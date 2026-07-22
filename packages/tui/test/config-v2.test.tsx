@@ -27,7 +27,7 @@ test("resolves nested config and keybind defaults", () => {
       leader: { timeout: 500 },
       scroll: { speed: 2, acceleration: true },
       diffs: { view: "split" },
-      debug: { devtools: true },
+      debug: { devtools: true, turn_tokens: true },
     },
     { terminalSuspend: true },
   )
@@ -36,7 +36,7 @@ test("resolves nested config and keybind defaults", () => {
   expect(config.keybinds.get("leader")?.[0]?.key).toBe("ctrl+o")
   expect(config.scroll).toEqual({ speed: 2, acceleration: true })
   expect(config.diffs).toEqual({ view: "split" })
-  expect(config.debug).toEqual({ devtools: true })
+  expect(config.debug).toEqual({ devtools: true, turn_tokens: true })
 })
 
 test("provides config and its host interface", async () => {

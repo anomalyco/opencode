@@ -1414,8 +1414,11 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
+  const config = useConfig()
   const { themeV2 } = useTheme()
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
+  const turnTokenUsage = () => readTurnTokenUsage(metadata())
+  const visible = () => metadata()?.kind !== "turn-token-usage" || config.data.debug?.turn_tokens === true
   const source = () => stringValue(metadata()?.source)
   const completion = () => source() === "subagent" || source() === "shell"
   const state = () => stringValue(metadata()?.state)
@@ -1439,22 +1442,99 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     return themeV2.text.feedback.info.default
   }
   return (
-    <Show
-      when={completion()}
-      fallback={
-        <InlineToolRow icon="◈" color={themeV2.text.subdued} pending="Notice" complete={true}>
-          {text()}
-        </InlineToolRow>
-      }
-    >
-      <box marginLeft={3}>
-        <text wrapMode="none">
-          <span style={{ fg: color() }}>{heading()}</span>
-          <span style={{ fg: themeV2.text.subdued }}>{suffix()}</span>
-        </text>
-      </box>
+    <Show when={visible()}>
+      <Show
+        when={turnTokenUsage()}
+        fallback={
+          <Show
+            when={completion()}
+            fallback={
+              <InlineToolRow icon="◈" color={themeV2.text.subdued} pending="Notice" complete={true}>
+                {text()}
+              </InlineToolRow>
+            }
+          >
+            <box marginLeft={3}>
+              <text wrapMode="none">
+                <span style={{ fg: color() }}>{heading()}</span>
+                <span style={{ fg: themeV2.text.subdued }}>{suffix()}</span>
+              </text>
+            </box>
+          </Show>
+        }
+      >
+        {(steps) => (
+          <box paddingLeft={3} flexDirection="column">
+            <box flexDirection="row">
+              <text width={INLINE_TOOL_ICON_WIDTH} fg={themeV2.text.subdued}>
+                ◈
+              </text>
+              <text fg={themeV2.text.subdued}>Turn token usage:</text>
+            </box>
+            <For each={steps()}>
+              {(item) => (
+                <box paddingLeft={INLINE_TOOL_ICON_WIDTH} flexDirection="column">
+                  <text fg={themeV2.text.subdued}>
+                    {item.label}:{" "}
+                    <span style={{ attributes: TextAttributes.BOLD }}>
+                      New tokens: {item.newTokens.toLocaleString()}
+                    </span>
+                    {` · Cached: ${item.cached.toLocaleString()} · Total: ${item.total.toLocaleString()}${item.breakdown ? ` [${item.breakdown}]` : ""}`}
+                  </text>
+                  <Show when={item.cacheBust !== undefined}>
+                    <text fg={themeV2.text.feedback.error.default}>
+                      ! Cache bust: {item.cacheBust?.toLocaleString()} fewer cached tokens than the previous step
+                    </text>
+                  </Show>
+                </box>
+              )}
+            </For>
+          </box>
+        )}
+      </Show>
     </Show>
   )
+}
+
+type TurnTokenStep = {
+  readonly label: string
+  readonly newTokens: number
+  readonly cached: number
+  readonly total: number
+  readonly breakdown: string
+  readonly cacheBust?: number
+}
+
+function readTurnTokenUsage(metadata: Record<string, unknown> | undefined) {
+  if (metadata?.kind !== "turn-token-usage" || !Array.isArray(metadata.steps)) return
+  const steps = metadata.steps.flatMap((value): TurnTokenStep[] => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return []
+    const step = value as Record<string, unknown>
+    const newTokens = finiteNumber(step.newTokens)
+    const cached = finiteNumber(step.cached)
+    const total = finiteNumber(step.total)
+    const cacheBust = step.cacheBust === undefined ? undefined : finiteNumber(step.cacheBust)
+    if (
+      typeof step.label !== "string" ||
+      newTokens === undefined ||
+      cached === undefined ||
+      total === undefined ||
+      typeof step.breakdown !== "string" ||
+      (step.cacheBust !== undefined && cacheBust === undefined)
+    )
+      return []
+    return [
+      {
+        label: step.label,
+        newTokens,
+        cached,
+        total,
+        breakdown: step.breakdown,
+        ...(cacheBust === undefined ? {} : { cacheBust }),
+      },
+    ]
+  })
+  return steps.length === metadata.steps.length ? steps : undefined
 }
 
 function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { type: "skill" }> }) {

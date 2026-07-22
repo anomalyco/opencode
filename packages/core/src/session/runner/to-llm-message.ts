@@ -201,6 +201,7 @@ function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, provider
         }),
       ]
     case "synthetic":
+      if (message.metadata?.modelVisible === false) return []
       return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "skill":
       return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]

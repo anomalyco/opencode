@@ -102,10 +102,15 @@ const layer = Layer.effect(
       const agent = loaded.agent
       const resolved = loaded.model
       const model = resolved.model
+      const previousCacheRead = loaded.messages.findLast(
+        (message): message is SessionMessage.Assistant & { tokens: NonNullable<SessionMessage.Assistant["tokens"]> } =>
+          message.type === "assistant" && message.tokens !== undefined,
+      )?.tokens.cache.read
       const compactionInput = { session, messages: loaded.messages, model, cost: resolved.cost }
       if (compaction.required(compactionInput) && !(yield* SessionPending.compaction(db, session.id))) {
         const compacted = yield* compaction.compact(compactionInput)
-        if (compacted.status === "completed") return { _tag: "RestartAfterCompaction", step: currentStep } as const
+        if (compacted.status === "completed")
+          return { _tag: "RestartAfterCompaction", step: currentStep, previousCacheRead } as const
         return yield* new StepFailedError({ error: compacted.error })
       }
       const prepared = yield* modelRequests.prepare({
@@ -233,7 +238,7 @@ const layer = Layer.effect(
             (yield* restore(recoverOverflow({ session, messages: loaded.messages, model, cost: resolved.cost })))
               .status === "completed"
           )
-            return { _tag: "RestartAfterOverflowCompaction", step: currentStep } as const
+            return { _tag: "RestartAfterOverflowCompaction", step: currentStep, previousCacheRead } as const
 
           // An unrecovered held-back overflow becomes the step's durable provider error. A
           // thrown LLM failure records the assistant failure unless a provider error was
@@ -341,6 +346,14 @@ const layer = Layer.effect(
             _tag: "Completed",
             needsContinuation,
             step: currentStep,
+            previousCacheRead,
+            settlement:
+              stepSettlement
+                ? {
+                    finish: stepSettlement.finish,
+                    tokens: stepSettlement.usageAvailable ? stepSettlement.tokens : undefined,
+                  }
+                : undefined,
           } as const
         }),
       )
@@ -358,6 +371,7 @@ const layer = Layer.effect(
       let currentPromotion = promotion
       let currentStep = step
       let assistantMessageID: SessionMessage.ID | undefined
+      let previousCacheRead: number | undefined
       while (true) {
         const attempt = yield* Effect.suspend(() =>
           attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
@@ -382,10 +396,13 @@ const layer = Layer.effect(
               .pipe(Effect.andThen(Effect.fail(error.cause)))
           }),
         )
+        previousCacheRead ??= attempt.previousCacheRead
         if (attempt._tag === "Completed")
           return {
             needsContinuation: attempt.needsContinuation,
             step: attempt.step,
+            previousCacheRead,
+            settlement: attempt.settlement,
           }
         if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
         yield* Effect.yieldNow
@@ -444,6 +461,14 @@ const layer = Layer.effect(
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
+        const steps: Array<{
+          readonly label: string
+          readonly newTokens: number
+          readonly cached: number
+          readonly total: number
+          readonly breakdown: string
+          readonly cacheBust?: number
+        }> = []
         // Repeat steps while continuation is needed. A step needs continuation only
         // when it recorded local tool calls whose results the model has not yet seen;
         // a provider error suppresses it. Pending steers also continue the loop so
@@ -456,6 +481,30 @@ const layer = Layer.effect(
             titleAttempted.add(input.sessionID)
             forkTitle(title.generateForFirstPrompt(yield* getSession(input.sessionID)).pipe(Effect.ignore))
           }
+          if (result.settlement) {
+            const tokens = result.settlement.tokens
+            if (tokens) {
+              const breakdown = [
+                tokens.input > 0 ? `${tokens.input.toLocaleString("en-US")} input` : undefined,
+                tokens.output > 0 ? `${tokens.output.toLocaleString("en-US")} output` : undefined,
+                tokens.reasoning > 0 ? `${tokens.reasoning.toLocaleString("en-US")} reasoning` : undefined,
+                tokens.cache.write > 0 ? `${tokens.cache.write.toLocaleString("en-US")} cache write` : undefined,
+              ]
+                .filter((value): value is string => value !== undefined)
+                .join(", ")
+              const newTokens = tokens.input + tokens.output + tokens.reasoning + tokens.cache.write
+              steps.push({
+                label: `Step ${steps.length + 1} [${result.settlement.finish}]`,
+                newTokens,
+                cached: tokens.cache.read,
+                total: newTokens + tokens.cache.read,
+                breakdown,
+                ...(result.previousCacheRead !== undefined && tokens.cache.read < result.previousCacheRead
+                  ? { cacheBust: result.previousCacheRead - tokens.cache.read }
+                  : {}),
+              })
+            }
+          }
           needsContinuation = result.needsContinuation
           step = result.step + 1
           if (needsContinuation) {
@@ -466,6 +515,24 @@ const layer = Layer.effect(
           yield* runPendingCompaction(input.sessionID)
           promotion = "steer"
           needsContinuation = yield* SessionPending.has(db, input.sessionID, "steer")
+        }
+        if (steps.length > 0) {
+          const lines = steps.flatMap((item) => [
+            `${item.label}: New tokens: ${item.newTokens.toLocaleString("en-US")} · Cached: ${item.cached.toLocaleString("en-US")} · Total: ${item.total.toLocaleString("en-US")}${item.breakdown ? ` [${item.breakdown}]` : ""}`,
+            ...(item.cacheBust === undefined
+              ? []
+              : [`! Cache bust: ${item.cacheBust.toLocaleString("en-US")} fewer cached tokens than the previous step`]),
+          ])
+          yield* events.publish(SessionEvent.Synthetic, {
+            sessionID: input.sessionID,
+            text: "",
+            description: `Turn token usage:\n${lines.join("\n")}`,
+            metadata: {
+              kind: "turn-token-usage",
+              modelVisible: false,
+              steps,
+            },
+          })
         }
         yield* runPendingCompaction(input.sessionID)
         const hasSteer = yield* SessionPending.has(db, input.sessionID, "steer")

@@ -224,12 +224,22 @@ describe("SessionRunnerLLM recorded", () => {
       yield* session.resume(sessionID)
 
       const messages = yield* session.context(sessionID)
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(3)
       expect(messages[0]).toMatchObject({ id: prompt.id, type: "user", text: "Say hello in one short sentence." })
       expect(messages[1]).toMatchObject({ type: "assistant", agent: "build", finish: "stop" })
       expect(messages[1]?.type === "assistant" ? messages[1].content : []).toMatchObject([
         { type: "text", text: "Hello!" },
       ])
+      expect(messages[2]).toMatchObject({
+        type: "synthetic",
+        description:
+          "Turn token usage:\nStep 1 [stop]: New tokens: 24 · Cached: 0 · Total: 24 [22 input, 2 output]",
+        metadata: {
+          kind: "turn-token-usage",
+          modelVisible: false,
+          steps: [{ label: "Step 1 [stop]", newTokens: 24, cached: 0, total: 24, breakdown: "22 input, 2 output" }],
+        },
+      })
       expect(
         (yield* db
           .select({ type: EventTable.type })
@@ -245,6 +255,7 @@ describe("SessionRunnerLLM recorded", () => {
         "session.text.started.1",
         "session.text.ended.1",
         "session.step.ended.1",
+        "session.synthetic.1",
       ])
     }),
   )

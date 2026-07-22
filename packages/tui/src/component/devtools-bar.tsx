@@ -59,6 +59,7 @@ export function DevToolsBar() {
   const canSwitchMode = () => supports(nextMode())
   const runtime = createMemo(() => runtimeStatus(frontendSamples()))
   const timing = () => config.data.debug?.timing ?? false
+  const turnTokens = () => config.data.debug?.turn_tokens ?? false
 
   const offEscape = keymap.intercept(
     "key",
@@ -351,6 +352,16 @@ export function DevToolsBar() {
                 hoverBackground
               >
                 {timing() ? "[x]" : "[ ]"} Time to first draw
+              </Action>
+              <Action
+                onClick={() =>
+                  void config.update((draft) => {
+                    draft.debug = { ...draft.debug, turn_tokens: !turnTokens() }
+                  })
+                }
+                hoverBackground
+              >
+                {turnTokens() ? "[x]" : "[ ]"} Turn token usage
               </Action>
             </box>
             <For each={groups()}>
