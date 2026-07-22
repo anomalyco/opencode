@@ -1108,11 +1108,16 @@ const layer = Layer.effect(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
 
+          // The turn is over once the newest assistant message is the reply to the
+          // newest user message. Compare parentID rather than ordering the two IDs:
+          // parentID is assigned by this loop, whereas a message ID can be supplied
+          // by the client, and one that does not sort below the IDs minted later
+          // pins `lastUser` forever and the loop never exits.
           if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            lastAssistant.parentID === lastUser.id
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
