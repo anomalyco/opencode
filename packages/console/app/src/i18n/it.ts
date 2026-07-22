@@ -362,6 +362,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Provider {{provider}} non supportato",
   "zen.api.error.missingApiKey": "Chiave API mancante.",
   "zen.api.error.invalidApiKey": "Chiave API non valida.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "Richiesta bloccata dal provider upstream.",
   "zen.api.error.subscriptionQuotaExceeded": "Quota dell'abbonamento superata. Riprova tra {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "Limite di utilizzo di 5 ore raggiunto. Si reimposta tra {{retryIn}}. Per continuare a usare questo modello ora, abilita l'utilizzo dal tuo saldo disponibile: {{consoleGoUrl}}",
