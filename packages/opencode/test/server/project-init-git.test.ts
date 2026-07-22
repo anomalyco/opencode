@@ -2,6 +2,7 @@ import { afterEach, describe, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Effect, Layer } from "effect"
 import { HttpClientResponse } from "effect/unstable/http"
 import path from "path"
@@ -9,6 +10,7 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Snapshot } from "../../src/snapshot"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -24,7 +26,11 @@ const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap
 const testInstanceStore = AppNodeBuilder.build(InstanceStore.node, [[InstanceStore.bootstrapNode, noopBootstrap]])
 
 const it = testEffect(
-  Layer.mergeAll(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Snapshot.node])), testInstanceStore, httpApiLayer),
+  Layer.mergeAll(
+    AppNodeBuilder.build(LayerNode.group([FSUtil.node, Snapshot.node, EventV2Bridge.node])),
+    testInstanceStore,
+    httpApiLayer,
+  ),
 )
 
 function request(directory: string, url: string, init: RequestInit = {}) {
@@ -53,6 +59,26 @@ const disposedEvents = (seen: GlobalEvent[], dir: string) =>
   seen.filter((evt) => evt.directory === dir && evt.payload.type === "server.instance.disposed").length
 
 describe("project.initGit endpoint", () => {
+  it.instance("reloads after a watched git initialization", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const events = yield* collectGlobalEvents()
+      const bridge = yield* EventV2Bridge.Service
+      const store = yield* InstanceStore.Service
+
+      const before = yield* store.load({ directory: tmp.directory })
+      expect(before.project.vcs).toBeUndefined()
+
+      const process = Bun.spawn(["git", "init", "--quiet"], { cwd: tmp.directory })
+      expect(yield* Effect.promise(() => process.exited)).toBe(0)
+      yield* bridge.publish(Watcher.Event.Updated, { file: path.join(tmp.directory, ".git"), event: "add" })
+
+      expect(disposedEvents(events.seen, tmp.directory)).toBe(1)
+      const current = yield* store.load({ directory: tmp.directory })
+      expect(current.project).toMatchObject({ vcs: "git", worktree: tmp.directory })
+    }),
+  )
+
   it.instance("initializes git and reloads immediately", () =>
     Effect.gen(function* () {
       const tmp = yield* TestInstance
