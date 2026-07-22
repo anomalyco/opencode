@@ -1381,8 +1381,11 @@ export function Prompt(props: PromptProps) {
                 setCursorVersion((value) => value + 1)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
-              onKeyDown={(e: { preventDefault(): void }) => {
+              onKeyDown={(e: { key?: string; preventDefault(): void }) => {
                 if (props.disabled) {
+                  // Let Tab pass through so agent.cycle still works during
+                  // permission prompts / questions (deep thinking state).
+                  if (e.key === "Tab") return
                   e.preventDefault()
                   return
                 }
