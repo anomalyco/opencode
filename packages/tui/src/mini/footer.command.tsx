@@ -10,6 +10,7 @@ import type {
   FooterSubagentTab,
   MiniSettingChange,
   MiniSettings,
+  RunAgent,
   RunCommand,
   RunInput,
   RunProvider,
@@ -21,6 +22,7 @@ type PanelEntry = RunFooterMenuItem & {
 }
 
 type CommandEntry =
+  | (PanelEntry & { action: "agent" })
   | (PanelEntry & { action: "model" })
   | (PanelEntry & { action: "editor" })
   | (PanelEntry & { action: "skill" })
@@ -37,6 +39,11 @@ type ModelEntry = PanelEntry & {
   providerID: string
   modelID: string
   providerName: string
+  current: boolean
+}
+
+type AgentEntry = PanelEntry & {
+  id: string
   current: boolean
 }
 
@@ -341,6 +348,7 @@ export function RunCommandMenuBody(props: {
   variants: Accessor<string[]>
   variantCycle: string
   onClose: () => void
+  onAgent: () => void
   onModel: () => void
   onEditor: () => void
   onSkill: () => void
@@ -420,6 +428,11 @@ export function RunCommandMenuBody(props: {
         : []
     const agent: CommandEntry[] = [
       {
+        action: "agent",
+        category: "Agent",
+        display: "Switch agent",
+      },
+      {
         action: "model",
         category: "Agent",
         display: "Switch model",
@@ -471,6 +484,11 @@ export function RunCommandMenuBody(props: {
     ]
   })
   const pick = (item: CommandEntry) => {
+    if (item.action === "agent") {
+      props.onAgent()
+      return
+    }
+
     if (item.action === "model") {
       props.onModel()
       return
@@ -562,6 +580,67 @@ export function RunCommandMenuBody(props: {
         grouped={!controller.query().trim()}
         background
         headerColor={props.theme().muted}
+        mono={props.mono}
+      />
+    </PanelShell>
+  )
+}
+
+export function RunAgentSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  agents: Accessor<RunAgent[]>
+  current: Accessor<string | undefined>
+  onClose: () => void
+  onSelect: (agent: string) => void
+  mono?: boolean
+}) {
+  const entries = createMemo<AgentEntry[]>(() =>
+    props
+      .agents()
+      .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+      .map((agent) => ({
+        category: "",
+        display: agent.id,
+        description: agent.description,
+        footer: props.current() === agent.id ? "current" : undefined,
+        keywords: `${agent.id} ${agent.name} ${agent.description ?? ""}`,
+        id: agent.id,
+        current: props.current() === agent.id,
+      })),
+  )
+  const controller = createSearchablePanelController({
+    entries,
+    limit: PANEL_LIST_ROWS,
+    onClose: props.onClose,
+    onSelect: (item) => props.onSelect(item.id),
+    isCurrent: (item) => item.current,
+  })
+
+  return (
+    <PanelShell
+      title="Select agent"
+      query={controller.query()}
+      count={controller.items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={controller.inputRef}
+      onQuery={controller.setQuery}
+      mono={props.mono}
+    >
+      <RunFooterMenu
+        theme={props.theme}
+        items={controller.items}
+        selected={controller.menu.selected}
+        offset={controller.menu.offset}
+        rows={() => PANEL_LIST_ROWS}
+        limit={PANEL_LIST_ROWS}
+        empty="No agents found"
+        border={false}
+        paddingLeft={panelPad(props.mono)}
+        paddingRight={panelPad(props.mono)}
+        grouped={false}
+        background
         mono={props.mono}
       />
     </PanelShell>

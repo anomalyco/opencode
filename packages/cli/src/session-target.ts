@@ -74,7 +74,7 @@ export async function resolveSessionTarget(input: {
     session,
     location,
     model: prepared.model,
-    agent: prepared.agent,
+    agent: prepared.agent ?? session.agent,
     resume: selected !== undefined,
   }
 }

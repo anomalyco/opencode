@@ -11,7 +11,6 @@
 import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { isDefaultTitle } from "../util/session"
-import { Locale } from "../util/locale"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"
 import type {
@@ -45,11 +44,6 @@ type CycleResult = {
   variants?: string[]
 }
 
-type FooterLabels = {
-  agentLabel: string
-  modelLabel: string
-}
-
 export type LifecycleInput = {
   host: MiniHost
   getDirectory: () => string
@@ -70,6 +64,7 @@ export type LifecycleInput = {
   onFormReply: (input: FormReply) => void | Promise<void>
   onFormCancel: (input: FormCancel) => void | Promise<void>
   onCycleVariant?: () => CycleResult | void
+  onAgentSelect?: (agent: string) => void
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
@@ -120,14 +115,6 @@ function splashInfo(title: string | undefined, history: RunPrompt[]) {
   return {
     title: next?.text ?? title,
     showSession: !!next,
-  }
-}
-
-function footerLabels(input: Pick<RunInput, "agent" | "model" | "variant">): FooterLabels {
-  const agentLabel = Locale.titlecase(input.agent ?? "build")
-  return {
-    agentLabel,
-    modelLabel: input.model ? formatModelLabel(input.model, input.variant) : "Default model",
   }
 }
 
@@ -203,11 +190,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     session_id: input.sessionID,
     mono,
   })
-  const labels = footerLabels({
-    agent: input.agent,
-    model: input.model,
-    variant: input.variant,
-  })
   const wrote = queueSplash(
     renderer,
     state,
@@ -232,7 +214,8 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     findFiles: input.findFiles,
     agents: input.agents,
     references: input.references,
-    ...labels,
+    agent: input.agent,
+    modelLabel: input.model ? formatModelLabel(input.model, input.variant) : "Default model",
     model: input.model,
     variant: input.variant,
     first: input.first,
@@ -249,6 +232,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     onFormReply: input.onFormReply,
     onFormCancel: input.onFormCancel,
     onCycleVariant: input.onCycleVariant,
+    onAgentSelect: input.onAgentSelect,
     onModelSelect: input.onModelSelect,
     onVariantSelect: input.onVariantSelect,
     onInterrupt: input.onInterrupt,

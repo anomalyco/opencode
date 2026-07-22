@@ -624,13 +624,17 @@ describe("V2 mini transport", () => {
       ok({ ...promptAdmission(request), admittedSeq: 2 }) as never,
     )
     await transport.queuePromptTurn({
-      agent: undefined,
+      agent: "review",
       model: undefined,
       variant: undefined,
       prompt: { messageID: "msg_next", text: "another", parts: [] },
       files: [],
       includeFiles: false,
     })
+    expect(client.session.switchAgent).toHaveBeenCalledWith(
+      { sessionID: "ses_1", agent: "review" },
+      expect.anything(),
+    )
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery: "queue" }), expect.anything())
     events.push({
       id: "evt_earlier_admission",
@@ -2714,7 +2718,7 @@ describe("V2 mini transport", () => {
     })
 
     await transport.runPromptTurn({
-      agent: undefined,
+      agent: "review",
       model: undefined,
       variant: undefined,
       prompt: {
@@ -2727,6 +2731,10 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
+    expect(client.session.switchAgent).toHaveBeenCalledWith(
+      { sessionID: "ses_1", agent: "review" },
+      expect.anything(),
+    )
     expect(request).toMatchObject({ sessionID: "ses_1", id: "msg_skill", skill: "tigerstyle" })
     expect(command).not.toHaveBeenCalled()
     expect(prompt).not.toHaveBeenCalled()

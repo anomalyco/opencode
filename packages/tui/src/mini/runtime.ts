@@ -304,6 +304,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         variant: state.activeVariant,
       }
     },
+    onAgentSelect: (agent) => {
+      state.agent = agent
+    },
     onModelSelect: async (model) => {
       if (state.model?.providerID === model.providerID && state.model.modelID === model.modelID) {
         return

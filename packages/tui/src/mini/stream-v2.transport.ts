@@ -1553,6 +1553,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         throw new Error("This prompt cannot be queued")
       if (!state.connected) throw new Error("Event stream is reconnecting")
       const client = sdk
+      if (next.agent)
+        await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
       mergePending(await admitPrompt(next, client, "queue"))
       settlementClient = client
     },
@@ -1574,6 +1576,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
       const command = next.prompt.command
       if (command?.source === "skill") {
+        if (next.agent)
+          await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
         input.trace?.write("send.skill", { sessionID: input.sessionID, messageID, skill: command.name })
         await runTurnWait(
           next,

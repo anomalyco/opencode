@@ -62,6 +62,7 @@ describe("run interactive runtime", () => {
       variants: ["low", "high"],
     })
     let lifecycle!: LifecycleInput
+    let turnAgent: string | undefined
     let turnModel: { providerID: string; modelID: string } | undefined
     let refreshCatalog: (() => Promise<unknown>) | undefined
     stubCatalogLists(sdk, {
@@ -107,6 +108,7 @@ describe("run interactive runtime", () => {
             catalogLoaded.resolve()
             return {
               runPromptTurn: async (input) => {
+                turnAgent = input.agent
                 turnModel = input.model
                 api.close()
               },
@@ -139,8 +141,10 @@ describe("run interactive runtime", () => {
       selection: { providerID: "test", modelID: "resolved" },
     })
     expect(lifecycle.onCycleVariant?.()).toMatchObject({ status: "variant low", variant: "low" })
+    lifecycle.onAgentSelect?.("review")
     ui.submit("hello")
     while (!turnModel) await Bun.sleep(0)
+    expect(turnAgent).toBe("review")
     expect(turnModel).toEqual({ providerID: "test", modelID: "resolved" })
     await task
   })

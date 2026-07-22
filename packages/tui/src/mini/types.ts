@@ -94,6 +94,7 @@ export type FooterQueuedPrompt = {
 export type RunAgent = {
   id: string
   name: string
+  description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
 }
@@ -286,6 +287,7 @@ export type FooterPromptRoute =
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
   | { type: "skill" }
+  | { type: "agent" }
   | { type: "model" }
   | { type: "variant" }
   | { type: "settings" }

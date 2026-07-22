@@ -8,6 +8,7 @@ import { Keymap } from "../../src/context/keymap"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,
+  RunAgentSelectBody,
   RunCommandMenuBody,
   RunModelSelectBody,
   RunQueuedPromptSelectBody,
@@ -26,6 +27,7 @@ import type {
   FooterView,
   MiniSettingChange,
   MiniSettings,
+  RunAgent,
   RunCommand,
   RunInput,
   RunPrompt,
@@ -110,6 +112,7 @@ async function renderFooter(
     commands?: RunCommand[]
     theme?: () => RunTheme
     providers?: RunProvider[]
+    currentAgent?: string
     currentModel?: RunInput["model"]
     currentVariant?: string
     subagents?: FooterSubagentState
@@ -122,6 +125,7 @@ async function renderFooter(
     onFormReply?: (input: unknown) => void
     miniSettings?: MiniSettings
     mono?: boolean
+    onStatus?: (status: string) => void
     onMiniSettingChange?: (change: MiniSettingChange) => void
   } = {},
 ) {
@@ -144,6 +148,8 @@ async function renderFooter(
           references={() => []}
           commands={() => input.commands ?? []}
           providers={() => input.providers}
+          currentAgent={() => input.currentAgent ?? "Build"}
+          currentAgentID={() => input.currentAgent?.toLowerCase() ?? "build"}
           currentModel={() => input.currentModel}
           variants={() => []}
           currentVariant={() => input.currentVariant}
@@ -162,11 +168,12 @@ async function renderFooter(
           onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
+          onAgentSelect={() => {}}
           onModelSelect={() => {}}
           onVariantSelect={() => {}}
           onRows={() => {}}
           onLayout={() => {}}
-          onStatus={() => {}}
+          onStatus={(status) => input.onStatus?.(status)}
           onMiniSettingChange={(change) => input.onMiniSettingChange?.(change)}
         />
       </Keymap.Provider>
@@ -385,6 +392,7 @@ test("direct command panel renders grouped actions without catalog commands", as
           variants={variants}
           variantCycle="ctrl+t"
           onClose={() => {}}
+          onAgent={() => {}}
           onModel={() => {}}
           onEditor={() => {}}
           onSkill={() => {}}
@@ -432,6 +440,11 @@ test("direct command panel renders grouped actions without catalog commands", as
     expect(frame).not.toContain("Review code")
     expect(frame).not.toContain("Commands 8")
 
+    await app.mockInput.typeText("agent")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Switch agent")
+
+    app.mockInput.pressKey("u", { ctrl: true })
     await app.mockInput.typeText("review")
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("No results found")
@@ -615,6 +628,7 @@ test("direct command panel shows subagent entry when available", async () => {
           variants={variants}
           variantCycle="ctrl+t"
           onClose={() => {}}
+          onAgent={() => {}}
           onModel={() => {}}
           onEditor={() => {}}
           onSkill={() => {}}
@@ -665,6 +679,7 @@ test("direct command panel keeps completed subagents available", async () => {
           variants={variants}
           variantCycle="ctrl+t"
           onClose={() => {}}
+          onAgent={() => {}}
           onModel={() => {}}
           onEditor={() => {}}
           onSkill={() => {}}
@@ -1134,6 +1149,8 @@ test("direct footer shows authoritative pending work while running", async () =>
           references={() => []}
           commands={() => []}
           providers={() => undefined}
+          currentAgent={() => "Build"}
+          currentAgentID={() => "build"}
           currentModel={() => ({
             providerID: "opencode",
             modelID: "a-model-name-long-enough-to-force-responsive-truncation",
@@ -1163,6 +1180,7 @@ test("direct footer shows authoritative pending work while running", async () =>
           onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
+          onAgentSelect={() => {}}
           onModelSelect={() => {}}
           onVariantSelect={() => {}}
           onRows={() => {}}
@@ -1221,12 +1239,14 @@ test("direct footer shows authoritative pending work while running", async () =>
 
 test("direct footer progressively adds model details after the command hint", async () => {
   for (const expected of [
-    { width: 24, model: false, variant: false },
-    { width: 32, model: true, variant: false },
-    { width: 40, model: true, variant: true },
+    { width: 24, agent: false, model: false, variant: false },
+    { width: 32, agent: false, model: true, variant: false },
+    { width: 40, agent: false, model: true, variant: true },
+    { width: 80, agent: true, model: true, variant: true },
   ]) {
     const app = await renderFooter({
       providers: [provider()],
+      currentAgent: "Plan",
       currentModel: { providerID: "opencode", modelID: "gpt-5" },
       currentVariant: "xhigh",
       width: expected.width,
@@ -1238,6 +1258,7 @@ test("direct footer progressively adds model details after the command hint", as
       expect({
         width: expected.width,
         command: frame.includes("ctrl+p cmd"),
+        agent: frame.includes("Plan"),
         model: frame.includes("GPT-5"),
         variant: frame.includes("xhigh"),
       }).toEqual({ ...expected, command: true })
@@ -1327,8 +1348,10 @@ test("direct footer shows full usage metadata when room is available", async () 
 })
 
 test("direct footer hides routine activity and shows explicit notices", async () => {
+  let status = ""
   const app = await renderFooter({
     state: { usage: "159.6K (16%) · $4.23" },
+    currentAgent: "Plan",
     miniSettings: {
       thinking: "hide",
       shell_output: "hide",
@@ -1337,6 +1360,7 @@ test("direct footer hides routine activity and shows explicit notices", async ()
       mono: true,
     },
     mono: true,
+    onStatus: (value) => (status = value),
     width: 160,
   })
 
@@ -1344,6 +1368,7 @@ test("direct footer hides routine activity and shows explicit notices", async ()
     await app.renderOnce()
     const initial = app.captureCharFrame()
     expect(initial).toContain("ctrl+p cmd")
+    expect(initial).not.toContain("Plan")
     expect(initial).not.toContain("gpt-5")
     expect(initial).not.toContain("159.6K")
 
@@ -1358,6 +1383,12 @@ test("direct footer hides routine activity and shows explicit notices", async ()
     expect(changed).not.toContain("gpt-5")
     expect(changed).not.toContain("159.6K")
     expect(boxPath(statusline, "SpinnerRenderable")).toBeUndefined()
+
+    app.mockInput.pressKey("p", { ctrl: true })
+    await app.renderOnce()
+    await app.mockInput.typeText("status")
+    app.mockInput.pressEnter()
+    expect(status).toBe("running - agent Plan - gpt-5 - 159.6K (16%) - $4.23")
 
     app.setState((state) => ({ ...state, notice: "variant high" }))
     await app.renderOnce()
@@ -1468,6 +1499,53 @@ test("direct model panel renders current model selector", async () => {
     expect(frame).not.toContain("┃")
     expect(frame).not.toContain("Old Model")
     expectPaletteList(list, 2)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("direct agent panel shows eligible agents and marks the current agent", async () => {
+  const [agents] = createSignal<RunAgent[]>([
+    { id: "build", name: "Build", description: "Build software", mode: "all", hidden: false },
+    { id: "review", name: "Review", description: "Review changes", mode: "primary", hidden: false },
+    { id: "explore", name: "Explore", mode: "subagent", hidden: false },
+    { id: "secret", name: "Secret", mode: "all", hidden: true },
+  ])
+  const [current] = createSignal("review")
+  let selected: string | undefined
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunAgentSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          agents={agents}
+          current={current}
+          onClose={() => {}}
+          onSelect={(agent) => (selected = agent)}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("Select agent")
+    expect(frame).toContain("build")
+    expect(frame).toContain("review")
+    expect(frame).toContain("Review changes")
+    expect(frame).toContain("current")
+    expect(frame).not.toContain("explore")
+    expect(frame).not.toContain("secret")
+
+    app.mockInput.pressEnter()
+    expect(selected).toBe("review")
   } finally {
     app.renderer.destroy()
   }

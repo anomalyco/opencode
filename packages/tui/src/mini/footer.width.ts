@@ -20,6 +20,7 @@ export function footerWidthPolicy(width: number) {
     },
     statusline: {
       showActivityMeta: compact,
+      showAgent: compact,
       showCommandHint: width >= FOOTER_WIDTH_BREAKPOINTS.commandHint,
       showModel: width >= FOOTER_WIDTH_BREAKPOINTS.model,
       showModelVariant: width >= FOOTER_WIDTH_BREAKPOINTS.modelVariant,

@@ -47,6 +47,8 @@ test("down opens subagents from an empty prompt", async () => {
           references={() => []}
           commands={() => []}
           providers={() => undefined}
+          currentAgent={() => "Build"}
+          currentAgentID={() => "build"}
           currentModel={() => undefined}
           variants={() => []}
           currentVariant={() => undefined}
@@ -65,6 +67,7 @@ test("down opens subagents from an empty prompt", async () => {
           onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
+          onAgentSelect={() => {}}
           onModelSelect={() => {}}
           onVariantSelect={() => {}}
           onRows={() => {}}
