@@ -451,7 +451,10 @@ function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; ho
       }
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
-      onMouseUp={props.disabled ? undefined : props.onClick}
+      onMouseUp={(event) => {
+        event.stopPropagation()
+        if (!props.disabled) props.onClick()
+      }}
     >
       <text fg={props.disabled ? themeV2.text.subdued : themeV2.text.action.primary.default}>{props.children}</text>
     </box>
