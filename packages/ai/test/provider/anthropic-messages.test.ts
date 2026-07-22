@@ -235,9 +235,9 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  // Regression: screenshot/read tool results must stay structured so base64
-  // image data is not JSON-stringified into `tool_result.content`.
-  it.effect("lowers image tool-result content as structured image blocks", () =>
+  // Regression: read tool results must stay structured so base64 media data is
+  // not JSON-stringified into `tool_result.content`.
+  it.effect("lowers media tool-result content as structured blocks", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
         LLM.request({
@@ -253,6 +253,7 @@ describe("Anthropic Messages route", () => {
               result: [
                 { type: "text", text: "Image read successfully" },
                 { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" },
+                { type: "file", uri: "data:application/pdf;base64,JVBERi0xLjQ=", mime: "application/pdf" },
               ],
             }),
           ],
@@ -263,6 +264,7 @@ describe("Anthropic Messages route", () => {
       expect(expectToolResult(prepared.body).content).toEqual([
         { type: "text", text: "Image read successfully" },
         { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjQ=" } },
       ])
     }),
   )
@@ -756,7 +758,7 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("continues a conversation with user image content", () =>
+  it.effect("continues a conversation with user media content", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLM.request({
@@ -766,6 +768,7 @@ describe("Anthropic Messages route", () => {
             Message.user([
               { type: "text", text: "What is in this image?" },
               { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=", filename: "report.pdf" },
             ]),
           ],
         }),
@@ -781,6 +784,7 @@ describe("Anthropic Messages route", () => {
                     content: [
                       { type: "text", text: "What is in this image?" },
                       { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+                      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjQ=" } },
                     ],
                   },
                 ],

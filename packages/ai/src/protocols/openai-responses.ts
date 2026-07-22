@@ -42,7 +42,16 @@ const OpenAIResponsesInputImage = Schema.Struct({
   type: Schema.tag("input_image"),
   image_url: Schema.String,
 })
-const OpenAIResponsesInputContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesInputImage])
+const OpenAIResponsesInputFile = Schema.Struct({
+  type: Schema.tag("input_file"),
+  filename: Schema.String,
+  file_data: Schema.String,
+})
+const OpenAIResponsesInputContent = Schema.Union([
+  OpenAIResponsesInputText,
+  OpenAIResponsesInputImage,
+  OpenAIResponsesInputFile,
+])
 type OpenAIResponsesInputContent = Schema.Schema.Type<typeof OpenAIResponsesInputContent>
 
 const OpenAIResponsesOutputText = Schema.Struct({
@@ -68,9 +77,13 @@ const OpenAIResponsesItemReference = Schema.Struct({
 })
 
 // `function_call_output.output` accepts either a plain string or an ordered
-// array of content items so tools can return images in addition to text.
+// array of content items so tools can return images and files in addition to text.
 // https://platform.openai.com/docs/api-reference/responses/object
-const OpenAIResponsesFunctionCallOutputContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesInputImage])
+const OpenAIResponsesFunctionCallOutputContent = Schema.Union([
+  OpenAIResponsesInputText,
+  OpenAIResponsesInputImage,
+  OpenAIResponsesInputFile,
+])
 
 const OpenAIResponsesFunctionCallOutput = Schema.Union([
   Schema.String,
@@ -351,14 +364,20 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
     const media = yield* ProviderShared.validateMedia(
       "OpenAI Responses",
       part,
-      new Set<string>(ProviderShared.IMAGE_MIMES),
+      new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.DOCUMENT_MIMES]),
     )
+    if (media.mime === "application/pdf")
+      return {
+        type: "input_file" as const,
+        filename: part.filename ?? "document.pdf",
+        file_data: media.dataUrl,
+      }
     return { type: "input_image" as const, image_url: media.dataUrl }
   }
   return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
 })
 
-// Tool results may carry structured text/images. Keep media as provider-native
+// Tool results may carry structured text, images, and files. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultContentItem")(function* (
   item: ToolContent,
@@ -367,8 +386,14 @@ const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultCon
   const media = yield* ProviderShared.validateToolFile(
     "OpenAI Responses",
     item,
-    new Set<string>(ProviderShared.IMAGE_MIMES),
+    new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.DOCUMENT_MIMES]),
   )
+  if (media.mime === "application/pdf")
+    return {
+      type: "input_file" as const,
+      filename: item.name ?? "document.pdf",
+      file_data: media.dataUrl,
+    }
   return { type: "input_image" as const, image_url: media.dataUrl }
 })
 

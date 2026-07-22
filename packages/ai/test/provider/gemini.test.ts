@@ -70,6 +70,7 @@ describe("Gemini route", () => {
             Message.user([
               { type: "text", text: "What is in this image?" },
               { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=" },
             ]),
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
             Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
@@ -81,7 +82,11 @@ describe("Gemini route", () => {
         contents: [
           {
             role: "user",
-            parts: [{ text: "What is in this image?" }, { inlineData: { mimeType: "image/png", data: "AAECAw==" } }],
+            parts: [
+              { text: "What is in this image?" },
+              { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
+              { inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } },
+            ],
           },
           {
             role: "model",
@@ -110,7 +115,7 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("continues image tool results as inline vision input without base64 text", () =>
+  it.effect("continues media tool results as inline model input without base64 text", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
         LLM.request({
@@ -125,6 +130,7 @@ describe("Gemini route", () => {
                 value: [
                   { type: "text", text: "Image read successfully" },
                   { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" },
+                  { type: "file", uri: "data:application/pdf;base64,JVBERi0xLjQ=", mime: "application/pdf" },
                 ],
               },
             }),
@@ -144,6 +150,7 @@ describe("Gemini route", () => {
               },
             },
             { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
+            { inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" } },
           ],
         },
       ])
