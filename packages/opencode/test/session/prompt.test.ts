@@ -57,6 +57,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Budget } from "@/provider/budget"
+import { Identity } from "@/identity"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -187,6 +189,8 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
+    Budget.defaultLayer,
+    Identity.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))

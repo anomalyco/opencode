@@ -34,6 +34,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LLMEvent, Usage } from "@opencode-ai/llm"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Budget } from "@/provider/budget"
+import { Identity } from "@/identity"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -235,6 +237,8 @@ const deps = Layer.mergeAll(
   RuntimeFlags.layer({ experimentalEventSystem: true }),
   Database.defaultLayer,
   EventV2Bridge.defaultLayer,
+  Budget.defaultLayer,
+  Identity.defaultLayer,
 )
 
 const env = Layer.mergeAll(
@@ -252,6 +256,8 @@ const compactionEnv = Layer.mergeAll(
   Database.defaultLayer,
   EventV2Bridge.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
+  Budget.defaultLayer,
+  Identity.defaultLayer,
 )
 const itCompaction = testEffect(compactionEnv)
 
@@ -276,6 +282,8 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
         Layer.provide(Image.defaultLayer),
         Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
         Layer.provide(status),
+        Layer.provide(Budget.defaultLayer),
+        Layer.provide(Identity.defaultLayer),
       )
     : layer(options?.result ?? "continue")
   return Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, events, status).pipe(
