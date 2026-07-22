@@ -91,14 +91,17 @@ const oauth = {
           Effect.flatMap((token) => {
             if (token.access_token) {
               const access = token.access_token
-              return request(userURL(domain), {
-                headers: {
-                  Accept: "application/json",
-                  Authorization: `Bearer ${access}`,
-                  "User-Agent": `opencode/${InstallationVersion}`,
-                  "X-GitHub-Api-Version": userApiVersion,
+              return request(
+                `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`,
+                {
+                  headers: {
+                    Accept: "application/json",
+                    Authorization: `Bearer ${access}`,
+                    "User-Agent": `opencode/${InstallationVersion}`,
+                    "X-GitHub-Api-Version": userApiVersion,
+                  },
                 },
-              }).pipe(
+              ).pipe(
                 Effect.map((user) => Option.getOrUndefined(decodeUser(user))?.endpoints?.api?.replace(/\/+$/, "")),
                 Effect.catch(() => Effect.succeed(undefined)),
                 Effect.map((apiEndpoint) =>
@@ -280,10 +283,6 @@ function oauthURLs(domain: string) {
     device: `https://${domain}/login/device/code`,
     token: `https://${domain}/login/oauth/access_token`,
   }
-}
-
-function userURL(domain: string) {
-  return `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`
 }
 
 function baseURL(enterprise?: string) {
