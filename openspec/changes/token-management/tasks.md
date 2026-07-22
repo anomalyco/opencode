@@ -58,11 +58,11 @@ Single-PR fallback (`size:exception`) is **not** recommended; tasks are independ
 
 ## Phase 4 — IPC Bridge & Renderer UI (WU4)
 
-- [ ] **T11** — Add IPC handlers in desktop main. *Read `packages/desktop/src/main/ipc.ts`; add `ipcMain.handle("user.get")`, `"user.listAdmin"`, `"user.credit"`. Each calls sidecar `fetch` with `Basic opencode:<pwd>` (matches `kill-sidecar` pattern). Pass `amount`/`description` through for credit.* **Files:** `packages/desktop/src/main/ipc.ts`. **Deps:** T8, T9. **Complexity:** M.
+- [x] **T11** — Add IPC handlers in desktop main. *Read `packages/desktop/src/main/ipc.ts`; add `ipcMain.handle("user.get")`, `"user.listAdmin"`, `"user.credit"`. Each calls sidecar `fetch` with `Basic opencode:<pwd>` (matches `kill-sidecar` pattern). Pass `amount`/`description` through for credit.* **Files:** `packages/desktop/src/main/ipc.ts`. **Deps:** T8, T9. **Complexity:** M.
 
-- [ ] **T12** — Expose `user` API on `window.api` via preload. *Read `packages/desktop/src/preload/index.ts` + `types.ts`; add `user: { get, listAdmin, credit }` to the `Api` interface and `contextBridge.exposeInMainWorld` mapping.* **Files:** `packages/desktop/src/preload/index.ts`, `packages/desktop/src/preload/types.ts`. **Deps:** T11. **Complexity:** S.
+- [x] **T12** — Expose `user` API on `window.api` via preload. *Read `packages/desktop/src/preload/index.ts` + `types.ts`; add `user: { get, listAdmin, credit }` to the `Api` interface and `contextBridge.exposeInMainWorld` mapping.* **Files:** `packages/desktop/src/preload/index.ts`, `packages/desktop/src/preload/types.ts`. **Deps:** T11. **Complexity:** S.
 
-- [ ] **T13** — Render "Signed in as {email}" in `titlebar.tsx`. *Read `packages/app/src/components/titlebar.tsx`; add `createResource` calling `window.api.user.get()` at boot; render `Signed in as ${email}` when present; hide line on null. No re-render churn.* **Files:** `packages/app/src/components/titlebar.tsx`. **Deps:** T12. **Complexity:** S.
+- [x] **T13** — Render "Signed in as {email}" in `titlebar.tsx`. *Read `packages/app/src/components/titlebar.tsx`; add `createResource` calling `window.api.user.get()` at boot; render `Signed in as ${email}` when present; hide line on null. No re-render churn.* **Files:** `packages/app/src/components/titlebar.tsx`. **Deps:** T12. **Complexity:** S.
 
 ## Phase 5 — Testing (WU5, parallelizable into WU2–WU4)
 
