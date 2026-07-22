@@ -1,5 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { open } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { monitorEventLoopDelay } from "node:perf_hooks"
@@ -139,8 +140,7 @@ export function DevToolsBar() {
         })().catch(() => client.connection.internal.history())
       : Promise.resolve([]))
     const file = path.join(tmpdir(), `opencode-debug-${crypto.randomUUID()}.json`)
-    await Bun.write(
-      file,
+    const output =
       JSON.stringify(
         {
           backend,
@@ -180,11 +180,13 @@ export function DevToolsBar() {
         },
         null,
         2,
-      ) + "\n",
-    ).then(
-      () => setDumpPath(file),
-      (error) => setDumpError(errorMessage(error)),
-    )
+      ) + "\n"
+    await open(file, "wx", 0o600)
+      .then((handle) => handle.writeFile(output).finally(() => handle.close()))
+      .then(
+        () => setDumpPath(file),
+        (error) => setDumpError(errorMessage(error)),
+      )
     setDumping(false)
   }
 
