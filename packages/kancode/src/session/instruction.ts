@@ -6,7 +6,6 @@ import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Flag } from "@kancode/core/flag/flag"
 import { FSUtil } from "@kancode/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
@@ -48,24 +47,16 @@ export class Service extends Context.Service<Service, Interface>()("@kancode/Ins
 const layer: Layer.Layer<
   Service,
   never,
-  FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient | RuntimeFlags.Service
+  FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const cfg = yield* Config.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
-    const flags = yield* RuntimeFlags.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [
-      path.join(global.config, "AGENTS.md"),
-      ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
-    ]
-    const instructionFiles = [
-      "AGENTS.md",
-      ...(!flags.disableClaudeCodePrompt ? ["CLAUDE.md"] : []),
-      "CONTEXT.md", // deprecated
-    ]
+    const globalFiles = [path.join(global.config, "AGENTS.md"), path.join(global.home, ".claude", "CLAUDE.md")]
+    const instructionFiles = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"]
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -231,7 +222,7 @@ export function loaded(messages: SessionV1.WithParts[]) {
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient],
+  deps: [Config.node, FSUtil.node, Global.node, httpClient],
 })
 
 export * as Instruction from "./instruction"

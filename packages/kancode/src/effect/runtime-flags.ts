@@ -17,16 +17,7 @@ export class Service extends ConfigService.Service<Service>()("@kancode/RuntimeF
   pure: bool("OPENCODE_PURE"),
   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
-  disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
   disableLspDownload: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
-  disableClaudeCodePrompt: Config.all({
-    broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
-    direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
-  }).pipe(Config.map((flags) => flags.broad || flags.direct)),
-  disableClaudeCodeSkills: Config.all({
-    broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
-    direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"),
-  }).pipe(Config.map((flags) => flags.broad || flags.direct)),
   enableExa: Config.all({
     experimental,
     enabled: bool("OPENCODE_ENABLE_EXA"),

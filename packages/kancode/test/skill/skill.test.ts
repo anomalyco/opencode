@@ -3,7 +3,6 @@ import { LayerNode } from "@kancode/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
 import { Discovery } from "../../src/skill/discovery"
-import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "../../src/config/config"
 import { CrossSpawnSpawner } from "@kancode/core/cross-spawn-spawner"
@@ -17,20 +16,6 @@ import fs from "fs/promises"
 const node = LayerNode.compile(CrossSpawnSpawner.node)
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(Skill.node), node, testInstanceStoreLayer))
-const itWithoutClaudeCodeSkills = testEffect(
-  Layer.mergeAll(
-    LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: true })]]),
-    node,
-    testInstanceStoreLayer,
-  ),
-)
-const itWithoutExternalSkills = testEffect(
-  Layer.mergeAll(
-    LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableExternalSkills: true })]]),
-    node,
-    testInstanceStoreLayer,
-  ),
-)
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
@@ -547,7 +532,7 @@ description: A skill in the .agents/skills directory.
     ),
   )
 
-  itWithoutClaudeCodeSkills.live("skips Claude Code skills when disabled", () =>
+  it.live("only discovers enabled external sources (not all present on disk)", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -578,56 +563,10 @@ description: A skill in the .agents/skills directory.
 
           const skill = yield* Skill.Service
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          // Only .agents is enabled; .claude is present on disk but not listed.
           expect(list.map((s) => s.name)).toEqual(["agent-skill"])
         }),
-      { git: true, config: { skills: { external: [".claude", ".agents"] } } },
-    ),
-  )
-
-  itWithoutExternalSkills.live("skips external skill directories when disabled", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            Promise.all([
-              Bun.write(
-                path.join(dir, ".claude", "skills", "claude-skill", "SKILL.md"),
-                `---
-name: claude-skill
-description: A skill in the .claude/skills directory.
----
-
-# Claude Skill
-`,
-              ),
-              Bun.write(
-                path.join(dir, ".agents", "skills", "agent-skill", "SKILL.md"),
-                `---
-name: agent-skill
-description: A skill in the .agents/skills directory.
----
-
-# Agent Skill
-`,
-              ),
-              Bun.write(
-                path.join(dir, ".kancode", "skill", "opencode-skill", "SKILL.md"),
-                `---
-name: opencode-skill
-description: A skill in the .kancode/skill directory.
----
-
-# OpenCode Skill
-`,
-              ),
-            ]),
-          )
-
-          const skill = yield* Skill.Service
-          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
-          expect(list.map((s) => s.name)).toEqual(["opencode-skill"])
-        }),
-      { git: true, config: { skills: { external: [".claude", ".agents"] } } },
+      { git: true, config: { skills: { external: [".agents"] } } },
     ),
   )
 
@@ -824,53 +763,6 @@ description: A skill in the legacy .opencode/skill (singular) directory.
           expect(item!.location).toContain(path.join(".opencode", "skill", "singular-skill", "SKILL.md"))
         }),
       { git: true, config: { skills: { external: [".opencode"] } } },
-    ),
-  )
-
-  itWithoutExternalSkills.live("skips all external skill dirs when external skills are disabled", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            Promise.all([
-              Bun.write(
-                path.join(dir, ".cursor", "skills", "cursor-skill", "SKILL.md"),
-                `---
-name: cursor-skill
-description: A skill in the .cursor/skills directory.
----
-
-# Cursor Skill
-`,
-              ),
-              Bun.write(
-                path.join(dir, ".opencode", "skills", "legacy-skill", "SKILL.md"),
-                `---
-name: legacy-skill
-description: A skill in the legacy .opencode/skills directory.
----
-
-# Legacy Skill
-`,
-              ),
-              Bun.write(
-                path.join(dir, ".kancode", "skill", "kancode-skill", "SKILL.md"),
-                `---
-name: kancode-skill
-description: A skill in the .kancode/skill directory.
----
-
-# KanCode Skill
-`,
-              ),
-            ]),
-          )
-
-          const skill = yield* Skill.Service
-          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
-          expect(list.map((s) => s.name)).toEqual(["kancode-skill"])
-        }),
-      { git: true, config: { skills: { external: [".cursor", ".opencode"] } } },
     ),
   )
 

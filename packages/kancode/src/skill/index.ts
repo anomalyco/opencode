@@ -202,8 +202,6 @@ const discoverSkills = Effect.fnUntraced(function* (
   discovery: Discovery.Interface,
   fsys: FSUtil.Interface,
   global: Global.Interface,
-  disableExternalSkills: boolean,
-  disableClaudeCodeSkills: boolean,
   directory: string,
   worktree: string,
 ) {
@@ -212,16 +210,8 @@ const discoverSkills = Effect.fnUntraced(function* (
   const cfg = yield* config.get()
 
   // External skill sources are opt-in. Only sources listed in
-  // `skills.external` are scanned; default is none. The env flags remain as
-  // hard kill switches: disableExternalSkills clears the list entirely, and
-  // disableClaudeCodeSkills drops .claude even when it is listed.
-  const enabledExternal: string[] = []
-  if (!disableExternalSkills) {
-    for (const dir of cfg.skills?.external ?? []) {
-      if (dir === CLAUDE_EXTERNAL_DIR && disableClaudeCodeSkills) continue
-      enabledExternal.push(dir)
-    }
-  }
+  // `skills.external` are scanned; default is none.
+  const enabledExternal = cfg.skills?.external ?? []
 
   if (enabledExternal.length > 0) {
     for (const dir of enabledExternal) {
@@ -293,19 +283,9 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const fsys = yield* FSUtil.Service
     const global = yield* Global.Service
-    const flags = yield* RuntimeFlags.Service
     const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
-        return yield* discoverSkills(
-          config,
-          discovery,
-          fsys,
-          global,
-          flags.disableExternalSkills,
-          flags.disableClaudeCodeSkills,
-          ctx.directory,
-          ctx.worktree,
-        )
+        return yield* discoverSkills(config, discovery, fsys, global, ctx.directory, ctx.worktree)
       }),
     )
     const state = yield* InstanceState.make(

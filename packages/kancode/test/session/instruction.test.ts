@@ -8,7 +8,6 @@ import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Global } from "@kancode/core/global"
-import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
@@ -32,17 +31,16 @@ const it = testEffect(
 
 const configLayer = Layer.succeed(Config.Service, TestConfig.make())
 
-const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
+const instructionLayer = (global: Partial<Global.Interface>) =>
   AppNodeBuilder.build(Instruction.node, [
     [Config.node, configLayer],
     [Global.node, Global.layerWith(global)],
-    [RuntimeFlags.node, RuntimeFlags.layer(flags)],
   ])
 
 const provideInstruction =
-  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
+  (global: Partial<Global.Interface>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global, flags)))
+    self.pipe(Effect.provide(instructionLayer(global)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -229,7 +227,7 @@ describe("Instruction.system", () => {
     }),
   )
 
-  it.live("skips project and global CLAUDE.md when Claude Code prompt is disabled", () =>
+  it.live("loads project and global CLAUDE.md alongside AGENTS.md", () =>
     Effect.gen(function* () {
       const globalTmp = yield* tmpWithFiles({ ".claude/CLAUDE.md": "# Global Claude" })
       const projectTmp = yield* tmpWithFiles({ "CLAUDE.md": "# Project Claude" })
@@ -237,13 +235,9 @@ describe("Instruction.system", () => {
       yield* Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const paths = yield* svc.systemPaths()
-        expect(paths.has(path.join(globalTmp, ".claude", "CLAUDE.md"))).toBe(false)
-        expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(false)
-        expect(yield* svc.system()).toEqual([])
-      }).pipe(
-        provideInstance(projectTmp),
-        provideInstruction({ home: globalTmp, config: globalTmp }, { disableClaudeCodePrompt: true }),
-      )
+        expect(paths.has(path.join(globalTmp, ".claude", "CLAUDE.md"))).toBe(true)
+        expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(true)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )
 })
