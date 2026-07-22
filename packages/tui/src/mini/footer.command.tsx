@@ -1069,7 +1069,11 @@ export function RunModelSelectBody(props: {
     >
       <RunFooterMenu
         theme={props.theme}
-        items={controller.items}
+        items={() =>
+          controller.query().trim()
+            ? controller.items().map((item) => ({ ...item, footer: item.providerName }))
+            : controller.items()
+        }
         selected={controller.menu.selected}
         offset={controller.menu.offset}
         rows={() => PANEL_LIST_ROWS}

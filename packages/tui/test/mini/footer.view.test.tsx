@@ -1498,7 +1498,10 @@ test("direct permission rejection submits through keymap return binding", async 
 })
 
 test("direct model panel renders current model selector", async () => {
-  const [providers] = createSignal<RunProvider[] | undefined>([provider()])
+  const [providers] = createSignal<RunProvider[] | undefined>([
+    provider(),
+    { id: "openai", name: "OpenAI", models: { "gpt-5": model({ id: "gpt-5", name: "GPT-5" }) } },
+  ])
   const [current] = createSignal<RunInput["model"]>({ providerID: "opencode", modelID: "gpt-5" })
 
   const app = await testRender(
@@ -1535,6 +1538,14 @@ test("direct model panel renders current model selector", async () => {
     expect(frame).not.toContain("┃")
     expect(frame).not.toContain("Old Model")
     expectPaletteList(list, 2)
+
+    "gpt-5".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    const search = app.captureCharFrame()
+
+    expect(search.match(/GPT-5/g)).toHaveLength(2)
+    expect(search).toContain("opencode")
+    expect(search).toContain("OpenAI")
   } finally {
     app.renderer.destroy()
   }
