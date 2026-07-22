@@ -30,7 +30,12 @@ type GlobalEventStream = {
   stream: AsyncIterable<GlobalEventEnvelope>
 }
 
-export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPSession.Interface }) {
+export function start(input: {
+  sdk: OpencodeClient
+  connection: Connection
+  session: ACPSession.Interface
+  capabilities: ACPPermission.Capabilities
+}) {
   const subscription = new Subscription(input)
   subscription.start()
   return subscription
@@ -48,6 +53,7 @@ export class Subscription {
       sdk: OpencodeClient
       connection: Connection
       session: ACPSession.Interface
+      capabilities: ACPPermission.Capabilities
     },
   ) {
     this.permission = new ACPPermission.Handler(input)

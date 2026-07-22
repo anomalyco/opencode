@@ -18,6 +18,7 @@ describe("opencode acp initialize/auth subprocess", () => {
         expect(initialized.agentCapabilities?.mcpCapabilities?.sse).toBe(true)
         expect(initialized.agentCapabilities?.loadSession).toBe(true)
         expect(initialized.agentCapabilities?.sessionCapabilities?.close).toEqual({})
+        expect(initialized.agentCapabilities?.sessionCapabilities?.delete).toEqual({})
         expect(initialized.agentCapabilities?.sessionCapabilities?.fork).toEqual({})
         expect(initialized.agentCapabilities?.sessionCapabilities?.list).toEqual({})
         expect(initialized.agentCapabilities?.sessionCapabilities?.resume).toEqual({})

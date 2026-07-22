@@ -5,6 +5,7 @@ import {
   type AuthenticateRequest,
   type CancelNotification,
   type CloseSessionRequest,
+  type DeleteSessionRequest,
   type ForkSessionRequest,
   type InitializeRequest,
   type ListSessionsRequest,
@@ -49,6 +50,10 @@ export class Agent implements ACPAgent {
 
   listSessions(params: ListSessionsRequest) {
     return run(this.service.listSessions(params))
+  }
+
+  deleteSession(params: DeleteSessionRequest) {
+    return run(this.service.deleteSession(params))
   }
 
   resumeSession(params: ResumeSessionRequest) {

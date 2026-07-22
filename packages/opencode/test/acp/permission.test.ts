@@ -46,10 +46,12 @@ function makeSessionService() {
 function createHarness(
   requestPermission: (params: RequestPermissionRequest) => Promise<RequestPermissionResponse> = () =>
     Promise.resolve({ outcome: { outcome: "selected", optionId: "once" } }),
+  writeTextFile = false,
 ) {
   const replies: PermissionReplyParams[] = []
   const requests: RequestPermissionRequest[] = []
   const updates: SessionUpdateParams[] = []
+  const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
   const session = makeSessionService()
   const sdk = {
     permission: {
@@ -71,10 +73,19 @@ function createHarness(
       updates.push(params)
       return Promise.resolve()
     },
-  } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate">
-  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
+    writeTextFile: (params: Parameters<AgentSideConnection["writeTextFile"]>[0]) => {
+      writes.push(params)
+      return Promise.resolve({})
+    },
+  } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate" | "writeTextFile">
+  const subscription = new ACPEvent.Subscription({
+    sdk,
+    connection,
+    session,
+    capabilities: { writeTextFile },
+  })
 
-  return { connection, replies, requests, sdk, session, subscription, updates }
+  return { connection, replies, requests, sdk, session, subscription, updates, writes }
 }
 
 async function createSession(session: ACPSession.Interface, sessionId: string, cwd = "/workspace") {
@@ -240,6 +251,27 @@ describe("acp permissions", () => {
         },
       ],
     })
+  })
+
+  it("syncs proposed edits only when the client advertised writeTextFile", async () => {
+    const filepath = await tempFile("sync.ts", "before\n")
+    const metadata = {
+      filepath,
+      diff: createTwoFilesPatch(filepath, filepath, "before\n", "after\n"),
+    }
+    const unsupported = createHarness(undefined, false)
+    const supported = createHarness(undefined, true)
+    await createSession(unsupported.session, "ses_unsupported")
+    await createSession(supported.session, "ses_supported")
+
+    unsupported.subscription.handle(
+      permissionAsked("ses_unsupported", "perm_unsupported", { permission: "edit", metadata }),
+    )
+    supported.subscription.handle(permissionAsked("ses_supported", "perm_supported", { permission: "edit", metadata }))
+    await pollUntil(() => unsupported.replies.length === 1 && supported.replies.length === 1, "edits were not replied")
+
+    expect(unsupported.writes).toEqual([])
+    expect(supported.writes).toEqual([{ sessionId: "ses_supported", path: filepath, content: "after\n" }])
   })
 
   it("includes per-file diff blocks and locations for apply_patch permission metadata", async () => {

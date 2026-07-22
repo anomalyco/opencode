@@ -16,6 +16,7 @@ import { Effect } from "effect"
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type Reply = "once" | "always" | "reject"
 type Connection = Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+export type Capabilities = { writeTextFile: boolean }
 
 const permissionOptions: PermissionOption[] = [
   { optionId: "once", kind: "allow_once", name: "Allow once" },
@@ -31,6 +32,7 @@ export class Handler {
       sdk: OpencodeClient
       connection: Connection
       session: ACPSession.Interface
+      capabilities: Capabilities
     },
   ) {}
 
@@ -99,7 +101,7 @@ export class Handler {
   private async writeProposedEdit(sessionId: string, metadata: ToolInput) {
     const filepath = stringValue(metadata.filepath)
     const diff = stringValue(metadata.diff)
-    if (!filepath || !diff || !this.input.connection.writeTextFile) return
+    if (!filepath || !diff || !this.input.capabilities.writeTextFile || !this.input.connection.writeTextFile) return
 
     const content = (await exists(filepath)) ? await readText(filepath) : ""
     const next = applyPatch(content, diff)

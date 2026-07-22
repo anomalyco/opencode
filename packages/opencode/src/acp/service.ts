@@ -6,6 +6,8 @@ import {
   type CancelNotification,
   type CloseSessionRequest,
   type CloseSessionResponse,
+  type DeleteSessionRequest,
+  type DeleteSessionResponse,
   type ForkSessionRequest,
   type ForkSessionResponse,
   type InitializeRequest,
@@ -56,6 +58,7 @@ export type Interface = {
   readonly newSession: (input: NewSessionRequest) => Effect.Effect<NewSessionResponse, Error>
   readonly loadSession: (input: LoadSessionRequest) => Effect.Effect<LoadSessionResponse, Error>
   readonly listSessions: (input: ListSessionsRequest) => Effect.Effect<ListSessionsResponse, Error>
+  readonly deleteSession: (input: DeleteSessionRequest) => Effect.Effect<DeleteSessionResponse, Error>
   readonly resumeSession: (input: ResumeSessionRequest) => Effect.Effect<ResumeSessionResponse, Error>
   readonly closeSession: (input: CloseSessionRequest) => Effect.Effect<CloseSessionResponse, Error>
   readonly forkSession: (input: ForkSessionRequest) => Effect.Effect<ForkSessionResponse, Error>
@@ -81,13 +84,15 @@ export function make(input: {
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
+  const capabilities = { writeTextFile: false }
   const events = input.connection
-    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session, capabilities })
     : undefined
   if (events) input.eventSubscription?.(events)
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
+    capabilities.writeTextFile = params.clientCapabilities?.fs?.writeTextFile === true
     const authMethod: AuthMethod = {
       description: "Run `opencode auth login` in the terminal",
       name: "Login with opencode",
@@ -118,6 +123,7 @@ export function make(input: {
         },
         sessionCapabilities: {
           close: {},
+          delete: {},
           fork: {},
           list: {},
           resume: {},
@@ -282,6 +288,25 @@ export function make(input: {
       sessions: page,
       ...(filtered.length > limit && last ? { nextCursor: String(new Date(last.updatedAt ?? 0).getTime()) } : {}),
     }
+  })
+
+  const deleteSession = Effect.fn("ACP.deleteSession")(function* (params: DeleteSessionRequest) {
+    const current = yield* session.tryGet(params.sessionId)
+    yield* request(
+      () =>
+        input.sdk.session.delete(
+          {
+            sessionID: params.sessionId,
+            ...(current ? { directory: current.cwd } : {}),
+          },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    yield* session.remove(params.sessionId)
+    registeredMcp.delete(params.sessionId)
+    sessionSnapshots.delete(params.sessionId)
+    return {}
   })
 
   const resumeSession = Effect.fn("ACP.resumeSession")(function* (params: ResumeSessionRequest) {
@@ -465,6 +490,7 @@ export function make(input: {
     newSession,
     loadSession,
     listSessions,
+    deleteSession,
     resumeSession,
     closeSession,
     forkSession,

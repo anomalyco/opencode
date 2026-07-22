@@ -152,6 +152,7 @@ describe("ACP service sessions", () => {
     const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
     const aborts: string[] = []
+    const deletes: string[] = []
     const forks: string[] = []
     const prompts: unknown[] = []
     const commands: unknown[] = []
@@ -196,6 +197,10 @@ describe("ACP service sessions", () => {
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
           }),
         messages: () => Promise.resolve({ data: messages }),
+        delete: (input: { sessionID: string }) => {
+          deletes.push(input.sessionID)
+          return Promise.resolve({ data: true })
+        },
         prompt:
           options?.prompt ??
           ((input: unknown) => {
@@ -268,6 +273,7 @@ describe("ACP service sessions", () => {
       updates,
       mcpAdds,
       aborts,
+      deletes,
       forks,
       prompts,
       commands,
@@ -380,6 +386,16 @@ describe("ACP service sessions", () => {
 
     expect(listed.sessions[0]?.sessionId).toBe(created.sessionId)
     expect(listed.sessions[0]?.cwd).toBe("/workspace")
+  })
+
+  it("deletes sessions from backing and local storage", async () => {
+    const { service, deletes } = makeService()
+    const created = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(await Effect.runPromise(service.deleteSession({ sessionId: created.sessionId }))).toEqual({})
+    expect(deletes).toEqual([created.sessionId])
+    const listed = await Effect.runPromise(service.listSessions({ cwd: "/workspace" }))
+    expect(listed.sessions.some((item) => item.sessionId === created.sessionId)).toBe(false)
   })
 
   it("lists all sessions with next cursor when the first page is full", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import type {
   CloseSessionResponse,
+  DeleteSessionResponse,
   ListSessionsResponse,
   LoadSessionResponse,
   ResumeSessionResponse,
@@ -78,6 +79,25 @@ describe("opencode acp lifecycle subprocess", () => {
         const listed = expectOk(yield* acp.request<ListSessionsResponse>("session/list", { cwd: home }))
 
         expect(listed.sessions.some((item) => item.sessionId === session.sessionId)).toBe(true)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "delete capability and delete request",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const acp = yield* createAcpClient(
+          { opencode },
+          { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
+        )
+        const initialized = yield* initialize(acp)
+        expect(initialized.agentCapabilities?.sessionCapabilities?.delete).toEqual({})
+        const session = yield* newSession(acp, home)
+
+        expectOk(yield* acp.request<DeleteSessionResponse>("session/delete", { sessionId: session.sessionId }))
+        const listed = expectOk(yield* acp.request<ListSessionsResponse>("session/list", { cwd: home }))
+        expect(listed.sessions.some((item) => item.sessionId === session.sessionId)).toBe(false)
       }),
     60_000,
   )

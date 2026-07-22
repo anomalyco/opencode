@@ -108,7 +108,12 @@ function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
     },
   } satisfies Pick<AgentSideConnection, "sessionUpdate">
   const session = makeSessionService()
-  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
+  const subscription = new ACPEvent.Subscription({
+    sdk,
+    connection,
+    session,
+    capabilities: { writeTextFile: false },
+  })
 
   return { calls, connection, events, sdk, session, subscription, updates }
 }
