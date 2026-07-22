@@ -368,10 +368,10 @@ const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
 
-const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
+const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string, id?: MessageID) {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
-    id: MessageID.ascending(),
+    id: id ?? MessageID.ascending(),
     role: "user",
     sessionID,
     agent: "build",
@@ -388,11 +388,14 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: strin
   return msg
 })
 
-const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { finish?: string }) {
+const seed = Effect.fn("test.seed")(function* (
+  sessionID: SessionID,
+  opts?: { finish?: string; userID?: MessageID; assistantID?: MessageID },
+) {
   const session = yield* Session.Service
-  const msg = yield* user(sessionID, "hello")
+  const msg = yield* user(sessionID, "hello", opts?.userID)
   const assistant: SessionV1.Assistant = {
-    id: MessageID.ascending(),
+    id: opts?.assistantID ?? MessageID.ascending(),
     role: "assistant",
     parentID: msg.id,
     sessionID,
@@ -458,6 +461,46 @@ noLLMServer.instance(
       if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
     }),
   { config: cfg },
+)
+
+noLLMServer.instance(
+  "loop exits when client clock skew makes the assistant ID sort before its parent user ID",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const seeded = yield* seed(chat.id, {
+        finish: "stop",
+        userID: MessageID.make("msg_002"),
+        assistantID: MessageID.make("msg_001"),
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.id).toBe(seeded.assistant.id)
+    }),
+  { config: cfg },
+)
+
+it.instance("loop responds when server clock skew makes an older assistant ID sort after the latest user ID", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* seed(chat.id, {
+      finish: "stop",
+      userID: MessageID.make("msg_001"),
+      assistantID: MessageID.make("msg_003"),
+    })
+    const latestUser = yield* user(chat.id, "follow up", MessageID.make("msg_002"))
+    yield* llm.text("new reply")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(yield* llm.calls).toBe(1)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.parentID).toBe(latestUser.id)
+  }),
 )
 
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
