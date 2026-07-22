@@ -49,6 +49,7 @@ type PatchFile = {
 }
 
 type ToolInput = ToolDict & {
+  id?: string
   path?: string
   pattern?: string
   url?: string
@@ -67,6 +68,7 @@ type ToolInput = ToolDict & {
 }
 
 type ToolMetadata = ToolDict & {
+  name?: string
   count?: number
   matches?: number
   diff?: string
@@ -416,9 +418,10 @@ function runTask(p: ToolProps): ToolInline {
 }
 
 function runSkill(p: ToolProps): ToolInline {
+  const name = p.metadata.name ?? p.input.id ?? ""
   return {
     icon: "→",
-    title: `Skill "${p.input.name ?? ""}"`,
+    title: `Skill "${name}"`,
   }
 }
 
@@ -819,7 +822,7 @@ function scrollLspStart(p: ToolProps): string {
 }
 
 function scrollSkillStart(p: ToolProps): string {
-  return `→ Skill "${p.input.name ?? ""}"`
+  return `→ Skill "${p.metadata.name ?? p.input.id ?? ""}"`
 }
 
 function scrollGlobStart(p: ToolProps): string {
