@@ -69,7 +69,7 @@ serviceIt.live("persists sources in one KV value", () =>
         const events = yield* EventV2.Service
         const changed = yield* events
           .subscribe(WellKnown.Event.Updated)
-          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
         const entry = yield* wellknown.add(`${server.url.origin}/`)
 
         expect(entry.origin).toBe(server.url.origin)
@@ -108,7 +108,7 @@ serviceIt.live("refreshes changed manifests", () =>
 
         const changed = yield* events
           .subscribe(WellKnown.Event.Updated)
-          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
         update()
         expect(yield* wellknown.refresh()).toBe(true)
         expect(yield* Fiber.join(changed)).toHaveLength(1)
