@@ -35,7 +35,7 @@ const settings: Setting[] = [
     title: "Animations",
     category: "Appearance",
     path: ["animations"],
-    default: true,
+    default: false,
     values: [false, true],
     labels: ["off", "on"],
   },

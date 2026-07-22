@@ -58,7 +58,7 @@ export function DevToolsBar() {
   const nextMode = () => (mode() === "dark" ? "light" : "dark")
   const canSwitchMode = () => supports(nextMode())
   const runtime = createMemo(() => runtimeStatus(frontendSamples()))
-  const timing = () => config.data.debug?.timing ?? true
+  const timing = () => config.data.debug?.timing ?? false
 
   const offEscape = keymap.intercept(
     "key",
