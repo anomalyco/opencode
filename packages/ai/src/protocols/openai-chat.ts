@@ -25,6 +25,7 @@ import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
 const IMAGE_MIMES = new Set<string>(ProviderShared.IMAGE_MIMES)
+const RESERVED_REASONING_FIELDS = new Set(["role", "content", "tool_calls"])
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
 
@@ -70,15 +71,18 @@ const OpenAIChatMessage = Schema.Union([
     role: Schema.Literal("user"),
     content: Schema.Union([Schema.String, Schema.Array(OpenAIChatUserContent)]),
   }),
-  Schema.Struct({
-    role: Schema.Literal("assistant"),
-    content: Schema.NullOr(Schema.String),
-    tool_calls: optionalArray(OpenAIChatAssistantToolCall),
-    reasoning_content: Schema.optional(Schema.String),
-    reasoning: Schema.optional(Schema.String),
-    reasoning_text: Schema.optional(Schema.String),
-    reasoning_details: optionalArray(Schema.Unknown),
-  }),
+  Schema.StructWithRest(
+    Schema.Struct({
+      role: Schema.Literal("assistant"),
+      content: Schema.NullOr(Schema.String),
+      tool_calls: optionalArray(OpenAIChatAssistantToolCall),
+      reasoning_content: Schema.optional(Schema.String),
+      reasoning: Schema.optional(Schema.String),
+      reasoning_text: Schema.optional(Schema.String),
+      reasoning_details: Schema.optional(Schema.Unknown),
+    }),
+    [Schema.Record(Schema.String, Schema.Unknown)],
+  ),
   Schema.Struct({ role: Schema.Literal("tool"), tool_call_id: Schema.String, content: Schema.String }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type OpenAIChatMessage = Schema.Schema.Type<typeof OpenAIChatMessage>
@@ -145,14 +149,17 @@ const OpenAIChatToolCallDelta = Schema.Struct({
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
-const OpenAIChatDelta = Schema.Struct({
-  content: optionalNull(Schema.String),
-  reasoning_content: optionalNull(Schema.String),
-  reasoning: optionalNull(Schema.String),
-  reasoning_text: optionalNull(Schema.String),
-  reasoning_details: optionalNull(Schema.Array(Schema.Unknown)),
-  tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
-})
+const OpenAIChatDelta = Schema.StructWithRest(
+  Schema.Struct({
+    content: optionalNull(Schema.String),
+    reasoning_content: optionalNull(Schema.String),
+    reasoning: optionalNull(Schema.String),
+    reasoning_text: optionalNull(Schema.String),
+    reasoning_details: optionalNull(Schema.Unknown),
+    tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
 const OpenAIChatChoice = Schema.Struct({
   delta: optionalNull(OpenAIChatDelta),
@@ -179,7 +186,7 @@ export interface ParserState {
   readonly usage?: Usage
   readonly finishReason?: FinishReason
   readonly lifecycle: Lifecycle.State
-  readonly reasoningField?: "reasoning" | "reasoning_content" | "reasoning_text"
+  readonly reasoningField?: string
   readonly reasoningDetails: Array<unknown>
   readonly reasoningDetailsObserved: boolean
   readonly reasoningEmitted: boolean
@@ -227,7 +234,7 @@ const openAICompatibleReasoningContent = (native: unknown) =>
 
 const reasoningField = (part: ReasoningPart) => {
   const field = part.providerMetadata?.openai?.reasoningField
-  if (field === "reasoning" || field === "reasoning_content" || field === "reasoning_text") return field
+  return typeof field === "string" ? field : undefined
 }
 
 const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown) => {
@@ -259,6 +266,7 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (mes
 
 const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(function* (
   message: OpenAIChatRequestMessage,
+  configuredField?: string,
 ) {
   const content: TextPart[] = []
   const reasoning: ReasoningPart[] = []
@@ -285,24 +293,26 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   const nativeReasoning = openAICompatibleReasoningContent(message.native?.openaiCompatible)
   const fullyStructured = reasoning.every((part) => Array.isArray(part.providerMetadata?.openai?.reasoningDetails))
   const field = (() => {
-    if (reasoning.length === 0) return
+    if (configuredField !== undefined) return configuredField
+    if (reasoning.length === 0) return undefined
     if (observedField !== undefined) return observedField
     if (nativeReasoning !== undefined) return "reasoning_content"
     if (!fullyStructured) return "reasoning_content"
   })()
-  const reasoningContent = (() => {
+  const reasoningText = (() => {
+    if (configuredField !== undefined) return reasoning.length === 0 ? (nativeReasoning ?? "") : text
     if (reasoning.length === 0) return nativeReasoning
-    if (field === "reasoning_content") return text
+    return text
   })()
-  return {
+  const result = {
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-    reasoning_content: reasoningContent,
-    reasoning: reasoning.length > 0 && field === "reasoning" ? text : undefined,
-    reasoning_text: reasoning.length > 0 && field === "reasoning_text" ? text : undefined,
-    reasoning_details: details,
+    reasoning_details: field === "reasoning_details" && configuredField !== undefined ? (details ?? []) : details,
   }
+  if (field === undefined || reasoningText === undefined) return result
+  if (field === "reasoning_details") return result
+  return { ...result, [field]: reasoningText }
 })
 
 const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
@@ -328,9 +338,12 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (m
   return { messages, images }
 })
 
-const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: OpenAIChatRequestMessage) {
+const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
+  message: OpenAIChatRequestMessage,
+  reasoningField?: string,
+) {
   if (message.role === "user") return [yield* lowerUserMessage(message)]
-  if (message.role === "assistant") return [yield* lowerAssistantMessage(message)]
+  if (message.role === "assistant") return [yield* lowerAssistantMessage(message, reasoningField)]
   return (yield* lowerToolMessages(message)).messages
 })
 
@@ -368,7 +381,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
       continue
     }
     flushImages()
-    messages.push(...(yield* lowerMessage(message)))
+    messages.push(...(yield* lowerMessage(message, request.model.reasoningField)))
   }
   flushImages()
   return messages
@@ -386,6 +399,10 @@ const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LL
 const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMRequest) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
+  if (request.model.reasoningField && RESERVED_REASONING_FIELDS.has(request.model.reasoningField))
+    return yield* ProviderShared.invalidRequest(
+      `OpenAI Chat reasoning field conflicts with reserved field ${request.model.reasoningField}`,
+    )
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
@@ -446,10 +463,18 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   })
 }
 
-const reasoningDelta = (delta: Schema.Schema.Type<typeof OpenAIChatDelta> | null | undefined) => {
-  if (delta?.reasoning_content) return { field: "reasoning_content", text: delta.reasoning_content } as const
-  if (delta?.reasoning) return { field: "reasoning", text: delta.reasoning } as const
-  if (delta?.reasoning_text) return { field: "reasoning_text", text: delta.reasoning_text } as const
+const reasoningDelta = (
+  delta: Schema.Schema.Type<typeof OpenAIChatDelta> | null | undefined,
+  configuredField?: string,
+) => {
+  if (!delta) return undefined
+  const fields = new Set([configuredField, "reasoning_content", "reasoning", "reasoning_text"])
+  for (const field of fields) {
+    if (field === undefined) continue
+    const text = delta[field]
+    if (typeof text === "string" && text.length > 0) return { field, text }
+  }
+  return undefined
 }
 
 const detailText = (details: ReadonlyArray<unknown>) => {
@@ -518,7 +543,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     let lifecycle = state.lifecycle
 
-    const reasoning = reasoningDelta(delta)
+    const reasoning = reasoningDelta(delta, state.reasoningField)
     const reasoningField = state.reasoningField ?? (!state.lifecycle.text.has("text-0") ? reasoning?.field : undefined)
     const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
     if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
@@ -635,12 +660,12 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIChatEvent),
-    initial: () => ({
+    initial: (request) => ({
       tools: ToolStream.empty<number>(),
       pendingTools: {},
       toolCallEvents: [],
       lifecycle: Lifecycle.initial(),
-      reasoningField: undefined,
+      reasoningField: request.model.reasoningField,
       reasoningDetails: [],
       reasoningDetailsObserved: false,
       reasoningEmitted: false,

@@ -503,6 +503,19 @@ describe("HttpApiCodegen.generate", () => {
     expect(types).not.toContain("Brand")
   })
 
+  test("preserves suggestions for open string unions in Promise wire types", () => {
+    const Field = Schema.Union([Schema.Literals(["reasoning", "reasoning_content"]), Schema.String]).annotate({
+      identifier: "Field",
+    })
+    const output = emitPromise(
+      compileContract(api(HttpApiEndpoint.get("get", "/model", { success: Schema.Struct({ field: Field }) }))),
+    )
+
+    expect(output.files.find((file) => file.path === "types.ts")?.content).toContain(
+      'export type Field = "reasoning" | "reasoning_content" | (string & {})',
+    )
+  })
+
   test("retains non-recursive references in Promise wire types", () => {
     const Referenced = Schema.Struct({ value: Schema.String }).annotate({ identifier: "Referenced" })
     const output = emitPromise(

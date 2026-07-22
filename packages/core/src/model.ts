@@ -12,6 +12,9 @@ export type VariantID = typeof VariantID.Type
 export const Family = Model.Family
 export type Family = Model.Family
 
+export const ReasoningField = Model.ReasoningField
+export type ReasoningField = Model.ReasoningField
+
 export const Capabilities = Model.Capabilities
 export type Capabilities = Model.Capabilities
 
@@ -24,6 +27,12 @@ export const Info = Model.Info
 export type Info = Model.Info
 
 export type MutableInfo = DeepMutable<Info>
+
+export function reasoningField(input: unknown): ReasoningField | undefined {
+  if (typeof input === "string") return input
+  if (typeof input !== "object" || input === null || Array.isArray(input) || !("field" in input)) return undefined
+  return typeof input.field === "string" ? input.field : undefined
+}
 
 export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID } {
   const [providerID, ...modelID] = input.split("/")

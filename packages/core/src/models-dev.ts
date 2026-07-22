@@ -43,7 +43,7 @@ type SourceModel = {
   readonly reasoning_options?: readonly ReasoningOption[]
   readonly temperature?: boolean
   readonly tool_call: boolean
-  readonly interleaved?: true | { readonly field: "reasoning" | "reasoning_content" | "reasoning_details" }
+  readonly interleaved?: boolean | string | { readonly field: string }
   readonly cost?: Cost
   readonly limit: { readonly context: number; readonly input?: number; readonly output: number }
   readonly modalities?: { readonly input: readonly Modality[]; readonly output: readonly Modality[] }
@@ -495,6 +495,7 @@ function modelInfo(
     modelID: ModelV2.ID.make(model.id),
     providerID,
     name: input.name ?? model.name,
+    reasoningField: ModelV2.reasoningField(model.interleaved),
     family: model.family ? ModelV2.Family.make(model.family) : undefined,
     package: model.provider?.npm ? ProviderV2.aisdk(model.provider.npm) : undefined,
     settings: model.provider?.api ? { baseURL: model.provider.api } : undefined,

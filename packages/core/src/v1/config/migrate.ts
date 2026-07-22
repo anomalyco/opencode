@@ -8,6 +8,7 @@ import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigProviderOptionsV1 } from "./provider-options"
 import { ProviderV2 } from "../../provider"
+import { ModelV2 } from "../../model"
 
 const keys = new Set([
   "logLevel",
@@ -278,6 +279,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     modelID: info.id,
     family: info.family,
     name: info.name,
+    reasoningField: ModelV2.reasoningField(info.interleaved),
     package: info.provider?.npm ? ProviderV2.aisdk(info.provider.npm) : undefined,
     settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
     capabilities,

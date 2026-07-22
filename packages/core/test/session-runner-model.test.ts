@@ -16,6 +16,7 @@ import { it } from "./lib/effect"
 
 interface ModelOptions {
   readonly modelID?: string
+  readonly reasoningField?: ModelV2.ReasoningField
   readonly settings?: ModelV2.Info["settings"]
   readonly headers?: ModelV2.Info["headers"]
   readonly body?: ModelV2.Info["body"]
@@ -28,6 +29,7 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
     modelID: ModelV2.ID.make(options.modelID ?? "api-test-model"),
     providerID: ProviderV2.ID.make("test-provider"),
     name: "Test model",
+    reasoningField: options.reasoningField,
     package: packageName,
     settings: options.settings ?? {},
     headers: options.headers ?? { "x-test": "header" },
@@ -101,6 +103,7 @@ describe("SessionRunnerModel", () => {
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
         model(ProviderV2.aisdk("@ai-sdk/openai-compatible"), {
+          reasoningField: "vendor_reasoning",
           settings: {
             apiKey: "settings-secret",
             baseURL: "https://compatible.example/v1",
@@ -121,6 +124,7 @@ describe("SessionRunnerModel", () => {
 
       expect(headers.authorization).toBe("Bearer settings-secret")
       expect(resolved.route.id).toBe("openai-compatible-chat")
+      expect(resolved.reasoningField).toBe("vendor_reasoning")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
       expect(resolved.route.defaults.http?.body).toEqual({})
     }),

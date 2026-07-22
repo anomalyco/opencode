@@ -344,7 +344,12 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
   }
-  return Model.make({ id: info.modelID ?? info.id, provider: info.providerID, route })
+  return Model.make({
+    id: info.modelID ?? info.id,
+    provider: info.providerID,
+    route,
+    reasoningField: info.reasoningField,
+  })
 }
 
 function gatewayProviderOptions(modelID: ModelV2.ID, settings: Readonly<Record<string, unknown>>) {

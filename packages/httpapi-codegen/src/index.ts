@@ -853,7 +853,7 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
       .replaceAll("Schema.Json", "JsonValue")
       .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
-    return mutable ? mutableType(output) : output
+    return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
   }
   return {
     types: document.codes.map((code) => render(code.Type)),
@@ -893,9 +893,15 @@ function structuralType(schema: Schema.Top) {
     }
     return type
   }
-  return expand(document.codes[0].Type)
-    .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
-    .replaceAll("Schema.Json", "JsonValue")
+  return preserveStringSuggestions(
+    expand(document.codes[0].Type)
+      .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
+      .replaceAll("Schema.Json", "JsonValue"),
+  )
+}
+
+function preserveStringSuggestions(type: string) {
+  return type.replaceAll(/((?:"(?:\\.|[^"\\])*"\s*\|\s*)+)string\b/g, "$1(string & {})")
 }
 
 function normalizePromiseClientContent(content: string, groups: ReadonlyArray<Group>) {

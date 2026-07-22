@@ -170,6 +170,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
                       models: {
                         chat: {
                           name: "First",
+                          reasoningField: "vendor_reasoning",
                           capabilities: { tools: true, input: ["text"], output: ["text"] },
                           disabled: true,
                           limit: { context: 100, output: 50 },
@@ -251,6 +252,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         expect(model.id).toBe(modelID)
         expect(model.modelID).toBe(ModelV2.ID.make("api-chat"))
         expect(model.name).toBe("Last")
+        expect(model.reasoningField).toBe("vendor_reasoning")
         expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
         expect(model.enabled).toBe(false)
         expect(model.limit).toEqual({ context: 100, output: 75 })

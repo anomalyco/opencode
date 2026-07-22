@@ -42,6 +42,7 @@ class Model extends Schema.Class<Model>("ConfigV2.Model")({
   modelID: ModelV2.ID.pipe(Schema.optional),
   family: ModelV2.Family.pipe(Schema.optional),
   name: Schema.String.pipe(Schema.optional),
+  reasoningField: ModelV2.ReasoningField.pipe(Schema.optional),
   package: Schema.String.pipe(Schema.optional),
   ...Overlays,
   capabilities: ModelV2.Capabilities.pipe(Schema.optional),

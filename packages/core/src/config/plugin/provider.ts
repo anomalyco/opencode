@@ -4,7 +4,6 @@ import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
-import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 
 export const Plugin = define({
@@ -59,6 +58,7 @@ export const Plugin = define({
               if (config.family !== undefined) model.family = config.family
               if (config.name !== undefined) model.name = config.name
               if (config.modelID !== undefined) model.modelID = config.modelID
+              if (config.reasoningField !== undefined) model.reasoningField = config.reasoningField
               if (config.package !== undefined) model.package = config.package
               if (config.settings !== undefined)
                 model.settings = ProviderV2.mergeOverlay(model.settings, config.settings)

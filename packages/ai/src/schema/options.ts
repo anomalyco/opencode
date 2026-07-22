@@ -181,6 +181,7 @@ export class Model {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute
+  readonly reasoningField?: string
   readonly defaults?: ModelDefaults
   readonly compatibility?: ModelCompatibility
 
@@ -188,6 +189,7 @@ export class Model {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
+    this.reasoningField = input.reasoningField
     this.defaults = input.defaults
     this.compatibility = input.compatibility
   }
@@ -197,6 +199,7 @@ export class Model {
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
+      reasoningField: input.reasoningField,
       defaults: input.defaults === undefined ? undefined : ModelDefaults.make(input.defaults),
       compatibility: input.compatibility === undefined ? undefined : ModelCompatibility.make(input.compatibility),
     })
@@ -207,6 +210,7 @@ export class Model {
       id: model.id,
       provider: model.provider,
       route: model.route,
+      reasoningField: model.reasoningField,
       defaults: model.defaults,
       compatibility: model.compatibility,
     }
@@ -226,6 +230,7 @@ export namespace Model {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute
+    readonly reasoningField?: string
     readonly defaults?: ModelDefaults
     readonly compatibility?: ModelCompatibility
   }

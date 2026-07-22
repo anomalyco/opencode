@@ -1,4 +1,4 @@
-import { describe, expect, beforeEach, afterAll } from "bun:test"
+import { describe, expect, beforeEach, afterAll, test } from "bun:test"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
@@ -15,6 +15,13 @@ import path from "path"
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
 
+test("normalizes permissive interleaved values to reasoning fields", () => {
+  expect(ModelV2.reasoningField("reasoning_text")).toBe("reasoning_text")
+  expect(ModelV2.reasoningField({ field: "vendor_reasoning" })).toBe("vendor_reasoning")
+  expect(ModelV2.reasoningField(true)).toBeUndefined()
+  expect(ModelV2.reasoningField(false)).toBeUndefined()
+})
+
 const fixture = {
   acme: {
     id: "acme",
@@ -30,6 +37,7 @@ const fixture = {
         reasoning: false,
         temperature: true,
         tool_call: true,
+        interleaved: { field: "vendor_reasoning" },
         limit: { context: 128000, output: 8192 },
       },
     },
@@ -49,6 +57,7 @@ const fixtureSnapshot = [
         modelID: ModelV2.ID.make("acme-1"),
         providerID: ProviderV2.ID.make("acme"),
         name: "Acme One",
+        reasoningField: "vendor_reasoning",
         family: undefined,
         package: undefined,
         settings: undefined,

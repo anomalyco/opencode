@@ -98,6 +98,25 @@ Here `openai/coding-default` is the selectable catalog reference, while `gpt-5.2
 model that is not already in the catalog, set accurate `capabilities` and `limit` values so OpenCode can expose tools and
 enforce the correct context limits. Set `disabled: true` on a model entry to hide it from the available catalog.
 
+OpenAI-compatible models that stream reasoning through a custom assistant-message field can set `reasoningField`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "local": {
+      "models": {
+        "reasoner": {
+          "reasoningField": "reasoning_content"
+        }
+      }
+    }
+  }
+}
+```
+
+OpenCode recognizes `reasoning`, `reasoning_content`, and `reasoning_text`, and accepts any provider-specific string. It
+reads streamed reasoning from this field and includes the field when replaying assistant messages to the model.
+
 ### Custom variants
 
 Add a variant, or override a catalog variant with the same ID, under the model's `variants` array:

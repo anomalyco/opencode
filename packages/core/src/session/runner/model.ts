@@ -209,14 +209,14 @@ export const fromCatalogModel = (
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: resolved.modelID ?? resolved.id }),
+        .model({ id: resolved.modelID ?? resolved.id, reasoningField: resolved.reasoningField }),
     )
   }
   if (ProviderV2.isAISDK(resolved.package) && packageName === "@ai-sdk/anthropic") {
     return Effect.succeed(
       withDefaults(resolved, AnthropicMessages.route)
         .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })
-        .model({ id: resolved.modelID ?? resolved.id }),
+        .model({ id: resolved.modelID ?? resolved.id, reasoningField: resolved.reasoningField }),
     )
   }
   if (
@@ -227,7 +227,7 @@ export const fromCatalogModel = (
     return Effect.succeed(
       withDefaults(resolved, OpenAICompatibleChat.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: resolved.modelID ?? resolved.id }),
+        .model({ id: resolved.modelID ?? resolved.id, reasoningField: resolved.reasoningField }),
     )
   }
   if (ProviderV2.isAISDK(resolved.package)) {
@@ -258,7 +258,10 @@ export const fromCatalogModel = (
     }
     return yield* Effect.try({
       try: () =>
-        Model.update(module.model(resolved.modelID ?? resolved.id, settings), { provider: resolved.providerID }),
+        Model.update(module.model(resolved.modelID ?? resolved.id, settings), {
+          provider: resolved.providerID,
+          reasoningField: resolved.reasoningField,
+        }),
       catch: () => unsupported(resolved),
     })
   })
@@ -302,7 +305,7 @@ const codexModel = (
         account === undefined ? Auth.none : Auth.headers({ "chatgpt-account-id": account }),
       ),
     })
-    .model({ id: model.modelID ?? model.id })
+    .model({ id: model.modelID ?? model.id, reasoningField: model.reasoningField })
 }
 
 const unsupported = (model: ModelV2.Info) =>
