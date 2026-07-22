@@ -22,7 +22,7 @@ import { createComponentTheme, type ComponentTheme } from "../theme/v2/component
 import { resolveThemeFile } from "../theme/v2/resolve"
 import { migrateV1 } from "../theme/v2/v1-migrate"
 import { themeModes } from "../theme/v2/select"
-import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
@@ -99,7 +99,7 @@ const [store, setStore] = createStore<State>({
 
 subscribeThemes((themes) => setStore("themes", themes))
 
-export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
+const themeContext = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light"; source?: ThemeSource }) => {
     const renderer = useRenderer()
@@ -362,6 +362,18 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     return service
   },
 })
+
+export const useTheme = themeContext.use
+export const ThemeProvider = themeContext.provider
+
+export function ThemeContextProvider(props: ParentProps<{ context: ContextName }>) {
+  const theme = useTheme()
+  return (
+    <themeContext.context.Provider value={theme.contextual(props.context)}>
+      {props.children}
+    </themeContext.context.Provider>
+  )
+}
 
 function duration(milliseconds: number) {
   return `${milliseconds.toFixed(2)} ms`

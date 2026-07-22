@@ -22,7 +22,7 @@ import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
-import { useTheme } from "../../context/theme"
+import { ThemeContextProvider, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -2352,15 +2352,26 @@ function StatusBadge(props: { children: string }) {
   )
 }
 
-function BlockTool(props: {
+type BlockToolProps = {
   title?: string
   path?: { label: string; value: string }
   children?: JSX.Element
   onClick?: () => void
   part?: SessionMessageAssistantTool
   spinner?: boolean
-}) {
-  const { themeV2 } = useTheme().contextual("elevated")
+}
+
+function BlockTool(props: BlockToolProps) {
+  const parentTheme = useTheme()
+  return (
+    <ThemeContextProvider context="elevated">
+      <BlockToolContent {...props} borderColor={parentTheme.themeV2.background.default} />
+    </ThemeContextProvider>
+  )
+}
+
+function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
+  const { themeV2 } = useTheme()
   const ctx = use()
   const data = useData()
   const renderer = useRenderer()
@@ -2380,7 +2391,7 @@ function BlockTool(props: {
       gap={1}
       backgroundColor={hover() ? themeV2.raise(themeV2.background.default) : themeV2.background.default}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={themeV2.background.default}
+      borderColor={props.borderColor}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
