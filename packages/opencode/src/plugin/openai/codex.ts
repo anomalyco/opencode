@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { OpenAIWebSocketPool } from "./ws-pool"
 import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
+import { createBrokerFetch } from "./broker"
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
@@ -102,6 +103,11 @@ interface CodexAuthPluginOptions {
   issuer?: string
   codexApiEndpoint?: string
   experimentalWebSockets?: boolean
+  fetch?: typeof fetch
+  broker?: {
+    url: string
+    serviceTokenFile: string
+  }
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -263,6 +269,17 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPluginOptions = {}): Promise<Hooks> {
   const issuer = options.issuer ?? ISSUER
   const codexApiEndpoint = options.codexApiEndpoint ?? CODEX_API_ENDPOINT
+  const httpFetch = options.fetch ?? fetch
+  const brokerURL = options.broker?.url ?? process.env.OPENCODE_OPENAI_AUTH_BROKER_URL
+  const broker = brokerURL
+    ? {
+        url: brokerURL,
+        serviceTokenFile:
+          options.broker?.serviceTokenFile ??
+          process.env.OPENCODE_OPENAI_AUTH_BROKER_TOKEN_FILE ??
+          "/var/run/secrets/kubernetes.io/serviceaccount/token",
+      }
+    : undefined
   let websocketFetchInstalled = false
   const websocketFetches: Array<ReturnType<typeof OpenAIWebSocketPool.createWebSocketFetch>> = []
 
@@ -278,7 +295,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     provider: {
       id: "openai",
       async models(provider, ctx) {
-        if (ctx.auth?.type !== "oauth") return provider.models
+        if (ctx.auth?.type !== "oauth" && !broker) return provider.models
 
         return Object.fromEntries(
           Object.entries(provider.models)
@@ -319,15 +336,29 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     },
     auth: {
       provider: "openai",
+      autoload: Boolean(broker),
       async loader(getAuth) {
-        const auth = await getAuth()
         const websocketFetch = options.experimentalWebSockets
-          ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
+          ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch })
           : undefined
         if (websocketFetch) {
           websocketFetches.push(websocketFetch)
           websocketFetchInstalled = true
         }
+        if (broker) {
+          return {
+            apiKey: OAUTH_DUMMY_KEY,
+            openaiAuth: "broker",
+            fetch: createBrokerFetch({
+              ...broker,
+              codexApiEndpoint,
+              fetch: httpFetch,
+              websocketFetch,
+            }),
+          }
+        }
+
+        const auth = await getAuth()
         if (auth.type !== "oauth") return websocketFetch ? { fetch: websocketFetch } : {}
 
         let refreshPromise:

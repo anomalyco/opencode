@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import {
   CodexAuthPlugin,
   parseJwtClaims,
@@ -7,6 +8,7 @@ import {
   renderOAuthError,
   type IdTokenClaims,
 } from "../../src/plugin/openai/codex"
+import { tmpdir } from "../fixture/fixture"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -286,6 +288,91 @@ describe("plugin.codex", () => {
     expect(apiRequests).toEqual([
       { authorization: "Bearer access-new", accountId: "acc-123" },
       { authorization: "Bearer access-new", accountId: "acc-123" },
+    ])
+  })
+
+  test("uses an external broker without loading or persisting OAuth credentials", async () => {
+    await using tmp = await tmpdir()
+    const serviceTokenFile = path.join(tmp.path, "service-account-token")
+    await Bun.write(serviceTokenFile, "service-account-token\n")
+
+    const brokerRequests: Array<{ authorization: string | null; previousHash: string }> = []
+    const apiRequests: Array<{ authorization: string | null; accountId: string | null }> = []
+    using server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/broker") {
+          const body: unknown = await request.json()
+          const previousHash =
+            typeof body === "object" &&
+            body !== null &&
+            "previousAccessTokenHash" in body &&
+            typeof body.previousAccessTokenHash === "string"
+              ? body.previousAccessTokenHash
+              : ""
+          brokerRequests.push({
+            authorization: request.headers.get("authorization"),
+            previousHash,
+          })
+          const rotated = previousHash === "hash-1"
+          return Response.json({
+            accessToken: rotated ? "access-2" : "access-1",
+            accessTokenHash: rotated ? "hash-2" : "hash-1",
+            chatgptAccountId: "account-1",
+            chatgptPlanType: "plus",
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          })
+        }
+        if (url.pathname === "/backend-api/codex/responses") {
+          const authorization = request.headers.get("authorization")
+          apiRequests.push({
+            authorization,
+            accountId: request.headers.get("ChatGPT-Account-Id"),
+          })
+          return new Response("{}", { status: authorization === "Bearer access-1" ? 401 : 200 })
+        }
+        return new Response("unexpected request", { status: 500 })
+      },
+    })
+
+    let loadedStoredAuth = false
+    let persistedAuth = false
+    const hooks = await CodexAuthPlugin(
+      {
+        client: {
+          auth: {
+            async set() {
+              persistedAuth = true
+            },
+          },
+        } as never,
+      } as never,
+      {
+        broker: {
+          url: new URL("/broker", server.url).toString(),
+          serviceTokenFile,
+        },
+        codexApiEndpoint: new URL("/backend-api/codex/responses", server.url).toString(),
+      },
+    )
+    const loaded = await hooks.auth!.loader!(async () => {
+      loadedStoredAuth = true
+      throw new Error("broker mode must not load stored auth")
+    }, {} as never)
+
+    expect(hooks.auth?.autoload).toBe(true)
+    expect(loaded.openaiAuth).toBe("broker")
+    expect((await loaded.fetch!("https://api.openai.com/v1/responses")).status).toBe(200)
+    expect(loadedStoredAuth).toBe(false)
+    expect(persistedAuth).toBe(false)
+    expect(brokerRequests).toEqual([
+      { authorization: "Bearer service-account-token", previousHash: "" },
+      { authorization: "Bearer service-account-token", previousHash: "hash-1" },
+    ])
+    expect(apiRequests).toEqual([
+      { authorization: "Bearer access-1", accountId: "account-1" },
+      { authorization: "Bearer access-2", accountId: "account-1" },
     ])
   })
 })

@@ -18,6 +18,7 @@ import {
 } from "@opencode-ai/llm"
 import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
+import { isOpenAIChatGPTAuth } from "./openai-auth"
 
 export type RuntimeStatus =
   | { readonly type: "supported"; readonly apiKey: string; readonly baseURL?: string }
@@ -146,7 +147,7 @@ export function stream(input: StreamInput): StreamResult {
 }
 
 function providerFetch(input: Pick<StreamInput, "provider" | "auth">): typeof globalThis.fetch | undefined {
-  if (input.provider.id !== "openai" || input.auth?.type !== "oauth") return undefined
+  if (!isOpenAIChatGPTAuth(input)) return undefined
   const value: unknown = input.provider.options.fetch
   if (typeof value !== "function") return undefined
   return value as typeof globalThis.fetch

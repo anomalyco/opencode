@@ -1698,6 +1698,44 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
 If you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
 
+##### Using an external token broker
+
+Headless deployments can delegate ChatGPT access-token rotation to an external
+broker instead of storing an OpenAI OAuth credential in OpenCode. Configure the
+broker URL and a file containing the bearer credential used to call it:
+
+```sh
+export OPENCODE_OPENAI_AUTH_BROKER_URL="https://broker.example.com/token"
+export OPENCODE_OPENAI_AUTH_BROKER_TOKEN_FILE="/var/run/secrets/service/token"
+opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+The token file is read for every broker request so platforms such as Kubernetes
+can rotate it. OpenCode sends:
+
+```json
+{
+  "previousAccessTokenHash": ""
+}
+```
+
+The broker must return a short-lived ChatGPT token and account metadata:
+
+```json
+{
+  "accessToken": "...",
+  "accessTokenHash": "...",
+  "chatgptAccountId": "...",
+  "chatgptPlanType": "plus",
+  "expiresAt": "2026-07-22T14:00:00Z"
+}
+```
+
+OpenCode refreshes before expiration. If OpenAI rejects a token with `401`, it
+sends that token's hash as `previousAccessTokenHash` and retries once with the
+broker response. Access and refresh credentials are not written to OpenCode's
+credential store in broker mode.
+
 ---
 
 ### OpenCode Zen

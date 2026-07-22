@@ -1547,7 +1547,7 @@ const layer = Layer.effect(
           if (disabled.has(providerID)) continue
 
           const stored = yield* auth.get(providerID).pipe(Effect.orDie)
-          if (!stored) continue
+          if (!stored && !plugin.auth.autoload) continue
           if (!plugin.auth.loader) continue
 
           const options = yield* Effect.promise(() =>

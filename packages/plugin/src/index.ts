@@ -87,6 +87,7 @@ type Rule = {
 
 export type AuthHook = {
   provider: string
+  autoload?: boolean
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
   methods: (
     | {
