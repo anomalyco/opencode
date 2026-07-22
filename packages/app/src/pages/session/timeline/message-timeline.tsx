@@ -472,6 +472,15 @@ export function MessageTimeline(props: {
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key as string))
+  const handleScrollToLastUser = () => {
+    const lastUser = props.userMessages.at(-1)
+    if (!lastUser) return
+    const index = messageRowIndex().get(lastUser.id)
+    if (index !== undefined) {
+      virtualizer.scrollToIndex(index, { align: "start" })
+    }
+  }
+
   createEffect(() => {
     props.setRevealMessage?.((id) => {
       const index = messageRowIndex().get(id)
@@ -1233,7 +1242,7 @@ export function MessageTimeline(props: {
   return (
     <div class="relative w-full h-full min-w-0">
       <div
-        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
+        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out flex items-center gap-2"
         classList={{
           "bottom-8": settings.general.newLayoutDesigns(),
           "bottom-6": !settings.general.newLayoutDesigns(),
@@ -1243,6 +1252,42 @@ export function MessageTimeline(props: {
           "scale-95": (!props.scroll.overflow || !props.scroll.jump) && !settings.general.newLayoutDesigns(),
         }}
       >
+        <Show when={props.userMessages.length > 0}>
+          <Show
+            when={settings.general.newLayoutDesigns()}
+            fallback={
+              <button
+                type="button"
+                aria-label={language.t("session.messages.jumpToLatestUser")}
+                class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
+                onClick={handleScrollToLastUser}
+              >
+                <div
+                  class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
+                  style={{
+                    "box-shadow":
+                      "0 51px 60px 0 rgba(0,0,0,0.10), 0 15px 18px 0 rgba(0,0,0,0.12), 0 6.386px 7.513px 0 rgba(0,0,0,0.12), 0 2.31px 2.717px 0 rgba(0,0,0,0.20)",
+                  }}
+                >
+                  <Icon name="speech-bubble" size="small" />
+                </div>
+              </button>
+            }
+          >
+            <button
+              type="button"
+              aria-label={language.t("session.messages.jumpToLatestUser")}
+              class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px]"
+              style={{
+                background: "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
+                "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
+              }}
+              onClick={handleScrollToLastUser}
+            >
+              <Icon name="speech-bubble" size="small" />
+            </button>
+          </Show>
+        </Show>
         <Show
           when={settings.general.newLayoutDesigns()}
           fallback={
