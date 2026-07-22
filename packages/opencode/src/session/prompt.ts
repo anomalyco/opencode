@@ -3,7 +3,6 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import path from "path"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import os from "os"
-import { Identifier } from "@/id/id"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { SessionRevert } from "./revert"
@@ -98,16 +97,6 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
   // They are not pending work and must not trigger an assistant-prefill request.
   return part.state.status === "error" && part.state.metadata?.interrupted === true
-}
-
-function requireAscendingMessageID(messageID: string | undefined) {
-  // A caller-supplied ID is stored as-is and ordered against the IDs minted for
-  // the rest of the session, so it has to sort the same way. Rejecting it here
-  // beats accepting one that silently breaks `MessageV2.latest`.
-  if (messageID === undefined || Identifier.isAscending("message", messageID)) return
-  throw new NamedError.Unknown({
-    message: `Message ID "${messageID}" is not an ascending ID. Generate it with Identifier.ascending("message") so it sorts after the messages already in the session.`,
-  })
 }
 
 export interface Interface {
@@ -477,7 +466,6 @@ const layer = Layer.effect(
               yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
               throw error
             }
-            requireAscendingMessageID(input.messageID)
             const model = input.model ?? agent.model ?? (yield* currentModel(input.sessionID))
             const userMsg: SessionV1.User = {
               id: input.messageID ?? MessageID.ascending(),
@@ -665,7 +653,6 @@ const layer = Layer.effect(
           : undefined
       const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
-      requireAscendingMessageID(input.messageID)
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
         role: "user",
@@ -1122,10 +1109,8 @@ const layer = Layer.effect(
             ) ?? false
 
           // The turn is over once the newest assistant message is the reply to the
-          // newest user message. Compare parentID rather than ordering the two IDs:
-          // parentID is assigned by this loop, whereas a message ID can be supplied
-          // by the client, and one that does not sort below the IDs minted later
-          // pins `lastUser` forever and the loop never exits.
+          // newest user message. parentID records that relationship directly and
+          // remains valid when the client supplies the message ID.
           if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&

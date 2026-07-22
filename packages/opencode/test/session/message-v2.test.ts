@@ -1659,4 +1659,40 @@ describe("session.message-v2.latest", () => {
     expect(state.tasks).toHaveLength(1)
     expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
   })
+
+  test("client-supplied IDs do not control message or task ordering", () => {
+    const oldUser = MessageID.make("msg_fcfbda4a-03c9-4e6b-82cf-2febde1b46a6")
+    const oldAssistant = MessageID.make("msg_f86f0407d0016iNuRJc2PUqfPV")
+    const newUser = MessageID.make("msg_00000000000000000000000000")
+    const state = MessageV2.latest([
+      {
+        info: { ...userInfo(oldUser), time: { created: 1 } },
+        parts: [],
+      },
+      {
+        info: {
+          ...assistantInfo(oldAssistant, oldUser),
+          finish: "stop",
+          time: { created: 2 },
+        },
+        parts: [],
+      },
+      {
+        info: { ...userInfo(newUser), time: { created: 3 } },
+        parts: [
+          {
+            ...basePart(newUser, "new-task"),
+            type: "compaction",
+            auto: true,
+          },
+        ] as SessionV1.Part[],
+      },
+    ])
+
+    expect(state.user?.id).toBe(newUser)
+    expect(state.assistant?.id).toBe(oldAssistant)
+    expect(state.finished?.id).toBe(oldAssistant)
+    expect(state.tasks).toHaveLength(1)
+    expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
+  })
 })

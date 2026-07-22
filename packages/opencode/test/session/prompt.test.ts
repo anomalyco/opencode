@@ -460,6 +460,46 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+it.instance("client-supplied message IDs do not control consecutive turns", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const messageID = MessageID.make("msg_fcfbda4a-03c9-4e6b-82cf-2febde1b46a6")
+
+    yield* llm.text("first reply")
+    const first = yield* prompt.prompt({
+      sessionID: chat.id,
+      messageID,
+      agent: "build",
+      model: ref,
+      parts: [{ type: "text", text: "first prompt" }],
+    })
+
+    expect(first.info.role).toBe("assistant")
+    if (first.info.role === "assistant") expect(first.info.parentID).toBe(messageID)
+
+    yield* llm.text("second reply")
+    const second = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      parts: [{ type: "text", text: "second prompt" }],
+    })
+
+    expect(second.info.role).toBe("assistant")
+    if (second.info.role !== "assistant") return
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+    const secondUser = messages.findLast((message) => message.info.role === "user")
+    if (!secondUser || secondUser.info.role !== "user") throw new Error("expected second user message")
+    expect(secondUser.info.id).not.toBe(messageID)
+    expect(second.info.parentID).toBe(secondUser.info.id)
+    expect(second.parts).toContainEqual(expect.objectContaining({ type: "text", text: "second reply" }))
+    expect(yield* llm.calls).toBe(2)
+  }),
+)
+
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

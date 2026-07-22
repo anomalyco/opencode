@@ -38,18 +38,6 @@ function generateID(prefix: keyof typeof prefixes, direction: "descending" | "as
   return given
 }
 
-const ASCENDING = /^[0-9a-f]{12}[0-9A-Za-z]{14}$/
-
-/**
- * Whether an ID has the shape `ascending()` produces, and so sorts by creation
- * time against other IDs of the same prefix. Callers that accept an ID from a
- * client should check this before storing it anywhere ordering is load-bearing.
- */
-export function isAscending(prefix: keyof typeof prefixes, id: string): boolean {
-  const start = prefixes[prefix] + "_"
-  return id.startsWith(start) && ASCENDING.test(id.slice(start.length))
-}
-
 function randomBase62(length: number): string {
   const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
   let result = ""
