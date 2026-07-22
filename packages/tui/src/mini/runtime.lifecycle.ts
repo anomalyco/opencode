@@ -82,6 +82,7 @@ export type Lifecycle = {
   footer: FooterApi
   onResize(fn: () => void): () => void
   refreshTheme(): void
+  setTitle(title?: string): void
   resetForReplay(input: { sessionTitle?: string; sessionID?: string; history: RunPrompt[] }): Promise<void>
   close(input: { showExit: boolean; sessionTitle?: string; sessionID?: string; history?: RunPrompt[] }): Promise<void>
 }
@@ -184,6 +185,12 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     consoleMode: "disabled",
     clearOnShutdown: false,
   })
+  const setTitle = (title?: string) => {
+    if (input.host.platform !== "linux") return
+    if (!title || isDefaultTitle(title)) return renderer.setTerminalTitle("OpenCode")
+    renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
+  }
+  setTitle(input.sessionTitle)
   const theme = await resolveRunTheme(renderer, tuiConfig.theme, mono)
   renderer.setBackgroundColor(theme.background)
   const state: SplashState = {
@@ -338,6 +345,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       footer.close()
       await footer.idle().catch(() => {})
       footer.destroy()
+      if (input.host.platform === "linux") renderer.setTerminalTitle("")
       shutdown(renderer)
       if (!wroteExit) {
         input.host.stdout.write("\n")
@@ -350,6 +358,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     refreshTheme() {
       footer.refreshTheme()
     },
+    setTitle,
     onResize(fn) {
       let width = renderer.terminalWidth
       let height = renderer.terminalHeight

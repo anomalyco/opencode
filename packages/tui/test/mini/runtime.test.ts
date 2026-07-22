@@ -84,6 +84,7 @@ describe("run interactive runtime", () => {
             footer: api,
             onResize: () => () => {},
             refreshTheme: () => {},
+            setTitle: () => {},
             resetForReplay: () => Promise.resolve(),
             close: () => Promise.resolve(),
           }
@@ -180,6 +181,7 @@ describe("run interactive runtime", () => {
             footer: api,
             onResize: () => () => {},
             refreshTheme: () => {},
+            setTitle: () => {},
             resetForReplay: () => Promise.resolve(),
             close: () => Promise.resolve(),
           }
@@ -199,6 +201,7 @@ describe("run interactive runtime", () => {
     const lifecycleStarted = defer<void>()
     const painted = defer<void>()
     const events: FooterEvent[] = []
+    const titles: Array<string | undefined> = []
     const api = footer(events)
     api.idle = () => painted.promise
     const event = api.event
@@ -265,6 +268,7 @@ describe("run interactive runtime", () => {
             footer: api,
             onResize: () => () => {},
             refreshTheme: () => {},
+            setTitle: (title) => titles.push(title),
             resetForReplay: () => Promise.resolve(),
             close: () => Promise.resolve(),
           }
@@ -282,6 +286,7 @@ describe("run interactive runtime", () => {
       history: [{ text: "previous prompt", parts: [] }],
     })
     expect(events).toContainEqual({ type: "agent", agent: "review" })
+    expect(titles).toEqual(["Resume"])
     expect(events).toContainEqual({
       type: "model",
       model: "Little Frank · OpenAI · high",
@@ -344,6 +349,7 @@ describe("run interactive runtime", () => {
           footer: api,
           onResize: () => () => {},
           refreshTheme: () => {},
+          setTitle: () => {},
           resetForReplay: () => Promise.resolve(),
           close: async (input) => {
             closedTitle = input.sessionTitle
@@ -423,6 +429,7 @@ describe("run interactive runtime", () => {
             footer: api,
             onResize: () => () => {},
             refreshTheme: () => {},
+            setTitle: () => {},
             resetForReplay: () => Promise.resolve(),
             close: () => Promise.resolve(),
           }

@@ -443,6 +443,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         if (footer.isClosed || runtimeController.signal.aborted) return
         state.sessionID = next.sessionID
         state.sessionTitle = next.sessionTitle ?? state.sessionTitle
+        shell.setTitle(state.sessionTitle)
         state.agent = next.agent
         state.location = next.location
         state.model = next.model
@@ -741,6 +742,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         replayLimit: input.replayLimit,
         footer,
         onCommit: rememberLocal,
+        onSessionTitle: (title) => {
+          state.sessionTitle = title
+          shell.setTitle(title)
+        },
         trace: log,
         onCatalogRefresh: requestCatalogRefresh,
         contextLimit: (model) =>
@@ -887,6 +892,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               state.shown = false
               state.sessionID = created.sessionID
               state.sessionTitle = created.sessionTitle
+              shell.setTitle(state.sessionTitle)
               state.agent = created.agent ?? state.agent
               state.location = created.location
               state.model = created.model

@@ -46,6 +46,7 @@ type StreamInput = {
   replayLimit?: number
   footer: FooterApi
   onCommit?: (commit: StreamCommit) => void
+  onSessionTitle?: (title: string) => void
   trace?: Trace
   signal?: AbortSignal
   onCatalogRefresh?: (signal?: AbortSignal) => unknown | Promise<unknown>
@@ -828,6 +829,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     input.trace?.write("recv.event", event)
     subagents.main(client, event, attempt.signal)
+    if (event.type === "session.renamed") {
+      input.onSessionTitle?.(event.data.title)
+      return
+    }
     if (event.type === "session.input.admitted") {
       if (event.data.input.type !== "user") return
       mergePending({

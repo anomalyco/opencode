@@ -200,6 +200,31 @@ afterEach(() => {
 })
 
 describe("V2 mini transport", () => {
+  test("reports session title changes", async () => {
+    const events = feed()
+    events.push(connected())
+    const titles: string[] = []
+    const transport = await createSessionTransport({
+      sdk: sdk({ streams: [events] }),
+      sessionID: "ses_1",
+      thinking: false,
+      footer: footer().api,
+      onSessionTitle: (title) => titles.push(title),
+    })
+
+    events.push({
+      id: "evt_renamed",
+      created: 1,
+      type: "session.renamed",
+      durable: durable("ses_1", 1),
+      data: { sessionID: "ses_1", title: "Greeting" },
+    })
+
+    while (titles.length === 0) await Bun.sleep(0)
+    expect(titles).toEqual(["Greeting"])
+    await transport.close()
+  })
+
   test("formats footer usage with compact tokens and context percentage", async () => {
     const events = feed()
     events.push(connected())
