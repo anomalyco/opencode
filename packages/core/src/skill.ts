@@ -30,10 +30,11 @@ export type Info = Skill.Info
 export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
   skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
 
-// External project/global dirs KanCode scans for skills, in addition to .kancode/.
-// .kancode is intentionally absent here — it is the "no origin tag" default.
-// .opencode is a skills-only exception to the no-project-.opencode-discovery
-// rule; config and other resources stay KanCode-only. See openspec/config.yaml.
+// External project/global dirs KanCode can scan for skills when enabled via
+// `skills.external`. .kancode is intentionally absent here — it is the "no
+// origin tag" default and is always scanned. .opencode is a skills-only
+// exception to the no-project-.opencode-discovery rule; config and other
+// resources stay KanCode-only. See openspec/config.yaml.
 export const EXTERNAL_DIRS = [".claude", ".agents", ".cursor", ".codex", ".kilo", ".opencode"] as const
 const ORIGIN_BY_DIR: Record<string, string> = {
   ".claude": ".claude",

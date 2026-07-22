@@ -47,7 +47,7 @@ already-loaded config until then.
 | Global commands               | global KanCode config `command(s)/<name>.md`                                                              |
 | Project skills                | `.kancode/skill(s)/<name>/SKILL.md`                                                                       |
 | Global skills                 | global KanCode config `skill(s)/<name>/SKILL.md`                                                          |
-| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                    |
+| External skills (opt-in)      | `~/.<source>/skills/<name>/SKILL.md` — enable via `skills.external` |
 
 KanCode does **not** load project `.opencode/` at runtime. To copy skills,
 commands, agents, themes, or plans from a legacy `.opencode/` directory into

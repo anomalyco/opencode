@@ -29,10 +29,10 @@ const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
-// External skill roots KanCode scans in addition to .kancode/. Ordered so
-// that origin labels stay stable. .kancode is intentionally absent here — it
-// is the "no origin tag" default. .opencode is a skills-only exception to
-// the no-project-.opencode-discovery rule; config and other resources stay
+// External skill roots KanCode can scan when enabled via `skills.external`.
+// .kancode is intentionally absent here — it is the "no origin tag" default
+// and is always scanned. .opencode is a skills-only exception to the
+// no-project-.opencode-discovery rule; config and other resources stay
 // KanCode-only. See openspec/config.yaml.
 const EXTERNAL_DIRS = [
   CLAUDE_EXTERNAL_DIR,
