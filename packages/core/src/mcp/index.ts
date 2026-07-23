@@ -2,8 +2,10 @@ export * as MCP from "./index"
 
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
+import { Event } from "@opencode-ai/schema/config"
 import { Command } from "@opencode-ai/schema/command"
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Config } from "../config"
@@ -180,26 +182,37 @@ export const layer = (options?: Options) => Layer.effect(
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
     yield* Effect.addFinalizer((exit) => Scope.close(root, exit))
 
-    const documents = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
-    // Global MCP timeout defaults, later config files overriding earlier ones.
-    const timeout = Object.assign(
-      {},
-      ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
-    )
+    const loadConfig = Effect.fnUntraced(function* () {
+      const documents = (yield* config.entries()).filter(
+        (entry): entry is Config.Document => entry.type === "document",
+      )
+      // Global MCP timeout defaults, later config files overriding earlier ones.
+      const timeout = Object.assign(
+        {},
+        ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
+      )
+      const servers = new Map<ServerName, typeof ConfigMCP.Server.Type>()
+      for (const entry of documents) {
+        for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
+          servers.set(ServerName.make(name), { ...server, timeout: { ...timeout, ...server.timeout } })
+        }
+      }
+      return { timeout, servers }
+    })
+    const initial = yield* loadConfig()
+    const configState = { names: new Set(initial.servers.keys()), timeout: initial.timeout }
     // Later config files win for duplicate server names; per-server timeout overrides globals.
     const runtime = new Map<ServerName, ServerEntry>()
     // Serializes lifecycle operations per server. Anything taking this lock from a connection
     // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
     const locks = KeyedMutex.makeUnsafe<ServerName>()
     const urlElicitations = new Map<string, Form.ID>()
-    for (const entry of documents) {
-      for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
-        runtime.set(ServerName.make(name), {
-          config: { ...server, timeout: { ...timeout, ...server.timeout } },
-          status: { status: "pending" },
-          startup: Deferred.makeUnsafe<void>(),
-        })
-      }
+    for (const [name, server] of initial.servers) {
+      runtime.set(name, {
+        config: server,
+        status: { status: "pending" },
+        startup: Deferred.makeUnsafe<void>(),
+      })
     }
 
     // Register every remote server as an OAuth integration so credentials live in the global store
@@ -560,6 +573,65 @@ export const layer = (options?: Options) => Layer.effect(
       yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
     })
 
+    const disposeServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
+      yield* stopServer(name, entry)
+      if (entry.integrationID) owned.delete(entry.integrationID)
+      if (entry.registration) yield* entry.registration.dispose
+    })
+
+    const replaceServer = Effect.fnUntraced(function* (
+      name: ServerName,
+      config: typeof ConfigMCP.Server.Type,
+    ) {
+      const previous = runtime.get(name)
+      if (previous) yield* disposeServer(name, previous)
+      const entry: ServerEntry = {
+        config,
+        status: { status: "pending" },
+        startup: Deferred.makeUnsafe<void>(),
+      }
+      runtime.set(name, entry)
+      yield* Effect.gen(function* () {
+        yield* register(name, entry)
+        if (config.disabled) {
+          entry.status = { status: "disabled" }
+          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          return
+        }
+        yield* startServer(name, entry)
+      }).pipe(
+        // Settle startup even when register fails or replacement is interrupted, so an entry that made it
+        // into runtime can never hang readers awaiting its startup.
+        Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(entry.startup, Exit.void))),
+      )
+    })
+
+    const removeServer = Effect.fnUntraced(function* (name: ServerName) {
+      const entry = runtime.get(name)
+      if (!entry) return
+      yield* disposeServer(name, entry)
+      // Credentials are kept: they are keyed by name + url, so re-adding the same server
+      // reuses them without forcing re-auth, matching add()'s replacement semantics.
+      runtime.delete(name)
+      yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+    })
+
+    const reloadConfig = Effect.fnUntraced(function* () {
+      const next = yield* loadConfig()
+      configState.timeout = next.timeout
+      const names = new Set([...configState.names, ...next.servers.keys()])
+      for (const name of names) {
+        const updated = next.servers.get(name)
+        if (!updated) {
+          yield* removeServer(name).pipe(locks.withLock(name))
+          continue
+        }
+        if (isDeepStrictEqual(runtime.get(name)?.config, updated)) continue
+        yield* replaceServer(name, updated).pipe(locks.withLock(name))
+      }
+      configState.names = new Set(next.servers.keys())
+    })
+
     // Disabled servers settle their startup immediately so queries never block on them.
     for (const [name, entry] of runtime) {
       if (entry.config.disabled) {
@@ -594,6 +666,15 @@ export const layer = (options?: Options) => Layer.effect(
       ),
     )
 
+    fork(
+      events.subscribe(Event.Updated).pipe(
+        Stream.runForEach(() =>
+          reloadConfig().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload MCP config", { cause }))),
+        ),
+        Effect.ignore,
+      ),
+    )
+
     // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.
     const whenAllReady = Effect.suspend(() =>
       Effect.forEach(Array.from(runtime.values()), (entry) => Deferred.await(entry.startup), {
@@ -615,33 +696,9 @@ export const layer = (options?: Options) => Layer.effect(
       }),
       add: Effect.fn("MCP.add")(function* (server, config) {
         const name = ServerName.make(server)
-        yield* Effect.gen(function* () {
-          const previous = runtime.get(name)
-          if (previous) {
-            yield* stopServer(name, previous)
-            if (previous.integrationID) owned.delete(previous.integrationID)
-            if (previous.registration) yield* previous.registration.dispose
-          }
-          const entry: ServerEntry = {
-            config: { ...config, timeout: { ...timeout, ...config.timeout } },
-            status: { status: "pending" },
-            startup: Deferred.makeUnsafe<void>(),
-          }
-          runtime.set(name, entry)
-          yield* Effect.gen(function* () {
-            yield* register(name, entry)
-            if (config.disabled) {
-              entry.status = { status: "disabled" }
-              yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
-              return
-            }
-            yield* startServer(name, entry)
-          }).pipe(
-            // Settle startup even when register fails or add is interrupted, so an entry that made it
-            // into runtime can never hang readers awaiting its startup.
-            Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(entry.startup, Exit.void))),
-          )
-        }).pipe(locks.withLock(name))
+        yield* replaceServer(name, { ...config, timeout: { ...configState.timeout, ...config.timeout } }).pipe(
+          locks.withLock(name),
+        )
       }),
       connect: Effect.fn("MCP.connect")(function* (server) {
         const name = ServerName.make(server)
@@ -663,14 +720,8 @@ export const layer = (options?: Options) => Layer.effect(
       remove: Effect.fn("MCP.remove")(function* (server) {
         const name = ServerName.make(server)
         yield* Effect.gen(function* () {
-          const target = yield* requireServer(name)
-          yield* stopServer(name, target.entry)
-          if (target.entry.integrationID) owned.delete(target.entry.integrationID)
-          if (target.entry.registration) yield* target.entry.registration.dispose
-          // Credentials are kept: they are keyed by name + url, so re-adding the same server
-          // reuses them without forcing re-auth, matching add()'s replacement semantics.
-          runtime.delete(name)
-          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          yield* requireServer(name)
+          yield* removeServer(name)
         }).pipe(locks.withLock(name))
       }),
       tools: Effect.fn("MCP.tools")(function* () {
