@@ -38,9 +38,14 @@ describe("concurrent ensure benchmark", () => {
     }
 
     expect(rows.map((row) => row.concurrency)).toEqual([...Concurrency])
-    console.log(JSON.stringify({ benchmark: "concurrent-ensure", rows }, null, 2))
+
+    logBenchmarkResults({ rows })
   }, 90_000)
 })
+
+function logBenchmarkResults(results: { rows: Row[] }) {
+  console.log(JSON.stringify({ benchmark: "concurrent-ensure", ...results }, null, 2))
+}
 
 async function runConcurrentEnsure(concurrency: number, startupMs: number): Promise<Row> {
   return withTemp(async (directory) => {
