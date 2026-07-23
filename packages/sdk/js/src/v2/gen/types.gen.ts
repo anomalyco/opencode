@@ -74,6 +74,7 @@ export type Event =
   | EventTuiPromptAppend2
   | EventTuiCommandExecute2
   | EventTuiToastShow2
+  | EventTuiReady
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
@@ -1439,6 +1440,13 @@ export type GlobalEvent = {
           message: string
           variant: "info" | "success" | "warning" | "error"
           duration?: number
+        }
+      }
+    | {
+        id: string
+        type: "tui.ready"
+        properties: {
+          [key: string]: unknown
         }
       }
     | {
@@ -2918,6 +2926,7 @@ export type V2Event =
   | TuiPromptAppend
   | TuiCommandExecute
   | TuiToastShow
+  | TuiReady
   | TuiSessionSelect
   | McpToolsChanged
   | McpBrowserOpenFailed
@@ -5807,6 +5816,23 @@ export type TuiToastShow = {
   }
 }
 
+export type TuiReady = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "tui.ready"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
 export type TuiSessionSelect = {
   id: string
   metadata?: {
@@ -6878,6 +6904,14 @@ export type EventPermissionReplied = {
     sessionID: string
     requestID: string
     reply: "once" | "always" | "reject"
+  }
+}
+
+export type EventTuiReady = {
+  id: string
+  type: "tui.ready"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -10871,6 +10905,34 @@ export type TuiShowToastResponses = {
 }
 
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
+
+export type TuiReadyData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tui/ready"
+}
+
+export type TuiReadyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiReadyError = TuiReadyErrors[keyof TuiReadyErrors]
+
+export type TuiReadyResponses = {
+  /**
+   * TUI startup notifications delivered successfully
+   */
+  200: boolean
+}
+
+export type TuiReadyResponse = TuiReadyResponses[keyof TuiReadyResponses]
 
 export type TuiPublishData = {
   body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect

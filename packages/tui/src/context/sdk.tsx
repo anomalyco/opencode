@@ -31,6 +31,18 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     let sdk = createSDK()
+    let resolveReady: () => void
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve
+    })
+    let isReady = false
+
+    async function markReady() {
+      if (isReady) return
+      isReady = true
+      await sdk.tui.ready().catch(() => {})
+      resolveReady()
+    }
 
     const handlers = new Set<(event: GlobalEvent) => void>()
     const emitter = {
@@ -79,47 +91,47 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       flush()
     }
 
-    function startSSE() {
+    async function startSSE() {
       sse?.abort()
       const ctrl = new AbortController()
       sse = ctrl
-      ;(async () => {
-        let attempt = 0
-        while (true) {
-          if (abort.signal.aborted || ctrl.signal.aborted) break
+      let attempt = 0
+      while (true) {
+        if (abort.signal.aborted || ctrl.signal.aborted) break
 
-          const events = await sdk.global.event({
-            signal: ctrl.signal,
-            sseMaxRetryAttempts: 0,
-          })
+        const events = await sdk.global.event({
+          signal: ctrl.signal,
+          sseMaxRetryAttempts: 0,
+        })
+        await markReady()
 
-          if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-            // Start syncing workspaces, it's important to do this after
-            // we've started listening to events
-            await sdk.sync.start().catch(() => {})
-          }
-
-          for await (const event of events.stream) {
-            if (ctrl.signal.aborted) break
-            handleEvent(event)
-          }
-
-          if (timer) clearTimeout(timer)
-          if (queue.length > 0) flush()
-          attempt += 1
-          if (abort.signal.aborted || ctrl.signal.aborted) break
-
-          // Exponential backoff
-          const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
-          await new Promise((resolve) => setTimeout(resolve, backoff))
+        if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+          // Start syncing workspaces, it's important to do this after
+          // we've started listening to events
+          await sdk.sync.start().catch(() => {})
         }
-      })().catch(() => {})
+
+        for await (const event of events.stream) {
+          if (ctrl.signal.aborted) break
+          handleEvent(event)
+        }
+
+        if (timer) clearTimeout(timer)
+        if (queue.length > 0) flush()
+        attempt += 1
+        if (abort.signal.aborted || ctrl.signal.aborted) break
+
+        // Exponential backoff
+        const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
+        await new Promise((resolve) => setTimeout(resolve, backoff))
+      }
     }
 
     onMount(async () => {
       if (props.events) {
         const unsub = await props.events.subscribe(handleEvent)
         onCleanup(unsub)
+        await markReady()
 
         if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // Start syncing workspaces, it's important to do this after
@@ -127,7 +139,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           await sdk.sync.start().catch(() => {})
         }
       } else {
-        startSSE()
+        void startSSE().catch(() => markReady())
       }
     })
 
@@ -143,6 +155,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         return sdk
       },
       directory: props.directory,
+      ready,
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,

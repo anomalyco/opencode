@@ -49,6 +49,11 @@ export const ToastShow = Event.define({
   },
 })
 
+export const Ready = Event.define({
+  type: "tui.ready",
+  schema: {},
+})
+
 export const SessionSelect = Event.define({
   type: "tui.session.select",
   schema: {
@@ -56,4 +61,4 @@ export const SessionSelect = Event.define({
   },
 })
 
-export const Definitions = Event.inventory(PromptAppend, CommandExecute, ToastShow, SessionSelect)
+export const Definitions = Event.inventory(PromptAppend, CommandExecute, ToastShow, Ready, SessionSelect)

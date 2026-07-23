@@ -43,6 +43,7 @@ export const TuiPaths = {
   clearPrompt: `${root}/clear-prompt`,
   executeCommand: `${root}/execute-command`,
   showToast: `${root}/show-toast`,
+  ready: `${root}/ready`,
   publish: `${root}/publish`,
   selectSession: `${root}/select-session`,
   controlNext: `${root}/control/next`,
@@ -146,6 +147,16 @@ export const TuiApi = HttpApi.make("tui")
             identifier: "tui.showToast",
             summary: "Show TUI toast",
             description: "Show a toast notification in the TUI.",
+          }),
+        ),
+        HttpApiEndpoint.post("ready", TuiPaths.ready, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "TUI startup notifications delivered successfully"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "tui.ready",
+            summary: "Mark TUI ready",
+            description: "Publish a TUI-ready event after the TUI event stream is subscribed.",
           }),
         ),
         HttpApiEndpoint.post("publish", TuiPaths.publish, {
