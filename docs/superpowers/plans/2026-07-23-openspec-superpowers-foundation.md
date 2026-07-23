@@ -26,16 +26,19 @@
 - Create: `.codex/skills/openspec-explore/SKILL.md`
 - Create: `.codex/skills/openspec-apply-change/SKILL.md`
 - Create: `.codex/skills/openspec-sync-specs/SKILL.md`
+- Create: `.codex/skills/openspec-update-change/SKILL.md`
 - Create: `.codex/skills/openspec-archive-change/SKILL.md`
 - Create: `.opencode/skills/openspec-propose/SKILL.md`
 - Create: `.opencode/skills/openspec-explore/SKILL.md`
 - Create: `.opencode/skills/openspec-apply-change/SKILL.md`
 - Create: `.opencode/skills/openspec-sync-specs/SKILL.md`
+- Create: `.opencode/skills/openspec-update-change/SKILL.md`
 - Create: `.opencode/skills/openspec-archive-change/SKILL.md`
 - Create: `.opencode/commands/opsx-propose.md`
 - Create: `.opencode/commands/opsx-explore.md`
 - Create: `.opencode/commands/opsx-apply.md`
 - Create: `.opencode/commands/opsx-sync.md`
+- Create: `.opencode/commands/opsx-update.md`
 - Create: `.opencode/commands/opsx-archive.md`
 
 **Interfaces:**
