@@ -660,7 +660,7 @@ describe("PatchTool", () => {
           ),
         ).toEqual({
           status: "error",
-          error: { type: "tool.execution", message: "Unable to apply patch at new.txt: forced write failure" },
+          error: { type: "tool.execution", message: "Failed to write new.txt: forced write failure" },
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "old.txt"), "utf8"))).toBe("before\n")
         expect(yield* exists(path.join(directory, "new.txt"))).toBe(false)
@@ -681,8 +681,7 @@ describe("PatchTool", () => {
           status: "error",
           error: {
             type: "tool.execution",
-            message:
-              "Patch partially applied before failing at second.txt: forced write failure. Completed before failure: first.txt",
+            message: "Failed to write second.txt: forced write failure. Completed before failure: first.txt",
           },
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "first.txt"), "utf8"))).toBe("first\n")
@@ -705,8 +704,7 @@ describe("PatchTool", () => {
           status: "error",
           error: {
             type: "tool.execution",
-            message:
-              "Patch partially applied while moving old.txt to new.txt: wrote new.txt but failed to remove old.txt: forced remove failure",
+            message: "Wrote new.txt but failed to remove old.txt: forced remove failure",
           },
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "old.txt"), "utf8"))).toBe("before\n")

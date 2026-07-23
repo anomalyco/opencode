@@ -82,24 +82,10 @@ export const Plugin = {
               output: Output,
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []
-                const fail = (path: string, error?: unknown) => {
-                  const detail = error === undefined ? "" : `: ${errorMessage(error)}`
-                  if (applied.length === 0) {
-                    return new ToolFailure({ message: `Unable to apply patch at ${path}${detail}` })
-                  }
+                const fail = (operation: string, error: unknown) => {
+                  const completed = applied.map((item) => item.resource).join(", ")
                   return new ToolFailure({
-                    message: `Patch partially applied before failing at ${path}${detail}. Completed before failure: ${applied.map((item) => item.resource).join(", ")}`,
-                  })
-                }
-                const failPreservingCause = (path: string, error: unknown) =>
-                  new ToolFailure({ message: fail(path, error).message, error })
-                const failMoveRemoval = (source: string, destination: string, error: unknown) => {
-                  const previous =
-                    applied.length === 0
-                      ? ""
-                      : `. Completed before move: ${applied.map((item) => item.resource).join(", ")}`
-                  return new ToolFailure({
-                    message: `Patch partially applied while moving ${source} to ${destination}: wrote ${destination} but failed to remove ${source}: ${errorMessage(error)}${previous}`,
+                    message: `${operation}: ${errorMessage(error)}${completed ? `. Completed before failure: ${completed}` : ""}`,
                   })
                 }
                 return Effect.gen(function* () {
@@ -224,7 +210,9 @@ export const Plugin = {
                       if (!moveTarget) updates.set(target.canonical, Patch.joinBom(update.content, update.bom))
                     }).pipe(
                       Effect.mapError((error) =>
-                        error instanceof ToolFailure ? error : failPreservingCause(hunk.path, error),
+                        error instanceof ToolFailure
+                          ? error
+                          : new ToolFailure({ message: `Unable to prepare patch at ${hunk.path}`, error }),
                       ),
                     )
                   }
@@ -256,7 +244,9 @@ export const Plugin = {
                                 ? change.contents
                                 : `${change.contents}\n`,
                             )
-                            .pipe(Effect.mapError((error) => fail(change.target.resource, error)))
+                            .pipe(
+                              Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)),
+                            )
                           applied.push({
                             type: change.type,
                             resource: change.target.resource,
@@ -267,7 +257,9 @@ export const Plugin = {
                         if (change.type === "delete") {
                           yield* fs
                             .remove(change.target.canonical)
-                            .pipe(Effect.mapError((error) => fail(change.target.resource, error)))
+                            .pipe(
+                              Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)),
+                            )
                           applied.push({
                             type: change.type,
                             resource: change.target.resource,
@@ -279,10 +271,10 @@ export const Plugin = {
                           const moveTarget = change.moveTarget
                           yield* fs
                             .writeWithDirs(moveTarget.canonical, change.content)
-                            .pipe(Effect.mapError((error) => fail(moveTarget.resource, error)))
+                            .pipe(Effect.mapError((error) => fail(`Failed to write ${moveTarget.resource}`, error)))
                           yield* fs.remove(change.target.canonical).pipe(
                             Effect.mapError((error) =>
-                              failMoveRemoval(change.target.resource, moveTarget.resource, error),
+                              fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
                             ),
                           )
                           applied.push({
@@ -294,7 +286,7 @@ export const Plugin = {
                         }
                         yield* fs
                           .writeWithDirs(change.target.canonical, change.content)
-                          .pipe(Effect.mapError((error) => fail(change.target.resource, error)))
+                          .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
                         applied.push({
                           type: change.type,
                           resource: change.target.resource,
@@ -311,7 +303,9 @@ export const Plugin = {
                     metadata: { files: output.files },
                   })),
                   Effect.mapError((error) =>
-                    error instanceof ToolFailure ? error : failPreservingCause("patch", error),
+                    error instanceof ToolFailure
+                      ? error
+                      : new ToolFailure({ message: "Unable to apply patch", error }),
                   ),
                 )
               },
