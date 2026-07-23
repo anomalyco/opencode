@@ -135,7 +135,14 @@ jobs:
 
             const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
 
-            if (linkedIssues === 0) {
+            // closingIssuesReferences is only populated for PRs that target the
+            // default branch, so PRs based on other branches (e.g. v2) would
+            // always be flagged. Fall back to matching closing keywords in the
+            // PR body before flagging.
+            const closingKeyword = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+#\d+/i;
+            const bodyReferencesIssue = closingKeyword.test(pr.body ?? '');
+
+            if (linkedIssues === 0 && !bodyReferencesIssue) {
               await addLabel('needs:issue');
               await comment('issue', `Thanks for your contribution!
 
