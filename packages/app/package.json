@@ -44,6 +44,7 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
+    "vite-plugin-pwa": "0.21.1",
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
