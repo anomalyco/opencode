@@ -68,7 +68,7 @@ describe("OpenAIPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5")),
           modelID: ModelV2.ID.make("gpt-5"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -86,7 +86,7 @@ describe("OpenAIPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5")),
           modelID: ModelV2.ID.make("gpt-5"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -105,7 +105,7 @@ describe("OpenAIPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("alias")),
+          ...ModelV2.Info.default(ProviderV2.ID.openai, ModelV2.ID.make("alias")),
           modelID: ModelV2.ID.make("gpt-5"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -125,7 +125,7 @@ describe("OpenAIPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.anthropic, ModelV2.ID.make("gpt-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.anthropic, ModelV2.ID.make("gpt-5")),
           modelID: ModelV2.ID.make("gpt-5"),
           package: ProviderV2.aisdk("test-provider"),
         }),

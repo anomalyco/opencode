@@ -148,7 +148,7 @@ describe("AzurePlugin", () => {
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+            ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
             modelID: ModelV2.ID.make("deployment"),
             package: ProviderV2.aisdk("test-provider"),
           }),
@@ -168,7 +168,7 @@ describe("AzurePlugin", () => {
         const exit = yield* aisdk
           .runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+              ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
               modelID: ModelV2.ID.make("deployment"),
               package: ProviderV2.aisdk("test-provider"),
             }),
@@ -189,7 +189,7 @@ describe("AzurePlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -208,7 +208,7 @@ describe("AzurePlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -227,7 +227,7 @@ describe("AzurePlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: ProviderV2.aisdk("test-provider"),
           body: { useCompletionUrls: true },
@@ -247,7 +247,7 @@ describe("AzurePlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -256,7 +256,7 @@ describe("AzurePlugin", () => {
       })
       const ignored = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.openai, ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -280,7 +280,7 @@ describe("AzurePlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("messages-deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("messages-deployment")),
           modelID: ModelV2.ID.make("messages-deployment"),
           package: ProviderV2.aisdk("test-provider"),
         }),
@@ -289,7 +289,7 @@ describe("AzurePlugin", () => {
       })
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("language-deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.azure, ModelV2.ID.make("language-deployment")),
           modelID: ModelV2.ID.make("language-deployment"),
           package: ProviderV2.aisdk("test-provider"),
         }),

@@ -172,7 +172,7 @@ describe("GoogleVertexPlugin", () => {
           const provider = required(yield* catalog.provider.get(ProviderV2.ID.make("google-vertex")))
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
               modelID: ModelV2.ID.make("gemini"),
               package: "aisdk:@ai-sdk/google-vertex",
             }),
@@ -294,7 +294,7 @@ describe("GoogleVertexPlugin", () => {
           yield* addPlugin()
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
               modelID: ModelV2.ID.make("gemini"),
               package: "aisdk:@ai-sdk/google-vertex",
             }),
@@ -339,7 +339,7 @@ describe("GoogleVertexPlugin", () => {
         () =>
           aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
               modelID: ModelV2.ID.make("gemini"),
               package: "aisdk:@ai-sdk/openai-compatible",
             }),
@@ -367,7 +367,7 @@ describe("GoogleVertexPlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make(" gemini-2.5-pro ")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make(" gemini-2.5-pro ")),
           modelID: ModelV2.ID.make(" gemini-2.5-pro "),
           package: "aisdk:test-provider",
         }),

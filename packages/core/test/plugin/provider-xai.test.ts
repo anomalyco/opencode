@@ -62,7 +62,7 @@ describe("XAIPlugin", () => {
 
       const ignored = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
           modelID: ModelV2.ID.make("grok-4"),
           package: "aisdk:@ai-sdk/xai",
         }),
@@ -72,7 +72,7 @@ describe("XAIPlugin", () => {
 
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
           modelID: ModelV2.ID.make("grok-4"),
           package: "aisdk:@ai-sdk/xai",
         }),
@@ -92,7 +92,7 @@ describe("XAIPlugin", () => {
 
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-xai"), ModelV2.ID.make("grok-4")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("custom-xai"), ModelV2.ID.make("grok-4")),
           modelID: ModelV2.ID.make("grok-4"),
           package: "aisdk:@ai-sdk/xai",
         }),
@@ -112,7 +112,7 @@ describe("XAIPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("alias")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("xai"), ModelV2.ID.make("alias")),
           modelID: ModelV2.ID.make("grok-4"),
           package: "aisdk:@ai-sdk/xai",
         }),
@@ -133,7 +133,7 @@ describe("XAIPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("grok-4")),
+          ...ModelV2.Info.default(ProviderV2.ID.openai, ModelV2.ID.make("grok-4")),
           modelID: ModelV2.ID.make("grok-4"),
           package: "aisdk:@ai-sdk/xai",
         }),

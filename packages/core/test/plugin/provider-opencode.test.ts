@@ -293,7 +293,7 @@ describe("OpencodePlugin", () => {
             package: ProviderV2.aisdk("test-provider"),
           })
           const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+            ...ModelV2.Info.default(provider.id, ModelV2.ID.make("paid")),
             modelID: ModelV2.ID.make("paid"),
             package: ProviderV2.aisdk("test-provider"),
             cost: cost(1),
@@ -320,7 +320,7 @@ describe("OpencodePlugin", () => {
             package: ProviderV2.aisdk("test-provider"),
           })
           const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("free")),
+            ...ModelV2.Info.default(provider.id, ModelV2.ID.make("free")),
             modelID: ModelV2.ID.make("free"),
             package: ProviderV2.aisdk("test-provider"),
             cost: cost(0),
@@ -347,7 +347,7 @@ describe("OpencodePlugin", () => {
             package: ProviderV2.aisdk("test-provider"),
           })
           const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("output-only")),
+            ...ModelV2.Info.default(provider.id, ModelV2.ID.make("output-only")),
             modelID: ModelV2.ID.make("output-only"),
             package: ProviderV2.aisdk("test-provider"),
             cost: cost(0, 1),
@@ -376,7 +376,7 @@ describe("OpencodePlugin", () => {
             package: ProviderV2.aisdk("test-provider"),
           })
           const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+            ...ModelV2.Info.default(provider.id, ModelV2.ID.make("paid")),
             modelID: ModelV2.ID.make("paid"),
             package: ProviderV2.aisdk("test-provider"),
             cost: cost(1),
@@ -410,7 +410,7 @@ describe("OpencodePlugin", () => {
             package: ProviderV2.aisdk("test-provider"),
           })
           const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+            ...ModelV2.Info.default(provider.id, ModelV2.ID.make("paid")),
             modelID: ModelV2.ID.make("paid"),
             package: ProviderV2.aisdk("test-provider"),
             cost: cost(1),
@@ -438,7 +438,7 @@ describe("OpencodePlugin", () => {
             settings: { apiKey: "configured" },
           })
           const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+            ...ModelV2.Info.default(provider.id, ModelV2.ID.make("paid")),
             modelID: ModelV2.ID.make("paid"),
             package: ProviderV2.aisdk("test-provider"),
             cost: cost(1),
@@ -468,7 +468,7 @@ describe("OpencodePlugin", () => {
             package: ProviderV2.aisdk("test-provider"),
           })
           const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+            ...ModelV2.Info.default(provider.id, ModelV2.ID.make("paid")),
             modelID: ModelV2.ID.make("paid"),
             package: ProviderV2.aisdk("test-provider"),
             cost: cost(1),

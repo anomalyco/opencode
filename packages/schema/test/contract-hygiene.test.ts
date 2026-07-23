@@ -83,7 +83,7 @@ describe("contract hygiene", () => {
 
   test("model defaults and provider overlays preserve public invariants", () => {
     const id = Model.ID.make("model")
-    expect(Model.Info.empty(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
+    expect(Model.Info.default(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
     expect(() =>
       Schema.decodeUnknownSync(Provider.Info)({
         id: "provider",

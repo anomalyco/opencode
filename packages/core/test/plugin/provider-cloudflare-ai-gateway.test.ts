@@ -117,7 +117,7 @@ describe("CloudflareAIGatewayPlugin", () => {
           yield* addPlugin()
           const result = yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
               modelID: ModelV2.ID.make("openai/gpt-5"),
               package: "aisdk:test-provider",
             }),
@@ -139,7 +139,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+            ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
             modelID: ModelV2.ID.make("openai/gpt-5"),
             package: "aisdk:test-provider",
           }),
@@ -184,7 +184,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+            ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
             modelID: ModelV2.ID.make("openai/gpt-5"),
             package: "aisdk:test-provider",
           }),
@@ -214,7 +214,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+            ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
             modelID: ModelV2.ID.make("openai/gpt-5"),
             package: "aisdk:test-provider",
           }),
@@ -252,7 +252,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
               modelID: ModelV2.ID.make("openai/gpt-5"),
               package: "aisdk:test-provider",
             }),
@@ -284,7 +284,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+            ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
             modelID: ModelV2.ID.make("openai/gpt-5"),
             package: "aisdk:test-provider",
           }),
@@ -307,7 +307,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         const result = yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+            ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
             modelID: ModelV2.ID.make("openai/gpt-5"),
             package: "aisdk:test-provider",
           }),
@@ -331,7 +331,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         const result = yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+            ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
             modelID: ModelV2.ID.make("openai/gpt-5"),
             package: "aisdk:test-provider",
           }),
@@ -361,7 +361,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
           const result = yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
               modelID: ModelV2.ID.make("openai/gpt-5"),
               package: "aisdk:test-provider",
             }),
@@ -385,7 +385,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         const result = yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(
+            ...ModelV2.Info.default(
               ProviderV2.ID.make("cloudflare-ai-gateway"),
               ModelV2.ID.make("anthropic/claude-sonnet-4-5"),
             ),
@@ -417,7 +417,7 @@ describe("CloudflareAIGatewayPlugin", () => {
 
         const result = yield* aisdk.runSDK({
           model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
+            ...ModelV2.Info.default(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
             modelID: ModelV2.ID.make("openai/gpt-5"),
             package: "aisdk:test-provider",
           }),

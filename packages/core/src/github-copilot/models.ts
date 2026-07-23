@@ -135,7 +135,7 @@ function build(id: ModelV2.ID, remote: UsableModel, baseURL: string, previous?: 
   const released = previous?.time.released || Date.parse(version)
 
   return ModelV2.Info.make({
-    ...ModelV2.Info.empty(ProviderV2.ID.githubCopilot, id),
+    ...ModelV2.Info.default(ProviderV2.ID.githubCopilot, id),
     id,
     modelID: ModelV2.ID.make(remote.id),
     providerID: ProviderV2.ID.githubCopilot,

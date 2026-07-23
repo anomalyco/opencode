@@ -13,7 +13,7 @@ import { Effect, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const selected = ModelV2.Info.make({
-  ...ModelV2.Info.empty(ProviderV2.ID.make("test-provider"), ModelV2.ID.make("gemini")),
+  ...ModelV2.Info.default(ProviderV2.ID.make("test-provider"), ModelV2.ID.make("gemini")),
   package: ProviderV2.aisdk("@ai-sdk/google"),
 })
 const runtime = Model.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })

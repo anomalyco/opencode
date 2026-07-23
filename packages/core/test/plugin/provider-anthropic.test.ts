@@ -63,7 +63,7 @@ describe("AnthropicPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-anthropic"), ModelV2.ID.make("claude-sonnet-4-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("custom-anthropic"), ModelV2.ID.make("claude-sonnet-4-5")),
           modelID: ModelV2.ID.make("claude-sonnet-4-5"),
           package: ProviderV2.aisdk("@ai-sdk/anthropic"),
         }),
@@ -81,7 +81,7 @@ describe("AnthropicPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-5")),
           modelID: ModelV2.ID.make("claude-sonnet-4-5"),
           package: ProviderV2.aisdk("@ai-sdk/anthropic"),
         }),

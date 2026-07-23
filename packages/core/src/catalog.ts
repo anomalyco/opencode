@@ -116,7 +116,7 @@ const layer = Layer.effect(
                 draft.providers.set(providerID, record)
               }
               const model =
-                record.models.get(modelID) ?? (ModelV2.Info.empty(providerID, modelID) as ModelV2.MutableInfo)
+                record.models.get(modelID) ?? (ModelV2.Info.default(providerID, modelID) as ModelV2.MutableInfo)
               if (!record.models.has(modelID)) record.models.set(modelID, model)
               fn(model)
               model.id = modelID
