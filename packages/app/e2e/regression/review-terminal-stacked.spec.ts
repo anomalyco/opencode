@@ -25,6 +25,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -65,39 +66,80 @@ test("keeps the review tree and terminal sized when both panels are open", async
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ branch: "review-pane-performance", default_branch: "dev" }),
+      body: JSON.stringify({
+        location: { directory },
+        data: { branch: "review-pane-performance", defaultBranch: "dev" },
+      }),
     }),
   )
-  await page.route("**/vcs/diff**", (route) => {
+  await page.route("**/api/vcs/diff**", (route) => {
     const url = new URL(route.request().url())
-    const scope = url.searchParams.get("directory")?.replaceAll("\\", "/")
+    const scope = url.searchParams.get("location[directory]")?.replaceAll("\\", "/")
     const detail = scope?.endsWith("/src/branch/d00027")
     if (detail && detailFailures-- > 0) return route.fulfill({ status: 500, body: "retry detail" })
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(
-        url.searchParams.get("mode") === "branch"
-          ? detail
-            ? branchDiffs
-                .filter((diff) => diff.file.startsWith("src/branch/d00027/"))
-                .map((diff) => fileDiff(diff.file, diff.additions, true, detailVersion))
-            : branchDiffs
-          : Array.from({ length: 7 }, (_, index) => fileDiff(`src/git-${index}.ts`, 1)),
-      ),
+      body: JSON.stringify({
+        location: { directory: scope ?? directory, project: { id: projectID, directory } },
+        data:
+          url.searchParams.get("mode") === "branch"
+            ? detail
+              ? branchDiffs
+                  .filter((diff) => diff.file.startsWith("src/branch/d00027/"))
+                  .map((diff) => fileDiff(diff.file, diff.additions, true, detailVersion))
+              : branchDiffs
+            : Array.from({ length: 7 }, (_, index) => fileDiff(`src/git-${index}.ts`, 1)),
+      }),
     })
   })
-  await page.route("**/pty", (route) =>
+  await page.route("**/api/pty*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ id: "pty_review_terminal", title: "Terminal 1" }),
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_review_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
     }),
   )
-  await page.route("**/pty/pty_review_terminal", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  await page.route("**/api/pty/pty_review_terminal*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_review_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
+    }),
   )
-  await page.routeWebSocket("**/pty/pty_review_terminal/connect", () => undefined)
+  await page.route("**/api/pty/pty_review_terminal/connect-token*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: { ticket: "e2e-ticket", expires_in: 60 },
+      }),
+    }),
+  )
+  await page.routeWebSocket("**/api/pty/pty_review_terminal/connect", () => undefined)
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem(
@@ -135,8 +177,8 @@ test("keeps the review tree and terminal sized when both panels are open", async
   const lazyDiff = page.waitForRequest((request) => {
     const url = new URL(request.url())
     return (
-      url.pathname === "/vcs/diff" &&
-      url.searchParams.get("directory")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
+      url.pathname === "/api/vcs/diff" &&
+      url.searchParams.get("location[directory]")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
     )
   })
   await lastFile.click()
@@ -150,8 +192,8 @@ test("keeps the review tree and terminal sized when both panels are open", async
   const refreshedDiff = page.waitForRequest((request) => {
     const url = new URL(request.url())
     return (
-      url.pathname === "/vcs/diff" &&
-      url.searchParams.get("directory")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
+      url.pathname === "/api/vcs/diff" &&
+      url.searchParams.get("location[directory]")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
     )
   })
   sessionStatus[sessionID] = { type: "idle" }
