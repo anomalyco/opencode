@@ -91,7 +91,7 @@
     "@effect/sql-sqlite-bun": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@ff-labs/fff-bun": "0.9.4",
+    "@ff-labs/fff-bun": "0.10.1",
     "@opencode-ai/codemode": "workspace:*",
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/effect-sqlite-node": "workspace:*",
