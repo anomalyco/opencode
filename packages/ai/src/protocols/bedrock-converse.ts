@@ -392,8 +392,13 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints()
   const toolConfig =
-    request.tools.length > 0 && request.toolChoice?.type !== "none"
-      ? { tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools), toolChoice }
+    request.tools.length > 0
+      ? {
+          tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools),
+          // Converse has no native "none". Keep definitions stable for prompt
+          // caching and omit only the unsupported choice.
+          ...(toolChoice === undefined ? {} : { toolChoice }),
+        }
       : undefined
   const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)
   const messages = yield* lowerMessages(request, breakpoints)

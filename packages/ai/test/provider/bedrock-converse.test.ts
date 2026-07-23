@@ -154,7 +154,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("omits tool config when tool choice is none", () =>
+  it.effect("keeps tools and omits the unsupported choice when tool choice is none", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(baseRequest, {
@@ -169,7 +169,18 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.body.toolConfig).toBeUndefined()
+      expect(prepared.body.toolConfig).toMatchObject({
+        tools: [
+          {
+            toolSpec: {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: { json: { type: "object", properties: { query: { type: "string" } } } },
+            },
+          },
+        ],
+      })
+      expect(prepared.body.toolConfig?.toolChoice).toBeUndefined()
     }),
   )
 
