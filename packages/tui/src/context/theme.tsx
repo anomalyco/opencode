@@ -5,20 +5,19 @@ import {
   addTheme,
   allThemes,
   hasTheme,
-  normalizeTheme,
+  parseTheme,
   selectedForeground,
   setCustomThemes,
   setSystemTheme,
   subscribeThemes,
   upsertTheme,
   type Theme,
-  type ThemeDocument,
 } from "../theme"
 import { generateSyntax } from "../theme/v2/syntax"
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes, themeDirectories } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
-import { resolveDecodedThemeFile } from "../theme/v2/resolve"
+import { resolveThemeDocument } from "../theme/v2/resolve"
 import { themeModes } from "../theme/v2/select"
 import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -60,7 +59,7 @@ export {
 const THEME_REFRESH_DELAYS = [250, 1000] as const
 
 type State = {
-  themes: Record<string, ThemeDocument>
+  themes: Record<string, unknown>
   mode: "dark" | "light"
   lock: "dark" | "light" | undefined
   active: string
@@ -263,23 +262,19 @@ const themeContext = createSimpleContext({
     })
 
     const initStarted = performance.now()
-    const file = createMemo(() => {
+    const selected = createMemo(() => {
       const name = store.themes[store.active] ? store.active : "opencode"
       try {
-        return normalizeTheme(store.themes[name], name)
+        return prepareTheme(store.themes[name], name, store.mode)
       } catch (error) {
         if (name === "opencode") throw error
         setStore("active", "opencode")
-        return normalizeTheme(store.themes.opencode, "opencode")
+        return prepareTheme(store.themes.opencode, "opencode", store.mode)
       }
     })
-    const modes = createMemo(() => themeModes(file()))
-    const mode = () => {
-      const supported = modes()
-      if (supported.includes(store.mode)) return store.mode
-      return supported[0] ?? store.mode
-    }
-    const valuesV2 = createMemo(() => resolveDecodedThemeFile(file(), mode()))
+    const modes = () => selected().modes
+    const mode = () => selected().mode
+    const valuesV2 = () => selected().theme
     valuesV2()
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const themeV2 = createComponentTheme(valuesV2, mode)
@@ -355,6 +350,14 @@ export function ThemeContextProvider(props: ParentProps<{ context: ContextName }
     </themeContext.context.Provider>
   )
 }
+
+function prepareTheme(source: unknown, name: string, requested: "dark" | "light") {
+  const document = parseTheme(source, name)
+  const modes = themeModes(document)
+  const mode = modes.includes(requested) ? requested : (modes[0] ?? requested)
+  return { modes, mode, theme: resolveThemeDocument(document, mode) }
+}
+
 export function createSyntaxStyleMemo(factory: () => SyntaxStyle) {
   const renderer = useRenderer()
   const retained = new Set<SyntaxStyle>()

@@ -1,22 +1,23 @@
+import { Schema } from "effect"
 import { resolveThemeColors } from "./resolve"
 import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
-import { decodeThemeFile } from "./v2/resolve"
-import type { ThemeFile } from "./v2/schema"
+import { resolveThemeDocument, themeDecodeError } from "./v2/resolve"
+import { ThemeDocument } from "./v2/schema"
 import { migrateV1 } from "./v2/v1-migrate"
 
 export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
+export { resolveThemeDocument, type ThemeDocument }
 
-export type ThemeDocument = ThemeV1Json | ThemeFile
-
-const pluginThemes: Record<string, ThemeDocument> = {}
-let customThemes: Record<string, ThemeDocument> = {}
-let systemTheme: ThemeDocument | undefined
-const listeners = new Set<(themes: Record<string, ThemeDocument>) => void>()
-const normalized = new WeakMap<object, ThemeFile>()
+const pluginThemes: Record<string, unknown> = {}
+let customThemes: Record<string, unknown> = {}
+let systemTheme: unknown
+const listeners = new Set<(themes: Record<string, unknown>) => void>()
+const parsed = new WeakMap<object, ThemeDocument>()
+const decodeThemeDocument = Schema.decodeUnknownSync(ThemeDocument)
 
 function listThemes() {
   // Priority: defaults < plugin installs < custom files < generated system.
-  const themes: Record<string, ThemeDocument> = {
+  const themes: Record<string, unknown> = {
     ...DEFAULT_THEMES,
     ...pluginThemes,
     ...customThemes,
@@ -37,39 +38,44 @@ export function allThemes() {
   return listThemes()
 }
 
-export function isTheme(theme: unknown): theme is ThemeDocument {
-  if (!isRecord(theme)) return false
-  const version = themeVersion(theme)
+export function isThemeSource(source: unknown) {
+  if (!isRecord(source)) return false
+  const version = themeVersion(source)
   if (version === 2) return true
   if (version !== 1) return false
-  return isRecord(theme.theme)
+  return isRecord(source.theme)
 }
 
-export function normalizeTheme(theme: ThemeDocument, name = "theme") {
-  const cached = normalized.get(theme)
+export function parseTheme(source: unknown, name = "theme") {
+  const object = typeof source === "object" && source !== null ? source : undefined
+  const cached = object ? parsed.get(object) : undefined
   if (cached) return cached
-  const version = themeVersion(theme)
-  if (version !== 1 && version !== 2) throw new Error(`Unsupported theme version: ${String(version)}`)
-  const file = version === 1 ? migrateV1(theme as ThemeV1Json) : decodeThemeFile(theme, name)
-  normalized.set(theme, file)
-  return file
+
+  const version = (source as { version?: unknown } | null)?.version ?? 1
+  const document =
+    version === 1
+      ? migrateV1(source as ThemeV1Json)
+      : version === 2
+        ? decodeV2Theme(source, name)
+        : unsupportedThemeVersion(version)
+
+  if (object) parsed.set(object, document)
+  return document
 }
 
-export function subscribeThemes(listener: (themes: Record<string, ThemeDocument>) => void) {
+export function subscribeThemes(listener: (themes: Record<string, unknown>) => void) {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
 
 export function setCustomThemes(themes: Record<string, unknown>) {
-  customThemes = Object.fromEntries(
-    Object.entries(themes).filter((entry): entry is [string, ThemeDocument] => isTheme(entry[1])),
-  )
-  for (const theme of Object.values(customThemes)) normalized.delete(theme)
+  customThemes = Object.fromEntries(Object.entries(themes).filter((entry) => isThemeSource(entry[1])))
+  for (const theme of Object.values(customThemes)) invalidateTheme(theme)
   syncThemes()
 }
 
-export function setSystemTheme(theme: ThemeDocument | undefined) {
-  if (theme) normalized.delete(theme)
+export function setSystemTheme(theme: unknown) {
+  if (theme) invalidateTheme(theme)
   systemTheme = theme
   syncThemes()
 }
@@ -81,9 +87,9 @@ export function hasTheme(name: string) {
 
 export function addTheme(name: string, theme: unknown) {
   if (!name) return false
-  if (!isTheme(theme)) return false
+  if (!isThemeSource(theme)) return false
   if (hasTheme(name)) return false
-  normalized.delete(theme)
+  invalidateTheme(theme)
   pluginThemes[name] = theme
   syncThemes()
   return true
@@ -91,8 +97,8 @@ export function addTheme(name: string, theme: unknown) {
 
 export function upsertTheme(name: string, theme: unknown) {
   if (!name) return false
-  if (!isTheme(theme)) return false
-  normalized.delete(theme)
+  if (!isThemeSource(theme)) return false
+  invalidateTheme(theme)
   if (customThemes[name] !== undefined) {
     customThemes[name] = theme
   } else {
@@ -111,10 +117,26 @@ export function resolveTheme(theme: ThemeV1Json, mode: "dark" | "light"): Theme 
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+function decodeV2Theme(source: unknown, name: string) {
+  try {
+    return decodeThemeDocument(source)
+  } catch (error) {
+    throw themeDecodeError(error, name)
+  }
+}
+
+function unsupportedThemeVersion(version: unknown): never {
+  throw new Error(`Unsupported theme version: ${String(version)}`)
+}
+
+function invalidateTheme(theme: unknown) {
+  if (typeof theme === "object" && theme !== null) parsed.delete(theme)
 }
 
 function themeVersion(theme: object) {
   return "version" in theme ? theme.version : 1
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

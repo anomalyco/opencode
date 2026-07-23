@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { BackgroundDefinition, TextDefinition, ThemeDefinition, ThemeFile } from "../../../src/theme/v2"
+import type { BackgroundDefinition, TextDefinition, ThemeDefinition, ThemeDocument } from "../../../src/theme/v2"
 
 const text = {
   default: "$hue.neutral.900",
@@ -51,11 +51,11 @@ const definition = {
   "@context:overlay": { background: { default: "$hue.neutral.300" } },
 } satisfies ThemeDefinition
 
-const file = { version: 2, light: definition, dark: definition } satisfies ThemeFile
-const lightOnly = { version: 2, light: definition } satisfies ThemeFile
-const darkOnly = { version: 2, dark: definition } satisfies ThemeFile
-// @ts-expect-error A theme file must provide at least one mode.
-const empty = { version: 2 } satisfies ThemeFile
+const document = { version: 2, light: definition, dark: definition } satisfies ThemeDocument
+const lightOnly = { version: 2, light: definition } satisfies ThemeDocument
+const darkOnly = { version: 2, dark: definition } satisfies ThemeDocument
+// @ts-expect-error A theme document must provide at least one mode.
+const empty = { version: 2 } satisfies ThemeDocument
 
 test("supports property-first definitions, variants, states, and contexts", () => {
   expect(text.action.primary.$hovered).toBe("$hue.neutral.200")
@@ -68,7 +68,7 @@ test("supports property-first definitions, variants, states, and contexts", () =
   expect(definition["@context:elevated"].text?.default).toBe("$hue.neutral.800")
   expect(definition["@context:overlay"].background?.default).toBe("$hue.neutral.300")
   expect(definition.categorical).toEqual(["blue", "accent"])
-  expect(file.light).toBe(definition)
+  expect(document.light).toBe(definition)
   expect(lightOnly.light).toBe(definition)
   expect(darkOnly.dark).toBe(definition)
   expect(empty.version).toBe(2)

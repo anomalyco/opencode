@@ -2,7 +2,7 @@ import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "@opencode-ai/ui/theme/color"
 import type { Theme, ThemeV1Json } from "../v1"
 import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults"
-import type { FileThemeDefinition, Mode, ThemeFile } from "./index"
+import type { FileThemeDefinition, Mode, ThemeDocument } from "./index"
 import { HueStep } from "./schema"
 
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
@@ -14,7 +14,7 @@ const categoricalTokens: readonly V1HueToken[] = ["secondary", "accent", "succes
 const minimumChroma = 0.03
 const lightThreshold = 0.6
 
-export function migrateV1(theme: ThemeV1Json): ThemeFile {
+export function migrateV1(theme: ThemeV1Json): ThemeDocument {
   const light = resolveV1(theme, "light")
   const dark = resolveV1(theme, "dark")
   if (light.background.a > 0 && dark.background.a > 0 && light.background.equals(dark.background)) {

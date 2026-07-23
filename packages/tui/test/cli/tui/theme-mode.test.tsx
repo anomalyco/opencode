@@ -77,7 +77,11 @@ test("uses an available mode while retaining the pinned preference", async () =>
   }
 })
 
-test("falls back to OpenCode when the configured V2 theme is invalid", async () => {
+test.each([
+  ["schema", { version: 2, light: { categorical: [] } }],
+  ["mode merging", { version: 2, light: { mergeMode: true } }],
+  ["token reference", { version: 2, light: { text: { default: "$missing" } } }],
+] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
   let theme: ReturnType<typeof useTheme> | undefined
 
   function Probe() {
@@ -88,10 +92,7 @@ test("falls back to OpenCode when the configured V2 theme is invalid", async () 
   const app = await testRender(
     () => (
       <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "invalid" } })}>
-        <ThemeProvider
-          mode="dark"
-          source={{ discover: () => Promise.resolve({ invalid: { version: 2, light: { categorical: [] } } }) }}
-        >
+        <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({ invalid: source }) }}>
           <Probe />
         </ThemeProvider>
       </ConfigProvider>

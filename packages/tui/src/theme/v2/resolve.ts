@@ -11,7 +11,7 @@ import {
   HueAlias,
   HueStep,
   ThemeDefinition,
-  ThemeFile,
+  ThemeDocument,
 } from "./schema"
 import type {
   ActionStateKey,
@@ -26,7 +26,6 @@ import type {
 import { selectTheme, selectThemeMode } from "./select"
 
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition)
-const decodeThemeFileSchema = Schema.decodeUnknownSync(ThemeFile)
 
 function decodeThemeDefinition(input: unknown) {
   try {
@@ -36,30 +35,18 @@ function decodeThemeDefinition(input: unknown) {
   }
 }
 
-export function decodeThemeFile(input: unknown, name = "theme") {
-  try {
-    return decodeThemeFileSchema(input)
-  } catch (error) {
-    throw themeDecodeError(error, name)
-  }
-}
-
-function themeDecodeError(error: unknown, name: string) {
+export function themeDecodeError(error: unknown, name: string) {
   const message = Schema.isSchemaError(error) ? error.message : String(error)
   const value = /got ("[^"]*"|\S+)/.exec(message)?.[1] ?? "value"
   return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
 }
 
-export function resolveThemeFile(file: ThemeFile, mode?: "light" | "dark", name = "theme") {
-  return resolveDecodedThemeFile(decodeThemeFile(file, name), mode)
-}
-
-export function resolveDecodedThemeFile(file: ThemeFile, mode?: "light" | "dark") {
-  const selected = selectThemeMode(file, mode)
+export function resolveThemeDocument(document: ThemeDocument, mode?: "light" | "dark") {
+  const selected = selectThemeMode(document, mode)
   const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
   const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
   const core = expandTokens(fallback())
-  const merged = file.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
+  const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
   if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
   return resolveExpandedTheme({
     ...merged,

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { DEFAULT_THEMES, resolveTheme as resolveV1 } from "../../../src/theme"
-import { resolveThemeFile } from "../../../src/theme/v2/resolve"
+import { resolveThemeDocument } from "../../../src/theme/v2/resolve"
 import { selectThemeMode, themeModes } from "../../../src/theme/v2/select"
 import { migrateV1 } from "../../../src/theme/v2/v1-migrate"
 import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "../../../src/theme/v2/defaults"
@@ -9,7 +9,7 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   const migrated = migrateV1(DEFAULT_THEMES.opencode)
   if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
   const legacy = resolveV1(DEFAULT_THEMES.opencode, "light")
-  const resolved = resolveThemeFile(migrated, "light")
+  const resolved = resolveThemeDocument(migrated, "light")
 
   expect(migrated.standalone).toBeTrue()
   expect(migrated.light.categorical?.length).toBeGreaterThan(0)
@@ -83,8 +83,8 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   expect(migrated.light.hue?.purple).toBe("$hue.gray")
   expect(migrated.light.hue?.accent).toBe("$hue.gray")
   expect(migrated.light.hue?.interactive).toBe("$hue.gray")
-  expect(() => resolveThemeFile(migrated, "light")).not.toThrow()
-  expect(() => resolveThemeFile(migrated, "dark")).not.toThrow()
+  expect(() => resolveThemeDocument(migrated, "light")).not.toThrow()
+  expect(() => resolveThemeDocument(migrated, "dark")).not.toThrow()
 })
 
 test("orders categorical hues by V1 semantic color mapping", () => {
@@ -185,7 +185,7 @@ test("migrates every built-in V1 theme in its supported modes", () => {
   for (const source of Object.values(DEFAULT_THEMES)) {
     const migrated = migrateV1(source)
     for (const mode of themeModes(migrated)) {
-      expect(resolveThemeFile(migrated, mode).text.default).toBeDefined()
+      expect(resolveThemeDocument(migrated, mode).text.default).toBeDefined()
     }
   }
 })

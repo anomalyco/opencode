@@ -7,7 +7,7 @@ import {
   addTheme,
   allThemes,
   hasTheme,
-  normalizeTheme,
+  parseTheme,
   resolveTheme,
   setCustomThemes,
   upsertTheme,
@@ -41,16 +41,22 @@ test("addTheme ignores invalid envelopes and unknown versions", () => {
   expect(allThemes()[name]).toBeUndefined()
 })
 
-test("normalizes unversioned and explicit V1 themes lazily once", () => {
+test("parseTheme delegates malformed V1 sources and rejects unknown versions", () => {
+  expect(() => parseTheme(null)).toThrow()
+  expect(() => parseTheme("invalid")).toThrow()
+  expect(() => parseTheme({ version: 3 })).toThrow("Unsupported theme version: 3")
+})
+
+test("parses unversioned and explicit V1 themes lazily once", () => {
   const unversioned = structuredClone(DEFAULT_THEMES.opencode)
   const explicit = { ...structuredClone(DEFAULT_THEMES.opencode), version: 1 }
-  const first = normalizeTheme(unversioned, "unversioned")
-  const second = normalizeTheme(explicit, "explicit")
+  const first = parseTheme(unversioned, "unversioned")
+  const second = parseTheme(explicit, "explicit")
 
   expect(first.version).toBe(2)
   expect(second.version).toBe(2)
-  expect(normalizeTheme(unversioned, "unversioned")).toBe(first)
-  expect(normalizeTheme(explicit, "explicit")).toBe(second)
+  expect(parseTheme(unversioned, "unversioned")).toBe(first)
+  expect(parseTheme(explicit, "explicit")).toBe(second)
 })
 
 test("decodes native V2 themes lazily once", () => {
@@ -59,50 +65,50 @@ test("decodes native V2 themes lazily once", () => {
 
   expect(addTheme(name, source)).toBe(true)
   expect(allThemes()[name]).toBe(source)
-  const file = normalizeTheme(allThemes()[name]!, name)
-  expect(file.light?.categorical).toEqual(["red"])
-  expect(normalizeTheme(allThemes()[name]!, name)).toBe(file)
+  const document = parseTheme(allThemes()[name]!, name)
+  expect(document.light?.categorical).toEqual(["red"])
+  expect(parseTheme(allThemes()[name]!, name)).toBe(document)
 })
 
-test("defers invalid V2 errors until normalization", () => {
+test("defers invalid V2 errors until parsing", () => {
   const name = `plugin-theme-invalid-v2-${Date.now()}`
   expect(addTheme(name, { version: 2, light: { categorical: [] } })).toBe(true)
-  expect(() => normalizeTheme(allThemes()[name]!, name)).toThrow(`Invalid theme: ${name}`)
+  expect(() => parseTheme(allThemes()[name]!, name)).toThrow(`Invalid theme: ${name}`)
 })
 
-test("defers invalid V1 errors until normalization", () => {
+test("defers invalid V1 errors until parsing", () => {
   const name = `plugin-theme-invalid-v1-${Date.now()}`
   const source = structuredClone(DEFAULT_THEMES.opencode)
   source.defs = { ...source.defs, one: "two", two: "one" }
   source.theme.primary = "one"
 
   expect(addTheme(name, source)).toBe(true)
-  expect(() => normalizeTheme(allThemes()[name]!, name)).toThrow("Circular color reference")
+  expect(() => parseTheme(allThemes()[name]!, name)).toThrow("Circular color reference")
 })
 
-test("replacement sources receive independent normalization caches", () => {
+test("replacement sources receive independent parse caches", () => {
   const name = `plugin-theme-replace-${Date.now()}`
   const first = structuredClone(DEFAULT_THEMES.opencode)
   const second = structuredClone(DEFAULT_THEMES.opencode)
   second.theme.primary = "#123456"
 
   expect(addTheme(name, first)).toBe(true)
-  const previous = normalizeTheme(allThemes()[name]!, name)
+  const previous = parseTheme(allThemes()[name]!, name)
   expect(upsertTheme(name, second)).toBe(true)
-  const next = normalizeTheme(allThemes()[name]!, name)
+  const next = parseTheme(allThemes()[name]!, name)
   expect(next).not.toBe(previous)
-  expect(normalizeTheme(allThemes()[name]!, name)).toBe(next)
+  expect(parseTheme(allThemes()[name]!, name)).toBe(next)
 })
 
-test("upsert invalidates a mutated source object's normalization cache", () => {
+test("upsert invalidates a mutated source object's parse cache", () => {
   const name = `plugin-theme-mutate-${Date.now()}`
   const source = structuredClone(DEFAULT_THEMES.opencode)
 
   expect(addTheme(name, source)).toBe(true)
-  const previous = normalizeTheme(allThemes()[name]!, name)
+  const previous = parseTheme(allThemes()[name]!, name)
   source.theme.primary = "#123456"
   expect(upsertTheme(name, source)).toBe(true)
-  expect(normalizeTheme(allThemes()[name]!, name)).not.toBe(previous)
+  expect(parseTheme(allThemes()[name]!, name)).not.toBe(previous)
 })
 
 test("custom themes retain precedence over plugin themes", () => {
