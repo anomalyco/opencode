@@ -26,7 +26,6 @@ export interface AfterEvent {
   readonly input: unknown
   result: ToolResultValue
   output?: ToolOutput
-  outputPaths?: ReadonlyArray<string>
 }
 
 export interface Interface {

@@ -9,10 +9,18 @@ import { Config } from "@opencode-ai/core/config"
 import { ConfigToolOutput } from "@opencode-ai/core/config/tool-output"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import type { ToolOutput } from "@opencode-ai/ai"
 import { testEffect } from "./lib/effect"
 import { tmpdir } from "./fixture/tmpdir"
 
 const sessionID = SessionV2.ID.make("ses_tool_output_store")
+
+const retainedPath = (output: ToolOutput) => {
+  const text = output.content.find((item) => item.type === "text")?.text
+  const match = text && /full content saved to (.+) \.\.\./.exec(text)
+  if (!match) throw new Error("expected managed output path in bounded content")
+  return match[1]
+}
 
 const withStore = <A, E, R>(
   body: (input: { root: string; store: ToolOutputStore.Interface; fs: FSUtil.Interface }) => Effect.Effect<A, E, R>,
@@ -61,11 +69,10 @@ describe("ToolOutputStore", () => {
             ],
           },
         })
-        expect(result.output.structured).toEqual({ kind: "report" })
-        expect(result.outputPaths).toHaveLength(1)
-        expect(yield* fs.readFileString(result.outputPaths[0])).toBe(first + second)
-        if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
-        expect(Buffer.byteLength(result.output.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
+        expect(result.structured).toEqual({ kind: "report" })
+        expect(yield* fs.readFileString(retainedPath(result))).toBe(first + second)
+        if (result.content[0]?.type !== "text") throw new Error("expected text preview")
+        expect(Buffer.byteLength(result.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
       }),
     ),
   )
@@ -75,10 +82,9 @@ describe("ToolOutputStore", () => {
       Effect.gen(function* () {
         const structured = { text: "x".repeat(ToolOutputStore.MAX_BYTES) }
         const result = yield* store.bound({ sessionID, callID: "call-json", output: { structured, content: [] } })
-        expect(result.output.structured).toEqual(structured)
-        expect(result.outputPaths).toHaveLength(1)
-        expect(JSON.parse(yield* fs.readFileString(result.outputPaths[0]))).toEqual(structured)
-        expect(result.output.content).toHaveLength(1)
+        expect(result.structured).toEqual(structured)
+        expect(JSON.parse(yield* fs.readFileString(retainedPath(result)))).toEqual(structured)
+        expect(result.content).toHaveLength(1)
       }),
     ),
   )
@@ -95,10 +101,9 @@ describe("ToolOutputStore", () => {
             content: [{ type: "file", uri: `data:image/png;base64,${data}`, mime: "image/png", name: "pixel.png" }],
           },
         })
-        expect(result.outputPaths).toEqual([])
-        expect(result.output.structured).toEqual({ caption: "pixel" })
-        expect(result.output.content).toHaveLength(1)
-        expect(result.output.content[0]).toEqual({
+        expect(result.structured).toEqual({ caption: "pixel" })
+        expect(result.content).toHaveLength(1)
+        expect(result.content[0]).toEqual({
           type: "file",
           uri: `data:image/png;base64,${data}`,
           mime: "image/png",
@@ -124,9 +129,9 @@ describe("ToolOutputStore", () => {
           output: { structured: { caption: "pixel" }, content: [{ type: "text", text }, media] },
         })
 
-        expect(result.output.structured).toEqual({ caption: "pixel" })
-        expect(result.output.content[1]).toEqual(media)
-        expect(yield* fs.readFileString(result.outputPaths[0])).toBe(text)
+        expect(result.structured).toEqual({ caption: "pixel" })
+        expect(result.content[1]).toEqual(media)
+        expect(yield* fs.readFileString(retainedPath(result))).toBe(text)
       }),
     ),
   )
@@ -136,10 +141,7 @@ describe("ToolOutputStore", () => {
       Effect.gen(function* () {
         const text = "x".repeat(30_000)
         const output = { structured: { output: text }, content: [{ type: "text" as const, text }] }
-        expect(yield* store.bound({ sessionID, callID: "call-duplicated", output })).toEqual({
-          output,
-          outputPaths: [],
-        })
+        expect(yield* store.bound({ sessionID, callID: "call-duplicated", output })).toEqual(output)
       }),
     ),
   )
@@ -166,10 +168,7 @@ describe("ToolOutputStore", () => {
     withStore(({ store }) =>
       Effect.gen(function* () {
         const output = { structured: { value: 1n }, content: [{ type: "text" as const, text: "readable text" }] }
-        expect(yield* store.bound({ sessionID, callID: "call-unencodable", output })).toEqual({
-          output,
-          outputPaths: [],
-        })
+        expect(yield* store.bound({ sessionID, callID: "call-unencodable", output })).toEqual(output)
       }),
     ),
   )
@@ -219,7 +218,7 @@ describe("ToolOutputStore", () => {
             callID: "call-config",
             output: { structured: {}, content: [{ type: "text", text: "one\ntwo\nthree" }] },
           })
-          expect(result.outputPaths).toHaveLength(1)
+          expect(retainedPath(result)).toContain("tool-output")
         }),
       new Config.Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
     ),

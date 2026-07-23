@@ -62,7 +62,6 @@ export interface Materialization {
 export interface Settlement {
   readonly result: ToolResultValue
   readonly output?: ToolOutput
-  readonly outputPaths?: ReadonlyArray<string>
   readonly error?: SessionError.Error
 }
 
@@ -165,20 +164,13 @@ const registryLayer = Layer.effect(
       if ("result" in pending) {
         settlement = pending
       } else {
-        const bounded = yield* resources.bound({
+        const output = yield* resources.bound({
           sessionID: input.sessionID,
           callID: input.call.id,
           output: { structured: pending.output.structured, content: yield* normalizeImages(pending.output.content) },
         })
-        const result = ToolOutput.toResultValue(bounded.output)
-        settlement =
-          result.type === "error"
-            ? bounded.outputPaths.length > 0
-              ? { result, outputPaths: bounded.outputPaths }
-              : { result }
-            : bounded.outputPaths.length > 0
-              ? { result, output: bounded.output, outputPaths: bounded.outputPaths }
-              : { result, output: bounded.output }
+        const result = ToolOutput.toResultValue(output)
+        settlement = result.type === "error" ? { result } : { result, output }
       }
       const afterEvent: ToolHooks.AfterEvent = {
         tool: input.call.name,
@@ -189,13 +181,11 @@ const registryLayer = Layer.effect(
         input: beforeEvent.input,
         result: settlement.result,
         output: settlement.output,
-        outputPaths: settlement.outputPaths,
       }
       yield* toolHooks.runAfter(afterEvent)
       return {
         result: afterEvent.result,
         ...(afterEvent.output !== undefined ? { output: afterEvent.output } : {}),
-        ...(afterEvent.outputPaths !== undefined ? { outputPaths: afterEvent.outputPaths } : {}),
         ...(settlement.error !== undefined ? { error: settlement.error } : {}),
       }
     })

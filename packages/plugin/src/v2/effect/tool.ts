@@ -290,7 +290,6 @@ export interface ToolExecuteAfterEvent {
   readonly input: unknown
   result: ToolResultValue
   output?: ToolOutput
-  outputPaths?: ReadonlyArray<string>
 }
 
 export interface RegisterOptions {

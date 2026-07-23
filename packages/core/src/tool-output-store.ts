@@ -22,11 +22,6 @@ export interface BoundInput {
   readonly output: ToolOutput
 }
 
-export interface BoundResult {
-  readonly output: ToolOutput
-  readonly outputPaths: ReadonlyArray<string>
-}
-
 export class StorageError extends Schema.TaggedErrorClass<StorageError>()("ToolOutputStore.StorageError", {
   operation: Schema.Literals(["encode", "write"]),
   cause: Schema.Defect(),
@@ -41,7 +36,7 @@ export type Error = StorageError
 
 export interface Interface {
   readonly limits: () => Effect.Effect<{ readonly maxLines: number; readonly maxBytes: number }>
-  readonly bound: (input: BoundInput) => Effect.Effect<BoundResult, Error>
+  readonly bound: (input: BoundInput) => Effect.Effect<ToolOutput, Error>
   readonly cleanup: () => Effect.Effect<void>
 }
 
@@ -150,26 +145,20 @@ const layer = Layer.effect(
         lineCount(contextual) <= outputLimits.maxLines &&
         Buffer.byteLength(contextual, "utf-8") <= outputLimits.maxBytes
       )
-        return {
-          output: input.output,
-          outputPaths: [],
-        }
+        return input.output
 
       const outputPath = yield* write(contextual)
       const marker = `... output truncated; full content saved to ${outputPath} ...`
 
       return {
-        output: {
-          structured: input.output.structured,
-          content: [
-            {
-              type: "text" as const,
-              text: boundedPreview(contextual, marker, outputLimits.maxLines, outputLimits.maxBytes),
-            },
-            ...media,
-          ],
-        },
-        outputPaths: [outputPath],
+        structured: input.output.structured,
+        content: [
+          {
+            type: "text" as const,
+            text: boundedPreview(contextual, marker, outputLimits.maxLines, outputLimits.maxBytes),
+          },
+          ...media,
+        ],
       }
     })
 

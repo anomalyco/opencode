@@ -404,14 +404,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             input: event.input,
             result: event.result,
             output: event.output,
-            outputPaths: event.outputPaths,
           }
           return Reflect.apply(callback, undefined, [output]).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
                 event.result = output.result
                 event.output = output.output
-                event.outputPaths = output.outputPaths
               }),
             ),
           )

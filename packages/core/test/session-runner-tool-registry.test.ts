@@ -20,11 +20,8 @@ const outputStore = Layer.mock(ToolOutputStore.Service, {
     return Effect.sync(() => bounds.push(input)).pipe(
       Effect.as(
         input.callID === "call-bounded"
-          ? {
-              output: { structured: {}, content: [{ type: "text" as const, text: "bounded reference" }] },
-              outputPaths: ["/managed/generic"],
-            }
-          : { output: input.output, outputPaths: [] },
+          ? { structured: {}, content: [{ type: "text" as const, text: "bounded reference" }] }
+          : input.output,
       ),
     )
   },
@@ -297,7 +294,6 @@ describe("ToolRegistry", () => {
       ).toEqual({
         result: { type: "text", value: "bounded reference" },
         output: { structured: {}, content: [{ type: "text", text: "bounded reference" }] },
-        outputPaths: ["/managed/generic"],
       })
       expect(bounds).toHaveLength(1)
     }),

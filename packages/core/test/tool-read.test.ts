@@ -325,7 +325,6 @@ describe("ReadTool", () => {
         call: { type: "tool-call", id: "call-large-image", name: "read", input: { path: "large.png" } },
       })
 
-      expect(settled.outputPaths).toBeUndefined()
       expect(settled.output?.structured).toMatchObject({
         uri: "file:///large.png",
         name: "large.png",

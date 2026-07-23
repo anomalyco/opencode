@@ -18577,12 +18577,6 @@
                           "$ref": "#/components/schemas/LLMToolContent"
                         }
                       },
-                      "outputPaths": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
                       "result": {},
                       "provider": {
                         "type": "object",
@@ -26400,12 +26394,6 @@
                       "$ref": "#/components/schemas/LLMToolContent"
                     }
                   },
-                  "outputPaths": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
                   "result": {},
                   "provider": {
                     "type": "object",
@@ -27524,12 +27512,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/LLMToolContent"
-            }
-          },
-          "outputPaths": {
-            "type": "array",
-            "items": {
-              "type": "string"
             }
           },
           "structured": {
@@ -29004,12 +28986,6 @@
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/LLMToolContent"
-                }
-              },
-              "outputPaths": {
-                "type": "array",
-                "items": {
-                  "type": "string"
                 }
               },
               "result": {},
@@ -34874,12 +34850,6 @@
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/LLMToolContent"
-                }
-              },
-              "outputPaths": {
-                "type": "array",
-                "items": {
-                  "type": "string"
                 }
               },
               "result": {},

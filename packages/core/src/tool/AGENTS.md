@@ -55,4 +55,3 @@ Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOut
 ## Current Gaps
 
 - MCP and future Session-scoped registrations still need an explicit canonical registration design.
-- The public Session result shape currently exposes managed `outputPaths`; full storage encapsulation requires a future opaque managed-output reference design.

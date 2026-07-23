@@ -312,7 +312,6 @@ Compatibility:
 
 Affected schema:
 
-- New optional managed `outputPath` and `outputPaths` fields on tool results and completed Session tool state.
 - Absolute managed output paths accepted by ordinary `read` and `grep` inputs.
 
 Change:
@@ -327,7 +326,7 @@ Reason:
 
 Compatibility:
 
-- Managed output is retained for a bounded period and exposed as a normal host filesystem path.
+- Managed output is retained for a bounded period and exposed in bounded tool content as a normal host filesystem path.
 
 ### Location-Scoped Filesystem Read And Search Contracts
 

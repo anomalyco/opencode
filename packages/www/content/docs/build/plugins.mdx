@@ -248,7 +248,7 @@ mutable fields:
 | `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
 | `ctx.session.hook("request", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
 | `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
-| `ctx.tool.hook("execute.after", callback)`  | `result`, `output`, and `outputPaths`, after execution settles                 |
+| `ctx.tool.hook("execute.after", callback)`  | `result` and `output`, after execution settles                                 |
 
 For example, remove a tool from selected model requests and normalize another
 tool's input:
