@@ -1,5 +1,5 @@
-import { type LLMEvent, type ProviderMetadata, type ToolContent, type ToolResultValue } from "@opencode-ai/ai"
-import { Effect, Schema } from "effect"
+import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
+import { Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
@@ -12,7 +12,6 @@ import { Snapshot } from "../../snapshot"
 import { RelativePath } from "../../schema"
 import { SessionUsage } from "../usage"
 import { Tool } from "../../tool/tool"
-import { MAX_BYTES } from "../../tool-output-store"
 import type { ToolRegistry } from "../../tool/registry"
 
 type Input = {
@@ -28,9 +27,11 @@ const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
 
 /** Derives canonical model content from a provider-hosted tool result. */
-const hostedContent = (result: ToolResultValue): readonly [ToolContent, ...ToolContent[]] => {
-  if (result.type === "content" && result.value.length > 0)
-    return result.value as unknown as readonly [ToolContent, ...ToolContent[]]
+const hostedContent = (result: ToolResultValue): Tool.NonEmptyContent => {
+  if (result.type === "content") {
+    const content = Tool.nonEmpty(result.value)
+    if (content !== undefined) return content
+  }
   return [{ type: "text", text: Tool.stringify(result.value) }]
 }
 
@@ -47,11 +48,8 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       progress?: ToolRegistry.Progress
     }
   >()
-  const failureSnapshot = (tool: { readonly progress?: ToolRegistry.Progress }) => {
-    if (!tool.progress) return {}
-    const metadata = Tool.jsonMetadata(tool.progress, MAX_BYTES)
-    return metadata === undefined ? {} : { metadata }
-  }
+  const failureSnapshot = (tool: { readonly progress?: ToolRegistry.Progress }) =>
+    tool.progress === undefined ? {} : { metadata: tool.progress }
   let assistantMessageID = input.assistantMessageID
   let stepStarted = false
   let stepFailed = false
@@ -292,7 +290,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(new Error(`Unknown tool call: ${callID}`))
   }
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent, error?: SessionError.Error) {
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -405,12 +403,12 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         tool.settled = true
         const executed = event.providerExecuted === true || tool.providerExecuted
         const resultState = providerState(event.providerMetadata)
-        if (error !== undefined || event.result.type === "error") {
+        if (event.result.type === "error") {
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
             assistantMessageID: tool.assistantMessageID,
             callID: event.id,
-            error: error ?? { type: "tool.execution", message: Tool.stringify(event.result.value) },
+            error: { type: "tool.execution", message: Tool.stringify(event.result.value) },
             ...failureSnapshot(tool),
             executed,
             resultState,
@@ -471,13 +469,12 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     const tool = tools.get(callID)
     if (!tool?.called || tool.settled)
       return yield* Effect.die(new Error(`Tool progress outside running call: ${callID}`))
-    const current = { ...update }
-    tool.progress = current
+    tool.progress = update
     yield* events.publish(SessionEvent.Tool.Progress, {
       sessionID: input.sessionID,
       assistantMessageID: tool.assistantMessageID,
       callID,
-      metadata: current,
+      metadata: update,
     })
   })
 

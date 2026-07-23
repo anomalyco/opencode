@@ -118,14 +118,24 @@ test("provider-executed success derives content and retains provider result stat
 test("interrupted progress metadata remains in the terminal failure snapshot", async () => {
   const { published, publisher } = capture("anthropic", { interruptProgress: true })
   await Effect.runPromise(publisher.publish(call))
-  const exit = await Effect.runPromiseExit(
-    publisher.progress(call.id, { phase: "visible" }),
-  )
+  const exit = await Effect.runPromiseExit(publisher.progress(call.id, { phase: "visible" }))
   expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
   await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
 
   expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
     metadata: { phase: "visible" },
+  })
+})
+
+test("failure snapshot retains canonical progress above the default byte limit", async () => {
+  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  await Effect.runPromise(publisher.publish(call))
+  const detail = "x".repeat(60 * 1024)
+  await Effect.runPromiseExit(publisher.progress(call.id, { detail }))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
+
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
+    metadata: { detail },
   })
 })
 

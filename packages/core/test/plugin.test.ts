@@ -365,7 +365,7 @@ describe("PluginV2", () => {
             yield* ctx.tool
               .hook("execute.after", (event) =>
                 Effect.sync(() => {
-                  if (event.status === "completed") event.content = [] as never
+                  if (event.status === "completed") (event.content as unknown as unknown[]).splice(0)
                 }),
               )
               .pipe(Effect.asVoid)
