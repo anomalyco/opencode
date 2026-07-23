@@ -859,25 +859,65 @@ describe("OpenAI Responses route", () => {
               },
               {
                 type: "response.output_item.added",
-                item: { type: "message", id: "msg_final" },
+                item: { type: "message", id: "msg_commentary_2", phase: "commentary" },
+              },
+              {
+                type: "response.output_text.delta",
+                item_id: "msg_commentary_2",
+                content_index: 0,
+                delta: "Thi",
               },
               {
                 type: "response.output_text.done",
-                item_id: "msg_final",
+                item_id: "msg_commentary_2",
+                content_index: 0,
+                text: "Third.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_commentary_2", phase: "commentary" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "openai-text-0" },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "openai-text-0",
                 content_index: 0,
                 text: "Final.",
               },
               {
                 type: "response.output_item.done",
-                item: { type: "message", id: "msg_final", phase: "final_answer" },
+                item: { type: "message", id: "openai-text-0", phase: "final_answer" },
               },
               {
                 type: "response.output_item.added",
-                item: { type: "message", id: "msg_refusal", phase: "final_answer" },
+                item: { type: "message", id: "msg_null", phase: null },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_null",
+                content_index: 0,
+                text: "Nullable.",
               },
               {
                 type: "response.output_item.done",
-                item: { type: "message", id: "msg_refusal", phase: "final_answer" },
+                item: { type: "message", id: "msg_null", phase: null },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_unphased" },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_unphased",
+                content_index: 0,
+                text: "Unphased.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_unphased" },
               },
               { type: "response.completed", response: { id: "resp_1" } },
             ),
@@ -898,8 +938,23 @@ describe("OpenAI Responses route", () => {
         },
         {
           type: "text",
+          text: "Third.",
+          providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+        },
+        {
+          type: "text",
           text: "Final.",
-          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+          providerMetadata: { openai: { itemId: "openai-text-0", phase: "final_answer" } },
+        },
+        {
+          type: "text",
+          text: "Nullable.",
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
+        },
+        {
+          type: "text",
+          text: "Unphased.",
+          providerMetadata: { openai: { itemId: "msg_unphased" } },
         },
       ])
 
@@ -917,8 +972,22 @@ describe("OpenAI Responses route", () => {
         },
         {
           role: "assistant",
+          phase: "commentary",
+          content: [{ type: "output_text", text: "Third." }],
+        },
+        {
+          role: "assistant",
           phase: "final_answer",
           content: [{ type: "output_text", text: "Final." }],
+        },
+        {
+          role: "assistant",
+          phase: null,
+          content: [{ type: "output_text", text: "Nullable." }],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "output_text", text: "Unphased." }],
         },
       ])
     }),

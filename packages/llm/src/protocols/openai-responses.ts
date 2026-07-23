@@ -247,9 +247,16 @@ interface ParserState {
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
-  readonly messageItems: Readonly<Record<string, ProviderMetadata>>
+  readonly messageItems: Readonly<Record<string, MessageStreamItem>>
+  readonly messageContentIDs: ReadonlySet<string>
+  readonly nextMessageContentID: number
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
   readonly store: boolean | undefined
+}
+
+interface MessageStreamItem {
+  readonly providerMetadata?: ProviderMetadata
+  readonly content: Readonly<Record<number, { readonly id: string; readonly text: string }>>
 }
 
 type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
@@ -309,9 +316,9 @@ const lowerReasoning = (part: ReasoningPart): OpenAIResponsesReasoningInput | un
   }
 }
 
-const messagePhase = (part: TextPart): OpenAIResponsesMessagePhase | undefined => {
+const messagePhase = (part: TextPart): OpenAIResponsesMessagePhase | null | undefined => {
   const phase = part.providerMetadata?.openai?.phase
-  return phase === "commentary" || phase === "final_answer" ? phase : undefined
+  return phase === "commentary" || phase === "final_answer" || phase === null ? phase : undefined
 }
 
 const messageItemID = (part: TextPart) => {
@@ -390,7 +397,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
-      let phase: OpenAIResponsesMessagePhase | undefined
+      let phase: OpenAIResponsesMessagePhase | null | undefined
       let itemID: string | undefined
       const reasoningItems: Record<string, OpenAIResponsesReasoningReplay> = {}
       const reasoningReferences = new Set<string>()
@@ -400,7 +407,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
         input.push({
           role: "assistant",
           content: content.map((part) => ({ type: "output_text", text: part.text })),
-          ...(phase ? { phase } : {}),
+          ...(phase !== undefined ? { phase } : {}),
         })
         content.splice(0, content.length)
         phase = undefined
@@ -646,35 +653,103 @@ const NO_EVENTS: StepResult["1"] = []
 // the protocol's `terminal` predicate stay in sync.
 const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
 
-const messageContentID = (event: OpenAIResponsesEvent) => {
+const messageMetadata = (item: OpenAIResponsesStreamItem, id: string) =>
+  openaiMetadata({ itemId: id, ...(item.phase !== undefined ? { phase: item.phase } : {}) })
+
+const ensureMessageContent = (state: ParserState, event: OpenAIResponsesEvent) => {
   const itemID = event.item_id ?? "text-0"
-  return event.content_index && event.content_index > 0 ? `${itemID}:${event.content_index}` : itemID
+  const index = event.content_index ?? 0
+  const item = state.messageItems[itemID] ?? { content: {} }
+  const existing = item.content[index]
+  if (existing) return { state, itemID, index, item, content: existing }
+  const findID = (next: number): readonly [string, number] => {
+    const id = `openai-text-${next}`
+    return state.messageContentIDs.has(id) ? findID(next + 1) : [id, next + 1]
+  }
+  const [id, nextMessageContentID] =
+    index === 0 && !state.messageContentIDs.has(itemID)
+      ? ([itemID, state.nextMessageContentID] as const)
+      : findID(state.nextMessageContentID)
+  const content = { id, text: "" }
+  const nextItem = { ...item, content: { ...item.content, [index]: content } }
+  return {
+    state: {
+      ...state,
+      messageItems: { ...state.messageItems, [itemID]: nextItem },
+      messageContentIDs: new Set([...state.messageContentIDs, id]),
+      nextMessageContentID,
+    },
+    itemID,
+    index,
+    item: nextItem,
+    content,
+  }
+}
+
+const updateMessageContent = (
+  state: ParserState,
+  itemID: string,
+  index: number,
+  content: { readonly id: string; readonly text: string },
+): ParserState => ({
+  ...state,
+  messageItems: {
+    ...state.messageItems,
+    [itemID]: {
+      ...state.messageItems[itemID],
+      content: { ...state.messageItems[itemID]?.content, [index]: content },
+    },
+  },
+})
+
+const appendOutputText = (state: ParserState, event: OpenAIResponsesEvent, text: string): StepResult => {
+  const ensured = ensureMessageContent(state, event)
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.textStart(
+    ensured.state.lifecycle,
+    events,
+    ensured.content.id,
+    ensured.item.providerMetadata,
+  )
+  return [
+    {
+      ...updateMessageContent(ensured.state, ensured.itemID, ensured.index, {
+        ...ensured.content,
+        text: ensured.content.text + text,
+      }),
+      lifecycle: Lifecycle.textDelta(lifecycle, events, ensured.content.id, text),
+    },
+    events,
+  ]
 }
 
 const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
-  const events: LLMEvent[] = []
-  const id = messageContentID(event)
-  const lifecycle = Lifecycle.textStart(
-    state.lifecycle,
-    events,
-    id,
-    event.item_id ? state.messageItems[event.item_id] : undefined,
-  )
-  return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
+  return appendOutputText(state, event, event.delta)
 }
 
 const onOutputTextDone = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
-  const id = messageContentID(event)
-  if (!state.lifecycle.text.has(id) && event.text === undefined) return [state, NO_EVENTS]
-  const providerMetadata = event.item_id ? state.messageItems[event.item_id] : undefined
-  const events: LLMEvent[] = []
-  const started = state.lifecycle.text.has(id)
-    ? state.lifecycle
-    : Lifecycle.textStart(state.lifecycle, events, id, providerMetadata)
-  const lifecycle =
-    !state.lifecycle.text.has(id) && event.text ? Lifecycle.textDelta(started, events, id, event.text) : started
-  return [{ ...state, lifecycle }, events]
+  if (event.text === undefined) return [state, NO_EVENTS]
+  const ensured = ensureMessageContent(state, event)
+  if (event.text === ensured.content.text) {
+    if (ensured.state.lifecycle.text.has(ensured.content.id)) return [ensured.state, NO_EVENTS]
+    const events: LLMEvent[] = []
+    return [
+      {
+        ...ensured.state,
+        lifecycle: Lifecycle.textStart(
+          ensured.state.lifecycle,
+          events,
+          ensured.content.id,
+          ensured.item.providerMetadata,
+        ),
+      },
+      events,
+    ]
+  }
+  if (event.text.startsWith(ensured.content.text))
+    return appendOutputText(ensured.state, event, event.text.slice(ensured.content.text.length))
+  return [ensured.state, NO_EVENTS]
 }
 
 const onReasoningDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
@@ -697,9 +772,6 @@ const onReasoningDone = (state: ParserState, _event: OpenAIResponsesEvent): Step
 const reasoningMetadata = (item: OpenAIResponsesStreamItem & { id: string }) =>
   openaiMetadata({ itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
 
-const messageMetadata = (item: OpenAIResponsesStreamItem, id: string) =>
-  item.phase ? openaiMetadata({ itemId: id, phase: item.phase }) : undefined
-
 // OpenAI Responses streams reasoning items in a stable order:
 //   `output_item.added` (reasoning) →
 //     `reasoning_summary_part.added` (index=0) →
@@ -714,12 +786,18 @@ const messageMetadata = (item: OpenAIResponsesStreamItem, id: string) =>
 // best-effort, not guaranteed.
 const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const item = event.item
-  if (item?.type === "message" && item.id && item.phase) {
-    const providerMetadata = openaiMetadata({ itemId: item.id, phase: item.phase })
+  if (item?.type === "message" && item.id) {
     return [
       {
         ...state,
-        messageItems: { ...state.messageItems, [item.id]: providerMetadata },
+        messageItems: {
+          ...state.messageItems,
+          [item.id]: {
+            ...state.messageItems[item.id],
+            providerMetadata: messageMetadata(item, item.id),
+            content: state.messageItems[item.id]?.content ?? {},
+          },
+        },
       },
       NO_EVENTS,
     ]
@@ -884,14 +962,16 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
   if (item.type === "message" && item.id) {
     const events: LLMEvent[] = []
     const itemID = item.id
+    const messageItem = state.messageItems[itemID]
     const { [itemID]: _finished, ...messageItems } = state.messageItems
-    const lifecycle = [...state.lifecycle.text]
-      .filter((id) => id === itemID || id.startsWith(`${itemID}:`))
-      .reduce(
-        (lifecycle, id) =>
-          Lifecycle.textEnd(lifecycle, events, id, messageMetadata(item, itemID) ?? state.messageItems[itemID]),
-        state.lifecycle,
-      )
+    const providerMetadata =
+      item.phase !== undefined
+        ? messageMetadata(item, itemID)
+        : (messageItem?.providerMetadata ?? messageMetadata(item, itemID))
+    const lifecycle = Object.values(messageItem?.content ?? {}).reduce(
+      (lifecycle, content) => Lifecycle.textEnd(lifecycle, events, content.id, providerMetadata),
+      state.lifecycle,
+    )
     return [
       {
         ...state,
@@ -1060,6 +1140,8 @@ export const protocol = Protocol.make({
       tools: ToolStream.empty<string>(),
       lifecycle: Lifecycle.initial(),
       messageItems: {},
+      messageContentIDs: new Set<string>(),
+      nextMessageContentID: 0,
       reasoningItems: {},
       store: OpenAIOptions.store(request),
     }),
