@@ -78,6 +78,12 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 
 const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
 const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
+// Advisory-only path scan: soft-fail realPath so live Unix sockets (EOPNOTSUPP) and similar
+// non-NotFound failures do not abort the bash tool. Workdir auth still uses strict resolve.
+const softResolve = (fs: FSUtil.Interface, target: string) => {
+  const lexical = path.resolve(FSUtil.windowsPath(target))
+  return fs.realPath(lexical).pipe(Effect.catch(() => Effect.succeed(lexical)))
+}
 const externalCommandDirectories = Effect.fn("BashTool.externalCommandDirectories")(function* (
   fs: FSUtil.Interface,
   command: string,
@@ -87,9 +93,9 @@ const externalCommandDirectories = Effect.fn("BashTool.externalCommandDirectorie
   for (const token of shellTokens(command)) {
     const value = unquote(token).replace(/[;,|&]+$/, "")
     if (!path.isAbsolute(value)) continue
-    const resolved = yield* fs.resolve(value)
+    const resolved = yield* softResolve(fs, value)
     if (FSUtil.contains(cwd, resolved)) continue
-    directories.add(yield* fs.resolve(path.dirname(resolved)))
+    directories.add(yield* softResolve(fs, path.dirname(resolved)))
   }
   return [...directories]
 })

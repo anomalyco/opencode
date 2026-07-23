@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import { realpathSync } from "node:fs"
+import { createServer } from "node:net"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
@@ -131,6 +132,7 @@ const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
 })
 
 const it = testEffect(Layer.empty)
+const unixSocketTest = process.platform === "win32" ? it.live.skip : it.live
 
 describe("BashTool", () => {
   it.live("registers and returns structured successful output from the active Location", () =>
@@ -340,6 +342,48 @@ describe("BashTool", () => {
         Effect.promise(() =>
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
         ),
+    ),
+  )
+
+  unixSocketTest("soft-fails advisory realPath for live Unix socket arguments", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(async () => {
+        const [active, outside] = await Promise.all([tmpdir(), tmpdir()])
+        const socketPath = path.join(outside.path, "live.sock")
+        const server = createServer()
+        await new Promise<void>((resolve, reject) => {
+          server.once("error", reject)
+          server.listen(socketPath, () => resolve())
+        })
+        return { active, outside, socketPath, server }
+      }),
+      (ctx) => {
+        reset()
+        denyAction = "external_directory"
+        return withTool(ctx.active.path, (registry) =>
+          settleTool(registry, call({ command: `printf '%s\\n' ${ctx.socketPath}` })),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["bash"])
+              expect(runs).toHaveLength(1)
+              expect(settled.output?.structured).toMatchObject({
+                truncated: false,
+              })
+              expect(settled.output?.structured).not.toHaveProperty("warnings")
+              expect(settled.output?.content[1]).toMatchObject({
+                type: "text",
+                text: expect.stringContaining("Warnings:"),
+              })
+            }),
+          ),
+        )
+      },
+      (ctx) =>
+        Effect.promise(async () => {
+          await new Promise<void>((resolve) => ctx.server.close(() => resolve()))
+          await Promise.all([ctx.active[Symbol.asyncDispose](), ctx.outside[Symbol.asyncDispose]()])
+        }),
     ),
   )
 
