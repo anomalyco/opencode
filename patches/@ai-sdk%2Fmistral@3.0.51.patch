@@ -1,5 +1,17 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 1bde0b9f8cbe6771a52c1041095c9dddfe8e5b6c..0ca2ffb2a0c9327aed5ddcf0004500dc8b42569f 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -14,6 +14,7 @@ declare const mistralLanguageModelOptions: z.ZodObject<{
+         none: "none";
+         high: "high";
+     }>>;
++    promptCacheKey: z.ZodOptional<z.ZodString>;
+ }, z.core.$strip>;
+ type MistralLanguageModelOptions = z.infer<typeof mistralLanguageModelOptions>;
+ 
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 1ca9113bed2728a616db773a8e08d8d6957447d7..15408ec429dc210b5fa43589d81b69c93bf27b2d 100644
+index 1bde0b9f8cbe6771a52c1041095c9dddfe8e5b6c..0ca2ffb2a0c9327aed5ddcf0004500dc8b42569f 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -14,6 +14,7 @@ declare const mistralLanguageModelOptions: z.ZodObject<{
@@ -11,7 +23,7 @@ index 1ca9113bed2728a616db773a8e08d8d6957447d7..15408ec429dc210b5fa43589d81b69c9
  type MistralLanguageModelOptions = z.infer<typeof mistralLanguageModelOptions>;
  
 diff --git a/dist/index.js b/dist/index.js
-index 45735e524aaff54ea058c99c729c5ffd3c507058..779bd50f2b18e0dbe61bf9aaad88e9c87ed3c419 100644
+index d3f904c12a1d582cc7b9e9a2d30273e1a8505b28..f3476d19933277a9e7d41c4a688f36aa34bebda1 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -128,11 +128,14 @@ function convertToMistralChatMessages(prompt) {
@@ -60,8 +72,8 @@ index 45735e524aaff54ea058c99c729c5ffd3c507058..779bd50f2b18e0dbe61bf9aaad88e9c8
  });
  
  // src/mistral-error.ts
-@@ -413,6 +422,7 @@ var MistralChatLanguageModel = class {
-       top_p: topP,
+@@ -407,6 +416,7 @@ var MistralChatLanguageModel = class {
+       stop: stopSequences,
        random_seed: seed,
        reasoning_effort: options.reasoningEffort,
 +      prompt_cache_key: options.promptCacheKey,
@@ -69,7 +81,7 @@ index 45735e524aaff54ea058c99c729c5ffd3c507058..779bd50f2b18e0dbe61bf9aaad88e9c8
        response_format: (responseFormat == null ? void 0 : responseFormat.type) === "json" ? structuredOutputs && (responseFormat == null ? void 0 : responseFormat.schema) != null ? {
          type: "json_schema",
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..929a5fe79c9fc12b437f82532157e775d14a999f 100644
+index d2eff622c1b84a96bdeb4012cb0206a33012a04d..0efee3bbc04d8134c32724694318c87b58b6bfa2 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -116,11 +116,14 @@ function convertToMistralChatMessages(prompt) {
@@ -118,8 +130,8 @@ index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..929a5fe79c9fc12b437f82532157e775
  });
  
  // src/mistral-error.ts
-@@ -403,6 +412,7 @@ var MistralChatLanguageModel = class {
-       top_p: topP,
+@@ -397,6 +406,7 @@ var MistralChatLanguageModel = class {
+       stop: stopSequences,
        random_seed: seed,
        reasoning_effort: options.reasoningEffort,
 +      prompt_cache_key: options.promptCacheKey,
@@ -127,7 +139,7 @@ index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..929a5fe79c9fc12b437f82532157e775
        response_format: (responseFormat == null ? void 0 : responseFormat.type) === "json" ? structuredOutputs && (responseFormat == null ? void 0 : responseFormat.schema) != null ? {
          type: "json_schema",
 diff --git a/src/convert-to-mistral-chat-messages.ts b/src/convert-to-mistral-chat-messages.ts
-index 1c74a7ee8959664635e729d1776d3ee516027ef9..80b52650d292522bd3da4979271cdeb58552fcf7 100644
+index 3c6914f8da615d7517bc43dd56198298d0a50247..fef2830282c11d3c99482115ed769349f56886cc 100644
 --- a/src/convert-to-mistral-chat-messages.ts
 +++ b/src/convert-to-mistral-chat-messages.ts
 @@ -3,7 +3,10 @@ import {
@@ -181,11 +193,11 @@ index 1c74a7ee8959664635e729d1776d3ee516027ef9..80b52650d292522bd3da4979271cdeb5
            tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
          });
 diff --git a/src/mistral-chat-language-model.ts b/src/mistral-chat-language-model.ts
-index 480c472d534bedbe8897979673453bd1c29a70b7..e46496da94f7d4af9822897202ca6baae67dae3a 100644
+index 7e4a7ab552f1b41b7074e1b3cada8a51d791268d..2e7191d8164982834d7db7aa26767fbc665db099 100644
 --- a/src/mistral-chat-language-model.ts
 +++ b/src/mistral-chat-language-model.ts
-@@ -129,6 +129,7 @@ export class MistralChatLanguageModel implements LanguageModelV3 {
-       top_p: topP,
+@@ -122,6 +122,7 @@ export class MistralChatLanguageModel implements LanguageModelV3 {
+       stop: stopSequences,
        random_seed: seed,
        reasoning_effort: options.reasoningEffort,
 +      prompt_cache_key: options.promptCacheKey,
@@ -193,10 +205,10 @@ index 480c472d534bedbe8897979673453bd1c29a70b7..e46496da94f7d4af9822897202ca6baa
        // response format:
        response_format:
 diff --git a/src/mistral-chat-options.ts b/src/mistral-chat-options.ts
-index 80fff45fba2c378fa06962f071946bcd2b882a0b..b4fdfa51f3bf11a4220e010c8aca92482cb0c3db 100644
+index 54b29c08517d348995b6ca093b11160e453d5c8b..de30c3e7d924889339e38b1067cb26e9ada05d11 100644
 --- a/src/mistral-chat-options.ts
 +++ b/src/mistral-chat-options.ts
-@@ -62,6 +62,11 @@ export const mistralLanguageModelOptions = z.object({
+@@ -64,6 +64,11 @@ export const mistralLanguageModelOptions = z.object({
     * - `'none'`: Disable reasoning
     */
    reasoningEffort: z.enum(['high', 'none']).optional(),
