@@ -1097,7 +1097,7 @@ function TurnTokenUsage(props: {
   const { themeV2 } = useTheme()
   const steps = createMemo(() => {
     let previousCacheRead = props.previousCacheRead
-    return props.messageIDs.flatMap((messageID, index) => {
+    return props.messageIDs.flatMap((messageID) => {
       const message = props.message(messageID)
       if (message?.type !== "assistant" || !message.tokens) return []
       const total =
@@ -1115,7 +1115,7 @@ function TurnTokenUsage(props: {
       previousCacheRead = message.tokens.cache.read
       return [
         {
-          label: `Step ${index + 1} [${message.finish ?? "unknown"}]`,
+          finish: `[${message.finish ?? "unknown"}]`,
           newTokens,
           cached: message.tokens.cache.read,
           total,
@@ -1124,6 +1124,12 @@ function TurnTokenUsage(props: {
       ]
     })
   })
+  const columns = createMemo(() => ({
+    step: Math.max("Step".length, ...steps().map((item) => item.finish.length)),
+    newTokens: Math.max("New".length, ...steps().map((item) => item.newTokens.toLocaleString().length)),
+    cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
+    total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
+  }))
   return (
     <Show when={config.data.debug?.turn_tokens === true && steps().length > 0}>
       <box paddingLeft={3} flexDirection="column">
@@ -1133,13 +1139,28 @@ function TurnTokenUsage(props: {
           </text>
           <text fg={themeV2.text.subdued}>Turn token usage:</text>
         </box>
+        <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
+          <text fg={themeV2.text.subdued}>
+            {"Step".padEnd(columns().step + 2)}
+            {"New".padStart(columns().newTokens)}
+            {"  "}
+            {"Cached".padStart(columns().cached)}
+            {"  "}
+            {"Total".padStart(columns().total)}
+          </text>
+        </box>
         <For each={steps()}>
           {(item) => (
             <box paddingLeft={INLINE_TOOL_ICON_WIDTH} flexDirection="column">
               <text fg={themeV2.text.subdued}>
-                {item.label}:{" "}
-                <span style={{ attributes: TextAttributes.BOLD }}>New tokens: {item.newTokens.toLocaleString()}</span>
-                {` · Cached: ${item.cached.toLocaleString()} · Total: ${item.total.toLocaleString()}`}
+                {item.finish.padEnd(columns().step + 2)}
+                <span style={{ attributes: TextAttributes.BOLD }}>
+                  {item.newTokens.toLocaleString().padStart(columns().newTokens)}
+                </span>
+                {"  "}
+                {item.cached.toLocaleString().padStart(columns().cached)}
+                {"  "}
+                {item.total.toLocaleString().padStart(columns().total)}
               </text>
               <Show when={item.cacheBust !== undefined}>
                 <text fg={themeV2.text.feedback.error.default}>
