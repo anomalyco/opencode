@@ -136,25 +136,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   )
 
   createEffect(
-    on(
-      () =>
-        turnTokens()
-          ? data.session.message.list(sessionID()).flatMap((message) =>
-              message.type === "assistant"
-                ? [
-                    {
-                      id: message.id,
-                      finish: message.finish,
-                      error: message.error,
-                      retry: message.retry,
-                      tokens: message.tokens,
-                    },
-                  ]
-                : [],
-            )
-          : [],
-      () => setRows(reconcile(reduce())),
-    ),
+    on(turnTokens, () => setRows(reconcile(reduce()))),
   )
 
   const appendMessage = (messageID: string) =>
@@ -276,9 +258,12 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
       appendFooter(event.data.assistantMessageID)
+      if (turnTokens()) setRows(reconcile(reduce()))
     }),
     data.on("session.step.failed", (event) => {
-      if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
+      if (event.data.sessionID !== sessionID()) return
+      appendFooter(event.data.assistantMessageID)
+      if (turnTokens()) setRows(reconcile(reduce()))
     }),
   ]
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
