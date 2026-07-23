@@ -414,7 +414,7 @@ function PanelBox(props: ParentProps) {
       position="absolute"
       zIndex={2600}
       bottom={1}
-      left={0}
+      left={-1}
       width={42}
       paddingLeft={2}
       paddingRight={2}
