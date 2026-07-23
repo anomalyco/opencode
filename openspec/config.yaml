@@ -1,20 +1,24 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  项目基于 anomalyco/opencode 的 dev 分支开发，使用 TypeScript、Bun 和 monorepo。
+  最终架构固定为：Web 对话窗口与飞书智能体作为用户层；Agent 层包含 Memory、规划、LLM 路由、执行、Skill、MCP Client 和业务查询工具；业务层使用 Nginx + Vue、Tomcat + Spring Boot；数据层为从用友 SQL Server 2008 迁移到云 MySQL。
+  交付采用并行策略：一期先打通飞书 -> Agent -> Skill -> 业务查询工具 -> MySQL；业务系统同步开发；后续补充 Web 入口和 Agent -> MCP Client -> Spring Boot 链路。
+  飞书负责用户准入与授权，智能体项目不重复建设用户权限系统，也不默认脱敏。
+  数据库工具需要支持完整增删改查。核心质量指标是业务语义、SQL、执行结果和回答解释的准确率。
+  遵守根 AGENTS.md 的上游开发规则。测试不得从仓库根目录运行；在对应 package 目录运行测试和 bun typecheck。
+  OpenSpec 是需求、行为规范、变更状态与归档历史的事实来源；Superpowers 用于 brainstorming、计划、TDD、系统化调试和完成前验证。
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - 明确业务价值、范围外事项、并行开发依赖和可独立验收的里程碑
+    - 不改变已固定的最终架构，除非用户明确批准新的架构变更
+  specs:
+    - 每项需求必须包含可验证场景和明确预期结果
+    - 数据库相关需求必须覆盖查询、写入、事务失败、结果复核和歧义输入
+  design:
+    - 明确组件边界、数据流、错误处理、准确率机制和后续业务接入替换点
+    - 优先使用 OpenCode 原生 Agent、Skill、MCP、Plugin、Server 和 SDK 扩展点，减少核心源码分叉
+  tasks:
+    - 每项任务必须包含精确文件路径、验证命令和预期结果
+    - 实现任务遵循 Superpowers TDD 和 verification-before-completion
