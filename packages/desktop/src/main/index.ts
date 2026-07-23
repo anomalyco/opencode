@@ -298,6 +298,7 @@ const main = Effect.gen(function* () {
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
+    rebuildMenu,
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()
@@ -380,20 +381,26 @@ const main = Effect.gen(function* () {
   yield* Fiber.await(loadingTask)
 
   const windows = restoreMainWindows()
-  if (windows.length) {
-    createMenu({
-      trigger: (id) => {
-        const win = getLastFocusedWindow()
-        if (win) sendMenuCommand(win, id)
-      },
-      checkForUpdates: () => {
-        void showUpdaterDialog(updater, true)
-      },
-      relaunch: () => {
-        relaunch()
-      },
-    })
+  const rebuildMenu = () => {
+    if (windows.length) {
+      createMenu({
+        trigger: (id) => {
+          const win = getLastFocusedWindow()
+          if (win) sendMenuCommand(win, id)
+        },
+        checkForUpdates: () => {
+          void showUpdaterDialog(updater, true)
+        },
+        relaunch: () => {
+          relaunch()
+        },
+      })
+    }
   }
+  for (const win of windows) {
+    win.on("focus", rebuildMenu)
+  }
+  rebuildMenu()
 })
 
 Effect.runFork(main)
