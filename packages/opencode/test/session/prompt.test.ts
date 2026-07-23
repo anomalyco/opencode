@@ -714,6 +714,25 @@ noLLMServer.instance.skip(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "prompt loop does not crash when toolcall is false",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ title: "No toolcall" })
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(result.info.role).toBe("assistant")
+    }),
+  { config: { ...cfg, provider: { test: { ...cfg.provider.test, models: { "test-model": { ...cfg.provider.test.models["test-model"], tool_call: false } } } } } },
+)
+
 it.instance("static loop returns assistant text through local provider", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
