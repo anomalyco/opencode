@@ -35,99 +35,85 @@ export const layer = Layer.effectDiscard(
         const groups = new Map<
           string,
           {
-            registrations: Array<{
-              name: string
-              tool: Tool.Any
-              permission: string
-            }>
+            tools: Record<string, Tool.Any>
             codemode: boolean
           }
         >()
         for (const tool of yield* mcp.tools()) {
-          const group = groups.get(tool.server) ?? { registrations: [], codemode: tool.codemode !== false }
+          const group = groups.get(tool.server) ?? { tools: {}, codemode: tool.codemode !== false }
           const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
-          group.registrations.push({
-            name: tool.name,
-            tool: Tool.make({
-              description: tool.description ?? "",
-              input: {
-                ...schema,
-                type: "object",
-                properties: schema.properties ?? {},
-                additionalProperties: false,
-              },
-              output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
-              execute: (input, context) =>
-                Effect.gen(function* () {
-                  yield* permission.assert({
-                    action: name(tool.server, tool.name),
-                    resources: ["*"],
-                    save: ["*"],
-                    metadata: {},
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source: {
-                      type: "tool",
-                      messageID: context.messageID,
-                      callID: context.callID,
-                    },
+          group.tools[tool.name] = Tool.make({
+            description: tool.description ?? "",
+            input: {
+              ...schema,
+              type: "object",
+              properties: schema.properties ?? {},
+              additionalProperties: false,
+            },
+            output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
+            execute: (input, context) =>
+              Effect.gen(function* () {
+                yield* permission.assert({
+                  action: name(tool.server, tool.name),
+                  resources: ["*"],
+                  save: ["*"],
+                  metadata: {},
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: {
+                    type: "tool",
+                    messageID: context.messageID,
+                    callID: context.callID,
+                  },
+                })
+                const result = yield* mcp
+                  .callTool({
+                    server: tool.server,
+                    name: tool.name,
+                    args: (input ?? {}) as Record<string, unknown>,
                   })
-                  const result = yield* mcp
-                    .callTool({
-                      server: tool.server,
-                      name: tool.name,
-                      args: (input ?? {}) as Record<string, unknown>,
-                    })
-                    .pipe(
-                      Effect.catchTags({
-                        "MCP.NotFoundError": (error) =>
-                          new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
-                        "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
-                      }),
-                    )
-                  if (result.isError)
-                    return yield* new ToolFailure({
-                      message:
-                        result.content
-                          .flatMap((part) => (part.type === "text" ? [part.text] : []))
-                          .join("\n")
-                          .trim() || "MCP tool returned an error",
-                    })
-                  const content = result.content.map((part) =>
-                    part.type === "text"
-                      ? { type: "text" as const, text: part.text }
-                      : { type: "file" as const, data: part.data, mime: part.mimeType },
+                  .pipe(
+                    Effect.catchTags({
+                      "MCP.NotFoundError": (error) =>
+                        new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
+                      "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
+                    }),
                   )
-                  const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-                  return {
-                    output: result.structured ?? (text === "" ? null : text),
-                    ...(content.length === 0 ? {} : { content: content as [Tool.Content, ...Tool.Content[]] }),
-                  }
-                }).pipe(
-                  Effect.mapError((error) =>
-                    error instanceof ToolFailure
-                      ? error
-                      : new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}` }),
-                  ),
+                if (result.isError)
+                  return yield* new ToolFailure({
+                    message:
+                      result.content
+                        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+                        .join("\n")
+                        .trim() || "MCP tool returned an error",
+                  })
+                const content = result.content.map((part) =>
+                  part.type === "text"
+                    ? { type: "text" as const, text: part.text }
+                    : { type: "file" as const, data: part.data, mime: part.mimeType },
+                )
+                const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+                return {
+                  output: result.structured ?? (text === "" ? null : text),
+                  ...(content.length === 0 ? {} : { content: content as [Tool.Content, ...Tool.Content[]] }),
+                }
+              }).pipe(
+                Effect.mapError((error) =>
+                  error instanceof ToolFailure
+                    ? error
+                    : new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}` }),
                 ),
-            }),
-            permission: name(tool.server, tool.name),
+              ),
           })
           groups.set(tool.server, group)
         }
         const next = yield* Scope.fork(scope)
         yield* tools
           .registerBatch(
-            Array.from(groups).flatMap(([server, group]) =>
-              group.registrations.map((registration) => ({
-                tools: { [registration.name]: registration.tool },
-                options: {
-                  namespace: namespace(server),
-                  codemode: group.codemode,
-                  permission: registration.permission,
-                },
-              })),
-            ),
+            Array.from(groups, ([server, group]) => ({
+              tools: group.tools,
+              options: { namespace: namespace(server), codemode: group.codemode },
+            })),
           )
           .pipe(Scope.provide(next), Effect.orDie)
         if (current) yield* Scope.close(current, Exit.void)

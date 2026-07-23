@@ -397,7 +397,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
           tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools),
           // Converse has no native "none". Keep definitions stable for prompt
           // caching and omit only the unsupported choice.
-          ...(toolChoice === undefined ? {} : { toolChoice }),
+          toolChoice,
         }
       : undefined
   const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)

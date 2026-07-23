@@ -557,7 +557,6 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                             description: registration.description,
                             input: registration.inputSchema,
                             output: registration.outputSchema ?? {},
-                            ...(registration.permission === undefined ? {} : { permission: registration.permission }),
                             execute: (input, context) =>
                               invoke(
                                 generation,
@@ -566,7 +565,9 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                                 context,
                               ),
                           }),
-                          registration.options,
+                          registration.permission === undefined
+                            ? registration.options
+                            : { ...registration.options, permission: registration.permission },
                         )
                     })
                     .pipe(Scope.provide(nextScope)),

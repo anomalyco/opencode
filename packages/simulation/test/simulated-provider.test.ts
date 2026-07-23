@@ -241,6 +241,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             additionalProperties: false,
           },
           outputSchema: { type: "object" },
+          permission: "simulate_lookup",
           options: { codemode: false },
         }
         const locations = yield* LocationServiceMap.Service
@@ -268,6 +269,9 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           expect(toolSet.definitions).toContainEqual(
             expect.objectContaining({ name: "lookup", description: "Look up a value" }),
           )
+          expect(
+            (yield* registry.snapshot([{ action: "simulate_lookup", resource: "*", effect: "deny" }])).definitions,
+          ).not.toContainEqual(expect.objectContaining({ name: "lookup" }))
           const secondaryToolSet = yield* ToolRegistry.Service.use((secondaryRegistry) =>
             secondaryRegistry.snapshot(),
           ).pipe(Effect.provide(secondary))
