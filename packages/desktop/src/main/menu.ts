@@ -9,6 +9,7 @@ import {
 
 import { UPDATER_ENABLED } from "./constants"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
+import { t } from "./i18n"
 
 type Deps = {
   trigger: (id: string) => void
@@ -22,7 +23,7 @@ export function createMenu(deps: Deps) {
   const template = DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "macos")).map((menu) => {
     if (menu.role) return { role: nativeRole(menu.role) }
     return {
-      label: menu.label,
+      label: t(menu.labelKey),
       submenu: menu.items
         ?.filter((entry) => desktopMenuVisible(entry, "macos"))
         .map((entry) => nativeItem(entry, deps)),
@@ -37,7 +38,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   if (entry.role) return { role: nativeRole(entry.role) }
 
   const item: MenuItemConstructorOptions = {
-    label: entry.label,
+    label: entry.labelKey ? t(entry.labelKey) : entry.label,
     accelerator: entry.accelerator?.macos,
     enabled: entry.enabled === "updater" ? UPDATER_ENABLED : undefined,
   }
