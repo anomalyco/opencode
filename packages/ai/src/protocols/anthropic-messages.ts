@@ -830,6 +830,7 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
     reason: mapFinishReason(event.delta?.stop_reason),
+    rawReason: event.delta?.stop_reason ?? undefined,
     usage,
     providerMetadata: event.delta?.stop_sequence
       ? anthropicMetadata({ stopSequence: event.delta.stop_sequence })

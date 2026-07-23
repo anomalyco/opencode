@@ -185,6 +185,7 @@ export interface ParserState {
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
   readonly usage?: Usage
   readonly finishReason?: FinishReason
+  readonly rawFinishReason?: string
   readonly lifecycle: Lifecycle.State
   readonly reasoningField?: string
   readonly reasoningDetails: Array<unknown>
@@ -536,6 +537,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const usage = mapUsage(event.usage) ?? state.usage
     const choice = event.choices[0]
     const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
+    const rawFinishReason = choice?.finish_reason ?? state.rawFinishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
@@ -614,6 +616,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         toolCallEvents: finished?.events ?? state.toolCallEvents,
         usage,
         finishReason,
+        rawFinishReason,
         lifecycle,
         reasoningField,
         reasoningDetails: state.reasoningDetails,
@@ -639,7 +642,8 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const ended = Lifecycle.reasoningEnd(started, events, "reasoning-0", metadata)
   const lifecycle = state.toolCallEvents.length ? Lifecycle.stepStart(ended, events) : ended
   events.push(...state.toolCallEvents)
-  if (reason) Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })
+  if (reason)
+    Lifecycle.finish(lifecycle, events, { reason, rawReason: state.rawFinishReason, usage: state.usage })
   return events
 }
 

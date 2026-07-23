@@ -326,6 +326,7 @@ describe("Bedrock Converse route", () => {
         raw: '{"query":"partial',
       })
       expect(response.finishReason).toBe("tool-calls")
+      expect(response.rawFinishReason).toBe("end_turn")
     }),
   )
 

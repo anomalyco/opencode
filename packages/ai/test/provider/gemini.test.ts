@@ -371,10 +371,11 @@ describe("Gemini route", () => {
         { type: "text-delta", id: "text-0", text: "Hello" },
         { type: "text-delta", id: "text-0", text: "!" },
         { type: "text-end", id: "text-0" },
-        { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
+        { type: "step-finish", index: 0, reason: "stop", rawReason: "STOP", usage, providerMetadata: undefined },
         {
           type: "finish",
           reason: "stop",
+          rawReason: "STOP",
           usage,
         },
       ])
@@ -527,10 +528,18 @@ describe("Gemini route", () => {
           providerExecuted: undefined,
           providerMetadata: undefined,
         },
-        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: "tool-calls",
+          rawReason: "STOP",
+          usage,
+          providerMetadata: undefined,
+        },
         {
           type: "finish",
           reason: "tool-calls",
+          rawReason: "STOP",
           usage,
         },
       ])
@@ -589,9 +598,9 @@ describe("Gemini route", () => {
       )
 
       expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
-      expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length" })
+      expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length", rawReason: "MAX_TOKENS" })
       expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
-      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter" })
+      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter", rawReason: "SAFETY" })
     }),
   )
 

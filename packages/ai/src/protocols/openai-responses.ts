@@ -980,6 +980,7 @@ const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): Step
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
     reason: mapFinishReason(event, state.hasFunctionCall),
+    rawReason: event.response?.incomplete_details?.reason,
     usage: mapUsage(event.response?.usage),
     providerMetadata:
       event.response?.id || event.response?.service_tier

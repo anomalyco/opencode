@@ -299,6 +299,7 @@ it.effect("emits malformed AI SDK tool input without executing it", () =>
     })
     expect(response.events.some(LLMEvent.is.toolInputEnd)).toBeTrue()
     expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
+    expect(response.rawFinishReason).toBe("tool_calls")
   }),
 )
 

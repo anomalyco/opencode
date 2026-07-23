@@ -460,7 +460,9 @@ interface ParserState {
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold the terminal event in state so `onHalt`
   // can emit exactly one finish after both chunks have had a chance to arrive.
-  readonly pendingFinish: { readonly reason: FinishReason; readonly usage?: Usage } | undefined
+  readonly pendingFinish:
+    | { readonly reason: FinishReason; readonly rawReason?: string; readonly usage?: Usage }
+    | undefined
   readonly hasToolCalls: boolean
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignatures: Readonly<Record<number, string>>
@@ -577,7 +579,11 @@ const step = (state: ParserState, event: BedrockEvent) =>
       return [
         {
           ...state,
-          pendingFinish: { reason: mapFinishReason(event.messageStop.stopReason), usage: state.pendingFinish?.usage },
+          pendingFinish: {
+            reason: mapFinishReason(event.messageStop.stopReason),
+            rawReason: event.messageStop.stopReason,
+            usage: state.pendingFinish?.usage,
+          },
         },
         [],
       ] as const
@@ -585,7 +591,17 @@ const step = (state: ParserState, event: BedrockEvent) =>
 
     if (event.metadata) {
       const usage = mapUsage(event.metadata.usage)
-      return [{ ...state, pendingFinish: { reason: state.pendingFinish?.reason ?? "stop", usage } }, []] as const
+      return [
+        {
+          ...state,
+          pendingFinish: {
+            reason: state.pendingFinish?.reason ?? "stop",
+            rawReason: state.pendingFinish?.rawReason,
+            usage,
+          },
+        },
+        [],
+      ] as const
     }
 
     const exception = (
@@ -620,6 +636,7 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
         Lifecycle.finish(state.lifecycle, events, {
           reason:
             state.pendingFinish.reason === "stop" && state.hasToolCalls ? "tool-calls" : state.pendingFinish.reason,
+          rawReason: state.pendingFinish.rawReason,
           usage: state.pendingFinish.usage,
         })
         return events

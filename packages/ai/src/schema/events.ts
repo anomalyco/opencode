@@ -194,6 +194,7 @@ export const StepFinish = Schema.Struct({
   type: Schema.tag("step-finish"),
   index: Schema.Number,
   reason: FinishReason,
+  rawReason: Schema.optional(Schema.String),
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.StepFinish" })
@@ -202,6 +203,7 @@ export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 export const Finish = Schema.Struct({
   type: Schema.tag("finish"),
   reason: FinishReason,
+  rawReason: Schema.optional(Schema.String),
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
@@ -365,6 +367,7 @@ interface ResponseState {
   readonly message: Message
   readonly usage?: Usage
   readonly finishReason?: FinishReason
+  readonly rawFinishReason?: string
   readonly textParts: Readonly<Record<string, ContentAssembly>>
   readonly reasoningParts: Readonly<Record<string, ContentAssembly>>
   readonly toolInputs: Readonly<Record<string, ToolInputAssembly>>
@@ -386,6 +389,7 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
       events,
       usage: event.usage ?? state.usage,
       finishReason: event.reason,
+      rawFinishReason: event.rawReason,
     }
   }
   if (LLMEvent.is.providerError(event)) {
@@ -580,6 +584,7 @@ export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
   finishReason: FinishReason,
+  rawFinishReason: Schema.optional(Schema.String),
 }) {
   /** Concatenated assistant text assembled from streamed `text-delta` events. */
   get text() {
@@ -616,6 +621,7 @@ export namespace LLMResponse {
           events: [...state.events],
           usage: state.usage,
           finishReason: state.finishReason,
+          rawFinishReason: state.rawFinishReason,
         })
 
   /** Convenience reducer for callers that already have a collected event list. */

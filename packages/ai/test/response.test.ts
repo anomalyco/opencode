@@ -74,6 +74,12 @@ describe("LLMResponse reducer", () => {
     expect(withoutFinishUsage?.usage).toMatchObject({ inputTokens: 3 })
   })
 
+  test("preserves the raw finish reason", () => {
+    const response = LLMResponse.fromEvents([LLMEvent.finish({ reason: "unknown", rawReason: "provider_limit" })])
+
+    expect(response?.rawFinishReason).toBe("provider_limit")
+  })
+
   test("assembles tool-call content only after the completed tool call event", () => {
     const pending = reduce([
       LLMEvent.toolInputStart({ id: "call_1", name: "lookup" }),

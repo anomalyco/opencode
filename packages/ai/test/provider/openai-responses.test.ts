@@ -887,11 +887,24 @@ describe("OpenAI Responses route", () => {
       const length = yield* generate({ reason: "max_output_tokens" })
       const contentFilter = yield* generate({ reason: "content_filter" })
       const unknown = yield* generate({})
+      const custom = yield* generate({ reason: "provider_limit" })
 
-      expect([length.finishReason, contentFilter.finishReason, unknown.finishReason]).toEqual([
+      expect([length.finishReason, contentFilter.finishReason, unknown.finishReason, custom.finishReason]).toEqual([
         "length",
         "content-filter",
         "unknown",
+        "unknown",
+      ])
+      expect([
+        length.rawFinishReason,
+        contentFilter.rawFinishReason,
+        unknown.rawFinishReason,
+        custom.rawFinishReason,
+      ]).toEqual([
+        "max_output_tokens",
+        "content_filter",
+        undefined,
+        "provider_limit",
       ])
     }),
   )

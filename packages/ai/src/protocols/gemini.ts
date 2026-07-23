@@ -403,6 +403,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
           : state.lifecycle
         Lifecycle.finish(lifecycle, events, {
           reason: mapFinishReason(state.finishReason, state.hasToolCalls),
+          rawReason: state.finishReason,
           usage: state.usage,
         })
         return events
