@@ -115,7 +115,7 @@ Pelajari lebih lanjut tentang [agen](https://opencode.ai/docs/agents).
 
 ### Dokumentasi
 
-Untuk informasi lebih lanjut tentang cara mengkonfigurasi OpenCode, [**kunjungi dokumentasi kami**](https://opencode.ai/docs).
+Untuk informasi lebih lanjut tentang cara melakukan konfigurasi OpenCode, [**kunjungi dokumentasi kami**](https://opencode.ai/docs).
 
 ### Berkontribusi
 
