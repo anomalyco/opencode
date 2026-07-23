@@ -15,6 +15,7 @@ import { Global } from "@opencode-ai/core/global"
 import { LSP } from "@/lsp/lsp"
 import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
+import { SecureInputRoutes } from "./secure-input"
 import { PermissionRoutes } from "./permission"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
@@ -166,6 +167,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     .route("/session", SessionRoutes())
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
+    .route("/secure-input", SecureInputRoutes())
     .route("/provider", ProviderRoutes())
     .route("/sync", SyncRoutes())
     .route("/", FileRoutes())

@@ -27,6 +27,10 @@ export function parameterSchema(description: string) {
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
     }),
     description: Schema.String.annotate({ description }),
+    interactive: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "Set to true for commands that require interactive password/sudo input (sudo, ssh -t, ansible -K). When enabled, the user will be prompted securely for passwords. Auto-detected for common patterns.",
+    }),
   })
 }
 
@@ -105,6 +109,7 @@ Usage notes:
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
+  - For commands that require interactive input (sudo, ssh -t, ansible -K), set \`interactive: true\` on the tool call. This enables PTY-based execution and the user will be prompted securely for passwords. Auto-detected for common patterns.
 
   - Avoid using Bash with the \`find\`, \`grep\`, \`cat\`, \`head\`, \`tail\`, \`sed\`, \`awk\`, or \`echo\` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
     - File search: Use Glob (NOT find or ls)

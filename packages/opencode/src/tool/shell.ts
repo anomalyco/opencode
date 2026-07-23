@@ -22,6 +22,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { SecureInput } from "@/secure-input"
 
 export { Parameters } from "./shell/prompt"
 
@@ -612,6 +613,29 @@ export const ShellTool = Tool.define(
                   yield* ask(ctx, scan)
                 }),
               )
+
+              // Interactive mode: use PTY + SecureInput for password-requiring commands
+              const wantsInteractive = params.interactive ?? SecureInput.isInteractiveCommand(params.command)
+              if (wantsInteractive) {
+                const secInput = yield* SecureInput.Service
+                const result = yield* secInput.execute({
+                  command: params.command,
+                  cwd,
+                  env: yield* shellEnv(ctx, cwd),
+                  sessionID: ctx.sessionID,
+                  timeout,
+                })
+                return {
+                  title: params.description,
+                  metadata: {
+                    output: result.output,
+                    exit: result.exitCode,
+                    description: params.description,
+                    interactive: true,
+                  },
+                  output: result.output,
+                }
+              }
 
               return yield* run(
                 {
