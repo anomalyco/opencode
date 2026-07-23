@@ -63,7 +63,7 @@ nix run nixpkgs#opencode           # atau github:anomalyco/opencode untuk branch
 ```
 
 > [!TIP]
-> Hapus versi yang lebih lama dari 0.1.x sebelum menginstal.
+> Hapus versi yang lebih lama dari 0.1.x sebelum melakukan proses instalasi.
 
 ### Aplikasi Desktop (BETA)
 
