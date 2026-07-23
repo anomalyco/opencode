@@ -1142,7 +1142,7 @@ function TurnTokenUsage(props: {
           </text>
         </box>
         <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
-          <text fg={themeV2.text.subdued}>
+          <text fg={themeV2.text.subdued} attributes={TextAttributes.ITALIC}>
             {"Step".padEnd(columns().step + 2)}
             {"New".padStart(columns().newTokens)}
             {"  "}
