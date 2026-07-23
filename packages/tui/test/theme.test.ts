@@ -34,10 +34,10 @@ test("addTheme keeps first theme for duplicate names", () => {
   expect(allThemes()[name]).toBe(one)
 })
 
-test("addTheme ignores invalid envelopes and unknown versions", () => {
+test("addTheme ignores values without a theme or mode definition", () => {
   const name = `plugin-theme-invalid-${Date.now()}`
   expect(addTheme(name, { defs: { a: "#ffffff" } })).toBe(false)
-  expect(addTheme(name, { version: 3, light: {} })).toBe(false)
+  expect(addTheme(name, { version: 2 })).toBe(false)
   expect(allThemes()[name]).toBeUndefined()
 })
 

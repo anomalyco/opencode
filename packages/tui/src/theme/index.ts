@@ -39,11 +39,8 @@ export function allThemes() {
 }
 
 export function isThemeSource(source: unknown) {
-  if (!isRecord(source)) return false
-  const version = themeVersion(source)
-  if (version === 2) return true
-  if (version !== 1) return false
-  return isRecord(source.theme)
+  if (typeof source !== "object" || source === null || Array.isArray(source)) return false
+  return "theme" in source || "light" in source || "dark" in source
 }
 
 export function parseTheme(source: unknown, name = "theme") {
@@ -131,12 +128,4 @@ function unsupportedThemeVersion(version: unknown): never {
 
 function invalidateTheme(theme: unknown) {
   if (typeof theme === "object" && theme !== null) parsed.delete(theme)
-}
-
-function themeVersion(theme: object) {
-  return "version" in theme ? theme.version : 1
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
