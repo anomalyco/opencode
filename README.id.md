@@ -67,7 +67,7 @@ nix run nixpkgs#opencode           # atau github:anomalyco/opencode untuk branch
 
 ### Aplikasi Desktop (BETA)
 
-OpenCode juga tersedia sebagai aplikasi desktop. Unduh langsung dari [halaman rilis](https://github.com/anomalyco/opencode/releases) atau [opencode.ai/download](https://opencode.ai/download).
+OpenCode juga tersedia dalam bentuk aplikasi desktop. Unduh langsung melalui [halaman rilis](https://github.com/anomalyco/opencode/releases) atau [opencode.ai/download](https://opencode.ai/download).
 
 | Platform              | Unduh                              |
 | --------------------- | ---------------------------------- |
