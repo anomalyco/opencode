@@ -22,7 +22,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
-import type { ModelMessage } from "ai"
 
 export const Event = SessionCompactionEvent
 
@@ -31,6 +30,11 @@ export const PRUNE_PROTECT = 40_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const RECENT_TAIL_AUDIT_MAX_CHARS = 4_000
 const RECENT_TAIL_AUDIT_PART_MAX_CHARS = 1_000
+const RECENT_TAIL_AUDIT_PREFIX = [
+  "<recent-preserved-tail-audit>",
+  "Use this text-only view only to reconcile Work State and Next Move. Do not copy it wholesale into the summary.",
+].join("\n")
+const RECENT_TAIL_AUDIT_SUFFIX = "</recent-preserved-tail-audit>"
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
@@ -80,47 +84,40 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
   })
 }
 
-function recentTailAudit(messages: ModelMessage[]) {
-  const selected: Array<{ role: ModelMessage["role"]; parts: string[] }> = []
-  let remaining = RECENT_TAIL_AUDIT_MAX_CHARS
+function recentTailAudit(messages: SessionV1.WithParts[]) {
+  const selected: Array<{ role: "user" | "assistant"; parts: string[] }> = []
+  let remaining = RECENT_TAIL_AUDIT_MAX_CHARS - RECENT_TAIL_AUDIT_PREFIX.length - RECENT_TAIL_AUDIT_SUFFIX.length - 2
 
   for (const message of messages.toReversed()) {
+    if (message.info.role !== "user" && message.info.role !== "assistant") continue
+    const role = message.info.role
     const parts: string[] = []
     for (const text of recentTailMessageText(message).toReversed()) {
       const part = text.trim()
       if (!part) continue
 
-      const prefix = parts.length ? "\n".length : `### ${message.role}\n`.length + (selected.length ? "\n\n".length : 0)
+      const prefix = parts.length ? "\n".length : `### ${role}\n`.length + (selected.length ? "\n\n".length : 0)
       if (remaining <= prefix) break
 
       const value = truncateTail(part, Math.min(RECENT_TAIL_AUDIT_PART_MAX_CHARS, remaining - prefix))
       parts.unshift(value)
       remaining -= prefix + value.length
     }
-    if (parts.length) selected.unshift({ role: message.role, parts })
+    if (parts.length) selected.unshift({ role, parts })
     if (remaining === 0) break
   }
 
   if (!selected.length) return undefined
   return [
-    "<recent-preserved-tail-audit>",
-    "Use this text-only view only to reconcile Work State and Next Move. Do not copy it wholesale into the summary.",
+    RECENT_TAIL_AUDIT_PREFIX,
     selected.map((message) => `### ${message.role}\n${message.parts.join("\n")}`).join("\n\n"),
-    "</recent-preserved-tail-audit>",
+    RECENT_TAIL_AUDIT_SUFFIX,
   ].join("\n")
 }
 
-function recentTailMessageText(message: ModelMessage) {
-  if (typeof message.content === "string") return [message.content]
-  return message.content.flatMap((part) => {
-    if (part.type === "text" || part.type === "reasoning") return [part.text]
-    if (part.type !== "tool-result") return []
-    if (part.output.type === "text" || part.output.type === "error-text") return [part.output.value]
-    if (part.output.type === "content")
-      return part.output.value.flatMap((item) => (item.type === "text" ? [item.text] : []))
-    if (part.output.type === "json" || part.output.type === "error-json") return [JSON.stringify(part.output.value)]
-    return part.output.reason ? [part.output.reason] : []
-  })
+function recentTailMessageText(message: SessionV1.WithParts) {
+  if (message.info.role !== "user" && message.info.role !== "assistant") return []
+  return message.parts.flatMap((part) => (part.type === "text" && !part.ignored && !part.synthetic ? [part.text] : []))
 }
 
 function truncateTail(text: string, max: number) {
@@ -404,10 +401,7 @@ const layer = Layer.effect(
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const tail = msgs.filter((message) => tailIDs.has(message.info.id))
       const head = msgs.filter((message) => !tailIDs.has(message.info.id))
-      const context = [
-        recentTailAudit(yield* MessageV2.toModelMessagesEffect(tail, model, { stripMedia: true })),
-        ...compacting.context,
-      ].filter((item): item is string => Boolean(item))
+      const context = [recentTailAudit(tail), ...compacting.context].filter((item): item is string => Boolean(item))
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(head, model, {
         stripMedia: true,

@@ -1536,6 +1536,94 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "includes only visible user and assistant text in the preserved recent tail audit",
+    () => {
+      const stub = llm()
+      let prompt = ""
+      stub.push(reply("summary", (input) => (prompt = JSON.stringify(input.messages.at(-1)))))
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        const recent = yield* createUserMessage(session.id, "VISIBLE_USER_TAIL")
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "text",
+          text: "IGNORED_TAIL_TEXT",
+          ignored: true,
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "text",
+          text: "SYNTHETIC_TAIL_TEXT",
+          synthetic: true,
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "file",
+          mime: "image/png",
+          filename: "PRIVATE_TAIL_MEDIA.png",
+          url: "data:image/png;base64,AAAA",
+        })
+        const assistant = yield* createAssistantMessage(session.id, recent.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "reasoning",
+          text: "PRIVATE_TAIL_REASONING",
+          time: { start: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: {},
+            output: "PRIVATE_TAIL_TOOL_OUTPUT",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "text",
+          text: "VISIBLE_ASSISTANT_TAIL",
+        })
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(prompt).toContain("VISIBLE_USER_TAIL")
+        expect(prompt).toContain("VISIBLE_ASSISTANT_TAIL")
+        expect(prompt).not.toContain("IGNORED_TAIL_TEXT")
+        expect(prompt).not.toContain("SYNTHETIC_TAIL_TEXT")
+        expect(prompt).not.toContain("PRIVATE_TAIL_MEDIA.png")
+        expect(prompt).not.toContain("PRIVATE_TAIL_REASONING")
+        expect(prompt).not.toContain("PRIVATE_TAIL_TOOL_OUTPUT")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 10_000 }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "applies message transforms to the preserved recent tail audit",
     () => {
       const stub = llm()
@@ -1591,8 +1679,21 @@ describe("session.compaction.process", () => {
     () => {
       const stub = llm()
       let prompt = ""
+      let audit = ""
       const completion = "COMPLETION_MARKER"
-      stub.push(reply("summary", (input) => (prompt = JSON.stringify(input.messages.at(-1)))))
+      stub.push(
+        reply("summary", (input) => {
+          prompt = JSON.stringify(input.messages.at(-1))
+          const message = input.messages.at(-1)
+          if (message?.role === "user" && Array.isArray(message.content)) {
+            audit =
+              message.content
+                .flatMap((part) => (part.type === "text" ? [part.text] : []))
+                .join("\n")
+                .match(/<recent-preserved-tail-audit>[\s\S]*?<\/recent-preserved-tail-audit>/)?.[0] ?? ""
+          }
+        }),
+      )
       return Effect.gen(function* () {
         const ssn = yield* SessionNs.Service
         const session = yield* ssn.create({})
@@ -1608,6 +1709,8 @@ describe("session.compaction.process", () => {
         yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
 
         expect(prompt).toContain(completion)
+        expect(audit).toContain(completion)
+        expect(audit.length).toBeLessThanOrEqual(4_000)
       }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 5, preserve_recent_tokens: 10_000 }) }))
     },
     { git: true },
