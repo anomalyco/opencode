@@ -11,10 +11,46 @@ index 1ca9113bed2728a616db773a8e08d8d6957447d7..15408ec429dc210b5fa43589d81b69c9
  type MistralLanguageModelOptions = z.infer<typeof mistralLanguageModelOptions>;
  
 diff --git a/dist/index.js b/dist/index.js
-index 45735e524aaff54ea058c99c729c5ffd3c507058..6aca5f6f13da0054ede31c1f1a692e4eaed37d34 100644
+index 45735e524aaff54ea058c99c729c5ffd3c507058..779bd50f2b18e0dbe61bf9aaad88e9c87ed3c419 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -268,7 +268,8 @@ var mistralLanguageModelOptions = import_v4.z.object({
+@@ -128,11 +128,14 @@ function convertToMistralChatMessages(prompt) {
+       }
+       case "assistant": {
+         let text = "";
++        const structuredContent = [];
++        let hasReasoning = false;
+         const toolCalls = [];
+         for (const part of content) {
+           switch (part.type) {
+             case "text": {
+               text += part.text;
++              structuredContent.push({ type: "text", text: part.text });
+               break;
+             }
+             case "tool-call": {
+@@ -148,6 +151,11 @@ function convertToMistralChatMessages(prompt) {
+             }
+             case "reasoning": {
+               text += part.text;
++              hasReasoning = true;
++              structuredContent.push({
++                type: "thinking",
++                thinking: [{ type: "text", text: part.text }]
++              });
+               break;
+             }
+             default: {
+@@ -159,7 +167,7 @@ function convertToMistralChatMessages(prompt) {
+         }
+         messages.push({
+           role: "assistant",
+-          content: text,
++          content: hasReasoning ? structuredContent : text,
+           prefix: isLastMessage ? true : void 0,
+           tool_calls: toolCalls.length > 0 ? toolCalls : void 0
+         });
+@@ -268,7 +276,8 @@ var mistralLanguageModelOptions = import_v4.z.object({
     * - `'high'`: Enable reasoning
     * - `'none'`: Disable reasoning
     */
@@ -24,7 +60,7 @@ index 45735e524aaff54ea058c99c729c5ffd3c507058..6aca5f6f13da0054ede31c1f1a692e4e
  });
  
  // src/mistral-error.ts
-@@ -413,6 +414,7 @@ var MistralChatLanguageModel = class {
+@@ -413,6 +422,7 @@ var MistralChatLanguageModel = class {
        top_p: topP,
        random_seed: seed,
        reasoning_effort: options.reasoningEffort,
@@ -33,10 +69,46 @@ index 45735e524aaff54ea058c99c729c5ffd3c507058..6aca5f6f13da0054ede31c1f1a692e4e
        response_format: (responseFormat == null ? void 0 : responseFormat.type) === "json" ? structuredOutputs && (responseFormat == null ? void 0 : responseFormat.schema) != null ? {
          type: "json_schema",
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..30cd3b1f503860109b7fa2107cd1eb17b70c96be 100644
+index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..929a5fe79c9fc12b437f82532157e775d14a999f 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -256,7 +256,8 @@ var mistralLanguageModelOptions = z.object({
+@@ -116,11 +116,14 @@ function convertToMistralChatMessages(prompt) {
+       }
+       case "assistant": {
+         let text = "";
++        const structuredContent = [];
++        let hasReasoning = false;
+         const toolCalls = [];
+         for (const part of content) {
+           switch (part.type) {
+             case "text": {
+               text += part.text;
++              structuredContent.push({ type: "text", text: part.text });
+               break;
+             }
+             case "tool-call": {
+@@ -136,6 +139,11 @@ function convertToMistralChatMessages(prompt) {
+             }
+             case "reasoning": {
+               text += part.text;
++              hasReasoning = true;
++              structuredContent.push({
++                type: "thinking",
++                thinking: [{ type: "text", text: part.text }]
++              });
+               break;
+             }
+             default: {
+@@ -147,7 +155,7 @@ function convertToMistralChatMessages(prompt) {
+         }
+         messages.push({
+           role: "assistant",
+-          content: text,
++          content: hasReasoning ? structuredContent : text,
+           prefix: isLastMessage ? true : void 0,
+           tool_calls: toolCalls.length > 0 ? toolCalls : void 0
+         });
+@@ -256,7 +264,8 @@ var mistralLanguageModelOptions = z.object({
     * - `'high'`: Enable reasoning
     * - `'none'`: Disable reasoning
     */
@@ -46,7 +118,7 @@ index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..30cd3b1f503860109b7fa2107cd1eb17
  });
  
  // src/mistral-error.ts
-@@ -403,6 +404,7 @@ var MistralChatLanguageModel = class {
+@@ -403,6 +412,7 @@ var MistralChatLanguageModel = class {
        top_p: topP,
        random_seed: seed,
        reasoning_effort: options.reasoningEffort,
@@ -54,6 +126,60 @@ index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..30cd3b1f503860109b7fa2107cd1eb17
        // response format:
        response_format: (responseFormat == null ? void 0 : responseFormat.type) === "json" ? structuredOutputs && (responseFormat == null ? void 0 : responseFormat.schema) != null ? {
          type: "json_schema",
+diff --git a/src/convert-to-mistral-chat-messages.ts b/src/convert-to-mistral-chat-messages.ts
+index 1c74a7ee8959664635e729d1776d3ee516027ef9..80b52650d292522bd3da4979271cdeb58552fcf7 100644
+--- a/src/convert-to-mistral-chat-messages.ts
++++ b/src/convert-to-mistral-chat-messages.ts
+@@ -3,7 +3,10 @@ import {
+   type LanguageModelV3DataContent,
+   type LanguageModelV3Prompt,
+ } from '@ai-sdk/provider';
+-import type { MistralPrompt } from './mistral-chat-prompt';
++import type {
++  MistralAssistantMessageContent,
++  MistralPrompt,
++} from './mistral-chat-prompt';
+ import { convertToBase64 } from '@ai-sdk/provider-utils';
+ 
+ function formatFileUrl({
+@@ -76,6 +79,8 @@ export function convertToMistralChatMessages(
+ 
+       case 'assistant': {
+         let text = '';
++        const structuredContent: Array<MistralAssistantMessageContent> = [];
++        let hasReasoning = false;
+         const toolCalls: Array<{
+           id: string;
+           type: 'function';
+@@ -86,6 +91,7 @@ export function convertToMistralChatMessages(
+           switch (part.type) {
+             case 'text': {
+               text += part.text;
++              structuredContent.push({ type: 'text', text: part.text });
+               break;
+             }
+             case 'tool-call': {
+@@ -101,6 +107,11 @@ export function convertToMistralChatMessages(
+             }
+             case 'reasoning': {
+               text += part.text;
++              hasReasoning = true;
++              structuredContent.push({
++                type: 'thinking',
++                thinking: [{ type: 'text', text: part.text }],
++              });
+               break;
+             }
+             default: {
+@@ -113,7 +124,7 @@ export function convertToMistralChatMessages(
+ 
+         messages.push({
+           role: 'assistant',
+-          content: text,
++          content: hasReasoning ? structuredContent : text,
+           prefix: isLastMessage ? true : undefined,
+           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+         });
 diff --git a/src/mistral-chat-language-model.ts b/src/mistral-chat-language-model.ts
 index 480c472d534bedbe8897979673453bd1c29a70b7..e46496da94f7d4af9822897202ca6baae67dae3a 100644
 --- a/src/mistral-chat-language-model.ts
@@ -82,3 +208,27 @@ index 80fff45fba2c378fa06962f071946bcd2b882a0b..b4fdfa51f3bf11a4220e010c8aca9248
  });
  
  export type MistralLanguageModelOptions = z.infer<
+diff --git a/src/mistral-chat-prompt.ts b/src/mistral-chat-prompt.ts
+index 13f1dced55ac4be084128127a57fbdd58115bc28..60969ded9e7abc48852da022bc6a6fb9d74901f5 100644
+--- a/src/mistral-chat-prompt.ts
++++ b/src/mistral-chat-prompt.ts
+@@ -23,7 +23,7 @@ export type MistralUserMessageContent =
+ 
+ export interface MistralAssistantMessage {
+   role: 'assistant';
+-  content: string;
++  content: string | Array<MistralAssistantMessageContent>;
+   prefix?: boolean;
+   tool_calls?: Array<{
+     id: string;
+@@ -32,6 +32,10 @@ export interface MistralAssistantMessage {
+   }>;
+ }
+ 
++export type MistralAssistantMessageContent =
++  | { type: 'text'; text: string }
++  | { type: 'thinking'; thinking: Array<{ type: 'text'; text: string }> };
++
+ export interface MistralToolMessage {
+   role: 'tool';
+   name: string;
