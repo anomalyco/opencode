@@ -19,10 +19,8 @@ describe("CodeModeCatalog.render", () => {
     expect(instructions).toContain("## Available tools (COMPLETE list")
     expect(instructions).toContain("- orders (1 tool)")
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
-    // A fully inlined catalog does not advertise search in the instructions.
     expect(instructions).not.toContain("search(")
 
-    // Sections in order: workflow at the top, catalog at the bottom.
     expect(instructions).toContain("## Workflow")
     expect(instructions).toContain("## Rules")
     expect(instructions).toContain("## Language")
@@ -33,8 +31,6 @@ describe("CodeModeCatalog.render", () => {
     expect(instructions).toContain("bracket notation and quotes are part of the path")
     expect(instructions).toContain("surrounding agent tools are not available")
     expect(instructions).toContain("Only tools listed here are available")
-    // Placeholders use generic namespace/tool/field names only - no real catalog tools
-    // cherry-picked into example lines.
     expect(instructions).toContain("`const result = await tools.<namespace>.<tool>(input)`")
     expect(instructions).toContain("check that it is a non-null object and not an array")
     expect(instructions).not.toContain("tools.orders.lookup({")
@@ -72,7 +68,6 @@ describe("CodeModeCatalog.render", () => {
     expect(partial).toContain("Only tools listed here or returned by the built-in `search` function")
     expect(partial).toContain('- Browse one namespace: `search({ query: "", namespace: "<name>" })`.')
     expect(partial).toContain("repeat the same search with `offset: next.offset`")
-    // The search signature is codemode-generated and stays complete and callable.
     expect(partial).toContain("Search returns complete callable signatures:\n- search(input: {")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
     expect(partial).not.toContain("tools.orders.lookup(input:")
@@ -93,7 +88,6 @@ describe("CodeModeCatalog.render", () => {
     expect(instructions).toContain("- alpha (2 tools, 1 shown)")
     expect(instructions).toContain(`  - ${cheapAlpha.signature} // Cheap`)
     expect(instructions).not.toContain("tools.alpha.expensive(")
-    // Fully shown namespaces read cleanly (no "shown" annotation).
     expect(instructions).toContain("- beta (1 tool)")
     expect(instructions).toContain(`  - ${cheapBeta.signature} // Cheap`)
   })

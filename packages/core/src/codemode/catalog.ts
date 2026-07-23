@@ -4,8 +4,7 @@ import { CodeMode } from "@opencode-ai/codemode"
 import { Schema } from "effect"
 import { Instructions } from "../instructions/index"
 
-// Model-facing descriptor for one Code Mode tool. Codemode constructs paths and
-// signatures; this module owns every piece of agent-facing catalog prose.
+// Codemode constructs paths and signatures; this module owns all agent-facing catalog prose.
 export const Entry = Schema.Struct({
   path: Schema.String,
   description: Schema.String,
@@ -24,15 +23,15 @@ const line = (tool: Entry) => {
   return description === "" ? `  - ${tool.signature}` : `  - ${tool.signature} // ${description}`
 }
 
-type Plan = {
+type Fit = {
   readonly ordered: ReadonlyArray<readonly [string, ReadonlyArray<Entry>]>
   readonly shown: ReadonlyMap<string, ReadonlySet<Entry>>
   readonly totalShown: number
   readonly complete: boolean
 }
 
-// Budget signatures round-robin so every namespace remains visible.
-const plan = (entries: ReadonlyArray<Entry>, budget: number): Plan => {
+// Round-robin per namespace so one expensive namespace cannot starve the rest.
+const fitBudget = (entries: ReadonlyArray<Entry>, budget: number): Fit => {
   const namespaces = new Map<string, Array<Entry>>()
   for (const tool of entries) {
     const [namespace = tool.path] = tool.path.split(".")
@@ -73,15 +72,14 @@ const plan = (entries: ReadonlyArray<Entry>, budget: number): Plan => {
   }
 }
 
-/** Renders the full agent-facing Code Mode instructions for one catalog snapshot. */
 export const render = (entries: ReadonlyArray<Entry>, budget = defaultBudget): string => {
-  const planned = plan(entries, budget)
+  const fit = fitBudget(entries, budget)
   const empty = entries.length === 0
 
   const intro = [
     empty
       ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime."
-      : planned.complete
+      : fit.complete
         ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the tools listed below; surrounding agent tools are not available."
         : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the tools listed or searchable below; surrounding agent tools are not available.",
     ...(empty
@@ -95,7 +93,7 @@ export const render = (entries: ReadonlyArray<Entry>, budget = defaultBudget): s
         "",
         "## Workflow",
         "",
-        ...(planned.complete
+        ...(fit.complete
           ? [
               "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
               "2. Call it using the exact signature shown: `const result = await tools.<namespace>.<tool>(input)`; bracket notation and quotes are part of the path.",
@@ -113,7 +111,7 @@ export const render = (entries: ReadonlyArray<Entry>, budget = defaultBudget): s
         "",
         "## Rules",
         "",
-        planned.complete
+        fit.complete
           ? "- Only tools listed here are available; surrounding agent tools are not implicitly exposed."
           : "- Only tools listed here or returned by the built-in `search` function are available; surrounding agent tools are not implicitly exposed.",
         "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
@@ -121,7 +119,7 @@ export const render = (entries: ReadonlyArray<Entry>, budget = defaultBudget): s
         '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
         "- Execution ends when the program returns; pending promises are interrupted, so await every call whose completion matters.",
         "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
-        ...(planned.complete
+        ...(fit.complete
           ? []
           : [
               '- Browse one namespace: `search({ query: "", namespace: "<name>" })`.',
@@ -144,13 +142,13 @@ export const render = (entries: ReadonlyArray<Entry>, budget = defaultBudget): s
     toolSection.push("## Available tools", "", "No tools are currently available.")
   } else {
     toolSection.push(
-      planned.complete
+      fit.complete
         ? "## Available tools (COMPLETE list - every tool is shown below with its full call signature)"
-        : `## Available tools (PARTIAL - ${planned.totalShown} of ${entries.length} shown; find the rest with search(...))`,
+        : `## Available tools (PARTIAL - ${fit.totalShown} of ${entries.length} shown; find the rest with search(...))`,
       "",
     )
-    for (const [namespace, group] of planned.ordered) {
-      const picked = planned.shown.get(namespace)!
+    for (const [namespace, group] of fit.ordered) {
+      const picked = fit.shown.get(namespace)!
       const count = `${group.length} tool${group.length === 1 ? "" : "s"}`
       const label =
         picked.size === group.length
@@ -161,7 +159,7 @@ export const render = (entries: ReadonlyArray<Entry>, budget = defaultBudget): s
       toolSection.push(`- ${namespace} (${label})`)
       for (const tool of group) if (picked.has(tool)) toolSection.push(line(tool))
     }
-    if (!planned.complete) {
+    if (!fit.complete) {
       toolSection.push("", "Search returns complete callable signatures:", `- ${CodeMode.searchSignature}`)
     }
   }
@@ -175,7 +173,6 @@ const replacement = (current: ReadonlyArray<Entry>, budget: number) =>
     render(current, budget),
   ].join("\n\n")
 
-/** Renders one mid-conversation catalog change as a semantic delta when it is smaller. */
 export const update = (
   previous: ReadonlyArray<Entry>,
   current: ReadonlyArray<Entry>,
@@ -189,7 +186,7 @@ export const update = (
   )
   const empty = diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0
   // Crossing between full and compact rendering changes the surrounding guidance, so restate everything.
-  const crossed = plan(previous, budget).complete !== plan(current, budget).complete
+  const crossed = fitBudget(previous, budget).complete !== fitBudget(current, budget).complete
   if (empty || crossed) return replacement(current, budget)
   const delta = [
     "The Code Mode tool catalog has changed.",

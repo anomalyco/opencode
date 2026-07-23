@@ -41,7 +41,6 @@ describe("CodeModeInstructions", () => {
       expect(initialized.text).toContain("## Available tools (COMPLETE list")
       expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
 
-      // A new tool renders as a small addition delta, not a full catalog restatement.
       catalog = [echo, lookup]
       const added = yield* instructions
         .load({ id: agent.id, info: agent })
@@ -51,7 +50,6 @@ describe("CodeModeInstructions", () => {
       expect(added.text).toContain(`  - ${lookup.signature} // Look up an order`)
       expect(added.text).not.toContain("## Available tools")
 
-      // Losing a tool (permission or agent change) renders as a removal delta.
       catalog = [echo]
       const removed = yield* instructions
         .load({ id: agent.id, info: agent })

@@ -602,8 +602,6 @@ describe("CodeMode public contract", () => {
       },
     ])
 
-    // The search built-in stays available, so a speculative call still works with the
-    // same signature as the catalog.
     const result = await Effect.runPromise(runtime.execute(`return search({ query: "order" })`))
     expect(result.ok).toBe(true)
     if (result.ok) {

@@ -438,7 +438,6 @@ const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescript
 export const searchIndex = <R>(tools: Tools<R>): ReadonlyArray<SearchEntry> =>
   visibleTools(tools).map(({ path, tool, description }) => toSearchEntry(path, tool, description))
 
-// Hosts render agent-facing instructions themselves from these structured descriptors.
 export const prepare = <R>(tools: Tools<R>): DiscoveryPlan => {
   const visible = visibleTools(tools)
   return {

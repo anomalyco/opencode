@@ -21,8 +21,8 @@ const layer = Layer.effect(
     return Service.of({
       load: Effect.fn("CodeModeInstructions.load")(function* (selection) {
         const catalog = selection.info ? ((yield* codeMode.materialize(selection.info.permissions)).catalog ?? []) : []
-        // Code-unit sorting keeps the stored snapshot canonical so identical catalogs hash
-        // identically; localeCompare would let host ICU locale and version reorder the array.
+        // Sort by code units, not localeCompare: host ICU differences would reorder identical
+        // catalogs and break stable hashing.
         const entries = catalog.toSorted((left, right) =>
           left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
         )
