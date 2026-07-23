@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createSignal, For, Show } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { Icon } from "@opencode-ai/ui/icon"
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
@@ -56,6 +57,7 @@ function JsonNode(props: { value: JsonValue; keyName?: string; depth: number }) 
           class="json-toggle"
           classList={{ "json-toggle--expanded": expanded() }}
           aria-expanded={expanded()}
+          aria-label={props.keyName !== undefined ? `Toggle ${props.keyName}` : "Toggle"}
           onClick={() => setExpanded((e) => !e)}
         >
           <Icon name="chevron-right" size="small" />
@@ -79,25 +81,21 @@ function JsonNode(props: { value: JsonValue; keyName?: string; depth: number }) 
 }
 
 export function JsonViewer(props: { json: string; class?: string }) {
-  const parsed = createMemo<JsonValue | undefined>(() => {
+  const [state, setState] = createStore<{ value: JsonValue; valid: boolean }>({ value: null, valid: false })
+
+  createEffect(() => {
     try {
-      return JSON.parse(props.json)
+      setState(reconcile({ value: JSON.parse(props.json), valid: true }))
     } catch {
-      return undefined
+      setState("valid", false)
     }
   })
 
   return (
-    <Show
-      when={parsed()}
-      keyed
-      fallback={<div class={props.class}>{props.json}</div>}
-    >
-      {(value) => (
-        <div class={`json-viewer ${props.class ?? ""}`}>
-          <JsonNode value={value} depth={0} />
-        </div>
-      )}
+    <Show when={state.valid} fallback={<div class={props.class}>{props.json}</div>}>
+      <div class={`json-viewer ${props.class ?? ""}`}>
+        <JsonNode value={state.value} depth={0} />
+      </div>
     </Show>
   )
 }

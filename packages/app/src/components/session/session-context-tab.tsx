@@ -1,4 +1,4 @@
-import { createMemo, createEffect, on, onCleanup, onMount, For, Show } from "solid-js"
+import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { findLast } from "@opencode-ai/core/util/array"
@@ -41,9 +41,11 @@ function RawMessageContent(props: { message: Message; getParts: (id: string) => 
     return JSON.stringify({ message: props.message, parts }, null, 2)
   })
 
-  onMount(() => {
-    requestAnimationFrame(props.onRendered)
-  })
+  createEffect(
+    on(contents, () => {
+      requestAnimationFrame(props.onRendered)
+    }),
+  )
 
   return (
     <JsonViewer
