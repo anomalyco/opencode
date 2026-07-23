@@ -1115,7 +1115,7 @@ function TurnTokenUsage(props: {
       previousCacheRead = message.tokens.cache.read
       return [
         {
-          finish: `[${message.finish ?? "unknown"}]`,
+          finish: message.finish === "tool-calls" ? "tool-call" : (message.finish ?? "unknown"),
           newTokens,
           cached: message.tokens.cache.read,
           total,
@@ -1137,7 +1137,9 @@ function TurnTokenUsage(props: {
           <text width={INLINE_TOOL_ICON_WIDTH} fg={themeV2.text.subdued}>
             ◈
           </text>
-          <text fg={themeV2.text.subdued}>Turn token usage:</text>
+          <text fg={themeV2.text.subdued} attributes={TextAttributes.BOLD}>
+            Tokens
+          </text>
         </box>
         <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
           <text fg={themeV2.text.subdued}>
