@@ -163,6 +163,18 @@ const blockingProcessor = Layer.succeed(
     create: () => Effect.sync(() => processorCreateStarted.shift()?.()).pipe(Effect.andThen(Effect.never)),
   }),
 )
+const failingCreateProcessor = Layer.mock(SessionProcessor.Service, {
+  create: () => Effect.die(new Error("processor creation failed")),
+})
+const failingProcessProcessor = Layer.mock(SessionProcessor.Service, {
+  create: (input) =>
+    Effect.succeed({
+      message: input.assistantMessage,
+      updateToolCall: () => Effect.succeed(undefined),
+      completeToolCall: () => Effect.void,
+      process: () => Effect.die(new Error("processor execution failed")),
+    } satisfies SessionProcessor.Handle),
+})
 
 const runtimeFlags = RuntimeFlags.layer({ experimentalEventSystem: true })
 
@@ -208,7 +220,10 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking" | "failing-create" | "failing-process"
+}) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
@@ -217,6 +232,12 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   ] as const
   if (input?.processor === "blocking") {
     return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
+  }
+  if (input?.processor === "failing-create") {
+    return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, failingCreateProcessor]])
+  }
+  if (input?.processor === "failing-process") {
+    return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, failingProcessProcessor]])
   }
   return LayerNode.compile(promptRoot, replacements)
 }
@@ -235,13 +256,18 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
   return LayerNode.compile(root, replacements)
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking" | "failing-create" | "failing-process"
+}) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const failingCreateNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "failing-create" }))
+const failingProcessNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "failing-process" }))
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -511,6 +537,49 @@ it.instance("loop calls LLM and returns assistant message", () =>
     const parts = result.parts.filter((p) => p.type === "text")
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
+  }),
+)
+
+it.instance("loop repairs orphan assistant shell and returns a new response", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const abandoned = yield* user(chat.id, "abandoned")
+    const orphan: SessionV1.Assistant = {
+      id: MessageID.ascending(),
+      role: "assistant",
+      parentID: abandoned.id,
+      sessionID: chat.id,
+      mode: "build",
+      agent: "build",
+      cost: 0,
+      path: { cwd: "/tmp", root: "/tmp" },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      time: { created: Date.now() },
+    }
+    yield* sessions.updateMessage(orphan)
+    const latest = yield* user(chat.id, "please continue")
+    yield* llm.text("recovered")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: orphan.id })
+
+    expect(yield* llm.hits).toHaveLength(1)
+    expect(result.info.id).not.toBe(orphan.id)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.parentID).toBe(latest.id)
+    expect(result.parts).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: "recovered" })]))
+    expect(stored.parts).toHaveLength(0)
+    expect(stored.info.role).toBe("assistant")
+    if (stored.info.role === "assistant") {
+      expect(stored.info.finish).toBeUndefined()
+      expect(stored.info.error?.name).toBe("MessageAbortedError")
+      expect(stored.info.time.completed).toBeNumber()
+    }
   }),
 )
 
@@ -1215,6 +1284,74 @@ raceNoLLMServer.instance(
     }),
   { config: cfg },
   3_000,
+)
+
+failingCreateNoLLMServer.instance(
+  "finalizes assistant when processor creation defects",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Processor creation defect" })
+      const parent = yield* user(chat.id, "hello")
+
+      const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.hasDies(exit.cause)).toBe(true)
+        expect(Cause.squash(exit.cause)).toMatchObject({ message: "processor creation failed" })
+      }
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const assistant = messages.find(
+        (message) => message.info.role === "assistant" && message.info.parentID === parent.id,
+      )
+      expect(assistant?.parts).toHaveLength(0)
+      expect(assistant?.info.role).toBe("assistant")
+      if (assistant?.info.role === "assistant") {
+        expect(assistant.info.finish).toBeUndefined()
+        expect(assistant.info.error).toMatchObject({
+          name: "UnknownError",
+          data: { message: "processor creation failed" },
+        })
+        expect(assistant.info.time.completed).toBeNumber()
+      }
+    }),
+  { config: cfg },
+)
+
+failingProcessNoLLMServer.instance(
+  "finalizes assistant when processor execution defects",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Processor execution defect" })
+      const parent = yield* user(chat.id, "hello")
+
+      const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.hasDies(exit.cause)).toBe(true)
+        expect(Cause.squash(exit.cause)).toMatchObject({ message: "processor execution failed" })
+      }
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const assistant = messages.find(
+        (message) => message.info.role === "assistant" && message.info.parentID === parent.id,
+      )
+      expect(assistant?.parts).toHaveLength(0)
+      expect(assistant?.info.role).toBe("assistant")
+      if (assistant?.info.role === "assistant") {
+        expect(assistant.info.finish).toBeUndefined()
+        expect(assistant.info.error).toMatchObject({
+          name: "UnknownError",
+          data: { message: "processor execution failed" },
+        })
+        expect(assistant.info.time.completed).toBeNumber()
+      }
+    }),
+  { config: cfg },
 )
 
 noLLMServer.instance(

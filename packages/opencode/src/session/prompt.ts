@@ -1078,6 +1078,31 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    const finalizeAssistant = Effect.fnUntraced(function* (input: {
+      message: SessionV1.Assistant
+      error: unknown
+      aborted?: boolean
+      requireEmpty?: boolean
+    }) {
+      const stored = yield* MessageV2.get({ sessionID: input.message.sessionID, messageID: input.message.id }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.option,
+      )
+      if (Option.isNone(stored)) return false
+      if (stored.value.info.role !== "assistant") return false
+      if (stored.value.info.time.completed) return false
+      if (input.requireEmpty && (stored.value.parts.length > 0 || stored.value.info.finish || stored.value.info.error))
+        return false
+      // finish is provider-owned; leaving it unset lets a later loop produce the missing response.
+      stored.value.info.error ??= MessageV2.fromError(input.error, {
+        providerID: stored.value.info.providerID,
+        aborted: input.aborted,
+      })
+      stored.value.info.time.completed = Date.now()
+      yield* sessions.updateMessage(stored.value.info)
+      return true
+    })
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
@@ -1092,6 +1117,29 @@ const layer = Layer.effect(
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
             Effect.provideService(Database.Service, database),
           )
+
+          const repaired = yield* Effect.forEach(
+            msgs.filter(
+              (message): message is SessionV1.WithParts & { info: SessionV1.Assistant } =>
+                message.info.role === "assistant" &&
+                message.parts.length === 0 &&
+                !message.info.finish &&
+                !message.info.error &&
+                !message.info.time.completed,
+            ),
+            (message) =>
+              finalizeAssistant({
+                message: message.info,
+                error: new DOMException("Assistant turn was interrupted before producing output.", "AbortError"),
+                aborted: true,
+                requireEmpty: true,
+              }),
+          )
+          if (repaired.some(Boolean)) {
+            msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+          }
 
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
@@ -1198,25 +1246,33 @@ const layer = Layer.effect(
             time: { created: Date.now() },
             sessionID,
           }
-          yield* sessions.updateMessage(msg)
 
-          const finalizeInterruptedAssistant = Effect.gen(function* () {
-            if (msg.time.completed) return
-            msg.error ??= MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
-              providerID: msg.providerID,
-              aborted: true,
-            })
-            msg.time.completed = Date.now()
+          const finalizeFailedAssistant = (cause: Cause.Cause<never>) => {
+            const aborted = Cause.hasInterruptsOnly(cause)
+            return finalizeAssistant({
+              message: msg,
+              error: aborted ? new DOMException("Aborted", "AbortError") : Cause.squash(cause),
+              aborted,
+            }).pipe(
+              Effect.catchCause((finalizeCause) =>
+                Effect.logError("failed to finalize assistant message", {
+                  "session.id": sessionID,
+                  messageID: msg.id,
+                  error: Cause.squash(finalizeCause),
+                }),
+              ),
+              Effect.asVoid,
+            )
+          }
+
+          const handle = yield* Effect.gen(function* () {
             yield* sessions.updateMessage(msg)
-          })
-
-          const handle = yield* processor
-            .create({
+            return yield* processor.create({
               assistantMessage: msg,
               sessionID,
               model,
             })
-            .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
+          }).pipe(Effect.onError(finalizeFailedAssistant))
 
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
@@ -1327,10 +1383,7 @@ const layer = Layer.effect(
               })
             }
             return "continue" as const
-          }).pipe(
-            Effect.ensuring(instruction.clear(handle.message.id)),
-            Effect.onInterrupt(() => finalizeInterruptedAssistant),
-          )
+          }).pipe(Effect.ensuring(instruction.clear(handle.message.id)), Effect.onError(finalizeFailedAssistant))
           if (outcome === "break") break
           continue
         }
