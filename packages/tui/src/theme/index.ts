@@ -40,7 +40,7 @@ export function allThemes() {
 
 export function isThemeSource(source: unknown) {
   if (typeof source !== "object" || source === null || Array.isArray(source)) return false
-  return "theme" in source || "light" in source || "dark" in source
+  return "theme" in source || "version" in source
 }
 
 export function parseTheme(source: unknown, name = "theme") {

@@ -34,11 +34,17 @@ test("addTheme keeps first theme for duplicate names", () => {
   expect(allThemes()[name]).toBe(one)
 })
 
-test("addTheme ignores values without a theme or mode definition", () => {
+test("addTheme ignores values without a V1 theme or version", () => {
   const name = `plugin-theme-invalid-${Date.now()}`
   expect(addTheme(name, { defs: { a: "#ffffff" } })).toBe(false)
-  expect(addTheme(name, { version: 2 })).toBe(false)
+  expect(addTheme(name, { light: {} })).toBe(false)
   expect(allThemes()[name]).toBeUndefined()
+})
+
+test("addTheme defers validation of versioned sources", () => {
+  const name = `plugin-theme-versioned-${Date.now()}`
+  expect(addTheme(name, { version: 2 })).toBe(true)
+  expect(() => parseTheme(allThemes()[name]!, name)).toThrow(`Invalid theme: ${name}`)
 })
 
 test("parseTheme delegates malformed V1 sources and rejects unknown versions", () => {

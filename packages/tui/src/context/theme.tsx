@@ -265,11 +265,11 @@ const themeContext = createSimpleContext({
     const selected = createMemo(() => {
       const name = store.themes[store.active] ? store.active : "opencode"
       try {
-        return prepareTheme(store.themes[name], name, store.mode)
+        return loadTheme(store.themes[name], name, store.mode)
       } catch (error) {
         if (name === "opencode") throw error
         setStore("active", "opencode")
-        return prepareTheme(store.themes.opencode, "opencode", store.mode)
+        return loadTheme(store.themes.opencode, "opencode", store.mode)
       }
     })
     const modes = () => selected().modes
@@ -351,7 +351,7 @@ export function ThemeContextProvider(props: ParentProps<{ context: ContextName }
   )
 }
 
-function prepareTheme(source: unknown, name: string, requested: "dark" | "light") {
+function loadTheme(source: unknown, name: string, requested: "dark" | "light") {
   const document = parseTheme(source, name)
   const modes = themeModes(document)
   const mode = modes.includes(requested) ? requested : (modes[0] ?? requested)
