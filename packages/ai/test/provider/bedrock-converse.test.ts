@@ -154,6 +154,25 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("omits tool config when tool choice is none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.updateRequest(baseRequest, {
+          tools: [
+            {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: { type: "object", properties: { query: { type: "string" } } },
+            },
+          ],
+          toolChoice: ToolChoice.make({ type: "none" }),
+        }),
+      )
+
+      expect(prepared.body.toolConfig).toBeUndefined()
+    }),
+  )
+
   it.effect("lowers assistant tool-call + tool-result message history", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(

@@ -96,8 +96,8 @@ export const layer = Layer.effect(
       const model = resolved.model
       const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
       const stepLimitReached = agent.info.steps !== undefined && input.step >= agent.info.steps
-      // The final Step retains definitions (stable prompt prefix preserves provider
-      // caching) and sets toolChoice "none"; violating calls are rejected at execution.
+      // The final Step keeps definitions available to protocols with native "none",
+      // preserving their prompt cache prefix. Calls are still rejected at execution.
       const toolSet = yield* registry.snapshot(agent.info.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]

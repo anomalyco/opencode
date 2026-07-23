@@ -244,9 +244,7 @@ const textWithCache = (
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
   ProviderShared.matchToolChoice("Bedrock Converse", toolChoice, {
     auto: () => ({ auto: {} }) as const,
-    // Converse has no native "none". Keep the definitions with auto so the
-    // cached prompt prefix survives; the runner rejects violating calls locally.
-    none: () => ({ auto: {} }) as const,
+    none: () => undefined,
     required: () => ({ any: {} }) as const,
     tool: (name) => ({ tool: { name } }) as const,
   })
@@ -394,7 +392,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints()
   const toolConfig =
-    request.tools.length > 0
+    request.tools.length > 0 && request.toolChoice?.type !== "none"
       ? { tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools), toolChoice }
       : undefined
   const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)
