@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
+import type { MessageApi, OpenCodeEvent, SessionApi } from "@opencode-ai/client/promise"
 import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
 
@@ -158,6 +159,57 @@ function setup(sessions: Record<string, Session>) {
 }
 
 describe("server session", () => {
+  test("projects V2 session events into current and legacy message state", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.remember(session("child"))
+    ctx.store.set("session_message", "child", [
+      {
+        id: "msg_1_user",
+        type: "user",
+        text: "hello",
+        time: { created: 1 },
+      },
+    ])
+    const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
+
+    apply({
+      id: "evt_step",
+      created: 2,
+      type: "session.step.started",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      location: { directory: "/repo" },
+      data: {
+        sessionID: "child",
+        assistantMessageID: "msg_2_assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    apply({
+      id: "evt_text_start",
+      created: 3,
+      type: "session.text.started",
+      durable: { aggregateID: "child", seq: 2, version: 1 },
+      location: { directory: "/repo" },
+      data: { sessionID: "child", assistantMessageID: "msg_2_assistant", ordinal: 0 },
+    })
+    apply({
+      id: "evt_text_delta",
+      created: 4,
+      type: "session.text.delta",
+      location: { directory: "/repo" },
+      data: { sessionID: "child", assistantMessageID: "msg_2_assistant", ordinal: 0, delta: "world" },
+    })
+
+    expect(ctx.store.data.session_message.child?.at(-1)).toMatchObject({
+      id: "msg_2_assistant",
+      type: "assistant",
+      content: [{ type: "text", text: "world" }],
+    })
+    expect(ctx.store.data.message.child?.map((message) => message.id)).toEqual(["msg_1_user", "msg_2_assistant"])
+    expect(ctx.store.data.part.msg_2_assistant).toMatchObject([{ type: "text", text: "world" }])
+  })
+
   test("resolves lineage by session ID without directory", async () => {
     const ctx = setup({ child: session("child", "root"), root: session("root") })
 
@@ -176,6 +228,111 @@ describe("server session", () => {
     expect(ctx.get).toEqual([{ sessionID: "root" }])
     expect(ctx.messages).toEqual([{ sessionID: "root", limit: 20, before: undefined }])
     expect(ctx.store.data.message.root).toEqual([])
+  })
+
+  test("loads current session content through the current message API", async () => {
+    const requests: unknown[] = []
+    const user = { id: "msg_z_user", type: "user", text: "hello", time: { created: 1 } }
+    const assistant = {
+      id: "msg_a_assistant",
+      type: "assistant",
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ type: "text", text: "hi" }],
+      time: { created: 2, completed: 3 },
+    }
+    const client = {
+      session: {
+        messages: () => {
+          throw new Error("legacy message endpoint called")
+        },
+      },
+    } as unknown as OpencodeClient
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return { data: [assistant, user], cursor: { previous: null, next: null } }
+      },
+    } as unknown as MessageApi
+    const store = createServerSession(client, {} as SessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root")
+
+    expect(requests).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+  })
+
+  test("reprojects current assistants when an older page supplies their user", async () => {
+    const user = { id: "msg_1_user", type: "user", text: "hello", time: { created: 1 } } as const
+    const assistant = (id: string, created: number) => ({
+      id,
+      type: "assistant" as const,
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ type: "text" as const, text: id }],
+      time: { created, completed: created },
+    })
+    const assistants = [
+      assistant("msg_2_assistant", 2),
+      assistant("msg_3_assistant", 3),
+      assistant("msg_4_assistant", 4),
+    ]
+    const pages = [
+      { data: assistants.slice(1).toReversed(), cursor: { previous: null, next: "older" } },
+      { data: [assistants[0], user], cursor: { previous: null, next: null } },
+    ]
+    const messageApi = {
+      list: async () => pages.shift()!,
+    } as unknown as MessageApi
+    const store = createServerSession({} as OpencodeClient, {} as SessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root")
+    expect(store.data.message.root).toEqual([])
+
+    await store.history.loadMore("root")
+
+    expect(store.data.message.root.map((message) => message.id)).toEqual([
+      user.id,
+      ...assistants.map((item) => item.id),
+    ])
+    expect(assistants.map((item) => store.data.part[item.id]?.[0]?.type)).toEqual(["text", "text", "text"])
+  })
+
+  test("indexes V1 messages for the current timeline projection", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const assistant = assistantMessage("message-2", user.id, { sessionID: "root" })
+    const client = messageClient(
+      response([
+        { info: user, parts: [textPart(user.id, { sessionID: "root" })] },
+        { info: assistant, parts: [textPart(assistant.id, { sessionID: "root" })] },
+      ]),
+    )
+    const messageApi = {
+      list: () => {
+        throw new Error("current message endpoint called")
+      },
+    } as unknown as MessageApi
+    const store = createServerSession(client, {} as SessionApi, messageApi, {
+      protocol: Promise.resolve("v1"),
+    })
+    store.remember(session("root"))
+
+    await store.sync("root")
+
+    expect(store.data.message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+    expect(store.data.session_message.root).toMatchObject([
+      { id: user.id, type: "user", text: "text" },
+      { id: assistant.id, type: "assistant" },
+    ])
+
+    const next = userMessage("message-3", { sessionID: "root" })
+    store.apply({ type: "message.updated", properties: { info: next } })
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id, next.id])
+
+    store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: next.id } })
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
 
   test("backfills an assistant-only initial page through its user root", async () => {
