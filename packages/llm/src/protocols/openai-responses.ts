@@ -46,6 +46,7 @@ type OpenAIResponsesInputContent = Schema.Schema.Type<typeof OpenAIResponsesInpu
 const OpenAIResponsesOutputText = Schema.Struct({
   type: Schema.tag("output_text"),
   text: Schema.String,
+  annotations: Schema.Array(Schema.Unknown),
 })
 
 const OpenAIResponsesMessagePhase = Schema.Literals(["commentary", "final_answer"])
@@ -82,6 +83,14 @@ const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputContent) }),
   Schema.Struct({
+    role: Schema.tag("assistant"),
+    content: Schema.String,
+    phase: optionalNull(OpenAIResponsesMessagePhase),
+  }),
+  Schema.Struct({
+    type: Schema.tag("message"),
+    id: Schema.String,
+    status: Schema.Literals(["in_progress", "completed", "incomplete"]),
     role: Schema.tag("assistant"),
     content: Schema.Array(OpenAIResponsesOutputText),
     phase: optionalNull(OpenAIResponsesMessagePhase),
@@ -326,6 +335,11 @@ const messageItemID = (part: TextPart) => {
   return typeof itemID === "string" && itemID.length > 0 ? itemID : undefined
 }
 
+const messageStatus = (part: TextPart) => {
+  const status = part.providerMetadata?.openai?.status
+  return status === "in_progress" || status === "completed" || status === "incomplete" ? status : undefined
+}
+
 const hostedToolItemID = (part: ToolResultPart) => {
   const openai = part.providerMetadata?.openai
   return ProviderShared.isRecord(openai) && typeof openai.itemId === "string" && openai.itemId.length > 0
@@ -399,19 +413,32 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
       const content: TextPart[] = []
       let phase: OpenAIResponsesMessagePhase | null | undefined
       let itemID: string | undefined
+      let status: "in_progress" | "completed" | "incomplete" | undefined
       const reasoningItems: Record<string, OpenAIResponsesReasoningReplay> = {}
       const reasoningReferences = new Set<string>()
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
-        input.push({
-          role: "assistant",
-          content: content.map((part) => ({ type: "output_text", text: part.text })),
-          ...(phase !== undefined ? { phase } : {}),
-        })
+        input.push(
+          itemID
+            ? {
+                type: "message",
+                id: itemID,
+                status: status ?? "completed",
+                role: "assistant",
+                content: content.map((part) => ({ type: "output_text", text: part.text, annotations: [] })),
+                ...(phase !== undefined ? { phase } : {}),
+              }
+            : {
+                role: "assistant",
+                content: ProviderShared.joinText(content),
+                ...(phase !== undefined ? { phase } : {}),
+              },
+        )
         content.splice(0, content.length)
         phase = undefined
         itemID = undefined
+        status = undefined
       }
       for (const part of message.content) {
         if (part.type === "text") {
@@ -420,6 +447,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           if (content.length > 0 && (phase !== nextPhase || itemID !== nextItemID)) flushText()
           phase = nextPhase
           itemID = nextItemID
+          status = messageStatus(part) ?? status
           content.push(part)
           continue
         }
@@ -653,8 +681,19 @@ const NO_EVENTS: StepResult["1"] = []
 // the protocol's `terminal` predicate stay in sync.
 const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
 
-const messageMetadata = (item: OpenAIResponsesStreamItem, id: string) =>
-  openaiMetadata({ itemId: id, ...(item.phase !== undefined ? { phase: item.phase } : {}) })
+const messageMetadata = (item: OpenAIResponsesStreamItem, id: string, previous?: ProviderMetadata) => {
+  const openai = previous?.openai
+  const phase = item.phase !== undefined ? item.phase : openai?.phase
+  const status =
+    item.status === "in_progress" || item.status === "completed" || item.status === "incomplete"
+      ? item.status
+      : openai?.status
+  return openaiMetadata({
+    itemId: id,
+    ...(phase === "commentary" || phase === "final_answer" || phase === null ? { phase } : {}),
+    ...(status === "in_progress" || status === "completed" || status === "incomplete" ? { status } : {}),
+  })
+}
 
 const ensureMessageContent = (state: ParserState, event: OpenAIResponsesEvent) => {
   const itemID = event.item_id ?? "text-0"
@@ -787,15 +826,16 @@ const reasoningMetadata = (item: OpenAIResponsesStreamItem & { id: string }) =>
 const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const item = event.item
   if (item?.type === "message" && item.id) {
+    const existing = state.messageItems[item.id]
     return [
       {
         ...state,
         messageItems: {
           ...state.messageItems,
           [item.id]: {
-            ...state.messageItems[item.id],
-            providerMetadata: messageMetadata(item, item.id),
-            content: state.messageItems[item.id]?.content ?? {},
+            ...existing,
+            providerMetadata: messageMetadata(item, item.id, existing?.providerMetadata),
+            content: existing?.content ?? {},
           },
         },
       },
@@ -964,10 +1004,7 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
     const itemID = item.id
     const messageItem = state.messageItems[itemID]
     const { [itemID]: _finished, ...messageItems } = state.messageItems
-    const providerMetadata =
-      item.phase !== undefined
-        ? messageMetadata(item, itemID)
-        : (messageItem?.providerMetadata ?? messageMetadata(item, itemID))
+    const providerMetadata = messageMetadata(item, itemID, messageItem?.providerMetadata)
     const lifecycle = Object.values(messageItem?.content ?? {}).reduce(
       (lifecycle, content) => Lifecycle.textEnd(lifecycle, events, content.id, providerMetadata),
       state.lifecycle,
