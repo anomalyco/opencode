@@ -94,9 +94,10 @@ You can also map a friendly catalog ID to a different API model ID with `modelID
 }
 ```
 
-Here `openai/coding-default` is the selectable catalog reference, while `gpt-5.2` is sent to the provider. When adding a
-model that is not already in the catalog, set accurate `capabilities` and `limit` values so OpenCode can expose tools and
-enforce the correct context limits. Set `disabled: true` on a model entry to hide it from the available catalog.
+Here `openai/coding-default` is the selectable catalog reference, while `gpt-5.2` is sent to the provider. A model that is
+not already in the catalog defaults to tool support, text and image input, and text output. Set accurate `capabilities`
+and `limit` values when those defaults do not match the model or OpenCode needs to enforce its context limits. Set
+`disabled: true` on a model entry to hide it from the available catalog.
 
 OpenAI-compatible models that stream reasoning through a custom assistant-message field can set
 `compatibility.reasoningField`:
@@ -193,8 +194,9 @@ For an OpenAI-compatible server, define a provider package, endpoint, and at lea
 }
 ```
 
-Use the server's real model name, limits, modalities, and tool support. OpenCode cannot infer these for a model you add
-manually. If the endpoint requires a key, add `apiKey` to provider `settings` using an environment substitution such as
+Use the server's real model name, limits, modalities, and tool support. OpenCode applies the custom-model capability
+defaults described above but cannot infer the server's actual limits or whether those defaults are accurate. If the
+endpoint requires a key, add `apiKey` to provider `settings` using an environment substitution such as
 `"apiKey": "{env:LOCAL_API_KEY}"`; do not commit secrets.
 
 ### Model references

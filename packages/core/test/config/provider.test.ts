@@ -78,6 +78,57 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("preserves catalog capabilities unless config overrides them", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("custom")
+      const inheritedID = ModelV2.ID.make("inherited")
+      const overriddenID = ModelV2.ID.make("overridden")
+      yield* catalog.transform((draft) => {
+        draft.model.update(providerID, inheritedID, (model) => {
+          model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+        })
+        draft.model.update(providerID, overriddenID, (model) => {
+          model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+        })
+      })
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    models: {
+                      inherited: { name: "Inherited" },
+                      overridden: {
+                        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* addPlugin(config)
+
+      expect((yield* catalog.model.get(providerID, inheritedID))?.capabilities).toEqual({
+        tools: false,
+        input: ["text"],
+        output: ["text"],
+      })
+      expect((yield* catalog.model.get(providerID, overriddenID))?.capabilities).toEqual({
+        tools: true,
+        input: ["text", "image"],
+        output: ["text"],
+      })
+    }),
+  )
+
   it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
