@@ -1,3 +1,4 @@
+import os from "os"
 import path from "path"
 import { Effect, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -36,6 +37,8 @@ export const GlobTool = Tool.define(
           })
 
           let search = params.path ?? ins.directory
+          if (search === "~") search = os.homedir()
+          if (search.startsWith("~/")) search = path.join(os.homedir(), search.slice(2))
           search = path.isAbsolute(search) ? search : path.resolve(ins.directory, search)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (info?.type === "File") {
