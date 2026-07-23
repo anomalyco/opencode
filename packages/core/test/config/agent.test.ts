@@ -27,13 +27,6 @@ test("rejects named agent color tokens", () => {
   expect(() => decode({ agents: { reviewer: { color: "warning" } } })).toThrow()
 })
 
-test("migrates v1 named agent colors to hex", () => {
-  for (const color of ["primary", "secondary", "accent", "success", "warning", "error", "info"] as const) {
-    expect(ConfigMigrateV1.migrateAgent({ color }).color).toBe("#aaaaaa")
-  }
-  expect(ConfigMigrateV1.migrateAgent({ color: "#ff6b6b" }).color).toBe("#ff6b6b")
-})
-
 describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("matches POSIX paths against home-relative permissions", () =>
     Effect.gen(function* () {
@@ -260,7 +253,6 @@ describe("ConfigAgentPlugin.Plugin", () => {
 model: openrouter/openai/gpt-5
 description: Markdown description
 temperature: 0.5
-color: warning
 tools:
   write: false
 ---
@@ -305,7 +297,6 @@ Use native v2 fields.`,
             model: { providerID: "openrouter", id: "openai/gpt-5" },
             system: "Review carefully.",
             description: "Markdown description",
-            color: "#aaaaaa",
             request: { body: { temperature: 0.5 } },
             permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
           })
