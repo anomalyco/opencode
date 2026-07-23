@@ -272,6 +272,23 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("maps truncation and malformed output stop reasons", () =>
+    Effect.gen(function* () {
+      const reasons = [
+        ["model_context_window_exceeded", "length"],
+        ["malformed_model_output", "error"],
+        ["malformed_tool_use", "error"],
+      ] as const
+
+      for (const [raw, normalized] of reasons) {
+        const response = yield* LLMClient.generate(baseRequest).pipe(
+          Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: raw }]))),
+        )
+        expect(response.finishReason).toEqual({ normalized, raw })
+      }
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(

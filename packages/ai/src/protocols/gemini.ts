@@ -382,10 +382,22 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
     finishReason === "SAFETY" ||
     finishReason === "BLOCKLIST" ||
     finishReason === "PROHIBITED_CONTENT" ||
-    finishReason === "SPII"
+    finishReason === "SPII" ||
+    finishReason === "MODEL_ARMOR" ||
+    finishReason === "IMAGE_PROHIBITED_CONTENT" ||
+    finishReason === "IMAGE_RECITATION" ||
+    finishReason === "LANGUAGE"
   )
     return "content-filter"
-  if (finishReason === "MALFORMED_FUNCTION_CALL") return "error"
+  if (
+    finishReason === "MALFORMED_FUNCTION_CALL" ||
+    finishReason === "UNEXPECTED_TOOL_CALL" ||
+    finishReason === "NO_IMAGE" ||
+    finishReason === "TOO_MANY_TOOL_CALLS" ||
+    finishReason === "MISSING_THOUGHT_SIGNATURE" ||
+    finishReason === "MALFORMED_RESPONSE"
+  )
+    return "error"
   return "unknown"
 }
 

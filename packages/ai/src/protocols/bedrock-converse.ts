@@ -431,9 +431,10 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
 // =============================================================================
 const mapFinishReason = (reason: string): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence") return "stop"
-  if (reason === "max_tokens") return "length"
+  if (reason === "max_tokens" || reason === "model_context_window_exceeded") return "length"
   if (reason === "tool_use") return "tool-calls"
   if (reason === "content_filtered" || reason === "guardrail_intervened") return "content-filter"
+  if (reason === "malformed_model_output" || reason === "malformed_tool_use") return "error"
   return "unknown"
 }
 

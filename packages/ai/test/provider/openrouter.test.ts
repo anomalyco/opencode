@@ -73,6 +73,25 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("fails on a mid-stream provider error", () =>
+    Effect.gen(function* () {
+      const model = OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini")
+      const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              error: { code: 502, message: "Provider disconnected" },
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+      expect(error.message).toContain("Provider disconnected")
+    }),
+  )
+
   it.effect("preserves manually supplied reasoning details", () =>
     Effect.gen(function* () {
       const details = [

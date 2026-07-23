@@ -5,6 +5,7 @@ import { Endpoint } from "../route/endpoint"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
+  LLMError,
   LLMEvent,
   Usage,
   type FinishReason,
@@ -18,6 +19,7 @@ import {
   type ToolDefinition,
   type ToolContent,
 } from "../schema"
+import { classifyProviderFailure } from "../provider-error"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
@@ -168,9 +170,15 @@ const OpenAIChatChoice = Schema.Struct({
   native_finish_reason: optionalNull(Schema.String),
 })
 
+const OpenAIChatError = Schema.Struct({
+  code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
+  message: Schema.String,
+})
+
 export const OpenAIChatEvent = Schema.Struct({
-  choices: Schema.Array(OpenAIChatChoice),
+  choices: optionalNull(Schema.Array(OpenAIChatChoice)),
   usage: optionalNull(OpenAIChatUsage),
+  error: optionalNull(OpenAIChatError),
 })
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
@@ -441,6 +449,7 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "length") return "length"
   if (reason === "content_filter") return "content-filter"
   if (reason === "function_call" || reason === "tool_calls") return "tool-calls"
+  if (reason === "error") return "error"
   return "unknown"
 }
 
@@ -534,9 +543,19 @@ const reasoningMetadata = (field: ParserState["reasoningField"], details?: Reado
 
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
+    if (event.error)
+      return yield* new LLMError({
+        module: ADAPTER,
+        method: "stream",
+        reason: classifyProviderFailure({
+          message: event.error.message,
+          code: event.error.code === undefined || event.error.code === null ? undefined : String(event.error.code),
+          status: typeof event.error.code === "number" ? event.error.code : undefined,
+        }),
+      })
     const events: LLMEvent[] = []
     const usage = mapUsage(event.usage) ?? state.usage
-    const choice = event.choices[0]
+    const choice = event.choices?.[0]
     const finishReason = choice?.finish_reason
       ? { normalized: mapFinishReason(choice.finish_reason), raw: choice.native_finish_reason ?? choice.finish_reason }
       : state.finishReason

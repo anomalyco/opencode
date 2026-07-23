@@ -616,6 +616,32 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("maps current blocking and invalid-output finish reasons", () =>
+    Effect.gen(function* () {
+      const reasons = [
+        ["MODEL_ARMOR", "content-filter"],
+        ["IMAGE_PROHIBITED_CONTENT", "content-filter"],
+        ["IMAGE_RECITATION", "content-filter"],
+        ["LANGUAGE", "content-filter"],
+        ["UNEXPECTED_TOOL_CALL", "error"],
+        ["NO_IMAGE", "error"],
+        ["IMAGE_OTHER", "unknown"],
+        ["TOO_MANY_TOOL_CALLS", "error"],
+        ["MISSING_THOUGHT_SIGNATURE", "error"],
+        ["MALFORMED_RESPONSE", "error"],
+      ] as const
+
+      for (const [raw, normalized] of reasons) {
+        const response = yield* LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: raw }] })),
+          ),
+        )
+        expect(response.finishReason).toEqual({ normalized, raw })
+      }
+    }),
+  )
+
   it.effect("leaves total usage undefined when component counts are missing", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
