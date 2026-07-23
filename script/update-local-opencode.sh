@@ -30,7 +30,8 @@ Environment overrides:
   STACK_SCRIPT        default: /var/opt/opencode-telegram-group-topics-bot/opencode-stack.sh
   TARGET_BIN          default: /root/.opencode/bin/opencode
   HEALTH_URL          default: http://127.0.0.1:4416/global/health
-  OPENCODE_SERVER_PASSWORD used for authenticated health checks when set
+  OPENCODE_SERVER_PASSWORD used for authenticated health checks when set;
+                           prompts in interactive sessions when unset
   SESSION_DIR         default: /root/.local/share/opencode
   BACKUP_ROOT         default: /root/.local/share/opencode/backups
   ALLOW_DIRTY         default: 0; set 1 to allow tracked worktree changes
@@ -167,6 +168,31 @@ require_clean_tracked_tree() {
   }
 }
 
+load_health_password() {
+  if [[ -n "${OPENCODE_SERVER_PASSWORD:-}" ]]; then
+    log "using OPENCODE_SERVER_PASSWORD from environment"
+    return 0
+  fi
+
+  if [[ -t 0 ]]; then
+    local password=""
+    printf 'OPENCODE_SERVER_PASSWORD is unset; enter password for authenticated health checks, or leave blank to skip auth: '
+    read -rs password || password=""
+    printf '\n'
+
+    if [[ -n "$password" ]]; then
+      export OPENCODE_SERVER_PASSWORD="$password"
+      log "using OPENCODE_SERVER_PASSWORD from interactive prompt"
+      return 0
+    fi
+
+    log "no health-check password entered; health check will run without auth"
+    return 0
+  fi
+
+  log "OPENCODE_SERVER_PASSWORD is not set and session is non-interactive; health check will run without auth"
+}
+
 backup_sessions() {
   local label="$1"
   local backup_file="$BACKUP_ROOT/opencode-sessions-$label-$(timestamp).tar.gz"
@@ -291,6 +317,8 @@ main() {
   if (( EXECUTE == 0 )); then
     log "dry-run mode; pass --execute to perform changes"
   fi
+
+  load_health_password
 
   require_clean_tracked_tree
 
