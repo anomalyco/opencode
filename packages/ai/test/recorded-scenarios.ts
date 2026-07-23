@@ -125,8 +125,8 @@ const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
 
 export const expectFinish = (
   events: ReadonlyArray<LLMEvent>,
-  reason: Extract<LLMEvent, { readonly type: "finish" }>["reason"],
-) => expect(events.at(-1)).toMatchObject({ type: "finish", reason })
+  reason: FinishReason,
+) => expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
 
 export const expectWeatherToolCall = (response: LLMResponse) =>
   expect(response.toolCalls).toMatchObject([
@@ -136,10 +136,10 @@ export const expectWeatherToolCall = (response: LLMResponse) =>
 export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
   const finishes = events.filter(LLMEvent.is.finish)
   expect(finishes).toHaveLength(1)
-  expect(finishes[0]?.reason).toBe("stop")
+  expect(finishes[0]?.reason.normalized).toBe("stop")
 
   const stepFinishes = events.filter(LLMEvent.is.stepFinish)
-  expect(stepFinishes.map((event) => event.reason)).toEqual(["tool-calls", "stop"])
+  expect(stepFinishes.map((event) => event.reason.normalized)).toEqual(["tool-calls", "stop"])
 
   const toolCalls = events.filter(LLMEvent.is.toolCall)
   expect(toolCalls).toHaveLength(1)
@@ -503,7 +503,7 @@ export const eventSummary = (events: ReadonlyArray<LLMEvent>) => {
       continue
     }
     if (event.type === "finish") {
-      summary.push({ type: "finish", reason: event.reason, usage: usageSummary(event.usage) })
+      summary.push({ type: "finish", reason: event.reason.normalized, usage: usageSummary(event.usage) })
     }
   }
   return summary.map((item) => Object.fromEntries(Object.entries(item).filter((entry) => entry[1] !== undefined)))

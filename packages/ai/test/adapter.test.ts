@@ -40,7 +40,7 @@ const fakeFraming: FramingDef<FakeEvent> = {
 
 const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
   event.type === "finish"
-    ? { type: "finish", reason: event.reason }
+    ? { type: "finish", reason: { normalized: event.reason } }
     : { type: "text-delta", id: "text-0", text: event.text }
 
 const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({

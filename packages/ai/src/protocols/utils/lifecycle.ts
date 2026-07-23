@@ -1,4 +1,4 @@
-import { LLMEvent, type FinishReason, type ProviderMetadata, type Usage } from "../../schema"
+import { LLMEvent, type FinishReasonDetails, type ProviderMetadata, type Usage } from "../../schema"
 
 export interface State {
   readonly stepStarted: boolean
@@ -81,8 +81,7 @@ export const finish = (
   state: State,
   events: LLMEvent[],
   input: {
-    readonly reason: FinishReason
-    readonly rawReason?: string
+    readonly reason: FinishReasonDetails
     readonly usage?: Usage
     readonly providerMetadata?: ProviderMetadata
   },
@@ -92,7 +91,6 @@ export const finish = (
     LLMEvent.stepFinish({
       index: 0,
       reason: input.reason,
-      rawReason: input.rawReason,
       usage: input.usage,
       providerMetadata: input.providerMetadata,
     }),

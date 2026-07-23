@@ -83,7 +83,7 @@ const indexStep = (event: LLMEvent, index: number): LLMEvent => {
 const stepState = (events: ReadonlyArray<LLMEvent>) => {
   const assistantContent: ContentPart[] = []
   const toolCalls: ToolCallPart[] = []
-  let reason: Extract<LLMEvent, { type: "finish" }>["reason"] = "unknown"
+  let reason: Extract<LLMEvent, { type: "finish" }>["reason"] = { normalized: "unknown" }
   let usage: Usage | undefined
   let providerMetadata: ProviderMetadata | undefined
 

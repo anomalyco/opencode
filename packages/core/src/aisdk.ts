@@ -666,14 +666,12 @@ function streamPartEvents(
       return Effect.succeed([
         LLMEvent.stepFinish({
           index: state.step++,
-          reason: finishReason(event.finishReason),
-          rawReason: event.finishReason.raw,
+          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
           usage: usage(event.usage),
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
         LLMEvent.finish({
-          reason: finishReason(event.finishReason),
-          rawReason: event.finishReason.raw,
+          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
           usage: usage(event.usage),
           providerMetadata: providerMetadata(event.providerMetadata),
         }),

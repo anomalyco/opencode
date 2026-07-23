@@ -8,6 +8,7 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
+  type FinishReasonDetails,
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
@@ -184,8 +185,7 @@ export interface ParserState {
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
   readonly usage?: Usage
-  readonly finishReason?: FinishReason
-  readonly rawFinishReason?: string
+  readonly finishReason?: FinishReasonDetails
   readonly lifecycle: Lifecycle.State
   readonly reasoningField?: string
   readonly reasoningDetails: Array<unknown>
@@ -536,8 +536,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const events: LLMEvent[] = []
     const usage = mapUsage(event.usage) ?? state.usage
     const choice = event.choices[0]
-    const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
-    const rawFinishReason = choice?.finish_reason ?? state.rawFinishReason
+    const finishReason = choice?.finish_reason
+      ? { normalized: mapFinishReason(choice.finish_reason), raw: choice.finish_reason }
+      : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
@@ -616,7 +617,6 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         toolCallEvents: finished?.events ?? state.toolCallEvents,
         usage,
         finishReason,
-        rawFinishReason,
         lifecycle,
         reasoningField,
         reasoningDetails: state.reasoningDetails,
@@ -630,7 +630,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const events: LLMEvent[] = []
   const hasToolCalls = state.toolCallEvents.length > 0
-  const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
+  const reason = state.finishReason
+    ? {
+        ...state.finishReason,
+        normalized:
+          state.finishReason.normalized === "stop" && hasToolCalls ? "tool-calls" : state.finishReason.normalized,
+      }
+    : undefined
   const metadata = reasoningMetadata(
     state.reasoningField,
     state.reasoningDetailsObserved ? state.reasoningDetails : undefined,
@@ -642,8 +648,7 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const ended = Lifecycle.reasoningEnd(started, events, "reasoning-0", metadata)
   const lifecycle = state.toolCallEvents.length ? Lifecycle.stepStart(ended, events) : ended
   events.push(...state.toolCallEvents)
-  if (reason)
-    Lifecycle.finish(lifecycle, events, { reason, rawReason: state.rawFinishReason, usage: state.usage })
+  if (reason) Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })
   return events
 }
 

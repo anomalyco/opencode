@@ -106,7 +106,7 @@ const readPdfRuntime = Tool.make({
 })
 
 const expectCode = (response: LLMResponse) => {
-  expect(response.finishReason).toBe("stop")
+  expect(response.finishReason.normalized).toBe("stop")
   expect(response.text.toUpperCase()).toContain(CODE)
 }
 
@@ -166,7 +166,7 @@ describe("PDF recorded", () => {
               tools: { read_pdf: readPdfRuntime },
             }).pipe(Stream.runCollect),
           )
-          expect(events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+          expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: "stop" } })
           expect(LLMResponse.text({ events }).toUpperCase()).toContain(CODE)
           return
         }

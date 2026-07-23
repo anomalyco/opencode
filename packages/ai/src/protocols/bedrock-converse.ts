@@ -8,6 +8,7 @@ import {
   Usage,
   type CacheHint,
   type FinishReason,
+  type FinishReasonDetails,
   type JsonSchema,
   type LLMRequest,
   type ModelToolSchemaCompatibility,
@@ -460,9 +461,7 @@ interface ParserState {
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold the terminal event in state so `onHalt`
   // can emit exactly one finish after both chunks have had a chance to arrive.
-  readonly pendingFinish:
-    | { readonly reason: FinishReason; readonly rawReason?: string; readonly usage?: Usage }
-    | undefined
+  readonly pendingFinish: { readonly reason: FinishReasonDetails; readonly usage?: Usage } | undefined
   readonly hasToolCalls: boolean
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignatures: Readonly<Record<number, string>>
@@ -580,8 +579,10 @@ const step = (state: ParserState, event: BedrockEvent) =>
         {
           ...state,
           pendingFinish: {
-            reason: mapFinishReason(event.messageStop.stopReason),
-            rawReason: event.messageStop.stopReason,
+            reason: {
+              normalized: mapFinishReason(event.messageStop.stopReason),
+              raw: event.messageStop.stopReason,
+            },
             usage: state.pendingFinish?.usage,
           },
         },
@@ -595,8 +596,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
         {
           ...state,
           pendingFinish: {
-            reason: state.pendingFinish?.reason ?? "stop",
-            rawReason: state.pendingFinish?.rawReason,
+            reason: state.pendingFinish?.reason ?? { normalized: "stop" },
             usage,
           },
         },
@@ -634,9 +634,13 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
     ? (() => {
         const events: LLMEvent[] = []
         Lifecycle.finish(state.lifecycle, events, {
-          reason:
-            state.pendingFinish.reason === "stop" && state.hasToolCalls ? "tool-calls" : state.pendingFinish.reason,
-          rawReason: state.pendingFinish.rawReason,
+          reason: {
+            ...state.pendingFinish.reason,
+            normalized:
+              state.pendingFinish.reason.normalized === "stop" && state.hasToolCalls
+                ? "tool-calls"
+                : state.pendingFinish.reason.normalized,
+          },
           usage: state.pendingFinish.usage,
         })
         return events

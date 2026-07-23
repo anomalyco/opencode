@@ -856,13 +856,13 @@ describe("OpenAI Responses route", () => {
         {
           type: "step-finish",
           index: 0,
-          reason: "stop",
+          reason: { normalized: "stop", raw: undefined },
           providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
           usage,
         },
         {
           type: "finish",
-          reason: "stop",
+          reason: { normalized: "stop", raw: undefined },
           providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
           usage,
         },
@@ -889,22 +889,16 @@ describe("OpenAI Responses route", () => {
       const unknown = yield* generate({})
       const custom = yield* generate({ reason: "provider_limit" })
 
-      expect([length.finishReason, contentFilter.finishReason, unknown.finishReason, custom.finishReason]).toEqual([
-        "length",
-        "content-filter",
-        "unknown",
-        "unknown",
-      ])
       expect([
-        length.rawFinishReason,
-        contentFilter.rawFinishReason,
-        unknown.rawFinishReason,
-        custom.rawFinishReason,
+        length.finishReason,
+        contentFilter.finishReason,
+        unknown.finishReason,
+        custom.finishReason,
       ]).toEqual([
-        "max_output_tokens",
-        "content_filter",
-        undefined,
-        "provider_limit",
+        { normalized: "length", raw: "max_output_tokens" },
+        { normalized: "content-filter", raw: "content_filter" },
+        { normalized: "unknown", raw: undefined },
+        { normalized: "unknown", raw: "provider_limit" },
       ])
     }),
   )
@@ -959,8 +953,8 @@ describe("OpenAI Responses route", () => {
         { type: "text-delta", id: "msg_1", text: "Hello" },
         { type: "reasoning-end", id: "rs_1" },
         { type: "text-end", id: "msg_1" },
-        { type: "step-finish", index: 0, reason: "stop" },
-        { type: "finish", reason: "stop" },
+        { type: "step-finish", index: 0, reason: { normalized: "stop", raw: undefined } },
+        { type: "finish", reason: { normalized: "stop", raw: undefined } },
       ])
       expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
       expect(response.message.content).toEqual([
@@ -1051,8 +1045,8 @@ describe("OpenAI Responses route", () => {
           id: "rs_1:1",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
-        { type: "step-finish", index: 0, reason: "stop" },
-        { type: "finish", reason: "stop" },
+        { type: "step-finish", index: 0, reason: { normalized: "stop", raw: undefined } },
+        { type: "finish", reason: { normalized: "stop", raw: undefined } },
       ])
     }),
   )
@@ -1435,10 +1429,16 @@ describe("OpenAI Responses route", () => {
           providerExecuted: undefined,
           providerMetadata: { openai: { itemId: "item_1" } },
         },
-        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "tool-calls", raw: undefined },
+          usage,
+          providerMetadata: undefined,
+        },
         {
           type: "finish",
-          reason: "tool-calls",
+          reason: { normalized: "tool-calls", raw: undefined },
           providerMetadata: undefined,
           usage,
         },
@@ -1478,7 +1478,7 @@ describe("OpenAI Responses route", () => {
         name: "lookup",
         raw: '{"query":"partial',
       })
-      expect(response.finishReason).toBe("tool-calls")
+      expect(response.finishReason.normalized).toBe("tool-calls")
       expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
     }),
   )
@@ -1505,7 +1505,7 @@ describe("OpenAI Responses route", () => {
         name: "lookup",
         raw: '{"query":"partial',
       })
-      expect(response.finishReason).toBe("tool-calls")
+      expect(response.finishReason.normalized).toBe("tool-calls")
     }),
   )
 

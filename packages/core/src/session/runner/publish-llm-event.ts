@@ -74,7 +74,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   let stepFailure: SessionError.Error | undefined
   let stepSettlement:
     | {
-        readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]
+        readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]["normalized"]
         readonly tokens: ReturnType<typeof SessionUsage.tokens>
       }
     | undefined
@@ -469,8 +469,8 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       case "step-finish":
         yield* flush()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
-        stepSettlement = { finish: event.reason, tokens: SessionUsage.tokens(event.usage) }
-        if (event.reason === "content-filter") {
+        stepSettlement = { finish: event.reason.normalized, tokens: SessionUsage.tokens(event.usage) }
+        if (event.reason.normalized === "content-filter") {
           providerFailed = true
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
           return

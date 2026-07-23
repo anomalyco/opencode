@@ -371,11 +371,16 @@ describe("Gemini route", () => {
         { type: "text-delta", id: "text-0", text: "Hello" },
         { type: "text-delta", id: "text-0", text: "!" },
         { type: "text-end", id: "text-0" },
-        { type: "step-finish", index: 0, reason: "stop", rawReason: "STOP", usage, providerMetadata: undefined },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "stop", raw: "STOP" },
+          usage,
+          providerMetadata: undefined,
+        },
         {
           type: "finish",
-          reason: "stop",
-          rawReason: "STOP",
+          reason: { normalized: "stop", raw: "STOP" },
           usage,
         },
       ])
@@ -531,15 +536,13 @@ describe("Gemini route", () => {
         {
           type: "step-finish",
           index: 0,
-          reason: "tool-calls",
-          rawReason: "STOP",
+          reason: { normalized: "tool-calls", raw: "STOP" },
           usage,
           providerMetadata: undefined,
         },
         {
           type: "finish",
-          reason: "tool-calls",
-          rawReason: "STOP",
+          reason: { normalized: "tool-calls", raw: "STOP" },
           usage,
         },
       ])
@@ -578,7 +581,10 @@ describe("Gemini route", () => {
         },
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
       ])
-      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })
+      expect(response.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "tool-calls", raw: "STOP" },
+      })
     }),
   )
 
@@ -598,9 +604,15 @@ describe("Gemini route", () => {
       )
 
       expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
-      expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length", rawReason: "MAX_TOKENS" })
+      expect(length.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "length", raw: "MAX_TOKENS" },
+      })
       expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
-      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter", rawReason: "SAFETY" })
+      expect(filtered.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "content-filter", raw: "SAFETY" },
+      })
     }),
   )
 

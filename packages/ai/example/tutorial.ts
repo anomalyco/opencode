@@ -78,7 +78,10 @@ const streamText = LLM.stream(request).pipe(
   Stream.tap((event) =>
     Effect.sync(() => {
       if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
-      if (event.type === "finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
+      if (event.type === "finish")
+        process.stdout.write(
+          `\nfinish: ${event.reason.normalized}${event.reason.raw ? ` (${event.reason.raw})` : ""}\n`,
+        )
     }),
   ),
   Stream.runDrain,

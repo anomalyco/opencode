@@ -229,7 +229,7 @@ test("success event data can carry a provider-executed result", () => {
 test("step finish records settlement without publishing step ended", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
-  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } })))
 
   expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
@@ -242,7 +242,7 @@ test("content-filter finish retains failure evidence until step closeout", async
     publisher.publish(
       LLMEvent.stepFinish({
         index: 0,
-        reason: "content-filter",
+        reason: { normalized: "content-filter" },
         usage: {
           nonCachedInputTokens: 8,
           outputTokens: 3,
@@ -285,7 +285,7 @@ test("content-filter finish preserves partial streamed text and never ends the s
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "text" }),
         LLMEvent.textDelta({ id: "text", text: "Partial" }),
-        LLMEvent.stepFinish({ index: 0, reason: "content-filter" }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "content-filter" } }),
       ],
       (event) => publisher.publish(event),
       { discard: true },
