@@ -1141,7 +1141,7 @@ export function options(input: {
   sessionID: string
   providerOptions?: Record<string, any>
 }): Record<string, any> {
-  const result: Record<string, any> = cachingOptions(input)
+  const result: Record<string, any> = {}
 
   if (
     input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
@@ -1278,49 +1278,37 @@ export function options(input: {
     }
   }
 
+  if (input.providerOptions?.setCacheKey !== false) {
+    if (input.model.api.npm === "@ai-sdk/deepinfra" || input.model.api.npm === "@ai-sdk/cerebras") {
+      result["prompt_cache_key"] = input.sessionID
+    } else if (
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/azure" ||
+      input.model.api.npm === "@ai-sdk/xai" ||
+      input.model.api.npm === "@ai-sdk/mistral" ||
+      input.model.api.npm === "venice-ai-sdk-provider" ||
+      input.providerOptions?.setCacheKey === true
+    ) {
+      result["promptCacheKey"] = input.sessionID
+    }
+  }
+
+  if (input.model.api.npm === "@ai-sdk/gateway") {
+    result["gateway"] = { caching: "auto" }
+  }
+
   return result
 }
 
-function cachingOptions(input: {
-  model: Provider.Model
-  sessionID: string
-  providerOptions?: Record<string, any>
-}): Record<string, any> {
-  if (input.providerOptions?.setCacheKey === false) {
-    if (input.model.api.npm === "@ai-sdk/gateway") return { gateway: { caching: "auto" } }
-    return {}
-  }
-
-  if (input.model.api.npm === "@ai-sdk/deepinfra" || input.model.api.npm === "@ai-sdk/cerebras") {
-    return { prompt_cache_key: input.sessionID }
-  }
-
-  if (
-    input.model.api.npm === "@ai-sdk/openai" ||
-    (input.model.providerID === "openai" && input.model.api.npm !== "@ai-sdk/openai-compatible") ||
-    input.model.api.npm === "@ai-sdk/azure" ||
-    input.model.api.npm === "@ai-sdk/xai" ||
-    input.model.api.npm === "@ai-sdk/mistral" ||
-    input.model.api.npm === "venice-ai-sdk-provider" ||
-    input.providerOptions?.setCacheKey === true
-  ) {
-    return { promptCacheKey: input.sessionID }
-  }
-
-  if (input.model.api.npm === "@ai-sdk/gateway") return { gateway: { caching: "auto" } }
-  return {}
-}
-
-export function smallOptions(model: Provider.Model, sessionID?: string, providerOptions?: Record<string, any>) {
+export function smallOptions(model: Provider.Model) {
   const small = Object.values(model.variants ?? {})[0] ?? {}
-  const caching = sessionID ? cachingOptions({ model, sessionID, providerOptions }) : {}
   if (
     model.providerID === "openai" ||
     model.api.npm === "@ai-sdk/openai" ||
     model.api.npm === "@ai-sdk/github-copilot" ||
     model.api.npm === "@ai-sdk/xai"
   ) {
-    const base = { ...caching, store: false }
+    const base = { store: false }
     return mergeDeep(base, small)
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
@@ -1330,11 +1318,11 @@ export function smallOptions(model: Provider.Model, sessionID?: string, provider
   }
 
   if (model.providerID === "venice") {
-    if (Object.keys(small).length > 0) return mergeDeep(caching, small)
-    return mergeDeep(caching, { veniceParameters: { disableThinking: true } })
+    if (Object.keys(small).length > 0) return small
+    return { veniceParameters: { disableThinking: true } }
   }
 
-  return mergeDeep(caching, small)
+  return small
 }
 
 // Maps model ID prefix to provider slug used in providerOptions.

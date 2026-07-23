@@ -5216,13 +5216,6 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
       expect(ProviderTransform.smallOptions(createModel(testCase.id))).toEqual(testCase.options)
     })
   }
-
-  test("includes the OpenAI cache key in small requests", () => {
-    expect(ProviderTransform.smallOptions(createModel("gpt-5-chat-latest"), "session-123")).toEqual({
-      store: false,
-      promptCacheKey: "session-123",
-    })
-  })
 })
 
 test("ProviderTransform.smallOptions preserves the weakest OpenRouter reasoning effort", () => {
