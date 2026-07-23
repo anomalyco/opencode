@@ -577,23 +577,30 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
 
 // filterCompacted reorders messages for model consumption
 // ([compaction-user, summary, ...retained tail..., continue-user]), so array
-// position is not chronological. Derive each binding by max id (MessageID
-// is monotonic via MessageID.ascending) so a pre-compaction overflowing tail
-// assistant doesn't get mistaken for the most recent turn. tasks are
-// compaction/subtask parts attached to user messages newer than the latest
-// finished assistant — i.e. unprocessed work.
+// position is not chronological. Derive each binding by service timestamp
+// (MessageID.ascending monotonicity is guaranteed only for server-generated
+// IDs; client-provided IDs may use a different clock) so a pre-compaction
+// overflowing tail assistant doesn't get mistaken for the most recent turn.
+// tasks are compaction/subtask parts attached to user messages newer than the
+// latest finished assistant — i.e. unprocessed work.
+export function after(a: Pick<Info, "time" | "id">, b: Pick<Info, "time" | "id">) {
+  return a.time.created !== b.time.created
+    ? a.time.created > b.time.created
+    : a.id > b.id
+}
+
 export function latest(msgs: WithParts[]) {
   let user: User | undefined
   let assistant: Assistant | undefined
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || info.id > user.id)) user = info
-    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
-    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
+    if (info.role === "user" && (!user || after(info, user))) user = info
+    if (info.role === "assistant" && (!assistant || after(info, assistant))) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || after(info, finished))) finished = info
   }
   const tasks = msgs.flatMap((m) =>
-    finished && m.info.id <= finished.id
+    finished && !after(m.info, finished)
       ? []
       : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
   )
