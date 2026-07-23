@@ -10,11 +10,10 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { CodeMode } from "../codemode"
-import { Tool, definition, nonEmpty, permission, registrationEntries, validateNamespace } from "./tool"
+import { Tool, nonEmpty, registrationEntries, toDefinition, validateName, validateNamespace } from "./tool"
 import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { SessionError } from "@opencode-ai/schema/session-error"
 import { toSessionError } from "../session/to-session-error"
 
 export type ExecuteInput = {
@@ -32,13 +31,13 @@ export interface Interface {
   readonly snapshot: (permissions?: PermissionV2.Ruleset) => Effect.Effect<ToolSet>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (
-    tools: Readonly<Record<string, Tool.AnyTool>>,
+    declarations: Readonly<Record<string, Tool.AnyDeclaration>>,
     options?: Tools.RegisterOptions,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
   /** Internal atomic registration capability used by plugin transforms. */
   readonly registerBatch: (
     registrations: ReadonlyArray<{
-      readonly tools: Readonly<Record<string, Tool.AnyTool>>
+      readonly declarations: Readonly<Record<string, Tool.AnyDeclaration>>
       readonly options?: Tools.RegisterOptions
     }>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
@@ -51,28 +50,16 @@ export interface Interface {
  */
 export interface ToolSet {
   readonly definitions: ReadonlyArray<ToolDefinition>
-  readonly execute: (input: ExecuteInput) => Effect.Effect<ToolExecution, ToolOutputStore.Error>
+  readonly execute: (input: ExecuteInput) => Effect.Effect<ToolOutcome, ToolOutputStore.Error>
 }
 
 /**
  * The canonical outcome of one local tool execution. `output` is the validated
  * machine value for Code Mode and remains ephemeral; durable publication drops it.
  */
-export type ToolExecution =
-  | {
-      readonly status: "completed"
-      readonly output?: unknown
-      readonly content: Tool.NonEmptyContent
-      readonly metadata?: Tool.Metadata
-      readonly outputPaths?: ReadonlyArray<string>
-    }
-  | {
-      readonly status: "error"
-      readonly error: SessionError.Error
-      readonly content?: Tool.NonEmptyContent
-      readonly metadata?: Tool.Metadata
-      readonly outputPaths?: ReadonlyArray<string>
-    }
+export type ToolOutcome =
+  | (Extract<Tool.Outcome, { readonly status: "completed" }> & { readonly output?: unknown })
+  | Extract<Tool.Outcome, { readonly status: "error" }>
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
 
@@ -126,15 +113,14 @@ const registryLayer = Layer.effect(
       return valid
     })
 
-    type Registration = {
-      readonly tool: Tool.AnyTool
-      readonly name: string
-      readonly namespace?: string
-    }
+    type Registration = Tool.Registration
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
     const registrationLock = Semaphore.makeUnsafe(1)
 
-    const executeTool = Effect.fn("ToolRegistry.executeTool")(function* (input: ExecuteInput, tool: Tool.AnyTool) {
+    const executeTool = Effect.fn("ToolRegistry.executeTool")(function* (
+      input: ExecuteInput,
+      declaration: Tool.AnyDeclaration,
+    ) {
       // Hooks fire only for hosted/local tools; provider-executed calls never reach executeTool.
       const beforeEvent: ToolHooks.BeforeEvent = {
         tool: input.call.name,
@@ -145,7 +131,7 @@ const registryLayer = Layer.effect(
         input: input.call.input,
       }
       yield* toolHooks.runBefore(beforeEvent)
-      const executed = yield* Tool.execute(tool, beforeEvent.input, {
+      const execution = yield* Tool.execute(declaration, beforeEvent.input, {
         sessionID: input.sessionID,
         agent: input.agent,
         messageID: input.messageID,
@@ -162,18 +148,18 @@ const registryLayer = Layer.effect(
         Effect.catchTag("LLM.ToolFailure", (failure) => Effect.succeed({ failure: toSessionError(failure) })),
       )
 
-      const execution: ToolExecution = yield* Effect.gen(function* () {
-        if ("failure" in executed) return { status: "error" as const, error: executed.failure }
+      const outcome: ToolOutcome = yield* Effect.gen(function* () {
+        if ("failure" in execution) return { status: "error" as const, error: execution.failure }
         const bounded = yield* resources.bound({
           sessionID: input.sessionID,
           callID: input.call.id,
-          content: yield* normalizeImages(executed.value.content),
+          content: yield* normalizeImages(execution.value.content),
         })
-        const metadata = yield* validMetadata(input.call.name, executed.value.metadata)
+        const metadata = yield* validMetadata(input.call.name, execution.value.metadata)
         return {
           status: "completed" as const,
-          ...(executed.value.output === undefined ? {} : { output: executed.value.output }),
-          content: nonEmpty(bounded.content) ?? executed.value.content,
+          ...(execution.value.output === undefined ? {} : { output: execution.value.output }),
+          content: nonEmpty(bounded.content) ?? execution.value.content,
           ...(metadata === undefined ? {} : { metadata }),
           ...(bounded.outputPaths.length > 0 ? { outputPaths: bounded.outputPaths } : {}),
         }
@@ -188,26 +174,29 @@ const registryLayer = Layer.effect(
         input: beforeEvent.input,
       }
       const afterEvent: ToolHooks.AfterEvent =
-        execution.status === "completed"
+        outcome.status === "completed"
           ? {
               ...base,
               status: "completed",
-              content: execution.content,
-              ...(execution.metadata === undefined ? {} : { metadata: execution.metadata }),
-              ...(execution.outputPaths === undefined ? {} : { outputPaths: execution.outputPaths }),
+              content: outcome.content,
+              ...(outcome.metadata === undefined ? {} : { metadata: outcome.metadata }),
+              ...(outcome.outputPaths === undefined ? {} : { outputPaths: outcome.outputPaths }),
             }
           : {
               ...base,
               status: "error",
-              error: execution.error,
-              ...(execution.content === undefined ? {} : { content: execution.content }),
-              ...(execution.metadata === undefined ? {} : { metadata: execution.metadata }),
-              ...(execution.outputPaths === undefined ? {} : { outputPaths: execution.outputPaths }),
+              error: outcome.error,
+              ...(outcome.content === undefined ? {} : { content: outcome.content }),
+              ...(outcome.metadata === undefined ? {} : { metadata: outcome.metadata }),
+              ...(outcome.outputPaths === undefined ? {} : { outputPaths: outcome.outputPaths }),
             }
       yield* toolHooks.runAfter(afterEvent)
       const afterMetadata = yield* validMetadata(input.call.name, afterEvent.metadata)
       const afterContent = yield* Effect.gen(function* () {
-        if (afterEvent.content === undefined || (execution.status === "completed" && afterEvent.content === execution.content))
+        if (
+          afterEvent.content === undefined ||
+          (outcome.status === "completed" && afterEvent.content === outcome.content)
+        )
           return { content: afterEvent.content, outputPaths: afterEvent.outputPaths }
         const bounded = yield* resources.bound({
           sessionID: input.sessionID,
@@ -225,7 +214,7 @@ const registryLayer = Layer.effect(
       if (afterEvent.status === "completed")
         return {
           status: "completed" as const,
-          ...(execution.status === "completed" && execution.output !== undefined ? { output: execution.output } : {}),
+          ...(outcome.status === "completed" && outcome.output !== undefined ? { output: outcome.output } : {}),
           content: afterContent.content ?? afterEvent.content,
           ...(afterMetadata === undefined ? {} : { metadata: afterMetadata }),
           ...(afterContent.outputPaths === undefined ? {} : { outputPaths: afterContent.outputPaths }),
@@ -241,10 +230,21 @@ const registryLayer = Layer.effect(
 
     const registerBatch: Interface["registerBatch"] = Effect.fn("ToolRegistry.registerBatch")(
       function* (registrations) {
-        const planned = yield* Effect.forEach(registrations, ({ tools, options }) =>
+        const planned = yield* Effect.forEach(registrations, ({ declarations, options }) =>
           Effect.gen(function* () {
             if (options?.namespace !== undefined) yield* validateNamespace(options.namespace)
-            const entries = registrationEntries(tools, options?.namespace)
+            const entries = registrationEntries(declarations, options)
+            yield* Effect.forEach(entries, (entry) => validateName(entry.name), { discard: true })
+            const collision = entries.find(
+              (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
+            )
+            if (collision)
+              return yield* Effect.fail(
+                new Tool.RegistrationError({
+                  name: collision.key,
+                  message: `Duplicate normalized tool name: ${collision.key}`,
+                }),
+              )
             const codemode = options?.codemode ?? true
             const reserved = codemode ? undefined : entries.find((entry) => entry.key === "execute")
             if (reserved)
@@ -254,13 +254,13 @@ const registryLayer = Layer.effect(
                   message: 'Tool name "execute" is reserved for CodeMode',
                 }),
               )
-            return { tools, options, entries, codemode }
+            return { declarations, options, entries, codemode }
           }),
         )
         // CodeMode registrations live in the CodeMode service; the registry keeps only direct tools.
         yield* Effect.forEach(
           planned.filter((plan) => plan.codemode && plan.entries.length > 0),
-          (plan) => codeMode.register(plan.tools, plan.options),
+          (plan) => codeMode.register(plan.entries),
           { discard: true },
         )
         const direct = planned.filter((plan) => !plan.codemode)
@@ -276,9 +276,10 @@ const registryLayer = Layer.effect(
                     {
                       token,
                       registration: {
-                        tool: entry.tool,
+                        declaration: entry.declaration,
                         name: entry.name,
                         namespace: entry.namespace,
+                        permission: entry.permission,
                       },
                     },
                   ])
@@ -302,10 +303,10 @@ const registryLayer = Layer.effect(
     )
 
     return Service.of({
-      register: Effect.fn("ToolRegistry.register")((tools, options) =>
+      register: Effect.fn("ToolRegistry.register")((declarations, options) =>
         registerBatch([
           {
-            tools,
+            declarations,
             ...(options === undefined ? {} : { options }),
           },
         ]),
@@ -319,20 +320,20 @@ const registryLayer = Layer.effect(
             for (const [name, entries] of local) {
               const registration = entries.at(-1)?.registration
               if (!registration) continue
-              if (whollyDisabled(permission(registration.tool, name), rules)) continue
+              if (whollyDisabled(registration.permission, rules)) continue
               direct.set(name, registration)
             }
-            const codemodeTool = (yield* codeMode.materialize(permissions)).tool
+            const codemodeDeclaration = (yield* codeMode.materialize(permissions)).declaration
             return {
               definitions: [
-                ...Array.from(direct, ([name, registration]) => definition(name, registration.tool)),
-                ...(codemodeTool ? [definition("execute", codemodeTool)] : []),
+                ...Array.from(direct, ([name, registration]) => toDefinition(name, registration.declaration)),
+                ...(codemodeDeclaration ? [toDefinition("execute", codemodeDeclaration)] : []),
               ],
               execute: (input: ExecuteInput) => {
-                if (input.call.name === "execute" && codemodeTool) return executeTool(input, codemodeTool)
+                if (input.call.name === "execute" && codemodeDeclaration) return executeTool(input, codemodeDeclaration)
                 const registration = direct.get(input.call.name)
-                if (registration) return executeTool(input, registration.tool)
-                return Effect.succeed<ToolExecution>({
+                if (registration) return executeTool(input, registration.declaration)
+                return Effect.succeed<ToolOutcome>({
                   status: "error",
                   error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },
                 })

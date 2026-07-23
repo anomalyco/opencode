@@ -83,10 +83,8 @@ export const RegistrationError = sdk.Tool.RegistrationError
 export const make = sdk.Tool.make
 export const validateName = sdk.Tool.validateName
 export const registrationEntries = sdk.Tool.registrationEntries
-export const withPermission = sdk.Tool.withPermission
-export const permission = sdk.Tool.permission
-export const definition = sdk.Tool.definition
-export const settle = sdk.Tool.settle`
+export const validateNamespace = sdk.Tool.validateNamespace
+export const toDefinition = sdk.Tool.toDefinition`
   return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
 import __cjs_mod__ from "node:module"
 import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"

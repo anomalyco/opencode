@@ -329,7 +329,7 @@ describe("RegExp", () => {
       description: "Decorate a string",
       input: Schema.String,
       output: Schema.String,
-      run: (input) => Effect.succeed(`[${input}]`),
+      execute: (input) => Effect.succeed(`[${input}]`),
     })
     const result = await Effect.runPromise(
       CodeMode.execute({
@@ -1028,7 +1028,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const capture = Tool.make({
       description: "Capture the exact input the host receives",
       input: { type: "object" },
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return "ok"

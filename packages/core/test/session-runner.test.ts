@@ -52,6 +52,7 @@ import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
 import { Tool } from "@opencode-ai/core/tool/tool"
+import { ToolHooks } from "@opencode-ai/core/tool/hooks"
 import {
   InstructionStateTable,
   SessionPendingTable,
@@ -433,6 +434,7 @@ const it = testEffect(
       Catalog.node,
       ToolRegistry.node,
       ToolRegistry.toolsNode,
+      ToolHooks.node,
       PluginHooks.node,
       echoNode,
       SessionRunnerModel.node,
@@ -921,10 +923,14 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("persists the latest progress metadata when a tool fails", () =>
+  it.effect("prefers failure outcome metadata over retained progress", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const registry = yield* ToolRegistry.Service
+      const hooks = yield* ToolHooks.Service
+      yield* hooks.hook.after((event) => {
+        if (event.status === "error") event.metadata = { phase: "failed" }
+      })
       yield* registry.register(
         {
           failing_progress: Tool.make({
@@ -955,7 +961,7 @@ describe("SessionRunnerLLM", () => {
               id: "call-failing-progress",
               state: {
                 status: "error",
-                metadata: { phase: "running" },
+                metadata: { phase: "failed" },
                 error: { message: "failed after progress" },
               },
             },
@@ -3854,7 +3860,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(2)
       expect(requests[0]?.toolChoice).toBeUndefined()
       expect(requests[1]?.toolChoice).toMatchObject({ type: "none" })
-      // The final step keeps tool definitions to preserve provider prompt caching.
+      // Protocols with native "none" keep these definitions for prompt caching.
       expect(requests[1]?.tools.map((tool) => tool.name)).toContain("echo")
       expect(requests[1]?.messages.at(-1)).toMatchObject({
         role: "assistant",

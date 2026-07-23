@@ -12,7 +12,7 @@ test("tools remain valid across separate module instances", async () => {
   }
   const tool = ForeignTool.make(config)
 
-  expect(Tool.definition("foreign", tool)).toEqual({
+  expect(Tool.toDefinition("foreign", tool)).toEqual({
     name: "foreign",
     description: "Foreign tool",
     inputSchema: {
@@ -66,7 +66,7 @@ test("portable schemas validate and describe typed tools", async () => {
     execute: ({ count }) => Effect.succeed({ output: count + 1 }),
   })
 
-  expect(Tool.definition("portable", tool)).toEqual({
+  expect(Tool.toDefinition("portable", tool)).toEqual({
     name: "portable",
     description: "Portable tool",
     inputSchema: { type: "object", properties: { count: { type: "string" } } },
@@ -119,7 +119,7 @@ test("raw JSON schemas are render-only and omitted output means model-only", asy
     execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
   })
 
-  expect(Tool.definition("raw", tool)).toEqual({
+  expect(Tool.toDefinition("raw", tool)).toEqual({
     name: "raw",
     description: "Raw tool",
     inputSchema: { type: "object", properties: { value: { type: "string" } } },

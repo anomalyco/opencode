@@ -5,7 +5,7 @@ import type { ToolContent } from "@opencode-ai/ai"
 import {
   decodeInput,
   encodeOutput,
-  type AnyTool,
+  type AnyDeclaration,
   type Content,
   type Context,
   Failure,
@@ -21,17 +21,21 @@ export type NonEmptyContent = readonly [ToolContent, ...ToolContent[]]
  * Code Mode, canonical model content, and optional UI metadata. The typed
  * domain output never leaves this function.
  */
-export type Executed = {
+export type Execution = {
   readonly output?: unknown
   readonly content: NonEmptyContent
   readonly metadata?: Metadata
 }
 
-export const execute = (tool: AnyTool, input: unknown, context: Context): Effect.Effect<Executed, Failure> =>
+export const execute = (
+  declaration: AnyDeclaration,
+  input: unknown,
+  context: Context,
+): Effect.Effect<Execution, Failure> =>
   Effect.gen(function* () {
-    const decoded = yield* decodeInput(tool.input, input)
-    const result = yield* tool.execute(decoded, context)
-    if (!("output" in tool) || tool.output === undefined) {
+    const decoded = yield* decodeInput(declaration.input, input)
+    const result = yield* declaration.execute(decoded, context)
+    if (declaration.output === undefined) {
       if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
       return {
         content: contentFrom(result.content),
@@ -40,7 +44,7 @@ export const execute = (tool: AnyTool, input: unknown, context: Context): Effect
     }
     if (!("output" in result))
       return yield* Effect.fail(new Failure({ message: "Tool did not return its declared output" }))
-    const encoded = yield* encodeOutput(tool.output, result.output)
+    const encoded = yield* encodeOutput(declaration.output, result.output)
     return {
       output: encoded,
       content: contentFrom(result.content, encoded),

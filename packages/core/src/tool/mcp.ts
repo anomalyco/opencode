@@ -32,12 +32,23 @@ export const layer = Layer.effectDiscard(
     // registry never has a gap where MCP tools disappear mid-swap.
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
-        const groups = new Map<string, { tools: Record<string, Tool.AnyTool>; codemode: boolean }>()
+        const groups = new Map<
+          string,
+          {
+            registrations: Array<{
+              name: string
+              declaration: Tool.AnyDeclaration
+              permission: string
+            }>
+            codemode: boolean
+          }
+        >()
         for (const tool of yield* mcp.tools()) {
-          const group = groups.get(tool.server) ?? { tools: {}, codemode: tool.codemode !== false }
+          const group = groups.get(tool.server) ?? { registrations: [], codemode: tool.codemode !== false }
           const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
-          group.tools[tool.name] = Tool.withPermission(
-            Tool.make({
+          group.registrations.push({
+            name: tool.name,
+            declaration: Tool.make({
               description: tool.description ?? "",
               input: {
                 ...schema,
@@ -100,18 +111,25 @@ export const layer = Layer.effectDiscard(
                   ),
                 ),
             }),
-            name(tool.server, tool.name),
-          )
+            permission: name(tool.server, tool.name),
+          })
           groups.set(tool.server, group)
         }
         const next = yield* Scope.fork(scope)
-        yield* Effect.forEach(
-          groups,
-          ([server, group]) => tools.register(group.tools, { namespace: namespace(server), codemode: group.codemode }),
-          {
-            discard: true,
-          },
-        ).pipe(Scope.provide(next), Effect.orDie)
+        yield* tools
+          .registerBatch(
+            Array.from(groups).flatMap(([server, group]) =>
+              group.registrations.map((registration) => ({
+                declarations: { [registration.name]: registration.declaration },
+                options: {
+                  namespace: namespace(server),
+                  codemode: group.codemode,
+                  permission: registration.permission,
+                },
+              })),
+            ),
+          )
+          .pipe(Scope.provide(next), Effect.orDie)
         if (current) yield* Scope.close(current, Exit.void)
         current = next
       }),

@@ -33,7 +33,7 @@ const echoTool = (trace: Trace) =>
     description: "Echo an id immediately",
     input: Schema.Struct({ id: Schema.Number }),
     output: Schema.Number,
-    run: ({ id }) =>
+    execute: ({ id }) =>
       Effect.sync(() => {
         trace.starts.push(id)
         trace.completed += 1
@@ -46,7 +46,7 @@ const gatedTool = (trace: Trace, gate: (id: number) => Deferred.Deferred<void>) 
     description: "Echo an id once its gate opens",
     input: Schema.Struct({ id: Schema.Number }),
     output: Schema.Number,
-    run: ({ id }) =>
+    execute: ({ id }) =>
       Effect.gen(function* () {
         trace.starts.push(id)
         trace.active += 1
@@ -70,7 +70,7 @@ const openTool = (gate: (id: number) => Deferred.Deferred<void>) =>
     description: "Open the gate for an id",
     input: Schema.Struct({ id: Schema.Number }),
     output: Schema.Boolean,
-    run: ({ id }) => Deferred.succeed(gate(id), undefined),
+    execute: ({ id }) => Deferred.succeed(gate(id), undefined),
   })
 
 const pendingTool = (trace: Trace) =>
@@ -78,7 +78,7 @@ const pendingTool = (trace: Trace) =>
     description: "Never settle",
     input: Schema.Struct({ id: Schema.Number }),
     output: Schema.Number,
-    run: ({ id }) =>
+    execute: ({ id }) =>
       Effect.gen(function* () {
         trace.starts.push(id)
         trace.active += 1
@@ -98,14 +98,14 @@ const failingTool = Tool.make({
   description: "Always refuse",
   input: Schema.Struct({}),
   output: Schema.String,
-  run: () => Effect.fail(toolError("Lookup refused")),
+  execute: () => Effect.fail(toolError("Lookup refused")),
 })
 
 const interruptedTool = Tool.make({
   description: "Interrupt this call",
   input: Schema.Struct({}),
   output: Schema.String,
-  run: () => Effect.interrupt,
+  execute: () => Effect.interrupt,
 })
 
 const completedTool = (trace: Trace) =>
@@ -113,7 +113,7 @@ const completedTool = (trace: Trace) =>
     description: "Return the number of completed calls",
     input: Schema.Struct({}),
     output: Schema.Number,
-    run: () => Effect.succeed(trace.completed),
+    execute: () => Effect.succeed(trace.completed),
   })
 
 /** Never settles, and holds interruption cleanup for `cleanupMs` so completion cleanup can outlast a timeout. */
@@ -122,7 +122,7 @@ const stubbornTool = (trace: Trace) =>
     description: "Never settle; clean up slowly when interrupted",
     input: Schema.Struct({ cleanupMs: Schema.Number }),
     output: Schema.Number,
-    run: ({ cleanupMs }) =>
+    execute: ({ cleanupMs }) =>
       Effect.never.pipe(
         Effect.onInterrupt(() =>
           Effect.andThen(

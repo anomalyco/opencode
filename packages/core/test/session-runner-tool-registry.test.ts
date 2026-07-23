@@ -64,15 +64,13 @@ const call = (name: string, id = `call-${name}`): ToolRegistry.ExecuteInput => (
   call: { type: "tool-call", id, name, input: { text: name } },
 })
 
-const make = (permission?: string) => {
-  const tool = Tool.make({
+const make = () =>
+  Tool.make({
     description: "Echo text",
     input: Schema.Struct({ text: Schema.String }),
     output: Schema.Struct({ text: Schema.String }),
     execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
   })
-  return permission ? Tool.withPermission(tool, permission) : tool
-}
 
 const constant = (text: string) =>
   Tool.make({
@@ -94,13 +92,27 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("rejects invalid and colliding normalized names", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const invalid = yield* service.register({ "123": make() }, { codemode: false }).pipe(Effect.flip)
+      expect(invalid.message).toBe("Invalid tool name: 123")
+
+      const collision = yield* service
+        .register({ "echo.tool": make(), echo_tool: make() }, { codemode: false })
+        .pipe(Effect.flip)
+      expect(collision.message).toBe("Duplicate normalized tool name: echo_tool")
+      expect((yield* service.snapshot()).definitions).toEqual([])
+    }),
+  )
+
   it.effect("validates a registration batch before installing any tools", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const error = yield* service
         .registerBatch([
-          { tools: { first: make() }, options: { codemode: false } },
-          { tools: { second: make() }, options: { namespace: "invalid..namespace", codemode: false } },
+          { declarations: { first: make() }, options: { codemode: false } },
+          { declarations: { second: make() }, options: { namespace: "invalid..namespace", codemode: false } },
         ])
         .pipe(Effect.flip)
 
@@ -112,15 +124,8 @@ describe("ToolRegistry", () => {
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register(
-        {
-          question: make(),
-          bash: make(),
-          edit: make("edit"),
-          write: make("edit"),
-        },
-        { codemode: false },
-      )
+      yield* service.register({ question: make(), bash: make() }, { codemode: false })
+      yield* service.register({ edit: make(), write: make() }, { codemode: false, permission: "edit" })
       const names = (permissions: PermissionV2.Ruleset) =>
         toolDefinitions(service, permissions).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
 
@@ -141,13 +146,12 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("keeps permission decoration isolated between registrations", () =>
+  it.effect("keeps permission options isolated between registrations", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const shared = make()
       yield* service.register({ first: shared }, { codemode: false })
-      yield* service.register({ second: Tool.withPermission(shared, "edit") }, { codemode: false })
-      Tool.withPermission(shared, "question")
+      yield* service.register({ second: shared }, { codemode: false, permission: "edit" })
 
       expect(
         (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map(
@@ -268,7 +272,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("passes complete invocation identity to the canonical handler", () =>
+  it.effect("passes complete call identity to declaration execution", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const contexts: Tool.Context[] = []
@@ -278,7 +282,8 @@ describe("ToolRegistry", () => {
             description: "Context",
             input: Schema.Struct({}),
             output: Schema.Struct({ ok: Schema.Boolean }),
-            execute: (_, context) => Effect.sync(() => contexts.push(context)).pipe(Effect.as({ output: { ok: true } })),
+            execute: (_, context) =>
+              Effect.sync(() => contexts.push(context)).pipe(Effect.as({ output: { ok: true } })),
           }),
         },
         { codemode: false },
@@ -356,7 +361,8 @@ describe("ToolRegistry", () => {
             description: "Emit image progress",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }, context) => context.progress({ stage: "capture" }).pipe(Effect.as({ output: { text } })),
+            execute: ({ text }, context) =>
+              context.progress({ stage: "capture" }).pipe(Effect.as({ output: { text } })),
           }),
         },
         { codemode: false },
@@ -391,9 +397,7 @@ describe("ToolRegistry", () => {
             input: Schema.Struct({ value: Transformed }),
             output: Schema.Struct({ value: Transformed }),
             execute: ({ value }) =>
-              Effect.sync(() => executed.push(value)).pipe(
-                Effect.as({ output: { value }, content: String(value) }),
-              ),
+              Effect.sync(() => executed.push(value)).pipe(Effect.as({ output: { value }, content: String(value) })),
           }),
         },
         { codemode: false },
@@ -512,8 +516,7 @@ describe("ToolRegistry", () => {
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),
           output: Schema.Struct({ text: Schema.String }),
-          execute: ({ text }) =>
-            Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ output: { text } })),
+          execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ output: { text } })),
         }),
       })
 

@@ -97,8 +97,7 @@ export const Plugin = {
       .transform((draft) =>
         draft.add(
           name,
-          Tool.withPermission(
-            Tool.make({
+          Tool.make({
               description:
                 "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
               input: Input,
@@ -213,9 +212,7 @@ export const Plugin = {
                 )
               },
             }),
-            "edit",
-          ),
-          { codemode: false },
+          { codemode: false, permission: "edit" },
         ),
       )
       .pipe(Effect.orDie)

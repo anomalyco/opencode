@@ -75,8 +75,7 @@ export const Plugin = {
       .transform((draft) =>
         draft.add(
           name,
-          Tool.withPermission(
-            Tool.make({
+          Tool.make({
               description: DESCRIPTION,
               input: Input,
               output: Output,
@@ -287,9 +286,7 @@ export const Plugin = {
                 )
               },
             }),
-            "edit",
-          ),
-          { codemode: false },
+          { codemode: false, permission: "edit" },
         ),
       )
       .pipe(Effect.orDie)

@@ -1,9 +1,10 @@
 export * as ExecuteTool from "./execute"
+export type { Registration } from "./tool"
 
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { ToolContent } from "@opencode-ai/ai"
 import { Effect, Ref, Schema } from "effect"
-import { definition, execute, make, type AnyTool, type Content, type Metadata } from "./tool"
+import { execute, make, toDefinition, type Content, type Metadata, type Registration } from "./tool"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -29,12 +30,6 @@ const ExecuteOutput = Schema.Struct({
 type CollectedFiles = {
   readonly index: number
   readonly files: Array<typeof ExecuteFile.Type>
-}
-
-export interface Registration {
-  readonly tool: AnyTool
-  readonly name: string
-  readonly namespace?: string
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
@@ -66,7 +61,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const executed = yield* execute(registration.tool, input, {
+              const executed = yield* execute(registration.declaration, input, {
                 sessionID: context.sessionID,
                 agent: context.agent,
                 messageID: context.messageID,
@@ -103,22 +98,29 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
         const output = formatResult(result)
-        const value = { output, toolCalls, files: collected, ...(result.ok ? {} : { error: true as const }) }
+        const value: typeof ExecuteOutput.Type = {
+          output,
+          toolCalls,
+          files: collected,
+          ...(result.ok ? {} : { error: true }),
+        }
+        const content: [Content, ...Content[]] = [{ type: "text", text: value.output }]
+        content.push(
+          ...value.files.map((file) => ({
+            type: "file" as const,
+            data: file.data,
+            mime: file.mime,
+            ...(file.name === undefined ? {} : { name: file.name }),
+          })),
+        )
+        const metadata: Metadata = {
+          toolCalls: value.toolCalls,
+          ...(value.error ? { error: true } : {}),
+        }
         return {
           output: value,
-          content: [
-            { type: "text" as const, text: value.output },
-            ...value.files.map((file) => ({
-              type: "file" as const,
-              data: file.data,
-              mime: file.mime,
-              ...(file.name === undefined ? {} : { name: file.name }),
-            })),
-          ] as [Content, ...Content[]],
-          metadata: {
-            toolCalls: value.toolCalls,
-            ...(value.error ? { error: true as const } : {}),
-          } satisfies Metadata,
+          content,
+          metadata,
         }
       }),
   })
@@ -133,15 +135,16 @@ function runtime(
   invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.ToolCallHooks,
 ) {
-  const tools: Record<string, Tool.Definition<never>> = {}
+  const tools: Record<string, Tool.Declaration<never>> = {}
   for (const [name, registration] of registrations) {
-    const child = definition(name, registration.tool)
-    const path = registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
+    const child = toDefinition(name, registration.declaration)
+    const path =
+      registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
       output: child.outputSchema,
-      run: (input) => invoke(name, registration, input),
+      execute: (input) => invoke(name, registration, input),
     })
   }
   return CodeMode.make<typeof tools>({ tools, ...hooks })

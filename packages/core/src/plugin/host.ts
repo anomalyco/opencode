@@ -357,20 +357,20 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         Effect.gen(function* () {
           const registrations: Array<{
             readonly name: string
-            readonly tool: Tool.AnyTool
+            readonly declaration: Tool.AnyDeclaration
             readonly options?: Tool.RegisterOptions
           }> = []
           yield* Effect.sync(() =>
             callback({
-              add: (name, tool, options) => {
-                registrations.push({ name, tool, ...(options ? { options } : {}) })
+              add: (name, declaration, options) => {
+                registrations.push({ name, declaration, ...(options ? { options } : {}) })
               },
             }),
           )
           yield* tools
             .registerBatch(
               registrations.map((registration) => ({
-                tools: { [registration.name]: registration.tool },
+                declarations: { [registration.name]: registration.declaration },
                 ...(registration.options === undefined ? {} : { options: registration.options }),
               })),
             )
@@ -413,18 +413,20 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
               const decoded = Schema.decodeUnknownOption(Tool.ExecuteAfterOutcome)(output)
               if (decoded._tag === "None")
                 return Effect.logWarning("ignoring invalid execute.after tool outcome", { tool: event.tool })
+              if (decoded.value.status !== event.status)
+                return Effect.logWarning("ignoring execute.after tool status change", { tool: event.tool })
               return Effect.sync(() => {
                 if (event.status === "completed" && decoded.value.status === "completed") {
-                  event.content = decoded.value.content
-                  event.metadata = decoded.value.metadata
-                  event.outputPaths = decoded.value.outputPaths
+                  if (output.content !== event.content) event.content = decoded.value.content
+                  if (output.metadata !== event.metadata) event.metadata = decoded.value.metadata
+                  if (output.outputPaths !== event.outputPaths) event.outputPaths = decoded.value.outputPaths
                   return
                 }
                 if (event.status === "error" && decoded.value.status === "error") {
-                  event.error = decoded.value.error
-                  event.content = decoded.value.content
-                  event.metadata = decoded.value.metadata
-                  event.outputPaths = decoded.value.outputPaths
+                  if (output.error !== event.error) event.error = decoded.value.error
+                  if (output.content !== event.content) event.content = decoded.value.content
+                  if (output.metadata !== event.metadata) event.metadata = decoded.value.metadata
+                  if (output.outputPaths !== event.outputPaths) event.outputPaths = decoded.value.outputPaths
                 }
               })
             }),

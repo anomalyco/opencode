@@ -1,3 +1,5 @@
+export * as Tool from "./tool.js"
+
 import type { Tool } from "../effect/tool.js"
 import type { Hooks, Transform } from "./registration.js"
 
@@ -9,31 +11,27 @@ export type Content = Tool.Content
 export type Metadata = Tool.Metadata
 export type ModelOutput = Tool.ModelOutput
 
-type BaseDefinition<Input extends SchemaType<any>> = {
-  readonly name: string
-  readonly description: string
-  readonly input: Input
-  readonly options?: RegisterOptions
-}
-
-export type Definition<
+export type Declaration<
   Input extends SchemaType<any>,
   Output extends SchemaType<any> | undefined = undefined,
-> = BaseDefinition<Input> &
-  (Output extends SchemaType<any>
-    ? {
-        readonly output: Output
-        readonly execute: (input: Tool.InputValue<Input>, context: Context) => Promise<Tool.Result<Output>>
-      }
-    : {
-        readonly output?: undefined
-        readonly execute: (input: Tool.InputValue<Input>, context: Context) => Promise<Tool.ContentResult>
-      })
+> = Omit<Tool.Declaration<Input, Output>, "execute"> & {
+  readonly execute: (
+    input: Tool.InputValue<Input>,
+    context: Context,
+  ) => Promise<Output extends SchemaType<any> ? Tool.Response<Output> : Tool.ContentResponse>
+}
 
-export type AnyTool = Omit<Tool.AnyTool, "execute" | "permission"> & {
-  readonly name: string
-  readonly options?: RegisterOptions
-  readonly execute: (input: any, context: Context) => Promise<Tool.Result<any> | Tool.ContentResult>
+export type AnyDeclaration = Omit<Tool.AnyDeclaration, "execute"> & {
+  readonly execute: (input: any, context: Context) => Promise<Tool.Response<any> | Tool.ContentResponse>
+}
+
+export function make<Input extends SchemaType<any>, Output extends SchemaType<any>>(
+  declaration: Declaration<Input, Output>,
+): Declaration<Input, Output>
+export function make<Input extends SchemaType<any>>(declaration: Declaration<Input>): Declaration<Input>
+export function make(declaration: AnyDeclaration): AnyDeclaration
+export function make(declaration: AnyDeclaration): AnyDeclaration {
+  return declaration
 }
 
 export type ToolExecuteBeforeEvent = Tool.ToolExecuteBeforeEvent
@@ -41,8 +39,12 @@ export type ToolExecuteAfterEvent = Tool.ToolExecuteAfterEvent
 export type RegisterOptions = Tool.RegisterOptions
 
 export interface ToolDraft {
-  add<Input extends SchemaType<any>, Output extends SchemaType<any>>(tool: Definition<Input, Output>): void
-  add<Input extends SchemaType<any>>(tool: Definition<Input>): void
+  add<Input extends SchemaType<any>, Output extends SchemaType<any>>(
+    name: string,
+    declaration: Declaration<Input, Output>,
+    options?: RegisterOptions,
+  ): void
+  add<Input extends SchemaType<any>>(name: string, declaration: Declaration<Input>, options?: RegisterOptions): void
 }
 
 export interface ToolHooks {

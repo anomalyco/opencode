@@ -81,66 +81,86 @@ export type Content =
 /** Model-facing tool content: plain text or non-empty rich content. */
 export type ModelOutput = string | readonly [Content, ...Content[]]
 
-type BaseDefinition<Input extends SchemaType<any>> = {
+type BaseDeclaration<Input extends SchemaType<any>> = {
   readonly description: string
   readonly input: Input
-  readonly permission?: string
 }
 
-export type Result<Output extends SchemaType<any>> = {
+export type Response<Output extends SchemaType<any>> = {
   readonly output: OutputValue<Output>
   readonly content?: ModelOutput
   readonly metadata?: Metadata
 }
 
-export type ContentResult = {
+export type ContentResponse = {
   readonly content: ModelOutput
   readonly metadata?: Metadata
 }
 
-export type Definition<
+export type Declaration<
   Input extends SchemaType<any>,
   Output extends SchemaType<any> | undefined = undefined,
-> = BaseDefinition<Input> &
+> = BaseDeclaration<Input> &
   (Output extends SchemaType<any>
     ? {
         readonly output: Output
-        readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Failure>
+        readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Response<Output>, Failure>
       }
     : {
         readonly output?: undefined
-        readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<ContentResult, Failure>
+        readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<ContentResponse, Failure>
       })
 
-export type AnyTool = BaseDefinition<any> & {
+export type AnyDeclaration = BaseDeclaration<any> & {
   readonly output?: SchemaType<any>
-  readonly execute: (input: any, context: Context) => Effect.Effect<Result<any> | ContentResult, Failure>
+  readonly execute: (input: any, context: Context) => Effect.Effect<Response<any> | ContentResponse, Failure>
 }
 
 export function make<Input extends SchemaType<any>, Output extends SchemaType<any>>(
-  config: Definition<Input, Output>,
-): Definition<Input, Output>
-export function make<Input extends SchemaType<any>>(config: Definition<Input>): Definition<Input>
-export function make(config: AnyTool): AnyTool
-export function make(config: AnyTool): AnyTool {
+  config: Declaration<Input, Output>,
+): Declaration<Input, Output>
+export function make<Input extends SchemaType<any>>(config: Declaration<Input>): Declaration<Input>
+export function make(config: AnyDeclaration): AnyDeclaration
+export function make(config: AnyDeclaration): AnyDeclaration {
   return config
 }
 
 // Registration
+
+export interface RegisterOptions {
+  readonly namespace?: string
+  /** Defaults to true. False exposes the tool directly to the provider. */
+  readonly codemode?: boolean
+  /** Permission action used for whole-tool visibility filtering. */
+  readonly permission?: string
+}
+
+export interface Registration {
+  readonly declaration: AnyDeclaration
+  readonly name: string
+  readonly namespace?: string
+  readonly permission: string
+}
 
 export const validateName = (name: string) =>
   /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name)
     ? Effect.void
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
-export const registrationEntries = (tools: Readonly<Record<string, AnyTool>>, namespace?: string) =>
-  Object.entries(tools).map(([name, tool]) => {
+export const registrationEntries = (
+  declarations: Readonly<Record<string, AnyDeclaration>>,
+  options?: RegisterOptions,
+): Array<Registration & { readonly key: string }> =>
+  Object.entries(declarations).map(([name, declaration]) => {
     const normalized = name.replace(/[^a-zA-Z0-9_-]/g, "_")
+    const key =
+      options?.namespace === undefined ? normalized : `${options.namespace.replaceAll(".", "_")}_${normalized}`
     return {
-      key: namespace === undefined ? normalized : `${namespace.replaceAll(".", "_")}_${normalized}`,
+      key,
       name: normalized,
-      namespace,
-      tool,
+      namespace: options?.namespace,
+      declaration,
+      permission: options?.permission ?? key,
     }
   })
 
@@ -151,22 +171,12 @@ export const validateNamespace = (namespace: string) =>
         new RegistrationError({ name: namespace, message: `Invalid tool namespace: ${JSON.stringify(namespace)}` }),
       )
 
-export const withPermission = <T extends AnyTool>(
-  tool: T,
-  permission: string,
-): Omit<T, "permission"> & {
-  readonly permission: string
-} => ({ ...tool, permission })
-
-export const permission = (tool: AnyTool, name: string) => tool.permission ?? name
-
-export const definition = (name: string, tool: AnyTool): ToolDefinition =>
-  ({
-    name,
-    description: tool.description,
-    inputSchema: inputJsonSchema(tool.input),
-    ...("output" in tool && tool.output !== undefined ? { outputSchema: outputJsonSchema(tool.output) } : {}),
-  })
+export const toDefinition = (name: string, declaration: AnyDeclaration): ToolDefinition => ({
+  name,
+  description: declaration.description,
+  inputSchema: inputJsonSchema(declaration.input),
+  ...(declaration.output === undefined ? {} : { outputSchema: outputJsonSchema(declaration.output) }),
+})
 
 // Schema interpretation
 
@@ -275,36 +285,25 @@ export const ExecuteAfterOutcome = Schema.Union([
   }),
 ]).pipe(Schema.toTaggedUnion("status"))
 
+type Mutable<A> = { -readonly [K in keyof A]: A[K] }
+type HookOutcome<A extends { readonly status: string }> = Omit<Mutable<A>, "status"> & Pick<A, "status">
+
+/** The bounded terminal outcome exposed to tool hooks. */
+export type Outcome = typeof ExecuteAfterOutcome.Type extends infer A
+  ? A extends { readonly status: string }
+    ? HookOutcome<A>
+    : never
+  : never
+
 /**
  * The canonical execution outcome as seen by `execute.after` hooks. Hooks
  * observe bounded model content, optional metadata, and managed output paths;
  * they never observe the raw domain output.
  */
-export type ToolExecuteAfterEvent = ToolHookBase &
-  (
-    | {
-        readonly status: "completed"
-        content: readonly [LLM.ToolContent, ...LLM.ToolContent[]]
-        metadata?: Metadata
-        outputPaths?: ReadonlyArray<string>
-      }
-    | {
-        readonly status: "error"
-        error: SessionError.Error
-        content?: readonly [LLM.ToolContent, ...LLM.ToolContent[]]
-        metadata?: Metadata
-        outputPaths?: ReadonlyArray<string>
-      }
-  )
-
-export interface RegisterOptions {
-  readonly namespace?: string
-  /** Defaults to true. False exposes the tool directly to the provider. */
-  readonly codemode?: boolean
-}
+export type ToolExecuteAfterEvent = ToolHookBase & Outcome
 
 export interface ToolDraft {
-  add(name: string, tool: AnyTool, options?: RegisterOptions): void
+  add(name: string, declaration: AnyDeclaration, options?: RegisterOptions): void
 }
 
 export interface ToolHooks {

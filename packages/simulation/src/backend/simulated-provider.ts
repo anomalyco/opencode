@@ -452,7 +452,7 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
     name: string,
     input: unknown,
     context: Tool.Context,
-  ): Effect.Effect<Tool.Result<JsonSchema.JsonSchema>, Tool.Failure> =>
+  ): Effect.Effect<Tool.Response<JsonSchema.JsonSchema>, Tool.Failure> =>
     Effect.gen(function* () {
       const encoded = yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
         Effect.mapError((error) => new Tool.Failure({ message: `Simulated tool input is not JSON: ${error.message}` })),

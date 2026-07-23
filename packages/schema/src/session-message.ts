@@ -110,7 +110,7 @@ export interface ToolStateRunning extends Schema.Schema.Type<typeof ToolStateRun
 export const ToolStateRunning = Schema.Struct({
   status: Schema.tag("running"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  metadata: Schema.Record(Schema.String, Schema.Unknown),
+  metadata: Schema.Record(Schema.String, Schema.Json),
 }).annotate({ identifier: "Session.Message.ToolState.Running" })
 
 export interface ToolStateCompleted extends Schema.Schema.Type<typeof ToolStateCompleted> {}

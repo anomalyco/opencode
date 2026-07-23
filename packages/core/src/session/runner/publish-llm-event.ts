@@ -485,7 +485,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   const toolExecution = Effect.fnUntraced(function* (
     callID: string,
     name: string,
-    execution: ToolRegistry.ToolExecution,
+    execution: ToolRegistry.ToolOutcome,
   ) {
     const tool = tools.get(callID)
     if (!tool?.called) return yield* Effect.die(new Error(`Tool execution before call: ${callID}`))
@@ -509,9 +509,9 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     }
     // An execution-provided snapshot wins; otherwise fall back to retained progress.
     const snapshot =
-      execution.content !== undefined
+      execution.content !== undefined || execution.metadata !== undefined
         ? {
-            content: execution.content,
+            ...(execution.content === undefined ? {} : { content: execution.content }),
             ...(execution.metadata === undefined ? {} : { metadata: execution.metadata }),
           }
         : failureSnapshot(tool)

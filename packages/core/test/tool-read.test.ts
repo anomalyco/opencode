@@ -358,7 +358,7 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("drops undecodable image data at settlement", () =>
+  it.effect("drops undecodable image data from the outcome", () =>
     Effect.gen(function* () {
       readResult = {
         uri: "file:///truncated.png",
@@ -385,7 +385,7 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("drops oversized images at settlement when resizing is disabled", () =>
+  it.effect("drops oversized images from the outcome when resizing is disabled", () =>
     Effect.gen(function* () {
       const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
       const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)

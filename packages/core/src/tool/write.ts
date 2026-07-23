@@ -53,8 +53,7 @@ export const Plugin = {
       .transform((draft) =>
         draft.add(
           name,
-          Tool.withPermission(
-            Tool.make({
+          Tool.make({
               description:
                 "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
               input: Input,
@@ -89,9 +88,7 @@ export const Plugin = {
                   Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
                 ),
             }),
-            "edit",
-          ),
-          { codemode: false },
+          { codemode: false, permission: "edit" },
         ),
       )
       .pipe(Effect.orDie)

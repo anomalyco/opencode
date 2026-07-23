@@ -7,7 +7,7 @@ const echo = (description: string, result: string) =>
     description,
     input: Schema.Struct({}),
     output: Schema.String,
-    run: () => Effect.succeed(result),
+    execute: () => Effect.succeed(result),
   })
 
 const value = async (runtime: CodeMode.Runtime, code: string) => {
@@ -88,7 +88,7 @@ describe("callable namespaces", () => {
     expect(diagnostic.message).toContain("Unknown tool 'issues.missing'")
   })
 
-  test("a namespace without its own definition stays non-callable", async () => {
+  test("a namespace without its own declaration stays non-callable", async () => {
     const nested = CodeMode.make({ tools: { "issues.list": echo("List issues", "list") } })
     const diagnostic = await failure(nested, `return await tools.issues({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
@@ -114,7 +114,7 @@ describe("blocked member names on tool paths", () => {
     expect(await value(runtime, `return Object.keys(tools.issues)`)).toEqual(["constructor"])
   })
 
-  test("a literal __proto__ key cannot poison a namespace into a fake definition", async () => {
+  test("a literal __proto__ key cannot poison a namespace into a fake declaration", async () => {
     const poisoned = CodeMode.make({
       tools: { ns: { "__proto__": echo("Hidden", "hidden"), real: echo("Real tool", "real") } },
     })
@@ -138,7 +138,7 @@ describe("empty segments", () => {
 })
 
 describe("canonical path collisions", () => {
-  test("the last definition supplied for a canonical path wins", async () => {
+  test("the last declaration supplied for a canonical path wins", async () => {
     const runtime = CodeMode.make({
       tools: { "issues.list": echo("First", "first"), issues: { list: echo("Second", "second") } },
     })

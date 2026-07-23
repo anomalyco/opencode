@@ -324,7 +324,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("includes move file info in structured output", () =>
+  it.live("includes move file info in output and metadata", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
         const source = path.join(directory, "old", "name.txt")

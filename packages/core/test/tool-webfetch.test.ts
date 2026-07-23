@@ -240,7 +240,7 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  it.effect("keeps images and files unsupported until typed settlement can carry attachments", () =>
+  it.effect("keeps images and files unsupported until typed outcomes can carry attachments", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service

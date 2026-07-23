@@ -14,6 +14,7 @@ import { SessionPending } from "@opencode-ai/core/session/pending"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Plugin } from "@opencode-ai/plugin/v2"
+import { Tool } from "@opencode-ai/plugin/v2/tool"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
@@ -280,9 +281,7 @@ describe("fromPromise", () => {
         id: "promise-tool",
         setup: async (ctx) => {
           await ctx.tool.transform((tools) => {
-            tools.add({
-              name: "hello",
-              options: { codemode: false },
+            tools.add("hello", Tool.make({
               description: "Hello",
               input: Schema.Struct({ name: Schema.String }),
               output: Schema.String,
@@ -290,7 +289,7 @@ describe("fromPromise", () => {
                 await context.progress({ phase: "greeting" })
                 return { output: `Hello, ${name}!` }
               },
-            })
+            }), { codemode: false })
           })
         },
       })

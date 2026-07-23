@@ -481,7 +481,7 @@ describe("ShellTool", () => {
     { timeout: 10_000 },
   )
 
-  it.live("returns a useful timeout settlement", () =>
+  it.live("returns a useful timeout outcome", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {

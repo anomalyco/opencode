@@ -1,6 +1,6 @@
 # Core Tool Architecture
 
-This folder owns Core's one local tool representation, process and Location registration, effective lookup, and settlement.
+This folder owns Core's local tool declarations, Location-scoped registrations, effective lookup, execution, and terminal outcomes.
 
 ## Representations
 
@@ -12,15 +12,15 @@ Do not add a second executable entry type, registry-owned executor, authorizatio
 
 ## Construction
 
-Tool schemas and projection use `input` and `output` terminology. A tool value carries its schemas, executor, projection, and optional catalog permission directly so separately loaded plugin package instances can exchange it structurally.
+Tool schemas use `input` and `output` terminology. A declaration carries schemas and executable behavior without public identity. A registration binds its name, namespace, CodeMode placement, and optional catalog permission action.
 
 Location-scoped built-in layers acquire `PermissionV2.Service` and every other required Location service while the layer is constructed. The executor captures those services. Permission sources are always constructed from the canonical invocation context:
 
 ```ts
 const source = {
   type: "tool" as const,
-  messageID: context.assistantMessageID,
-  callID: context.toolCallID,
+  messageID: context.messageID,
+  callID: context.callID,
 }
 ```
 
@@ -28,7 +28,7 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins and plugin tools register through `Tools.Service.register({ [name]: tool })`. Registrations may provide a
+Built-ins and plugin tools register through `Tools.Service.register({ [name]: declaration })`. Registrations may provide a
 namespace, which flattens direct model names to `<namespace>_<tool>`, and default into CodeMode (`codemode` defaults true;
 `codemode: false` keeps the tool on the provider's native tool list).
 
@@ -42,13 +42,13 @@ Registrations are scoped:
 
 ## Permissions
 
-The registry has no `PermissionV2.Service` dependency and performs no execution authorization. An internal built-in-only operation attaches a permission action solely to preserve whole-tool definition filtering; it is not part of public `Tool.make`. Most tools default to their registered name; `edit`, `write`, and `patch` declare the shared `edit` action.
+The registry has no `PermissionV2.Service` dependency and performs no execution authorization. Registration options may attach a permission action solely to preserve whole-tool definition filtering. Most registrations default to their effective name; `edit`, `write`, and `patch` use the shared `edit` action.
 
-Definition filtering is catalog visibility, not execution authorization. A call still executes the captured leaf policy if it reaches settlement.
+Definition filtering is catalog visibility, not execution authorization. A call still executes the captured declaration's leaf policy if it reaches execution.
 
 ## Output
 
-Built-ins return complete validated domain output. `ToolRegistry.Materialization.settle` is the only execution and generic model-output bounding boundary and owns managed retention paths.
+Built-ins return complete declaration responses. `ToolRegistry.ToolSet.execute` is the only local execution and generic model-output bounding boundary and owns managed retention paths.
 
 Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOutputBytes` and accurately reports stdout/stderr capture loss, but it does not run model-output truncation or return a managed `outputPath`.
 
