@@ -1,3 +1,4 @@
+import { AionLabsPlugin } from "./provider/aionlabs"
 import { AlibabaPlugin } from "./provider/alibaba"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock"
 import { AnthropicPlugin } from "./provider/anthropic"
@@ -15,6 +16,7 @@ import { GooglePlugin } from "./provider/google"
 import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "./provider/google-vertex"
 import { GroqPlugin } from "./provider/groq"
 import { KiloPlugin } from "./provider/kilo"
+import { LLM7Plugin } from "./provider/llm7"
 import { LLMGatewayPlugin } from "./provider/llmgateway"
 import { MistralPlugin } from "./provider/mistral"
 import { NvidiaPlugin } from "./provider/nvidia"
@@ -34,6 +36,7 @@ import type { PluginInternal } from "./internal"
 import type { Scope } from "effect"
 
 export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>[] = [
+  AionLabsPlugin,
   AlibabaPlugin,
   AmazonBedrockPlugin,
   AnthropicPlugin,
@@ -52,6 +55,7 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   GoogleVertexPlugin,
   GroqPlugin,
   KiloPlugin,
+  LLM7Plugin,
   LLMGatewayPlugin,
   MistralPlugin,
   NvidiaPlugin,
