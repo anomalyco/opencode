@@ -80,7 +80,7 @@ export function DialogHomeCommandPaletteV2(props: {
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
     load: (search, signal) =>
-      serverCtx.sdk.client.experimental.session.list({ roots: true, search, limit: 50 }, { signal }),
+      serverCtx.sdk.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
   })

@@ -8,6 +8,7 @@ import { useServerSDK } from "./server-sdk"
 import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
+import { normalizeProjectInfo } from "./global-sync/utils"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { pathKey } from "@/utils/path-key"
 import { decode64 } from "@/utils/base64"
@@ -570,7 +571,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
 
         void serverSdk()
-          .client.project.update({ projectID: project.id, directory: worktree, icon: { color } })
+          .api.project.update({ projectID: project.id, icon: { color } })
+          .then((result) =>
+            serverSync().set("project", (items) =>
+              items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
+            ),
+          )
           .catch(() => {
             if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
           })

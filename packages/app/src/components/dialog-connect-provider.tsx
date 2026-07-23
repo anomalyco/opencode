@@ -1,4 +1,7 @@
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
+import type {
+  IntegrationMethod,
+  IntegrationOauthConnectOutput,
+} from "@opencode-ai/client/promise"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -28,6 +31,8 @@ import {
   Switch,
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
+import { useQueryClient } from "@tanstack/solid-query"
+import { useParams } from "@solidjs/router"
 import { Link } from "@/components/link"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
@@ -35,8 +40,11 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
+import { decode64 } from "@/utils/base64"
+import { pathKey } from "@/utils/path-key"
 
 const CUSTOM_ID = "_custom"
+type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 
 export function useProviderConnectController(options: { onBack?: () => void } = {}) {
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
@@ -228,8 +236,6 @@ function ProviderPickerV2(props: {
 }) {
   const providers = useProviders(props.directory)
   const language = useLanguage()
-  const serverSync = useServerSync()
-  const serverSDK = useServerSDK()
   const [store, setStore] = createStore({
     filter: "",
     active: undefined as string | undefined,
@@ -266,19 +272,7 @@ function ProviderPickerV2(props: {
 
   const connect = (provider: string) => {
     props.onPrepare?.()
-    if (provider === CUSTOM_ID || serverSync().data.provider_auth[provider]) {
-      props.onSelect(provider)
-      return
-    }
-    if (store.connecting) return
-    setStore("connecting", provider)
-    void serverSDK()
-      .client.provider.auth()
-      .then((response) => {
-        serverSync().set("provider_auth", response.data ?? {})
-        props.onSelect(provider)
-      })
-      .catch(() => props.onSelect(provider))
+    props.onSelect(provider)
   }
 
   const move = (event: KeyboardEvent, direction: number) => {
@@ -395,10 +389,17 @@ function ProviderConnection(props: {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
+  const queryClient = useQueryClient()
+  const params = useParams()
   const language = useLanguage()
   const settings = useSettings()
   const newLayout = settings.general.newLayoutDesigns
   const providers = useProviders(props.directory)
+  const directory = () => props.directory?.() ?? decode64(params.dir)
+  const location = () => {
+    const value = directory()
+    return value ? { directory: value } : undefined
+  }
 
   const alive = { value: true }
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -413,38 +414,34 @@ function ProviderConnection(props: {
   const provider = createMemo(
     () => providers.all().get(props.provider) ?? serverSync().data.provider.all.get(props.provider)!,
   )
-  const fallback = createMemo<ProviderAuthMethod[]>(() => [
+  const fallback = createMemo<ConnectMethod[]>(() => [
     {
-      type: "api" as const,
+      type: "key" as const,
       label: language.t("provider.connect.method.apiKey"),
     },
   ])
-  const [auth] = createResource(
-    () => props.provider,
-    async () => {
-      const cached = serverSync().data.provider_auth[props.provider]
-      if (cached) return cached
-      const res = await serverSDK().client.provider.auth()
-      if (!alive.value) return fallback()
-      serverSync().set("provider_auth", res.data ?? {})
-      return res.data?.[props.provider] ?? fallback()
-    },
+  const [integration] = createResource(
+    () => ({ provider: props.provider, directory: directory() }),
+    (input) =>
+      serverSDK()
+        .api.integration.get({
+          integrationID: input.provider,
+          location: input.directory ? { directory: input.directory } : undefined,
+        })
+        .then((result) => result.data),
   )
-  const loading = createMemo(() => auth.loading && !serverSync().data.provider_auth[props.provider])
-  const methods = createMemo(() => auth.latest ?? serverSync().data.provider_auth[props.provider] ?? fallback())
-  const cachedMethods = serverSync().data.provider_auth[props.provider]
-  const directMethod =
-    cachedMethods?.length === 1 && cachedMethods[0].type === "api" && !cachedMethods[0].prompts?.length ? 0 : undefined
+  const loading = createMemo(() => integration.loading)
+  const methods = createMemo<ConnectMethod[]>(() => {
+    const values = integration.latest?.methods.filter(
+      (method): method is ConnectMethod => method.type === "key" || method.type === "oauth",
+    )
+    return values?.length ? values : fallback()
+  })
   const [store, setStore] = createStore({
-    methodIndex: directMethod as undefined | number,
-    authorization: undefined as undefined | ProviderAuthAuthorization,
+    methodIndex: undefined as undefined | number,
+    authorization: undefined as undefined | IntegrationOauthConnectOutput["data"],
     promptInputs: undefined as undefined | Record<string, string>,
-    state: (directMethod === undefined ? "pending" : undefined) as
-      | undefined
-      | "pending"
-      | "complete"
-      | "error"
-      | "prompt",
+    state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
     error: undefined as string | undefined,
   })
 
@@ -454,7 +451,7 @@ function ProviderConnection(props: {
     | { type: "auth.prompt" }
     | { type: "auth.inputs"; inputs: Record<string, string> }
     | { type: "auth.pending" }
-    | { type: "auth.complete"; authorization: ProviderAuthAuthorization }
+    | { type: "auth.complete"; authorization: IntegrationOauthConnectOutput["data"] }
     | { type: "auth.error"; error: string }
 
   function dispatch(action: Action) {
@@ -508,7 +505,7 @@ function ProviderConnection(props: {
 
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""
-    if (value.type === "api") return language.t("provider.connect.method.apiKey")
+    if (value.type === "key") return language.t("provider.connect.method.apiKey")
     return value.label ?? ""
   }
 
@@ -518,7 +515,7 @@ function ProviderConnection(props: {
     const hint = suffix?.[1]
     return {
       label: suffix ? label.slice(0, -suffix[0].length) : label,
-      hint: hint ? hint[0].toUpperCase() + hint.slice(1) : value?.type === "api" ? "Browser" : undefined,
+      hint: hint ? hint[0].toUpperCase() + hint.slice(1) : value?.type === "key" ? "Browser" : undefined,
     }
   }
 
@@ -549,46 +546,22 @@ function ProviderConnection(props: {
     const method = methods()[index]
     dispatch({ type: "method.select", index })
 
-    if (method.type === "api" && method.prompts?.length) {
-      if (!inputs) {
-        dispatch({ type: "auth.prompt" })
-        return
-      }
-      dispatch({ type: "auth.inputs", inputs })
-      return
-    }
-
     if (method.type === "oauth") {
       if (method.prompts?.length && !inputs) {
         dispatch({ type: "auth.prompt" })
         return
       }
       dispatch({ type: "auth.pending" })
-      const start = Date.now()
       await serverSDK()
-        .client.provider.oauth.authorize(
-          {
-            providerID: props.provider,
-            method: index,
-            inputs,
-          },
-          { throwOnError: true },
-        )
+        .api.integration.oauth.connect({
+          integrationID: props.provider,
+          methodID: method.id,
+          inputs: inputs ?? {},
+          location: location(),
+        })
         .then((x) => {
           if (!alive.value) return
-          const elapsed = Date.now() - start
-          const delay = 1000 - elapsed
-
-          if (delay > 0) {
-            if (timer.current !== undefined) clearTimeout(timer.current)
-            timer.current = setTimeout(() => {
-              timer.current = undefined
-              if (!alive.value) return
-              dispatch({ type: "auth.complete", authorization: x.data! })
-            }, delay)
-            return
-          }
-          dispatch({ type: "auth.complete", authorization: x.data! })
+          dispatch({ type: "auth.complete", authorization: x.data })
         })
         .catch((e) => {
           if (!alive.value) return
@@ -603,9 +576,9 @@ function ProviderConnection(props: {
       index: 0,
     })
 
-    const prompts = createMemo<NonNullable<ProviderAuthMethod["prompts"]>>(() => {
+    const prompts = createMemo(() => {
       const value = method()
-      return value?.prompts ?? []
+      return value?.type === "oauth" ? (value.prompts ?? []) : []
     })
     const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
       if (!prompt.when) return true
@@ -634,10 +607,6 @@ function ProviderConnection(props: {
       const next = prompts().findIndex((prompt, i) => i > index && matches(prompt, value))
       if (next !== -1) {
         setFormStore("index", next)
-        return
-      }
-      if (method()?.type === "api") {
-        dispatch({ type: "auth.inputs", inputs: value })
         return
       }
       await selectMethod(store.methodIndex, value)
@@ -741,7 +710,10 @@ function ProviderConnection(props: {
   })
 
   async function complete() {
-    await serverSDK().client.global.dispose()
+    const value = directory()
+    await queryClient
+      .refetchQueries(serverSync().queryOptions.providers(value ? pathKey(value) : null))
+      .catch(() => undefined)
     dialog.close()
     showToast({
       variant: "success",
@@ -805,7 +777,7 @@ function ProviderConnection(props: {
               listRef = ref
             }}
             items={methods}
-            key={(m) => m?.label}
+            key={(m) => m?.label ?? m?.type}
             onSelect={async (selected, index) => {
               if (!selected) return
               void selectMethod(index)
@@ -851,13 +823,10 @@ function ProviderConnection(props: {
       }
 
       setFormStore("error", undefined)
-      await serverSDK().client.auth.set({
-        providerID: props.provider,
-        auth: {
-          type: "api",
-          key: apiKey,
-          ...(store.promptInputs ? { metadata: store.promptInputs } : {}),
-        },
+      await serverSDK().api.integration.connect.key({
+        integrationID: props.provider,
+        location: location(),
+        key: apiKey,
       })
       await complete()
     }
@@ -984,12 +953,13 @@ function ProviderConnection(props: {
 
       setFormStore("error", undefined)
       const result = await serverSDK()
-        .client.provider.oauth.callback({
-          providerID: props.provider,
-          method: store.methodIndex,
+        .api.integration.oauth.complete({
+          integrationID: props.provider,
+          attemptID: store.authorization!.attemptID,
+          location: location(),
           code,
         })
-        .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
+        .then(() => ({ ok: true as const }))
         .catch((error) => ({ ok: false as const, error }))
       if (result.ok) {
         await complete()
@@ -1076,25 +1046,37 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      void (async () => {
+      const poll = async () => {
+        const authorization = store.authorization
+        if (!authorization || !alive.value) return
         const result = await serverSDK()
-          .client.provider.oauth.callback({
-            providerID: props.provider,
-            method: store.methodIndex,
+          .api.integration.oauth.status({
+            integrationID: props.provider,
+            attemptID: authorization.attemptID,
+            location: location(),
           })
-          .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
+          .then((value) => ({ ok: true as const, status: value.data }))
           .catch((error) => ({ ok: false as const, error }))
-
         if (!alive.value) return
-
         if (!result.ok) {
-          const message = formatError(result.error, language.t("common.requestFailed"))
-          dispatch({ type: "auth.error", error: message })
+          dispatch({ type: "auth.error", error: formatError(result.error, language.t("common.requestFailed")) })
           return
         }
-
-        await complete()
-      })()
+        if (result.status.status === "complete") {
+          await complete()
+          return
+        }
+        if (result.status.status === "failed") {
+          dispatch({ type: "auth.error", error: result.status.message })
+          return
+        }
+        if (result.status.status === "expired") {
+          dispatch({ type: "auth.error", error: language.t("common.requestFailed") })
+          return
+        }
+        timer.current = setTimeout(poll, 1_000)
+      }
+      void poll()
     })
 
     return (
@@ -1178,15 +1160,15 @@ function ProviderConnection(props: {
                 </div>
               </div>
             </Match>
-            <Match when={method()?.type === "api"}>
+            <Match when={method()?.type === "key"}>
               <ApiAuthView />
             </Match>
             <Match when={method()?.type === "oauth"}>
               <Switch>
-                <Match when={store.authorization?.method === "code"}>
+                <Match when={store.authorization?.mode === "code"}>
                   <OAuthCodeView />
                 </Match>
-                <Match when={store.authorization?.method === "auto"}>
+                <Match when={store.authorization?.mode === "auto"}>
                   <OAuthAutoView />
                 </Match>
               </Switch>

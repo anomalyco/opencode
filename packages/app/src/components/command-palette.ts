@@ -1,5 +1,6 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import type { GlobalSession, Project } from "@opencode-ai/sdk/v2/client"
+import type { Project } from "@opencode-ai/sdk/v2/client"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/context/command"
@@ -13,6 +14,7 @@ import { useTabs } from "@/context/tabs"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { normalizeSessionInfo } from "@/utils/session"
 
 export type CommandPaletteEntry = {
   id: string
@@ -145,7 +147,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
     load: (search, signal) =>
-      serverSDK.client.experimental.session.list({ roots: true, search, limit: 50 }, { signal }),
+      serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
   })
@@ -219,7 +221,7 @@ export function createServerSessionEntries(props: {
   server: ServerConnection.Key
   opened: () => LocalProject[]
   stored: () => Project[]
-  load: (search: string, signal: AbortSignal) => Promise<{ data?: GlobalSession[] }>
+  load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
   untitled: () => string
   category: () => string
 }) {
@@ -255,7 +257,8 @@ export function createServerSessionEntries(props: {
     return props
       .load(search, current.signal)
       .then((result) =>
-        (result.data ?? [])
+        result.data
+          .map(normalizeSessionInfo)
           .filter((session) => !session.time.archived)
           .map((session) => {
             const project =
@@ -264,7 +267,7 @@ export function createServerSessionEntries(props: {
               id: `session:${props.server}:${session.id}`,
               type: "session" as const,
               title: session.title || props.untitled(),
-              description: project ? displayName(project) : session.project?.name || getFilename(session.directory),
+              description: project ? displayName(project) : getFilename(session.directory),
               category: props.category(),
               directory: session.directory,
               sessionID: session.id,
