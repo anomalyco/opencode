@@ -88,8 +88,8 @@ describe("search tools", () => {
 
               expect(glob.output?.structured).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT })
               expect(grep.output?.structured).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT })
-              expect(glob.output?.content).toEqual([{ type: "text", text: glob.result.value }])
-              expect(grep.output?.content).toEqual([{ type: "text", text: grep.result.value }])
+              expect(glob.output?.content).toEqual([{ type: "text", text: String(glob.result.value) }])
+              expect(grep.output?.content).toEqual([{ type: "text", text: String(grep.result.value) }])
               expect(String(glob.result.value).split("\n")).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT)
               expect(grep.result.value).toStartWith(`Found ${FileSystem.DEFAULT_SEARCH_LIMIT} matches\n`)
             }),
