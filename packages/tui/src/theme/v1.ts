@@ -98,7 +98,7 @@ export type Variant = {
   light: HexColor | RefName
 }
 export type ColorValue = HexColor | RefName | Variant | RGBA | number
-export type ThemeJson = {
+export type ThemeV1Json = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
   theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
@@ -108,7 +108,7 @@ export type ThemeJson = {
   }
 }
 
-export const DEFAULT_THEMES: Record<string, ThemeJson> = {
+export const DEFAULT_THEMES: Record<string, ThemeV1Json> = {
   aura,
   ayu,
   catppuccin,

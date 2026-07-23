@@ -56,5 +56,6 @@ export const migrations = (
     import("./migration/20260710025429_instruction_sync"),
     import("./migration/20260716020354_kv"),
     import("./migration/20260722011141_delete_tool_progress_events"),
+    import("./migration/20260722170000_canonical_tool_results"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

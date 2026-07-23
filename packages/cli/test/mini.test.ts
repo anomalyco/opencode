@@ -214,11 +214,15 @@ describe("mini command", () => {
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain("--server string")
     expect(result.stdout).toContain("--prompt string")
+    expect(result.stdout).toContain("--replay")
+    expect(result.stdout).toContain("disable with --no-replay")
+    expect(result.stdout).toContain("--replay-limit integer")
+    expect(result.stdout).toContain("Limit replay to the newest N messages (default: 200)")
     expect(result.stdout).not.toContain("SUBCOMMANDS")
   })
 
   test("routes local and explicit-server invocations into mini", async () => {
-    for (const args of [["mini"], ["mini", "--server", "http://127.0.0.1:1"]]) {
+    for (const args of [["mini"], ["mini", "--no-replay"], ["mini", "--server", "http://127.0.0.1:1"]]) {
       const result = await cli(args)
 
       expect(result.exitCode).toBe(1)

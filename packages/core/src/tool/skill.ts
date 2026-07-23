@@ -21,11 +21,6 @@ export const Output = Schema.Struct({
   directory: Schema.String,
   output: Schema.String,
 })
-const StructuredOutput = Schema.Struct({
-  name: Output.fields.name,
-  directory: Output.fields.directory,
-})
-
 export const description = [
   "Load a specialized skill when the task at hand matches one of the available skills in the instructions.",
   "",
@@ -70,9 +65,6 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            structured: StructuredOutput,
-            toStructuredOutput: ({ output }) => ({ name: output.name, directory: output.directory }),
-            toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {
                 const current = yield* skills.list()
@@ -101,7 +93,13 @@ export const Plugin = {
                     output: toModelOutput(skill, files),
                   }
                 }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
-              }),
+              }).pipe(
+                Effect.map((output) => ({
+                  output,
+                  content: output.output,
+                  metadata: { name: output.name, directory: output.directory },
+                })),
+              ),
           }),
           { codemode: false },
         ),

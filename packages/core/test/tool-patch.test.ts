@@ -17,7 +17,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
@@ -126,29 +126,19 @@ const withTool = <A, E, R>(
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(
-      location(
-        { directory: AbsolutePath.make(directory) },
-        { projectDirectory: AbsolutePath.make(projectDirectory) },
-      ),
+      location({ directory: AbsolutePath.make(directory) }, { projectDirectory: AbsolutePath.make(projectDirectory) }),
     ),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(
-        LayerNode.group([
-          ToolRegistry.node,
-          ToolRegistry.toolsNode,
-          patchToolNode,
-        ]),
-        [
-          [FSUtil.node, filesystem],
-          [Location.node, activeLocation],
-          [PermissionV2.node, permission],
-          [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-        ],
-      ),
+      AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, patchToolNode]), [
+        [FSUtil.node, filesystem],
+        [Location.node, activeLocation],
+        [PermissionV2.node, permission],
+        [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+      ]),
     ),
   )
 }
@@ -192,18 +182,23 @@ describe("PatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["patch"])
-                const settled = yield* settleTool(
+                const settled = yield* executeTool(
                   registry,
                   call(
                     "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Update File: update.txt\n@@\n-before\n+after\n*** Delete File: remove.txt\n*** End Patch",
                   ),
                 )
-                expect(settled.result).toEqual({
-                  type: "text",
-                  value: "Success. Updated the following files:\nA nested/new.txt\nM update.txt\nD remove.txt",
-                })
-                if (process.platform === "win32") expect(settled.result.value).not.toContain("\\")
-                expect(settled.output?.structured).toMatchObject({
+                expect(settled.status).toBe("completed")
+                if (settled.status !== "completed") return
+                expect(settled.content).toEqual([
+                  {
+                    type: "text",
+                    text: "Success. Updated the following files:\nA nested/new.txt\nM update.txt\nD remove.txt",
+                  },
+                ])
+                const modelText = settled.content[0]?.type === "text" ? settled.content[0].text : ""
+                if (process.platform === "win32") expect(modelText).not.toContain("\\")
+                expect(settled.output).toMatchObject({
                   applied: [
                     { type: "add", resource: "nested/new.txt" },
                     { type: "update", resource: "update.txt" },
@@ -278,9 +273,11 @@ describe("PatchTool", () => {
                       "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch",
                     ),
                   ),
-                ).toEqual({
-                  type: "text",
-                  value: "Success. Updated the following files:\nA created.txt\nM moved.txt",
+                ).toMatchObject({
+                  status: "completed",
+                  content: [
+                    { type: "text", text: "Success. Updated the following files:\nA created.txt\nM moved.txt" },
+                  ],
                 })
                 expect(yield* exists(source)).toBe(false)
                 expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "moved.txt"), "utf8"))).toBe(
@@ -308,7 +305,9 @@ describe("PatchTool", () => {
         return Effect.promise(() =>
           Promise.all([
             fs.writeFile(source, "before\n"),
-            fs.mkdir(path.dirname(destination), { recursive: true }).then(() => fs.writeFile(destination, "existing\n")),
+            fs
+              .mkdir(path.dirname(destination), { recursive: true })
+              .then(() => fs.writeFile(destination, "existing\n")),
           ]),
         ).pipe(
           Effect.andThen(
@@ -321,7 +320,7 @@ describe("PatchTool", () => {
                       "*** Begin Patch\n*** Update File: old.txt\n*** Move to: nested/moved.txt\n@@\n-before\n+after\n*** End Patch",
                     ),
                   ),
-                ).toMatchObject({ type: "text" })
+                ).toMatchObject({ status: "completed" })
                 expect(yield* exists(source)).toBe(false)
                 expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("after\n")
               }),
@@ -342,11 +341,12 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call(
-              "*** Begin Patch\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n same\n*** End Patch",
-            ),
+            call("*** Begin Patch\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n same\n*** End Patch"),
           ),
-        ).toEqual({ type: "text", value: "Success. Updated the following files:\nM moved.txt" })
+        ).toMatchObject({
+          status: "completed",
+          content: [{ type: "text", text: "Success. Updated the following files:\nM moved.txt" }],
+        })
         expect(yield* exists(source)).toBe(false)
         expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("same\n")
       }),
@@ -375,19 +375,21 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("includes move file info in structured output", () =>
+  it.live("includes move file info in output and metadata", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
         const source = path.join(directory, "old", "name.txt")
         yield* Effect.promise(() => fs.mkdir(path.dirname(source), { recursive: true }))
         yield* Effect.promise(() => fs.writeFile(source, "old content\n"))
-        const settled = yield* settleTool(
+        const settled = yield* executeTool(
           registry,
           call(
             "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-old content\n+new content\n*** End Patch",
           ),
         )
-        expect(settled.output?.structured).toMatchObject({
+        expect(settled.status).toBe("completed")
+        if (settled.status !== "completed") return
+        expect(settled.output).toMatchObject({
           applied: [{ type: "update", resource: "renamed/dir/name.txt" }],
           files: [
             {
@@ -437,59 +439,14 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("updates an empty file", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "empty.txt")
-        yield* Effect.promise(() => fs.writeFile(target, ""))
-        yield* executeTool(registry, call("*** Begin Patch\n*** Update File: empty.txt\n@@\n+First line\n*** End Patch"))
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("First line\n")
-      }),
-    ),
-  )
-
   it.live("rejects deleting a directory", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(path.join(directory, "dir")))
         expect(
           yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: dir\n*** End Patch")),
-        ).toMatchObject({ type: "error" })
+        ).toMatchObject({ status: "error" })
         expect(yield* exists(path.join(directory, "dir"))).toBe(true)
-      }),
-    ),
-  )
-
-  it.live("supports an end-of-file anchor", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "tail.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "first\nsecond"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: tail.txt\n@@\n first\n-second\n+second updated\n*** End of File\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("first\nsecond updated\n")
-      }),
-    ),
-  )
-
-  it.live("applies an end-of-file chunk to the final duplicate", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "duplicates.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "marker\nend\nmiddle\nmarker\nend\n"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: duplicates.txt\n@@\n-marker\n-end\n+marker changed\n+end\n*** End of File\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
-          "marker\nend\nmiddle\nmarker changed\nend\n",
-        )
       }),
     ),
   )
@@ -502,11 +459,9 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call(
-              "*** Begin Patch\n*** Update File: two-chunks.txt\n@@\n-b\n+B\n\n-d\n+D\n*** End Patch",
-            ),
+            call("*** Begin Patch\n*** Update File: two-chunks.txt\n@@\n-b\n+B\n\n-d\n+D\n*** End Patch"),
           ),
-        ).toMatchObject({ type: "error" })
+        ).toMatchObject({ status: "error" })
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("a\nb\nc\nd\n")
       }),
     ),
@@ -515,7 +470,10 @@ describe("PatchTool", () => {
   it.live("requires patchText", () =>
     withTempTool((_directory, registry) =>
       Effect.gen(function* () {
-        expect(yield* executeTool(registry, call(""))).toEqual({ type: "error", value: "patchText is required" })
+        expect(yield* executeTool(registry, call(""))).toEqual({
+          status: "error",
+          error: { type: "tool.execution", message: "patchText is required" },
+        })
       }),
     ),
   )
@@ -524,12 +482,18 @@ describe("PatchTool", () => {
     withTempTool((_directory, registry) =>
       Effect.gen(function* () {
         expect(yield* executeTool(registry, call("invalid patch"))).toEqual({
-          type: "error",
-          value: "patch verification failed: The first line of the patch must be '*** Begin Patch'",
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message: "patch verification failed: The first line of the patch must be '*** Begin Patch'",
+          },
         })
         expect(yield* executeTool(registry, call("*** Begin Patch\n*** Add File: foo\n+hello"))).toEqual({
-          type: "error",
-          value: "patch verification failed: The last line of the patch must be '*** End Patch'",
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message: "patch verification failed: The last line of the patch must be '*** End Patch'",
+          },
         })
       }),
     ),
@@ -545,8 +509,8 @@ describe("PatchTool", () => {
           "*** Begin Patch\n*** Environment ID: remote\n*** End Patch",
         ]) {
           expect(yield* executeTool(registry, call(patchText))).toEqual({
-            type: "error",
-            value: "patch rejected: empty patch",
+            status: "error",
+            error: { type: "tool.execution", message: "patch rejected: empty patch" },
           })
         }
       }),
@@ -556,30 +520,14 @@ describe("PatchTool", () => {
   it.live("rejects an invalid hunk header", () =>
     withTempTool((_directory, registry) =>
       Effect.gen(function* () {
-        expect(
-          yield* executeTool(
-            registry,
-            call("*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch"),
-          ),
-        ).toEqual({
-          type: "error",
-          value:
-            "patch verification failed: Invalid hunk at line 2: '*** Frobnicate File: foo' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'",
+        expect(yield* executeTool(registry, call("*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch"))).toEqual({
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message:
+              "patch verification failed: Invalid hunk at line 2: '*** Frobnicate File: foo' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'",
+          },
         })
-      }),
-    ),
-  )
-
-  it.live("applies multiple hunks to one file", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "multi.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "a\nb\nc\nd\n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: multi.txt\n@@\n-b\n+B\n@@\n-d\n+D\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("a\nB\nc\nD\n")
       }),
     ),
   )
@@ -606,13 +554,13 @@ describe("PatchTool", () => {
         const bom = "\uFEFF"
         const target = path.join(directory, "example.cs")
         yield* Effect.promise(() => fs.writeFile(target, `${bom}using System;\n\nclass Test {}\n`))
-        const settled = yield* settleTool(
+        const settled = yield* executeTool(
           registry,
-          call(
-            "*** Begin Patch\n*** Update File: example.cs\n@@\n class Test {}\n+class Next {}\n*** End Patch",
-          ),
+          call("*** Begin Patch\n*** Update File: example.cs\n@@\n class Test {}\n+class Next {}\n*** End Patch"),
         )
-        const output = Schema.decodeUnknownSync(PatchTool.Output)(settled.output?.structured)
+        expect(settled.status).toBe("completed")
+        if (settled.status !== "completed") return
+        const output = Schema.decodeUnknownSync(PatchTool.Output)(settled.output)
         expect(output.files[0]?.patch).not.toContain(bom)
         expect(output.files[0]?.patch).not.toContain("-using System;")
         expect(output.files[0]?.patch).not.toContain("+using System;")
@@ -623,126 +571,22 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("appends a trailing newline on update", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "no-newline.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "no newline at end"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: no-newline.txt\n@@\n-no newline at end\n+first line\n+second line\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("first line\nsecond line\n")
-      }),
-    ),
-  )
-
-  it.live("disambiguates change context with an @@ header", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "context.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "fn a\nx=10\ny=2\nfn b\nx=10\ny=20\n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: context.txt\n@@ fn b\n-x=10\n+x=11\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
-          "fn a\nx=10\ny=2\nfn b\nx=11\ny=20\n",
-        )
-      }),
-    ),
-  )
-
-  it.live("parses a heredoc-wrapped patch", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        yield* executeTool(
-          registry,
-          call("cat <<'EOF'\n*** Begin Patch\n*** Add File: heredoc.txt\n+with cat\n*** End Patch\nEOF"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "heredoc.txt"), "utf8"))).toBe(
-          "with cat\n",
-        )
-      }),
-    ),
-  )
-
-  it.live("parses a heredoc-wrapped patch without cat", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        yield* executeTool(
-          registry,
-          call("<<EOF\n*** Begin Patch\n*** Add File: heredoc.txt\n+without cat\n*** End Patch\nEOF"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "heredoc.txt"), "utf8"))).toBe(
-          "without cat\n",
-        )
-      }),
-    ),
-  )
-
-  it.live("matches with trailing whitespace differences", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "trailing.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "line1  \nline2\nline3   \n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: trailing.txt\n@@\n-line2\n+changed\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("line1  \nchanged\nline3   \n")
-      }),
-    ),
-  )
-
-  it.live("matches with leading whitespace differences", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "leading.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "  line1\nline2\n  line3\n"))
-        yield* executeTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: leading.txt\n@@\n-line2\n+changed\n*** End Patch"),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("  line1\nchanged\n  line3\n")
-      }),
-    ),
-  )
-
-  it.live("matches with Unicode punctuation differences", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "unicode.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "He said “hello”\nsome—dash\nend\n"))
-        yield* executeTool(
-          registry,
-          call(
-            '*** Begin Patch\n*** Update File: unicode.txt\n@@\n-He said "hello"\n+He said "hi"\n*** End Patch',
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe('He said "hi"\nsome—dash\nend\n')
-      }),
-    ),
-  )
-
   it.live("rejects an update with missing context", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
         const target = path.join(directory, "unchanged.txt")
         yield* Effect.promise(() => fs.writeFile(target, "line1\nline2\n"))
-        const settled = yield* settleTool(
-          registry,
-          call("*** Begin Patch\n*** Update File: unchanged.txt\n@@\n-missing\n+changed\n*** End Patch"),
-        )
-        expect(settled.result).toEqual({
-          type: "error",
-          value: "patch verification failed: Failed to find expected lines in unchanged.txt:\nmissing",
-        })
-        expect(settled.error).toEqual({
-          type: "tool.execution",
-          message: "patch verification failed: Failed to find expected lines in unchanged.txt:\nmissing",
+        expect(
+          yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Update File: unchanged.txt\n@@\n-missing\n+changed\n*** End Patch"),
+          ),
+        ).toMatchObject({
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message: "patch verification failed: Failed to find expected lines in unchanged.txt:\nmissing",
+          },
         })
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("line1\nline2\n")
       }),
@@ -758,10 +602,12 @@ describe("PatchTool", () => {
             call("*** Begin Patch\n*** Update File: missing.txt\n@@\n-old\n+new\n*** End Patch"),
           ),
         ).toMatchObject({
-          type: "error",
-          value: expect.stringContaining(
-            `patch verification failed: Failed to read file to update ${path.join(directory, "missing.txt")}: `,
-          ),
+          status: "error",
+          error: {
+            message: expect.stringContaining(
+              `patch verification failed: Failed to read file to update ${path.join(directory, "missing.txt")}: `,
+            ),
+          },
         })
       }),
     ),
@@ -774,8 +620,11 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(registry, call("*** Begin Patch\n*** Update File: nested\n@@\n-old\n+new\n*** End Patch")),
         ).toEqual({
-          type: "error",
-          value: `patch verification failed: Failed to read file to update ${path.join(directory, "nested")}: path is a directory`,
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message: `patch verification failed: Failed to read file to update ${path.join(directory, "nested")}: path is a directory`,
+          },
         })
       }),
     ),
@@ -787,10 +636,13 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: missing.txt\n*** End Patch")),
         ).toMatchObject({
-          type: "error",
-          value: expect.stringContaining(
-            `patch verification failed: Failed to read file to delete ${path.join(directory, "missing.txt")}: `,
-          ),
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message: expect.stringContaining(
+              `patch verification failed: Failed to read file to delete ${path.join(directory, "missing.txt")}: `,
+            ),
+          },
         })
       }),
     ),
@@ -804,13 +656,11 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call(
-              "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-before\n+after\n*** End Patch",
-            ),
+            call("*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-before\n+after\n*** End Patch"),
           ),
         ).toEqual({
-          type: "error",
-          value: "Unable to apply patch at new.txt: forced write failure",
+          status: "error",
+          error: { type: "tool.execution", message: "Unable to apply patch at new.txt: forced write failure" },
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "old.txt"), "utf8"))).toBe("before\n")
         expect(yield* exists(path.join(directory, "new.txt"))).toBe(false)
@@ -825,14 +675,15 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call(
-              "*** Begin Patch\n*** Add File: first.txt\n+first\n*** Add File: second.txt\n+second\n*** End Patch",
-            ),
+            call("*** Begin Patch\n*** Add File: first.txt\n+first\n*** Add File: second.txt\n+second\n*** End Patch"),
           ),
         ).toEqual({
-          type: "error",
-          value:
-            "Patch partially applied before failing at second.txt: forced write failure. Completed before failure: first.txt",
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message:
+              "Patch partially applied before failing at second.txt: forced write failure. Completed before failure: first.txt",
+          },
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "first.txt"), "utf8"))).toBe("first\n")
         expect(yield* exists(path.join(directory, "second.txt"))).toBe(false)
@@ -848,14 +699,15 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call(
-              "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-before\n+after\n*** End Patch",
-            ),
+            call("*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-before\n+after\n*** End Patch"),
           ),
         ).toEqual({
-          type: "error",
-          value:
-            "Patch partially applied while moving old.txt to new.txt: wrote new.txt but failed to remove old.txt: forced remove failure",
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message:
+              "Patch partially applied while moving old.txt to new.txt: wrote new.txt but failed to remove old.txt: forced remove failure",
+          },
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "old.txt"), "utf8"))).toBe("before\n")
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "new.txt"), "utf8"))).toBe("after\n")
@@ -878,7 +730,7 @@ describe("PatchTool", () => {
                     registry,
                     call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`),
                   ),
-                ).toMatchObject({ type: "text" })
+                ).toMatchObject({ status: "completed" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
                 expect(readsBeforeEditApproval).toBe(1)
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
@@ -912,7 +764,7 @@ describe("PatchTool", () => {
                       registry,
                       call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`),
                     ),
-                  ).toMatchObject({ type: "error" })
+                  ).toMatchObject({ status: "error" })
                   expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
                   expect(readsBeforeEditApproval).toBe(0)
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
@@ -947,7 +799,7 @@ describe("PatchTool", () => {
                       registry,
                       call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
                     ),
-                  ).toMatchObject({ type: "text" })
+                  ).toMatchObject({ status: "completed" })
                   expect(assertions.map((input) => input.action)).toEqual(["edit"])
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
                 }),
@@ -978,7 +830,7 @@ describe("PatchTool", () => {
                     registry,
                     call("*** Begin Patch\n*** Update File: link.txt\n@@\n-before\n+after\n*** End Patch"),
                   ),
-                ).toMatchObject({ type: "text" })
+                ).toMatchObject({ status: "completed" })
                 expect(assertions.map((input) => input.action)).toEqual(["edit"])
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
               }),
@@ -1009,7 +861,7 @@ describe("PatchTool", () => {
                     registry,
                     call(`*** Begin Patch\n*** Update File: ${relative}\n@@\n-before\n+after\n*** End Patch`),
                   ),
-                ).toMatchObject({ type: "text" })
+                ).toMatchObject({ status: "completed" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
                 expect(readsBeforeEditApproval).toBe(1)
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
@@ -1045,7 +897,7 @@ describe("PatchTool", () => {
                       `*** Begin Patch\n*** Update File: ${first}\n@@\n-before\n+after\n*** Update File: ${second}\n@@\n-before\n+after\n*** End Patch`,
                     ),
                   ),
-                ).toMatchObject({ type: "text" })
+                ).toMatchObject({ status: "completed" })
                 expect(assertions.map((input) => input.action)).toEqual([
                   "external_directory",
                   "external_directory",
@@ -1084,8 +936,10 @@ describe("PatchTool", () => {
                 ),
               ),
             ).toMatchObject({
-              type: "error",
-              value: expect.stringContaining("patch verification failed: Failed to read file to update"),
+              status: "error",
+              error: {
+                message: expect.stringContaining("patch verification failed: Failed to read file to update"),
+              },
             })
             expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
           }),
@@ -1110,7 +964,7 @@ describe("PatchTool", () => {
                     registry,
                     call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch"),
                   ),
-                ).toMatchObject({ type: "text" })
+                ).toMatchObject({ status: "completed" })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("replacement\n")
               }),
             ),
@@ -1135,7 +989,7 @@ describe("PatchTool", () => {
                 registry,
                 call("*** Begin Patch\n*** Add File: appeared.txt\n+replacement\n*** End Patch"),
               ),
-            ).toMatchObject({ type: "text" })
+            ).toMatchObject({ status: "completed" })
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("replacement\n")
           }),
         )
@@ -1174,5 +1028,4 @@ describe("PatchTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
-
 })

@@ -13,7 +13,7 @@ const echo = (description: string) =>
     description,
     input: Schema.Struct({ value: Schema.String }),
     output: Schema.String,
-    run: ({ value }) => Effect.succeed(value),
+    execute: ({ value }) => Effect.succeed(value),
   })
 
 const tools = {

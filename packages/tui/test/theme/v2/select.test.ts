@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { HueDefinition, ThemeDefinition, ThemeFile } from "../../../src/theme/v2"
+import type { HueDefinition, ThemeDefinition, ThemeDocument } from "../../../src/theme/v2"
 import { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "../../../src/theme/v2/select"
 
 const hue = {} as HueDefinition
@@ -11,20 +11,20 @@ const dark = {
 } satisfies ThemeDefinition
 
 test("requires and selects independent light and dark themes", () => {
-  const file = { version: 2, light, dark } satisfies ThemeFile
-  expect(selectTheme(file)).toBe(light)
-  expect(selectTheme(file, "light")).toBe(light)
-  expect(selectTheme(file, "dark")).toBe(dark)
-  expect(selectThemeMode(file, "dark").mode).toBe("dark")
+  const document = { version: 2, light, dark } satisfies ThemeDocument
+  expect(selectTheme(document)).toBe(light)
+  expect(selectTheme(document, "light")).toBe(light)
+  expect(selectTheme(document, "dark")).toBe(dark)
+  expect(selectThemeMode(document, "dark").mode).toBe("dark")
 })
 
 test("merges an expanded mode override over the other mode", () => {
-  const file = {
+  const document = {
     version: 2,
     light,
     dark: { mergeMode: true, text: { default: "#ffffff" } },
-  } satisfies ThemeFile
-  const selected = selectTheme(file, "dark")
+  } satisfies ThemeDocument
+  const selected = selectTheme(document, "dark")
 
   expect(selected.hue).toBeDefined()
   expect(selected.text?.default).toBe("#ffffff")
@@ -41,8 +41,8 @@ test("replaces categorical order in a merge mode", () => {
 })
 
 test("selects the available mode when the requested mode is missing", () => {
-  const lightOnly = { version: 2, light } satisfies ThemeFile
-  const darkOnly = { version: 2, dark } satisfies ThemeFile
+  const lightOnly = { version: 2, light } satisfies ThemeDocument
+  const darkOnly = { version: 2, dark } satisfies ThemeDocument
 
   expect(themeModes(lightOnly)).toEqual(["light"])
   expect(themeModes(darkOnly)).toEqual(["dark"])
@@ -62,10 +62,10 @@ test("rejects a merge mode without its base mode", () => {
 })
 
 test("rejects mutual mode merging", () => {
-  const file = {
+  const document = {
     version: 2,
     light: { mergeMode: true },
     dark: { mergeMode: true },
-  } satisfies ThemeFile
-  expect(() => selectTheme(file)).toThrow("cannot both merge")
+  } satisfies ThemeDocument
+  expect(() => selectTheme(document)).toThrow("cannot both merge")
 })

@@ -2,6 +2,19 @@
 
 Status: **Historical pre-release compatibility ledger.** Older entries retain the names and behavior that were accurate when written; current contracts live in Protocol, Schema, Core, and the indexed specifications.
 
+## 2026-07-22: Canonical Tool Results
+
+- Bump `session.tool.success` and `session.tool.failed` to version 2. Success stores exactly non-empty model `content` plus optional JSON `metadata`; failure stores one `error` plus the final bounded partial snapshot (`content?`, `metadata?`). The generic `structured` and `result` fields are removed.
+- Rename the ephemeral `session.tool.progress` field `structured` to `metadata`; progress is one metadata replacement snapshot. Model content belongs exclusively to terminal outcomes.
+- Change projected `SessionMessage.ToolState`: completed is `{ input, content, metadata? }` with non-empty content, error is `{ input, error, content?, metadata? }`, running renames `structured` to `metadata`. Provider replay derives wire values from canonical content.
+- Move provider-hosted result payloads into provider-owned result state (`providerResultState.result`); Anthropic server-tool round-trips read it during lowering. OpenAI continues replaying from item references.
+- Public Plugin API: remove `structured`, projection callbacks, the `Structured` generic, `Tool.Failure.metadata`, and the exported `Tool.settle`; tool responses carry schema-validated `output`, model-visible `content`, and optional JSON `metadata`. Code Mode receives the validated encoded output.
+
+Compatibility:
+
+- `20260722170000_canonical_tool_results` rewrites projected assistant tool rows in place: terminal content is preserved (or synthesized once from the old `structured`/`result`), compact values move to `metadata` only where tools now declare projections, and hosted payloads are copied into `providerResultState.result`. Old-version tool events fall out of the durable manifest and are skipped on read; no event rows are deleted.
+- Promise and Effect client surfaces are regenerated. The legacy JavaScript SDK regenerates on the branch where the V1 package exists.
+
 ## 2026-07-10: Replace Instruction Checkpoints With Value Deltas
 
 - Replace rendered `session.instructions.updated.1` prose with `session.instructions.updated.2 { delta }`, where values are SHA-256 hashes and the literal `"removed"` means removal.
@@ -74,7 +87,7 @@ Compatibility:
 - No stored event row, database, or runtime publish behavior change; runtime already attaches the envelope only after durable commit/replay.
 - Generated clients now model the existing invariant: durable events carry `durable`, live-only events do not.
 
-## 2026-07-03: Declare Event Durability At Definition Level
+## 2026-07-03: Declare Event Durability At Tool Level
 
 - Add explicit `Event.durable(...)` and `Event.ephemeral(...)` definition constructors.
 - Preserve the existing durable and live-only event classifications while deriving durable inventories from definition metadata instead of hand-maintained lists.

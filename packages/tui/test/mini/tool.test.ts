@@ -28,7 +28,7 @@ describe("Mini tool presentation", () => {
         state: {
           status: "completed",
           input: { patchText: "*** Begin Patch\n*** End Patch" },
-          structured: {
+          metadata: {
             files: [
               {
                 type: "update",
@@ -45,7 +45,7 @@ describe("Mini tool presentation", () => {
     ).toMatchObject({
       name: "patch",
       state: {
-        structured: {
+        metadata: {
           files: [
             {
               status: "modified",
@@ -66,27 +66,25 @@ describe("Mini tool presentation", () => {
         state: {
           status: "running",
           input: { subagent_type: "explore", description: "Inspect" },
-          structured: {},
-          content: [],
+          metadata: {},
         },
         time: { created: 1, ran: 1 },
       }),
     ).toMatchObject({ name: "subagent", state: { input: { agent: "explore" } } })
   })
 
-  test("renders the skill name from structured metadata with the input id as fallback", () => {
-    const skill = (structured: { name?: string }) => ({
-      type: "tool" as const,
-      id: "call-skill",
-      name: "skill",
-      state: {
-        status: "completed" as const,
-        input: { id: "tigerstyle" },
-        structured,
-        content: [],
-      },
-      time: { created: 1, ran: 1, completed: 2 },
-    })
+  test("renders the skill name from tool metadata with the input id as fallback", () => {
+    const skill = (metadata: { name?: string }) =>
+      canonicalToolPart(
+        "skill",
+        {
+          status: "completed",
+          input: { id: "tigerstyle" },
+          metadata,
+          content: [{ type: "text", text: "" }],
+        },
+        "call-skill",
+      )
 
     expect(toolInlineInfo(skill({ name: "effect" })).title).toBe('Skill "effect"')
     expect(toolInlineInfo(skill({})).title).toBe('Skill "tigerstyle"')
@@ -112,8 +110,8 @@ describe("Mini tool presentation", () => {
         canonicalToolPart("glob", {
           status: "completed",
           input: { pattern: "*.ts" },
-          structured: { count: 3 },
-          content: [],
+          metadata: { count: 3 },
+          content: [{ type: "text", text: "" }],
         }),
       ).description,
     ).toBe("3 matches")
@@ -122,8 +120,8 @@ describe("Mini tool presentation", () => {
         canonicalToolPart("grep", {
           status: "completed",
           input: { pattern: "needle" },
-          structured: { matches: 1 },
-          content: [],
+          metadata: { matches: 1 },
+          content: [{ type: "text", text: "" }],
         }),
       ).description,
     ).toBe("1 match")

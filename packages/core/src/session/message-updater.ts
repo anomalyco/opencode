@@ -355,8 +355,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
               SessionMessage.ToolStateRunning.make({
                 status: "running",
                 input: event.data.input,
-                structured: {},
-                content: [],
+                metadata: {},
               }),
             )
           }
@@ -366,11 +365,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
           if (match && match.state.status === "running") {
-            match.state.structured = event.data.structured
-            match.state.content = [...event.data.content]
+            match.state.metadata = event.data.metadata
           }
         })
       },
+      // Terminal tool events are self-contained; projection is a direct copy and
+      // never reaches into ephemeral progress history.
       "session.tool.success": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
@@ -382,9 +382,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
               SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: match.state.input,
-                structured: event.data.structured,
-                content: [...event.data.content],
-                result: event.data.result,
+                content: event.data.content,
+                ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
               }),
             )
           }
@@ -402,9 +401,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 status: "error",
                 error: event.data.error,
                 input: typeof match.state.input === "string" ? {} : match.state.input,
-                structured: event.data.metadata ?? (match.state.status === "running" ? match.state.structured : {}),
-                content: event.data.content ?? (match.state.status === "running" ? match.state.content : []),
-                result: event.data.result,
+                ...(event.data.content === undefined ? {} : { content: event.data.content }),
+                ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
               }),
             )
           }

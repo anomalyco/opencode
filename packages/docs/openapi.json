@@ -10561,26 +10561,10 @@
         "additionalProperties": false
       },
       "Agent.Color": {
-        "anyOf": [
+        "type": "string",
+        "allOf": [
           {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^#[0-9a-fA-F]{6}$"
-              }
-            ]
-          },
-          {
-            "type": "string",
-            "enum": [
-              "primary",
-              "secondary",
-              "accent",
-              "success",
-              "warning",
-              "error",
-              "info"
-            ]
+            "pattern": "^#[0-9a-fA-F]{6}$"
           }
         ]
       },

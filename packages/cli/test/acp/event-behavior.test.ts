@@ -218,8 +218,7 @@ describe("acp event behavior", () => {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
             callID: "call_ok",
-            structured: { phase: 1 },
-            content: [{ type: "text", text: "working" }],
+            metadata: { phase: 1 },
           }),
         )
         send(
@@ -227,9 +226,8 @@ describe("acp event behavior", () => {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
             callID: "call_ok",
-            structured: { exit: 0 },
+            metadata: { exit: 0 },
             content: [{ type: "text", text: "done" }],
-            result: { code: 0 },
             executed: true,
           }),
         )
@@ -255,8 +253,7 @@ describe("acp event behavior", () => {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
             callID: "call_fail",
-            structured: { bytes: 0 },
-            content: [{ type: "text", text: "opening" }],
+            metadata: { bytes: 0 },
           }),
         )
         send(
@@ -313,12 +310,10 @@ describe("acp event behavior", () => {
         locations: [{ path: resolve("/workspace", "sub") }],
         rawInput: { command: "printf done", workdir: "sub" },
       })
-      expect(updates[2]?.update).toMatchObject({
-        content: [{ type: "content", content: { type: "text", text: "working" } }],
-      })
+      expect(updates[2]?.update).not.toHaveProperty("content")
       expect(updates[3]?.update).toMatchObject({
         content: [{ type: "content", content: { type: "text", text: "done" } }],
-        rawOutput: { structured: { exit: 0 }, result: { code: 0 } },
+        rawOutput: { metadata: { exit: 0 } },
       })
       expect(updates[7]?.update).toMatchObject({
         kind: "read",
@@ -327,7 +322,7 @@ describe("acp event behavior", () => {
           { type: "content", content: { type: "text", text: "opening" } },
           { type: "content", content: { type: "text", text: "not found" } },
         ],
-        rawOutput: { structured: { bytes: 0 }, error: "not found" },
+        rawOutput: { metadata: { bytes: 0 }, error: "not found" },
       })
       expect(response.stopReason).toBe("end_turn")
     } finally {
@@ -379,7 +374,7 @@ describe("acp event behavior", () => {
         { type: "content", content: { type: "text", text: "done" } },
         { type: "content", content: { type: "image", mimeType: "image/png", data: "AAAA" } },
       ],
-      rawOutput: { structured: { exit: 0 }, result: { code: 0 } },
+      rawOutput: { metadata: { exit: 0 } },
     })
     expect(updates[8]?.update).toMatchObject({
       toolCallId: "call_running",
@@ -439,6 +434,7 @@ describe("acp event behavior", () => {
       sessionID: "ses_cancel",
       cwd: "/workspace",
       start: { type: "input", id: "input_cancel" },
+      writeTextFile: false,
       control,
       submit: async (signal) => {
         await fixture.client.session.prompt(
@@ -481,6 +477,7 @@ describe("acp event behavior", () => {
       sessionID: "ses_cancel_admission",
       cwd: "/workspace",
       start: { type: "input", id: "input_cancel_admission" },
+      writeTextFile: false,
       control,
       submit: (signal) =>
         fixture.client.session.prompt(
@@ -566,7 +563,7 @@ function turn(input: {
     sessionID: input.sessionID,
     cwd: "/workspace",
     start: { type: "input", id: input.inputID },
-    userMessageID: `client_${input.inputID}`,
+    writeTextFile: false,
     control: { cancelled: false, admission: new AbortController() },
     submit: (signal) =>
       input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inputID, text: "hello" }, { signal }),
@@ -616,12 +613,11 @@ function replayFixtureMessages(): SessionMessageInfo[] {
           state: {
             status: "completed",
             input: { command: "printf done" },
-            structured: { exit: 0 },
+            metadata: { exit: 0 },
             content: [
               { type: "text", text: "done" },
               { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "image.png" },
             ],
-            result: { code: 0 },
           },
         },
         {
@@ -632,8 +628,7 @@ function replayFixtureMessages(): SessionMessageInfo[] {
           state: {
             status: "running",
             input: { command: "pwd" },
-            structured: {},
-            content: [{ type: "text", text: "/workspace" }],
+            metadata: {},
           },
         },
         {
@@ -644,7 +639,7 @@ function replayFixtureMessages(): SessionMessageInfo[] {
           state: {
             status: "error",
             input: { filePath: "/workspace/missing.ts" },
-            structured: { bytes: 0 },
+            metadata: { bytes: 0 },
             content: [{ type: "text", text: "partial" }],
             error: { type: "tool.error", message: "failed hard" },
           },
@@ -677,7 +672,7 @@ function replayToolMessage(id: string) {
         state: {
           status: "completed",
           input: { command: "printf done" },
-          structured: { exit: 0 },
+          metadata: { exit: 0 },
           content: [{ type: "text", text: "done" }],
         },
       },

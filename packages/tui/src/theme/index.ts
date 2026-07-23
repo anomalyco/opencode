@@ -1,16 +1,25 @@
+import { Schema } from "effect"
 import { resolveThemeColors } from "./resolve"
-import { DEFAULT_THEMES, type Theme, type ThemeJson } from "./v1"
+import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
+import { resolveThemeDocument, themeDecodeError } from "./v2/resolve"
+import { ThemeDocument } from "./v2/schema"
+import { migrateV1 } from "./v2/v1-migrate"
 
-export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeJson } from "./v1"
+export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
+export { resolveThemeDocument, type ThemeDocument }
 
-const pluginThemes: Record<string, ThemeJson> = {}
-let customThemes: Record<string, ThemeJson> = {}
-let systemTheme: ThemeJson | undefined
-const listeners = new Set<(themes: Record<string, ThemeJson>) => void>()
+export type ThemeDocumentSource = Record<string, unknown>
+
+const pluginThemes: Record<string, ThemeDocumentSource> = {}
+let customThemes: Record<string, ThemeDocumentSource> = {}
+let systemTheme: ThemeDocumentSource | undefined
+const listeners = new Set<(themes: Record<string, ThemeDocumentSource>) => void>()
+const parsed = new WeakMap<object, ThemeDocument>()
+const decodeThemeDocument = Schema.decodeUnknownSync(ThemeDocument)
 
 function listThemes() {
   // Priority: defaults < plugin installs < custom files < generated system.
-  const themes = {
+  const themes: Record<string, ThemeDocumentSource> = {
     ...DEFAULT_THEMES,
     ...pluginThemes,
     ...customThemes,
@@ -31,23 +40,40 @@ export function allThemes() {
   return listThemes()
 }
 
-export function isTheme(theme: unknown): theme is ThemeJson {
-  if (typeof theme !== "object" || theme === null || Array.isArray(theme)) return false
-  const value = Reflect.get(theme, "theme")
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+export function isThemeSource(source: unknown): source is ThemeDocumentSource {
+  if (typeof source !== "object" || source === null || Array.isArray(source)) return false
+  return "theme" in source || "version" in source
 }
 
-export function subscribeThemes(listener: (themes: Record<string, ThemeJson>) => void) {
+export function parseTheme(source: ThemeDocumentSource, name = "theme") {
+  const cached = parsed.get(source)
+  if (cached) return cached
+
+  const version = source.version ?? 1
+  const document =
+    version === 1
+      ? migrateV1(source as ThemeV1Json)
+      : version === 2
+        ? decodeV2Theme(source, name)
+        : unsupportedThemeVersion(version)
+
+  parsed.set(source, document)
+  return document
+}
+
+export function subscribeThemes(listener: (themes: Record<string, ThemeDocumentSource>) => void) {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
 
-export function setCustomThemes(themes: Record<string, ThemeJson>) {
-  customThemes = themes
+export function setCustomThemes(themes: Record<string, unknown>) {
+  customThemes = Object.fromEntries(
+    Object.entries(themes).filter((entry): entry is [string, ThemeDocumentSource] => isThemeSource(entry[1])),
+  )
   syncThemes()
 }
 
-export function setSystemTheme(theme: ThemeJson | undefined) {
+export function setSystemTheme(theme: ThemeDocumentSource | undefined) {
   systemTheme = theme
   syncThemes()
 }
@@ -59,7 +85,7 @@ export function hasTheme(name: string) {
 
 export function addTheme(name: string, theme: unknown) {
   if (!name) return false
-  if (!isTheme(theme)) return false
+  if (!isThemeSource(theme)) return false
   if (hasTheme(name)) return false
   pluginThemes[name] = theme
   syncThemes()
@@ -68,7 +94,7 @@ export function addTheme(name: string, theme: unknown) {
 
 export function upsertTheme(name: string, theme: unknown) {
   if (!name) return false
-  if (!isTheme(theme)) return false
+  if (!isThemeSource(theme)) return false
   if (customThemes[name] !== undefined) {
     customThemes[name] = theme
   } else {
@@ -78,11 +104,23 @@ export function upsertTheme(name: string, theme: unknown) {
   return true
 }
 
-export function resolveTheme(theme: ThemeJson, mode: "dark" | "light"): Theme {
+export function resolveTheme(theme: ThemeV1Json, mode: "dark" | "light"): Theme {
   const resolved = resolveThemeColors(theme, mode)
   return {
     ...resolved.theme,
     _hasSelectedListItemText: resolved.hasSelectedListItemText,
     thinkingOpacity: resolved.thinkingOpacity,
   }
+}
+
+function decodeV2Theme(source: ThemeDocumentSource, name: string) {
+  try {
+    return decodeThemeDocument(source)
+  } catch (error) {
+    throw themeDecodeError(error, name)
+  }
+}
+
+function unsupportedThemeVersion(version: unknown): never {
+  throw new Error(`Unsupported theme version: ${String(version)}`)
 }

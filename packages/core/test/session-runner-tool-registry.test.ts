@@ -8,23 +8,24 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { executeTool, settleTool, toolDefinitions } from "./lib/tool"
+import { executeTool, toolDefinitions } from "./lib/tool"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
 const bounds: ToolOutputStore.BoundInput[] = []
 const retentionFailure = new ToolOutputStore.StorageError({ operation: "write", cause: new Error("disk full") })
 const outputStore = Layer.mock(ToolOutputStore.Service, {
+  limits: () => Effect.succeed({ maxLines: ToolOutputStore.MAX_LINES, maxBytes: ToolOutputStore.MAX_BYTES }),
   bound: (input) => {
     if (input.callID === "call-retention-failure") return Effect.fail(retentionFailure)
     return Effect.sync(() => bounds.push(input)).pipe(
       Effect.as(
         input.callID === "call-bounded"
           ? {
-              output: { structured: {}, content: [{ type: "text" as const, text: "bounded reference" }] },
+              content: [{ type: "text" as const, text: "bounded reference" }],
               outputPaths: ["/managed/generic"],
             }
-          : { output: input.output, outputPaths: [] },
+          : { content: input.content, outputPaths: [] },
       ),
     )
   },
@@ -63,24 +64,20 @@ const call = (name: string, id = `call-${name}`): ToolRegistry.ExecuteInput => (
   call: { type: "tool-call", id, name, input: { text: name } },
 })
 
-const make = (permission?: string) => {
-  const tool = Tool.make({
+const make = () =>
+  Tool.make({
     description: "Echo text",
     input: Schema.Struct({ text: Schema.String }),
     output: Schema.Struct({ text: Schema.String }),
-    execute: ({ text }) => Effect.succeed({ text }),
-    toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+    execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
   })
-  return permission ? Tool.withPermission(tool, permission) : tool
-}
 
 const constant = (text: string) =>
   Tool.make({
     description: "Return text",
     input: Schema.Struct({ text: Schema.String }),
     output: Schema.Struct({ text: Schema.String }),
-    execute: () => Effect.succeed({ text }),
-    toModelOutput: ({ output }) => [{ type: "text" as const, text: output.text }],
+    execute: () => Effect.succeed({ output: { text }, content: text }),
   })
 
 describe("ToolRegistry", () => {
@@ -91,7 +88,21 @@ describe("ToolRegistry", () => {
 
       expect(error).toBeInstanceOf(Tool.RegistrationError)
       expect(error.message).toBe('Invalid tool namespace: "slack..admin"')
-      expect((yield* service.materialize()).definitions).toEqual([])
+      expect((yield* service.snapshot()).definitions).toEqual([])
+    }),
+  )
+
+  it.effect("rejects invalid and colliding normalized names", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const invalid = yield* service.register({ "123": make() }, { codemode: false }).pipe(Effect.flip)
+      expect(invalid.message).toBe("Invalid tool name: 123")
+
+      const collision = yield* service
+        .register({ "echo.tool": make(), echo_tool: make() }, { codemode: false })
+        .pipe(Effect.flip)
+      expect(collision.message).toBe("Duplicate normalized tool name: echo_tool")
+      expect((yield* service.snapshot()).definitions).toEqual([])
     }),
   )
 
@@ -106,19 +117,15 @@ describe("ToolRegistry", () => {
         .pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Tool.RegistrationError)
-      expect((yield* service.materialize()).definitions).toEqual([])
+      expect((yield* service.snapshot()).definitions).toEqual([])
     }),
   )
 
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({
-        question: make(),
-        bash: make(),
-        edit: make("edit"),
-        write: make("edit"),
-      }, { codemode: false })
+      yield* service.register({ question: make(), bash: make() }, { codemode: false })
+      yield* service.register({ edit: make(), write: make() }, { codemode: false, permission: "edit" })
       const names = (permissions: PermissionV2.Ruleset) =>
         toolDefinitions(service, permissions).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
 
@@ -139,18 +146,15 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("keeps permission decoration isolated between registrations", () =>
+  it.effect("keeps permission options isolated between registrations", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const shared = make()
       yield* service.register({ first: shared }, { codemode: false })
-      yield* service.register({ second: Tool.withPermission(shared, "edit") }, { codemode: false })
-      Tool.withPermission(shared, "question")
+      yield* service.register({ second: shared }, { codemode: false, permission: "edit" })
 
       expect(
-        (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map(
-          (definition) => definition.name,
-        ),
+        (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map((tool) => tool.name),
       ).toEqual(["first"])
     }),
   )
@@ -191,41 +195,47 @@ describe("ToolRegistry", () => {
   it.effect("returns model errors without swallowing interruption or defects", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({
-        failed: Tool.make({
-          description: "Failed",
-          input: Schema.Struct({}),
-          output: Schema.Struct({ ok: Schema.Boolean }),
-          execute: () => Effect.fail(new Tool.Failure({ message: "Denied" })),
-        }),
-      }, { codemode: false })
+      yield* service.register(
+        {
+          failed: Tool.make({
+            description: "Failed",
+            input: Schema.Struct({}),
+            output: Schema.Struct({ ok: Schema.Boolean }),
+            execute: () => Effect.fail(new Tool.Failure({ message: "Denied" })),
+          }),
+        },
+        { codemode: false },
+      )
       expect(
         yield* executeTool(service, {
           sessionID,
           ...identity,
           call: { type: "tool-call", id: "failed", name: "failed", input: {} },
         }),
-      ).toEqual({ type: "error", value: "Denied" })
+      ).toEqual({ status: "error", error: { type: "tool.execution", message: "Denied" } })
       expect(
         yield* executeTool(service, {
           sessionID,
           ...identity,
           call: { type: "tool-call", id: "missing", name: "missing", input: {} },
         }),
-      ).toEqual({ type: "error", value: "Unknown tool: missing" })
+      ).toEqual({ status: "error", error: { type: "tool.unknown", message: "Unknown tool: missing" } })
 
-      yield* service.register({
-        defect: Tool.make({
-          description: "Defect",
-          input: Schema.Struct({}),
-          output: Schema.Struct({}),
-          execute: () => Effect.die("unexpected executor defect"),
-        }),
-      }, { codemode: false })
+      yield* service.register(
+        {
+          defect: Tool.make({
+            description: "Defect",
+            input: Schema.Struct({}),
+            output: Schema.Struct({}),
+            execute: () => Effect.die("unexpected executor defect"),
+          }),
+        },
+        { codemode: false },
+      )
       expect(
-        yield* service.materialize().pipe(
-          Effect.flatMap((materialized) =>
-            materialized.settle({
+        yield* service.snapshot().pipe(
+          Effect.flatMap((toolSet) =>
+            toolSet.execute({
               sessionID,
               ...identity,
               call: { type: "tool-call", id: "defect", name: "defect", input: {} },
@@ -237,12 +247,12 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("propagates retention failures through settlement", () =>
+  it.effect("propagates retention failures through execution", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register({ echo: make() }, { codemode: false })
-      const materialized = yield* service.materialize()
-      const exit = yield* materialized.settle(call("echo", "call-retention-failure")).pipe(Effect.exit)
+      const toolSet = yield* service.snapshot()
+      const exit = yield* toolSet.execute(call("echo", "call-retention-failure")).pipe(Effect.exit)
 
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBe(retentionFailure)
@@ -250,79 +260,88 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("exposes settlement only through materialization", () =>
+  it.effect("exposes execution only through a snapshot", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       expect("definitions" in service).toBe(false)
       expect("execute" in service).toBe(false)
       expect("settle" in service).toBe(false)
-      expect(typeof service.materialize).toBe("function")
+      expect(typeof service.snapshot).toBe("function")
     }),
   )
 
-  it.effect("passes complete invocation identity to the canonical handler", () =>
+  it.effect("passes complete call identity to tool execution", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const contexts: Tool.Context[] = []
-      yield* service.register({
-        context: Tool.make({
-          description: "Context",
-          input: Schema.Struct({}),
-          output: Schema.Struct({ ok: Schema.Boolean }),
-          execute: (_, context) => Effect.sync(() => contexts.push(context)).pipe(Effect.as({ ok: true })),
-        }),
-      }, { codemode: false })
+      yield* service.register(
+        {
+          context: Tool.make({
+            description: "Context",
+            input: Schema.Struct({}),
+            output: Schema.Struct({ ok: Schema.Boolean }),
+            execute: (_, context) =>
+              Effect.sync(() => contexts.push(context)).pipe(Effect.as({ output: { ok: true } })),
+          }),
+        },
+        { codemode: false },
+      )
       yield* executeTool(service, {
         sessionID,
         ...identity,
         call: { type: "tool-call", id: "call-context", name: "context", input: {} },
       })
-      expect(contexts).toEqual([
-        { sessionID, ...identity, callID: "call-context", progress: expect.any(Function) },
-      ])
+      expect(contexts).toEqual([{ sessionID, ...identity, callID: "call-context", progress: expect.any(Function) }])
     }),
   )
 
-  it.effect("encodes output and applies generic settlement bounding", () =>
+  it.effect("encodes output and applies generic execution bounding", () =>
     Effect.gen(function* () {
       bounds.length = 0
       const service = yield* ToolRegistry.Service
       yield* service.register({ bounded: make() }, { codemode: false })
       expect(
-        yield* settleTool(service, {
+        yield* executeTool(service, {
           sessionID,
           ...identity,
           call: { type: "tool-call", id: "call-bounded", name: "bounded", input: { text: "complete" } },
         }),
       ).toEqual({
-        result: { type: "text", value: "bounded reference" },
-        output: { structured: {}, content: [{ type: "text", text: "bounded reference" }] },
+        status: "completed",
+        output: { text: "complete" },
+        content: [{ type: "text", text: "bounded reference" }],
         outputPaths: ["/managed/generic"],
       })
       expect(bounds).toHaveLength(1)
     }),
   )
 
-  it.effect("normalizes image tool output at settlement and drops unresizable images", () =>
+  it.effect("normalizes image tool output at execution and drops unresizable images", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({
-        snapshot: Tool.make({
-          description: "Return images",
-          input: Schema.Struct({ text: Schema.String }),
-          output: Schema.Struct({ text: Schema.String }),
-          execute: ({ text }) => Effect.succeed({ text }),
-          toModelOutput: ({ output }) => [
-            { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "frame.png" },
-            { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "too-large.png" },
-            { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "corrupt.png" },
-            { type: "text", text: output.text },
-          ],
-        }),
-      }, { codemode: false })
+      yield* service.register(
+        {
+          snapshot: Tool.make({
+            description: "Return images",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }) =>
+              Effect.succeed({
+                output: { text },
+                content: [
+                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "frame.png" },
+                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "too-large.png" },
+                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "corrupt.png" },
+                  { type: "text", text },
+                ],
+              }),
+          }),
+        },
+        { codemode: false },
+      )
 
-      const settlement = yield* settleTool(service, call("snapshot"))
-      expect(settlement.output?.content).toEqual([
+      const execution = yield* executeTool(service, call("snapshot"))
+      expect(execution.content).toEqual([
         { type: "file", uri: "data:image/jpeg;base64,bm9ybWFsaXplZA==", mime: "image/jpeg", name: "frame.png" },
         { type: "text", text: "snapshot" },
         { type: "text", text: "[1 image omitted: could not be decoded.]" },
@@ -331,44 +350,31 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("normalizes image progress content before it is published", () =>
+  it.effect("publishes progress metadata unchanged", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
-      yield* service.register({
-        progressive: Tool.make({
-          description: "Emit image progress",
-          input: Schema.Struct({ text: Schema.String }),
-          output: Schema.Struct({ text: Schema.String }),
-          execute: ({ text }, context) =>
-            context
-              .progress({
-                structured: { stage: "capture" },
-                content: [
-                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "frame.png" },
-                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "too-large.png" },
-                ],
-              })
-              .pipe(Effect.as({ text })),
-        }),
-      }, { codemode: false })
+      yield* service.register(
+        {
+          progressive: Tool.make({
+            description: "Emit image progress",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }, context) =>
+              context.progress({ stage: "capture" }).pipe(Effect.as({ output: { text } })),
+          }),
+        },
+        { codemode: false },
+      )
 
       const updates: ToolRegistry.Progress[] = []
-      yield* settleTool(service, {
+      yield* executeTool(service, {
         ...call("progressive"),
         progress: (update) =>
           Effect.sync(() => {
             updates.push(update)
           }),
       })
-      expect(updates).toEqual([
-        {
-          structured: { stage: "capture" },
-          content: [
-            { type: "file", uri: "data:image/jpeg;base64,bm9ybWFsaXplZA==", mime: "image/jpeg", name: "frame.png" },
-            { type: "text", text: "[1 image omitted: could not be resized below the image size limit.]" },
-          ],
-        },
-      ])
+      expect(updates).toEqual([{ stage: "capture" }])
     }),
   )
 
@@ -382,23 +388,31 @@ describe("ToolRegistry", () => {
           encode: SchemaGetter.transform((value) => value === "yes"),
         }),
       )
-      yield* service.register({
-        transformed: Tool.make({
-          description: "Transform values",
-          input: Schema.Struct({ value: Transformed }),
-          output: Schema.Struct({ value: Transformed }),
-          execute: ({ value }) => Effect.sync(() => executed.push(value)).pipe(Effect.as({ value })),
-          toModelOutput: ({ output }) => [{ type: "text", text: String(output.value) }],
-        }),
-      }, { codemode: false })
+      yield* service.register(
+        {
+          transformed: Tool.make({
+            description: "Transform values",
+            input: Schema.Struct({ value: Transformed }),
+            output: Schema.Struct({ value: Transformed }),
+            execute: ({ value }) =>
+              Effect.sync(() => executed.push(value)).pipe(Effect.as({ output: { value }, content: String(value) })),
+          }),
+        },
+        { codemode: false },
+      )
 
+      // Canonical content observes the decoded domain value; Code Mode observes the encoded value.
       expect(
         yield* executeTool(service, {
           sessionID,
           ...identity,
           call: { type: "tool-call", id: "transformed", name: "transformed", input: { value: true } },
         }),
-      ).toEqual({ type: "text", value: "true" })
+      ).toEqual({
+        status: "completed",
+        output: { value: true },
+        content: [{ type: "text", text: "yes" }],
+      })
       expect(executed).toEqual(["yes"])
       expect(
         yield* executeTool(service, {
@@ -406,35 +420,44 @@ describe("ToolRegistry", () => {
           ...identity,
           call: { type: "tool-call", id: "invalid-input", name: "transformed", input: { value: "yes" } },
         }),
-      ).toMatchObject({ type: "error", value: expect.stringContaining("Invalid tool input") })
+      ).toMatchObject({
+        status: "error",
+        error: { type: "tool.execution", message: expect.stringContaining("Invalid tool input") },
+      })
       expect(executed).toEqual(["yes"])
 
-      yield* service.register({
-        invalid_output: Tool.make({
-          description: "Return invalid output",
-          input: Schema.Struct({}),
-          output: Schema.Struct({
-            value: Schema.Boolean.pipe(
-              Schema.decodeTo(Schema.String, {
-                decode: SchemaGetter.transform((value) => String(value)),
-                encode: SchemaGetter.transformOrFail((value) =>
-                  value === "valid"
-                    ? Effect.succeed(true)
-                    : Effect.fail(new SchemaIssue.InvalidValue(Option.some(value), { message: "invalid output" })),
-                ),
-              }),
-            ),
+      yield* service.register(
+        {
+          invalid_output: Tool.make({
+            description: "Return invalid output",
+            input: Schema.Struct({}),
+            output: Schema.Struct({
+              value: Schema.Boolean.pipe(
+                Schema.decodeTo(Schema.String, {
+                  decode: SchemaGetter.transform((value) => String(value)),
+                  encode: SchemaGetter.transformOrFail((value) =>
+                    value === "valid"
+                      ? Effect.succeed(true)
+                      : Effect.fail(new SchemaIssue.InvalidValue(Option.some(value), { message: "invalid output" })),
+                  ),
+                }),
+              ),
+            }),
+            execute: () => Effect.succeed({ output: { value: "invalid" } }),
           }),
-          execute: () => Effect.succeed({ value: "invalid" }),
-        }),
-      }, { codemode: false })
+        },
+        { codemode: false },
+      )
       expect(
         yield* executeTool(service, {
           sessionID,
           ...identity,
           call: { type: "tool-call", id: "invalid-output", name: "invalid_output", input: {} },
         }),
-      ).toMatchObject({ type: "error", value: expect.stringContaining("invalid value for its output schema") })
+      ).toMatchObject({
+        status: "error",
+        error: { type: "tool.execution", message: expect.stringContaining("invalid value for its output schema") },
+      })
     }),
   )
 
@@ -443,12 +466,12 @@ describe("ToolRegistry", () => {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
       yield* service.register({ echo: constant("advertised") }, { codemode: false }).pipe(Scope.provide(scope))
-      const request = yield* service.materialize()
+      const request = yield* service.snapshot()
       yield* Scope.close(scope, Exit.void)
       yield* service.register({ echo: constant("replacement") }, { codemode: false })
 
-      expect((yield* request.settle(call("echo"))).result).toEqual({ type: "text", value: "advertised" })
-      expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "replacement" })
+      expect((yield* request.execute(call("echo"))).content).toEqual([{ type: "text", text: "advertised" }])
+      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "replacement" }])
     }),
   )
 
@@ -459,9 +482,9 @@ describe("ToolRegistry", () => {
       const overlay = yield* Scope.make()
       yield* service.register({ echo: constant("overlay") }, { codemode: false }).pipe(Scope.provide(overlay))
 
-      expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "overlay" })
+      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "overlay" }])
       yield* Scope.close(overlay, Exit.void)
-      expect(yield* executeTool(service, call("echo"))).toEqual({ type: "text", value: "base" })
+      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "base" }])
     }),
   )
 
@@ -476,12 +499,13 @@ describe("ToolRegistry", () => {
             description: "Echo text",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }) => Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ text })),
+            execute: ({ text }) =>
+              Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ output: { text } })),
           }),
         })
         .pipe(Scope.provide(scope))
-      const materialized = yield* service.materialize()
-      const execute = materialized.definitions.find((tool) => tool.name === "execute")
+      const toolSet = yield* service.snapshot()
+      const execute = toolSet.definitions.find((tool) => tool.name === "execute")
       expect(execute?.description).toContain("confined Code Mode runtime")
       expect(execute?.description).not.toContain("Echo text")
       yield* Scope.close(scope, Exit.void)
@@ -490,11 +514,11 @@ describe("ToolRegistry", () => {
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),
           output: Schema.Struct({ text: Schema.String }),
-          execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ text })),
+          execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ output: { text } })),
         }),
       })
 
-      const settlement = yield* materialized.settle({
+      const execution = yield* toolSet.execute({
         ...call("execute"),
         call: {
           type: "tool-call",
@@ -504,7 +528,7 @@ describe("ToolRegistry", () => {
         },
       })
 
-      expect(settlement.result).toMatchObject({ type: "text" })
+      expect(execution).toMatchObject({ status: "completed", content: [{ type: "text" }] })
       expect(executed).toEqual(["old:request"])
     }),
   )

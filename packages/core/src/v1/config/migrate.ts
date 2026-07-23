@@ -161,7 +161,7 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     description: info.description,
     mode: info.mode,
     hidden: info.hidden,
-    color: info.color,
+    color: info.color === undefined ? undefined : info.color.startsWith("#") ? info.color : "#aaaaaa",
     steps: info.steps,
     disabled: info.disable,
     permissions: permissions(info.permission),

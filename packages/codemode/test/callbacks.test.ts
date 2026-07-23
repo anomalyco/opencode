@@ -27,7 +27,7 @@ const echo = Tool.make({
   description: "Echo the input",
   input: Schema.Struct({ id: Schema.Number }),
   output: Schema.Number,
-  run: (input: { id: number }) => Effect.succeed(input.id),
+  execute: (input: { id: number }) => Effect.succeed(input.id),
 })
 const withTool = (code: string) => Effect.runPromise(CodeMode.make({ tools: { host: { echo } } }).execute(code))
 const toolError = async (code: string) => {

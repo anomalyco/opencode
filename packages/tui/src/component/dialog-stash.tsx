@@ -29,7 +29,7 @@ function getStashPreview(input: string, maxLength: number = 50): string {
 export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const dialog = useDialog()
   const stash = usePromptStash()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const shortcuts = Keymap.useShortcuts()
 
   const [toDelete, setToDelete] = createSignal<number>()
@@ -45,7 +45,8 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           title: isDeleting
             ? `Press ${shortcuts.get("stash.delete")} again to confirm`
             : getStashPreview(entry.prompt.text),
-          bg: isDeleting ? theme.error : undefined,
+          bg: isDeleting ? themeV2.background.action.destructive.focused : undefined,
+          fg: isDeleting ? themeV2.text.action.destructive.focused : undefined,
           value: index,
           description: getRelativeTime(entry.timestamp),
           footer: lineCount > 1 ? `~${lineCount} lines` : undefined,

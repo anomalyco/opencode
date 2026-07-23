@@ -870,6 +870,32 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("maps incomplete response reasons", () =>
+    Effect.gen(function* () {
+      const generate = (incompleteDetails: object) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents({
+                type: "response.incomplete",
+                response: { id: "resp_incomplete", incomplete_details: incompleteDetails },
+              }),
+            ),
+          ),
+        )
+
+      const length = yield* generate({ reason: "max_output_tokens" })
+      const contentFilter = yield* generate({ reason: "content_filter" })
+      const unknown = yield* generate({})
+
+      expect([length.finishReason, contentFilter.finishReason, unknown.finishReason]).toEqual([
+        "length",
+        "content-filter",
+        "unknown",
+      ])
+    }),
+  )
+
   // OpenAI's documented stream orders output text within one message item; no
   // provider-valid same-kind overlap is evidenced, so done boundaries close it.
   it.effect("closes sequential output messages before starting the next", () =>

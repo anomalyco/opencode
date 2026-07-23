@@ -3,7 +3,7 @@ export * as ShellTool from "./shell"
 import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
-import { Effect, Fiber, Schedule, Schema, Scope } from "effect"
+import { Deferred, Effect, Schema, Scope } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
@@ -147,19 +147,6 @@ export const Plugin = {
             description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. An optional timeout may be provided in milliseconds (zero: unlimited; foreground default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Background commands default to unlimited. Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Background mode (background=true) launches the command asynchronously and returns immediately; you are notified when it finishes.`,
             input: Input,
             output: Output,
-            structured: StructuredOutput,
-            toStructuredOutput: ({ output }) => ({
-              truncated: output.truncated,
-              ...(output.exit === undefined ? {} : { exit: output.exit }),
-              ...(output.shellID === undefined ? {} : { shellID: output.shellID }),
-              ...(output.timeout === undefined ? {} : { timeout: output.timeout }),
-            }),
-            toModelOutput: ({ output }) => {
-              const parts: Content[] = [{ type: "text", text: output.output }]
-              const model = modelOutput(output)
-              if (model) parts.push({ type: "text", text: model })
-              return parts
-            },
             execute: (input, context) =>
               Effect.gen(function* () {
                 const source = {
@@ -199,6 +186,7 @@ export const Plugin = {
                   timeout,
                   metadata: { sessionID: context.sessionID },
                 })
+                yield* context.progress({ shellID: info.id })
 
                 const captureShell = Effect.fn("ShellTool.captureShell")(function* () {
                   const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
@@ -232,7 +220,9 @@ export const Plugin = {
                   }
                 })
 
+                const settled = yield* Deferred.make<Output>()
                 const run = settleShell().pipe(
+                  Effect.tap((output) => Deferred.succeed(settled, output)),
                   Effect.map((output) => output.output),
                   Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
                 )
@@ -256,32 +246,8 @@ export const Plugin = {
                   }
                 }
 
-                let previousProgress: { readonly output: string; readonly truncated: boolean } | undefined
-                const progress = yield* Effect.sleep("1 second").pipe(
-                  Effect.andThen(
-                    captureShell().pipe(
-                      Effect.flatMap((capture) =>
-                        Effect.gen(function* () {
-                          if (
-                            previousProgress?.output === capture.output &&
-                            previousProgress.truncated === capture.truncated
-                          )
-                            return
-                          previousProgress = capture
-                          yield* context.progress({
-                            structured: { truncated: capture.truncated },
-                            content: [{ type: "text", text: capture.output }],
-                          })
-                        }),
-                      ),
-                    ),
-                  ),
-                  Effect.repeat(Schedule.forever),
-                  Effect.forkIn(scope, { startImmediately: true }),
-                )
                 const result = yield* runtime.job.block({ id: job.id, sessionID: context.sessionID }).pipe(
                   Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)),
-                  Effect.ensuring(Fiber.interrupt(progress)),
                 )
                 if (result?.type === "backgrounded") {
                   yield* shell.timeout(info.id, 0)
@@ -298,11 +264,23 @@ export const Plugin = {
                   return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
                 if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
 
-                return {
-                  ...(yield* settleShell()),
-                  ...(warnings.length ? { warnings } : {}),
-                }
+                return { ...(yield* Deferred.await(settled)), ...(warnings.length ? { warnings } : {}) }
               }).pipe(
+                Effect.map((output) => {
+                  const content: [Content, ...Content[]] = [{ type: "text", text: output.output }]
+                  const model = modelOutput(output)
+                  if (model) content.push({ type: "text", text: model })
+                  return {
+                    output,
+                    content,
+                    metadata: {
+                      truncated: output.truncated,
+                      ...("exit" in output && output.exit !== undefined ? { exit: output.exit } : {}),
+                      ...("shellID" in output && output.shellID !== undefined ? { shellID: output.shellID } : {}),
+                      ...("timeout" in output && output.timeout !== undefined ? { timeout: output.timeout } : {}),
+                    },
+                  }
+                }),
                 Effect.mapError(
                   (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
                 ),

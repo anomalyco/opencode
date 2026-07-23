@@ -70,7 +70,7 @@ declare module "@opentui/solid" {
 extend({ go_upsell_art: GoUpsellArtRenderable })
 
 export function BgPulse() {
-  const { theme } = useTheme()
+  const { themeV2, mode } = useTheme().contextual("elevated")
   const renderer = useRenderer()
   let targetFps = renderer.targetFps
   let maxFps = renderer.maxFps
@@ -91,9 +91,9 @@ export function BgPulse() {
     <go_upsell_art
       width="100%"
       height="100%"
-      backgroundPanel={theme.backgroundPanel}
-      primary={theme.primary}
-      logoBase={tint(theme.background, theme.text, 0.62)}
+      backgroundPanel={themeV2.background.default}
+      primary={themeV2.hue.interactive[mode() === "light" ? 800 : 200]}
+      logoBase={tint(themeV2.background.default, themeV2.text.default, 0.62)}
       live
     />
   )

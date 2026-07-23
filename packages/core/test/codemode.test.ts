@@ -9,14 +9,16 @@ describe("CodeMode", () => {
   it.effect("owns registrations, execute, and catalog materialization", () =>
     Effect.gen(function* () {
       const codeMode = yield* CodeMode.Service
-      yield* codeMode.register({
-        echo: Tool.make({
-          description: "Echo text",
-          input: Schema.Struct({ text: Schema.String }),
-          output: Schema.String,
-          execute: ({ text }) => Effect.succeed(text),
+      yield* codeMode.register(
+        Tool.registrationEntries({
+          echo: Tool.make({
+            description: "Echo text",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.String,
+            execute: ({ text }) => Effect.succeed({ output: text }),
+          }),
         }),
-      })
+      )
 
       const materialized = yield* codeMode.materialize()
       expect(materialized.tool).toBeDefined()

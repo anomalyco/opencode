@@ -76,22 +76,19 @@ export const Plugin = {
       .transform((draft) =>
         draft.add(
           name,
-          Tool.withPermission(
-            Tool.make({
+          Tool.make({
               description: DESCRIPTION,
               input: Input,
               output: Output,
-              toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []
                 const fail = (path: string, error?: unknown) => {
                   const detail = error === undefined ? "" : `: ${errorMessage(error)}`
                   if (applied.length === 0) {
-                    return new ToolFailure({ message: `Unable to apply patch at ${path}${detail}`, error })
+                    return new ToolFailure({ message: `Unable to apply patch at ${path}${detail}` })
                   }
                   return new ToolFailure({
                     message: `Patch partially applied before failing at ${path}${detail}. Completed before failure: ${applied.map((item) => item.resource).join(", ")}`,
-                    error,
                   })
                 }
                 const failMoveRemoval = (source: string, destination: string, error: unknown) => {
@@ -101,7 +98,6 @@ export const Plugin = {
                       : `. Completed before move: ${applied.map((item) => item.resource).join(", ")}`
                   return new ToolFailure({
                     message: `Patch partially applied while moving ${source} to ${destination}: wrote ${destination} but failed to remove ${source}: ${errorMessage(error)}${previous}`,
-                    error,
                   })
                 }
                 return Effect.gen(function* () {
@@ -247,12 +243,14 @@ export const Plugin = {
                     (change) =>
                       Effect.gen(function* () {
                         if (change.type === "add") {
-                          yield* fs.writeWithDirs(
-                            change.target.canonical,
-                            change.contents.endsWith("\n") || change.contents === ""
-                              ? change.contents
-                              : `${change.contents}\n`,
-                          ).pipe(Effect.mapError((error) => fail(change.target.resource, error)))
+                          yield* fs
+                            .writeWithDirs(
+                              change.target.canonical,
+                              change.contents.endsWith("\n") || change.contents === ""
+                                ? change.contents
+                                : `${change.contents}\n`,
+                            )
+                            .pipe(Effect.mapError((error) => fail(change.target.resource, error)))
                           applied.push({
                             type: change.type,
                             resource: change.target.resource,
@@ -300,12 +298,17 @@ export const Plugin = {
                     { discard: true },
                   )
                   return { applied, files: patchFiles }
-                }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch", error))))
+                }).pipe(
+                  Effect.map((output) => ({
+                    output,
+                    content: toModelOutput(output),
+                    metadata: { files: output.files },
+                  })),
+                  Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch", error))),
+                )
               },
             }),
-            "edit",
-          ),
-          { codemode: false },
+          { codemode: false, permission: "edit" },
         ),
       )
       .pipe(Effect.orDie)

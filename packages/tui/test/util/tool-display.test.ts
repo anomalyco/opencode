@@ -40,19 +40,19 @@ describe("webSearchProviderLabel", () => {
 })
 
 describe("toolDisplayMetadata", () => {
-  test("returns structured metadata for non-pending states", () => {
-    const structured = { provider: "parallel", numResults: 3 }
+  test("returns tool metadata for non-pending states", () => {
+    const metadata = { provider: "parallel", numResults: 3 }
 
-    expect(toolDisplayMetadata({ status: "running", structured })).toBe(structured)
-    expect(toolDisplayMetadata({ status: "completed", structured })).toBe(structured)
-    expect(toolDisplayMetadata({ status: "error", structured })).toBe(structured)
+    expect(toolDisplayMetadata({ status: "running", metadata })).toBe(metadata)
+    expect(toolDisplayMetadata({ status: "completed", metadata })).toBe(metadata)
+    expect(toolDisplayMetadata({ status: "error", metadata })).toBe(metadata)
   })
 
   test("does not expose pending or malformed metadata", () => {
-    expect(toolDisplayMetadata({ status: "streaming", structured: { provider: "exa" } })).toEqual({})
+    expect(toolDisplayMetadata({ status: "streaming", metadata: { provider: "exa" } })).toEqual({})
     expect(toolDisplayMetadata({ status: "completed" })).toEqual({})
-    expect(toolDisplayMetadata({ status: "completed", structured: null })).toEqual({})
-    expect(toolDisplayMetadata({ status: "completed", structured: [] })).toEqual({})
+    expect(toolDisplayMetadata({ status: "completed", metadata: null })).toEqual({})
+    expect(toolDisplayMetadata({ status: "completed", metadata: [] })).toEqual({})
     expect(toolDisplayMetadata(undefined)).toEqual({})
   })
 })

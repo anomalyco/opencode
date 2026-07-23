@@ -4,6 +4,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { streamTurn } from "../../src/acp/event"
+import { syncEditedFiles } from "../../src/acp/permission"
 import { createSseFixture, durableEvent, ephemeralEvent, withTimeout } from "./sse-fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
@@ -12,6 +13,27 @@ type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission
 type Fixture = ReturnType<typeof createSseFixture>
 
 describe("acp permission behavior", () => {
+  test("does not sync edits when writeTextFile was not advertised", async () => {
+    const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
+
+    await syncEditedFiles({
+      connection: {
+        writeTextFile: async (input) => {
+          writes.push(input)
+          return {}
+        },
+      },
+      writeTextFile: false,
+      sessionID: "ses_no_write",
+      cwd: "/workspace",
+      toolName: "edit",
+      toolInput: { filePath: "/workspace/file.ts" },
+      metadata: {},
+    })
+
+    expect(writes).toEqual([])
+  })
+
   test("forwards allow-once and allow-always selections to the generated client", async () => {
     const permissionRequests: RequestPermissionRequest[] = []
     const fixture = createSseFixture({
@@ -171,7 +193,7 @@ describe("acp permission behavior", () => {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
             callID: "call_edit",
-            structured: { files: [{ file: "file.ts" }], replacements: 1 },
+            metadata: { files: [{ file: "file.ts" }], replacements: 1 },
             content: [{ type: "text", text: "edited" }],
             executed: true,
           }),
@@ -264,7 +286,7 @@ describe("acp permission behavior", () => {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
             callID: "call_patch",
-            structured: { files: [{ file: "first.ts" }, { file: "second.ts" }] },
+            metadata: { files: [{ file: "first.ts" }, { file: "second.ts" }] },
             content: [{ type: "text", text: "patched" }],
             executed: true,
           }),
@@ -465,6 +487,7 @@ function startTurn(fixture: Fixture, connection: Connection, sessionID: string, 
     sessionID,
     cwd,
     start: { type: "input", id: inputID },
+    writeTextFile: true,
     control: { cancelled: false, admission: new AbortController() },
     submit: (signal) => fixture.client.session.prompt({ sessionID, id: inputID, text: "hello" }, { signal }),
   })

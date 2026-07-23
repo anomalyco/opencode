@@ -97,6 +97,11 @@ jobs:
         working-directory: packages/client
         run: bun run check:generated
 
+      - name: Check generated documentation
+        if: runner.os == 'Linux'
+        working-directory: packages/docs
+        run: bun run check:generated
+
   e2e:
     name: e2e (${{ matrix.settings.name }})
     if: github.ref_name != 'v2' && github.head_ref != 'v2'

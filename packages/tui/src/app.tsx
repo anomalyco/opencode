@@ -65,6 +65,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { ThemeErrorToast } from "./component/theme-error-toast"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
@@ -337,6 +338,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                               <DataProvider>
                                                 <LocationProvider>
                                                   <ThemeProvider mode={mode}>
+                                                    <ThemeErrorToast />
                                                     <LocalProvider>
                                                       <PromptStashProvider>
                                                         <DialogProvider>

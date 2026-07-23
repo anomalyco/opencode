@@ -188,7 +188,7 @@ ultimate source of truth.
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
       and a JavaScript `this` receiver remain outside the supported object/function model.
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
-      last definition supplied for a canonical path wins.
+      last tool supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.
 - [x] Outbound tool arguments follow JSON serialization semantics, like `JSON.stringify`: object properties with
       `undefined` values are dropped, `undefined` array elements and non-finite numbers become `null`, and sparse

@@ -190,10 +190,6 @@ const Output = Schema.Struct({
   provider: Provider,
   text: Schema.String,
 })
-const StructuredOutput = Schema.Struct({
-  provider: Output.fields.provider,
-})
-
 export const Plugin = {
   id: "opencode.tool.websearch",
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: PluginContext) {
@@ -209,9 +205,6 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            structured: StructuredOutput,
-            toStructuredOutput: ({ output }) => ({ provider: output.provider }),
-            toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
             execute: (input, context) => {
               const provider = selectProvider(context.sessionID, config, config.provider)
               return Effect.gen(function* () {
@@ -250,10 +243,11 @@ export const Plugin = {
                           ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
                         },
                       )
-                return {
+                const output = {
                   provider,
                   text: text ?? NO_RESULTS,
                 }
+                return { output, content: output.text, metadata: { provider: output.provider } }
               }).pipe(
                 Effect.mapError(
                   (error) => new ToolFailure({ message: `Unable to search the web for ${input.query}`, error }),

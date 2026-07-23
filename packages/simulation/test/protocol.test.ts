@@ -127,7 +127,7 @@ test("decodes the simulated tool lifecycle", () => {
       params: {
         id: "tool_1",
         sequence: 0,
-        update: { structured: { phase: "searching" }, content: [{ type: "text", text: "Searching" }] },
+        update: { phase: "searching" },
       },
     }),
   ).toMatchObject({ method: "tool.update" })

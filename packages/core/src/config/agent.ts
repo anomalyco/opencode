@@ -6,10 +6,7 @@ import { ConfigProvider } from "./provider"
 import { ConfigModel } from "./model"
 import { PositiveInt } from "../schema"
 
-export const Color = Schema.Union([
-  Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
-  Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
-])
+export const Color = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))
 
 export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   model: ConfigModel.Selection.pipe(Schema.optional),

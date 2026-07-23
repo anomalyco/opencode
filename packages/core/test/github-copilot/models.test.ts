@@ -49,12 +49,12 @@ test("defensively syncs advertised Copilot models", async () => {
 
   try {
     const existing = ModelV2.Info.make({
-      ...ModelV2.Info.empty(ProviderV2.ID.githubCopilot, ModelV2.ID.make("gpt-5")),
+      ...ModelV2.Info.default(ProviderV2.ID.githubCopilot, ModelV2.ID.make("gpt-5")),
       modelID: ModelV2.ID.make("gpt-5"),
       name: "GPT-5 local",
     })
     const stale = ModelV2.Info.make({
-      ...ModelV2.Info.empty(ProviderV2.ID.githubCopilot, ModelV2.ID.make("stale")),
+      ...ModelV2.Info.default(ProviderV2.ID.githubCopilot, ModelV2.ID.make("stale")),
       modelID: ModelV2.ID.make("stale"),
     })
     const models = await CopilotModels.get(server.url.origin, {}, [existing, stale])

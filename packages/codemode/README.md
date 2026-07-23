@@ -33,7 +33,7 @@ const lookupOrder = Tool.make({
   description: "Look up an order by ID",
   input: Schema.Struct({ id: Schema.String }),
   output: Schema.Struct({ id: Schema.String, status: Schema.String }),
-  run: ({ id }) => Effect.succeed({ id, status: "open" }),
+  execute: ({ id }) => Effect.succeed({ id, status: "open" }),
 })
 
 const runtime = CodeMode.make({
@@ -55,10 +55,10 @@ const result = await Effect.runPromise(
 ### `Tool.make`
 
 `input` and `output` accept either an Effect Schema or a render-only JSON Schema document. Effect Schema input is
-decoded before `run`; Effect Schema output is decoded and safely copied before the program sees it. JSON Schemas only
-shape the model-visible signature. Without `output`, the signature uses `Promise<unknown>`.
+decoded before `execute`; Effect Schema output is decoded and safely copied before the program sees it. JSON Schemas
+only shape the model-visible signature. Without `output`, the signature uses `Promise<void>`.
 
-Descriptions and schemas are model-visible contracts. Authorization belongs in `run`.
+Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
 Dots in tool names create namespaces: `{ "issues.list": tool }` and `{ issues: { list: tool } }` both expose
 `tools.issues.list(...)`. Other characters use bracket notation, such as

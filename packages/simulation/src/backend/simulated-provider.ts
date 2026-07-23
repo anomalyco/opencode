@@ -10,6 +10,7 @@ import {
   Exit,
   Fiber,
   FiberSet,
+  JsonSchema,
   Layer,
   PubSub,
   Queue,
@@ -451,7 +452,7 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
     name: string,
     input: unknown,
     context: Tool.Context,
-  ): Effect.Effect<Tool.DynamicOutput, Tool.Failure> =>
+  ): Effect.Effect<Tool.Response<JsonSchema.JsonSchema>, Tool.Failure> =>
     Effect.gen(function* () {
       const encoded = yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
         Effect.mapError((error) => new Tool.Failure({ message: `Simulated tool input is not JSON: ${error.message}` })),
@@ -518,7 +519,15 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
             ),
           ),
       )
-      if (invocation.type === "success") return invocation.output
+      // The simulation wire protocol keeps its historical field names; map to the
+      // canonical output at this boundary.
+      if (invocation.type === "success")
+        return {
+          output: invocation.output.structured,
+          ...(invocation.output.content.length === 0
+            ? {}
+            : { content: invocation.output.content as [Tool.Content, ...Tool.Content[]] }),
+        }
       return yield* Effect.fail(new Tool.Failure({ message: invocation.message }))
     })
 
@@ -546,11 +555,8 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                           registration.name,
                           Tool.make({
                             description: registration.description,
-                            jsonSchema: registration.inputSchema,
-                            ...(registration.outputSchema === undefined
-                              ? {}
-                              : { outputSchema: registration.outputSchema }),
-                            ...(registration.permission === undefined ? {} : { permission: registration.permission }),
+                            input: registration.inputSchema,
+                            output: registration.outputSchema ?? {},
                             execute: (input, context) =>
                               invoke(
                                 generation,
@@ -559,7 +565,9 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                                 context,
                               ),
                           }),
-                          registration.options,
+                          registration.permission === undefined
+                            ? registration.options
+                            : { ...registration.options, permission: registration.permission },
                         )
                     })
                     .pipe(Scope.provide(nextScope)),

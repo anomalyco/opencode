@@ -234,8 +234,7 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       footer: ui.api,
-      contextLimit: (model) =>
-        model.providerID === "test" && model.modelID === "model" ? 160_000 : undefined,
+      contextLimit: (model) => (model.providerID === "test" && model.modelID === "model" ? 160_000 : undefined),
     })
 
     events.push({
@@ -324,8 +323,7 @@ describe("V2 mini transport", () => {
           {
             status: "running" as const,
             input: { command: "git status --short" },
-            structured: {},
-            content: [],
+            metadata: {},
           },
           "call_child_source",
         ),
@@ -620,8 +618,8 @@ describe("V2 mini transport", () => {
       expect.objectContaining({ kind: "user", messageID: "msg_queued", text: "follow up" }),
     )
     expect(pending()).toEqual([])
-    const prompt = spyOn(client.session, "prompt").mockImplementation((request) =>
-      ok({ ...promptAdmission(request), admittedSeq: 2 }) as never,
+    const prompt = spyOn(client.session, "prompt").mockImplementation(
+      (request) => ok({ ...promptAdmission(request), admittedSeq: 2 }) as never,
     )
     await transport.queuePromptTurn({
       agent: "review",
@@ -631,10 +629,7 @@ describe("V2 mini transport", () => {
       files: [],
       includeFiles: false,
     })
-    expect(client.session.switchAgent).toHaveBeenCalledWith(
-      { sessionID: "ses_1", agent: "review" },
-      expect.anything(),
-    )
+    expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: "ses_1", agent: "review" }, expect.anything())
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery: "queue" }), expect.anything())
     events.push({
       id: "evt_earlier_admission",
@@ -1976,13 +1971,13 @@ describe("V2 mini transport", () => {
         id: `evt_repeated_success_${index}`,
         created: index * 3 + 3,
         type: "session.tool.success",
-        durable: durable("ses_1", index * 3 + 2),
+        durable: durable("ses_1", index * 3 + 2, 2),
         data: {
           sessionID: "ses_1",
           assistantMessageID: messageID,
           callID: "call_repeated",
-          structured: {},
-          content: [],
+          metadata: {},
+          content: [{ type: "text", text: "" }],
           executed: true,
         },
       })
@@ -2048,15 +2043,14 @@ describe("V2 mini transport", () => {
         sessionID: "ses_1",
         assistantMessageID: "msg_progress",
         callID: "call_progress",
-        structured: { checkpoint: 1 },
-        content: [{ type: "text", text: "partial" }],
+        metadata: { checkpoint: 1 },
       },
     })
     events.push({
       id: "evt_progress_failed",
       created: 4,
       type: "session.tool.failed",
-      durable: durable("ses_1", 3),
+      durable: durable("ses_1", 3, 2),
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_progress",
@@ -2077,7 +2071,7 @@ describe("V2 mini transport", () => {
     ])
     expect(commits.at(-1)?.part?.state).toMatchObject({
       status: "error",
-      structured: { checkpoint: 1 },
+      metadata: { checkpoint: 1 },
       content: [{ type: "text", text: "partial" }],
     })
     await transport.close()
@@ -2649,9 +2643,7 @@ describe("V2 mini transport", () => {
         ],
         command: { name: "deploy", arguments: "prod" },
       },
-      files: [
-        { type: "file", url: "file:///tmp/context.txt", filename: "context.txt", mime: "text/plain" },
-      ],
+      files: [{ type: "file", url: "file:///tmp/context.txt", filename: "context.txt", mime: "text/plain" }],
       includeFiles: true,
     })
 
@@ -2732,10 +2724,7 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
-    expect(client.session.switchAgent).toHaveBeenCalledWith(
-      { sessionID: "ses_1", agent: "review" },
-      expect.anything(),
-    )
+    expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: "ses_1", agent: "review" }, expect.anything())
     expect(request).toMatchObject({ sessionID: "ses_1", id: "msg_skill", skill: "tigerstyle" })
     expect(command).not.toHaveBeenCalled()
     expect(prompt).not.toHaveBeenCalled()
@@ -2886,7 +2875,7 @@ describe("V2 mini transport", () => {
       id: "evt_failed_subagent",
       created: 3,
       type: "session.tool.failed",
-      durable: durable("ses_1", 2),
+      durable: durable("ses_1", 2, 2),
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_subagent",
@@ -2897,8 +2886,7 @@ describe("V2 mini transport", () => {
       },
     })
 
-    while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_failed")))
-      await Bun.sleep(0)
+    while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_failed"))) await Bun.sleep(0)
     expect(states().at(-1)?.tabs).toMatchObject([
       {
         sessionID: "ses_child_failed",
@@ -2954,8 +2942,7 @@ describe("V2 mini transport", () => {
         sessionID: "ses_1",
         assistantMessageID: "msg_subagent",
         callID: "call_subagent",
-        structured: { sessionID: "ses_child_progress", status: "running" },
-        content: [],
+        metadata: { sessionID: "ses_child_progress", status: "running" },
       },
     })
     while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_progress")))
@@ -3005,8 +2992,7 @@ describe("V2 mini transport", () => {
         sessionID: "ses_child_progress",
         assistantMessageID: "msg_child_tool",
         callID: "call_child_shell",
-        structured: { checkpoint: "child" },
-        content: [{ type: "text", text: "child partial" }],
+        metadata: { checkpoint: "child" },
       },
     })
     events.push({
@@ -3025,7 +3011,7 @@ describe("V2 mini transport", () => {
       id: "evt_child_tool_failed",
       created: 8,
       type: "session.tool.failed",
-      durable: durable("ses_child_progress", 3),
+      durable: durable("ses_child_progress", 3, 2),
       data: {
         sessionID: "ses_child_progress",
         assistantMessageID: "msg_child_tool",
@@ -3058,7 +3044,7 @@ describe("V2 mini transport", () => {
       commits.find((item) => item.part?.id === "call_child_shell" && item.toolState === "error")?.part?.state,
     ).toMatchObject({
       status: "error",
-      structured: { checkpoint: "child" },
+      metadata: { checkpoint: "child" },
       content: [{ type: "text", text: "child partial" }],
     })
     expect(
@@ -3145,7 +3131,11 @@ describe("V2 mini transport", () => {
       { sessionID: "ses_child", label: "Explore", title: "Find files", status: "running" },
     ])
 
-    expect(states().at(-1)?.details.ses_child?.commits.filter((item) => item.text === "child answer")).toHaveLength(1)
+    expect(
+      states()
+        .at(-1)
+        ?.details.ses_child?.commits.filter((item) => item.text === "child answer"),
+    ).toHaveLength(1)
 
     events.push({
       id: "evt_child_text_replayed",
@@ -3159,7 +3149,11 @@ describe("V2 mini transport", () => {
       },
     })
     await Bun.sleep(0)
-    expect(states().at(-1)?.details.ses_child?.commits.filter((item) => item.text === "child answer")).toHaveLength(1)
+    expect(
+      states()
+        .at(-1)
+        ?.details.ses_child?.commits.filter((item) => item.text === "child answer"),
+    ).toHaveLength(1)
 
     events.push({
       id: "evt_child_text_suffix",
@@ -3172,7 +3166,9 @@ describe("V2 mini transport", () => {
         delta: " suffix",
       },
     })
-    while (!states().some((state) => state.details.ses_child?.commits.some((item) => item.text === "child answer suffix")))
+    while (
+      !states().some((state) => state.details.ses_child?.commits.some((item) => item.text === "child answer suffix"))
+    )
       await Bun.sleep(0)
 
     events.push({
@@ -3437,7 +3433,7 @@ describe("V2 mini transport", () => {
                   status: "completed" as const,
                   input: { command: "projected" },
                   content: [{ type: "text" as const, text: "projected result" }],
-                  structured: {},
+                  metadata: {},
                 },
                 time: { created: 1, ran: 1, completed: 2 },
               },
@@ -3488,12 +3484,12 @@ describe("V2 mini transport", () => {
       id: "evt_success_terminal",
       created: 2,
       type: "session.tool.success",
-      durable: durable("ses_child", 2),
+      durable: durable("ses_child", 2, 2),
       data: {
         sessionID: "ses_child",
         assistantMessageID: "msg_tool_projected",
         callID: "call_terminal",
-        structured: {},
+        metadata: {},
         content: [{ type: "text", text: "found" }],
         executed: true,
       },
@@ -3651,13 +3647,13 @@ describe("V2 mini transport", () => {
       id: "evt_parent_success",
       created: 0,
       type: "session.tool.success",
-      durable: durable("ses_1", 1),
+      durable: durable("ses_1", 1, 2),
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_parent_a",
         callID: "call_sub",
-        structured: { sessionID: "ses_child", status: "running", output: "" },
-        content: [],
+        metadata: { sessionID: "ses_child", status: "running", output: "" },
+        content: [{ type: "text", text: "" }],
         executed: true,
       },
     })
@@ -3738,7 +3734,7 @@ describe("V2 mini transport", () => {
                   status: "completed" as const,
                   input: { agent: "explore", description: "Find things", prompt: "go" },
                   content: [{ type: "text" as const, text: "done" }],
-                  structured: { sessionID: "ses_child", status: "completed", output: "done" },
+                  metadata: { sessionID: "ses_child", status: "completed", output: "done" },
                 },
                 time: { created: 1, ran: 1, completed: 2 },
               },

@@ -59,7 +59,7 @@ describe("VercelPlugin", () => {
       yield* addPlugin()
       const event = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-vercel"), ModelV2.ID.make("v0-1.0-md")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("custom-vercel"), ModelV2.ID.make("v0-1.0-md")),
           modelID: ModelV2.ID.make("v0-1.0-md"),
           package: "aisdk:@ai-sdk/vercel",
         }),

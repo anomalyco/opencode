@@ -17,7 +17,7 @@ import { it } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const skillToolNode = makeLocationNode({
   name: "test/skill-tool-plugin",
@@ -108,23 +108,22 @@ describe("SkillTool", () => {
                 ...toolIdentity,
                 call: { type: "tool-call", id: "call-skill", name: "skill", input: { id: "effect" } },
               }),
-            ).toEqual({
-              type: "text",
-              value: SkillTool.toModelOutput(info, [reference]),
+            ).toMatchObject({
+              status: "completed",
+              content: [{ type: "text", text: SkillTool.toModelOutput(info, [reference]) }],
             })
             expect(SkillTool.toModelOutput(info, [reference])).toContain(`Base directory for this skill: ${directory}`)
             expect(
-              yield* settleTool(registry, {
+              yield* executeTool(registry, {
                 sessionID,
                 ...toolIdentity,
                 call: { type: "tool-call", id: "call-skill-overflow", name: "skill", input: { id: "effect" } },
               }),
             ).toEqual({
-              result: { type: "text", value: SkillTool.toModelOutput(info, [reference]) },
-              output: {
-                structured: { name: "Effect", directory },
-                content: [{ type: "text", text: SkillTool.toModelOutput(info, [reference]) }],
-              },
+              status: "completed",
+              output: { name: "Effect", directory, output: SkillTool.toModelOutput(info, [reference]) },
+              content: [{ type: "text", text: SkillTool.toModelOutput(info, [reference]) }],
+              metadata: { name: "Effect", directory },
             })
             expect(assertions).toMatchObject([
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
@@ -136,7 +135,10 @@ describe("SkillTool", () => {
                 ...toolIdentity,
                 call: { type: "tool-call", id: "call-missing-skill", name: "skill", input: { id: "missing" } },
               }),
-            ).toEqual({ type: "error", value: "Unable to load skill missing" })
+            ).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: "Unable to load skill missing" },
+            })
             deny = true
             expect(
               yield* executeTool(registry, {
@@ -144,7 +146,10 @@ describe("SkillTool", () => {
                 ...toolIdentity,
                 call: { type: "tool-call", id: "call-denied-skill", name: "skill", input: { id: "effect" } },
               }),
-            ).toEqual({ type: "error", value: "Unable to load skill effect" })
+            ).toEqual({
+              status: "error",
+              error: { type: "permission.rejected", message: "Permission denied: skill" },
+            })
             deny = false
             const flat = SkillV2.Info.make({
               id: SkillV2.ID.make("public"),
@@ -166,7 +171,10 @@ describe("SkillTool", () => {
                 ...toolIdentity,
                 call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { id: "public" } },
               }),
-            ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })
+            ).toMatchObject({
+              status: "completed",
+              content: [{ type: "text", text: SkillTool.toModelOutput(flat, []) }],
+            })
           }).pipe(Effect.provide(skillToolLayer))
         }),
       ),

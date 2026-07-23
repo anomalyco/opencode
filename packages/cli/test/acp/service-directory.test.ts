@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
-import { makeACPFixture, makeSession, secondModel, testModel } from "./service-fixture"
+import { makeACPFixture, makeSession, secondModel } from "./service-fixture"
 
 describe("acp service directory behavior", () => {
   test("creates sessions from a catalog shared by concurrent callers in the same cwd", async () => {
@@ -134,7 +134,6 @@ describe("acp service directory behavior", () => {
       configId: "mode",
       value: "plan",
     })
-    await fixture.service.setSessionModel({ sessionId: session.sessionId, modelId: "test/test-model/high" })
     await fixture.service.setSessionMode({ sessionId: session.sessionId, modeId: "build" })
 
     expect(currentValue(selectedModel, "model")).toBe("test/second-model")
@@ -148,7 +147,6 @@ describe("acp service directory behavior", () => {
     ).toEqual([
       { model: { providerID: "test", id: secondModel.id } },
       { model: { providerID: "test", id: secondModel.id, variant: "medium" } },
-      { model: { providerID: "test", id: testModel.id, variant: "high" } },
     ])
     expect(
       fixture.requests

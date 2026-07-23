@@ -1,7 +1,7 @@
 // Current-native subagent (child Session) tracking for the mini transport.
 //
 // Discovers child Sessions of the active parent from four current sources:
-//   1. projected subagent tool output (`structured.sessionID`) during hydration
+//   1. projected subagent tool output (`metadata.sessionID`) during hydration
 //   2. the current session list filtered by `parentID` during hydration
 //   3. the process-local active-session map during hydration
 //   4. live events from unknown sessions whose `parentID` matches the parent
@@ -33,6 +33,7 @@ import type {
   StreamCommit,
 } from "./types"
 import { canonicalToolName, normalizeTool, toolOutputText, toolView } from "./tool"
+import { toolDisplayContent } from "../util/tool-display"
 
 const CHILD_MESSAGE_LIMIT = 80
 const CHILD_FRAME_LIMIT = 80
@@ -55,7 +56,7 @@ export function toolCommit(
 ): StreamCommit {
   const part = normalizeTool(input)
   const status = part.state.status
-  const output = status === "streaming" ? "" : toolOutputText(part.name, part.state.content)
+  const output = status === "streaming" ? "" : toolOutputText(part.name, toolDisplayContent(part.state))
   const partial = status === "error" && phase === "progress" && value !== undefined
   const text =
     status === "running" || partial
@@ -178,10 +179,10 @@ function blockerCategory(event: V2Event): "permission" | "form" | undefined {
   if (event.type === "form.created" || event.type === "form.replied" || event.type === "form.cancelled") return "form"
 }
 
-function childSessionID(structured: Record<string, unknown> | undefined) {
-  const sessionID = text(structured?.sessionID)
+function childSessionID(metadata: Record<string, unknown> | undefined) {
+  const sessionID = text(metadata?.sessionID)
   if (!sessionID || !sessionID.startsWith("ses")) return undefined
-  const status = structured?.status
+  const status = metadata?.status
   if (status !== "running" && status !== "completed") return undefined
   return { sessionID, running: status === "running" }
 }
@@ -199,7 +200,7 @@ function tab(child: ChildState): FooterSubagentTab {
 
 export function createSubagentTracker(input: SubagentTrackerInput): SubagentTracker {
   const children = new Map<string, ChildState>()
-  // Live subagent tool calls in the parent, so tool.success structured output
+  // Live subagent tool calls in the parent, so tool.success metadata
   // can be joined with the call's input metadata.
   const pendingCalls = new Map<string, Record<string, unknown>>()
   // Recently resolved non-family sessions. Retention is bounded so unrelated
@@ -309,7 +310,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     const current = child.tools.get(key)
-    const output = toolOutputText(part.name, part.state.content)
+    const output = toolOutputText(part.name, toolDisplayContent(part.state))
     if (part.state.status === "running") {
       if (!current || current.part.state.status === "streaming")
         setFrame(child, frame, toolCommit(part, messageID, "start", undefined, input.directory))
@@ -779,7 +780,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           name: current?.part.name ?? "tool",
           executed: event.data.executed,
           providerState: event.data.state,
-          state: { status: "running", input: event.data.input, structured: {}, content: [] },
+          state: { status: "running", input: event.data.input, metadata: {} },
           time: { created: current?.part.time.created ?? event.created, ran: event.created },
         },
         event.data.assistantMessageID,
@@ -804,8 +805,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           state: {
             status: "running",
             input: part && part.state.status !== "streaming" ? part.state.input : {},
-            structured: event.data.structured,
-            content: event.data.content,
+            metadata: event.data.metadata,
           },
           time: {
             created: part?.time.created ?? event.created,
@@ -837,18 +837,15 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
             ? {
                 status: "error",
                 input: part && part.state.status !== "streaming" ? part.state.input : {},
-                structured:
-                  event.data.metadata ?? (part && part.state.status !== "streaming" ? part.state.structured : {}),
-                content: event.data.content ?? (part && part.state.status !== "streaming" ? part.state.content : []),
+                metadata: event.data.metadata,
+                content: event.data.content,
                 error: event.data.error,
-                result: event.data.result,
               }
             : {
                 status: "completed",
                 input: part && part.state.status !== "streaming" ? part.state.input : {},
-                structured: event.data.structured,
+                metadata: event.data.metadata,
                 content: event.data.content,
-                result: event.data.result,
               },
           time: {
             created: part?.time.created ?? event.created,
@@ -921,7 +918,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   const mainTool = (item: SessionMessageAssistantTool, active?: Record<string, unknown>) => {
     const tool = normalizeTool(item)
     if (tool.name !== "subagent" || tool.state.status === "streaming") return
-    const found = childSessionID(record(tool.state.structured))
+    const found = childSessionID(record(tool.state.metadata))
     if (!found) return
     const child = admitChild(found.sessionID)
     if (!child) return
@@ -967,7 +964,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       const key = sourceKey(event.data.assistantMessageID, event.data.callID)
       const pending = pendingCalls.get(key)
       if (event.type !== "session.tool.progress") pendingCalls.delete(key)
-      const found = childSessionID(record(event.type === "session.tool.failed" ? event.data.metadata : event.data.structured))
+      const found = childSessionID(record(event.data.metadata))
       if (!found) return
       const child = admitChild(found.sessionID)
       if (!child) return
@@ -1085,11 +1082,13 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       input.emit()
     },
     snapshot() {
-      const tabs = [...children.values()].toSorted((a, b) => {
-        const active = Number(b.status === "running") - Number(a.status === "running")
-        if (active !== 0) return active
-        return b.lastUpdatedAt - a.lastUpdatedAt
-      }).map(tab)
+      const tabs = [...children.values()]
+        .toSorted((a, b) => {
+          const active = Number(b.status === "running") - Number(a.status === "running")
+          if (active !== 0) return active
+          return b.lastUpdatedAt - a.lastUpdatedAt
+        })
+        .map(tab)
       const child = selected ? children.get(selected) : undefined
       const details: Record<string, FooterSubagentDetail> =
         child && !child.detailStale ? { [child.sessionID]: { commits: child.frames.map((item) => item.commit) } } : {}

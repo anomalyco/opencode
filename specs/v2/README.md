@@ -23,7 +23,7 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 | Document                | Job                                                                                     |
 | ----------------------- | --------------------------------------------------------------------------------------- |
 | [Session](./session.md) | Explain prompt admission, execution, instructions, compaction, and recovery boundaries. |
-| [Tools](./tools.md)     | Explain tool construction, registration, execution, and settlement laws.                |
+| [Tools](./tools.md)     | Explain tool construction, registration, execution, and outcome laws.                   |
 
 ## Decisions And Proposals
 

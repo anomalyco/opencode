@@ -36,8 +36,8 @@ export const layer = Layer.effect(
         const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(selection.session.id)
           ? selection.session.id.slice(4)
           : selection.session.id
-        const executableTools = yield* registry.materialize(selection.agent.info.permissions)
-        const toolDefinitions = executableTools.definitions
+        const toolSet = yield* registry.snapshot(selection.agent.info.permissions)
+        const toolDefinitions = toolSet.definitions
         const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
         const contextEvent = yield* hooks.trigger("session", "context", {
           sessionID: selection.session.id,
@@ -52,7 +52,10 @@ export const layer = Layer.effect(
             Message.user(input.prompt),
           ],
           tools: Object.fromEntries(
-            toolDefinitions.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
+            toolDefinitions.map((tool) => [
+              tool.name,
+              { description: tool.description, input: { ...tool.inputSchema } },
+            ]),
           ),
         })
         const hookedTools = Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
@@ -74,7 +77,6 @@ export const layer = Layer.effect(
             system: contextEvent.system,
             messages: contextEvent.messages,
             tools: hookedTools,
-            toolChoice: "none",
           }),
         )
         yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })

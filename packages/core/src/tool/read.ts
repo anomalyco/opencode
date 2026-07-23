@@ -48,20 +48,6 @@ export const Plugin = {
               "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths inside it are accepted, while external absolute paths require external_directory approval.",
             input: Input,
             output: Output,
-            structured: Schema.toEncoded(Output),
-            // Image base64 reaches the model through content items (normalized generically
-            // at tool settlement); persisting a second copy in structured would store the
-            // original unresized bytes in the message row.
-            toStructuredOutput: ({ output }) =>
-              "encoding" in output && output.encoding === "base64" ? { ...output, content: "" } : output,
-            toModelOutput: ({ input, output }) => {
-              if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
-                return []
-              return [
-                { type: "text", text: "Image read successfully" },
-                { type: "file", data: output.content, mime: output.mime, name: input.path },
-              ]
-            },
             execute: (input, context) => {
               return Effect.gen(function* () {
                 const source = {
@@ -125,6 +111,20 @@ export const Plugin = {
                   return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
                 return content
               }).pipe(
+                Effect.map((output) => {
+                  // Image base64 reaches the model through content items; avoid a second
+                  // unresized copy in model text.
+                  const content =
+                    "encoding" in output && output.encoding === "base64"
+                      ? SUPPORTED_IMAGE_MIMES.has(output.mime)
+                        ? ([
+                            { type: "text", text: "Image read successfully" },
+                            { type: "file", data: output.content, mime: output.mime, name: input.path },
+                          ] as const)
+                        : JSON.stringify({ ...output, content: "" }, null, 2)
+                      : JSON.stringify(output, null, 2)
+                  return { output, content }
+                }),
                 Effect.mapError((error) => {
                   const message =
                     error instanceof ReadToolFileSystem.BinaryFileError ||

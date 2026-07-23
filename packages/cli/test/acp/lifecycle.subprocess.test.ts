@@ -1,5 +1,6 @@
 import type {
   CloseSessionResponse,
+  DeleteSessionResponse,
   ListSessionsResponse,
   LoadSessionResponse,
   ResumeSessionResponse,
@@ -58,6 +59,20 @@ describe("acp lifecycle subprocess", () => {
     const listed = expectOk(await acp.request<ListSessionsResponse>("session/list", { cwd: fixture.home }))
 
     expect(listed.sessions.some((item) => item.sessionId === session.sessionId)).toBe(true)
+  }, 60_000)
+
+  test("delete capability and delete request", async () => {
+    await using fixture = await createAcpFixture()
+    const acp = fixture.spawn()
+    const initialized = await initialize(acp)
+    expect(initialized.agentCapabilities?.sessionCapabilities?.delete).toEqual({})
+    const session = await newSession(acp, fixture.home)
+
+    expect(
+      expectOk(await acp.request<DeleteSessionResponse>("session/delete", { sessionId: session.sessionId })),
+    ).toEqual({})
+    const listed = expectOk(await acp.request<ListSessionsResponse>("session/list", { cwd: fixture.home }))
+    expect(listed.sessions.some((item) => item.sessionId === session.sessionId)).toBe(false)
   }, 60_000)
 
   test("resume capability advertisement", async () => {

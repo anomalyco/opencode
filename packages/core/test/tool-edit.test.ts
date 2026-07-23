@@ -18,7 +18,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
@@ -141,15 +141,23 @@ describe("EditTool", () => {
                 expect(yield* toolDefinitions(registry, [{ action: "edit", resource: "*", effect: "deny" }])).toEqual(
                   [],
                 )
-                const settled = yield* settleTool(
+                const settled = yield* executeTool(
                   registry,
                   call({ path: "hello.txt", oldString: "before", newString: "after" }),
                 )
-                expect(settled.result).toEqual({
-                  type: "text",
-                  value: "Edited file successfully: hello.txt\nReplacements: 1\n```diff\n-before\n+after\n```",
+                expect(settled.status).toBe("completed")
+                if (settled.status !== "completed") return
+                expect(settled.content).toEqual([
+                  {
+                    type: "text",
+                    text: "Edited file successfully: hello.txt\nReplacements: 1\n```diff\n-before\n+after\n```",
+                  },
+                ])
+                // Compact UI metadata carries the file diffs the TUI renders.
+                expect(settled.metadata).toMatchObject({
+                  files: [{ file: "hello.txt", status: "modified", additions: 1, deletions: 1 }],
                 })
-                expect(settled.output?.structured).toEqual({
+                expect(settled.output).toEqual({
                   replacements: 1,
                   files: [
                     {
@@ -187,7 +195,7 @@ describe("EditTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.gen(function* () {
-              expect(result.type).toBe("text")
+              expect(result.status).toBe("completed")
               expect(assertions.map((input) => input.action)).toEqual(["edit"])
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after")
             }),
@@ -217,7 +225,7 @@ describe("EditTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.sync(() => {
-              expect(result.type).toBe("text")
+              expect(result.status).toBe("completed")
               expect(assertions.map((input) => input.action)).toEqual(["edit"])
               expect(assertions[0]?.resources).toEqual(["link.txt"])
             }),
@@ -247,7 +255,7 @@ describe("EditTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.gen(function* () {
-              expect(result.type).toBe("text")
+              expect(result.status).toBe("completed")
               expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after")
               expect(writes).toHaveLength(1)
@@ -276,8 +284,8 @@ describe("EditTool", () => {
               executeTool(registry, call({ path: external, oldString: "before", newString: "after" })),
             ),
           ).toEqual({
-            type: "error",
-            value: `Unable to edit ${external}`,
+            status: "error",
+            error: { type: "permission.rejected", message: "Permission denied: external_directory" },
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(reads).toBe(0)
@@ -290,8 +298,8 @@ describe("EditTool", () => {
               executeTool(registry, call({ path: external, oldString: "before", newString: "after" })),
             ),
           ).toEqual({
-            type: "error",
-            value: `Unable to edit ${external}`,
+            status: "error",
+            error: { type: "permission.rejected", message: "Permission denied: edit" },
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
           expect(reads).toBe(0)
@@ -325,7 +333,10 @@ describe("EditTool", () => {
                   call({ path: "secret.txt", oldString: "not present", newString: "replacement" }),
                 )
 
-                expect(matching).toEqual({ type: "error", value: "Unable to edit secret.txt" })
+                expect(matching).toEqual({
+                  status: "error",
+                  error: { type: "permission.rejected", message: "Permission denied: edit" },
+                })
                 expect(missing).toEqual(matching)
                 expect(assertions.map((input) => input.action)).toEqual(["edit", "edit"])
                 expect(reads).toBe(0)
@@ -352,28 +363,40 @@ describe("EditTool", () => {
                 expect(
                   yield* executeTool(registry, call({ path: "matches.txt", oldString: "same", newString: "same" })),
                 ).toEqual({
-                  type: "error",
-                  value: "No changes to apply: oldString and newString are identical.",
+                  status: "error",
+                  error: {
+                    type: "tool.execution",
+                    message: "No changes to apply: oldString and newString are identical.",
+                  },
                 })
                 expect(
                   yield* executeTool(registry, call({ path: "matches.txt", oldString: "", newString: "after" })),
                 ).toEqual({
-                  type: "error",
-                  value: "oldString must not be empty. Use write to create or overwrite a file.",
+                  status: "error",
+                  error: {
+                    type: "tool.execution",
+                    message: "oldString must not be empty. Use write to create or overwrite a file.",
+                  },
                 })
                 expect(
                   yield* executeTool(registry, call({ path: "matches.txt", oldString: "missing", newString: "after" })),
                 ).toEqual({
-                  type: "error",
-                  value:
-                    "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                  status: "error",
+                  error: {
+                    type: "tool.execution",
+                    message:
+                      "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                  },
                 })
                 expect(
                   yield* executeTool(registry, call({ path: "matches.txt", oldString: "same", newString: "after" })),
                 ).toEqual({
-                  type: "error",
-                  value:
-                    "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                  status: "error",
+                  error: {
+                    type: "tool.execution",
+                    message:
+                      "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                  },
                 })
                 expect(writes).toEqual([])
               }),
@@ -394,12 +417,14 @@ describe("EditTool", () => {
         return Effect.promise(() => fs.writeFile(target, "same same same")).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
-              settleTool(registry, call({ path: "all.txt", oldString: "same", newString: "after", replaceAll: true })),
+              executeTool(registry, call({ path: "all.txt", oldString: "same", newString: "after", replaceAll: true })),
             ),
           ),
           Effect.andThen((settled) =>
             Effect.gen(function* () {
-              expect(settled.output?.structured).toMatchObject({ replacements: 3 })
+              expect(settled.status).toBe("completed")
+              if (settled.status !== "completed") return
+              expect(settled.output).toMatchObject({ replacements: 3 })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after after after")
               expect(writes).toHaveLength(1)
             }),
@@ -445,9 +470,14 @@ describe("EditTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.gen(function* () {
+              // The message-less StaleContentError cause must not erase the tool's
+              // curated failure message; the canonical error is the sole authority.
               expect(result).toEqual({
-                type: "error",
-                value: "File changed after permission approval. Read it again before editing.",
+                status: "error",
+                error: {
+                  type: "tool.execution",
+                  message: "File changed after permission approval. Read it again before editing.",
+                },
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
               expect(writes).toEqual([])

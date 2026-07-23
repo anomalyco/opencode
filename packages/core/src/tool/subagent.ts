@@ -31,11 +31,6 @@ export const Output = Schema.Struct({
   status: Schema.Literals(["completed", "running"]),
   output: Schema.String,
 })
-const StructuredOutput = Schema.Struct({
-  sessionID: Output.fields.sessionID,
-  status: Output.fields.status,
-})
-
 export const description = [
   "Spawn a subagent: a child session running a configured agent with fresh context.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
@@ -119,9 +114,6 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            structured: StructuredOutput,
-            toStructuredOutput: ({ output }) => ({ sessionID: output.sessionID, status: output.status }),
-            toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {
                 const parent = yield* runtime.session
@@ -186,7 +178,7 @@ export const Plugin = {
 
                 const background = input.background === true
                 yield* context.progress({
-                  structured: { sessionID: child.id, status: "running" },
+                  metadata: { sessionID: child.id, status: "running" },
                 })
 
                 const run = Effect.gen(function* () {
@@ -238,7 +230,13 @@ export const Plugin = {
                 if (result?.info.status === "cancelled")
                   return yield* new ToolFailure({ message: "Subagent cancelled" })
                 return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
-              }),
+              }).pipe(
+                Effect.map((output) => ({
+                  output,
+                  content: output.output,
+                  metadata: { sessionID: output.sessionID, status: output.status },
+                })),
+              ),
           }),
           { codemode: false },
         ),

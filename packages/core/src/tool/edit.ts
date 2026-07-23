@@ -97,15 +97,11 @@ export const Plugin = {
       .transform((draft) =>
         draft.add(
           name,
-          Tool.withPermission(
-            Tool.make({
+          Tool.make({
               description:
                 "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
               input: Input,
               output: Output,
-              toModelOutput: ({ input, output }) => [
-                { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
-              ],
               execute: (input, context) => {
                 const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
                   effect.pipe(
@@ -207,12 +203,16 @@ export const Plugin = {
                     ],
                     replacements,
                   } satisfies Output
-                })
+                }).pipe(
+                  Effect.map((output) => ({
+                    output,
+                    content: toModelOutput(output, input.oldString, input.newString),
+                    metadata: { files: output.files },
+                  })),
+                )
               },
             }),
-            "edit",
-          ),
-          { codemode: false },
+          { codemode: false, permission: "edit" },
         ),
       )
       .pipe(Effect.orDie)

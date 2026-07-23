@@ -235,6 +235,34 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("keeps tools and sends tool_choice none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_choice_none",
+          model,
+          tools: [{ name: "lookup", description: "Look things up", inputSchema: { type: "object", properties: {} } }],
+          messages: [
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+          ],
+          toolChoice: "none",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          name: "lookup",
+          description: "Look things up",
+          input_schema: { type: "object", properties: {} },
+        },
+      ])
+      expect(prepared.body.tool_choice).toEqual({ type: "none" })
+    }),
+  )
+
   // Regression: read tool results must stay structured so base64 media data is
   // not JSON-stringified into `tool_result.content`.
   it.effect("lowers media tool-result content as structured blocks", () =>
@@ -636,7 +664,14 @@ describe("Anthropic Messages route", () => {
         name: "web_search",
         result: { type: "json", value: [{ type: "web_search_result", url: "https://example.com", title: "Example" }] },
         providerExecuted: true,
-        providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
+        // The complete payload rides in provider metadata as irreducible replay
+        // state for later stateless requests.
+        providerMetadata: {
+          anthropic: {
+            blockType: "web_search_tool_result",
+            result: [{ type: "web_search_result", url: "https://example.com", title: "Example" }],
+          },
+        },
       })
       expect(response.text).toBe("Found it.")
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })

@@ -34,7 +34,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { tempLocationLayer } from "./fixture/location"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { registerToolPlugin, settleTool } from "./lib/tool"
+import { executeTool, registerToolPlugin } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
@@ -163,7 +163,7 @@ describe("SessionInstructions", () => {
 
       // A read deep under sub/ discovers deep and sub AGENTS.md, walking up to but
       // excluding the Location root (already supplied by core initial instructions).
-      yield* settleTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
+      yield* executeTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
 
       const firstInjected = yield* synthetics(sessionID)
       expect(firstInjected).toHaveLength(1)
@@ -179,7 +179,7 @@ describe("SessionInstructions", () => {
 
       // A sibling read under sub/other discovers only the new AGENTS.md; sub is already
       // injected for this session so it is not re-emitted, and the root is still excluded.
-      yield* settleTool(registry, readCall(sessionID, "call-other", "sub/other/file2.txt"))
+      yield* executeTool(registry, readCall(sessionID, "call-other", "sub/other/file2.txt"))
 
       const secondInjected = yield* synthetics(sessionID)
       expect(secondInjected).toHaveLength(2)
@@ -210,7 +210,7 @@ describe("SessionInstructions", () => {
       yield* seedSynthetic(sessionID, [subPath])
       expect(yield* synthetics(sessionID)).toHaveLength(1)
 
-      yield* settleTool(registry, readCall(sessionID, "call-sub", "sub/file.txt"))
+      yield* executeTool(registry, readCall(sessionID, "call-sub", "sub/file.txt"))
 
       // The durable claim on the prior synthetic prevents re-injection; no new synthetic.
       expect(yield* synthetics(sessionID)).toHaveLength(1)
@@ -236,7 +236,7 @@ describe("SessionInstructions", () => {
 
         // Listing packages/foo/ discovers its own AGENTS.md, walking up to but excluding
         // the Location root (already supplied by core initial instructions).
-        yield* settleTool(registry, readCall(sessionID, "call-list", "packages/foo"))
+        yield* executeTool(registry, readCall(sessionID, "call-list", "packages/foo"))
 
         const firstInjected = yield* synthetics(sessionID)
         expect(firstInjected).toHaveLength(1)
@@ -247,7 +247,7 @@ describe("SessionInstructions", () => {
 
         // A subsequent file read under the listed directory is a dedup: pkg's AGENTS.md is
         // already injected for this session, so nothing new is emitted.
-        yield* settleTool(registry, readCall(sessionID, "call-file", "packages/foo/file.txt"))
+        yield* executeTool(registry, readCall(sessionID, "call-file", "packages/foo/file.txt"))
 
         expect(yield* synthetics(sessionID)).toHaveLength(1)
       }),
@@ -269,7 +269,7 @@ describe("SessionInstructions", () => {
 
       // The walk starts and stops at the Location root: the root AGENTS.md is searched but
       // dropped by the dirname filter, and up() only walks upward so nested dirs are unseen.
-      yield* settleTool(registry, readCall(sessionID, "call-root-list", "."))
+      yield* executeTool(registry, readCall(sessionID, "call-root-list", "."))
 
       expect(yield* synthetics(sessionID)).toHaveLength(0)
     }),

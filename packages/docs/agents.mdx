@@ -89,7 +89,7 @@ becomes `system`:
 description: Reviews changes without modifying files
 mode: subagent
 model: anthropic/claude-sonnet-4-5#high
-color: warning
+color: "#ff6b6b"
 steps: 8
 permissions:
   - action: edit
@@ -118,7 +118,7 @@ Use the `agents` field in any [OpenCode configuration file](/config):
       "mode": "all",
       "model": "anthropic/claude-sonnet-4-5#high",
       "system": "Review the current changes. Report findings before any summary.",
-      "color": "warning",
+      "color": "#ff6b6b",
       "steps": 8,
       "permissions": [
         { "action": "edit", "resource": "*", "effect": "deny" },
@@ -250,8 +250,7 @@ security boundary.
 
 ### `color`
 
-Sets the agent's UI color. Use a six-digit hex color such as `#ff6b6b`, or one
-of `primary`, `secondary`, `accent`, `success`, `warning`, `error`, or `info`.
+Sets the agent's UI color. Use a six-digit hex color such as `#ff6b6b`.
 
 ### `disabled`
 

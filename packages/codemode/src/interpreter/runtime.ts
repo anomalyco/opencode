@@ -271,7 +271,10 @@ const promiseResolutionNode: AstNode = { type: "PromiseResolution" }
 
 export class Interpreter<R> {
   private scopes: ScopeStack
-  private readonly invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+  private readonly executeTool: (
+    path: ReadonlyArray<string>,
+    args: Array<unknown>,
+  ) => Effect.Effect<unknown, unknown, R>
   private readonly invokeSearch: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   private readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   private readonly logs: Array<string>
@@ -286,7 +289,7 @@ export class Interpreter<R> {
   }
 
   constructor(
-    invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
+    executeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     invokeSearch: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
     promises: PromiseRuntime<R>,
@@ -294,7 +297,7 @@ export class Interpreter<R> {
   ) {
     const globalScope = new Map<string, Binding>()
     this.scopes = new ScopeStack([globalScope])
-    this.invokeTool = invokeTool
+    this.executeTool = executeTool
     this.invokeSearch = invokeSearch
     this.toolKeys = toolKeys
     this.logs = logs
@@ -369,7 +372,7 @@ export class Interpreter<R> {
     path: ReadonlyArray<string>,
     args: Array<unknown>,
   ): Effect.Effect<CodeModePromise, never, R> {
-    return this.createPromise(Effect.suspend(() => this.invokeTool(path, args)))
+    return this.createPromise(Effect.suspend(() => this.executeTool(path, args)))
   }
 
   private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<CodeModePromise, never, R> {
@@ -2079,7 +2082,7 @@ export class Interpreter<R> {
   }
 
   private invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
-    const invocation = new Interpreter(this.invokeTool, this.invokeSearch, this.toolKeys, this.promises, this.logs)
+    const invocation = new Interpreter(this.executeTool, this.invokeSearch, this.toolKeys, this.promises, this.logs)
     invocation.scopes = new ScopeStack([...fn.capturedScopes, new Map()])
     const run = Effect.gen(function* () {
       // Seed all parameters first so defaults cannot fall through to same-named outer bindings.

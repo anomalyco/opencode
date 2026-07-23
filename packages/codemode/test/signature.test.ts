@@ -18,7 +18,8 @@ const listIssues = Tool.make({
     },
     required: ["owner"],
   },
-  run: () => Effect.succeed("[]"),
+  output: {},
+  execute: () => Effect.succeed("[]"),
 })
 
 // An Effect Schema tool whose field annotations must flow through the emitted JSON Schema.
@@ -31,7 +32,7 @@ const lookupOrder = Tool.make({
   output: Schema.Struct({
     status: Schema.String.annotate({ description: "Current order status" }),
   }),
-  run: () => Effect.succeed({ status: "open" }),
+  execute: () => Effect.succeed({ status: "open" }),
 })
 
 describe("pretty signature rendering", () => {
@@ -261,7 +262,7 @@ describe("non-identifier property names render as quoted keys", () => {
         properties: { "content-type": { type: "string" } },
         required: ["content-type"],
       } as const,
-      run: () => Effect.succeed({ "content-type": "text/plain" }),
+      execute: () => Effect.succeed({ "content-type": "text/plain" }),
     })
     expect(inputTypeScript(tool)).toContain('"foo-bar"?: string')
     expect(outputTypeScript(tool)).toBe('{ "content-type": string }')
@@ -272,7 +273,7 @@ describe("non-identifier property names render as quoted keys", () => {
     const tool = Tool.make({
       description: "Schema tool with awkward field names",
       input: Schema.Struct({ "foo-bar": Schema.String, plain: Schema.optionalKey(Schema.Number) }),
-      run: () => Effect.succeed(null),
+      execute: () => Effect.succeed(null),
     })
     expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number }')
     expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string,', "  plain?: number,", "}"].join("\n"))
@@ -306,7 +307,7 @@ describe("union schemas render every alternative", () => {
         },
       } as const,
       output: { anyOf: [{ type: "number" }, { type: "boolean" }] } as const,
-      run: () => Effect.succeed(1),
+      execute: () => Effect.succeed(1),
     })
     expect(inputTypeScript(tool)).toBe("{ value?: string | number }")
     expect(outputTypeScript(tool)).toBe("number | boolean")
@@ -417,7 +418,8 @@ describe("non-identifier tool paths", () => {
       },
       required: ["query", "libraryName"],
     } as const,
-    run: () => Effect.succeed("/reactjs/react.dev"),
+    output: {},
+    execute: () => Effect.succeed("/reactjs/react.dev"),
   })
   const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
 

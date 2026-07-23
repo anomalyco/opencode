@@ -94,19 +94,23 @@ await ctx.session.hook("context", (event) => {
 })
 ```
 
-Promise tools use plain object declarations with async executors:
+Promise tools use executable tool values with async executors. Registration
+supplies the tool's name and options separately:
 
 ```ts
 import { Schema } from "effect"
+import { Tool } from "@opencode-ai/plugin/v2/tool"
 
 await ctx.tool.transform((tools) => {
-  tools.add({
-    name: "echo",
-    description: "Echo text",
-    input: Schema.Struct({ text: Schema.String }),
-    output: Schema.Struct({ text: Schema.String }),
-    execute: async ({ text }) => ({ text }),
-  })
+  tools.add(
+    "echo",
+    Tool.make({
+      description: "Echo text",
+      input: Schema.Struct({ text: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      execute: async ({ text }) => ({ output: { text }, content: text }),
+    }),
+  )
 })
 ```
 

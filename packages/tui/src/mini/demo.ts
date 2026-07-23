@@ -342,13 +342,13 @@ function make(state: State, tool: string, input: Record<string, JsonValue>): Ref
   }
 }
 
-function startTool(state: State, ref: Ref, structured: Record<string, JsonValue> = {}): SessionMessageAssistantTool {
+function startTool(state: State, ref: Ref, metadata: Record<string, JsonValue> = {}): SessionMessageAssistantTool {
   state.started.add(ref.call)
   const part = {
     type: "tool" as const,
     id: ref.call,
     name: ref.tool,
-    state: { status: "running" as const, input: ref.input, structured, content: [] },
+    state: { status: "running" as const, input: ref.input, metadata },
     time: { created: ref.start, ran: ref.start },
   }
   present(state, [toolCommit(part, ref.msg, "start")])
@@ -395,8 +395,8 @@ function doneTool(
     state: {
       status: "completed",
       input: ref.input,
-      content: output.output ? [{ type: "text", text: output.output }] : [],
-      structured: output.metadata ?? {},
+      content: [{ type: "text", text: output.output }],
+      metadata: output.metadata,
     },
     time: { created: ref.start, ran: ref.start, completed: Date.now() },
   }
@@ -415,8 +415,6 @@ function failTool(state: State, ref: Ref, error: string): void {
           status: "error",
           input: ref.input,
           error: { type: "unknown", message: error },
-          structured: {},
-          content: [],
         },
         time: { created: ref.start, ran: ref.start, completed: Date.now() },
       },
@@ -527,8 +525,7 @@ function emitTask(state: State): void {
         offset: 1,
         limit: 200,
       },
-      structured: {},
-      content: [],
+      metadata: {},
     },
     time: { created: Date.now(), ran: Date.now() },
   } satisfies SessionMessageAssistantTool

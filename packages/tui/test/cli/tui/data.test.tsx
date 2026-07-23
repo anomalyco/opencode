@@ -5,12 +5,14 @@ import type { OpenCodeEvent } from "@opencode-ai/client"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { EventV2 } from "@opencode-ai/core/event"
 import { createEffect, onMount, type ParentProps } from "solid-js"
+import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
 import { DataProvider as DataProviderBase, useData } from "../../../src/context/data"
 import { LocationProvider, useLocation } from "../../../src/context/location"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const formFields = [{ key: "authorization", type: "external", url: "https://example.com" }] satisfies [
   {
@@ -32,14 +34,18 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
+const config = createTuiResolvedConfig()
+
 function DataProvider(props: ParentProps) {
   return (
-    <DataProviderBase>
-      <LocationProvider>
-        <SyncLocation />
-        {props.children}
-      </LocationProvider>
-    </DataProviderBase>
+    <ConfigProvider config={config}>
+      <DataProviderBase>
+        <LocationProvider>
+          <SyncLocation />
+          {props.children}
+        </LocationProvider>
+      </DataProviderBase>
+    </ConfigProvider>
   )
 }
 
@@ -2336,8 +2342,7 @@ test("settles pending tools when a live failure arrives", async () => {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
-        structured: { sessionID: "session-child", status: "running" },
-        content: [],
+        metadata: { sessionID: "session-child", status: "running" },
       },
     })
 
@@ -2347,7 +2352,7 @@ test("settles pending tools when a live failure arrives", async () => {
         assistant?.type === "assistant" &&
         assistant.content[0]?.type === "tool" &&
         assistant.content[0].state.status === "running" &&
-        assistant.content[0].state.structured.sessionID === "session-child"
+        assistant.content[0].state.metadata.sessionID === "session-child"
       )
     })
 
@@ -2355,7 +2360,7 @@ test("settles pending tools when a live failure arrives", async () => {
       id: "evt_failed_1",
       created: 0,
       type: "session.tool.failed",
-      durable: durable("session-1", 6),
+      durable: durable("session-1", 6, 2),
       data: {
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
@@ -2386,8 +2391,8 @@ test("settles pending tools when a live failure arrives", async () => {
     if (tool.state.status !== "error") return
     expect(tool.state.error).toEqual({ type: "unknown", message: "aborted" })
     expect(tool.state.input).toEqual({})
-    expect(tool.state.structured).toEqual({ sessionID: "session-child", status: "running" })
-    expect(tool.state.content).toEqual([])
+    expect(tool.state.metadata).toBeUndefined()
+    expect(tool.state.content).toBeUndefined()
     expect(tool.executed).toBe(false)
     expect(tool.providerState).toEqual({ call: true })
     expect(tool.providerResultState).toEqual({ result: true })

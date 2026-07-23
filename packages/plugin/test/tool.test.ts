@@ -1,17 +1,6 @@
 import { expect, test } from "bun:test"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Effect, Schema } from "effect"
 import * as Tool from "../src/v2/effect/tool"
-
-const context = {
-  sessionID: Session.ID.make("ses_test"),
-  agent: Agent.ID.make("build"),
-  messageID: SessionMessage.ID.make("msg_test"),
-  callID: "call_test",
-  progress: () => Effect.void,
-} satisfies Tool.Context
 
 test("tools remain valid across separate module instances", async () => {
   const ForeignTool = await import(`${new URL("../src/v2/effect/tool.ts", import.meta.url).href}?foreign`)
@@ -19,11 +8,11 @@ test("tools remain valid across separate module instances", async () => {
     description: "Foreign tool",
     input: Schema.Struct({ value: Schema.String }),
     output: Schema.Struct({ ok: Schema.Boolean }),
-    execute: () => Effect.succeed({ ok: true }),
+    execute: () => Effect.succeed({ output: { ok: true } }),
   }
   const tool = ForeignTool.make(config)
 
-  expect(Tool.definition("foreign", tool)).toEqual({
+  expect(Tool.toLLMDefinition("foreign", tool)).toEqual({
     name: "foreign",
     description: "Foreign tool",
     inputSchema: {
@@ -39,10 +28,7 @@ test("tools remain valid across separate module instances", async () => {
       additionalProperties: false,
     },
   })
-  expect(await Effect.runPromise(Tool.settle(tool, { input: { value: "input" } }, context))).toEqual({
-    structured: { ok: true },
-    content: [],
-  })
+  expect(await Effect.runPromise(Tool.decodeInput(tool.input, { value: "input" }))).toEqual({ value: "input" })
 })
 
 test("portable schemas validate and describe typed tools", async () => {
@@ -77,19 +63,18 @@ test("portable schemas validate and describe typed tools", async () => {
     description: "Portable tool",
     input,
     output,
-    execute: ({ count }) => Effect.succeed(count + 1),
+    execute: ({ count }) => Effect.succeed({ output: count + 1 }),
   })
 
-  expect(Tool.definition("portable", tool)).toEqual({
+  expect(Tool.toLLMDefinition("portable", tool)).toEqual({
     name: "portable",
     description: "Portable tool",
     inputSchema: { type: "object", properties: { count: { type: "string" } } },
     outputSchema: { type: "string" },
   })
-  expect(await Effect.runPromise(Tool.settle(tool, { input: { count: "41" } }, context))).toEqual({
-    structured: "42",
-    content: [{ type: "text", text: "42" }],
-  })
+  const decoded = await Effect.runPromise(Tool.decodeInput(tool.input, { count: "41" }))
+  expect(decoded).toEqual({ count: 41 })
+  expect(await Effect.runPromise(Tool.encodeOutput(tool.output, 42))).toBe("42")
 })
 
 test("portable schema failures become tool failures", async () => {
@@ -104,29 +89,39 @@ test("portable schema failures become tool failures", async () => {
       },
     },
   }
-  const tool = Tool.make({
-    description: "Failing tool",
-    input,
-    output: input,
-    execute: Effect.succeed,
-  })
 
-  const error = await Effect.runPromiseExit(Tool.settle(tool, { input: 1 }, context))
+  const error = await Effect.runPromiseExit(Tool.decodeInput(input, 1))
   expect(error.toString()).toContain("Invalid tool input: expected a string")
 })
 
-test("two-parameter Definition annotations retain their original meaning", () => {
+test("canonical results carry metadata with typed output", async () => {
   const input = Schema.Struct({ value: Schema.String })
   const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })
-  const structured = Schema.Struct({ value: Schema.String })
-  const tool: Tool.Definition<typeof input, typeof structured> = Tool.make({
+  const tool = Tool.make({
     description: "Annotated tool",
     input,
     output,
-    structured,
-    toStructuredOutput: ({ output }) => ({ value: output.value }),
-    execute: ({ value }) => Effect.succeed({ value, internal: true }),
+    execute: ({ value }) => Effect.succeed({ output: { value, internal: true }, metadata: { value }, content: value }),
   })
 
-  expect(tool.structured).toBe(structured)
+  expect(await Effect.runPromise(tool.execute({ value: "out" }, {} as Tool.Context))).toEqual({
+    output: { value: "out", internal: true },
+    metadata: { value: "out" },
+    content: "out",
+  })
+})
+
+test("raw JSON schemas are render-only and omitted output means model-only", async () => {
+  const tool = Tool.make({
+    description: "Raw tool",
+    input: { type: "object", properties: { value: { type: "string" } } },
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  })
+
+  expect(Tool.toLLMDefinition("raw", tool)).toEqual({
+    name: "raw",
+    description: "Raw tool",
+    inputSchema: { type: "object", properties: { value: { type: "string" } } },
+  })
+  expect(await Effect.runPromise(Tool.decodeInput(tool.input, { value: 1 }))).toEqual({ value: 1 })
 })

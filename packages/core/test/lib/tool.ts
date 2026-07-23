@@ -14,7 +14,7 @@ export const toolIdentity = {
 }
 
 export const toolDefinitions = (registry: ToolRegistry.Interface, permissions?: PermissionV2.Ruleset) =>
-  registry.materialize(permissions).pipe(Effect.map((materialized) => materialized.definitions))
+  registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
 
 export function waitForTool(
   registry: ToolRegistry.Interface,
@@ -35,7 +35,7 @@ export function waitForTool(
 /**
  * Registers a core tool plugin's tools against the real registry without booting the
  * full plugin host. Only the tool domain is live; focused tool tests exercise
- * registration, materialization, and settlement through the same path production uses.
+ * registration, snapshots, and execution through the same path production uses.
  */
 export const registerToolPlugin = <R>(plugin: {
   readonly id: string
@@ -52,7 +52,7 @@ export const registerToolPlugin = <R>(plugin: {
           Effect.gen(function* () {
             const registrations: Array<{
               readonly name: string
-              readonly tool: Tool.AnyTool
+              readonly tool: Tool.Any
               readonly options?: Tool.RegisterOptions
             }> = []
             callback({
@@ -73,8 +73,5 @@ export const registerToolPlugin = <R>(plugin: {
     yield* plugin.effect(context)
   })
 
-export const settleTool = (registry: ToolRegistry.Interface, input: ToolRegistry.ExecuteInput) =>
-  registry.materialize().pipe(Effect.flatMap((materialized) => materialized.settle(input)))
-
 export const executeTool = (registry: ToolRegistry.Interface, input: ToolRegistry.ExecuteInput) =>
-  settleTool(registry, input).pipe(Effect.map((settlement) => settlement.result))
+  registry.snapshot().pipe(Effect.flatMap((toolSet) => toolSet.execute(input)))
