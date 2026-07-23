@@ -269,6 +269,39 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("adds cache reads and writes to Bedrock input usage", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["messageStart", { role: "assistant" }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { text: "Hello" } }],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["messageStop", { stopReason: "end_turn" }],
+        [
+          "metadata",
+          {
+            usage: {
+              inputTokens: 5,
+              outputTokens: 2,
+              totalTokens: 12,
+              cacheReadInputTokens: 3,
+              cacheWriteInputTokens: 2,
+            },
+          },
+        ],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 10,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: 3,
+        cacheWriteInputTokens: 2,
+        outputTokens: 2,
+        totalTokens: 12,
+      })
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(

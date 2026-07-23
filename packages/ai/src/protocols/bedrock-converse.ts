@@ -436,21 +436,22 @@ const mapFinishReason = (reason: string): FinishReason => {
   return "unknown"
 }
 
-// AWS Bedrock Converse reports `inputTokens` (inclusive total) with
-// `cacheReadInputTokens` and `cacheWriteInputTokens` as subsets. Pass
-// the total through and derive the non-cached breakdown. Bedrock does
-// not break reasoning out of `outputTokens` for any current model.
+// AWS reports inputTokens separately from cache reads and writes.
+// Bedrock does not break reasoning out of outputTokens for current models.
 const mapUsage = (usage: BedrockUsageSchema | undefined): Usage | undefined => {
   if (!usage) return undefined
-  const cacheTotal = (usage.cacheReadInputTokens ?? 0) + (usage.cacheWriteInputTokens ?? 0)
-  const nonCached = ProviderShared.subtractTokens(usage.inputTokens, cacheTotal)
+  const inputTokens = ProviderShared.sumTokens(
+    usage.inputTokens,
+    usage.cacheReadInputTokens,
+    usage.cacheWriteInputTokens,
+  )
   return new Usage({
-    inputTokens: usage.inputTokens,
+    inputTokens,
     outputTokens: usage.outputTokens,
-    nonCachedInputTokens: nonCached,
+    nonCachedInputTokens: usage.inputTokens,
     cacheReadInputTokens: usage.cacheReadInputTokens,
     cacheWriteInputTokens: usage.cacheWriteInputTokens,
-    totalTokens: ProviderShared.totalTokens(usage.inputTokens, usage.outputTokens, usage.totalTokens),
+    totalTokens: ProviderShared.totalTokens(inputTokens, usage.outputTokens, usage.totalTokens),
     providerMetadata: { bedrock: usage },
   })
 }
