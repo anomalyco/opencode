@@ -5,6 +5,7 @@ import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
 import type { FooterEvent, MiniHost } from "../../src/mini/types"
 import { catalogModel, catalogProvider, stubCatalogLists } from "./fixture/catalog"
 import { createFooterApiFixture } from "./fixture/footer-api"
+import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -473,7 +474,7 @@ describe("run interactive runtime", () => {
     expect(closedTitle).toBe("Cached title")
   })
 
-  test("adopts the deferred target location for catalogs, files, and runtime placement", async () => {
+  test("adopts deferred target placement and supplied TUI config", async () => {
     const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const lifecycleStarted = defer<void>()
     const painted = defer<void>()
@@ -483,6 +484,8 @@ describe("run interactive runtime", () => {
     let getDirectory: (() => string) | undefined
     let findFiles: ((query: string) => Promise<string[]>) | undefined
     let transportLocation: unknown
+    let runtimeConfig: LifecycleInput["tuiConfig"] | undefined
+    const tuiConfig = createTuiResolvedConfig({ keybinds: { "variant.cycle": "ctrl+g" } })
     const catalogs = stubCatalogLists(sdk, {
       location: { directory: "/session", workspaceID: "work-1" },
     })
@@ -519,11 +522,13 @@ describe("run interactive runtime", () => {
         model: undefined,
         variant: undefined,
         files: [],
+        tuiConfig,
       },
       {
         createRuntimeLifecycle: async (input) => {
           getDirectory = input.getDirectory
           findFiles = input.findFiles
+          runtimeConfig = input.tuiConfig
           lifecycleStarted.resolve()
           return {
             footer: api,
@@ -562,6 +567,8 @@ describe("run interactive runtime", () => {
 
     const query = { location: { directory: "/session", workspace: "work-1" } }
     expect(getDirectory?.()).toBe("/session")
+    if (!runtimeConfig) throw new Error("runtime lifecycle did not receive TUI config")
+    expect(await runtimeConfig).toBe(tuiConfig)
     expect(transportLocation).toMatchObject({ directory: "/session", workspaceID: "work-1" })
     expect(catalogs.provider).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.model).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })

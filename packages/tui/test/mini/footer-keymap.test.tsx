@@ -8,7 +8,7 @@ import { RunFooterView } from "../../src/mini/footer.view"
 import { RUN_THEME_FALLBACK } from "../../src/mini/theme"
 import type { FooterState, FooterSubagentState, FooterView } from "../../src/mini/types"
 
-test("configured subagent key updates its hint and action", async () => {
+async function renderSubagent(interrupt: "ctrl+i" | "none") {
   const [state] = createSignal<FooterState>({
     phase: "idle",
     status: "",
@@ -38,7 +38,7 @@ test("configured subagent key updates its hint and action", async () => {
       keybinds: {
         "prompt.editor": "none",
         "session.queued_prompts": "none",
-        "composer.subagent.interrupt": "ctrl+i",
+        "composer.subagent.interrupt": interrupt,
       },
     },
     { terminalSuspend: true },
@@ -97,17 +97,40 @@ test("configured subagent key updates its hint and action", async () => {
   }
 
   const app = await testRender(() => <Harness />, { width: 100, height: 8, kittyKeyboard: true })
+  return { app, interrupted }
+}
+
+async function openSubagent(app: Awaited<ReturnType<typeof testRender>>) {
+  await app.renderOnce()
+  expect(app.renderer.currentFocusedEditor?.plainText).toBe("")
+  app.mockInput.pressArrow("down")
+  await app.renderOnce()
+  expect(app.captureCharFrame()).toContain("Select subagent")
+  app.mockInput.pressEnter()
+  await app.renderOnce()
+}
+
+test("configured subagent key updates its hint and action", async () => {
+  const { app, interrupted } = await renderSubagent("ctrl+i")
   try {
-    await app.renderOnce()
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("")
-    app.mockInput.pressArrow("down")
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Select subagent")
-    app.mockInput.pressEnter()
-    await app.renderOnce()
+    await openSubagent(app)
     expect(app.captureCharFrame()).toContain("ctrl+i")
     app.mockInput.pressKey("i", { ctrl: true })
     expect(interrupted).toEqual(["subagent-1"])
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    app.renderer.destroy()
+  }
+})
+
+test("disabled subagent interrupt has no component fallback", async () => {
+  const { app, interrupted } = await renderSubagent("none")
+  try {
+    await openSubagent(app)
+    expect(app.captureCharFrame()).not.toContain("ctrl+d")
+    app.mockInput.pressKey("d", { ctrl: true })
+    expect(interrupted).toEqual([])
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

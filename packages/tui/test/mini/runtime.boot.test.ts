@@ -8,31 +8,10 @@ import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 function config(input?: {
   leader?: string
   leaderTimeout?: number
-  bindings?: Partial<{
-    commandList: string[]
-    variantCycle: string[]
-    interrupt: string[]
-    historyPrevious: string[]
-    historyNext: string[]
-    inputClear: string[]
-    inputSubmit: string[]
-    inputNewline: string[]
-  }>
 }): Resolved {
-  const bind = input?.bindings
   return createTuiResolvedConfig({
     leader: input?.leaderTimeout === undefined ? undefined : { timeout: input.leaderTimeout },
-    keybinds: {
-      ...(input?.leader && { leader: input.leader }),
-      ...(bind?.commandList && { "command.palette.show": bind.commandList }),
-      ...(bind?.variantCycle && { "variant.cycle": bind.variantCycle }),
-      ...(bind?.interrupt && { "session.interrupt": bind.interrupt }),
-      ...(bind?.historyPrevious && { "prompt.history.previous": bind.historyPrevious }),
-      ...(bind?.historyNext && { "prompt.history.next": bind.historyNext }),
-      ...(bind?.inputClear && { "prompt.clear": bind.inputClear }),
-      ...(bind?.inputSubmit && { "input.submit": bind.inputSubmit }),
-      ...(bind?.inputNewline && { "input.newline": bind.inputNewline }),
-    },
+    keybinds: input?.leader ? { leader: input.leader } : undefined,
   })
 }
 
@@ -41,33 +20,12 @@ describe("run runtime boot", () => {
     mock.restore()
   })
 
-  test("reads footer keybinds from resolved keybind config", async () => {
-    const input = config({
-      leader: "ctrl+g",
-      bindings: {
-        commandList: ["ctrl+p"],
-        variantCycle: ["ctrl+t", "alt+t"],
-        interrupt: ["ctrl+c"],
-        historyPrevious: ["k"],
-        historyNext: ["j"],
-        inputClear: ["ctrl+l"],
-        inputSubmit: ["ctrl+s"],
-        inputNewline: ["alt+return"],
-      },
-    })
+  test("returns supplied resolved config", async () => {
+    const input = config({ leader: "ctrl+g" })
 
     const result = await resolveRunTuiConfig(input)
 
-    expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+g")
-    expect(result.leader.timeout).toBe(2000)
-    expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
-    expect(result.keybinds.get("variant.cycle").map((item) => item.key)).toEqual(["ctrl+t", "alt+t"])
-    expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("ctrl+c")
-    expect(result.keybinds.get("prompt.history.previous")?.[0]?.key).toBe("k")
-    expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("j")
-    expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+l")
-    expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("ctrl+s")
-    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("alt+return")
+    expect(result).toBe(input)
   })
 
   test("falls back to default tui keymap config when config load fails", async () => {
