@@ -1,5 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
 import type { ServerConnection } from "@/context/server"
 import { decode64 } from "@/utils/base64"
 
@@ -44,7 +44,7 @@ export function createSdkForServer({
 export function createApiForServer(input: {
   server: ServerConnection.HttpBase
   fetch?: typeof globalThis.fetch
-}) {
+}): OpenCodeClient {
   return OpenCode.make({
     baseUrl: input.server.url,
     fetch: input.fetch,
@@ -59,4 +59,4 @@ export function createApiForServer(input: {
   })
 }
 
-export type ServerApi = ReturnType<typeof createApiForServer>
+export type ServerApi = OpenCodeClient
