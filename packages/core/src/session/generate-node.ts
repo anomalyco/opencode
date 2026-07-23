@@ -74,7 +74,6 @@ export const layer = Layer.effect(
             system: contextEvent.system,
             messages: contextEvent.messages,
             tools: hookedTools,
-            toolChoice: "none",
           }),
         )
         yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })

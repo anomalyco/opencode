@@ -301,7 +301,7 @@ it.effect("generates from fresh settled Session context without durable mutation
       ),
     ).toEqual(["Settled partial answer"])
     expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Hooked lookup" }])
-    expect(requests[0]?.toolChoice).toMatchObject({ type: "none" })
+    expect(requests[0]?.toolChoice).toBeUndefined()
     expect(yield* durableState(db, sessionID)).toEqual(before)
   }),
 )
