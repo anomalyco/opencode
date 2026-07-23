@@ -4,11 +4,11 @@ import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { PermissionV2 } from "./permission"
 import { ExecuteTool } from "./tool/execute"
-import type { AnyDefinition, Registration } from "./tool/tool"
+import type { Any, Registration } from "./tool/tool"
 import { Wildcard } from "./util/wildcard"
 
 export interface Materialization {
-  readonly definition?: AnyDefinition
+  readonly tool?: Any
   readonly instructions?: string
 }
 
@@ -66,7 +66,7 @@ const layer = Layer.effect(
         const executeRule = rules.findLast((rule) => Wildcard.match("execute", rule.action))
         if (executeRule?.resource === "*" && executeRule.effect === "deny") return {}
         return {
-          definition: ExecuteTool.create(registrations),
+          tool: ExecuteTool.create(registrations),
           instructions: ExecuteTool.instructions(registrations),
         }
       }),

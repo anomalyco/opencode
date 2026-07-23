@@ -111,8 +111,8 @@ describe("ToolRegistry", () => {
       const service = yield* ToolRegistry.Service
       const error = yield* service
         .registerBatch([
-          { definitions: { first: make() }, options: { codemode: false } },
-          { definitions: { second: make() }, options: { namespace: "invalid..namespace", codemode: false } },
+          { tools: { first: make() }, options: { codemode: false } },
+          { tools: { second: make() }, options: { namespace: "invalid..namespace", codemode: false } },
         ])
         .pipe(Effect.flip)
 
@@ -154,9 +154,7 @@ describe("ToolRegistry", () => {
       yield* service.register({ second: shared }, { codemode: false, permission: "edit" })
 
       expect(
-        (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map(
-          (definition) => definition.name,
-        ),
+        (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map((tool) => tool.name),
       ).toEqual(["first"])
     }),
   )
@@ -272,7 +270,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("passes complete call identity to definition execution", () =>
+  it.effect("passes complete call identity to tool execution", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const contexts: Tool.Context[] = []

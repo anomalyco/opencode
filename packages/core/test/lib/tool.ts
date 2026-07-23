@@ -52,17 +52,17 @@ export const registerToolPlugin = <R>(plugin: {
           Effect.gen(function* () {
             const registrations: Array<{
               readonly name: string
-              readonly definition: Tool.AnyDefinition
+              readonly tool: Tool.Any
               readonly options?: Tool.RegisterOptions
             }> = []
             callback({
-              add: (name, definition, options) => {
-                registrations.push({ name, definition, ...(options ? { options } : {}) })
+              add: (name, tool, options) => {
+                registrations.push({ name, tool, ...(options ? { options } : {}) })
               },
             })
             yield* Effect.forEach(
               registrations,
-              (registration) => tools.register({ [registration.name]: registration.definition }, registration.options),
+              (registration) => tools.register({ [registration.name]: registration.tool }, registration.options),
               { discard: true },
             ).pipe(Effect.orDie)
             return { dispose: Effect.void }

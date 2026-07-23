@@ -61,7 +61,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const executed = yield* execute(registration.definition, input, {
+              const executed = yield* execute(registration.tool, input, {
                 sessionID: context.sessionID,
                 agent: context.agent,
                 messageID: context.messageID,
@@ -132,19 +132,19 @@ export const instructions = (registrations: ReadonlyMap<string, Registration>) =
 
 function runtime(
   registrations: ReadonlyMap<string, Registration>,
-  invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
+  executeTool: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.ToolCallHooks,
 ) {
-  const tools: Record<string, Tool.Definition<never>> = {}
+  const tools: Record<string, Tool.Tool<never>> = {}
   for (const [name, registration] of registrations) {
-    const child = toLLMDefinition(name, registration.definition)
+    const child = toLLMDefinition(name, registration.tool)
     const path =
       registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
       output: child.outputSchema,
-      execute: (input) => invoke(name, registration, input),
+      execute: (input) => executeTool(name, registration, input),
     })
   }
   return CodeMode.make<typeof tools>({ tools, ...hooks })

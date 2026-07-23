@@ -5,7 +5,7 @@ import type { ToolContent } from "@opencode-ai/ai"
 import {
   decodeInput,
   encodeOutput,
-  type AnyDefinition,
+  type Any,
   type Content,
   type Context,
   Failure,
@@ -27,15 +27,11 @@ export type Execution = {
   readonly metadata?: Metadata
 }
 
-export const execute = (
-  definition: AnyDefinition,
-  input: unknown,
-  context: Context,
-): Effect.Effect<Execution, Failure> =>
+export const execute = (tool: Any, input: unknown, context: Context): Effect.Effect<Execution, Failure> =>
   Effect.gen(function* () {
-    const decoded = yield* decodeInput(definition.input, input)
-    const result = yield* definition.execute(decoded, context)
-    if (definition.output === undefined) {
+    const decoded = yield* decodeInput(tool.input, input)
+    const result = yield* tool.execute(decoded, context)
+    if (tool.output === undefined) {
       if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
       return {
         content: contentFrom(result.content),
@@ -44,7 +40,7 @@ export const execute = (
     }
     if (!("output" in result))
       return yield* Effect.fail(new Failure({ message: "Tool did not return its declared output" }))
-    const encoded = yield* encodeOutput(definition.output, result.output)
+    const encoded = yield* encodeOutput(tool.output, result.output)
     return {
       output: encoded,
       content: contentFrom(result.content, encoded),

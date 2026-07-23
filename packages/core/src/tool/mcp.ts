@@ -37,7 +37,7 @@ export const layer = Layer.effectDiscard(
           {
             registrations: Array<{
               name: string
-              definition: Tool.AnyDefinition
+              tool: Tool.Any
               permission: string
             }>
             codemode: boolean
@@ -48,7 +48,7 @@ export const layer = Layer.effectDiscard(
           const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
           group.registrations.push({
             name: tool.name,
-            definition: Tool.make({
+            tool: Tool.make({
               description: tool.description ?? "",
               input: {
                 ...schema,
@@ -120,7 +120,7 @@ export const layer = Layer.effectDiscard(
           .registerBatch(
             Array.from(groups).flatMap(([server, group]) =>
               group.registrations.map((registration) => ({
-                definitions: { [registration.name]: registration.definition },
+                tools: { [registration.name]: registration.tool },
                 options: {
                   namespace: namespace(server),
                   codemode: group.codemode,

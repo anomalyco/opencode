@@ -8,7 +8,7 @@ Status: **Historical pre-release compatibility ledger.** Older entries retain th
 - Rename the ephemeral `session.tool.progress` field `structured` to `metadata`; progress is one metadata replacement snapshot. Model content belongs exclusively to terminal outcomes.
 - Change projected `SessionMessage.ToolState`: completed is `{ input, content, metadata? }` with non-empty content, error is `{ input, error, content?, metadata? }`, running renames `structured` to `metadata`. Provider replay derives wire values from canonical content.
 - Move provider-hosted result payloads into provider-owned result state (`providerResultState.result`); Anthropic server-tool round-trips read it during lowering. OpenAI continues replaying from item references.
-- Public Plugin API: remove `structured`, projection callbacks, the `Structured` generic, `Tool.Failure.metadata`, and the exported `Tool.settle`; definition responses carry schema-validated `output`, model-visible `content`, and optional JSON `metadata`. Code Mode receives the validated encoded output.
+- Public Plugin API: remove `structured`, projection callbacks, the `Structured` generic, `Tool.Failure.metadata`, and the exported `Tool.settle`; tool responses carry schema-validated `output`, model-visible `content`, and optional JSON `metadata`. Code Mode receives the validated encoded output.
 
 Compatibility:
 
@@ -87,7 +87,7 @@ Compatibility:
 - No stored event row, database, or runtime publish behavior change; runtime already attaches the envelope only after durable commit/replay.
 - Generated clients now model the existing invariant: durable events carry `durable`, live-only events do not.
 
-## 2026-07-03: Declare Event Durability At Definition Level
+## 2026-07-03: Declare Event Durability At Tool Level
 
 - Add explicit `Event.durable(...)` and `Event.ephemeral(...)` definition constructors.
 - Preserve the existing durable and live-only event classifications while deriving durable inventories from definition metadata instead of hand-maintained lists.

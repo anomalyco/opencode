@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool, toolError } from "../src/index.js"
 
-const run = (tool: Tool.Definition<never>) =>
+const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
 class UnsafeHostError extends Schema.TaggedErrorClass<UnsafeHostError>()("UnsafeHostError", {
@@ -760,7 +760,7 @@ describe("CodeMode public contract", () => {
     expect(instructions).not.toContain("search(")
   })
 
-  test("uses one ranked search returning complete definitions for large catalogs", async () => {
+  test("uses one ranked search returning complete tools for large catalogs", async () => {
     const upload = Tool.make({
       description: "Upload one readable local file to the current Discord thread",
       input: Schema.Struct({ path: Schema.String }),

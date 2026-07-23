@@ -94,8 +94,8 @@ await ctx.session.hook("context", (event) => {
 })
 ```
 
-Promise tools use executable definitions with async executors. Registration
-supplies the definition's name and options separately:
+Promise tools use executable tool values with async executors. Registration
+supplies the tool's name and options separately:
 
 ```ts
 import { Schema } from "effect"

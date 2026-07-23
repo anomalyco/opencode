@@ -357,20 +357,20 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         Effect.gen(function* () {
           const registrations: Array<{
             readonly name: string
-            readonly definition: Tool.AnyDefinition
+            readonly tool: Tool.Any
             readonly options?: Tool.RegisterOptions
           }> = []
           yield* Effect.sync(() =>
             callback({
-              add: (name, definition, options) => {
-                registrations.push({ name, definition, ...(options ? { options } : {}) })
+              add: (name, tool, options) => {
+                registrations.push({ name, tool, ...(options ? { options } : {}) })
               },
             }),
           )
           yield* tools
             .registerBatch(
               registrations.map((registration) => ({
-                definitions: { [registration.name]: registration.definition },
+                tools: { [registration.name]: registration.tool },
                 ...(registration.options === undefined ? {} : { options: registration.options }),
               })),
             )

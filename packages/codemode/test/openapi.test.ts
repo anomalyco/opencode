@@ -143,12 +143,7 @@ describe("OpenAPI.fromSpec", () => {
     const remove = toolAt(api.tools, "users.remove")
 
     expect(api.skipped).toEqual([])
-    if (
-      !Tool.isDefinition(get) ||
-      !Tool.isDefinition(create) ||
-      !Tool.isDefinition(search) ||
-      !Tool.isDefinition(remove)
-    ) {
+    if (!Tool.isTool(get) || !Tool.isTool(create) || !Tool.isTool(search) || !Tool.isTool(remove)) {
       throw new Error("happy-path fixture did not generate every operation")
     }
     expect(inputTypeScript(get)).toBe(
@@ -241,23 +236,23 @@ describe("OpenAPI.fromSpec", () => {
     expect(toolAt(result.tools, "v2.session.create")).not.toBeUndefined()
 
     const sessionGet = toolAt(result.tools, "v2.session.get")
-    expect(Tool.isDefinition(sessionGet)).toBe(true)
-    if (!Tool.isDefinition(sessionGet)) throw new Error("v2.session.get was not generated")
+    expect(Tool.isTool(sessionGet)).toBe(true)
+    if (!Tool.isTool(sessionGet)) throw new Error("v2.session.get was not generated")
     expect(inputTypeScript(sessionGet)).toBe("{ sessionID: string }")
     expect(outputTypeScript(sessionGet)).toContain("id: string")
     expect(outputTypeScript(sessionGet)).toContain("additions: number")
 
     const switchAgent = toolAt(result.tools, "v2.session.switchAgent")
-    expect(Tool.isDefinition(switchAgent)).toBe(true)
-    if (!Tool.isDefinition(switchAgent)) throw new Error("v2.session.switchAgent was not generated")
+    expect(Tool.isTool(switchAgent)).toBe(true)
+    if (!Tool.isTool(switchAgent)) throw new Error("v2.session.switchAgent was not generated")
     expect(inputTypeScript(switchAgent)).toBe("{ sessionID: string; agent: string }")
 
     const instructionPut = toolAt(result.tools, "v2.session.instructions.entry.put")
-    expect(Tool.isDefinition(instructionPut)).toBe(true)
-    if (!Tool.isDefinition(instructionPut)) throw new Error("v2.session.instructions.entry.put was not generated")
+    expect(Tool.isTool(instructionPut)).toBe(true)
+    if (!Tool.isTool(instructionPut)) throw new Error("v2.session.instructions.entry.put was not generated")
     expect(inputTypeScript(instructionPut)).toBe("{ sessionID: string; key: string; value: unknown }")
     expect(toolAt(result.tools, "v2_session_instructions_entry_put_2")).toBeUndefined()
-    expect(Tool.isDefinition(toolAt(result.tools, "v2.pty.connect"))).toBe(false)
+    expect(Tool.isTool(toolAt(result.tools, "v2.pty.connect"))).toBe(false)
     expect(toolAt(result.tools, "v2.session.log")).toBeUndefined()
     expect(toolAt(result.tools, "v2.event.subscribe")).toBeUndefined()
     expect(toolAt(result.tools, "v2.fs.read")).toBeUndefined()
@@ -278,9 +273,9 @@ describe("OpenAPI.fromSpec", () => {
       },
     })
 
-    expect(Tool.isDefinition(toolAt(result.tools, "group.item"))).toBe(true)
-    expect(Tool.isDefinition(toolAt(result.tools, "group_item_2"))).toBe(true)
-    expect(Tool.isDefinition(toolAt(result.tools, "group.operation.other"))).toBe(true)
+    expect(Tool.isTool(toolAt(result.tools, "group.item"))).toBe(true)
+    expect(Tool.isTool(toolAt(result.tools, "group_item_2"))).toBe(true)
+    expect(Tool.isTool(toolAt(result.tools, "group.operation.other"))).toBe(true)
   })
 
   test("synthesizes flat operation IDs from methods and paths", () => {
@@ -305,7 +300,7 @@ describe("OpenAPI.fromSpec", () => {
       "deleteUsersById",
       "getOrganizationsByOrganizationidUsersById",
     ]) {
-      expect(Tool.isDefinition(toolAt(tools, path))).toBe(true)
+      expect(Tool.isTool(toolAt(tools, path))).toBe(true)
     }
   })
 
@@ -330,7 +325,7 @@ describe("OpenAPI.fromSpec", () => {
       "test",
     )
 
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
     expect(inputTypeScript(tool)).toBe("{ limit: number }")
   })
 
@@ -358,8 +353,8 @@ describe("OpenAPI.fromSpec", () => {
     })
     const search = toolAt(result.tools, "search")
 
-    expect(Tool.isDefinition(search)).toBe(true)
-    if (!Tool.isDefinition(search)) throw new Error("search was not generated")
+    expect(Tool.isTool(search)).toBe(true)
+    if (!Tool.isTool(search)) throw new Error("search was not generated")
     expect(inputTypeScript(search)).toBe("{ value?: string | null }")
     const schema: unknown = search.input
     const input = isRecord(schema) ? schema : {}
@@ -397,14 +392,14 @@ describe("OpenAPI.fromSpec", () => {
       "test",
     )
 
-    if (!Tool.isDefinition(tool) || !isRecord(tool.output)) throw new Error("test output was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.output)) throw new Error("test output was not generated")
     expect(tool.output.$defs).toMatchObject({ Local: { type: "string" }, Global: { type: "number" } })
   })
 
   test("projects read-only and write-only properties by schema direction", () => {
     for (const version of ["3.0.3", "3.1.0"]) {
       const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: directionalSpec(version) }).tools, "users.create")
-      if (!Tool.isDefinition(tool) || !isRecord(tool.input) || !isRecord(tool.output)) {
+      if (!Tool.isTool(tool) || !isRecord(tool.input) || !isRecord(tool.output)) {
         throw new Error(`users.create was not generated for OpenAPI ${version}`)
       }
 
@@ -467,7 +462,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     expect(inputTypeScript(tool)).toBe("{ name: string }")
   })
@@ -518,7 +513,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
     const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
     const record = isRecord(properties.record) ? properties.record : {}
     const definitions = isRecord(tool.input.$defs) ? tool.input.$defs : {}
@@ -567,7 +562,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     expect(inputTypeScript(tool)).toBe("{ name: string }")
   })
@@ -607,7 +602,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
     const definitions = isRecord(tool.input.$defs) ? tool.input.$defs : {}
     const node = isRecord(definitions.Node) ? definitions.Node : {}
 
@@ -648,7 +643,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
     const definitions = isRecord(tool.input.$defs) ? tool.input.$defs : {}
     const leaf = isRecord(definitions[`C${depth - 1}`]) ? definitions[`C${depth - 1}`] : {}
 
@@ -686,7 +681,7 @@ describe("OpenAPI.fromSpec", () => {
         }).tools,
         "test",
       )
-      if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+      if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
       expect(inputTypeScript(tool)).toBe("{ name: string }")
     }
@@ -725,7 +720,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
     const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
     const record: Record<string, unknown> = isRecord(properties.record) ? properties.record : {}
 
@@ -763,7 +758,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
     const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
     const choice: Record<string, unknown> = isRecord(properties.choice) ? properties.choice : {}
     const pick: Record<string, unknown> = isRecord(properties.pick) ? properties.pick : {}
@@ -807,7 +802,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
     const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
     const record = isRecord(properties.record) ? properties.record : {}
 
@@ -836,7 +831,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     expect(inputTypeScript(tool)).toBe("{ filter: { state: string } }")
   })
@@ -866,7 +861,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     expect(inputTypeScript(tool)).toBe("{ filter: { value: string } }")
   })
@@ -901,7 +896,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
     const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
     const body = isRecord(properties.body) ? properties.body : {}
     const allOf = Array.isArray(body.allOf) ? body.allOf : []
@@ -923,7 +918,7 @@ describe("OpenAPI.fromSpec", () => {
       }),
     )
     const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: directionalSpec("3.1.0") }).tools, "users.create")
-    if (!Tool.isDefinition(tool)) throw new Error("users.create was not generated")
+    if (!Tool.isTool(tool)) throw new Error("users.create was not generated")
 
     const result = await Effect.runPromise(
       tool
@@ -1022,7 +1017,7 @@ describe("OpenAPI.fromSpec", () => {
   test("serializes deep-object query parameters from the opencode fixture", async () => {
     const client = recordingClient(() => json({ directory: "/tmp" }))
     const location = toolAt(OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools, "v2.location.get")
-    if (!Tool.isDefinition(location)) throw new Error("v2.location.get was not generated")
+    if (!Tool.isTool(location)) throw new Error("v2.location.get was not generated")
 
     await Effect.runPromise(
       location
@@ -1060,7 +1055,7 @@ describe("OpenAPI.fromSpec", () => {
       },
     })
     const tool = toolAt(result.tools, "items")
-    if (!Tool.isDefinition(tool)) throw new Error("items was not generated")
+    if (!Tool.isTool(tool)) throw new Error("items was not generated")
 
     await Effect.runPromise(
       tool
@@ -1103,7 +1098,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     await Effect.runPromise(
       tool
@@ -1205,7 +1200,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "getTest",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     await Effect.runPromise(tool.execute({}).pipe(Effect.provide(client.layer)))
 
@@ -1242,7 +1237,7 @@ describe("OpenAPI.fromSpec", () => {
       authenticated([{ key: [] }], { key: { type: "apiKey", in: "query", name: "__proto__" } }).tools,
       "test",
     )
-    if (!Tool.isDefinition(prototype)) throw new Error("prototype auth tool was not generated")
+    if (!Tool.isTool(prototype)) throw new Error("prototype auth tool was not generated")
 
     await Effect.runPromise(prototype.execute({}).pipe(Effect.provide(client.layer)))
     expect(new URL(client.requests[0]!.url).searchParams.get("__proto__")).toBe("secret")
@@ -1254,7 +1249,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(duplicate)) throw new Error("duplicate auth tool was not generated")
+    if (!Tool.isTool(duplicate)) throw new Error("duplicate auth tool was not generated")
     await expect(Effect.runPromise(duplicate.execute({}).pipe(Effect.provide(client.layer)))).rejects.toThrow(
       "multiple credentials",
     )
@@ -1280,7 +1275,7 @@ describe("OpenAPI.fromSpec", () => {
       },
     })
     const alternativeTool = toolAt(alternative.tools, "test")
-    if (!Tool.isDefinition(alternativeTool)) throw new Error("supported auth alternative was not generated")
+    if (!Tool.isTool(alternativeTool)) throw new Error("supported auth alternative was not generated")
     await Effect.runPromise(alternativeTool.execute({}).pipe(Effect.provide(client.layer)))
     expect(client.requests.at(-1)?.headers.authorization).toBe("Bearer secret")
   })
@@ -1292,7 +1287,7 @@ describe("OpenAPI.fromSpec", () => {
       servers: [{ url: "https://document.example" }],
     } satisfies Document
     const tool = toolAt(OpenAPI.fromSpec({ spec }).tools, "test")
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     await Effect.runPromise(tool.execute({}).pipe(Effect.provide(client.layer)))
     expect(client.requests[0]?.url).toBe("https://operation.example/v1/test")
@@ -1365,7 +1360,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     await expect(
       Effect.runPromise(tool.execute({ filter: { value: undefined } }).pipe(Effect.provide(client.layer))),
@@ -1391,7 +1386,7 @@ describe("OpenAPI.fromSpec", () => {
       }).tools,
       "test",
     )
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     await Effect.runPromise(tool.execute({ body: { name: "updated" } }).pipe(Effect.provide(client.layer)))
     expect(client.requests[0]!.headers["content-type"]).toBe("application/merge-patch+json")
@@ -1404,7 +1399,7 @@ describe("OpenAPI.fromSpec", () => {
 
   test("rejects oversized and malformed JSON responses", async () => {
     const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: singleOperation({}) }).tools, "test")
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
     const oversized = recordingClient(
       () => new Response(null, { headers: { "content-length": String(50 * 1024 * 1024 + 1) } }),
     )
@@ -1430,7 +1425,7 @@ describe("OpenAPI.fromSpec", () => {
       },
     })
     const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec }).tools, "test")
-    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+    if (!Tool.isTool(tool)) throw new Error("test was not generated")
     const client = recordingClient(() => new Response("123", { headers: { "content-type": "text/plain" } }))
 
     expect(outputTypeScript(tool)).toBe("string | null")
@@ -1499,13 +1494,13 @@ describe("OpenAPI.fromSpec", () => {
     const update = toolAt(tools, "things.update")
     const echo = toolAt(tools, "echo")
 
-    expect(Tool.isDefinition(update)).toBe(true)
-    if (!Tool.isDefinition(update)) throw new Error("things.update was not generated")
+    expect(Tool.isTool(update)).toBe(true)
+    if (!Tool.isTool(update)) throw new Error("things.update was not generated")
     expect(inputTypeScript(update)).toBe(
       "{ path_id: string; query_id: string; path_id_2?: string; header_id: string; body_id: string }",
     )
-    expect(Tool.isDefinition(echo)).toBe(true)
-    if (!Tool.isDefinition(echo)) throw new Error("echo was not generated")
+    expect(Tool.isTool(echo)).toBe(true)
+    if (!Tool.isTool(echo)) throw new Error("echo was not generated")
     expect(inputTypeScript(echo)).toBe("{ body: string }")
 
     const runtime = CodeMode.make({ tools })
@@ -1586,13 +1581,13 @@ describe("OpenAPI.fromSpec", () => {
 
     for (const name of ["optional", "dictionary", "composed", "nullable"]) {
       const tool = toolAt(tools, `body.${name}`)
-      expect(Tool.isDefinition(tool)).toBe(true)
-      if (!Tool.isDefinition(tool)) throw new Error(`body.${name} was not generated`)
+      expect(Tool.isTool(tool)).toBe(true)
+      if (!Tool.isTool(tool)) throw new Error(`body.${name} was not generated`)
       const input = isRecord(tool.input) ? tool.input : {}
       expect(Object.keys(isRecord(input.properties) ? input.properties : {})).toStrictEqual(["body"])
     }
     const optional = toolAt(tools, "body.optional")
-    if (!Tool.isDefinition(optional)) throw new Error("body.optional was not generated")
+    if (!Tool.isTool(optional)) throw new Error("body.optional was not generated")
     expect(inputTypeScript(optional)).toBe("{ body?: { name: string } }")
   })
 })

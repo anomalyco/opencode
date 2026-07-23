@@ -7,13 +7,13 @@ export type RegisterOptions = Tool.RegisterOptions
 
 export interface Interface {
   readonly register: (
-    definitions: Readonly<Record<string, Tool.AnyDefinition>>,
+    tools: Readonly<Record<string, Tool.Any>>,
     options?: Tool.RegisterOptions,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
   /** Internal atomic registration capability used by plugin transforms. */
   readonly registerBatch: (
     registrations: ReadonlyArray<{
-      readonly definitions: Readonly<Record<string, Tool.AnyDefinition>>
+      readonly tools: Readonly<Record<string, Tool.Any>>
       readonly options?: Tool.RegisterOptions
     }>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>

@@ -48,13 +48,13 @@ test("canonical execution distinguishes declared, model-only, and raw schema out
 })
 
 test("declared outputs cannot bypass validation and raw outputs stay JSON-compatible", async () => {
-  const missing: Tool.AnyDefinition = {
+  const missing: Tool.Any = {
     description: "Missing output",
     input: Schema.Struct({}),
     output: Schema.String,
     execute: () => Effect.succeed({ content: "not an output" }),
   }
-  const invalid: Tool.AnyDefinition = {
+  const invalid: Tool.Any = {
     description: "Invalid raw output",
     input: {},
     output: {},
@@ -76,7 +76,7 @@ test("execute preserves successful results with visible unhandled rejections", a
     output: Schema.String,
     execute: () => Effect.fail(new Tool.Failure({ message: "Lookup refused" })),
   })
-  const execute = ExecuteTool.create(new Map([["fail", { definition: child, name: "fail", permission: "fail" }]]))
+  const execute = ExecuteTool.create(new Map([["fail", { tool: child, name: "fail", permission: "fail" }]]))
   const result = await Effect.runPromise(Tool.execute(execute, { code: `tools.fail({}); return "done"` }, context))
 
   expect(result.metadata).toEqual({ toolCalls: [{ tool: "fail", status: "error" }] })
@@ -108,10 +108,10 @@ test("execute supports callable namespace tools", async () => {
   })
   const execute = ExecuteTool.create(
     new Map([
-      ["slack_admin", { definition: callable, name: "admin", namespace: "slack", permission: "slack_admin" }],
+      ["slack_admin", { tool: callable, name: "admin", namespace: "slack", permission: "slack_admin" }],
       [
         "slack_admin_create",
-        { definition: child, name: "create", namespace: "slack.admin", permission: "slack_admin_create" },
+        { tool: child, name: "create", namespace: "slack.admin", permission: "slack_admin_create" },
       ],
     ]),
   )

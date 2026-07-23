@@ -2,7 +2,7 @@ export * as PluginPromise from "./promise"
 
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/v2/plugin"
-import type { AnyDefinition, RegisterOptions } from "@opencode-ai/plugin/v2/tool"
+import type { Any, RegisterOptions } from "@opencode-ai/plugin/v2/tool"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Location } from "@opencode-ai/schema/location"
@@ -189,8 +189,8 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.tool.transform((draft) =>
                   callback({
-                    add: (name: string, definition: AnyDefinition, options?: RegisterOptions) =>
-                      draft.add(name, fromPromiseDefinition(definition), options),
+                    add: (name: string, tool: Any, options?: RegisterOptions) =>
+                      draft.add(name, fromPromiseTool(tool), options),
                   }),
                 ),
               ),
@@ -303,12 +303,12 @@ function wireEvent(value: unknown): unknown {
   return wire(value)
 }
 
-function fromPromiseDefinition(definition: AnyDefinition): Tool.AnyDefinition {
+function fromPromiseTool(tool: Any): Tool.Any {
   return {
-    ...definition,
+    ...tool,
     execute: (input, context) =>
       Effect.promise(() =>
-        definition.execute(input, {
+        tool.execute(input, {
           ...context,
           progress: (update) => Effect.runPromise(context.progress(update)),
         }),
