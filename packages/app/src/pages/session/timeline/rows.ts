@@ -1,4 +1,5 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
@@ -31,6 +32,47 @@ export type TimelineRowMap = {
 }
 
 export namespace Timeline {
+  export function constructSessionMessageRows(
+    messages: SessionMessageInfo[],
+    getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
+    getMessageParts: (messageID: string) => Part[],
+    showReasoning: boolean,
+    status: SessionStatus["type"],
+    inlineComments: boolean,
+  ) {
+    const turns = messages.reduce<{ user: UserMessage; assistants: AssistantMessage[] }[]>((result, message) => {
+      const projected = getMessage(message.id)
+      if (message.type === "shell" && projected?.role === "user") {
+        const assistant = getMessage(`${message.id}:assistant`)
+        result.push({ user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] })
+        return result
+      }
+      if (projected?.role === "user") {
+        result.push({ user: projected, assistants: [] })
+        return result
+      }
+      if (projected?.role !== "assistant") return result
+      result.at(-1)?.assistants.push(projected)
+      return result
+    }, [])
+    const activeMessageID = turns.at(-1)?.user.id
+    return {
+      activeMessageID,
+      rows: turns.flatMap((turn, index) =>
+        constructMessageRows(
+          turn.user,
+          getMessageParts,
+          turn.assistants,
+          index,
+          showReasoning,
+          status,
+          turn.user.id === activeMessageID,
+          inlineComments,
+        ),
+      ),
+    }
+  }
+
   export function constructMessageRows(
     userMessage: UserMessage,
     getMessageParts: (messageID: string) => Part[],
