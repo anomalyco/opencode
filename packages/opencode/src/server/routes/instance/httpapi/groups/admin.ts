@@ -91,6 +91,10 @@ export const AdminApi = HttpApi.make("admin").add(
         }),
       ),
       HttpApiEndpoint.get("usageStats", AdminPaths.usageStats, {
+        query: {
+          from: Schema.optional(Schema.String),
+          to: Schema.optional(Schema.String),
+        },
         success: described(AdminUsageStatsResponse, "Daily usage breakdown"),
         error: [AdminBadRequestError],
       }).annotateMerge(

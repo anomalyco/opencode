@@ -162,7 +162,7 @@ export const layer = Layer.effect(
                 .where(eq(TokenBalanceTable.userId, input.id))
                 .get()
 
-              if (balanceRow && monthAllowanceDue(currentMonth, balanceRow.lastAllowanceMonth)) {
+              if (balanceRow && monthAllowanceDue(currentMonth, balanceRow.lastAllowanceMonth ?? "")) {
                 yield* tx
                   .update(TokenBalanceTable)
                   .set({

@@ -98,9 +98,11 @@ const mockIdentity = Layer.succeed(
     getByID: () => Effect.succeed(null),
     getCurrent: () => Effect.succeed(null),
     requireAdmin: () => Effect.fail(new Identity.Unauthorized({ message: "mock" })),
-    listUsersWithBalances: () => Effect.succeed([]),
-    credit: () => Effect.succeed({ newBalance: 0, transactionId: 0 }),
-  }),
+      listUsersWithBalances: () => Effect.succeed([]),
+      credit: () => Effect.succeed({ newBalance: 0, transactionId: 0 }),
+      stats: () => Effect.succeed({ totalUsers: 0, totalBalance: 0, totalUsedThisMonth: 0 }),
+      usageStats: () => Effect.succeed([]),
+    }),
 )
 
 function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, flags: Partial<RuntimeFlags.Info> = {}) {
