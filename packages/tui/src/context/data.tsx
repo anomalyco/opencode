@@ -298,6 +298,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.created":
           result.session.invalidate(event.data.sessionID)
           void result.session.sync(event.data.sessionID)
+          sync.complete(`session.pending:${event.data.sessionID}`)
+          sync.complete(`session.message:${event.data.sessionID}`)
           break
         case "session.deleted":
           removeSession(event.data.sessionID)

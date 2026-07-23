@@ -261,6 +261,94 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("does not hydrate message history after observing a session creation", async () => {
+  const events = createEventStream()
+  const sessionID = "session-new"
+  const messageID = "msg_first"
+  const requests: string[] = []
+  const calls = createFetch((url) => {
+    if (url.pathname.includes(sessionID)) requests.push(url.pathname)
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          title: "New session",
+          location: { directory },
+        },
+      })
+    return undefined
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    emitEvent(events, {
+      id: "evt_created",
+      created: 1,
+      type: "session.created",
+      durable: durable(sessionID),
+      data: {
+        sessionID,
+        info: {
+          id: sessionID,
+          slug: "session-new",
+          projectID: "proj_test",
+          directory,
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          title: "New session",
+          version: "1",
+        },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_admitted",
+      created: 2,
+      type: "session.input.admitted",
+      durable: durable(sessionID, 1),
+      data: {
+        sessionID,
+        inputID: messageID,
+        input: { type: "user", data: { text: "first" }, delivery: "steer" },
+      },
+    })
+    await wait(() => data.session.message.get(sessionID, messageID) !== undefined)
+
+    await Promise.all([
+      data.session.sync(sessionID),
+      data.session.pending.sync(sessionID),
+      data.session.message.sync(sessionID),
+    ])
+
+    expect(requests).toEqual([`/api/session/${sessionID}`])
+    expect(data.session.get(sessionID)?.title).toBe("New session")
+    expect(data.session.message.get(sessionID, messageID)).toMatchObject({ text: "first" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("applies absolute usage events to session info", async () => {
   const events = createEventStream()
   const sessionID = "ses_usage_refresh"
