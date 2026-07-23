@@ -82,7 +82,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       ? input.model.variants[input.user.model.variant]
       : {}
   const base = input.small
-    ? ProviderTransform.smallOptions(input.model)
+    ? ProviderTransform.smallOptions(input.model, input.sessionID, input.provider.options)
     : ProviderTransform.options({
         model: input.model,
         sessionID: input.sessionID,
