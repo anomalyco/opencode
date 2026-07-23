@@ -442,14 +442,14 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "adapter.call",
         description: "Call an adapter-described tool",
-        signature: "tools.adapter.call(input: {\n  id: string,\n  count?: number,\n}): Promise<unknown>",
+        signature: "tools.adapter.call(input: {\n  id: string,\n  count?: number,\n}): Promise<void>",
       },
     ])
 
     // JSON Schema is render-only: mistyped input passes through unvalidated.
     const result = await Effect.runPromise(runtime.execute(`return await tools.adapter.call({ id: 42 })`))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toStrictEqual({ echoed: { id: 42 } })
+    if (result.ok) expect(result.value).toBeNull()
     expect(observed).toStrictEqual([{ id: 42 }])
   })
 
@@ -534,18 +534,18 @@ describe("CodeMode schema flexibility", () => {
     if (result.ok) expect(result.value).toStrictEqual({ login: "kit", id: 7 })
   })
 
-  test("Effect Schema output without an input transform still renders unknown when omitted", async () => {
+  test("Effect Schema output without an input transform renders void when omitted", async () => {
     const ping = Tool.make({
       description: "Ping",
       input: Schema.Struct({ host: Schema.String }),
       run: () => Effect.succeed("pong"),
     })
     const runtime = CodeMode.make({ tools: { net: { ping } } })
-    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: {\n  host: string,\n}): Promise<unknown>")
+    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: {\n  host: string,\n}): Promise<void>")
 
     const result = await Effect.runPromise(runtime.execute(`return await tools.net.ping({ host: "example.test" })`))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toBe("pong")
+    if (result.ok) expect(result.value).toBeNull()
   })
 })
 

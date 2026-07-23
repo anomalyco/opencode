@@ -63,9 +63,6 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            toModelOutput: ({ input, output }) => [
-              { type: "text", text: toModelOutput(input.questions, output.answers) },
-            ],
             execute: (input, context) =>
               permission
                 .assert({
@@ -95,13 +92,18 @@ export const Plugin = {
                   ),
                   Effect.flatMap((state) => {
                     if (state.status === "cancelled") return Effect.die(new CancelledError())
-                    return Effect.succeed({
+                    const output = {
                       answers: input.questions.map((_, index): QuestionV2.Answer => {
                         const value = state.answer[`q${index}`]
                         if (value === undefined) return []
                         if (typeof value === "object") return Array.from(value)
                         return [String(value)]
                       }),
+                    }
+                    return Effect.succeed({
+                      output,
+                      content: toModelOutput(input.questions, output.answers),
+                      metadata: { answers: output.answers },
                     })
                   }),
                 ),

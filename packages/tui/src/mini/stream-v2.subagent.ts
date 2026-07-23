@@ -33,7 +33,7 @@ import type {
   StreamCommit,
 } from "./types"
 import { canonicalToolName, normalizeTool, toolOutputText, toolView } from "./tool"
-import { nonEmptyToolContent } from "../util/tool-display"
+import { toolDisplayContent } from "../util/tool-display"
 
 const CHILD_MESSAGE_LIMIT = 80
 const CHILD_FRAME_LIMIT = 80
@@ -56,7 +56,7 @@ export function toolCommit(
 ): StreamCommit {
   const part = normalizeTool(input)
   const status = part.state.status
-  const output = status === "streaming" ? "" : toolOutputText(part.name, part.state.content)
+  const output = status === "streaming" ? "" : toolOutputText(part.name, toolDisplayContent(part.state))
   const partial = status === "error" && phase === "progress" && value !== undefined
   const text =
     status === "running" || partial
@@ -310,7 +310,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     const current = child.tools.get(key)
-    const output = toolOutputText(part.name, part.state.content)
+    const output = toolOutputText(part.name, toolDisplayContent(part.state))
     if (part.state.status === "running") {
       if (!current || current.part.state.status === "streaming")
         setFrame(child, frame, toolCommit(part, messageID, "start", undefined, input.directory))
@@ -780,7 +780,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           name: current?.part.name ?? "tool",
           executed: event.data.executed,
           providerState: event.data.state,
-          state: { status: "running", input: event.data.input, metadata: {}, content: [] },
+          state: { status: "running", input: event.data.input, metadata: {} },
           time: { created: current?.part.time.created ?? event.created, ran: event.created },
         },
         event.data.assistantMessageID,
@@ -806,7 +806,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
             status: "running",
             input: part && part.state.status !== "streaming" ? part.state.input : {},
             metadata: event.data.metadata,
-            content: event.data.content,
           },
           time: {
             created: part?.time.created ?? event.created,
@@ -838,11 +837,8 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
             ? {
                 status: "error",
                 input: part && part.state.status !== "streaming" ? part.state.input : {},
-                metadata:
-                  event.data.metadata ?? (part && part.state.status !== "streaming" ? part.state.metadata : undefined),
-                content:
-                  event.data.content ??
-                  (part && part.state.status !== "streaming" ? nonEmptyToolContent(part.state.content) : undefined),
+                metadata: event.data.metadata,
+                content: event.data.content,
                 error: event.data.error,
               }
             : {

@@ -367,7 +367,6 @@ Recent work
               state: SessionMessage.ToolStateRunning.make({
                 status: "running",
                 input: { path: "README.md" },
-                content: [],
                 metadata: { type: "media", mime: "image/png" },
               }),
               time: { created },

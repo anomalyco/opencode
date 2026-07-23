@@ -69,8 +69,7 @@ const make = (permission?: string) => {
     description: "Echo text",
     input: Schema.Struct({ text: Schema.String }),
     output: Schema.Struct({ text: Schema.String }),
-    execute: ({ text }) => Effect.succeed({ text }),
-    toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+    execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
   })
   return permission ? Tool.withPermission(tool, permission) : tool
 }
@@ -80,8 +79,7 @@ const constant = (text: string) =>
     description: "Return text",
     input: Schema.Struct({ text: Schema.String }),
     output: Schema.Struct({ text: Schema.String }),
-    execute: () => Effect.succeed({ text }),
-    toModelOutput: ({ output }) => [{ type: "text" as const, text: output.text }],
+    execute: () => Effect.succeed({ output: { text }, content: text }),
   })
 
 describe("ToolRegistry", () => {
@@ -280,7 +278,7 @@ describe("ToolRegistry", () => {
             description: "Context",
             input: Schema.Struct({}),
             output: Schema.Struct({ ok: Schema.Boolean }),
-            execute: (_, context) => Effect.sync(() => contexts.push(context)).pipe(Effect.as({ ok: true })),
+            execute: (_, context) => Effect.sync(() => contexts.push(context)).pipe(Effect.as({ output: { ok: true } })),
           }),
         },
         { codemode: false },
@@ -324,13 +322,16 @@ describe("ToolRegistry", () => {
             description: "Return images",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }) => Effect.succeed({ text }),
-            toModelOutput: ({ output }) => [
-              { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "frame.png" },
-              { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "too-large.png" },
-              { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "corrupt.png" },
-              { type: "text", text: output.text },
-            ],
+            execute: ({ text }) =>
+              Effect.succeed({
+                output: { text },
+                content: [
+                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "frame.png" },
+                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "too-large.png" },
+                  { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "corrupt.png" },
+                  { type: "text", text },
+                ],
+              }),
           }),
         },
         { codemode: false },
@@ -346,7 +347,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("normalizes image progress content before it is published", () =>
+  it.effect("publishes progress metadata unchanged", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register(
@@ -355,16 +356,7 @@ describe("ToolRegistry", () => {
             description: "Emit image progress",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }, context) =>
-              context
-                .progress({
-                  metadata: { stage: "capture" },
-                  content: [
-                    { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "frame.png" },
-                    { type: "file", data: "aW1hZ2U=", mime: "image/png", name: "too-large.png" },
-                  ],
-                })
-                .pipe(Effect.as({ text })),
+            execute: ({ text }, context) => context.progress({ stage: "capture" }).pipe(Effect.as({ output: { text } })),
           }),
         },
         { codemode: false },
@@ -378,15 +370,7 @@ describe("ToolRegistry", () => {
             updates.push(update)
           }),
       })
-      expect(updates).toEqual([
-        {
-          metadata: { stage: "capture" },
-          content: [
-            { type: "file", uri: "data:image/jpeg;base64,bm9ybWFsaXplZA==", mime: "image/jpeg", name: "frame.png" },
-            { type: "text", text: "[1 image omitted: could not be resized below the image size limit.]" },
-          ],
-        },
-      ])
+      expect(updates).toEqual([{ stage: "capture" }])
     }),
   )
 
@@ -406,14 +390,16 @@ describe("ToolRegistry", () => {
             description: "Transform values",
             input: Schema.Struct({ value: Transformed }),
             output: Schema.Struct({ value: Transformed }),
-            execute: ({ value }) => Effect.sync(() => executed.push(value)).pipe(Effect.as({ value })),
-            toModelOutput: ({ output }) => [{ type: "text", text: String(output.value) }],
+            execute: ({ value }) =>
+              Effect.sync(() => executed.push(value)).pipe(
+                Effect.as({ output: { value }, content: String(value) }),
+              ),
           }),
         },
         { codemode: false },
       )
 
-      // toModelOutput observes the decoded domain value; Code Mode observes the encoded value.
+      // Canonical content observes the decoded domain value; Code Mode observes the encoded value.
       expect(
         yield* executeTool(service, {
           sessionID,
@@ -455,7 +441,7 @@ describe("ToolRegistry", () => {
                 }),
               ),
             }),
-            execute: () => Effect.succeed({ value: "invalid" }),
+            execute: () => Effect.succeed({ output: { value: "invalid" } }),
           }),
         },
         { codemode: false },
@@ -511,7 +497,8 @@ describe("ToolRegistry", () => {
             description: "Echo text",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }) => Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ text })),
+            execute: ({ text }) =>
+              Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ output: { text } })),
           }),
         })
         .pipe(Scope.provide(scope))
@@ -525,7 +512,8 @@ describe("ToolRegistry", () => {
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),
           output: Schema.Struct({ text: Schema.String }),
-          execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ text })),
+          execute: ({ text }) =>
+            Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ output: { text } })),
         }),
       })
 

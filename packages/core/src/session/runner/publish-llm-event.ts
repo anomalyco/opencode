@@ -49,12 +49,8 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   >()
   const failureSnapshot = (tool: { readonly progress?: ToolRegistry.Progress }) => {
     if (!tool.progress) return {}
-    const first = tool.progress.content[0]
-    const metadata = Tool.jsonMetadata(tool.progress.metadata, MAX_BYTES)
-    return {
-      ...(first === undefined ? {} : { content: [first, ...tool.progress.content.slice(1)] as const }),
-      ...(metadata === undefined ? {} : { metadata }),
-    }
+    const metadata = Tool.jsonMetadata(tool.progress, MAX_BYTES)
+    return metadata === undefined ? {} : { metadata }
   }
   let assistantMessageID = input.assistantMessageID
   let stepStarted = false
@@ -475,13 +471,13 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     const tool = tools.get(callID)
     if (!tool?.called || tool.settled)
       return yield* Effect.die(new Error(`Tool progress outside running call: ${callID}`))
-    const current = { metadata: { ...update.metadata }, content: [...update.content] }
+    const current = { ...update }
     tool.progress = current
     yield* events.publish(SessionEvent.Tool.Progress, {
       sessionID: input.sessionID,
       assistantMessageID: tool.assistantMessageID,
       callID,
-      ...current,
+      metadata: current,
     })
   })
 

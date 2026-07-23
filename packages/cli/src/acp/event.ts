@@ -152,14 +152,12 @@ export async function streamTurn(input: {
         const current = tools.get(event.data.callID)
         if (!current) continue
         current.metadata = event.data.metadata
-        current.content = event.data.content
         await update({
           sessionUpdate: "tool_call_update",
           ...runningToolUpdate({
             toolCallId: event.data.callID,
             toolName: current.name,
             state: { input: current.input },
-            content: current.content,
             cwd: input.cwd,
           }),
         })
@@ -356,7 +354,6 @@ async function replayMessage(
               toolCallId: part.id,
               toolName: part.name,
               state: { input: part.state.input },
-              content: part.state.content,
               cwd,
             }),
           },

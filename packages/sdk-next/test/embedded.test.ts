@@ -77,7 +77,7 @@ it.live(
                       description: "Marks the initial Location plugin generation",
                       input: Schema.Struct({}),
                       output: Schema.Void,
-                      execute: () => Effect.void,
+                      execute: () => Effect.succeed({ output: undefined }),
                     }),
                   ),
                 )
@@ -104,7 +104,7 @@ it.live(
                       description: "Tool registered after Location boot",
                       input: Schema.Struct({}),
                       output: Schema.Void,
-                      execute: () => Effect.void,
+                      execute: () => Effect.succeed({ output: undefined }),
                     }),
                   ),
                 )
@@ -225,7 +225,7 @@ it.live(
                     description: "Embedded test tool",
                     input: Schema.Struct({}),
                     output: Schema.Struct({ ok: Schema.Boolean }),
-                    execute: () => Effect.succeed({ ok: true }),
+                    execute: () => Effect.succeed({ output: { ok: true } }),
                   }),
                 ),
               )

@@ -2343,7 +2343,6 @@ test("settles pending tools when a live failure arrives", async () => {
         assistantMessageID: "msg_explicit_assistant_9",
         callID: "call-1",
         metadata: { sessionID: "session-child", status: "running" },
-        content: [],
       },
     })
 
@@ -2392,7 +2391,7 @@ test("settles pending tools when a live failure arrives", async () => {
     if (tool.state.status !== "error") return
     expect(tool.state.error).toEqual({ type: "unknown", message: "aborted" })
     expect(tool.state.input).toEqual({})
-    expect(tool.state.metadata).toEqual({ sessionID: "session-child", status: "running" })
+    expect(tool.state.metadata).toBeUndefined()
     expect(tool.state.content).toBeUndefined()
     expect(tool.executed).toBe(false)
     expect(tool.providerState).toEqual({ call: true })

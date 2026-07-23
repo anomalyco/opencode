@@ -324,7 +324,6 @@ describe("V2 mini transport", () => {
             status: "running" as const,
             input: { command: "git status --short" },
             metadata: {},
-            content: [],
           },
           "call_child_source",
         ),
@@ -2045,7 +2044,6 @@ describe("V2 mini transport", () => {
         assistantMessageID: "msg_progress",
         callID: "call_progress",
         metadata: { checkpoint: 1 },
-        content: [{ type: "text", text: "partial" }],
       },
     })
     events.push({
@@ -2945,7 +2943,6 @@ describe("V2 mini transport", () => {
         assistantMessageID: "msg_subagent",
         callID: "call_subagent",
         metadata: { sessionID: "ses_child_progress", status: "running" },
-        content: [],
       },
     })
     while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_progress")))
@@ -2996,7 +2993,6 @@ describe("V2 mini transport", () => {
         assistantMessageID: "msg_child_tool",
         callID: "call_child_shell",
         metadata: { checkpoint: "child" },
-        content: [{ type: "text", text: "child partial" }],
       },
     })
     events.push({

@@ -42,6 +42,7 @@ import {
   canonicalToolName,
   finiteNumber,
   primitiveInputSummary,
+  toolDisplayContent,
   toolDisplayMetadata,
   webSearchProviderLabel,
 } from "../../util/tool-display"
@@ -2146,7 +2147,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
     },
     get output() {
       if (props.part.state.status === "streaming") return undefined
-      return (props.part.state.content ?? [])
+      return toolDisplayContent(props.part.state)
         .flatMap((content) => (content.type === "text" ? [content.text] : [content.name ?? content.uri]))
         .join("\n")
     },
@@ -2548,6 +2549,8 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
   )
 }
 
+const SHELL_DISPLAY_LIMIT = 1024 * 1024
+
 function Shell(props: ToolProps) {
   const { themeV2 } = useTheme()
   const ctx = use()
@@ -2559,6 +2562,7 @@ function Shell(props: ToolProps) {
   })
   const color = createMemo(() => (permission() ? themeV2.text.feedback.warning.default : themeV2.text.default))
   const shellID = createMemo(() => stringValue(props.metadata.shellID))
+  const background = createMemo(() => Boolean(shellID()) && props.part.state.status !== "running")
   const backgroundRunning = createMemo(() => {
     const id = shellID()
     return Boolean(id && data.shell.get(id))
@@ -2567,31 +2571,73 @@ function Shell(props: ToolProps) {
   const command = createMemo(() => stringValue(props.input.command))
   const [expanded, setExpanded] = createSignal(false)
   const [backgroundOutput, setBackgroundOutput] = createSignal("")
+  const [outputTruncated, setOutputTruncated] = createSignal(false)
   let loading = false
-  const loadBackgroundOutput = async () => {
+  let drainRequested = false
+  let cursor = 0
+  let wasRunning = false
+  const loadBackgroundOutput = async (drain = false) => {
     const id = shellID()
-    if (!id || loading) return
+    if (!id) return
+    if (loading) {
+      if (drain) drainRequested = true
+      return
+    }
     loading = true
     const location = data.session.get(ctx.sessionID)?.location
-    await client.api.shell
-      .output({
-        id,
-        limit: 1024 * 1024,
-        location: location ? { directory: location.directory, workspace: location.workspaceID } : undefined,
-      })
-      .then((response) => setBackgroundOutput(stripAnsi(response.data.output.trim())))
-      .catch(() => undefined)
+    do {
+      const response = await client.api.shell
+        .output({
+          id,
+          cursor,
+          limit: SHELL_DISPLAY_LIMIT,
+          location: location ? { directory: location.directory, workspace: location.workspaceID } : undefined,
+        })
+        .catch(() => undefined)
+      if (!response) break
+      if (response.data.output)
+        setBackgroundOutput((output) => {
+          const next = stripAnsi(output + response.data.output)
+          if (next.length <= SHELL_DISPLAY_LIMIT) return next
+          setOutputTruncated(true)
+          return next.slice(-SHELL_DISPLAY_LIMIT)
+        })
+      if (response.data.cursor <= cursor) break
+      cursor = response.data.cursor
+      if (!drain || cursor >= response.data.size) break
+      const tail = Math.max(cursor, response.data.size - SHELL_DISPLAY_LIMIT)
+      if (tail > cursor) {
+        cursor = tail
+        setOutputTruncated(true)
+      }
+    } while (true)
     loading = false
+    if (drainRequested) {
+      drainRequested = false
+      void loadBackgroundOutput(true)
+    }
   }
   createEffect(() => {
-    if (!expanded() || !backgroundRunning()) return
+    const running = backgroundRunning()
+    if (!running) {
+      if (wasRunning) void loadBackgroundOutput(true)
+      wasRunning = false
+      return
+    }
+    wasRunning = true
+    if (background() && !expanded()) return
+    void loadBackgroundOutput()
     const interval = setInterval(() => void loadBackgroundOutput(), 1_000)
     onCleanup(() => clearInterval(interval))
   })
   const output = createMemo(() => {
     if (props.part.state.status === "streaming") return ""
-    if (shellID()) return expanded() ? backgroundOutput() : ""
-    const content = props.part.state.content?.[0]
+    if (shellID()) {
+      if (background() && !expanded()) return ""
+      const text = backgroundOutput().trim()
+      return outputTruncated() ? `[earlier output omitted]\n${text}` : text
+    }
+    const content = toolDisplayContent(props.part.state)[0]
     return stripAnsi(content?.type === "text" ? content.text.trim() : "")
   })
   const maxLines = 10
@@ -2607,7 +2653,7 @@ function Shell(props: ToolProps) {
   const toggle = () => {
     const next = !expanded()
     setExpanded(next)
-    if (next) void loadBackgroundOutput()
+    if (next) void loadBackgroundOutput(!backgroundRunning())
   }
 
   return (
@@ -2638,7 +2684,7 @@ function Shell(props: ToolProps) {
             </Spinner>
           </Show>
         </Show>
-        <Show when={shellID()}>
+        <Show when={background()}>
           <StatusBadge>Background</StatusBadge>
         </Show>
       </box>
@@ -3154,7 +3200,7 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
           ? item.state.error.message
           : item.state.status === "streaming"
             ? ""
-            : item.state.content
+            : toolDisplayContent(item.state)
                 .flatMap((entry) => (entry.type === "text" ? [entry.text] : [entry.name ?? entry.uri]))
                 .join("\n")
       return [`**Tool: ${item.name}**\n\n**Input:**\n\`\`\`json\n${input}\n\`\`\`\n\n${output}`]

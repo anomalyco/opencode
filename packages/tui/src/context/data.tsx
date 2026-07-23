@@ -606,7 +606,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             match.time.ran = event.created
             match.executed = event.data.executed
             match.providerState = event.data.state
-            match.state = { status: "running", input: event.data.input, metadata: {}, content: [] }
+            match.state = { status: "running", input: event.data.input, metadata: {} }
           })
           break
         case "session.tool.progress":
@@ -617,7 +617,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             )
             if (match?.state.status !== "running") return
             match.state.metadata = event.data.metadata
-            match.state.content = [...event.data.content]
           })
           break
         case "session.tool.success":
@@ -649,10 +648,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               status: "error",
               error: event.data.error,
               input: typeof match.state.input === "string" ? {} : match.state.input,
-              metadata: event.data.metadata ?? (match.state.status === "running" ? match.state.metadata : undefined),
-              content:
-                event.data.content ??
-                (match.state.status === "running" ? nonEmptyToolContent(match.state.content) : undefined),
+              metadata: event.data.metadata,
+              content: event.data.content,
             }
             match.executed = event.data.executed || match.executed === true
             match.providerResultState = event.data.resultState

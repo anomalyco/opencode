@@ -10,6 +10,7 @@ import {
   Exit,
   Fiber,
   FiberSet,
+  JsonSchema,
   Layer,
   PubSub,
   Queue,
@@ -451,7 +452,7 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
     name: string,
     input: unknown,
     context: Tool.Context,
-  ): Effect.Effect<Tool.DynamicOutput, Tool.Failure> =>
+  ): Effect.Effect<Tool.Result<JsonSchema.JsonSchema>, Tool.Failure> =>
     Effect.gen(function* () {
       const encoded = yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
         Effect.mapError((error) => new Tool.Failure({ message: `Simulated tool input is not JSON: ${error.message}` })),
@@ -519,9 +520,14 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
           ),
       )
       // The simulation wire protocol keeps its historical field names; map to the
-      // canonical dynamic output at this boundary.
+      // canonical output at this boundary.
       if (invocation.type === "success")
-        return { output: invocation.output.structured, content: invocation.output.content }
+        return {
+          output: invocation.output.structured,
+          ...(invocation.output.content.length === 0
+            ? {}
+            : { content: invocation.output.content as [Tool.Content, ...Tool.Content[]] }),
+        }
       return yield* Effect.fail(new Tool.Failure({ message: invocation.message }))
     })
 
@@ -549,10 +555,8 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                           registration.name,
                           Tool.make({
                             description: registration.description,
-                            jsonSchema: registration.inputSchema,
-                            ...(registration.outputSchema === undefined
-                              ? {}
-                              : { outputSchema: registration.outputSchema }),
+                            input: registration.inputSchema,
+                            output: registration.outputSchema ?? {},
                             ...(registration.permission === undefined ? {} : { permission: registration.permission }),
                             execute: (input, context) =>
                               invoke(
@@ -771,10 +775,7 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                 message: `Expected simulated tool update sequence ${expected}, received ${params.sequence}`,
               }),
             )
-          yield* invocation.progress({
-            metadata: params.update.structured,
-            ...(params.update.content === undefined ? {} : { content: params.update.content }),
-          })
+          yield* invocation.progress(params.update)
           invocation.update = { sequence: params.sequence, fingerprint }
         }),
       )

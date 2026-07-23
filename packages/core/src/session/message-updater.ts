@@ -356,7 +356,6 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 status: "running",
                 input: event.data.input,
                 metadata: {},
-                content: [],
               }),
             )
           }
@@ -367,7 +366,6 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           const match = latestTool(draft, event.data.callID)
           if (match && match.state.status === "running") {
             match.state.metadata = event.data.metadata
-            match.state.content = [...event.data.content]
           }
         })
       },

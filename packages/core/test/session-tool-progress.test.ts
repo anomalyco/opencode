@@ -84,7 +84,7 @@ describe("Tool.Progress", () => {
 
       yield* start("call-success")
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "running", metadata: {}, content: [] },
+        state: { status: "running", metadata: {} },
       })
 
       const progress = yield* service.publish(SessionEvent.Tool.Progress, {
@@ -92,10 +92,9 @@ describe("Tool.Progress", () => {
         assistantMessageID,
         callID: "call-success",
         metadata: { phase: "checkpoint" },
-        content: content("saved"),
       })
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "running", metadata: {}, content: [] },
+        state: { status: "running", metadata: {} },
       })
 
       const success = yield* service.publish(SessionEvent.Tool.Success, {
@@ -116,7 +115,6 @@ describe("Tool.Progress", () => {
         assistantMessageID,
         callID: "call-failed",
         metadata: { phase: "checkpoint" },
-        content: content("before failure"),
       })
       const failed = yield* service.publish(SessionEvent.Tool.Failed, {
         sessionID,

@@ -309,10 +309,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             params: {
               id: successID,
               sequence: 0,
-              update: {
-                structured: { phase: "searching" },
-                content: [{ type: "text", text: "Searching" }],
-              },
+              update: { phase: "searching" },
             },
           })
           socket.send(update)
@@ -334,7 +331,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
               params: {
                 id: successID,
                 sequence: 0,
-                update: { structured: { phase: "different" } },
+                update: { phase: "different" },
               },
             }),
           )
@@ -350,7 +347,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
               params: {
                 id: successID,
                 sequence: 2,
-                update: { structured: { phase: "skipped" } },
+                update: { phase: "skipped" },
               },
             }),
           )
@@ -393,12 +390,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             output: { answer: 42 },
             content: [{ type: "text", text: "42" }],
           })
-          expect(progress).toEqual([
-            {
-              metadata: { phase: "searching" },
-              content: [{ type: "text", text: "Searching" }],
-            },
-          ])
+          expect(progress).toEqual([{ phase: "searching" }])
 
           const failed = yield* executeCall("call_failure", "missing").pipe(Effect.forkScoped)
           const failedInvocation = yield* takeToolInvocation(messages)
@@ -484,10 +476,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           const replayed = yield* executeCall("call_replayed", "reconnect").pipe(Effect.forkScoped)
           const original = yield* takeToolInvocation(messages)
           const originalID = requireString(requireRecord(original.params).id)
-          const replayedProgress = {
-            structured: { phase: "before-reconnect" },
-            content: [{ type: "text", text: "Still running" }],
-          }
+          const replayedProgress = { phase: "before-reconnect" }
           socket.send(
             JSON.stringify({
               jsonrpc: "2.0",
@@ -554,7 +543,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(replacementMessages)).toMatchObject({ id: 26, result: { ok: true } })
-          expect(progress.filter((update) => update.metadata.phase === "before-reconnect")).toHaveLength(1)
+          expect(progress.filter((update) => update.phase === "before-reconnect")).toHaveLength(1)
           replacement.send(
             JSON.stringify({
               jsonrpc: "2.0",

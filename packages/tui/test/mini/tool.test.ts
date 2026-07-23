@@ -67,7 +67,6 @@ describe("Mini tool presentation", () => {
           status: "running",
           input: { subagent_type: "explore", description: "Inspect" },
           metadata: {},
-          content: [],
         },
         time: { created: 1, ran: 1 },
       }),

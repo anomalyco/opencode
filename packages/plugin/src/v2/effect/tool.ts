@@ -1,9 +1,9 @@
 export * as Tool from "./tool.js"
 
 import { Agent } from "@opencode-ai/schema/agent"
-import type { LLM } from "@opencode-ai/schema/llm"
+import { LLM } from "@opencode-ai/schema/llm"
 import { Session } from "@opencode-ai/schema/session"
-import type { SessionError } from "@opencode-ai/schema/session-error"
+import { SessionError } from "@opencode-ai/schema/session-error"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Effect, JsonSchema, Schema } from "effect"
@@ -25,15 +25,12 @@ export interface Context {
   readonly progress: (update: Progress) => Effect.Effect<void>
 }
 
-/** Live replacement snapshot for a running tool: content for the model, metadata for the UI. */
-export interface Progress {
-  readonly metadata: Metadata
-  readonly content?: ReadonlyArray<Content>
-}
+/** Live replacement metadata for a running tool. */
+export type Progress = Metadata
 
 export type StandardSchemaType<Input = unknown, Output = Input> = StandardSchemaV1<Input, Output> &
   StandardJSONSchemaV1<Input, Output>
-export type SchemaType<A> = Schema.Codec<A, any> | StandardSchemaType<any, A>
+export type SchemaType<A = unknown> = Schema.Codec<A, any> | StandardSchemaType<any, A> | JsonSchema.JsonSchema
 type IsAny<A> = 0 extends 1 & A ? true : false
 export type InputValue<S> =
   IsAny<S> extends true
@@ -42,7 +39,7 @@ export type InputValue<S> =
       ? A
       : S extends StandardSchemaV1<any, infer A>
         ? A
-        : never
+        : unknown
 export type OutputValue<S> =
   IsAny<S> extends true
     ? any
@@ -50,7 +47,7 @@ export type OutputValue<S> =
       ? A
       : S extends StandardSchemaV1<infer A, any>
         ? A
-        : never
+        : unknown
 export type EncodedValue<S> =
   IsAny<S> extends true
     ? any
@@ -58,7 +55,7 @@ export type EncodedValue<S> =
       ? A
       : S extends StandardSchemaV1<any, infer A>
         ? A
-        : never
+        : unknown
 
 type ToolDefinition = {
   readonly name: string
@@ -81,53 +78,49 @@ export type Content =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "file"; readonly data: string; readonly mime: string; readonly name?: string }
 
-/** What `toModelOutput` may return: plain text or non-empty rich content. */
+/** Model-facing tool content: plain text or non-empty rich content. */
 export type ModelOutput = string | readonly [Content, ...Content[]]
 
-export type Definition<Input extends SchemaType<any>, Output extends SchemaType<any> = any> = {
+type BaseDefinition<Input extends SchemaType<any>> = {
   readonly description: string
   readonly input: Input
-  /** Required. The encoded side must be JSON: it validates the handler result and is what Code Mode receives. */
-  readonly output: Output
   readonly permission?: string
-  readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<OutputValue<Output>, Failure>
-  /**
-   * Optional model projection. Receives the typed domain output. When absent, an
-   * encoded string becomes text and any other encoded JSON is serialized once.
-   */
-  readonly toModelOutput?: (call: {
-    readonly input: InputValue<Input>
-    readonly output: OutputValue<Output>
-  }) => ModelOutput
-  /** Optional compact UI metadata. Receives the typed domain output. Absent means absent: no defaults. */
-  readonly toMetadata?: (call: { readonly input: InputValue<Input>; readonly output: OutputValue<Output> }) => Metadata
 }
 
-/** A dynamic tool's split result: a machine value for Code Mode and content for the model. */
-export type DynamicOutput = {
-  readonly output: unknown
-  readonly content: ReadonlyArray<Content>
+export type Result<Output extends SchemaType<any>> = {
+  readonly output: OutputValue<Output>
+  readonly content?: ModelOutput
+  readonly metadata?: Metadata
 }
 
-/**
- * Config for a tool whose input shape is a raw JSON Schema not known at compile
- * time (MCP servers, plugin manifests). Input is passed through as `unknown`;
- * `execute` returns the machine output and model content directly.
- */
-export type DynamicDefinition = {
-  readonly description: string
-  readonly jsonSchema: JsonSchema.JsonSchema
-  readonly outputSchema?: JsonSchema.JsonSchema
-  readonly permission?: string
-  readonly execute: (input: unknown, context: Context) => Effect.Effect<DynamicOutput, Failure>
+export type ContentResult = {
+  readonly content: ModelOutput
+  readonly metadata?: Metadata
 }
 
-export type AnyTool = Definition<any, any> | DynamicDefinition
+export type Definition<
+  Input extends SchemaType<any>,
+  Output extends SchemaType<any> | undefined = undefined,
+> = BaseDefinition<Input> &
+  (Output extends SchemaType<any>
+    ? {
+        readonly output: Output
+        readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Failure>
+      }
+    : {
+        readonly output?: undefined
+        readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<ContentResult, Failure>
+      })
+
+export type AnyTool = BaseDefinition<any> & {
+  readonly output?: SchemaType<any>
+  readonly execute: (input: any, context: Context) => Effect.Effect<Result<any> | ContentResult, Failure>
+}
 
 export function make<Input extends SchemaType<any>, Output extends SchemaType<any>>(
   config: Definition<Input, Output>,
 ): Definition<Input, Output>
-export function make(config: DynamicDefinition): DynamicDefinition
+export function make<Input extends SchemaType<any>>(config: Definition<Input>): Definition<Input>
 export function make(config: AnyTool): AnyTool
 export function make(config: AnyTool): AnyTool {
   return config
@@ -168,19 +161,12 @@ export const withPermission = <T extends AnyTool>(
 export const permission = (tool: AnyTool, name: string) => tool.permission ?? name
 
 export const definition = (name: string, tool: AnyTool): ToolDefinition =>
-  "jsonSchema" in tool
-    ? {
-        name,
-        description: tool.description,
-        inputSchema: tool.jsonSchema,
-        outputSchema: tool.outputSchema,
-      }
-    : {
-        name,
-        description: tool.description,
-        inputSchema: inputJsonSchema(tool.input),
-        outputSchema: outputJsonSchema(tool.output),
-      }
+  ({
+    name,
+    description: tool.description,
+    inputSchema: inputJsonSchema(tool.input),
+    ...("output" in tool && tool.output !== undefined ? { outputSchema: outputJsonSchema(tool.output) } : {}),
+  })
 
 // Schema interpretation
 
@@ -189,7 +175,8 @@ export function decodeInput(schema: SchemaType<any>, value: unknown): Effect.Eff
     return Schema.decodeUnknownEffect(schema)(value).pipe(
       Effect.mapError((error) => new Failure({ message: `Invalid tool input: ${error.message}` })),
     )
-  return validateStandard(schema, value, "Invalid tool input")
+  if (isStandardSchema(schema)) return validateStandard(schema, value, "Invalid tool input")
+  return Effect.succeed(value)
 }
 
 export function encodeOutput(schema: SchemaType<any>, value: unknown): Effect.Effect<any, Failure> {
@@ -199,7 +186,17 @@ export function encodeOutput(schema: SchemaType<any>, value: unknown): Effect.Ef
         (error) => new Failure({ message: `Tool returned an invalid value for its output schema: ${error.message}` }),
       ),
     )
-  return validateStandard(schema, value, "Tool returned an invalid value for its output schema")
+  if (isStandardSchema(schema))
+    return validateStandard(schema, value, "Tool returned an invalid value for its output schema")
+  return Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+    Effect.mapError(
+      (error) => new Failure({ message: `Tool returned a non-JSON value for its output schema: ${error.message}` }),
+    ),
+  )
+}
+
+function isStandardSchema(schema: SchemaType<any>): schema is StandardSchemaType {
+  return "~standard" in schema
 }
 
 function validateStandard(schema: StandardSchemaType, value: unknown, prefix: string): Effect.Effect<unknown, Failure> {
@@ -225,15 +222,15 @@ function standardFailure(prefix: string, error: unknown) {
 }
 
 function inputJsonSchema(schema: SchemaType<any>): JsonSchema.JsonSchema {
-  if (!Schema.isSchema(schema))
+  if (isStandardSchema(schema))
     return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
-  return toJsonSchema(schema)
+  return Schema.isSchema(schema) ? toJsonSchema(schema) : (schema as JsonSchema.JsonSchema)
 }
 
 function outputJsonSchema(schema: SchemaType<any>): JsonSchema.JsonSchema {
-  if (!Schema.isSchema(schema))
+  if (isStandardSchema(schema))
     return schema["~standard"].jsonSchema.output({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
-  return toJsonSchema(schema)
+  return Schema.isSchema(schema) ? toJsonSchema(schema) : (schema as JsonSchema.JsonSchema)
 }
 
 function toJsonSchema(schema: Schema.Top): JsonSchema.JsonSchema {
@@ -261,6 +258,22 @@ type ToolHookBase = {
   readonly callID: string
   readonly input: unknown
 }
+
+export const ExecuteAfterOutcome = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("completed"),
+    content: Schema.NonEmptyArray(LLM.ToolContent),
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+    outputPaths: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("error"),
+    error: SessionError.Error,
+    content: Schema.optional(Schema.NonEmptyArray(LLM.ToolContent)),
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+    outputPaths: Schema.optional(Schema.Array(Schema.String)),
+  }),
+]).pipe(Schema.toTaggedUnion("status"))
 
 /**
  * The canonical execution outcome as seen by `execute.after` hooks. Hooks

@@ -16,7 +16,7 @@ import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
-import { nonEmptyToolContent } from "../util/tool-display"
+import { toolDisplayContent } from "../util/tool-display"
 import type {
   FooterApi,
   FooterView,
@@ -559,7 +559,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     const current = state.tools.get(key)
-    const output = toolOutputText(part.name, part.state.content)
+    const output = toolOutputText(part.name, toolDisplayContent(part.state))
     const prefix = current ? output.startsWith(current.output) : false
     const version = current && !prefix ? current.version + 1 : (current?.version ?? 0)
     const delta = current && prefix ? output.slice(current.output.length) : output
@@ -1042,7 +1042,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         name: current?.part.name ?? "tool",
         executed: event.data.executed,
         providerState: event.data.state,
-        state: { status: "running", input: event.data.input, metadata: {}, content: [] },
+        state: { status: "running", input: event.data.input, metadata: {} },
         time: { created: current?.part.time.created ?? event.created, ran: event.created },
       }
       renderTool(event.data.assistantMessageID, item)
@@ -1063,7 +1063,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           status: "running",
           input: part && part.state.status !== "streaming" ? part.state.input : {},
           metadata: event.data.metadata,
-          content: event.data.content,
         },
         time: { created: part?.time.created ?? event.created, ran: part?.time.ran ?? event.created },
       })
@@ -1084,11 +1083,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           ? {
               status: "error",
               input: part && part.state.status !== "streaming" ? part.state.input : {},
-              metadata:
-                event.data.metadata ?? (part && part.state.status !== "streaming" ? part.state.metadata : undefined),
-              content:
-                event.data.content ??
-                (part && part.state.status !== "streaming" ? nonEmptyToolContent(part.state.content) : undefined),
+              metadata: event.data.metadata,
+              content: event.data.content,
               error: event.data.error,
             }
           : {

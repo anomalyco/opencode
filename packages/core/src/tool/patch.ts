@@ -80,8 +80,6 @@ export const Plugin = {
               description: DESCRIPTION,
               input: Input,
               output: Output,
-              toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
-              toMetadata: ({ output }) => ({ files: output.files }),
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []
                 const fail = (path: string, error?: unknown) => {
@@ -279,7 +277,14 @@ export const Plugin = {
                     { discard: true },
                   )
                   return { applied, files: patchFiles }
-                }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch", error))))
+                }).pipe(
+                  Effect.map((output) => ({
+                    output,
+                    content: toModelOutput(output),
+                    metadata: { files: output.files },
+                  })),
+                  Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch", error))),
+                )
               },
             }),
             "edit",

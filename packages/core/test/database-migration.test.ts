@@ -591,6 +591,7 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL)`,
         )
+        yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, type text NOT NULL, data text NOT NULL)`)
         const assistant = {
           agent: "build",
           model: { id: "model", providerID: "provider" },
@@ -674,6 +675,27 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`INSERT INTO session_message VALUES ('msg_corrupt', 'ses_test', 'assistant', 3, 14, 15, 'not json')`,
         )
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_success', 'session.tool.success.1', ${JSON.stringify({
+            sessionID: "ses_test",
+            assistantMessageID: "msg_tools",
+            callID: "call_hosted",
+            structured: {},
+            content: [],
+            result: { type: "json", value: [{ url: "https://example.com" }] },
+            executed: true,
+          })})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event VALUES ('evt_failed', 'session.tool.failed.1', ${JSON.stringify({
+            sessionID: "ses_test",
+            assistantMessageID: "msg_tools",
+            callID: "call_failed",
+            error: { type: "tool.execution", message: "timed out" },
+            metadata: { truncated: false },
+            executed: false,
+          })})`,
+        )
 
         yield* DatabaseMigration.applyOnly(db, [canonicalToolResultsMigration])
 
@@ -711,7 +733,10 @@ describe("DatabaseMigration", () => {
             blockType: "web_search_tool_result",
             result: [{ url: "https://example.com" }],
           },
-          state: { status: "completed" },
+          state: {
+            status: "completed",
+            content: [{ type: "text", text: JSON.stringify([{ url: "https://example.com" }], null, 2) }],
+          },
         })
         expect(states.get("call_failed")).toMatchObject({
           state: {
@@ -721,15 +746,34 @@ describe("DatabaseMigration", () => {
             metadata: { truncated: false },
           },
         })
-        const failed = (states.get("call_failed") as { state: Record<string, unknown> }).state
-        expect(failed).not.toHaveProperty("result")
-        expect(failed).not.toHaveProperty("structured")
+        const failedState = (states.get("call_failed") as { state: Record<string, unknown> }).state
+        expect(failedState).not.toHaveProperty("result")
+        expect(failedState).not.toHaveProperty("structured")
         expect(states.get("call_running")).toMatchObject({
           state: {
             status: "running",
             metadata: { truncated: false },
-            content: [{ type: "text", text: "tick" }],
           },
+        })
+        const event = yield* db.get<{ type: string; data: string }>(sql`SELECT type, data FROM event WHERE id = 'evt_success'`)
+        expect(event!.type).toBe("session.tool.success.2")
+        expect(JSON.parse(event!.data)).toEqual({
+          sessionID: "ses_test",
+          assistantMessageID: "msg_tools",
+          callID: "call_hosted",
+          executed: true,
+          resultState: { result: [{ url: "https://example.com" }] },
+          content: [{ type: "text", text: JSON.stringify([{ url: "https://example.com" }], null, 2) }],
+        })
+        const failedEvent = yield* db.get<{ type: string; data: string }>(sql`SELECT type, data FROM event WHERE id = 'evt_failed'`)
+        expect(failedEvent!.type).toBe("session.tool.failed.2")
+        expect(JSON.parse(failedEvent!.data)).toEqual({
+          sessionID: "ses_test",
+          assistantMessageID: "msg_tools",
+          callID: "call_failed",
+          executed: false,
+          error: { type: "tool.execution", message: "timed out" },
+          metadata: { truncated: false },
         })
         expect(yield* db.get(sql`SELECT data FROM session_message WHERE id = 'msg_user'`)).toEqual({
           data: '{"text":"hi","time":{"created":1}}',

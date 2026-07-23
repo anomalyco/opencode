@@ -25,11 +25,8 @@ export type ExecuteInput = {
   readonly progress?: (update: Progress) => Effect.Effect<void>
 }
 
-/** Live replacement snapshot for a running tool: content for the model, metadata for the UI. */
-export interface Progress {
-  readonly metadata: Tool.Metadata
-  readonly content: ReadonlyArray<ToolContent>
-}
+/** Live replacement metadata for a running tool. */
+export type Progress = Tool.Metadata
 
 export interface Interface {
   readonly snapshot: (permissions?: PermissionV2.Ruleset) => Effect.Effect<ToolSet>
@@ -64,7 +61,7 @@ export interface ToolSet {
 export type ToolExecution =
   | {
       readonly status: "completed"
-      readonly output: unknown
+      readonly output?: unknown
       readonly content: Tool.NonEmptyContent
       readonly metadata?: Tool.Metadata
       readonly outputPaths?: ReadonlyArray<string>
@@ -153,11 +150,11 @@ const registryLayer = Layer.effect(
         agent: input.agent,
         messageID: input.messageID,
         callID: input.call.id,
-        progress: (update) => {
+        progress: (metadata) => {
           const progress = input.progress
           if (!progress) return Effect.void
-          return normalizeImages((update.content ?? []).map(Tool.toModelContent)).pipe(
-            Effect.flatMap((content) => progress({ metadata: update.metadata, content })),
+          return validMetadata(input.call.name, metadata).pipe(
+            Effect.flatMap((valid) => (valid === undefined ? Effect.void : progress(valid))),
           )
         },
       }).pipe(
@@ -175,7 +172,7 @@ const registryLayer = Layer.effect(
         const metadata = yield* validMetadata(input.call.name, executed.value.metadata)
         return {
           status: "completed" as const,
-          output: executed.value.output,
+          ...(executed.value.output === undefined ? {} : { output: executed.value.output }),
           content: nonEmpty(bounded.content) ?? executed.value.content,
           ...(metadata === undefined ? {} : { metadata }),
           ...(bounded.outputPaths.length > 0 ? { outputPaths: bounded.outputPaths } : {}),
@@ -208,20 +205,37 @@ const registryLayer = Layer.effect(
               ...(execution.outputPaths === undefined ? {} : { outputPaths: execution.outputPaths }),
             }
       yield* toolHooks.runAfter(afterEvent)
+      const afterMetadata = yield* validMetadata(input.call.name, afterEvent.metadata)
+      const afterContent = yield* Effect.gen(function* () {
+        if (afterEvent.content === undefined || (execution.status === "completed" && afterEvent.content === execution.content))
+          return { content: afterEvent.content, outputPaths: afterEvent.outputPaths }
+        const bounded = yield* resources.bound({
+          sessionID: input.sessionID,
+          callID: input.call.id,
+          content: yield* normalizeImages(afterEvent.content),
+        })
+        return {
+          content: nonEmpty(bounded.content),
+          outputPaths:
+            bounded.outputPaths.length === 0
+              ? afterEvent.outputPaths
+              : Array.from(new Set([...(afterEvent.outputPaths ?? []), ...bounded.outputPaths])),
+        }
+      })
       if (afterEvent.status === "completed")
         return {
           status: "completed" as const,
-          output: execution.status === "completed" ? execution.output : undefined,
-          content: afterEvent.content,
-          ...(afterEvent.metadata === undefined ? {} : { metadata: afterEvent.metadata }),
-          ...(afterEvent.outputPaths === undefined ? {} : { outputPaths: afterEvent.outputPaths }),
+          ...(execution.status === "completed" && execution.output !== undefined ? { output: execution.output } : {}),
+          content: afterContent.content ?? afterEvent.content,
+          ...(afterMetadata === undefined ? {} : { metadata: afterMetadata }),
+          ...(afterContent.outputPaths === undefined ? {} : { outputPaths: afterContent.outputPaths }),
         }
       return {
         status: "error" as const,
         error: afterEvent.error,
-        ...(afterEvent.content === undefined ? {} : { content: afterEvent.content }),
-        ...(afterEvent.metadata === undefined ? {} : { metadata: afterEvent.metadata }),
-        ...(afterEvent.outputPaths === undefined ? {} : { outputPaths: afterEvent.outputPaths }),
+        ...(afterContent.content === undefined ? {} : { content: afterContent.content }),
+        ...(afterMetadata === undefined ? {} : { metadata: afterMetadata }),
+        ...(afterContent.outputPaths === undefined ? {} : { outputPaths: afterContent.outputPaths }),
       }
     })
 

@@ -258,7 +258,7 @@ describe("PluginV2", () => {
                   description: "Plugin tool",
                   input: Schema.Struct({}),
                   output: Schema.Struct({ ok: Schema.Boolean }),
-                  execute: () => Effect.succeed({ ok: true }),
+                  execute: () => Effect.succeed({ output: { ok: true } }),
                 }),
                 { codemode: false },
               ),
@@ -283,7 +283,7 @@ describe("PluginV2", () => {
           description,
           input: Schema.Struct({}),
           output: Schema.Struct({ ok: Schema.Boolean }),
-          execute: () => Effect.succeed({ ok: true }),
+          execute: () => Effect.succeed({ output: { ok: true } }),
         })
       const plugin = EffectPlugin.define({
         id: "grouped-tools",
@@ -329,7 +329,8 @@ describe("PluginV2", () => {
                     description: "Echo",
                     input: Schema.Struct({ text: Schema.String }),
                     output: Schema.Struct({ text: Schema.String }),
-                    execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
+                    execute: ({ text }) =>
+                      Effect.sync(() => executed.push({ text })).pipe(Effect.as({ output: { text } })),
                   }),
                   { codemode: false },
                 ),
@@ -357,6 +358,14 @@ describe("PluginV2", () => {
                   if (event.status !== "completed") return
                   event.content = [{ type: "text", text: "after-mutated" }]
                   event.metadata = { rewritten: true }
+                }),
+              )
+              .pipe(Effect.asVoid)
+
+            yield* ctx.tool
+              .hook("execute.after", (event) =>
+                Effect.sync(() => {
+                  if (event.status === "completed") event.content = [] as never
                 }),
               )
               .pipe(Effect.asVoid)

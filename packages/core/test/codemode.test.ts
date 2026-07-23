@@ -14,7 +14,7 @@ describe("CodeMode", () => {
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),
           output: Schema.String,
-          execute: ({ text }) => Effect.succeed(text),
+          execute: ({ text }) => Effect.succeed({ output: text }),
         }),
       })
 

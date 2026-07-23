@@ -4,7 +4,7 @@ This folder owns Core's one local tool representation, process and Location regi
 
 ## Representations
 
-- `tool.ts` defines the structural canonical `Tool.make({ description, input, output, execute, toModelOutput })` declaration. Shipped built-ins and plugin tools use the same type.
+- `tool.ts` defines the structural canonical `Tool.make({ description, input, output?, execute })` declaration. Executors return model content and metadata alongside declared machine output. Shipped built-ins and plugin tools use the same type.
 - `tools.ts` exposes the registration-only `Tools.Service` view used by Location producers.
 - `registry.ts` stores only canonical Location registrations, derives definitions, invokes tools, and applies generic output bounding.
 

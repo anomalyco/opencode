@@ -6,6 +6,69 @@ import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Effect, Schema } from "effect"
 
+const context = {
+  sessionID: Session.ID.make("ses_execute"),
+  agent: Agent.ID.make("build"),
+  messageID: SessionMessage.ID.make("msg_execute"),
+  callID: "call_execute",
+  progress: () => Effect.void,
+}
+
+test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
+  const declared = Tool.make({
+    description: "Declared",
+    input: Schema.Struct({ value: Schema.String }),
+    output: Schema.Struct({ value: Schema.String }),
+    execute: ({ value }) => Effect.succeed({ output: { value } }),
+  })
+  const modelOnly = Tool.make({
+    description: "Model only",
+    input: Schema.Struct({}),
+    execute: () => Effect.succeed({ content: "visible only", metadata: { kind: "model" } }),
+  })
+  const raw = Tool.make({
+    description: "Raw",
+    input: {},
+    output: {},
+    execute: (input) => Effect.succeed({ output: input, content: "raw" }),
+  })
+
+  expect(await Effect.runPromise(Tool.execute(declared, { value: "encoded" }, context))).toEqual({
+    output: { value: "encoded" },
+    content: [{ type: "text", text: '{"value":"encoded"}' }],
+  })
+  expect(await Effect.runPromise(Tool.execute(modelOnly, {}, context))).toEqual({
+    content: [{ type: "text", text: "visible only" }],
+    metadata: { kind: "model" },
+  })
+  expect(await Effect.runPromise(Tool.execute(raw, { unchecked: true }, context))).toEqual({
+    output: { unchecked: true },
+    content: [{ type: "text", text: "raw" }],
+  })
+})
+
+test("declared outputs cannot bypass validation and raw outputs stay JSON-compatible", async () => {
+  const missing: Tool.AnyTool = {
+    description: "Missing output",
+    input: Schema.Struct({}),
+    output: Schema.String,
+    execute: () => Effect.succeed({ content: "not an output" }),
+  }
+  const invalid: Tool.AnyTool = {
+    description: "Invalid raw output",
+    input: {},
+    output: {},
+    execute: () => Effect.succeed({ output: 1n, content: "not JSON" }),
+  }
+
+  expect((await Effect.runPromiseExit(Tool.execute(missing, {}, context))).toString()).toContain(
+    "Tool did not return its declared output",
+  )
+  expect((await Effect.runPromiseExit(Tool.execute(invalid, {}, context))).toString()).toContain(
+    "Tool returned a non-JSON value",
+  )
+})
+
 test("execute preserves successful results with visible unhandled rejections", async () => {
   const child = Tool.make({
     description: "Always fail",
@@ -18,13 +81,7 @@ test("execute preserves successful results with visible unhandled rejections", a
     Tool.execute(
       execute,
       { code: `tools.fail({}); return "done"` },
-      {
-        sessionID: Session.ID.make("ses_execute"),
-        agent: Agent.ID.make("build"),
-        messageID: SessionMessage.ID.make("msg_execute"),
-        callID: "call_execute",
-        progress: () => Effect.void,
-      },
+      context,
     ),
   )
 
@@ -47,13 +104,13 @@ test("execute supports callable namespace tools", async () => {
     description: "Administer Slack",
     input: Schema.Struct({}),
     output: Schema.String,
-    execute: () => Effect.succeed("admin"),
+    execute: () => Effect.succeed({ output: "admin" }),
   })
   const child = Tool.make({
     description: "Create a Slack resource",
     input: Schema.Struct({}),
     output: Schema.String,
-    execute: () => Effect.succeed("created"),
+    execute: () => Effect.succeed({ output: "created" }),
   })
   const execute = ExecuteTool.create(
     new Map([
@@ -65,13 +122,7 @@ test("execute supports callable namespace tools", async () => {
     Tool.execute(
       execute,
       { code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" },
-      {
-        sessionID: Session.ID.make("ses_execute"),
-        agent: Agent.ID.make("build"),
-        messageID: SessionMessage.ID.make("msg_execute"),
-        callID: "call_execute",
-        progress: () => Effect.void,
-      },
+      context,
     ),
   )
 

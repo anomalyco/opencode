@@ -291,7 +291,7 @@ export default Plugin.define({
       tools.add({
         name: "greeting",
         description: "Create a greeting",
-        jsonSchema: {
+        input: {
           type: "object",
           properties: {
             name: { type: "string" },
@@ -299,11 +299,17 @@ export default Plugin.define({
           required: ["name"],
           additionalProperties: false,
         },
+        output: {
+          type: "object",
+          properties: { greeting: { type: "string" } },
+          required: ["greeting"],
+          additionalProperties: false,
+        },
         execute: async ({ name }) => {
           const text = `Hello, ${name}!`
           return {
-            structured: { greeting: text },
-            content: [{ type: "text", text }],
+            output: { greeting: text },
+            content: text,
           }
         },
       })

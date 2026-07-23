@@ -348,7 +348,7 @@ function startTool(state: State, ref: Ref, metadata: Record<string, JsonValue> =
     type: "tool" as const,
     id: ref.call,
     name: ref.tool,
-    state: { status: "running" as const, input: ref.input, metadata, content: [] },
+    state: { status: "running" as const, input: ref.input, metadata },
     time: { created: ref.start, ran: ref.start },
   }
   present(state, [toolCommit(part, ref.msg, "start")])
@@ -526,7 +526,6 @@ function emitTask(state: State): void {
         limit: 200,
       },
       metadata: {},
-      content: [],
     },
     time: { created: Date.now(), ran: Date.now() },
   } satisfies SessionMessageAssistantTool

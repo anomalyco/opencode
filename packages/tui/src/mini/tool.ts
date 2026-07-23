@@ -21,6 +21,7 @@ import {
   canonicalToolName,
   finiteNumber,
   primitiveInputSummary,
+  toolDisplayContent,
   toolDisplayMetadata,
   webSearchProviderLabel,
 } from "../util/tool-display"
@@ -1115,7 +1116,7 @@ function frame(part: SessionMessageAssistantTool, directory?: string): ToolFrame
       output: "",
       time: { start: tool.time.created },
     }
-  const output = toolOutputText(tool.name, tool.state.content)
+  const output = toolOutputText(tool.name, toolDisplayContent(tool.state))
   return {
     directory,
     raw: output,

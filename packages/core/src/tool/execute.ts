@@ -3,7 +3,7 @@ export * as ExecuteTool from "./execute"
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { ToolContent } from "@opencode-ai/ai"
 import { Effect, Ref, Schema } from "effect"
-import { definition, execute, make, type AnyTool, type Metadata } from "./tool"
+import { definition, execute, make, type AnyTool, type Content, type Metadata } from "./tool"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -50,19 +50,6 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
     description,
     input: CodeMode.Input,
     output: ExecuteOutput,
-    toMetadata: ({ output }): Metadata => ({
-      toolCalls: output.toolCalls,
-      ...(output.error ? { error: true as const } : {}),
-    }),
-    toModelOutput: ({ output }) => [
-      { type: "text" as const, text: output.output },
-      ...output.files.map((file) => ({
-        type: "file" as const,
-        data: file.data,
-        mime: file.mime,
-        ...(file.name === undefined ? {} : { name: file.name }),
-      })),
-    ],
     execute: ({ code }, context) =>
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
@@ -116,7 +103,23 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
         const output = formatResult(result)
-        return { output, toolCalls, files: collected, ...(result.ok ? {} : { error: true as const }) }
+        const value = { output, toolCalls, files: collected, ...(result.ok ? {} : { error: true as const }) }
+        return {
+          output: value,
+          content: [
+            { type: "text" as const, text: value.output },
+            ...value.files.map((file) => ({
+              type: "file" as const,
+              data: file.data,
+              mime: file.mime,
+              ...(file.name === undefined ? {} : { name: file.name }),
+            })),
+          ] as [Content, ...Content[]],
+          metadata: {
+            toolCalls: value.toolCalls,
+            ...(value.error ? { error: true as const } : {}),
+          } satisfies Metadata,
+        }
       }),
   })
 }

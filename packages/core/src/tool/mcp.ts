@@ -39,13 +39,13 @@ export const layer = Layer.effectDiscard(
           group.tools[tool.name] = Tool.withPermission(
             Tool.make({
               description: tool.description ?? "",
-              jsonSchema: {
+              input: {
                 ...schema,
                 type: "object",
                 properties: schema.properties ?? {},
                 additionalProperties: false,
               },
-              outputSchema: tool.outputSchema as JsonSchema.JsonSchema | undefined,
+              output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
               execute: (input, context) =>
                 Effect.gen(function* () {
                   yield* permission.assert({
@@ -87,17 +87,10 @@ export const layer = Layer.effectDiscard(
                       ? { type: "text" as const, text: part.text }
                       : { type: "file" as const, data: part.data, mime: part.mimeType },
                   )
-                  // A server that advertises an output schema promises machine-readable
-                  // structured content; falling back to text would violate the advertised
-                  // Code Mode return contract.
-                  if (tool.outputSchema !== undefined && result.structured === undefined)
-                    return yield* new ToolFailure({
-                      message: `MCP tool ${name(tool.server, tool.name)} declared an output schema but returned no structured content`,
-                    })
                   const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
                   return {
                     output: result.structured ?? (text === "" ? null : text),
-                    content,
+                    ...(content.length === 0 ? {} : { content: content as [Tool.Content, ...Tool.Content[]] }),
                   }
                 }).pipe(
                   Effect.mapError((error) =>

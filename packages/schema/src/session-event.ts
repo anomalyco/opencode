@@ -409,16 +409,12 @@ export namespace Tool {
   })
   export type Called = typeof Called.Type
 
-  /** Live replacement snapshot for a running tool: content for the model, metadata for the UI. */
+  /** Live replacement metadata for a running tool. */
   export const Progress = Event.ephemeral({
     type: "session.tool.progress",
     schema: {
       ...ToolBase,
-      // Deliberately looser than terminal metadata (JSON-only): live snapshots
-      // are ephemeral, and only the JSON-validated subset survives into a
-      // durable failure snapshot.
-      metadata: Schema.Record(Schema.String, Schema.Unknown),
-      content: Schema.Array(ToolContent),
+      metadata: Schema.Record(Schema.String, Schema.Json),
     },
   })
   export type Progress = typeof Progress.Type

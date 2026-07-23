@@ -33,8 +33,14 @@ export function toolDisplayMetadata(state: unknown): Record<string, unknown> {
   return state.metadata as Record<string, unknown>
 }
 
+export function toolDisplayContent(state: SessionMessageAssistantTool["state"]) {
+  if (state.status === "streaming" || state.status === "running") return []
+  return state.content ?? []
+}
+
 export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [T, ...T[]] | undefined {
   if (!content) return undefined
   const [first, ...rest] = content
   return first === undefined ? undefined : [first, ...rest]
 }
+import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"

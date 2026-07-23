@@ -857,6 +857,8 @@ it.effect("preserves MCP text and media content for the model", () =>
     })
 
     expect(execution.status).toBe("completed")
+    if (execution.status !== "completed") return
+    expect(execution.output).toBe("rendered chart")
     expect(execution.content).toMatchObject([
       { type: "text", text: "rendered chart" },
       { type: "file", mime: "image/png" },

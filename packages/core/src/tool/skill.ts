@@ -65,8 +65,6 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            toMetadata: ({ output }) => ({ name: output.name, directory: output.directory }),
-            toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {
                 const current = yield* skills.list()
@@ -95,7 +93,13 @@ export const Plugin = {
                     output: toModelOutput(skill, files),
                   }
                 }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
-              }),
+              }).pipe(
+                Effect.map((output) => ({
+                  output,
+                  content: output.output,
+                  metadata: { name: output.name, directory: output.directory },
+                })),
+              ),
           }),
           { codemode: false },
         ),

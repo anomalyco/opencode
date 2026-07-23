@@ -230,7 +230,7 @@ export const inputTypeScript = <R>(definition: Definition<R>, pretty = false): s
 
 export const outputTypeScript = <R>(definition: Definition<R>, pretty = false): string =>
   definition.output === undefined
-    ? "unknown"
+    ? "void"
     : isEffectSchema(definition.output)
       ? toTypeScript(definition.output, true, pretty)
       : jsonSchemaToTypeScript(definition.output, pretty)
@@ -239,6 +239,8 @@ export const decodeInput = <R>(definition: Definition<R>, value: unknown): unkno
   isEffectSchema(definition.input) ? Schema.decodeUnknownSync(definition.input)(value) : value
 
 export const decodeOutput = <R>(definition: Definition<R>, value: unknown): unknown =>
-  definition.output !== undefined && isEffectSchema(definition.output)
-    ? Schema.decodeUnknownSync(definition.output)(value)
-    : value
+  definition.output === undefined
+    ? undefined
+    : isEffectSchema(definition.output)
+      ? Schema.decodeUnknownSync(definition.output)(value)
+      : value

@@ -114,8 +114,6 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            toMetadata: ({ output }) => ({ sessionID: output.sessionID, status: output.status }),
-            toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {
                 const parent = yield* runtime.session
@@ -232,7 +230,13 @@ export const Plugin = {
                 if (result?.info.status === "cancelled")
                   return yield* new ToolFailure({ message: "Subagent cancelled" })
                 return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
-              }),
+              }).pipe(
+                Effect.map((output) => ({
+                  output,
+                  content: output.output,
+                  metadata: { sessionID: output.sessionID, status: output.status },
+                })),
+              ),
           }),
           { codemode: false },
         ),

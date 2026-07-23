@@ -135,7 +135,6 @@ function failedTool(inputID: string): V2Event[] {
         assistantMessageID: "msg_failed_tool",
         callID: "call_failed_tool",
         metadata: { checkpoint: 1 },
-        content: [{ type: "text", text: "partial output" }],
       },
     },
     {

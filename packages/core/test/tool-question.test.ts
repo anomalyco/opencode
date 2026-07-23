@@ -158,6 +158,7 @@ describe("QuestionTool", () => {
             text: 'User has answered your questions: "What should happen?"="Build", "Which environment?"="Dev", "Anything else?"="Unanswered". You can now continue with the user\'s answers in mind.',
           },
         ],
+        metadata: { answers: [["Build"], ["Dev"], []] },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "question", resources: ["*"] }])
       expect(capturedInput()).toEqual({

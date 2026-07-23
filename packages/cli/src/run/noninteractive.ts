@@ -343,7 +343,6 @@ export async function runNonInteractivePrompt(input: Input) {
         const current = tools.get(toolKey(event.data.assistantMessageID, event.data.callID))
         if (current) {
           current.metadata = event.data.metadata
-          current.content = event.data.content
         }
         continue
       }

@@ -287,8 +287,8 @@ describe("fromPromise", () => {
               input: Schema.Struct({ name: Schema.String }),
               output: Schema.String,
               execute: async ({ name }, context) => {
-                await context.progress({ metadata: { phase: "greeting" } })
-                return `Hello, ${name}!`
+                await context.progress({ phase: "greeting" })
+                return { output: `Hello, ${name}!` }
               },
             })
           })
@@ -312,7 +312,7 @@ describe("fromPromise", () => {
         output: "Hello, world!",
         content: [{ type: "text", text: "Hello, world!" }],
       })
-      expect(progress).toEqual([{ metadata: { phase: "greeting" }, content: [] }])
+      expect(progress).toEqual([{ phase: "greeting" }])
     }),
   )
 })

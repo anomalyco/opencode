@@ -104,6 +104,12 @@ export type SessionMessageProviderState = { [x: string]: JsonValue }
 
 export type SessionMessageToolStateStreaming = { status: "streaming"; input: string }
 
+export type SessionMessageToolStateRunning = {
+  status: "running"
+  input: { [x: string]: JsonValue }
+  metadata: { [x: string]: JsonValue }
+}
+
 export type ToolTextContent = { type: "text"; text: string }
 
 export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string }
@@ -916,6 +922,15 @@ export type SessionToolInputDelta = {
   type: "session.tool.input.delta"
   location?: LocationRef
   data: { sessionID: string; assistantMessageID: string; callID: string; delta: string }
+}
+
+export type SessionToolProgress = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.tool.progress"
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; callID: string; metadata: { [x: string]: JsonValue } }
 }
 
 export type SessionCompactionDelta = {
@@ -1809,13 +1824,6 @@ export type SessionPendingUserData1 = {
   metadata?: { [x: string]: any }
 }
 
-export type SessionMessageToolStateRunning = {
-  status: "running"
-  input: { [x: string]: JsonValue }
-  metadata: { [x: string]: JsonValue }
-  content: Array<LLMToolContent>
-}
-
 export type SessionMessageToolStateCompleted = {
   status: "completed"
   input: { [x: string]: JsonValue }
@@ -1865,21 +1873,6 @@ export type SessionToolFailed = {
     metadata?: { [x: string]: JsonValue }
     executed: boolean
     resultState?: SessionMessageProviderState7
-  }
-}
-
-export type SessionToolProgress = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.tool.progress"
-  location?: LocationRef
-  data: {
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    metadata: { [x: string]: any }
-    content: Array<LLMToolContent>
   }
 }
 

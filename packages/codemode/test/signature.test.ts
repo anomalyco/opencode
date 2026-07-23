@@ -18,6 +18,7 @@ const listIssues = Tool.make({
     },
     required: ["owner"],
   },
+  output: {},
   run: () => Effect.succeed("[]"),
 })
 
@@ -417,6 +418,7 @@ describe("non-identifier tool paths", () => {
       },
       required: ["query", "libraryName"],
     } as const,
+    output: {},
     run: () => Effect.succeed("/reactjs/react.dev"),
   })
   const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })

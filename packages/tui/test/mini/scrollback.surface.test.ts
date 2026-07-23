@@ -387,7 +387,6 @@ test("renders question summaries without boilerplate footer copy", async () => {
             ],
           },
           metadata: {},
-          content: [],
         },
       }),
       final: toolCommit({
@@ -482,7 +481,6 @@ test("inserts spacers for new visible groups", async () => {
             pattern: "**/run.ts",
           },
           metadata: {},
-          content: [],
         },
       }),
     )
@@ -618,7 +616,6 @@ test("does not double-space before completed shell output when inline tool heade
             workdir: "src/cli/cmd/run",
           },
           metadata: {},
-          content: [],
         },
       }),
     )
@@ -635,7 +632,6 @@ test("does not double-space before completed shell output when inline tool heade
             path: "src/cli/cmd/run",
           },
           metadata: {},
-          content: [],
         },
       }),
     )
@@ -652,7 +648,6 @@ test("does not double-space before completed shell output when inline tool heade
             path: "src/cli/cmd/run",
           },
           metadata: {},
-          content: [],
         },
       }),
     )
@@ -736,7 +731,6 @@ test("renders structured write finals once as code blocks", async () => {
             content: "const x = 1\nconst y = 2\n",
           },
           metadata: {},
-          content: [],
         },
       }),
     )

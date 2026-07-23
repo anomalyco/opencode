@@ -303,7 +303,7 @@ function wireEvent(value: unknown): unknown {
 }
 
 function fromPromiseTool(tool: AnyTool) {
-  if ("jsonSchema" in tool)
+  if ("output" in tool && tool.output !== undefined)
     return Tool.make({
       ...tool,
       execute: (input, context) =>

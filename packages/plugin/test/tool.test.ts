@@ -8,7 +8,7 @@ test("tools remain valid across separate module instances", async () => {
     description: "Foreign tool",
     input: Schema.Struct({ value: Schema.String }),
     output: Schema.Struct({ ok: Schema.Boolean }),
-    execute: () => Effect.succeed({ ok: true }),
+    execute: () => Effect.succeed({ output: { ok: true } }),
   }
   const tool = ForeignTool.make(config)
 
@@ -63,7 +63,7 @@ test("portable schemas validate and describe typed tools", async () => {
     description: "Portable tool",
     input,
     output,
-    execute: ({ count }) => Effect.succeed(count + 1),
+    execute: ({ count }) => Effect.succeed({ output: count + 1 }),
   })
 
   expect(Tool.definition("portable", tool)).toEqual({
@@ -94,18 +94,35 @@ test("portable schema failures become tool failures", async () => {
   expect(error.toString()).toContain("Invalid tool input: expected a string")
 })
 
-test("metadata projection receives the typed domain output", () => {
+test("canonical results carry metadata with typed output", async () => {
   const input = Schema.Struct({ value: Schema.String })
   const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })
   const tool = Tool.make({
     description: "Annotated tool",
     input,
     output,
-    toMetadata: ({ output }) => ({ value: output.value }),
-    execute: ({ value }) => Effect.succeed({ value, internal: true }),
+    execute: ({ value }) =>
+      Effect.succeed({ output: { value, internal: true }, metadata: { value }, content: value }),
   })
 
-  expect(tool.toMetadata?.({ input: { value: "in" }, output: { value: "out", internal: true } })).toEqual({
-    value: "out",
+  expect(await Effect.runPromise(tool.execute({ value: "out" }, {} as Tool.Context))).toEqual({
+    output: { value: "out", internal: true },
+    metadata: { value: "out" },
+    content: "out",
   })
+})
+
+test("raw JSON schemas are render-only and omitted output means model-only", async () => {
+  const tool = Tool.make({
+    description: "Raw tool",
+    input: { type: "object", properties: { value: { type: "string" } } },
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  })
+
+  expect(Tool.definition("raw", tool)).toEqual({
+    name: "raw",
+    description: "Raw tool",
+    inputSchema: { type: "object", properties: { value: { type: "string" } } },
+  })
+  expect(await Effect.runPromise(Tool.decodeInput(tool.input, { value: 1 }))).toEqual({ value: 1 })
 })

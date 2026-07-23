@@ -40,7 +40,7 @@ export type Definition<R = never> = {
 
 type InputType<S> = S extends Schema.Decoder<unknown> ? S["Type"] : unknown
 
-type ResultType<S> = S extends Schema.Decoder<unknown> ? S["Encoded"] : unknown
+type ResultType<S> = S extends undefined ? void : S extends Schema.Decoder<unknown> ? S["Encoded"] : unknown
 
 /** Options for defining one CodeMode tool. */
 export type Options<I extends SchemaType, O extends SchemaType | undefined, R = never> = {
@@ -62,7 +62,7 @@ export const isDefinition = <R = never>(value: unknown): value is Definition<R> 
  * Defines one schema-described tool available to a CodeMode program through `tools.*`.
  *
  * Effect Schemas validate values; JSON Schemas only shape the model-visible signature.
- * Without `output`, results are exposed as `unknown`. Hosts remain responsible for authorization
+ * Without `output`, results are exposed as `void`. Hosts remain responsible for authorization
  * and durable side effects.
  */
 export const make = <I extends SchemaType, const O extends SchemaType | undefined = undefined, R = never>(

@@ -409,25 +409,25 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             ...(event.status === "error" ? { error: event.error } : {}),
           }
           return Reflect.apply(callback, undefined, [output]).pipe(
-            Effect.tap(() =>
-              Effect.sync(() => {
-                // Terminal content must stay schema-valid: completed content is
-                // non-empty, failed content is non-empty or absent. An untyped
-                // hook clearing it must not produce an unencodable event.
-                if (event.status === "completed") {
-                  if (Array.isArray(output.content) && output.content.length > 0)
-                    event.content = output.content as unknown as typeof event.content
-                } else {
-                  event.content =
-                    Array.isArray(output.content) && output.content.length > 0
-                      ? (output.content as unknown as typeof event.content)
-                      : undefined
-                  if (output.error !== undefined) event.error = output.error as typeof event.error
+            Effect.tap(() => {
+              const decoded = Schema.decodeUnknownOption(Tool.ExecuteAfterOutcome)(output)
+              if (decoded._tag === "None")
+                return Effect.logWarning("ignoring invalid execute.after tool outcome", { tool: event.tool })
+              return Effect.sync(() => {
+                if (event.status === "completed" && decoded.value.status === "completed") {
+                  event.content = decoded.value.content
+                  event.metadata = decoded.value.metadata
+                  event.outputPaths = decoded.value.outputPaths
+                  return
                 }
-                event.metadata = Tool.jsonMetadata(output.metadata) as typeof event.metadata
-                event.outputPaths = output.outputPaths as typeof event.outputPaths
-              }),
-            ),
+                if (event.status === "error" && decoded.value.status === "error") {
+                  event.error = decoded.value.error
+                  event.content = decoded.value.content
+                  event.metadata = decoded.value.metadata
+                  event.outputPaths = decoded.value.outputPaths
+                }
+              })
+            }),
           )
         })
       },

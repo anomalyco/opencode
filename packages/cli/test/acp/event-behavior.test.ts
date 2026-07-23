@@ -219,7 +219,6 @@ describe("acp event behavior", () => {
             assistantMessageID: "msg_tools",
             callID: "call_ok",
             metadata: { phase: 1 },
-            content: [{ type: "text", text: "working" }],
           }),
         )
         send(
@@ -255,7 +254,6 @@ describe("acp event behavior", () => {
             assistantMessageID: "msg_tools",
             callID: "call_fail",
             metadata: { bytes: 0 },
-            content: [{ type: "text", text: "opening" }],
           }),
         )
         send(
@@ -312,9 +310,7 @@ describe("acp event behavior", () => {
         locations: [{ path: resolve("/workspace", "sub") }],
         rawInput: { command: "printf done", workdir: "sub" },
       })
-      expect(updates[2]?.update).toMatchObject({
-        content: [{ type: "content", content: { type: "text", text: "working" } }],
-      })
+      expect(updates[2]?.update).not.toHaveProperty("content")
       expect(updates[3]?.update).toMatchObject({
         content: [{ type: "content", content: { type: "text", text: "done" } }],
         rawOutput: { metadata: { exit: 0 } },
@@ -633,7 +629,6 @@ function replayFixtureMessages(): SessionMessageInfo[] {
             status: "running",
             input: { command: "pwd" },
             metadata: {},
-            content: [{ type: "text", text: "/workspace" }],
           },
         },
         {

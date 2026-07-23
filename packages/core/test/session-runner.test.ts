@@ -244,7 +244,6 @@ const echo = Layer.effectDiscard(
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),
           output: Schema.Struct({ text: Schema.String }),
-          toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
           execute: ({ text }, context) =>
             Effect.gen(function* () {
               authorizations.push(context)
@@ -255,7 +254,7 @@ const echo = Layer.effectDiscard(
                 yield* Deferred.succeed(toolExecutionsStarted, undefined)
               }
               if (toolExecutionGate) yield* Deferred.await(toolExecutionGate)
-              return { text }
+              return { output: { text }, content: text }
             }).pipe(Effect.ensuring(Effect.sync(() => activeToolExecutions--))),
         }),
         defect: Tool.make({
@@ -273,7 +272,7 @@ const echo = Layer.effectDiscard(
           description: "Produce output that cannot be persisted",
           input: Schema.Struct({}),
           output: Schema.Struct({}),
-          execute: () => Effect.succeed({}),
+          execute: () => Effect.succeed({ output: {} }),
         }),
       },
       { codemode: false },
@@ -876,8 +875,8 @@ describe("SessionRunnerLLM", () => {
             execute: ({ query }, context) =>
               Effect.gen(function* () {
                 contexts.push(context)
-                yield* context.progress({ metadata: { phase: "reading" } })
-                return { answer: query.toUpperCase() }
+                yield* context.progress({ phase: "reading" })
+                return { output: { answer: query.toUpperCase() } }
               }),
           }),
         },
@@ -922,7 +921,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("persists the latest partial snapshot when a tool fails", () =>
+  it.effect("persists the latest progress metadata when a tool fails", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const registry = yield* ToolRegistry.Service
@@ -934,10 +933,7 @@ describe("SessionRunnerLLM", () => {
             output: Schema.Struct({}),
             execute: (_, context) =>
               Effect.gen(function* () {
-                yield* context.progress({
-                  metadata: { phase: "running" },
-                  content: [{ type: "text", text: "before failure" }],
-                })
+                yield* context.progress({ phase: "running" })
                 return yield* new ToolFailure({ message: "failed after progress" })
               }),
           }),
@@ -960,7 +956,6 @@ describe("SessionRunnerLLM", () => {
               state: {
                 status: "error",
                 metadata: { phase: "running" },
-                content: [{ type: "text", text: "before failure" }],
                 error: { message: "failed after progress" },
               },
             },
@@ -984,7 +979,10 @@ describe("SessionRunnerLLM", () => {
               description: "Record the advertised tool",
               input: Schema.Struct({}),
               output: Schema.Struct({ value: Schema.String }),
-              execute: () => Effect.sync(() => executions.push("advertised")).pipe(Effect.as({ value: "advertised" })),
+              execute: () =>
+                Effect.sync(() => executions.push("advertised")).pipe(
+                  Effect.as({ output: { value: "advertised" } }),
+                ),
             }),
           },
           { codemode: false },
@@ -1012,7 +1010,10 @@ describe("SessionRunnerLLM", () => {
             description: "Record the replacement tool",
             input: Schema.Struct({}),
             output: Schema.Struct({ value: Schema.String }),
-            execute: () => Effect.sync(() => executions.push("replacement")).pipe(Effect.as({ value: "replacement" })),
+            execute: () =>
+              Effect.sync(() => executions.push("replacement")).pipe(
+                Effect.as({ output: { value: "replacement" } }),
+              ),
           }),
         },
         { codemode: false },

@@ -424,7 +424,7 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "reports bounded output progress for a running command",
+    "reports the shell ID for a running command",
     () =>
       Effect.acquireUseRelease(
         Effect.promise(() => tmpdir()),
@@ -434,7 +434,7 @@ describe("ShellTool", () => {
           const releasePath = path.join(tmp.path, release)
           return withSession(tmp.path, (registry) =>
             Effect.gen(function* () {
-              const observed = yield* Deferred.make<ToolRegistry.Progress>()
+              const observed = yield* Deferred.make<string>()
               yield* executeTool(registry, {
                 ...call(
                   { command: progressOverflowCommand(ShellTool.MAX_CAPTURE_BYTES + 1024, release) },
@@ -442,27 +442,13 @@ describe("ShellTool", () => {
                 ),
                 progress: (update) =>
                   Effect.gen(function* () {
-                    if (update.metadata.truncated !== true) return
-                    const content = update.content[0]
-                    if (content?.type !== "text") return
-                    if (
-                      content.text.indexOf("\n\n[output truncated; full output saved to:") !==
-                      ShellTool.MAX_CAPTURE_BYTES
-                    )
-                      return
-                    yield* Deferred.succeed(observed, update)
+                    if (typeof update.shellID !== "string") return
+                    yield* Deferred.succeed(observed, update.shellID)
                     yield* Effect.promise(() => fs.writeFile(releasePath, ""))
                   }),
               })
 
-              const progress = yield* Deferred.await(observed)
-              expect(progress.metadata).toEqual({ truncated: true })
-              const content = progress.content[0]
-              expect(content?.type).toBe("text")
-              if (content?.type !== "text") return
-              expect(content.text.indexOf("\n\n[output truncated; full output saved to:")).toBe(
-                ShellTool.MAX_CAPTURE_BYTES,
-              )
+              expect(yield* Deferred.await(observed)).toMatch(/^sh_/)
             }).pipe(Effect.ensuring(Effect.promise(() => fs.writeFile(releasePath, "")).pipe(Effect.ignore))),
           )
         },
@@ -472,7 +458,7 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "does not repeat unchanged shell progress",
+    "does not repeat shell ID progress",
     () =>
       Effect.acquireUseRelease(
         Effect.promise(() => tmpdir()),
@@ -485,12 +471,8 @@ describe("ShellTool", () => {
                 ...call({ command: steadyProgressCommand }, "call-steady-progress"),
                 progress: (update) => Effect.sync(() => updates.push(update)),
               })
-              expect(updates).toEqual([
-                {
-                  metadata: { truncated: false },
-                  content: [{ type: "text", text: "steady" }],
-                },
-              ])
+              expect(updates).toHaveLength(1)
+              expect(updates[0]?.shellID).toMatch(/^sh_/)
             }),
           )
         },

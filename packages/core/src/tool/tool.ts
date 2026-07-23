@@ -8,7 +8,7 @@ import {
   type AnyTool,
   type Content,
   type Context,
-  type Failure,
+  Failure,
   type Metadata,
 } from "@opencode-ai/plugin/v2/effect/tool"
 import { Effect, Schema } from "effect"
@@ -22,33 +22,34 @@ export type NonEmptyContent = readonly [ToolContent, ...ToolContent[]]
  * domain output never leaves this function.
  */
 export type Executed = {
-  readonly output: unknown
+  readonly output?: unknown
   readonly content: NonEmptyContent
   readonly metadata?: Metadata
 }
 
 export const execute = (tool: AnyTool, input: unknown, context: Context): Effect.Effect<Executed, Failure> =>
   Effect.gen(function* () {
-    if ("jsonSchema" in tool) {
-      const result = yield* tool.execute(input, context)
+    const decoded = yield* decodeInput(tool.input, input)
+    const result = yield* tool.execute(decoded, context)
+    if (!("output" in tool) || tool.output === undefined) {
+      if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
       return {
-        output: result.output,
-        content: nonEmpty(result.content.map(toModelContent)) ?? [textContent(stringify(result.output))],
+        content: contentFrom(result.content),
+        ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
       }
     }
-    const decoded = yield* decodeInput(tool.input, input)
-    const output = yield* tool.execute(decoded, context)
-    const encoded = yield* encodeOutput(tool.output, output)
-    const metadata = tool.toMetadata?.({ input: decoded, output })
+    if (!("output" in result))
+      return yield* Effect.fail(new Failure({ message: "Tool did not return its declared output" }))
+    const encoded = yield* encodeOutput(tool.output, result.output)
     return {
       output: encoded,
-      content: contentFrom(tool.toModelOutput?.({ input: decoded, output }), encoded),
-      ...(metadata === undefined ? {} : { metadata }),
+      content: contentFrom(result.content, encoded),
+      ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
     }
   })
 
 /** Model content from the tool's projection, falling back to the stringified encoded output. */
-const contentFrom = (projected: string | ReadonlyArray<Content> | undefined, encoded: unknown): NonEmptyContent => {
+const contentFrom = (projected: string | ReadonlyArray<Content> | undefined, encoded?: unknown): NonEmptyContent => {
   if (typeof projected === "string") return [textContent(projected)]
   if (projected !== undefined) {
     const mapped = nonEmpty(projected.map(toModelContent))
