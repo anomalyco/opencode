@@ -8,7 +8,7 @@ import { recordedTests } from "../recorded-test"
 
 const model = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-}).responses("gpt-5.3-codex")
+}).responses("gpt-5.6-sol")
 
 const recorded = recordedTests({
   prefix: "openai-responses-phase",
