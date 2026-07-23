@@ -66,14 +66,15 @@ const client = Layer.mock(LLMClient.Service)({
       return response
     }),
 })
-const models = SessionRunnerModel.layerWith(() =>
-  Effect.succeed(
-    SessionRunnerModel.resolved(model, {
-      capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-      cost: [],
-    }),
-  ),
-)
+const models = Layer.mock(SessionRunnerModel.Service)({
+  resolve: () =>
+    Effect.succeed(
+      SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        cost: [],
+      }),
+    ),
+})
 const builtins = Layer.mock(InstructionBuiltIns.Service, {
   load: () =>
     Effect.succeed(

@@ -280,17 +280,18 @@ const echo = Layer.effectDiscard(
 const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [ToolRegistry.node] })
 let modelResolveHook = Effect.void
 let currentModel = model
-const models = SessionRunnerModel.layerWith((session) =>
-  modelResolveHook.pipe(
-    Effect.as(
-      SessionRunnerModel.resolved(session.model?.id === "replacement" ? replacementModel : currentModel, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-        cost: [],
-        variant: session.model?.variant,
-      }),
+const models = Layer.mock(SessionRunnerModel.Service)({
+  resolve: (session) =>
+    modelResolveHook.pipe(
+      Effect.as(
+        SessionRunnerModel.resolved(session.model?.id === "replacement" ? replacementModel : currentModel, {
+          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          cost: [],
+          variant: session.model?.variant,
+        }),
+      ),
     ),
-  ),
-)
+})
 const systemContextKey = Instructions.Key.make("test/context")
 let systemBaseline = "Initial context"
 let systemRemoved = false

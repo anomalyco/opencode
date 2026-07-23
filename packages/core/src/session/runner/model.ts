@@ -40,9 +40,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
 
-/** Test or embedding seam for supplying a model resolver directly. */
-export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
-
 /** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
 export const resolved = (
   model: Model,
