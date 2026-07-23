@@ -1036,16 +1036,6 @@ type SessionRowViewProps = {
 }
 
 function SessionRowView(props: SessionRowViewProps) {
-  const config = useConfig()
-  const hidden = () => props.row.type === "turn-usage" && config.data.debug?.turn_tokens !== true
-  return (
-    <Show when={!hidden()}>
-      <SessionRowContent row={props.row} message={props.message} boundaryID={props.boundaryID} />
-    </Show>
-  )
-}
-
-function SessionRowContent(props: SessionRowViewProps) {
   return (
     <box id={props.boundaryID} marginTop={1} flexShrink={0}>
       <Switch>

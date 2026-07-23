@@ -1,6 +1,7 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { useConfig } from "../../config"
 import { useData } from "../../context/data"
 import { useClient } from "../../context/client"
 
@@ -32,14 +33,20 @@ export type SessionRow =
 export function createSessionRows(sessionID: Accessor<string>) {
   const data = useData()
   const client = useClient()
+  const config = useConfig()
   const [rows, setRows] = createStore<SessionRow[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
+  const turnTokens = () => config.data.debug?.turn_tokens === true
 
   function reduce() {
     const messages = data.session.message.list(sessionID())
     const inputs = new Set(data.session.input.list(sessionID()))
     const boundary = revertBoundary()
-    const rows = reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages, inputs)
+    const rows = reduceSessionRows(
+      boundary ? messages.filter((message) => message.id < boundary) : messages,
+      inputs,
+      turnTokens(),
+    )
     partitionPending(rows, pendingPermissions())
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
     rows.splice(
@@ -131,19 +138,21 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(
       () =>
-        data.session.message.list(sessionID()).flatMap((message) =>
-          message.type === "assistant"
-            ? [
-                {
-                  id: message.id,
-                  finish: message.finish,
-                  error: message.error,
-                  retry: message.retry,
-                  tokens: message.tokens,
-                },
-              ]
-            : [],
-        ),
+        turnTokens()
+          ? data.session.message.list(sessionID()).flatMap((message) =>
+              message.type === "assistant"
+                ? [
+                    {
+                      id: message.id,
+                      finish: message.finish,
+                      error: message.error,
+                      retry: message.retry,
+                      tokens: message.tokens,
+                    },
+                  ]
+                : [],
+            )
+          : [],
       () => setRows(reconcile(reduce())),
     ),
   )
@@ -277,12 +286,17 @@ export function createSessionRows(sessionID: Accessor<string>) {
   return rows
 }
 
-export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>()) {
+export function reduceSessionRows(
+  messages: SessionMessageInfo[],
+  inputs = new Set<string>(),
+  turnTokens = false,
+) {
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
-  const steps: SessionMessageAssistant[] = []
-  let previousTurnCacheRead: number | undefined
+  const usage = turnTokens
+    ? { steps: [] as SessionMessageAssistant[], previousTurnCacheRead: undefined as number | undefined }
+    : undefined
   return [
     ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
@@ -294,7 +308,7 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       rows.push({ type: "message", messageID: message.id })
       return rows
     }
-    steps.push(message)
+    usage?.steps.push(message)
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
@@ -306,18 +320,20 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       completePrevious(rows)
       rows.push({ type: "assistant-footer", messageID: message.id })
     }
-    if (terminal) {
-      const stepsWithUsage = steps.filter(hasTokenUsage)
+    if (terminal && usage) {
+      const stepsWithUsage = usage.steps.filter(hasTokenUsage)
       const last = stepsWithUsage.at(-1)
       if (last) {
         rows.push({
           type: "turn-usage",
           messageIDs: stepsWithUsage.map((step) => step.id),
-          ...(previousTurnCacheRead === undefined ? {} : { previousCacheRead: previousTurnCacheRead }),
+          ...(usage.previousTurnCacheRead === undefined
+            ? {}
+            : { previousCacheRead: usage.previousTurnCacheRead }),
         })
-        previousTurnCacheRead = last.tokens.cache.read
+        usage.previousTurnCacheRead = last.tokens.cache.read
       }
-      steps.length = 0
+      usage.steps.length = 0
     }
     return rows
   }, [])
