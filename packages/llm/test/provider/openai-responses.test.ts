@@ -824,6 +824,106 @@ describe("OpenAI Responses route", () => {
       ])
     }),
   )
+
+  it.effect("preserves phased message and content boundaries", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_commentary", phase: "commentary" },
+              },
+              {
+                type: "response.output_text.delta",
+                item_id: "msg_commentary",
+                content_index: 0,
+                delta: "First.",
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_commentary",
+                content_index: 0,
+                text: "First.",
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_commentary",
+                content_index: 1,
+                text: "Second.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_commentary" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_final" },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_final",
+                content_index: 0,
+                text: "Final.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_final", phase: "final_answer" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_refusal", phase: "final_answer" },
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_refusal", phase: "final_answer" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "First.",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Second.",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Final.",
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+        },
+      ])
+
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          role: "assistant",
+          phase: "commentary",
+          content: [
+            { type: "output_text", text: "First." },
+            { type: "output_text", text: "Second." },
+          ],
+        },
+        {
+          role: "assistant",
+          phase: "final_answer",
+          content: [{ type: "output_text", text: "Final." }],
+        },
+      ])
+    }),
+  )
+
   it.effect("parses reasoning summary stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -1107,10 +1207,12 @@ describe("OpenAI Responses route", () => {
         {
           role: "assistant",
           phase: "commentary",
-          content: [
-            { type: "output_text", text: "Checking first." },
-            { type: "output_text", text: "Still checking." },
-          ],
+          content: [{ type: "output_text", text: "Checking first." }],
+        },
+        {
+          role: "assistant",
+          phase: "commentary",
+          content: [{ type: "output_text", text: "Still checking." }],
         },
         {
           role: "assistant",
