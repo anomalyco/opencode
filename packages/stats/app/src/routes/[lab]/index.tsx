@@ -1,4 +1,3 @@
-import "../index.css"
 import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
@@ -155,6 +154,7 @@ export default function StatsLab() {
                     pairs={labComparisonPairs(data(), stats()?.models ?? [])}
                     title={`${data().name} Model Comparisons`}
                     description="Model pairs from this lab."
+                    variant="featured"
                   />
                 </>
               )}

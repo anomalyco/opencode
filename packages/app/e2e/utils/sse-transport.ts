@@ -162,7 +162,7 @@ export async function installSseTransport<T>(
         const request = new Request(input, init)
         const url = new URL(request.url)
         if (url.origin !== server || (url.pathname !== "/global/event" && url.pathname !== "/event"))
-          return originalFetch(input, init)
+          return originalFetch(request)
 
         const id = ++nextConnectionID
         const record = {
