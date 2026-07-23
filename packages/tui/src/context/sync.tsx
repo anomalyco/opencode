@@ -29,7 +29,6 @@ import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
-import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
 
@@ -49,6 +48,14 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
     else right = middle - 1
   }
   return { found: false, index: left }
+}
+
+export function createSessionListFilter(input: { directoryFilterEnabled: boolean; directory?: string }): {
+  scope?: "project"
+  directory?: string
+} {
+  if (!input.directoryFilterEnabled || !input.directory) return { scope: "project" }
+  return { directory: input.directory }
 }
 
 export const {
@@ -151,14 +158,11 @@ export const {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
-    function sessionListQuery(): { scope?: "project"; path?: string } {
-      if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
-      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
-      return {
-        path: path
-          .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
-          .replaceAll("\\", "/"),
-      }
+    function sessionListQuery() {
+      return createSessionListFilter({
+        directoryFilterEnabled: kv.get("session_directory_filter_enabled", true),
+        directory: project.data.instance.path.directory,
+      })
     }
 
     function listSessions() {
