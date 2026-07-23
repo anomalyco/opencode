@@ -1239,6 +1239,25 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
+  if (input.providerOptions?.setCacheKey !== false) {
+    if (input.model.api.npm === "@ai-sdk/deepinfra" || input.model.api.npm === "@ai-sdk/cerebras") {
+      result["prompt_cache_key"] = input.sessionID
+    } else if (
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/azure" ||
+      input.model.api.npm === "@ai-sdk/xai" ||
+      input.model.api.npm === "@ai-sdk/mistral" ||
+      input.model.api.npm === "venice-ai-sdk-provider" ||
+      input.providerOptions?.setCacheKey === true
+    ) {
+      result["promptCacheKey"] = input.sessionID
+    }
+  }
+
+  if (input.model.api.npm === "@ai-sdk/gateway") {
+    result["gateway"] = { caching: "auto" }
+  }
+
   if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
     result["reasoningSummary"] = "auto"
     return result
@@ -1276,25 +1295,6 @@ export function options(input: {
       result["include"] = INCLUDE_ENCRYPTED_REASONING
       result["reasoningSummary"] = "auto"
     }
-  }
-
-  if (input.providerOptions?.setCacheKey !== false) {
-    if (input.model.api.npm === "@ai-sdk/deepinfra" || input.model.api.npm === "@ai-sdk/cerebras") {
-      result["prompt_cache_key"] = input.sessionID
-    } else if (
-      input.model.api.npm === "@ai-sdk/openai" ||
-      input.model.api.npm === "@ai-sdk/azure" ||
-      input.model.api.npm === "@ai-sdk/xai" ||
-      input.model.api.npm === "@ai-sdk/mistral" ||
-      input.model.api.npm === "venice-ai-sdk-provider" ||
-      input.providerOptions?.setCacheKey === true
-    ) {
-      result["promptCacheKey"] = input.sessionID
-    }
-  }
-
-  if (input.model.api.npm === "@ai-sdk/gateway") {
-    result["gateway"] = { caching: "auto" }
   }
 
   return result

@@ -252,6 +252,21 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBeUndefined()
   })
 
+  test("should keep the Azure cache key for gpt-5.5 early return", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "azure",
+        api: { id: "gpt-5.5", url: "https://azure.com", npm: "@ai-sdk/azure" },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(false)
+    expect(result.reasoningSummary).toBe("auto")
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
   for (const npm of ["@ai-sdk/deepinfra", "@ai-sdk/cerebras"]) {
     test(`should set the snake-case cache key for ${npm}`, () => {
       const result = ProviderTransform.options({
