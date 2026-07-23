@@ -167,3 +167,6 @@ const table = sqliteTable("session", {
 - Use Superpowers for brainstorming, implementation planning, TDD, systematic debugging, and verification.
 - Follow `docs/workflows/openspec-superpowers.md` for the required sequence and conflict handling.
 - Do not manually edit generated OpenSpec skills or commands; refresh them with `openspec-cn update`.
+- Treat names in generated OpenSpec templates as host abstractions: `AskUserQuestion` means the current host's user-input or clarification capability, `TodoWrite` means its plan/task tracker, `Task tool` means its supported and authorized delegation capability (or local execution when delegation is unavailable), and `Skill tool` means invoking the named installed skill through the current host.
+- `/opsx:*` names are logical OpenCode workflow commands. In OpenCode, invoke the matching slash command; in Codex, invoke the corresponding `openspec-*` skill using the current skill mechanism. Do not execute `/opsx:*` as a shell command.
+- Verification uses the `openspec-verify-change` skill (OpenCode `/opsx:verify`). It is an agent workflow, not an `openspec-cn verify` CLI command.
