@@ -1,0 +1,29 @@
+{
+  "name": "@opencode-ai/console-support",
+  "version": "1.18.4",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "dev": "sst shell --stage production -- vite dev"
+  },
+  "dependencies": {
+    "@cloudflare/vite-plugin": "1.15.2",
+    "@opencode-ai/console-core": "workspace:*",
+    "@solidjs/meta": "catalog:",
+    "@solidjs/router": "catalog:",
+    "@solidjs/start": "catalog:",
+    "nitro": "3.0.1-alpha.1",
+    "solid-js": "catalog:",
+    "vite": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "4.50.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

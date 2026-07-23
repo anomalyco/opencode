@@ -3,17 +3,16 @@ import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
 import path from "path"
-import * as Log from "@opencode-ai/core/util/log"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Shell } from "@/shell/shell"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
@@ -26,7 +25,6 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
-const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -82,8 +80,6 @@ type Chunk = {
   text: string
   size: number
 }
-
-export const log = Log.create({ service: "shell-tool" })
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -264,17 +260,22 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
   return tree
 })
 
-const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan) {
+const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan, input: { command: string }) {
   if (scan.dirs.size > 0) {
-    const globs = Array.from(scan.dirs).map((dir) => {
-      if (process.platform === "win32") return AppFileSystem.normalizePathPattern(path.join(dir, "*"))
+    const directories = Array.from(scan.dirs)
+    const globs = directories.map((dir) => {
+      if (process.platform === "win32") return FSUtil.normalizePathPattern(path.join(dir, "*"))
       return path.join(dir, "*")
     })
     yield* ctx.ask({
       permission: "external_directory",
       patterns: globs,
       always: globs,
-      metadata: {},
+      metadata: {
+        command: input.command,
+        directories,
+        patterns: globs,
+      },
     })
   }
 
@@ -283,7 +284,9 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan)
     permission: ShellID.ToolID,
     patterns: Array.from(scan.patterns),
     always: Array.from(scan.always),
-    metadata: {},
+    metadata: {
+      command: input.command,
+    },
   })
 })
 
@@ -337,9 +340,11 @@ export const ShellTool = Tool.define(
   Effect.gen(function* () {
     const config = yield* Config.Service
     const spawner = yield* ChildProcessSpawner
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
+    const flags = yield* RuntimeFlags.Service
+    const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
     const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
       const lines = yield* spawner
@@ -347,16 +352,16 @@ export const ShellTool = Tool.define(
         .pipe(Effect.catch(() => Effect.succeed([] as string[])))
       const file = lines[0]?.trim()
       if (!file) return
-      return AppFileSystem.normalizePath(file)
+      return FSUtil.normalizePath(file)
     })
 
     const resolvePath = Effect.fn("ShellTool.resolvePath")(function* (text: string, root: string, shell: string) {
       if (process.platform === "win32") {
-        if (Shell.posix(shell) && text.startsWith("/") && AppFileSystem.windowsPath(text) === text) {
+        if (Shell.posix(shell) && text.startsWith("/") && FSUtil.windowsPath(text) === text) {
           const file = yield* cygpath(shell, text)
           if (file) return file
         }
-        return AppFileSystem.normalizePath(path.resolve(root, AppFileSystem.windowsPath(text)))
+        return FSUtil.normalizePath(path.resolve(root, FSUtil.windowsPath(text)))
       }
       return path.resolve(root, text)
     })
@@ -392,7 +397,7 @@ export const ShellTool = Tool.define(
         if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
           for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
             const resolved = yield* argPath(arg, cwd, ps, shell)
-            log.info("resolved path", { arg, resolved })
+            yield* Effect.logInfo("resolved path", { arg, resolved })
             if (!resolved || containsPath(resolved, instance)) continue
             const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
             scan.dirs.add(dir)
@@ -427,7 +432,6 @@ export const ShellTool = Tool.define(
         cwd: string
         env: NodeJS.ProcessEnv
         timeout: number
-        description: string
       },
       ctx: Tool.Context,
     ) {
@@ -443,15 +447,40 @@ export const ShellTool = Tool.define(
       let expired = false
       let aborted = false
 
+      const closeSink = Effect.fnUntraced(function* () {
+        const stream = sink
+        if (!stream) return
+        sink = undefined
+        if (stream.destroyed || stream.closed) return
+        yield* Effect.promise(
+          () =>
+            new Promise<void>((resolve) => {
+              let settled = false
+              const done = () => {
+                if (settled) return
+                settled = true
+                stream.off("close", done)
+                stream.off("error", done)
+                stream.off("finish", done)
+                resolve()
+              }
+              stream.once("close", done)
+              stream.once("error", done)
+              stream.once("finish", done)
+              stream.end(done)
+            }),
+        ).pipe(Effect.catch(() => Effect.void))
+      })
+
       yield* ctx.metadata({
         metadata: {
           output: "",
-          description: input.description,
         },
       })
 
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
+          yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
           yield* Effect.forkScoped(
@@ -486,7 +515,6 @@ export const ShellTool = Tool.define(
                       ctx.metadata({
                         metadata: {
                           output: last,
-                          description: input.description,
                         },
                       }),
                     ),
@@ -497,7 +525,6 @@ export const ShellTool = Tool.define(
               return ctx.metadata({
                 metadata: {
                   output: last,
-                  description: input.description,
                 },
               })
             }),
@@ -555,23 +582,11 @@ export const ShellTool = Tool.define(
       if (meta.length > 0) {
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
-      if (sink) {
-        const stream = sink
-        yield* Effect.promise(
-          () =>
-            new Promise<void>((resolve) => {
-              stream.end(() => resolve())
-              stream.on("error", () => resolve())
-            }),
-        )
-      }
-
       return {
-        title: input.description,
+        title: input.command,
         metadata: {
           output: last || preview(output),
           exit: code,
-          description: input.description,
           truncated: cut,
           ...(cut && file ? { outputPath: file } : {}),
         },
@@ -585,31 +600,31 @@ export const ShellTool = Tool.define(
         const shell = Shell.acceptable(cfg.shell)
         const name = Shell.name(shell)
         const limits = yield* trunc.limits()
-        const prompt = ShellPrompt.render(name, process.platform, limits)
-        log.info("shell tool using shell", { shell })
+        const prompt = ShellPrompt.render(name, process.platform, limits, defaultTimeoutMs)
+        yield* Effect.logInfo("shell tool using shell", { shell })
 
         return {
           description: prompt.description,
           parameters: prompt.parameters,
           execute: (params: Parameters, ctx: Tool.Context) =>
             Effect.gen(function* () {
-              const executeInstance = yield* InstanceState.context
+              const instanceCtx = yield* InstanceState.context
               const cwd = params.workdir
-                ? yield* resolvePath(params.workdir, executeInstance.directory, shell)
-                : executeInstance.directory
+                ? yield* resolvePath(params.workdir, instanceCtx.directory, shell)
+                : instanceCtx.directory
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
-              const timeout = params.timeout ?? DEFAULT_TIMEOUT
+              const timeout = params.timeout ?? defaultTimeoutMs
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
                   const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
                     Effect.sync(() => tree.delete()),
                   )
-                  const scan = yield* collect(tree.rootNode, cwd, ps, shell, executeInstance)
-                  if (!containsPath(cwd, executeInstance)) scan.dirs.add(cwd)
-                  yield* ask(ctx, scan)
+                  const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
+                  if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
+                  yield* ask(ctx, scan, params)
                 }),
               )
 
@@ -620,7 +635,6 @@ export const ShellTool = Tool.define(
                   cwd,
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
-                  description: params.description,
                 },
                 ctx,
               )

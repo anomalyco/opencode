@@ -124,18 +124,6 @@ OpenCode に貢献したい場合は、Pull Request を送る前に [contributin
 
 OpenCode に関連するプロジェクトで、名前に "opencode"（例: "opencode-dashboard" や "opencode-mobile"）を含める場合は、そのプロジェクトが OpenCode チームによって作られたものではなく、いかなる形でも関係がないことを README に明記してください。
 
-### FAQ
-
-#### Claude Code との違いは？
-
-機能面では Claude Code と非常に似ています。主な違いは次のとおりです。
-
-- 100% オープンソース
-- 特定のプロバイダーに依存しません。[OpenCode Zen](https://opencode.ai/zen) で提供しているモデルを推奨しますが、OpenCode は Claude、OpenAI、Google、またはローカルモデルでも利用できます。モデルが進化すると差は縮まり価格も下がるため、provider-agnostic であることが重要です。
-- そのまま使える LSP サポート
-- TUI にフォーカス。OpenCode は neovim ユーザーと [terminal.shop](https://terminal.shop) の制作者によって作られており、ターミナルで可能なことの限界を押し広げます。
-- クライアント/サーバー構成。例えば OpenCode をあなたのPCで動かし、モバイルアプリからリモート操作できます。TUI フロントエンドは複数あるクライアントの1つにすぎません。
-
 ---
 
 **コミュニティに参加** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)

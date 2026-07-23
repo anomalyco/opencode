@@ -38,7 +38,9 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     })
 
     const getVcs = Effect.fn("InstanceHttpApi.vcs")(function* () {
-      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], { concurrency: 2 })
+      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
+        concurrency: "unbounded",
+      })
       return { branch, default_branch }
     })
 
@@ -46,8 +48,10 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       return yield* vcs.status()
     })
 
-    const getVcsDiff = Effect.fn("InstanceHttpApi.vcsDiff")(function* (ctx: { query: { mode: Vcs.Mode } }) {
-      return yield* vcs.diff(ctx.query.mode)
+    const getVcsDiff = Effect.fn("InstanceHttpApi.vcsDiff")(function* (ctx: {
+      query: { mode: Vcs.Mode; context?: number }
+    }) {
+      return yield* vcs.diff(ctx.query.mode, { context: ctx.query.context })
     })
 
     const getVcsDiffRaw = Effect.fn("InstanceHttpApi.vcsDiffRaw")(function* () {

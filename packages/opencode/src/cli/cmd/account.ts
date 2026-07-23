@@ -15,6 +15,8 @@ const dim = (value: string) => UI.Style.TEXT_DIM + value + UI.Style.TEXT_NORMAL
 
 const activeSuffix = (isActive: boolean) => (isActive ? dim(" (active)") : "")
 
+export const defaultConsoleUrl = "https://console.opencode.ai"
+
 export const formatAccountLabel = (account: { email: string; url: string }, isActive: boolean) =>
   `${account.email} ${dim(account.url)}${activeSuffix(isActive)}`
 
@@ -173,18 +175,17 @@ const openEffect = Effect.fn("open")(function* () {
 })
 
 export const LoginCommand = effectCmd({
-  command: "login <url>",
+  command: "login [url]",
   describe: false,
   instance: false,
   builder: (yargs) =>
     yargs.positional("url", {
       describe: "server URL",
       type: "string",
-      demandOption: true,
     }),
   handler: Effect.fn("Cli.account.login")(function* (args) {
     UI.empty()
-    yield* Effect.orDie(loginEffect(args.url))
+    yield* Effect.orDie(loginEffect(args.url ?? defaultConsoleUrl))
   }),
 })
 

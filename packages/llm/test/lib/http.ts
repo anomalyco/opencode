@@ -1,8 +1,9 @@
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLMClient, RequestExecutor } from "../../src/route"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import type { Service as LLMClientService } from "../../src/route/client"
 import type { Service as RequestExecutorService } from "../../src/route/executor"
+import type { Service as WebSocketExecutorService } from "../../src/route/transport/websocket"
 
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest
@@ -31,12 +32,13 @@ const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
     ),
   )
 
-export type RuntimeEnv = RequestExecutorService | LLMClientService
+export type RuntimeEnv = RequestExecutorService | WebSocketExecutorService | LLMClientService
 
 export const runtimeLayer = (layer: Layer.Layer<HttpClient.HttpClient>): Layer.Layer<RuntimeEnv> => {
   const requestExecutorLayer = RequestExecutor.layer.pipe(Layer.provide(layer))
-  const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
-  return Layer.mergeAll(requestExecutorLayer, llmClientLayer)
+  const deps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
+  const llmClientLayer = LLMClient.layer.pipe(Layer.provide(deps))
+  return Layer.mergeAll(deps, llmClientLayer)
 }
 
 const SSE_HEADERS = { "content-type": "text/event-stream" } as const

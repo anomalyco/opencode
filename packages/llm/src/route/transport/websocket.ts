@@ -1,8 +1,6 @@
-import { Cause, Context, Effect, Queue, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
-import { Auth, type Auth as AuthDef } from "../auth"
-import type { Endpoint } from "../endpoint"
-import { LLMError, TransportReason, type LLMRequest } from "../../schema"
+import { LLMError, TransportReason } from "../../schema"
 import * as HttpTransport from "./http"
 import type { Transport } from "./index"
 
@@ -135,6 +133,8 @@ export const open = (input: WebSocketRequest) =>
       }),
   }).pipe(Effect.flatMap((ws) => fromWebSocket(ws, input)))
 
+export const layer: Layer.Layer<Service> = Layer.succeed(Service, Service.of({ open }))
+
 export const fromWebSocket = (
   ws: globalThis.WebSocket,
   input: WebSocketRequest,
@@ -213,12 +213,8 @@ export interface JsonPrepared {
 }
 
 export interface JsonInput<Body, Message> {
-  readonly endpoint: Endpoint<Body>
-  readonly auth?: AuthDef
-  readonly encodeBody: (body: Body) => string
   readonly toMessage: (body: Body | Record<string, unknown>) => Effect.Effect<Message, LLMError>
   readonly encodeMessage: (message: Message) => string
-  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
 }
 
 export type JsonPatch<Body, Message> = Partial<JsonInput<Body, Message>>
@@ -230,15 +226,10 @@ export interface JsonTransport<Body, Message> extends Transport<Body, JsonPrepar
 export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransport<Body, Message> => ({
   id: "websocket-json",
   with: (patch) => json({ ...input, ...patch }),
-  prepare: (body, request) =>
+  prepare: (prepareInput) =>
     Effect.gen(function* () {
       const parts = yield* HttpTransport.jsonRequestParts({
-        body,
-        request,
-        endpoint: input.endpoint,
-        auth: input.auth ?? Auth.bearer(),
-        encodeBody: input.encodeBody,
-        headers: input.headers,
+        ...prepareInput,
       })
       return {
         url: yield* webSocketUrl(parts.url),
@@ -270,8 +261,14 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
   },
 })
 
+export const jsonTransport = {
+  id: "websocket-json",
+  with: json,
+} as const
+
 export const WebSocketExecutor = {
   Service,
+  layer,
   open,
   fromWebSocket,
   messageText,
@@ -279,4 +276,5 @@ export const WebSocketExecutor = {
 
 export const WebSocketTransport = {
   json,
+  jsonTransport,
 } as const

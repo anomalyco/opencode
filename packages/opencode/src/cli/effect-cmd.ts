@@ -1,9 +1,7 @@
 import type { Argv } from "yargs"
 import { Effect, Schema } from "effect"
-import { AppRuntime, type AppServices } from "@/effect/app-runtime"
-import { InstanceStore } from "@/project/instance-store"
-import { InstanceRef } from "@/effect/instance-ref"
-import { Instance } from "@/project/instance"
+import type { AppServices } from "@/effect/app-runtime"
+import type { InstanceStore } from "@/project/instance-store"
 import { cmd, type WithDoubleDash } from "./cmd/cmd"
 
 /**
@@ -75,6 +73,7 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
     describe: opts.describe,
     builder: opts.builder as never,
     async handler(rawArgs) {
+      const { AppRuntime } = await import("@/effect/app-runtime")
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as WithDoubleDash<Args>
       const useInstance = typeof opts.instance === "function" ? opts.instance(args) : opts.instance !== false
@@ -82,20 +81,14 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
         await AppRuntime.runPromise(opts.handler(args))
         return
       }
+      const { InstanceStore } = await import("@/project/instance-store")
+      const { InstanceRef } = await import("@/effect/instance-ref")
       const directory = opts.directory?.(args) ?? process.cwd()
-      // Two-phase: load ctx, then run body inside Instance.current ALS.
-      // Effect's InstanceRef is provided via fiber context, but that context is
-      // lost across `await` inside `Effect.promise(async () => ...)` callbacks
-      // — when handlers re-enter Effect via `AppRuntime.runPromise(svc.method())`
-      // there, attach() falls back to Instance.current ALS, which Node preserves
-      // across awaits. Matches the pre-effectCmd `bootstrap()` behavior.
       const { store, ctx } = await AppRuntime.runPromise(
         InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
       )
       try {
-        await Instance.restore(ctx, () =>
-          AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx))),
-        )
+        await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))
       } finally {
         await AppRuntime.runPromise(store.dispose(ctx))
       }

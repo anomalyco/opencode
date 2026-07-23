@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/stats-core",
+  "version": "1.18.4",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./athena": "./src/athena.ts",
+    "./config": "./src/config.ts",
+    "./database": "./src/database.ts",
+    "./database/*": "./src/database/*.ts",
+    "./domain/*": "./src/domain/*.ts",
+    "./runtime": "./src/runtime.ts",
+    "./stat-sync": "./src/stat-sync.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:check-unique-users": "bun src/ensure-unique-users.ts --check",
+    "db:ensure-unique-users": "bun src/ensure-unique-users.ts",
+    "db:migrate": "bun src/migrate.ts",
+    "db:push": "drizzle-kit push --config=drizzle.config.ts",
+    "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
+    "honeycomb:backfill": "bun src/honeycomb-backfill.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-athena": "3.933.0",
+    "@planetscale/database": "1.19.0",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "sst": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "drizzle-kit": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

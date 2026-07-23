@@ -75,6 +75,66 @@ describe("buildRequestParts", () => {
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
+  test("preserves an external attachment source path for the model", () => {
+    const result = buildRequestParts({
+      prompt: [],
+      context: [],
+      images: [
+        {
+          type: "image",
+          id: "img_external",
+          filename: "opencode.global.dat",
+          sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+          mime: "text/plain",
+          dataUrl: "data:text/plain;base64,AAA",
+        },
+      ],
+      text: "inspect this",
+      messageID: "msg_external",
+      sessionID: "ses_external",
+      sessionDirectory: "C:\\Repos\\sst\\opencode",
+    })
+
+    expect(result.requestParts.find((part) => part.type === "file")?.filename).toBe(
+      "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+    )
+  })
+
+  test("preserves reference aliases as directory file parts", () => {
+    const result = buildRequestParts({
+      prompt: [
+        {
+          type: "file",
+          path: "/repo/../docs",
+          content: "@docs",
+          start: 0,
+          end: 5,
+          mime: "application/x-directory",
+          filename: "docs",
+        },
+      ],
+      context: [],
+      images: [],
+      text: "@docs",
+      messageID: "msg_reference",
+      sessionID: "ses_reference",
+      sessionDirectory: "/repo/app",
+    })
+
+    const filePart = result.requestParts.find((part) => part.type === "file")
+    expect(filePart).toBeDefined()
+    if (filePart?.type === "file") {
+      expect(filePart.mime).toBe("application/x-directory")
+      expect(filePart.filename).toBe("docs")
+      expect(filePart.url).toBe("file:///repo/../docs")
+      expect(filePart.source?.type).toBe("file")
+      if (filePart.source?.type === "file") {
+        expect(filePart.source.path).toBe("/repo/../docs")
+        expect(filePart.source.text.value).toBe("@docs")
+      }
+    }
+  })
+
   test("deduplicates context files when prompt already includes same path", () => {
     const prompt: Prompt = [{ type: "file", path: "src/foo.ts", content: "@src/foo.ts", start: 0, end: 11 }]
 

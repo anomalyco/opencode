@@ -37,6 +37,7 @@ opencode [project]
 | <nobr><code>{"--prompt"}</code></nobr>      |       | Prompt to use                                                           |
 | <nobr><code>{"--model"}</code></nobr>       | `-m`  | Model to use in the form of provider/model                              |
 | <nobr><code>{"--agent"}</code></nobr>       |       | Agent to use                                                            |
+| <nobr><code>{"--auto"}</code></nobr>        |       | Auto-approve permissions that are not explicitly denied                 |
 | <nobr><code>{"--port"}</code></nobr>        |       | Port to listen on                                                       |
 | <nobr><code>{"--hostname"}</code></nobr>    |       | Hostname to listen on                                                   |
 | <nobr><code>{"--mdns"}</code></nobr>        |       | Enable mDNS discovery                                                   |
@@ -361,26 +362,26 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flags
 
-| Flag                                                         | Short | Description                                                                |
-| ------------------------------------------------------------ | ----- | -------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>                      |       | The command to run, use message for args                                   |
-| <nobr><code>{"--continue"}</code></nobr>                     | `-c`  | Continue the last session                                                  |
-| <nobr><code>{"--session"}</code></nobr>                      | `-s`  | Session ID to continue                                                     |
-| <nobr><code>{"--fork"}</code></nobr>                         |       | Fork the session when continuing (use with `--continue` or `--session`)    |
-| <nobr><code>{"--share"}</code></nobr>                        |       | Share the session                                                          |
-| <nobr><code>{"--model"}</code></nobr>                        | `-m`  | Model to use in the form of provider/model                                 |
-| <nobr><code>{"--agent"}</code></nobr>                        |       | Agent to use                                                               |
-| <nobr><code>{"--file"}</code></nobr>                         | `-f`  | File(s) to attach to message                                               |
-| <nobr><code>{"--format"}</code></nobr>                       |       | Format: default (formatted) or json (raw JSON events)                      |
-| <nobr><code>{"--title"}</code></nobr>                        |       | Title for the session (uses truncated prompt if no value provided)         |
-| <nobr><code>{"--attach"}</code></nobr>                       |       | Attach to a running opencode server (e.g., http://localhost:4096)          |
-| <nobr><code>{"--password"}</code></nobr>                     | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
-| <nobr><code>{"--username"}</code></nobr>                     | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>                          |       | Directory to run in, or path on the remote server when attaching           |
-| <nobr><code>{"--port"}</code></nobr>                         |       | Port for the local server (defaults to random port)                        |
-| <nobr><code>{"--variant"}</code></nobr>                      |       | Model variant (provider-specific reasoning effort)                         |
-| <nobr><code>{"--thinking"}</code></nobr>                     |       | Show thinking blocks                                                       |
-| <nobr><code>{"--dangerously-skip-permissions"}</code></nobr> |       | Auto-approve permissions that are not explicitly denied (dangerous!)       |
+| Flag                                     | Short | Description                                                                |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |       | The command to run, use message for args                                   |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue the last session                                                  |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Session ID to continue                                                     |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Fork the session when continuing (use with `--continue` or `--session`)    |
+| <nobr><code>{"--share"}</code></nobr>    |       | Share the session                                                          |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Model to use in the form of provider/model                                 |
+| <nobr><code>{"--agent"}</code></nobr>    |       | Agent to use                                                               |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`  | File(s) to attach to message                                               |
+| <nobr><code>{"--format"}</code></nobr>   |       | Format: default (formatted) or json (raw JSON events)                      |
+| <nobr><code>{"--title"}</code></nobr>    |       | Title for the session (uses truncated prompt if no value provided)         |
+| <nobr><code>{"--attach"}</code></nobr>   |       | Attach to a running opencode server (e.g., http://localhost:4096)          |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Directory to run in, or path on the remote server when attaching           |
+| <nobr><code>{"--port"}</code></nobr>     |       | Port for the local server (defaults to random port)                        |
+| <nobr><code>{"--variant"}</code></nobr>  |       | Model variant (provider-specific reasoning effort)                         |
+| <nobr><code>{"--thinking"}</code></nobr> |       | Show thinking blocks                                                       |
+| <nobr><code>{"--auto"}</code></nobr>     |       | Auto-approve permissions that are not explicitly denied                    |
 
 ---
 
@@ -712,7 +713,7 @@ These environment variables enable experimental features that may change or be r
 
 | Variable                                        | Type    | Description                             |
 | ----------------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Enable all experimental features        |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | Enable the experimental umbrella flag   |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Enable icon discovery                   |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disable copy on select in TUI           |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Default timeout for bash commands in ms |
@@ -723,5 +724,10 @@ These environment variables enable experimental features that may change or be r
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disable file watcher                    |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Enable experimental Exa features        |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Enable TY LSP for python files          |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Enable experimental markdown features   |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Enable plan mode                        |
+| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Enable background subagent tasks        |
+| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Enable experimental event system        |
+| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Enable native LLM request path          |
+| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Enable parallel web search execution    |
+| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Enable Scout subagent                   |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Enable workspace support                |

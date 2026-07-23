@@ -1,17 +1,11 @@
-import { Instance } from "../project/instance"
 import { InstanceRuntime } from "../project/instance-runtime"
-import { WithInstance } from "../project/with-instance"
+import { context } from "../project/instance-context"
 
 export async function bootstrap<T>(directory: string, cb: () => Promise<T>) {
-  return WithInstance.provide({
-    directory,
-    fn: async () => {
-      try {
-        const result = await cb()
-        return result
-      } finally {
-        await InstanceRuntime.disposeInstance(Instance.current)
-      }
-    },
-  })
+  const ctx = await InstanceRuntime.load({ directory })
+  try {
+    return await context.provide(ctx, cb)
+  } finally {
+    await InstanceRuntime.disposeInstance(ctx)
+  }
 }

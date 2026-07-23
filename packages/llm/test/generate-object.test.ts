@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { LLM } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
+import { Auth } from "../src/route"
 import { Tool, toDefinitions } from "../src/tool"
 import { it } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
@@ -17,11 +18,9 @@ type OpenAIChatBody = {
   }>
 }
 
-const model = OpenAIChat.model({
-  id: "gpt-4o-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const model = OpenAIChat.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4o-mini" })
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)

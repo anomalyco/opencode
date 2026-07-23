@@ -489,14 +489,14 @@ Možete kontrolirati ponašanje sažimanja konteksta putem opcije `compaction`.
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - Automatski sažimanje sesije kada je kontekst pun (podrazumevano: `true`).
-- `prune` - Uklonite stare izlaze alata da sačuvate tokene (podrazumevano: `true`).
+- `prune` - Uklonite stare izlaze alata da sačuvate tokene (podrazumevano: `false`).
 - `reserved` - Token buffer za sažimanje. Ostavlja dovoljno prostora da se izbjegne prelijevanje tokom sažimanja
 
 ---
