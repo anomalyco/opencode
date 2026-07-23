@@ -278,7 +278,7 @@ handle expected errors inside the callback.
 
 ### Add a tool
 
-Create an executable declaration with `Tool.make`, then register it with a name
+Create an executable definition with `Tool.make`, then register it with a name
 and registration options. Define its input with JSON Schema and use an async
 executor:
 
@@ -334,9 +334,9 @@ argument to `tools.add` to configure the registration with
   provider.
 
 The executor receives a second context argument containing `sessionID`,
-`agent`, `messageID`, `callID`, and `progress`. A declaration with `output`
+`agent`, `messageID`, `callID`, and `progress`. A definition with `output`
 must return `output`; Effect and Standard Schema codecs validate it, while raw
-JSON Schema declarations enforce JSON compatibility only. A declaration
+JSON Schema definitions enforce JSON compatibility only. A definition
 without `output` returns model-visible `content` instead.
 
 ### Add a command

@@ -8,7 +8,7 @@ import {
   inputTypeScript,
   outputTypeScript,
 } from "./tool-schema.js"
-import { isDeclaration, type Declaration } from "./tool.js"
+import { isDefinition, type Definition } from "./tool.js"
 import type { Tools } from "./tools.js"
 import {
   CodeModeDate,
@@ -284,9 +284,9 @@ export const copyOut = (value: unknown, mode: CopyOutMode): unknown => {
   return value
 }
 
-// Dots in tool names are namespace separators; the last declaration for a canonical path wins.
+// Dots in tool names are namespace separators; the last definition for a canonical path wins.
 type ToolNode<R> = {
-  declaration?: Declaration<R>
+  definition?: Definition<R>
   readonly children: Map<string, ToolNode<R>>
 }
 
@@ -301,7 +301,7 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
         current.children.set(segment, child)
         current = child
       }
-      if (isDeclaration<R>(value)) current.declaration = value
+      if (isDefinition<R>(value)) current.definition = value
       else insert(current, value)
     }
   }
@@ -312,25 +312,25 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
 const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =>
   path.flatMap((segment) => segment.split("."))
 
-const declarations = <R>(
+const definitions = <R>(
   node: ToolNode<R>,
   path: ReadonlyArray<string> = [],
-): Array<{ path: string; declaration: Declaration<R> }> => [
-  ...(node.declaration === undefined ? [] : [{ path: path.join("."), declaration: node.declaration }]),
-  ...Array.from(node.children, ([name, child]) => declarations(child, [...path, name])).flat(),
+): Array<{ path: string; definition: Definition<R> }> => [
+  ...(node.definition === undefined ? [] : [{ path: path.join("."), definition: node.definition }]),
+  ...Array.from(node.children, ([name, child]) => definitions(child, [...path, name])).flat(),
 ]
 
-const describeDeclaration = <R>(path: string, declaration: Declaration<R>): ToolDescription => ({
+const describeDefinition = <R>(path: string, definition: Definition<R>): ToolDescription => ({
   path,
-  description: declaration.description,
-  signature: `${toolExpression(path)}(input: ${inputTypeScript(declaration, true)}): Promise<${outputTypeScript(declaration, true)}>`,
+  description: definition.description,
+  signature: `${toolExpression(path)}(input: ${inputTypeScript(definition, true)}): Promise<${outputTypeScript(definition, true)}>`,
 })
 
-const visibleDeclarations = <R>(tools: Tools<R>) =>
-  declarations(toolTrie(tools)).map(({ path, declaration }) => ({
+const visibleDefinitions = <R>(tools: Tools<R>) =>
+  definitions(toolTrie(tools)).map(({ path, definition }) => ({
     path,
-    declaration,
-    description: describeDeclaration(path, declaration),
+    definition,
+    description: describeDefinition(path, definition),
   }))
 
 export type DiscoveryPlan = {
@@ -359,7 +359,7 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
-const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Declaration => ({
+const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Definition => ({
   _tag: "CodeModeTool",
   description: "Search available tools",
   input: SearchInput,
@@ -420,8 +420,8 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Declaration =>
 })
 
 const searchSignature = (() => {
-  const declaration = makeSearchTool([])
-  return `search(input: ${inputTypeScript(declaration, true)}): ${outputTypeScript(declaration, true)}`
+  const definition = makeSearchTool([])
+  return `search(input: ${inputTypeScript(definition, true)}): ${outputTypeScript(definition, true)}`
 })()
 
 const catalogLine = (tool: ToolDescription) => {
@@ -430,13 +430,13 @@ const catalogLine = (tool: ToolDescription) => {
   return description === "" ? `  - ${tool.signature}` : `  - ${tool.signature} // ${description}`
 }
 
-const toSearchEntry = <R>(path: string, declaration: Declaration<R>, description: ToolDescription): SearchEntry => ({
+const toSearchEntry = <R>(path: string, definition: Definition<R>, description: ToolDescription): SearchEntry => ({
   description,
   namespace: path.split(".", 1)[0]!,
   searchText: [
     path,
-    declaration.description,
-    ...inputProperties(declaration).flatMap(({ name, description: property }) =>
+    definition.description,
+    ...inputProperties(definition).flatMap(({ name, description: property }) =>
       property === undefined ? [name] : [name, property],
     ),
   ]
@@ -445,16 +445,14 @@ const toSearchEntry = <R>(path: string, declaration: Declaration<R>, description
 })
 
 export const searchIndex = <R>(tools: Tools<R>): ReadonlyArray<SearchEntry> =>
-  visibleDeclarations(tools).map(({ path, declaration, description }) =>
-    toSearchEntry(path, declaration, description),
-  )
+  visibleDefinitions(tools).map(({ path, definition, description }) => toSearchEntry(path, definition, description))
 
 // Budget signatures round-robin so every namespace remains visible.
 export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget): DiscoveryPlan => {
   if (!Number.isSafeInteger(catalogBudget) || catalogBudget < 0) {
     throw new RangeError("discovery.catalogBudget must be a non-negative safe integer")
   }
-  const visible = visibleDeclarations(tools)
+  const visible = visibleDefinitions(tools)
   const described = visible.map(({ description }) => description)
 
   const namespaces = new Map<string, Array<ToolDescription>>()
@@ -589,7 +587,7 @@ export const prepare = <R>(tools: Tools<R>, catalogBudget = defaultCatalogBudget
   return {
     catalog: described,
     instructions: lines.join("\n"),
-    searchIndex: visible.map(({ path, declaration, description }) => toSearchEntry(path, declaration, description)),
+    searchIndex: visible.map(({ path, definition, description }) => toSearchEntry(path, definition, description)),
   }
 }
 
@@ -605,7 +603,7 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   return Array.from(node.children.keys())
 }
 
-const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Declaration<R> => {
+const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Definition<R> => {
   const segments = canonicalSegments(path)
   const node = lookup(root, segments)
   if (node === undefined) {
@@ -613,10 +611,10 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Declaration
       "Use search({ query }) to find available described tools.",
     ])
   }
-  if (node.declaration === undefined) {
+  if (node.definition === undefined) {
     throw new ToolRuntimeError("UnknownTool", `Tool '${segments.join(".")}' is not callable.`)
   }
-  return node.declaration
+  return node.definition
 }
 
 export type ToolRuntime<R = never> = {
@@ -676,21 +674,21 @@ export const make = <R>(
       return calls.length - 1
     }).pipe(Effect.tap((index) => hooks?.onToolCallStart?.({ index, name, input }) ?? Effect.void))
 
-  const invokeDeclaration = (name: string, declaration: Declaration<R>, externalArgs: Array<unknown>) =>
+  const invokeDefinition = (name: string, definition: Definition<R>, externalArgs: Array<unknown>) =>
     Effect.gen(function* () {
       if (externalArgs.length !== 1)
         throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects exactly one input object.`)
       const input = yield* Effect.try({
-        try: () => decodeToolInput(declaration, externalArgs[0]),
+        try: () => decodeToolInput(definition, externalArgs[0]),
         catch: (cause) =>
           new ToolRuntimeError("InvalidToolInput", `Invalid input for tool '${name}': ${String(cause)}`),
       })
       const index = yield* recordAndObserve(name, input)
       return yield* observeEnd(
         Effect.gen(function* () {
-          const raw = yield* runHost(Effect.suspend(() => declaration.execute(input)))
+          const raw = yield* runHost(Effect.suspend(() => definition.execute(input)))
           const result = yield* Effect.try({
-            try: () => decodeToolOutput(declaration, raw),
+            try: () => decodeToolOutput(definition, raw),
             catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
           })
           return yield* decodeOutput(result, name)
@@ -705,7 +703,7 @@ export const make = <R>(
     keys: (path) => namespaceKeys(root, path),
     search: (args) =>
       Effect.suspend(() =>
-        invokeDeclaration(
+        invokeDefinition(
           "search",
           searchTool,
           args.map((arg) => copyOut(copyIn(arg, "Arguments for tool 'search'"), "json")),
@@ -715,8 +713,8 @@ export const make = <R>(
       Effect.gen(function* () {
         const name = canonicalSegments(path).join(".")
         const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`), "json"))
-        const declaration = resolve(root, path)
-        return yield* invokeDeclaration(name, declaration, externalArgs)
+        const definition = resolve(root, path)
+        return yield* invokeDefinition(name, definition, externalArgs)
       }),
   }
 }

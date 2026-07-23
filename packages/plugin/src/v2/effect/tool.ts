@@ -9,7 +9,7 @@ import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/sp
 import { Effect, JsonSchema, Schema } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
-// Tool declarations
+// Tool definitions
 
 /** A JSON-compatible value. Tool metadata and encoded outputs must be JSON. */
 export type JsonValue = typeof Schema.Json.Type
@@ -81,7 +81,7 @@ export type Content =
 /** Model-facing tool content: plain text or non-empty rich content. */
 export type ModelOutput = string | readonly [Content, ...Content[]]
 
-type BaseDeclaration<Input extends SchemaType<any>> = {
+type BaseDefinition<Input extends SchemaType<any>> = {
   readonly description: string
   readonly input: Input
 }
@@ -97,10 +97,10 @@ export type ContentResponse = {
   readonly metadata?: Metadata
 }
 
-export type Declaration<
+export type Definition<
   Input extends SchemaType<any>,
   Output extends SchemaType<any> | undefined = undefined,
-> = BaseDeclaration<Input> &
+> = BaseDefinition<Input> &
   (Output extends SchemaType<any>
     ? {
         readonly output: Output
@@ -111,17 +111,17 @@ export type Declaration<
         readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<ContentResponse, Failure>
       })
 
-export type AnyDeclaration = BaseDeclaration<any> & {
+export type AnyDefinition = BaseDefinition<any> & {
   readonly output?: SchemaType<any>
   readonly execute: (input: any, context: Context) => Effect.Effect<Response<any> | ContentResponse, Failure>
 }
 
 export function make<Input extends SchemaType<any>, Output extends SchemaType<any>>(
-  config: Declaration<Input, Output>,
-): Declaration<Input, Output>
-export function make<Input extends SchemaType<any>>(config: Declaration<Input>): Declaration<Input>
-export function make(config: AnyDeclaration): AnyDeclaration
-export function make(config: AnyDeclaration): AnyDeclaration {
+  config: Definition<Input, Output>,
+): Definition<Input, Output>
+export function make<Input extends SchemaType<any>>(config: Definition<Input>): Definition<Input>
+export function make(config: AnyDefinition): AnyDefinition
+export function make(config: AnyDefinition): AnyDefinition {
   return config
 }
 
@@ -136,7 +136,7 @@ export interface RegisterOptions {
 }
 
 export interface Registration {
-  readonly declaration: AnyDeclaration
+  readonly definition: AnyDefinition
   readonly name: string
   readonly namespace?: string
   readonly permission: string
@@ -148,10 +148,10 @@ export const validateName = (name: string) =>
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
 export const registrationEntries = (
-  declarations: Readonly<Record<string, AnyDeclaration>>,
+  definitions: Readonly<Record<string, AnyDefinition>>,
   options?: RegisterOptions,
 ): Array<Registration & { readonly key: string }> =>
-  Object.entries(declarations).map(([name, declaration]) => {
+  Object.entries(definitions).map(([name, definition]) => {
     const normalized = name.replace(/[^a-zA-Z0-9_-]/g, "_")
     const key =
       options?.namespace === undefined ? normalized : `${options.namespace.replaceAll(".", "_")}_${normalized}`
@@ -159,7 +159,7 @@ export const registrationEntries = (
       key,
       name: normalized,
       namespace: options?.namespace,
-      declaration,
+      definition,
       permission: options?.permission ?? key,
     }
   })
@@ -171,11 +171,11 @@ export const validateNamespace = (namespace: string) =>
         new RegistrationError({ name: namespace, message: `Invalid tool namespace: ${JSON.stringify(namespace)}` }),
       )
 
-export const toDefinition = (name: string, declaration: AnyDeclaration): ToolDefinition => ({
+export const toLLMDefinition = (name: string, definition: AnyDefinition): ToolDefinition => ({
   name,
-  description: declaration.description,
-  inputSchema: inputJsonSchema(declaration.input),
-  ...(declaration.output === undefined ? {} : { outputSchema: outputJsonSchema(declaration.output) }),
+  description: definition.description,
+  inputSchema: inputJsonSchema(definition.input),
+  ...(definition.output === undefined ? {} : { outputSchema: outputJsonSchema(definition.output) }),
 })
 
 // Schema interpretation
@@ -303,7 +303,7 @@ export type Outcome = typeof ExecuteAfterOutcome.Type extends infer A
 export type ToolExecuteAfterEvent = ToolHookBase & Outcome
 
 export interface ToolDraft {
-  add(name: string, declaration: AnyDeclaration, options?: RegisterOptions): void
+  add(name: string, definition: AnyDefinition, options?: RegisterOptions): void
 }
 
 export interface ToolHooks {

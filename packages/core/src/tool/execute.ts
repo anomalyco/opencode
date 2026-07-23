@@ -4,7 +4,7 @@ export type { Registration } from "./tool"
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { ToolContent } from "@opencode-ai/ai"
 import { Effect, Ref, Schema } from "effect"
-import { execute, make, toDefinition, type Content, type Metadata, type Registration } from "./tool"
+import { execute, make, toLLMDefinition, type Content, type Metadata, type Registration } from "./tool"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -61,7 +61,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const executed = yield* execute(registration.declaration, input, {
+              const executed = yield* execute(registration.definition, input, {
                 sessionID: context.sessionID,
                 agent: context.agent,
                 messageID: context.messageID,
@@ -135,9 +135,9 @@ function runtime(
   invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.ToolCallHooks,
 ) {
-  const tools: Record<string, Tool.Declaration<never>> = {}
+  const tools: Record<string, Tool.Definition<never>> = {}
   for (const [name, registration] of registrations) {
-    const child = toDefinition(name, registration.declaration)
+    const child = toLLMDefinition(name, registration.definition)
     const path =
       registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
     tools[path] = Tool.make({

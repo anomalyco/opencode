@@ -10,7 +10,7 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { CodeMode } from "../codemode"
-import { Tool, nonEmpty, registrationEntries, toDefinition, validateName, validateNamespace } from "./tool"
+import { Tool, nonEmpty, registrationEntries, toLLMDefinition, validateName, validateNamespace } from "./tool"
 import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -31,13 +31,13 @@ export interface Interface {
   readonly snapshot: (permissions?: PermissionV2.Ruleset) => Effect.Effect<ToolSet>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (
-    declarations: Readonly<Record<string, Tool.AnyDeclaration>>,
+    definitions: Readonly<Record<string, Tool.AnyDefinition>>,
     options?: Tools.RegisterOptions,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
   /** Internal atomic registration capability used by plugin transforms. */
   readonly registerBatch: (
     registrations: ReadonlyArray<{
-      readonly declarations: Readonly<Record<string, Tool.AnyDeclaration>>
+      readonly definitions: Readonly<Record<string, Tool.AnyDefinition>>
       readonly options?: Tools.RegisterOptions
     }>,
   ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
@@ -119,7 +119,7 @@ const registryLayer = Layer.effect(
 
     const executeTool = Effect.fn("ToolRegistry.executeTool")(function* (
       input: ExecuteInput,
-      declaration: Tool.AnyDeclaration,
+      definition: Tool.AnyDefinition,
     ) {
       // Hooks fire only for hosted/local tools; provider-executed calls never reach executeTool.
       const beforeEvent: ToolHooks.BeforeEvent = {
@@ -131,7 +131,7 @@ const registryLayer = Layer.effect(
         input: input.call.input,
       }
       yield* toolHooks.runBefore(beforeEvent)
-      const execution = yield* Tool.execute(declaration, beforeEvent.input, {
+      const execution = yield* Tool.execute(definition, beforeEvent.input, {
         sessionID: input.sessionID,
         agent: input.agent,
         messageID: input.messageID,
@@ -230,10 +230,10 @@ const registryLayer = Layer.effect(
 
     const registerBatch: Interface["registerBatch"] = Effect.fn("ToolRegistry.registerBatch")(
       function* (registrations) {
-        const planned = yield* Effect.forEach(registrations, ({ declarations, options }) =>
+        const planned = yield* Effect.forEach(registrations, ({ definitions, options }) =>
           Effect.gen(function* () {
             if (options?.namespace !== undefined) yield* validateNamespace(options.namespace)
-            const entries = registrationEntries(declarations, options)
+            const entries = registrationEntries(definitions, options)
             yield* Effect.forEach(entries, (entry) => validateName(entry.name), { discard: true })
             const collision = entries.find(
               (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
@@ -254,7 +254,7 @@ const registryLayer = Layer.effect(
                   message: 'Tool name "execute" is reserved for CodeMode',
                 }),
               )
-            return { declarations, options, entries, codemode }
+            return { definitions, options, entries, codemode }
           }),
         )
         // CodeMode registrations live in the CodeMode service; the registry keeps only direct tools.
@@ -276,7 +276,7 @@ const registryLayer = Layer.effect(
                     {
                       token,
                       registration: {
-                        declaration: entry.declaration,
+                        definition: entry.definition,
                         name: entry.name,
                         namespace: entry.namespace,
                         permission: entry.permission,
@@ -303,10 +303,10 @@ const registryLayer = Layer.effect(
     )
 
     return Service.of({
-      register: Effect.fn("ToolRegistry.register")((declarations, options) =>
+      register: Effect.fn("ToolRegistry.register")((definitions, options) =>
         registerBatch([
           {
-            declarations,
+            definitions,
             ...(options === undefined ? {} : { options }),
           },
         ]),
@@ -323,16 +323,16 @@ const registryLayer = Layer.effect(
               if (whollyDisabled(registration.permission, rules)) continue
               direct.set(name, registration)
             }
-            const codemodeDeclaration = (yield* codeMode.materialize(permissions)).declaration
+            const codemodeDefinition = (yield* codeMode.materialize(permissions)).definition
             return {
               definitions: [
-                ...Array.from(direct, ([name, registration]) => toDefinition(name, registration.declaration)),
-                ...(codemodeDeclaration ? [toDefinition("execute", codemodeDeclaration)] : []),
+                ...Array.from(direct, ([name, registration]) => toLLMDefinition(name, registration.definition)),
+                ...(codemodeDefinition ? [toLLMDefinition("execute", codemodeDefinition)] : []),
               ],
               execute: (input: ExecuteInput) => {
-                if (input.call.name === "execute" && codemodeDeclaration) return executeTool(input, codemodeDeclaration)
+                if (input.call.name === "execute" && codemodeDefinition) return executeTool(input, codemodeDefinition)
                 const registration = direct.get(input.call.name)
-                if (registration) return executeTool(input, registration.declaration)
+                if (registration) return executeTool(input, registration.definition)
                 return Effect.succeed<ToolOutcome>({
                   status: "error",
                   error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },

@@ -271,7 +271,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("constructs plain Promise tool declarations in the host", () =>
+  it.effect("constructs plain Promise tool definitions in the host", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
@@ -281,15 +281,19 @@ describe("fromPromise", () => {
         id: "promise-tool",
         setup: async (ctx) => {
           await ctx.tool.transform((tools) => {
-            tools.add("hello", Tool.make({
-              description: "Hello",
-              input: Schema.Struct({ name: Schema.String }),
-              output: Schema.String,
-              execute: async ({ name }, context) => {
-                await context.progress({ phase: "greeting" })
-                return { output: `Hello, ${name}!` }
-              },
-            }), { codemode: false })
+            tools.add(
+              "hello",
+              Tool.make({
+                description: "Hello",
+                input: Schema.Struct({ name: Schema.String }),
+                output: Schema.String,
+                execute: async ({ name }, context) => {
+                  await context.progress({ phase: "greeting" })
+                  return { output: `Hello, ${name}!` }
+                },
+              }),
+              { codemode: false },
+            )
           })
         },
       })

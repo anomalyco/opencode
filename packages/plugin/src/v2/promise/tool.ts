@@ -11,27 +11,27 @@ export type Content = Tool.Content
 export type Metadata = Tool.Metadata
 export type ModelOutput = Tool.ModelOutput
 
-export type Declaration<
-  Input extends SchemaType<any>,
-  Output extends SchemaType<any> | undefined = undefined,
-> = Omit<Tool.Declaration<Input, Output>, "execute"> & {
+export type Definition<Input extends SchemaType<any>, Output extends SchemaType<any> | undefined = undefined> = Omit<
+  Tool.Definition<Input, Output>,
+  "execute"
+> & {
   readonly execute: (
     input: Tool.InputValue<Input>,
     context: Context,
   ) => Promise<Output extends SchemaType<any> ? Tool.Response<Output> : Tool.ContentResponse>
 }
 
-export type AnyDeclaration = Omit<Tool.AnyDeclaration, "execute"> & {
+export type AnyDefinition = Omit<Tool.AnyDefinition, "execute"> & {
   readonly execute: (input: any, context: Context) => Promise<Tool.Response<any> | Tool.ContentResponse>
 }
 
 export function make<Input extends SchemaType<any>, Output extends SchemaType<any>>(
-  declaration: Declaration<Input, Output>,
-): Declaration<Input, Output>
-export function make<Input extends SchemaType<any>>(declaration: Declaration<Input>): Declaration<Input>
-export function make(declaration: AnyDeclaration): AnyDeclaration
-export function make(declaration: AnyDeclaration): AnyDeclaration {
-  return declaration
+  definition: Definition<Input, Output>,
+): Definition<Input, Output>
+export function make<Input extends SchemaType<any>>(definition: Definition<Input>): Definition<Input>
+export function make(definition: AnyDefinition): AnyDefinition
+export function make(definition: AnyDefinition): AnyDefinition {
+  return definition
 }
 
 export type ToolExecuteBeforeEvent = Tool.ToolExecuteBeforeEvent
@@ -41,10 +41,10 @@ export type RegisterOptions = Tool.RegisterOptions
 export interface ToolDraft {
   add<Input extends SchemaType<any>, Output extends SchemaType<any>>(
     name: string,
-    declaration: Declaration<Input, Output>,
+    definition: Definition<Input, Output>,
     options?: RegisterOptions,
   ): void
-  add<Input extends SchemaType<any>>(name: string, declaration: Declaration<Input>, options?: RegisterOptions): void
+  add<Input extends SchemaType<any>>(name: string, definition: Definition<Input>, options?: RegisterOptions): void
 }
 
 export interface ToolHooks {

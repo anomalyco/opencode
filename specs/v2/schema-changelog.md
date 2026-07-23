@@ -8,7 +8,7 @@ Status: **Historical pre-release compatibility ledger.** Older entries retain th
 - Rename the ephemeral `session.tool.progress` field `structured` to `metadata`; progress is one metadata replacement snapshot. Model content belongs exclusively to terminal outcomes.
 - Change projected `SessionMessage.ToolState`: completed is `{ input, content, metadata? }` with non-empty content, error is `{ input, error, content?, metadata? }`, running renames `structured` to `metadata`. Provider replay derives wire values from canonical content.
 - Move provider-hosted result payloads into provider-owned result state (`providerResultState.result`); Anthropic server-tool round-trips read it during lowering. OpenAI continues replaying from item references.
-- Public Plugin API: remove `structured`, projection callbacks, the `Structured` generic, `Tool.Failure.metadata`, and the exported `Tool.settle`; declaration responses carry schema-validated `output`, model-visible `content`, and optional JSON `metadata`. Code Mode receives the validated encoded output.
+- Public Plugin API: remove `structured`, projection callbacks, the `Structured` generic, `Tool.Failure.metadata`, and the exported `Tool.settle`; definition responses carry schema-validated `output`, model-visible `content`, and optional JSON `metadata`. Code Mode receives the validated encoded output.
 
 Compatibility:
 

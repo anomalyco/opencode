@@ -111,8 +111,8 @@ describe("ToolRegistry", () => {
       const service = yield* ToolRegistry.Service
       const error = yield* service
         .registerBatch([
-          { declarations: { first: make() }, options: { codemode: false } },
-          { declarations: { second: make() }, options: { namespace: "invalid..namespace", codemode: false } },
+          { definitions: { first: make() }, options: { codemode: false } },
+          { definitions: { second: make() }, options: { namespace: "invalid..namespace", codemode: false } },
         ])
         .pipe(Effect.flip)
 
@@ -272,7 +272,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("passes complete call identity to declaration execution", () =>
+  it.effect("passes complete call identity to definition execution", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const contexts: Tool.Context[] = []

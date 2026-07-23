@@ -1,5 +1,5 @@
 import { HttpClient } from "effect/unstable/http"
-import { make, type Declaration } from "../tool.js"
+import { make, type Definition } from "../tool.js"
 import { invoke } from "./runtime.js"
 import {
   componentDefinitions,
@@ -117,16 +117,16 @@ export const fromSpec = (options: Options): Result => {
   return { tools, skipped }
 }
 
-const setTool = (tools: Tools, path: ReadonlyArray<string>, declaration: Declaration<HttpClient.HttpClient>): void => {
+const setTool = (tools: Tools, path: ReadonlyArray<string>, definition: Definition<HttpClient.HttpClient>): void => {
   const [head, ...rest] = path
   if (head === undefined) return
   if (rest.length === 0) {
-    tools[head] = declaration
+    tools[head] = definition
     return
   }
   const child = tools[head]
   if (child === undefined || !isRecord(child) || child._tag === "CodeModeTool") {
     tools[head] = Object.create(null) as Tools
   }
-  setTool(tools[head] as Tools, rest, declaration)
+  setTool(tools[head] as Tools, rest, definition)
 }

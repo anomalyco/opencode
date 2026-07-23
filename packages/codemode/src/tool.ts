@@ -29,8 +29,8 @@ export type JsonSchema = {
 /** Either a validating Effect Schema or a render-only JSON Schema document. */
 export type SchemaType = Schema.Decoder<unknown> | JsonSchema
 
-/** Executable tool declaration exposed through CodeMode's `tools` object. */
-export type Declaration<R = never> = {
+/** Executable tool definition exposed through CodeMode's `tools` object. */
+export type Definition<R = never> = {
   readonly _tag: "CodeModeTool"
   readonly description: string
   readonly input: SchemaType
@@ -50,8 +50,8 @@ export type Options<I extends SchemaType, O extends SchemaType | undefined, R = 
   readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
 }
 
-// Object.hasOwn: an inherited _tag must not classify a namespace as a Declaration.
-export const isDeclaration = <R = never>(value: unknown): value is Declaration<R> =>
+// Object.hasOwn: an inherited _tag must not classify a namespace as a Definition.
+export const isDefinition = <R = never>(value: unknown): value is Definition<R> =>
   typeof value === "object" &&
   value !== null &&
   "_tag" in value &&
@@ -67,7 +67,7 @@ export const isDeclaration = <R = never>(value: unknown): value is Declaration<R
  */
 export const make = <I extends SchemaType, const O extends SchemaType | undefined = undefined, R = never>(
   options: Options<I, O, R>,
-): Declaration<R> => ({
+): Definition<R> => ({
   _tag: "CodeModeTool",
   description: options.description,
   input: options.input,
