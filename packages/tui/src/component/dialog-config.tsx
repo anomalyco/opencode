@@ -222,14 +222,6 @@ const settings: Setting[] = [
     values: [false, true],
     labels: ["off", "on"],
   },
-  {
-    title: "DevTools: Timing",
-    category: "Debug",
-    path: ["debug", "timing"],
-    default: true,
-    values: [false, true],
-    labels: ["off", "on"],
-  },
 ]
 
 export function DialogConfig() {
