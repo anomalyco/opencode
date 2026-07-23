@@ -298,6 +298,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.created":
           result.session.invalidate(event.data.sessionID)
           void result.session.sync(event.data.sessionID)
+          // Band-aid: a newly created session starts empty, so live events can be its source of truth.
+          // Fetching pending inputs and projected messages separately lets promotion move an input between snapshots,
+          // causing both requests to miss it and overwrite event-built state. Skip those racy initial reads until
+          // hydration can load pending and projected messages atomically.
           sync.complete(`session.pending:${event.data.sessionID}`)
           sync.complete(`session.message:${event.data.sessionID}`)
           break
