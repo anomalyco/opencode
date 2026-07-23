@@ -2434,6 +2434,51 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("preserves assistant text provider state across durable continuation", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Check this")
+
+      const providerMetadata = { openai: { itemId: "msg_commentary", phase: "commentary" } }
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "msg_commentary", providerMetadata }),
+          LLMEvent.textDelta({ id: "msg_commentary", text: "Checking.", providerMetadata }),
+          LLMEvent.textEnd({ id: "msg_commentary", providerMetadata }),
+          LLMEvent.toolCall({ id: "call-echo", name: "echo", input: { text: "hello" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        reply.text("Done", "text-final"),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages[1]?.content[0]).toEqual({
+        type: "text",
+        text: "Checking.",
+        providerMetadata,
+      })
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Check this" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "Checking.",
+              state: { itemId: "msg_commentary", phase: "commentary" },
+            },
+            { type: "tool", id: "call-echo" },
+          ],
+        },
+        { type: "assistant", content: [{ type: "text", text: "Done" }] },
+      ])
+    }),
+  )
+
   it.effect("reloads a model switch before a tool-driven continuation step", () =>
     Effect.gen(function* () {
       const session = yield* setup

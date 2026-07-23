@@ -98,8 +98,6 @@ export type SessionMessageShell = {
   output?: { output: string; cursor: number; size: number; truncated: boolean }
 }
 
-export type SessionMessageAssistantText = { type: "text"; text: string }
-
 export type SessionMessageProviderState = { [x: string]: JsonValue }
 
 export type SessionMessageToolStateStreaming = { status: "streaming"; input: string }
@@ -151,8 +149,6 @@ export type ShellInfo = {
   time: { started: number; completed?: number }
 }
 
-export type SessionMessageProviderState3 = { [x: string]: any }
-
 export type SessionMessageProviderState4 = { [x: string]: any }
 
 export type SessionMessageProviderState5 = { [x: string]: any }
@@ -160,6 +156,12 @@ export type SessionMessageProviderState5 = { [x: string]: any }
 export type SessionMessageProviderState6 = { [x: string]: any }
 
 export type SessionMessageProviderState7 = { [x: string]: any }
+
+export type SessionMessageProviderState8 = { [x: string]: any }
+
+export type SessionMessageProviderState9 = { [x: string]: any }
+
+export type SessionMessageProviderState10 = { [x: string]: any }
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: number }
 
@@ -717,26 +719,6 @@ export type SessionStepEnded = {
   }
 }
 
-export type SessionTextStarted = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.text.started"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; ordinal: number }
-}
-
-export type SessionTextEnded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.text.ended"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; ordinal: number; text: string }
-}
-
 export type SessionToolInputStarted = {
   id: string
   created: number
@@ -1234,6 +1216,8 @@ export type SessionPendingSynthetic = {
   delivery: "steer" | "queue"
 }
 
+export type SessionMessageAssistantText = { type: "text"; text: string; state?: SessionMessageProviderState }
+
 export type SessionMessageAssistantReasoning = {
   type: "reasoning"
   text: string
@@ -1344,6 +1328,32 @@ export type ShellCreated = {
   data: { info: ShellInfo }
 }
 
+export type SessionTextStarted = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.text.started"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState4 }
+}
+
+export type SessionTextEnded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.text.ended"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    ordinal: number
+    text: string
+    state?: SessionMessageProviderState5
+  }
+}
+
 export type SessionReasoningStarted = {
   id: string
   created: number
@@ -1351,7 +1361,7 @@ export type SessionReasoningStarted = {
   type: "session.reasoning.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState3 }
+  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState6 }
 }
 
 export type SessionReasoningEnded = {
@@ -1366,7 +1376,7 @@ export type SessionReasoningEnded = {
     assistantMessageID: string
     ordinal: number
     text: string
-    state?: SessionMessageProviderState4
+    state?: SessionMessageProviderState7
   }
 }
 
@@ -1383,7 +1393,7 @@ export type SessionToolCalled = {
     callID: string
     input: { [x: string]: any }
     executed: boolean
-    state?: SessionMessageProviderState5
+    state?: SessionMessageProviderState8
   }
 }
 
@@ -1848,7 +1858,7 @@ export type SessionToolSuccess = {
     content: Array<LLMToolContent>
     result?: any
     executed: boolean
-    resultState?: SessionMessageProviderState6
+    resultState?: SessionMessageProviderState9
   }
 }
 
@@ -1868,7 +1878,7 @@ export type SessionToolFailed = {
     metadata?: { [x: string]: any }
     result?: any
     executed: boolean
-    resultState?: SessionMessageProviderState7
+    resultState?: SessionMessageProviderState10
   }
 }
 

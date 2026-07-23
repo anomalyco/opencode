@@ -15,6 +15,36 @@ const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: Provi
 const build = AgentV2.defaultID
 
 describe("toLLMMessages", () => {
+  test("restores same-model provider state on assistant text", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-text-state"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Checking.",
+              state: { itemId: "msg_commentary", phase: "commentary" },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Checking.",
+        providerMetadata: { provider: { itemId: "msg_commentary", phase: "commentary" } },
+      },
+    ])
+  })
+
   test("omits empty assistant turns", () => {
     const assistant = (value: string, content: SessionMessage.Assistant["content"]) =>
       SessionMessage.Assistant.make({
@@ -661,6 +691,11 @@ Recent work
           agent: build,
           model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
           content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Checking",
+              state: { itemId: "msg_old", phase: "commentary" },
+            }),
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Visible thought",
@@ -705,6 +740,7 @@ Recent work
     )
 
     expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Checking", providerMetadata: undefined },
       { type: "text", text: "Visible thought" },
       {
         type: "tool-call",

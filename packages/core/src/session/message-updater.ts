@@ -307,7 +307,9 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.text.started": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          draft.content.push(castDraft(SessionMessage.AssistantText.make({ type: "text", text: "" })))
+          draft.content.push(
+            castDraft(SessionMessage.AssistantText.make({ type: "text", text: "", state: event.data.state })),
+          )
         })
       },
       "session.text.delta": (event) => {
@@ -319,7 +321,10 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.text.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestText(draft)
-          if (match) match.text = event.data.text
+          if (match) {
+            match.text = event.data.text
+            if (event.data.state !== undefined) match.state = event.data.state
+          }
         })
       },
       "session.tool.input.started": (event) => {
