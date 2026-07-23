@@ -1029,15 +1029,25 @@ export function Session() {
   )
 }
 
-function SessionRowView(props: {
+type SessionRowViewProps = {
   row: SessionRow
   message: (messageID: string) => SessionMessageInfo | undefined
   boundaryID?: string
-}) {
+}
+
+function SessionRowView(props: SessionRowViewProps) {
   const config = useConfig()
   const hidden = () => props.row.type === "turn-usage" && config.data.debug?.turn_tokens !== true
   return (
-    <box id={props.boundaryID} height={hidden() ? 0 : undefined} marginTop={hidden() ? 0 : 1} flexShrink={0}>
+    <Show when={!hidden()}>
+      <SessionRowContent row={props.row} message={props.message} boundaryID={props.boundaryID} />
+    </Show>
+  )
+}
+
+function SessionRowContent(props: SessionRowViewProps) {
+  return (
+    <box id={props.boundaryID} marginTop={1} flexShrink={0}>
       <Switch>
         <Match when={props.row.type === "message" ? props.row : undefined}>
           {(row) => (
