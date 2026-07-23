@@ -6,7 +6,8 @@ import { replayMessages, streamTurn, type TurnControl } from "../../src/acp/even
 import { createSseFixture, durableEvent, ephemeralEvent, withTimeout } from "./sse-fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
+  Partial<Pick<AgentSideConnection, "unstable_createElicitation">>
 type Fixture = ReturnType<typeof createSseFixture>
 
 describe("acp event behavior", () => {
@@ -439,6 +440,7 @@ describe("acp event behavior", () => {
       sessionID: "ses_cancel",
       cwd: "/workspace",
       start: { type: "input", id: "input_cancel" },
+      elicitation: false,
       control,
       submit: async (signal) => {
         await fixture.client.session.prompt(
@@ -481,6 +483,7 @@ describe("acp event behavior", () => {
       sessionID: "ses_cancel_admission",
       cwd: "/workspace",
       start: { type: "input", id: "input_cancel_admission" },
+      elicitation: false,
       control,
       submit: (signal) =>
         fixture.client.session.prompt(
@@ -505,7 +508,178 @@ describe("acp event behavior", () => {
     }
   })
 
-  test("cancels unsupported session forms so execution can continue", async () => {
+  test("replies to session forms through client elicitation", async () => {
+    const elicitation = Promise.withResolvers<Parameters<AgentSideConnection["unstable_createElicitation"]>[0]>()
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_form", inputID: id }))
+        send(
+          ephemeralEvent("form.created", {
+            form: {
+              id: "frm_question",
+              sessionID: "ses_form",
+              title: "Questions",
+              metadata: { kind: "question", tool: { callID: "call_question", messageID: "msg_question" } },
+              fields: [
+                {
+                  key: "choice",
+                  title: "Strategy",
+                  description: "Choose an approach",
+                  type: "string",
+                  options: [
+                    { value: "minimal", label: "Minimal", description: "Make the smallest change" },
+                    { value: "broad", label: "Broad", description: "Refactor nearby code" },
+                  ],
+                  required: true,
+                },
+                { key: "count", title: "Count", type: "integer", minimum: 1, maximum: 5, default: 2 },
+                { key: "confirm", title: "Confirm", type: "boolean", default: true },
+                {
+                  key: "areas",
+                  title: "Areas",
+                  type: "multiselect",
+                  options: [
+                    { value: "tests", label: "Tests" },
+                    { value: "docs", label: "Docs" },
+                  ],
+                  minItems: 1,
+                },
+              ],
+            },
+          }),
+        )
+      },
+      onFormReply({ sessionID, formID, body, send }) {
+        expect({ sessionID, formID, body }).toEqual({
+          sessionID: "ses_form",
+          formID: "frm_question",
+          body: { answer: { choice: "minimal", count: 2, confirm: true, areas: ["tests"] } },
+        })
+        send(
+          ephemeralEvent("form.replied", {
+            sessionID,
+            id: formID,
+            answer: { choice: "minimal", count: 2, confirm: true, areas: ["tests"] },
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID }))
+      },
+    })
+    const connection = {
+      ...recordingConnection([]),
+      unstable_createElicitation: async (request) => {
+        elicitation.resolve(request)
+        return {
+          action: "accept" as const,
+          content: { choice: "minimal", count: 2, confirm: true, areas: ["tests"] },
+        }
+      },
+    } satisfies Connection
+
+    try {
+      const result = turn({
+        fixture,
+        connection,
+        sessionID: "ses_form",
+        inputID: "input_form",
+        elicitation: true,
+      })
+
+      const request = await withTimeout(elicitation.promise, "elicitation was not requested")
+      const response = await result
+      const payload: unknown = request
+      expect(payload).toEqual({
+        sessionId: "ses_form",
+        toolCallId: "call_question",
+        mode: "form",
+        message: "Questions",
+        requestedSchema: {
+          type: "object",
+          title: "Questions",
+          properties: {
+            choice: {
+              type: "string",
+              title: "Strategy",
+              description: "Choose an approach",
+              oneOf: [
+                { const: "minimal", title: "Minimal", description: "Make the smallest change" },
+                { const: "broad", title: "Broad", description: "Refactor nearby code" },
+              ],
+            },
+            count: { type: "integer", title: "Count", minimum: 1, maximum: 5, default: 2 },
+            confirm: { type: "boolean", title: "Confirm", default: true },
+            areas: {
+              type: "array",
+              title: "Areas",
+              items: {
+                anyOf: [
+                  { const: "tests", title: "Tests" },
+                  { const: "docs", title: "Docs" },
+                ],
+              },
+              minItems: 1,
+            },
+          },
+          required: ["choice"],
+        },
+      })
+      expect(response.stopReason).toBe("end_turn")
+    } finally {
+      await fixture.stop()
+    }
+  })
+
+  test("cancels session forms when client elicitation is cancelled", async () => {
+    const fixture = formCancellationFixture("ses_form_cancelled")
+    const connection = {
+      ...recordingConnection([]),
+      unstable_createElicitation: async () => ({ action: "cancel" as const }),
+    } satisfies Connection
+
+    try {
+      const response = await turn({
+        fixture,
+        connection,
+        sessionID: "ses_form_cancelled",
+        inputID: "input_form",
+        elicitation: true,
+      })
+
+      expect(response.stopReason).toBe("end_turn")
+      expect(
+        fixture.requests.some(
+          (request) => request.path === "/api/session/ses_form_cancelled/form/frm_question/cancel",
+        ),
+      ).toBe(true)
+    } finally {
+      await fixture.stop()
+    }
+  })
+
+  test("cancels session forms when client elicitation is unsupported", async () => {
+    const fixture = formCancellationFixture("ses_form_unsupported")
+
+    try {
+      const response = await turn({
+        fixture,
+        connection: recordingConnection([]),
+        sessionID: "ses_form_unsupported",
+        inputID: "input_form",
+        elicitation: false,
+      })
+
+      expect(response.stopReason).toBe("end_turn")
+      expect(
+        fixture.requests.some(
+          (request) => request.path === "/api/session/ses_form_unsupported/form/frm_question/cancel",
+        ),
+      ).toBe(true)
+    } finally {
+      await fixture.stop()
+    }
+  })
+
+  test("cancels unsupported session form shapes", async () => {
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
         send(durableEvent("session.input.promoted", { sessionID: "ses_form", inputID: id }))
@@ -516,7 +690,7 @@ describe("acp event behavior", () => {
               sessionID: "ses_form",
               title: "Questions",
               metadata: { kind: "question" },
-              fields: [{ key: "q0", title: "Choice", type: "string" }],
+              fields: [{ key: "external", title: "Authorize", type: "external", url: "https://example.com" }],
             },
           }),
         )
@@ -533,6 +707,7 @@ describe("acp event behavior", () => {
         connection: recordingConnection([]),
         sessionID: "ses_form",
         inputID: "input_form",
+        elicitation: true,
       })
 
       expect(response.stopReason).toBe("end_turn")
@@ -559,6 +734,7 @@ function turn(input: {
   readonly connection: Connection
   readonly sessionID: string
   readonly inputID: string
+  readonly elicitation?: boolean
 }) {
   return streamTurn({
     client: input.fixture.client,
@@ -568,8 +744,31 @@ function turn(input: {
     start: { type: "input", id: input.inputID },
     userMessageID: `client_${input.inputID}`,
     control: { cancelled: false, admission: new AbortController() },
+    elicitation: input.elicitation ?? false,
     submit: (signal) =>
       input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inputID, text: "hello" }, { signal }),
+  })
+}
+
+function formCancellationFixture(sessionID: string) {
+  return createSseFixture({
+    onPrompt({ id, send }) {
+      send(durableEvent("session.input.promoted", { sessionID, inputID: id }))
+      send(
+        ephemeralEvent("form.created", {
+          form: {
+            id: "frm_question",
+            sessionID,
+            title: "Questions",
+            fields: [{ key: "q0", title: "Choice", type: "string" }],
+          },
+        }),
+      )
+    },
+    onFormCancel({ sessionID: current, formID, send }) {
+      send(ephemeralEvent("form.cancelled", { sessionID: current, id: formID }))
+      send(durableEvent("session.execution.succeeded", { sessionID: current }))
+    },
   })
 }
 

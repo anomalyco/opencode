@@ -465,6 +465,7 @@ function startTurn(fixture: Fixture, connection: Connection, sessionID: string, 
     sessionID,
     cwd,
     start: { type: "input", id: inputID },
+    elicitation: false,
     control: { cancelled: false, admission: new AbortController() },
     submit: (signal) => fixture.client.session.prompt({ sessionID, id: inputID, text: "hello" }, { signal }),
   })

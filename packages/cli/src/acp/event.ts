@@ -1,6 +1,13 @@
-import type { AgentSideConnection, PromptResponse } from "@agentclientprotocol/sdk"
+import type {
+  AgentSideConnection,
+  CreateElicitationRequest,
+  ElicitationPropertySchema,
+  PromptResponse,
+} from "@agentclientprotocol/sdk"
 import type {
   EventSubscribeOutput,
+  FormField,
+  FormInfo,
   OpenCodeClient,
   SessionMessageAssistant,
   SessionMessageInfo,
@@ -18,7 +25,7 @@ import {
 } from "./tool"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
-  Partial<Pick<AgentSideConnection, "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "writeTextFile" | "unstable_createElicitation">>
 
 export type TurnControl = {
   cancelled: boolean
@@ -48,6 +55,7 @@ export async function streamTurn(input: {
   readonly cwd: string
   readonly start: TurnStart
   readonly userMessageID?: string | null
+  readonly elicitation: boolean
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
 }): Promise<PromptResponse> {
@@ -84,8 +92,12 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "form.created" && event.data.form.sessionID === input.sessionID) {
-        await input.client.form
-          .cancel({ sessionID: input.sessionID, formID: event.data.form.id })
+        await replyForm({
+          client: input.client,
+          connection: input.connection,
+          form: event.data.form,
+          elicitation: input.elicitation,
+        })
           .catch(() => input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {}))
         continue
       }
@@ -256,6 +268,117 @@ export async function streamTurn(input: {
     streamController.abort()
     await stream.return?.(undefined).catch(() => {})
   }
+}
+
+async function replyForm(input: {
+  readonly client: OpenCodeClient
+  readonly connection: Connection
+  readonly form: FormInfo
+  readonly elicitation: boolean
+}) {
+  const request = input.elicitation ? formRequest(input.form) : undefined
+  if (!request || !input.connection.unstable_createElicitation) {
+    return input.client.form.cancel({ sessionID: input.form.sessionID, formID: input.form.id })
+  }
+  const response = await input.connection.unstable_createElicitation(request).catch(() => undefined)
+  if (!response || response.action !== "accept") {
+    return input.client.form.cancel({ sessionID: input.form.sessionID, formID: input.form.id })
+  }
+  await input.client.form
+    .reply({ sessionID: input.form.sessionID, formID: input.form.id, answer: response.content ?? {} })
+    .catch(() => input.client.form.cancel({ sessionID: input.form.sessionID, formID: input.form.id }))
+}
+
+function formRequest(form: FormInfo): CreateElicitationRequest | undefined {
+  const properties = form.fields
+    .map((field) => [field.key, formProperty(field)] as const)
+    .filter((entry): entry is readonly [string, ElicitationPropertySchema] => entry[1] !== undefined)
+  if (properties.length !== form.fields.length) return undefined
+  const toolCallID = questionToolCallID(form.metadata)
+  return {
+    sessionId: form.sessionID,
+    ...(toolCallID ? { toolCallId: toolCallID } : {}),
+    mode: "form",
+    message: form.title,
+    requestedSchema: {
+      type: "object",
+      title: form.title,
+      properties: Object.fromEntries(properties),
+      required: form.fields.filter((field) => field.type !== "external" && field.required).map((field) => field.key),
+    },
+  }
+}
+
+function formProperty(field: FormField): ElicitationPropertySchema | undefined {
+  if (field.type === "external" || field.when?.length) return undefined
+  const base = {
+    ...(field.title ? { title: field.title } : {}),
+    ...(field.description ? { description: field.description } : {}),
+  }
+  if (field.type === "string") {
+    return {
+      ...base,
+      type: "string",
+      ...(field.format ? { format: field.format } : {}),
+      ...(field.minLength === undefined ? {} : { minLength: field.minLength }),
+      ...(field.maxLength === undefined ? {} : { maxLength: field.maxLength }),
+      ...(field.pattern === undefined ? {} : { pattern: field.pattern }),
+      ...(field.default === undefined ? {} : { default: field.default }),
+      ...(field.options?.length
+        ? {
+            oneOf: field.options.map((option) => ({
+              const: option.value,
+              title: option.label,
+              ...(option.description ? { description: option.description } : {}),
+            })),
+          }
+        : {}),
+    }
+  }
+  if (field.type === "number" || field.type === "integer") {
+    if (
+      [field.minimum, field.maximum, field.default].some(
+        (value) => value !== undefined && (typeof value !== "number" || !Number.isFinite(value)),
+      )
+    )
+      return undefined
+    const constraints = {
+      ...base,
+      ...(typeof field.minimum === "number" ? { minimum: field.minimum } : {}),
+      ...(typeof field.maximum === "number" ? { maximum: field.maximum } : {}),
+      ...(typeof field.default === "number" ? { default: field.default } : {}),
+    }
+    if (field.type === "number") return { ...constraints, type: "number" }
+    return { ...constraints, type: "integer" }
+  }
+  if (field.type === "boolean") {
+    return {
+      ...base,
+      type: "boolean",
+      ...(field.default === undefined ? {} : { default: field.default }),
+    }
+  }
+  return {
+    ...base,
+    type: "array",
+    items: {
+      anyOf: field.options.map((option) => ({
+        const: option.value,
+        title: option.label,
+        ...(option.description ? { description: option.description } : {}),
+      })),
+    },
+    ...(field.minItems === undefined ? {} : { minItems: field.minItems }),
+    ...(field.maxItems === undefined ? {} : { maxItems: field.maxItems }),
+    ...(field.default === undefined ? {} : { default: field.default }),
+  }
+}
+
+function questionToolCallID(metadata: FormInfo["metadata"]) {
+  if (!metadata) return undefined
+  const tool = metadata.tool
+  if (!tool || typeof tool !== "object" || Array.isArray(tool)) return undefined
+  return typeof tool.callID === "string" ? tool.callID : undefined
 }
 
 export async function replayMessages(

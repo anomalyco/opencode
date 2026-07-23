@@ -47,7 +47,8 @@ import { ACPError } from "./error"
 
 export const AuthMethodID = "opencode-login"
 
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
+  Partial<Pick<AgentSideConnection, "unstable_createElicitation">>
 
 type Catalog = {
   readonly providers: ConfigOptionProvider[]
@@ -98,6 +99,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
   const catalogs = new Map<string, Promise<Catalog>>()
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, TurnControl>()
+  const capabilities = { elicitation: false }
 
   const catalog = (cwd: string) => {
     const cached = catalogs.get(cwd)
@@ -157,6 +159,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
 
   return {
     initialize: async (params) => {
+      capabilities.elicitation = supportsFormElicitation(params)
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
@@ -296,6 +299,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         cwd: state.cwd,
         start: prepared.start,
         userMessageID: params.messageId,
+        elicitation: capabilities.elicitation,
         control,
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
       }).finally(() => {
@@ -313,6 +317,13 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       await input.client.session.interrupt({ sessionID: params.sessionId }).catch(() => {})
     },
   }
+}
+
+function supportsFormElicitation(input: InitializeRequest) {
+  const elicitation = input.clientCapabilities?.elicitation
+  if (!elicitation) return false
+  if (elicitation.form) return true
+  return elicitation.form === undefined && elicitation.url === undefined
 }
 
 function preparePrompt(catalog: Catalog, prompt: PromptRequest["prompt"], messageID: string): PreparedPrompt {

@@ -1,8 +1,79 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionConfigOption } from "@agentclientprotocol/sdk"
+import type { CreateElicitationRequest, SessionConfigOption } from "@agentclientprotocol/sdk"
 import { makeACPFixture, makeSession, secondModel } from "./service-fixture"
+import { durableEvent, ephemeralEvent } from "./sse-fixture"
 
 describe("acp service lifecycle", () => {
+  test("enables form elicitation from negotiated client capabilities", async () => {
+    const elicitations: CreateElicitationRequest[] = []
+    await using fixture = makeACPFixture({
+      createElicitation: async (request) => {
+        elicitations.push(request)
+        return { action: "accept", content: { name: "Ada" } }
+      },
+      fetch(request, context) {
+        if (request.method === "POST" && request.path === "/api/session") {
+          return Response.json({ data: makeSession("ses_elicitation") })
+        }
+        if (request.method === "POST" && request.path === "/api/session/ses_elicitation/prompt") {
+          if (!request.body || typeof request.body !== "object") return new Response(null, { status: 400 })
+          const inputID = Reflect.get(request.body, "id")
+          if (typeof inputID !== "string") return new Response(null, { status: 400 })
+          context.send(durableEvent("session.input.promoted", { sessionID: "ses_elicitation", inputID }))
+          context.send(
+            ephemeralEvent("form.created", {
+              form: {
+                id: "frm_elicitation",
+                sessionID: "ses_elicitation",
+                title: "Profile",
+                fields: [{ key: "name", title: "Name", type: "string", required: true }],
+              },
+            }),
+          )
+          return Response.json({ data: { text: "hello" } })
+        }
+        if (
+          request.method === "POST" &&
+          request.path === "/api/session/ses_elicitation/form/frm_elicitation/reply"
+        ) {
+          context.send(
+            ephemeralEvent("form.replied", {
+              id: "frm_elicitation",
+              sessionID: "ses_elicitation",
+              answer: { name: "Ada" },
+            }),
+          )
+          context.send(durableEvent("session.execution.succeeded", { sessionID: "ses_elicitation" }))
+          return new Response(null, { status: 204 })
+        }
+        return undefined
+      },
+    })
+    await fixture.service.initialize({
+      protocolVersion: 1,
+      clientCapabilities: { elicitation: { form: {} } },
+      clientInfo: { name: "test", version: "1.0.0" },
+    })
+    const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+
+    const response = await fixture.service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hi" }] })
+
+    expect(response.stopReason).toBe("end_turn")
+    expect(elicitations).toEqual([
+      {
+        sessionId: "ses_elicitation",
+        mode: "form",
+        message: "Profile",
+        requestedSchema: {
+          type: "object",
+          title: "Profile",
+          properties: { name: { type: "string", title: "Name" } },
+          required: ["name"],
+        },
+      },
+    ])
+  })
+
   test("loads and forks with paginated replay while resume does not replay", async () => {
     await using fixture = makeACPFixture({
       fetch(request) {

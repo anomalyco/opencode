@@ -30,6 +30,7 @@ type FixtureHandler = (
 
 type FixtureOptions = {
   readonly fetch?: FixtureHandler
+  readonly createElicitation?: AgentSideConnection["unstable_createElicitation"]
   readonly models?: readonly ModelInfo[]
   readonly defaultModel?: ModelInfo
   readonly agents?: readonly AgentInfo[]
@@ -192,6 +193,7 @@ export function makeACPFixture(options: FixtureOptions = {}) {
         updates.push(update)
       },
       requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+      ...(options.createElicitation ? { unstable_createElicitation: options.createElicitation } : {}),
     },
   })
 
