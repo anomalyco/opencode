@@ -210,6 +210,7 @@ const OpenAIResponsesStreamItem = Schema.Struct({
   server_label: Schema.optional(Schema.String),
   output: Schema.optional(Schema.Unknown),
   error: Schema.optional(Schema.Unknown),
+  content: Schema.optional(Schema.Array(Schema.Unknown)),
   encrypted_content: optionalNull(Schema.String),
   phase: optionalNull(OpenAIResponsesMessagePhase),
 })
@@ -340,6 +341,11 @@ const messageStatus = (part: TextPart) => {
   return status === "in_progress" || status === "completed" || status === "incomplete" ? status : undefined
 }
 
+const messageAnnotations = (part: TextPart) => {
+  const annotations = part.providerMetadata?.openai?.annotations
+  return Array.isArray(annotations) ? annotations : []
+}
+
 const hostedToolItemID = (part: ToolResultPart) => {
   const openai = part.providerMetadata?.openai
   return ProviderShared.isRecord(openai) && typeof openai.itemId === "string" && openai.itemId.length > 0
@@ -426,7 +432,11 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
                 id: itemID,
                 status: status ?? "completed",
                 role: "assistant",
-                content: content.map((part) => ({ type: "output_text", text: part.text, annotations: [] })),
+                content: content.map((part) => ({
+                  type: "output_text",
+                  text: part.text,
+                  annotations: messageAnnotations(part),
+                })),
                 ...(phase !== undefined ? { phase } : {}),
               }
             : {
@@ -693,6 +703,17 @@ const messageMetadata = (item: OpenAIResponsesStreamItem, id: string, previous?:
     ...(phase === "commentary" || phase === "final_answer" || phase === null ? { phase } : {}),
     ...(status === "in_progress" || status === "completed" || status === "incomplete" ? { status } : {}),
   })
+}
+
+const messageContentMetadata = (
+  providerMetadata: ProviderMetadata,
+  item: OpenAIResponsesStreamItem,
+  index: number,
+): ProviderMetadata => {
+  const content = item.content?.[index]
+  if (!ProviderShared.isRecord(content) || content.type !== "output_text" || !Array.isArray(content.annotations))
+    return providerMetadata
+  return openaiMetadata({ ...providerMetadata.openai, annotations: content.annotations })
 }
 
 const ensureMessageContent = (state: ParserState, event: OpenAIResponsesEvent) => {
@@ -1005,8 +1026,14 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
     const messageItem = state.messageItems[itemID]
     const { [itemID]: _finished, ...messageItems } = state.messageItems
     const providerMetadata = messageMetadata(item, itemID, messageItem?.providerMetadata)
-    const lifecycle = Object.values(messageItem?.content ?? {}).reduce(
-      (lifecycle, content) => Lifecycle.textEnd(lifecycle, events, content.id, providerMetadata),
+    const lifecycle = Object.entries(messageItem?.content ?? {}).reduce(
+      (lifecycle, entry) =>
+        Lifecycle.textEnd(
+          lifecycle,
+          events,
+          entry[1].id,
+          messageContentMetadata(providerMetadata, item, Number(entry[0])),
+        ),
       state.lifecycle,
     )
     return [

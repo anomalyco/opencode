@@ -893,7 +893,26 @@ describe("OpenAI Responses route", () => {
               },
               {
                 type: "response.output_item.done",
-                item: { type: "message", id: "openai-text-0", phase: "final_answer" },
+                item: {
+                  type: "message",
+                  id: "openai-text-0",
+                  phase: "final_answer",
+                  content: [
+                    {
+                      type: "output_text",
+                      text: "Final.",
+                      annotations: [
+                        {
+                          type: "url_citation",
+                          url: "https://example.com",
+                          title: "Example",
+                          start_index: 0,
+                          end_index: 6,
+                        },
+                      ],
+                    },
+                  ],
+                },
               },
               {
                 type: "response.output_item.added",
@@ -948,7 +967,21 @@ describe("OpenAI Responses route", () => {
         {
           type: "text",
           text: "Final.",
-          providerMetadata: { openai: { itemId: "openai-text-0", phase: "final_answer" } },
+          providerMetadata: {
+            openai: {
+              itemId: "openai-text-0",
+              phase: "final_answer",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://example.com",
+                  title: "Example",
+                  start_index: 0,
+                  end_index: 6,
+                },
+              ],
+            },
+          },
         },
         {
           type: "text",
@@ -991,7 +1024,21 @@ describe("OpenAI Responses route", () => {
           status: "completed",
           role: "assistant",
           phase: "final_answer",
-          content: [{ type: "output_text", text: "Final.", annotations: [] }],
+          content: [
+            {
+              type: "output_text",
+              text: "Final.",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://example.com",
+                  title: "Example",
+                  start_index: 0,
+                  end_index: 6,
+                },
+              ],
+            },
+          ],
         },
         {
           type: "message",
