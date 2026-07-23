@@ -7,10 +7,11 @@ Esta guía describe cómo configurar opencode para uso organizacional con contro
 1. [Arquitectura de control](#arquitectura-de-control)
 2. [Configuración organizacional](#configuración-organizacional)
 3. [Modelos disponibles](#modelos-disponibles)
-4. [Control de presupuesto (token-management)](#control-de-presupuesto-token-management)
-5. [Seguridad y compliance](#seguridad-y-compliance)
-6. [Despliegue](#despliegue)
-7. [Infraestructura de ahorro de tokens](#infraestructura-de-ahorro-de-tokens)
+4. [Estimación de costos](#estimación-de-costos)
+5. [Control de presupuesto (token-management)](#control-de-presupuesto-token-management)
+6. [Seguridad y compliance](#seguridad-y-compliance)
+7. [Despliegue](#despliegue)
+8. [Infraestructura de ahorro de tokens](#infraestructura-de-ahorro-de-tokens)
 
 ---
 
@@ -148,6 +149,46 @@ Si se necesita un modelo externo para datos clasificados:
 1. Agregar el provider a `enabled_providers`
 2. Configurar API key via variable de entorno o archivo
 3. Activar `OPENCODE_TOKEN_MGMT=1` para que el Budget Service controle el consumo
+
+---
+
+## Estimación de costos
+
+Basado en un ratio **3 administrativos por cada 1 desarrollador** (dato confirmado por RRHH).
+
+### Perfiles de consumo
+
+| Perfil | Uso principal | Consumo tokens | Modelo | Costo |
+|--------|--------------|---------------|--------|-------|
+| **Dev** | Coding, arquitectura, debugging | Alto | Go ($10/mes) | $10 × N |
+| **Admin** | Lectura de docs, resúmenes, análisis | Bajo | Zen (gratis) | $0 |
+
+### Escenarios mensuales
+
+| Empleados | Devs | Admins | Licencias Go | Costo/mes |
+|-----------|------|--------|-------------|-----------|
+| **20** | 5 | 15 | 5 + 2 compartidas | **$70** |
+| **40** | 10 | 30 | 10 + 4 compartidas | **$140** |
+| **60** | 15 | 45 | 15 + 6 compartidas | **$210** |
+| **100** | 25 | 75 | 25 + 10 compartidas | **$350** |
+
+### Comparación
+
+| Solución | 20 empleados | 100 empleados |
+|----------|-------------|---------------|
+| **gentle-opencode** | **$70/mes** | **$350/mes** |
+| Copilot Enterprise | $780/mes | $3,900/mes |
+| Cursor Business | $800/mes | $4,000/mes |
+
+**11x más barato** que Copilot Enterprise.
+
+### Por qué
+
+1. **Zen gratuito** cubre al 75% de los empleados (administrativos)
+2. **Licencias Go compartidas**: 1 licencia para 4 admins
+3. **Infraestructura de ahorro**: CodeGraph + Engram + Context7 + gentle-ai → 60-75% menos tokens
+4. **Auto-swap a Zen**: sin saldo Go → cae a gratuito, sin overages
+5. **Sin costo por token**: modelos `opencode*` zero deduct
 
 ---
 
