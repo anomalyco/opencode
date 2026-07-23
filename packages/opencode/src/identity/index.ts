@@ -52,6 +52,9 @@ export interface Interface {
     email: string
     displayName?: string
     tenantId?: string
+    roles?: readonly string[]
+    groups?: readonly string[]
+    extensionAttrs?: Record<string, string>
   }) => Effect.Effect<void>
   readonly getByID: (id: string) => Effect.Effect<UserIdentity | null>
   readonly getCurrent: () => Effect.Effect<UserIdentity | null>
@@ -108,6 +111,9 @@ export const layer = Layer.effect(
       email: string
       displayName?: string
       tenantId?: string
+      roles?: readonly string[]
+      groups?: readonly string[]
+      extensionAttrs?: Record<string, string>
     }) {
       if (!isEnabled()) return
 
@@ -115,9 +121,11 @@ export const layer = Layer.effect(
         .transaction(
           (tx) =>
             Effect.gen(function* () {
-              // First-user detection: if the table is empty, this user becomes admin.
+              // Admin detection: explicit opencode-admins role wins, else first user.
+              const hasAdminRole = input.roles?.includes("opencode-admins") ?? false
               const existing = yield* tx.select({ id: UserIdentityTable.id }).from(UserIdentityTable).limit(1).all()
               const isEmpty = existing.length === 0
+              const isAdmin = hasAdminRole || isEmpty
 
               yield* tx
                 .insert(UserIdentityTable)
@@ -126,7 +134,7 @@ export const layer = Layer.effect(
                   email: input.email,
                   displayName: input.displayName ?? null,
                   tenantId: input.tenantId ?? null,
-                  isAdmin: isEmpty ? 1 : 0,
+                  isAdmin: isAdmin ? 1 : 0,
                   createdAt: Date.now(),
                   lastLoginAt: Date.now(),
                 })
@@ -136,6 +144,7 @@ export const layer = Layer.effect(
                     email: input.email,
                     displayName: input.displayName ?? null,
                     tenantId: input.tenantId ?? null,
+                    isAdmin: isAdmin ? 1 : 0,
                     lastLoginAt: Date.now(),
                   },
                 })
@@ -154,7 +163,11 @@ export const layer = Layer.effect(
                 .run()
 
               // --- Auto-recharge: monthly allowance ---
-              const allowance = Number(process.env["OPENCODE_MONTHLY_ALLOWANCE"]) || 50000
+              // Priority: extensionAttrs.monthlyTokenAllowance → env var → default 50000
+              const allowance =
+                Number(input.extensionAttrs?.monthlyTokenAllowance) ||
+                Number(process.env["OPENCODE_MONTHLY_ALLOWANCE"]) ||
+                50000
               const currentMonth = getCurrentUTCMonth()
               const balanceRow = yield* tx
                 .select({ lastAllowanceMonth: TokenBalanceTable.lastAllowanceMonth })

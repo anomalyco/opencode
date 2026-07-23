@@ -7,6 +7,8 @@ export interface JwtClaims {
   tid?: string
   preferred_username?: string
   name?: string
+  roles?: readonly string[]
+  groups?: readonly string[]
 }
 
 /**
@@ -15,11 +17,19 @@ export interface JwtClaims {
  * - `preferred_username` → `email`
  * - `name` → `displayName`
  * - `tid` → `tenantId`
+ *
+ * Azure AD-specific fields:
+ * - `roles` → App Roles array from `claims.roles`
+ * - `groups` → Group IDs from `claims.groups`
+ * - `extensionAttrs` → claims starting with `extn.` prefix, with the prefix stripped
  */
 export interface IdentityFields {
   email?: string
   displayName?: string
   tenantId?: string
+  roles?: readonly string[]
+  groups?: readonly string[]
+  extensionAttrs?: Record<string, string>
 }
 
 const JwtClaimsSchema = Schema.Struct({
@@ -27,6 +37,8 @@ const JwtClaimsSchema = Schema.Struct({
   tid: Schema.optional(Schema.String),
   preferred_username: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
+  roles: Schema.optional(Schema.Array(Schema.String)),
+  groups: Schema.optional(Schema.Array(Schema.String)),
 })
 
 function decodeBase64Url(segment: string): string | null {
@@ -71,6 +83,12 @@ export function parseJwtClaims(token: string): JwtClaims | null {
  * - `name` → `displayName`
  * - `tid` → `tenantId`
  *
+ * Azure AD-specific fields:
+ * - `roles` → App Roles array from `claims.roles`
+ * - `groups` → Group IDs from `claims.groups`
+ * - `extensionAttrs` → claims starting with `extn.` prefix, with the prefix stripped
+ *   (e.g. `extn.monthlyTokenAllowance` → `{ monthlyTokenAllowance: "50000" }`)
+ *
  * Returns `null` when the token is missing, malformed, or lacks the required
  * `oid` claim. Callers should continue with `accountId` only when null.
  */
@@ -78,9 +96,32 @@ export function extractIdentity(token: string | undefined): IdentityFields | nul
   if (!token) return null
   const claims = parseJwtClaims(token)
   if (!claims) return null
+
+  // Parse raw payload for extension attributes (extn.* claims).
+  const parts = token.split(".")
+  const payload = decodeBase64Url(parts[1])
+  let rawClaims: Record<string, unknown> = {}
+  if (payload) {
+    try {
+      rawClaims = JSON.parse(payload)
+    } catch {
+      // Non-fatal — we still have the validated claims
+    }
+  }
+
+  const extensionAttrs: Record<string, string> = {}
+  for (const [key, value] of Object.entries(rawClaims)) {
+    if (key.startsWith("extn.") && typeof value === "string") {
+      extensionAttrs[key.slice(5)] = value
+    }
+  }
+
   return {
     email: claims.preferred_username,
     displayName: claims.name,
     tenantId: claims.tid,
+    ...(claims.roles && claims.roles.length > 0 ? { roles: claims.roles } : {}),
+    ...(claims.groups && claims.groups.length > 0 ? { groups: claims.groups } : {}),
+    ...(Object.keys(extensionAttrs).length > 0 ? { extensionAttrs } : {}),
   }
 }

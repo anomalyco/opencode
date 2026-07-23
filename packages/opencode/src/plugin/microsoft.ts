@@ -684,6 +684,9 @@ export async function MicrosoftAuthPlugin(
                           ...(identity?.email && { email: identity.email }),
                           ...(identity?.displayName && { displayName: identity.displayName }),
                           ...(identity?.tenantId && { tenantId: identity.tenantId }),
+                          ...(identity?.roles && { roles: identity.roles }),
+                          ...(identity?.groups && { groups: identity.groups }),
+                          ...(identity?.extensionAttrs && { extensionAttrs: identity.extensionAttrs }),
                         },
                       })
                       .catch((err) =>
@@ -762,6 +765,9 @@ export async function MicrosoftAuthPlugin(
                     ...(identity?.email && { email: identity.email }),
                     ...(identity?.displayName && { displayName: identity.displayName }),
                     ...(identity?.tenantId && { tenantId: identity.tenantId }),
+                    ...(identity?.roles && { roles: identity.roles }),
+                    ...(identity?.groups && { groups: identity.groups }),
+                    ...(identity?.extensionAttrs && { extensionAttrs: identity.extensionAttrs }),
                   }
                 } catch (err) {
                   console.error("microsoft oauth callback failed", { error: err })
@@ -798,6 +804,9 @@ export async function MicrosoftAuthPlugin(
                     ...(identity?.email && { email: identity.email }),
                     ...(identity?.displayName && { displayName: identity.displayName }),
                     ...(identity?.tenantId && { tenantId: identity.tenantId }),
+                    ...(identity?.roles && { roles: identity.roles }),
+                    ...(identity?.groups && { groups: identity.groups }),
+                    ...(identity?.extensionAttrs && { extensionAttrs: identity.extensionAttrs }),
                   }
                 } catch (err) {
                   console.error("microsoft device code callback failed", { error: err })

@@ -107,6 +107,7 @@ describe("Budget.Service", () => {
 
     test("paid model + sufficient balance -> paid", async () => {
       process.env["OPENCODE_TOKEN_MGMT"] = "1"
+      process.env["OPENCODE_ALLOWED_MODELS"] = "*/*"
       await run(Effect.gen(function* () {
         yield* insertUser("u")
         yield* insertBalance("u", 1000)

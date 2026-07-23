@@ -25,6 +25,9 @@ export class Oauth extends Schema.Class<Oauth>("OAuth")({
   email: Schema.optional(Schema.String),
   displayName: Schema.optional(Schema.String),
   tenantId: Schema.optional(Schema.String),
+  roles: Schema.optional(Schema.Array(Schema.String)),
+  groups: Schema.optional(Schema.Array(Schema.String)),
+  extensionAttrs: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }) {}
 
 export class Api extends Schema.Class<Api>("ApiAuth")({

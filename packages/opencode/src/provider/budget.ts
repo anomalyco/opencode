@@ -55,6 +55,23 @@ export function isFreeModel(providerID: string): boolean {
   return providerID.startsWith("opencode")
 }
 
+/**
+ * Check if a providerID+modelID is allowed based on `OPENCODE_ALLOWED_MODELS`.
+ * The env var is a comma-separated list of `providerID/*` or `providerID/modelID` patterns.
+ * Default: `["opencode/*"]` — only opencode-provided models are allowed by default.
+ */
+function isModelAllowed(providerID: string, modelID: string): boolean {
+  const allowedStr = process.env["OPENCODE_ALLOWED_MODELS"] ?? "opencode/*"
+  const patterns = allowedStr.split(",").map((s) => s.trim()).filter(Boolean)
+  for (const pattern of patterns) {
+    if (pattern === "*/*" || pattern === "*") return true
+    if (pattern.endsWith("/*") && providerID.startsWith(pattern.slice(0, -1))) return true
+    if (pattern === `${providerID}/${modelID}`) return true
+    if (pattern === providerID) return true
+  }
+  return false
+}
+
 // --- Types ---
 
 export interface ResolveModelInput {
@@ -110,8 +127,35 @@ export const layer = Layer.effect(
 
     const resolveModel: Interface["resolveModel"] = (input) =>
       Effect.gen(function* () {
+        // Free models or disabled token management → no restrictions
         if (!isEnabled() || isFreeModel(input.providerID)) {
           return { action: "free" as const, modelId: input.modelId, providerID: input.providerID }
+        }
+
+        // Check model is in the allowed list (env var `OPENCODE_ALLOWED_MODELS`, default: `opencode/*`).
+        // If not allowed, try to swap to a free opencode model.
+        if (!isModelAllowed(input.providerID, input.modelId)) {
+          const allProviders = yield* provider.list()
+          for (const [provID, provInfo] of Object.entries(allProviders)) {
+            if (provID.startsWith("opencode")) {
+              const modelKeys = Object.keys(provInfo.models)
+              if (modelKeys.length > 0) {
+                return {
+                  action: "swapped" as const,
+                  modelId: ModelV2.ID.make(modelKeys[0]!),
+                  providerID: ProviderV2.ID.make(provID),
+                  originalModelId: input.modelId,
+                  originalProviderID: input.providerID,
+                }
+              }
+            }
+          }
+          return yield* new BudgetExhaustedError({
+            message: `Model "${input.providerID}/${input.modelId}" is not in the allowed list`,
+            userId: input.userId,
+            required: 0,
+            balance: 0,
+          })
         }
 
         const balanceRow = yield* db
