@@ -61,6 +61,7 @@ export default {
           \`userId\` text PRIMARY KEY,
           \`balance\` integer DEFAULT 0 NOT NULL,
           \`lifetimeUsed\` integer DEFAULT 0 NOT NULL,
+          \`lastAllowanceMonth\` text DEFAULT '' NOT NULL,
           \`updatedAt\` integer NOT NULL,
           CONSTRAINT \`fk_token_balance_userId_user_identity_id_fk\` FOREIGN KEY (\`userId\`) REFERENCES \`user_identity\`(\`id\`) ON DELETE CASCADE
         );

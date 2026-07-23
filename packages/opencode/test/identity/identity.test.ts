@@ -93,17 +93,18 @@ describe("Identity.Service", () => {
     }),
   )
 
-  it.live("listUsersWithBalances returns users with zero balances after upsert", () =>
+  it.live("listUsersWithBalances returns users with allowance after upsert", () =>
     Effect.gen(function* () {
       const identity = yield* Identity.Service
       process.env["OPENCODE_TOKEN_MGMT"] = "1"
+      process.env["OPENCODE_MONTHLY_ALLOWANCE"] = "50000"
 
       yield* identity.upsertFromAuth({ id: "user-1", email: "alice@contoso.com" })
 
       const users = yield* identity.listUsersWithBalances()
       expect(users).toHaveLength(1)
       expect(users[0].id).toBe("user-1")
-      expect(users[0].balance).toBe(0)
+      expect(users[0].balance).toBe(50000) // Monthly allowance credited
       expect(users[0].lifetimeUsed).toBe(0)
       expect(users[0].isAdmin).toBe(true) // first user = admin
     }),
@@ -113,12 +114,13 @@ describe("Identity.Service", () => {
     Effect.gen(function* () {
       const identity = yield* Identity.Service
       process.env["OPENCODE_TOKEN_MGMT"] = "1"
+      process.env["OPENCODE_MONTHLY_ALLOWANCE"] = "50000"
 
       // First upsert the user so tables exist.
       yield* identity.upsertFromAuth({ id: "user-1", email: "alice@contoso.com" })
 
       const result = yield* identity.credit({ userId: "user-1", amount: 100, description: "test credit" })
-      expect(result.newBalance).toBe(100)
+      expect(result.newBalance).toBe(50100) // 50000 allowance + 100 credit
       expect(result.transactionId).toBeGreaterThan(0)
     }),
   )
@@ -131,6 +133,70 @@ describe("Identity.Service", () => {
       yield* identity.upsertFromAuth({ id: "user-1", email: "alice@contoso.com" })
       const user = yield* identity.getByID("user-1")
       expect(user).toBeNull()
+    }),
+  )
+})
+
+describe("Identity auto-recharge", () => {
+  it.live("credits monthly allowance on first upsertFromAuth call", () =>
+    Effect.gen(function* () {
+      const identity = yield* Identity.Service
+      process.env["OPENCODE_TOKEN_MGMT"] = "1"
+      process.env["OPENCODE_MONTHLY_ALLOWANCE"] = "50000"
+
+      yield* identity.upsertFromAuth({
+        id: "user-1",
+        email: "alice@contoso.com",
+      })
+
+      // Verify allowance via listUsersWithBalances
+      const users = yield* identity.listUsersWithBalances()
+      const user = users.find((u) => u.id === "user-1")
+      expect(user).not.toBeUndefined()
+      expect(user!.balance).toBe(50000)
+    }),
+  )
+
+  it.live("does NOT double-credit when upsertFromAuth called again same month", () =>
+    Effect.gen(function* () {
+      const identity = yield* Identity.Service
+      process.env["OPENCODE_TOKEN_MGMT"] = "1"
+      process.env["OPENCODE_MONTHLY_ALLOWANCE"] = "50000"
+
+      yield* identity.upsertFromAuth({ id: "user-1", email: "alice@contoso.com" })
+      yield* identity.upsertFromAuth({ id: "user-1", email: "alice@contoso.com" })
+
+      const users = yield* identity.listUsersWithBalances()
+      const user = users.find((u) => u.id === "user-1")
+      expect(user!.balance).toBe(50000) // Only one allowance
+    }),
+  )
+
+  it.live("credits allowance with custom OPENCODE_MONTHLY_ALLOWANCE", () =>
+    Effect.gen(function* () {
+      const identity = yield* Identity.Service
+      process.env["OPENCODE_TOKEN_MGMT"] = "1"
+      process.env["OPENCODE_MONTHLY_ALLOWANCE"] = "1000"
+
+      yield* identity.upsertFromAuth({ id: "user-2", email: "bob@contoso.com" })
+
+      const users = yield* identity.listUsersWithBalances()
+      const user = users.find((u) => u.id === "user-2")
+      expect(user!.balance).toBe(1000)
+    }),
+  )
+
+  it.live("does not credit allowance when OPENCODE_TOKEN_MGMT is unset", () =>
+    Effect.gen(function* () {
+      const identity = yield* Identity.Service
+      delete process.env["OPENCODE_TOKEN_MGMT"]
+
+      yield* identity.upsertFromAuth({ id: "user-3", email: "carol@contoso.com" })
+
+      const users = yield* identity.listUsersWithBalances()
+      const user = users.find((u) => u.id === "user-3")
+      // When gated, upsertFromAuth skips everything, so no user row exists.
+      expect(user).toBeUndefined()
     }),
   )
 })

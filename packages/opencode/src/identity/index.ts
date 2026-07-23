@@ -29,6 +29,21 @@ export interface UserWithBalance extends UserIdentity {
   lifetimeUsed: number
 }
 
+export interface AdminStats {
+  totalUsers: number
+  totalBalance: number
+  totalUsedThisMonth: number
+}
+
+export interface UsageStatsEntry {
+  date: string
+  userId: string
+  email: string
+  tokensUsed: number
+  costUsd: number
+  requestCount: number
+}
+
 // --- Interface ---
 
 export interface Interface {
@@ -47,6 +62,11 @@ export interface Interface {
     amount: number
     description: string
   }) => Effect.Effect<{ newBalance: number; transactionId: number }>
+  readonly stats: () => Effect.Effect<AdminStats>
+  readonly usageStats: (input: {
+    from: string
+    to: string
+  }) => Effect.Effect<UsageStatsEntry[]>
 }
 
 // --- Service ---
@@ -54,6 +74,14 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Identity") {}
 
 // --- helpers ---
+
+export function getCurrentUTCMonth(): string {
+  return new Date().toISOString().slice(0, 7)
+}
+
+export function monthAllowanceDue(currentMonth: string, lastMonth: string): boolean {
+  return lastMonth < currentMonth
+}
 
 function mapRow(row: typeof UserIdentityTable.$inferSelect): UserIdentity {
   return {
@@ -124,6 +152,38 @@ export const layer = Layer.effect(
                 })
                 .onConflictDoNothing()
                 .run()
+
+              // --- Auto-recharge: monthly allowance ---
+              const allowance = Number(process.env["OPENCODE_MONTHLY_ALLOWANCE"]) || 50000
+              const currentMonth = getCurrentUTCMonth()
+              const balanceRow = yield* tx
+                .select({ lastAllowanceMonth: TokenBalanceTable.lastAllowanceMonth })
+                .from(TokenBalanceTable)
+                .where(eq(TokenBalanceTable.userId, input.id))
+                .get()
+
+              if (balanceRow && monthAllowanceDue(currentMonth, balanceRow.lastAllowanceMonth)) {
+                yield* tx
+                  .update(TokenBalanceTable)
+                  .set({
+                    balance: sql`${TokenBalanceTable.balance} + ${allowance}`,
+                    lastAllowanceMonth: currentMonth,
+                    updatedAt: Date.now(),
+                  })
+                  .where(eq(TokenBalanceTable.userId, input.id))
+                  .run()
+
+                yield* tx
+                  .insert(TokenTransactionTable)
+                  .values({
+                    userId: input.id,
+                    amount: allowance,
+                    description: `Monthly allowance ${currentMonth}`,
+                    createdAt: Date.now(),
+                  })
+                  .run()
+              }
+              // --- end auto-recharge ---
             }),
           { behavior: "immediate" },
         )
@@ -276,6 +336,82 @@ export const layer = Layer.effect(
       )
     })
 
+    const stats = Effect.fn("Identity.stats")(function* () {
+      if (!isEnabled()) return { totalUsers: 0, totalBalance: 0, totalUsedThisMonth: 0 }
+
+      const now = new Date()
+      const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+
+      const [userCount, balanceSum, monthUsage] = yield* Effect.all(
+        [
+          db.select({ count: sql<number>`COUNT(*)` }).from(UserIdentityTable).get(),
+          db
+            .select({ sum: sql<number>`COALESCE(SUM(${TokenBalanceTable.balance}), 0)` })
+            .from(TokenBalanceTable)
+            .get(),
+          db
+            .select({ sum: sql<number>`COALESCE(SUM(ABS(${TokenTransactionTable.amount})), 0)` })
+            .from(TokenTransactionTable)
+            .where(
+              sql`${TokenTransactionTable.amount} < 0 AND ${TokenTransactionTable.createdAt} >= ${monthStart}`,
+            )
+            .get(),
+        ],
+        { concurrency: 3 },
+      ).pipe(Effect.catch(() => Effect.succeed([null, null, null] as const)))
+
+      return {
+        totalUsers: userCount?.count ?? 0,
+        totalBalance: balanceSum?.sum ?? 0,
+        totalUsedThisMonth: monthUsage?.sum ?? 0,
+      }
+    })
+
+    const usageStats = Effect.fn("Identity.usageStats")(function* (input: {
+      from: string
+      to: string
+    }) {
+      if (!isEnabled()) return []
+
+      const fromMs = new Date(input.from + "T00:00:00Z").getTime()
+      const toMs = new Date(input.to + "T23:59:59.999Z").getTime()
+
+      if (isNaN(fromMs) || isNaN(toMs)) return []
+
+      const rows = yield* db
+        .select({
+          date: sql<string>`date(${TokenTransactionTable.createdAt} / 1000, 'unixepoch')`,
+          userId: TokenTransactionTable.userId,
+          email: UserIdentityTable.email,
+          tokensUsed: sql<number>`COALESCE(SUM(ABS(${TokenTransactionTable.tokensUsed})), 0)`,
+          costUsd: sql<number>`COALESCE(SUM(ABS(${TokenTransactionTable.costUsd})), 0)`,
+          requestCount: sql<number>`COUNT(*)`,
+        })
+        .from(TokenTransactionTable)
+        .leftJoin(
+          UserIdentityTable,
+          eq(UserIdentityTable.id, TokenTransactionTable.userId),
+        )
+        .where(
+          sql`${TokenTransactionTable.amount} < 0
+            AND ${TokenTransactionTable.createdAt} >= ${fromMs}
+            AND ${TokenTransactionTable.createdAt} <= ${toMs}`,
+        )
+        .groupBy(sql`date(${TokenTransactionTable.createdAt} / 1000, 'unixepoch')`, TokenTransactionTable.userId)
+        .orderBy(sql`date(${TokenTransactionTable.createdAt} / 1000, 'unixepoch') DESC`, sql`tokensUsed DESC`)
+        .all()
+        .pipe(Effect.catch(() => Effect.succeed([])))
+
+      return rows.map((row) => ({
+        date: row.date,
+        userId: row.userId,
+        email: row.email ?? "",
+        tokensUsed: row.tokensUsed,
+        costUsd: row.costUsd,
+        requestCount: row.requestCount,
+      }))
+    })
+
     return Service.of({
       upsertFromAuth,
       getByID,
@@ -283,6 +419,8 @@ export const layer = Layer.effect(
       requireAdmin,
       listUsersWithBalances,
       credit,
+      stats,
+      usageStats,
     })
   }),
 )

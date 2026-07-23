@@ -1,0 +1,683 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - list:
+          - listitem [ref=e7]:
+            - link "Agenda" [ref=e8] [cursor=pointer]:
+              - /url: /work_time/index
+          - listitem [ref=e9]:
+            - link "Mi cuenta" [ref=e10] [cursor=pointer]:
+              - /url: /my/account
+          - listitem [ref=e11]:
+            - link "Terminar sesión" [ref=e12] [cursor=pointer]:
+              - /url: /logout
+      - generic [ref=e13]:
+        - text: Conectado como
+        - link "ifernandez" [ref=e14] [cursor=pointer]:
+          - /url: /users/471
+      - list:
+        - listitem [ref=e15]:
+          - link " Inicio" [ref=e16] [cursor=pointer]:
+            - /url: /
+        - listitem [ref=e17]:
+          - link " Mi página" [ref=e18] [cursor=pointer]:
+            - /url: /my/page
+        - listitem [ref=e19]:
+          - link " Proyectos" [ref=e20] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=e21]:
+          - link "" [ref=e22] [cursor=pointer]:
+            - /url: "#"
+            - text: 
+            - generic [ref=e23]: 
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - link "Búsqueda" [ref=e28] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/search
+            - text: ":"
+          - textbox "Búsqueda:" [ref=e29]
+        - generic [ref=e30]:
+          - generic [ref=e31] [cursor=pointer]: Service & Delivery 2026
+          - text: ✓
+      - heading "Service & Delivery 2026" [level=1] [ref=e32]
+      - generic [ref=e33]:
+        - list [ref=e34]:
+          - listitem [ref=e35]:
+            - link "+" [ref=e36] [cursor=pointer]:
+              - /url: "#"
+          - listitem [ref=e37]:
+            - link "Vistazo" [ref=e38] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026
+          - listitem [ref=e39]:
+            - link "Actividad" [ref=e40] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/activity
+          - listitem [ref=e41]:
+            - link "Peticiones" [ref=e42] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/issues
+          - listitem [ref=e43]:
+            - link "Tiempo dedicado" [ref=e44] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries
+          - listitem [ref=e45]:
+            - link "Archivos" [ref=e46] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/files
+          - listitem [ref=e47]:
+            - link "Configuración" [ref=e48] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/settings
+        - text:  
+    - generic [ref=e50]:
+      - generic [ref=e51]: ✔ Creación correcta.
+      - link " Tiempo dedicado" [ref=e53] [cursor=pointer]:
+        - /url: /projects/service-delivery-2026/time_entries/new
+      - heading "Tiempo dedicado" [level=2] [ref=e54]
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - group "Filtros" [ref=e58]:
+              - generic [ref=e59] [cursor=pointer]: Filtros
+              - generic:
+                - table [ref=e60]:
+                  - rowgroup [ref=e61]:
+                    - row "Fecha todos" [ref=e62]:
+                      - cell "Fecha" [ref=e63]:
+                        - checkbox "Fecha" [checked] [ref=e64] [cursor=pointer]: ✔
+                        - text: Fecha
+                      - cell "todos" [ref=e65]:
+                        - combobox [ref=e66]:
+                          - option "igual"
+                          - option ">="
+                          - option "<="
+                          - option "entre"
+                          - option "hace menos de"
+                          - option "hace más de"
+                          - option "en los anteriores"
+                          - option "hace"
+                          - option "hoy"
+                          - option "ayer"
+                          - option "esta semana"
+                          - option "última semana"
+                          - option "en las últimas 2 semanas"
+                          - option "este mes"
+                          - option "último mes"
+                          - option "este año"
+                          - option "ninguno"
+                          - option "todos" [selected]
+                      - cell [ref=e67]
+                - generic [ref=e68]:
+                  - text: Añadir el filtro
+                  - combobox "Añadir el filtro" [ref=e69]:
+                    - option [selected]
+                    - option "Petición"
+                    - option "Usuario"
+                    - option "Autor"
+                    - option "Actividad"
+                    - option "Comentario"
+                    - option "Horas"
+                    - option "Fecha" [disabled]
+                    - option "Tipo de la petición"
+                    - option "Estado de la petición"
+                    - option "Versión prevista de la petición"
+                    - option "Categoría de la petición"
+                    - option "Tiempo Estimado Real de la petición"
+                    - option "Evaluación de la petición"
+                    - option "Tags de la petición"
+                    - option "Fecha de inicio del proyecto"
+                    - option "Fecha de fin del proyecto"
+                    - option "Tipo de servicio del proyecto"
+                    - option "Tecnología del proyecto"
+                    - option "Tiempo Estimado Real del proyecto"
+                    - option "Responsable del proyecto"
+            - group "Opciones" [ref=e70]:
+              - generic [ref=e71] [cursor=pointer]: Opciones
+              - text: ✔
+          - paragraph [ref=e72]:
+            - link " Aceptar" [ref=e73] [cursor=pointer]:
+              - /url: "#"
+            - link " Anular" [ref=e74] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?set_filter=1&sort=
+            - link " Guardar" [ref=e75] [cursor=pointer]:
+              - /url: "#"
+        - list [ref=e77]:
+          - listitem [ref=e78]:
+            - link "Detalles" [ref=e79] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries
+          - listitem [ref=e80]:
+            - link "Informe" [ref=e81] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries/report
+      - paragraph [ref=e82]:
+        - generic [ref=e83]: "Horas: 4739:48"
+      - table [ref=e86]:
+        - rowgroup [ref=e87]:
+          - row "Seleccionar todo/No seleccionar nada Fecha Usuario Actividad Petición Comentario Horas" [ref=e88]:
+            - columnheader "Seleccionar todo/No seleccionar nada" [ref=e89]:
+              - checkbox "Seleccionar todo/No seleccionar nada" [ref=e90] [cursor=pointer]
+            - columnheader "Fecha" [ref=e91]:
+              - link "Fecha" [ref=e92] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?sort=spent_on
+            - columnheader "Usuario" [ref=e93]:
+              - link "Usuario" [ref=e94] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?sort=user%2Cspent_on%3Adesc
+            - columnheader "Actividad" [ref=e95]:
+              - link "Actividad" [ref=e96] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?sort=activity%2Cspent_on%3Adesc
+            - columnheader "Petición" [ref=e97]:
+              - link "Petición" [ref=e98] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?sort=issue%2Cspent_on%3Adesc
+            - columnheader "Comentario" [ref=e99]
+            - columnheader "Horas" [ref=e100]:
+              - link "Horas" [ref=e101] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?sort=hours%2Cspent_on%3Adesc
+            - columnheader [ref=e102]
+        - rowgroup [ref=e103]:
+          - 'row "16/07/2026 Laura Revel Gestión Task #15464: Gestión Interna Actividades de Gestión 2:30 Actions" [ref=e104]':
+            - cell [ref=e105]:
+              - checkbox [ref=e106] [cursor=pointer]
+            - cell "16/07/2026" [ref=e107]
+            - cell "Laura Revel" [ref=e108]:
+              - link "Laura Revel" [ref=e109] [cursor=pointer]:
+                - /url: /users/363
+            - cell "Gestión" [ref=e110]
+            - 'cell "Task #15464: Gestión Interna" [ref=e111]':
+              - 'link "Task #15464" [ref=e112] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Actividades de Gestión" [ref=e113]
+            - cell "2:30" [ref=e114]
+            - cell "Actions" [ref=e115]:
+              - link "Actions" [ref=e116] [cursor=pointer]:
+                - /url: "#"
+          - 'row "15/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Pasaje a PROD sitio web Ingles + Daily 8:00 Actions" [ref=e117]':
+            - cell [ref=e118]:
+              - checkbox [ref=e119] [cursor=pointer]
+            - cell "15/07/2026" [ref=e120]
+            - cell "Kevin Wastavino" [ref=e121]:
+              - link "Kevin Wastavino" [ref=e122] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e123]
+            - 'cell "Task #15464: Gestión Interna" [ref=e124]':
+              - 'link "Task #15464" [ref=e125] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Pasaje a PROD sitio web Ingles + Daily" [ref=e126]
+            - cell "8:00" [ref=e127]
+            - cell "Actions" [ref=e128]:
+              - link "Actions" [ref=e129] [cursor=pointer]:
+                - /url: "#"
+          - 'row "15/07/2026 R Descalzi Gestión Task #15464: Gestión Interna Tareas internas relacionadas con el rol: revisión de emails, revisión de srs y tickets 0:30 Actions" [ref=e130]':
+            - cell [ref=e131]:
+              - checkbox [ref=e132] [cursor=pointer]
+            - cell "15/07/2026" [ref=e133]
+            - cell "R Descalzi" [ref=e134]:
+              - link "R Descalzi" [ref=e135] [cursor=pointer]:
+                - /url: /users/241
+            - cell "Gestión" [ref=e136]
+            - 'cell "Task #15464: Gestión Interna" [ref=e137]':
+              - 'link "Task #15464" [ref=e138] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Tareas internas relacionadas con el rol: revisión de emails, revisión de srs y tickets" [ref=e139]'
+            - cell "0:30" [ref=e140]
+            - cell "Actions" [ref=e141]:
+              - link "Actions" [ref=e142] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Karen Villarreal Desarrollo Task #15459: Capacitaciones Documentación Issue 16436 Arcor 2:00 Actions" [ref=e143]':
+            - cell [ref=e144]:
+              - checkbox [ref=e145] [cursor=pointer]
+            - cell "14/07/2026" [ref=e146]
+            - cell "Karen Villarreal" [ref=e147]:
+              - link "Karen Villarreal" [ref=e148] [cursor=pointer]:
+                - /url: /users/206
+            - cell "Desarrollo" [ref=e149]
+            - 'cell "Task #15459: Capacitaciones" [ref=e150]':
+              - 'link "Task #15459" [ref=e151] [cursor=pointer]':
+                - /url: /issues/15459
+              - text: ": Capacitaciones"
+            - cell "Documentación Issue 16436 Arcor" [ref=e152]
+            - cell "2:00" [ref=e153]
+            - cell "Actions" [ref=e154]:
+              - link "Actions" [ref=e155] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Karen Villarreal Desarrollo Task #15459: Capacitaciones Informe funcional REBA 6:00 Actions" [ref=e156]':
+            - cell [ref=e157]:
+              - checkbox [ref=e158] [cursor=pointer]
+            - cell "14/07/2026" [ref=e159]
+            - cell "Karen Villarreal" [ref=e160]:
+              - link "Karen Villarreal" [ref=e161] [cursor=pointer]:
+                - /url: /users/206
+            - cell "Desarrollo" [ref=e162]
+            - 'cell "Task #15459: Capacitaciones" [ref=e163]':
+              - 'link "Task #15459" [ref=e164] [cursor=pointer]':
+                - /url: /issues/15459
+              - text: ": Capacitaciones"
+            - cell "Informe funcional REBA" [ref=e165]
+            - cell "6:00" [ref=e166]
+            - cell "Actions" [ref=e167]:
+              - link "Actions" [ref=e168] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Stefania Sanchiz Reunion Task #15464: Gestión Interna REBA - Reunión de Equipo 2:00 Actions" [ref=e169]':
+            - cell [ref=e170]:
+              - checkbox [ref=e171] [cursor=pointer]
+            - cell "14/07/2026" [ref=e172]
+            - cell "Stefania Sanchiz" [ref=e173]:
+              - link "Stefania Sanchiz" [ref=e174] [cursor=pointer]:
+                - /url: /users/70
+            - cell "Reunion" [ref=e175]
+            - 'cell "Task #15464: Gestión Interna" [ref=e176]':
+              - 'link "Task #15464" [ref=e177] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "REBA - Reunión de Equipo" [ref=e178]
+            - cell "2:00" [ref=e179]
+            - cell "Actions" [ref=e180]:
+              - link "Actions" [ref=e181] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Stefania Sanchiz Desarrollo Task #15464: Gestión Interna REBA - Migración RN-Fusion: Documento Funcional - Definición de Perfiles 4:30 Actions" [ref=e182]':
+            - cell [ref=e183]:
+              - checkbox [ref=e184] [cursor=pointer]
+            - cell "14/07/2026" [ref=e185]
+            - cell "Stefania Sanchiz" [ref=e186]:
+              - link "Stefania Sanchiz" [ref=e187] [cursor=pointer]:
+                - /url: /users/70
+            - cell "Desarrollo" [ref=e188]
+            - 'cell "Task #15464: Gestión Interna" [ref=e189]':
+              - 'link "Task #15464" [ref=e190] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "REBA - Migración RN-Fusion: Documento Funcional - Definición de Perfiles" [ref=e191]'
+            - cell "4:30" [ref=e192]
+            - cell "Actions" [ref=e193]:
+              - link "Actions" [ref=e194] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Andres Suarez Desarrollo Task #15464: Gestión Interna Disponible para asignación 8:00 Actions" [ref=e195]':
+            - cell [ref=e196]:
+              - checkbox [ref=e197] [cursor=pointer]
+            - cell "14/07/2026" [ref=e198]
+            - cell "Andres Suarez" [ref=e199]:
+              - link "Andres Suarez" [ref=e200] [cursor=pointer]:
+                - /url: /users/425
+            - cell "Desarrollo" [ref=e201]
+            - 'cell "Task #15464: Gestión Interna" [ref=e202]':
+              - 'link "Task #15464" [ref=e203] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Disponible para asignación" [ref=e204]
+            - cell "8:00" [ref=e205]
+            - cell "Actions" [ref=e206]:
+              - link "Actions" [ref=e207] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Optimización base de sitio web PROD para recepción cambios QA 2:00 Actions" [ref=e208]':
+            - cell [ref=e209]:
+              - checkbox [ref=e210] [cursor=pointer]
+            - cell "14/07/2026" [ref=e211]
+            - cell "Kevin Wastavino" [ref=e212]:
+              - link "Kevin Wastavino" [ref=e213] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e214]
+            - 'cell "Task #15464: Gestión Interna" [ref=e215]':
+              - 'link "Task #15464" [ref=e216] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Optimización base de sitio web PROD para recepción cambios QA" [ref=e217]
+            - cell "2:00" [ref=e218]
+            - cell "Actions" [ref=e219]:
+              - link "Actions" [ref=e220] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Daily Marketing 0:40 Actions" [ref=e221]':
+            - cell [ref=e222]:
+              - checkbox [ref=e223] [cursor=pointer]
+            - cell "14/07/2026" [ref=e224]
+            - cell "Kevin Wastavino" [ref=e225]:
+              - link "Kevin Wastavino" [ref=e226] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e227]
+            - 'cell "Task #15464: Gestión Interna" [ref=e228]':
+              - 'link "Task #15464" [ref=e229] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Daily Marketing" [ref=e230]
+            - cell "0:40" [ref=e231]
+            - cell "Actions" [ref=e232]:
+              - link "Actions" [ref=e233] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Laura Revel Gestión Task #15464: Gestión Interna Actividades de Gestión 2:30 Actions" [ref=e234]':
+            - cell [ref=e235]:
+              - checkbox [ref=e236] [cursor=pointer]
+            - cell "14/07/2026" [ref=e237]
+            - cell "Laura Revel" [ref=e238]:
+              - link "Laura Revel" [ref=e239] [cursor=pointer]:
+                - /url: /users/363
+            - cell "Gestión" [ref=e240]
+            - 'cell "Task #15464: Gestión Interna" [ref=e241]':
+              - 'link "Task #15464" [ref=e242] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Actividades de Gestión" [ref=e243]
+            - cell "2:30" [ref=e244]
+            - cell "Actions" [ref=e245]:
+              - link "Actions" [ref=e246] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Cecilia Colla Gestión Task #15464: Gestión Interna otras gestiones 3:00 Actions" [ref=e247]':
+            - cell [ref=e248]:
+              - checkbox [ref=e249] [cursor=pointer]
+            - cell "14/07/2026" [ref=e250]
+            - cell "Cecilia Colla" [ref=e251]:
+              - link "Cecilia Colla" [ref=e252] [cursor=pointer]:
+                - /url: /users/145
+            - cell "Gestión" [ref=e253]
+            - 'cell "Task #15464: Gestión Interna" [ref=e254]':
+              - 'link "Task #15464" [ref=e255] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "otras gestiones" [ref=e256]
+            - cell "3:00" [ref=e257]
+            - cell "Actions" [ref=e258]:
+              - link "Actions" [ref=e259] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Cecilia Colla Gestión Task #15464: Gestión Interna stem/ blanqueo con sporte y generacion de tk 1:00 Actions" [ref=e260]':
+            - cell [ref=e261]:
+              - checkbox [ref=e262] [cursor=pointer]
+            - cell "14/07/2026" [ref=e263]
+            - cell "Cecilia Colla" [ref=e264]:
+              - link "Cecilia Colla" [ref=e265] [cursor=pointer]:
+                - /url: /users/145
+            - cell "Gestión" [ref=e266]
+            - 'cell "Task #15464: Gestión Interna" [ref=e267]':
+              - 'link "Task #15464" [ref=e268] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "stem/ blanqueo con sporte y generacion de tk" [ref=e269]
+            - cell "1:00" [ref=e270]
+            - cell "Actions" [ref=e271]:
+              - link "Actions" [ref=e272] [cursor=pointer]:
+                - /url: "#"
+          - 'row "14/07/2026 Cecilia Colla Gestión Task #15464: Gestión Interna Repaso y evaluación : Copilot: domina la IA en Microsoft 365 4:00 Actions" [ref=e273]':
+            - cell [ref=e274]:
+              - checkbox [ref=e275] [cursor=pointer]
+            - cell "14/07/2026" [ref=e276]
+            - cell "Cecilia Colla" [ref=e277]:
+              - link "Cecilia Colla" [ref=e278] [cursor=pointer]:
+                - /url: /users/145
+            - cell "Gestión" [ref=e279]
+            - 'cell "Task #15464: Gestión Interna" [ref=e280]':
+              - 'link "Task #15464" [ref=e281] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Repaso y evaluación : Copilot: domina la IA en Microsoft 365" [ref=e282]'
+            - cell "4:00" [ref=e283]
+            - cell "Actions" [ref=e284]:
+              - link "Actions" [ref=e285] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Desarrollo de instalador Windows one-click, renombrado de app desktop a oneinfo dev, backup automatico de Engram DB, y configuracion de linking del desktop app 8:00  Modificar  Borrar Actions" [ref=e286]':
+            - cell [ref=e287]:
+              - checkbox [ref=e288] [cursor=pointer]
+            - cell "13/07/2026" [ref=e289]
+            - cell "Iván José Fernández Michonovich" [ref=e290]:
+              - link "Iván José Fernández Michonovich" [ref=e291] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e292]
+            - 'cell "Task #15464: Gestión Interna" [ref=e293]':
+              - 'link "Task #15464" [ref=e294] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Desarrollo de instalador Windows one-click, renombrado de app desktop a oneinfo dev, backup automatico de Engram DB, y configuracion de linking del desktop app" [ref=e295]
+            - cell "8:00" [ref=e296]
+            - cell " Modificar  Borrar Actions" [ref=e297]:
+              - link " Modificar" [ref=e298] [cursor=pointer]:
+                - /url: /time_entries/103267/edit
+              - link " Borrar" [ref=e299] [cursor=pointer]:
+                - /url: /time_entries/103267
+              - link "Actions" [ref=e300] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Karen Villarreal Desarrollo Task #15459: Capacitaciones Documentación Issue 16436 Arcor 8:00 Actions" [ref=e301]':
+            - cell [ref=e302]:
+              - checkbox [ref=e303] [cursor=pointer]
+            - cell "13/07/2026" [ref=e304]
+            - cell "Karen Villarreal" [ref=e305]:
+              - link "Karen Villarreal" [ref=e306] [cursor=pointer]:
+                - /url: /users/206
+            - cell "Desarrollo" [ref=e307]
+            - 'cell "Task #15459: Capacitaciones" [ref=e308]':
+              - 'link "Task #15459" [ref=e309] [cursor=pointer]':
+                - /url: /issues/15459
+              - text: ": Capacitaciones"
+            - cell "Documentación Issue 16436 Arcor" [ref=e310]
+            - cell "8:00" [ref=e311]
+            - cell "Actions" [ref=e312]:
+              - link "Actions" [ref=e313] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Stefania Sanchiz Desarrollo Task #15464: Gestión Interna REBA - Migración RN-Fusion: Documento Funcional - Definición de Perfiles 7:30 Actions" [ref=e314]':
+            - cell [ref=e315]:
+              - checkbox [ref=e316] [cursor=pointer]
+            - cell "13/07/2026" [ref=e317]
+            - cell "Stefania Sanchiz" [ref=e318]:
+              - link "Stefania Sanchiz" [ref=e319] [cursor=pointer]:
+                - /url: /users/70
+            - cell "Desarrollo" [ref=e320]
+            - 'cell "Task #15464: Gestión Interna" [ref=e321]':
+              - 'link "Task #15464" [ref=e322] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "REBA - Migración RN-Fusion: Documento Funcional - Definición de Perfiles" [ref=e323]'
+            - cell "7:30" [ref=e324]
+            - cell "Actions" [ref=e325]:
+              - link "Actions" [ref=e326] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Cecilia Colla Gestión Task #15464: Gestión Interna Capacitacion : Copilot: domina la IA en Microsoft 365 8:00 Actions" [ref=e327]':
+            - cell [ref=e328]:
+              - checkbox [ref=e329] [cursor=pointer]
+            - cell "13/07/2026" [ref=e330]
+            - cell "Cecilia Colla" [ref=e331]:
+              - link "Cecilia Colla" [ref=e332] [cursor=pointer]:
+                - /url: /users/145
+            - cell "Gestión" [ref=e333]
+            - 'cell "Task #15464: Gestión Interna" [ref=e334]':
+              - 'link "Task #15464" [ref=e335] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Capacitacion : Copilot: domina la IA en Microsoft 365" [ref=e336]'
+            - cell "8:00" [ref=e337]
+            - cell "Actions" [ref=e338]:
+              - link "Actions" [ref=e339] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Ajustes parte 2 - Sitio web QA Ingles 3:15 Actions" [ref=e340]':
+            - cell [ref=e341]:
+              - checkbox [ref=e342] [cursor=pointer]
+            - cell "13/07/2026" [ref=e343]
+            - cell "Kevin Wastavino" [ref=e344]:
+              - link "Kevin Wastavino" [ref=e345] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e346]
+            - 'cell "Task #15464: Gestión Interna" [ref=e347]':
+              - 'link "Task #15464" [ref=e348] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Ajustes parte 2 - Sitio web QA Ingles" [ref=e349]
+            - cell "3:15" [ref=e350]
+            - cell "Actions" [ref=e351]:
+              - link "Actions" [ref=e352] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Reunión con Claudio + Cambios en marcas de tareas para conciliación de horas UA 1:05 Actions" [ref=e353]':
+            - cell [ref=e354]:
+              - checkbox [ref=e355] [cursor=pointer]
+            - cell "13/07/2026" [ref=e356]
+            - cell "Kevin Wastavino" [ref=e357]:
+              - link "Kevin Wastavino" [ref=e358] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e359]
+            - 'cell "Task #15464: Gestión Interna" [ref=e360]':
+              - 'link "Task #15464" [ref=e361] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Reunión con Claudio + Cambios en marcas de tareas para conciliación de horas UA" [ref=e362]
+            - cell "1:05" [ref=e363]
+            - cell "Actions" [ref=e364]:
+              - link "Actions" [ref=e365] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Reunión de revisión de temas con Rosario Descalzi 1:10 Actions" [ref=e366]':
+            - cell [ref=e367]:
+              - checkbox [ref=e368] [cursor=pointer]
+            - cell "13/07/2026" [ref=e369]
+            - cell "Kevin Wastavino" [ref=e370]:
+              - link "Kevin Wastavino" [ref=e371] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e372]
+            - 'cell "Task #15464: Gestión Interna" [ref=e373]':
+              - 'link "Task #15464" [ref=e374] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Reunión de revisión de temas con Rosario Descalzi" [ref=e375]
+            - cell "1:10" [ref=e376]
+            - cell "Actions" [ref=e377]:
+              - link "Actions" [ref=e378] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 R Descalzi Reunion Task #15464: Gestión Interna Reunión interna Marketing Cloud - con Kevin. 1:10 Actions" [ref=e379]':
+            - cell [ref=e380]:
+              - checkbox [ref=e381] [cursor=pointer]
+            - cell "13/07/2026" [ref=e382]
+            - cell "R Descalzi" [ref=e383]:
+              - link "R Descalzi" [ref=e384] [cursor=pointer]:
+                - /url: /users/241
+            - cell "Reunion" [ref=e385]
+            - 'cell "Task #15464: Gestión Interna" [ref=e386]':
+              - 'link "Task #15464" [ref=e387] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Reunión interna Marketing Cloud - con Kevin." [ref=e388]
+            - cell "1:10" [ref=e389]
+            - cell "Actions" [ref=e390]:
+              - link "Actions" [ref=e391] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Andres Suarez Desarrollo Task #15464: Gestión Interna Disponible para asignación 8:00 Actions" [ref=e392]':
+            - cell [ref=e393]:
+              - checkbox [ref=e394] [cursor=pointer]
+            - cell "13/07/2026" [ref=e395]
+            - cell "Andres Suarez" [ref=e396]:
+              - link "Andres Suarez" [ref=e397] [cursor=pointer]:
+                - /url: /users/425
+            - cell "Desarrollo" [ref=e398]
+            - 'cell "Task #15464: Gestión Interna" [ref=e399]':
+              - 'link "Task #15464" [ref=e400] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Disponible para asignación" [ref=e401]
+            - cell "8:00" [ref=e402]
+            - cell "Actions" [ref=e403]:
+              - link "Actions" [ref=e404] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Análisis de diferencia horaria con reporte de Claudio para gestión de tratamiento de horas especiales UIniversal Assistance. 0:30 Actions" [ref=e405]':
+            - cell [ref=e406]:
+              - checkbox [ref=e407] [cursor=pointer]
+            - cell "13/07/2026" [ref=e408]
+            - cell "Kevin Wastavino" [ref=e409]:
+              - link "Kevin Wastavino" [ref=e410] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e411]
+            - 'cell "Task #15464: Gestión Interna" [ref=e412]':
+              - 'link "Task #15464" [ref=e413] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Análisis de diferencia horaria con reporte de Claudio para gestión de tratamiento de horas especiales UIniversal Assistance." [ref=e414]
+            - cell "0:30" [ref=e415]
+            - cell "Actions" [ref=e416]:
+              - link "Actions" [ref=e417] [cursor=pointer]:
+                - /url: "#"
+          - 'row "13/07/2026 Kevin Wastavino Gestión Task #15464: Gestión Interna Daily extendida post licencia + respuesta a solicitud de Daniel P. por carga de horas 2:00 Actions" [ref=e418]':
+            - cell [ref=e419]:
+              - checkbox [ref=e420] [cursor=pointer]
+            - cell "13/07/2026" [ref=e421]
+            - cell "Kevin Wastavino" [ref=e422]:
+              - link "Kevin Wastavino" [ref=e423] [cursor=pointer]:
+                - /url: /users/69
+            - cell "Gestión" [ref=e424]
+            - 'cell "Task #15464: Gestión Interna" [ref=e425]':
+              - 'link "Task #15464" [ref=e426] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Daily extendida post licencia + respuesta a solicitud de Daniel P. por carga de horas" [ref=e427]
+            - cell "2:00" [ref=e428]
+            - cell "Actions" [ref=e429]:
+              - link "Actions" [ref=e430] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e431]:
+        - list [ref=e432]:
+          - listitem [ref=e433]: « Anterior
+          - listitem [ref=e434]: "1"
+          - listitem [ref=e435]:
+            - link "2" [ref=e436] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?page=2
+          - listitem [ref=e437]:
+            - link "3" [ref=e438] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?page=3
+          - listitem [ref=e439]: …
+          - listitem [ref=e440]:
+            - link "81" [ref=e441] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?page=81
+          - listitem [ref=e442]:
+            - link "Siguiente »" [ref=e443] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?page=2
+        - generic [ref=e444]:
+          - text: (1-25/2006)
+          - generic [ref=e445]:
+            - text: "Por página: 25,"
+            - link "50" [ref=e446] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?per_page=50
+            - text: ","
+            - link "100" [ref=e447] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?per_page=100
+      - paragraph [ref=e448]:
+        - text: "Exportar a:"
+        - link "Atom" [ref=e450] [cursor=pointer]:
+          - /url: /projects/service-delivery-2026/time_entries.atom?key=bc986bd28db4cb3222c65bbe746fc225833a8697
+        - generic [ref=e451]:
+          - text: "|"
+          - link "CSV" [ref=e452] [cursor=pointer]:
+            - /url: /projects/service-delivery-2026/time_entries.csv
+      - link "Volver al inicio" [ref=e453] [cursor=pointer]:
+        - /url: "#gototop"
+    - generic [ref=e454]:
+      - text: Powered by
+      - link "Bitnami Redmine Stack" [ref=e455] [cursor=pointer]:
+        - /url: https://bitnami.com/stack/redmine
+      - text: © 2006-2020 Jean-Philippe Lang
+  - log [ref=e456]
+  - log [ref=e457]
+  - log [ref=e458]
+  - log [ref=e459]
+  - log [ref=e460]
+  - log [ref=e461]
+  - log [ref=e462]
+  - log [ref=e463]
+  - log [ref=e464]
+  - log [ref=e465]
+  - log [ref=e466]
+  - log [ref=e467]
+  - log [ref=e468]
+  - log [ref=e469]
+  - log [ref=e470]
+  - log [ref=e471]
+  - log [ref=e472]
+  - log [ref=e473]
+  - log [ref=e474]
+  - log [ref=e475]
+  - log [ref=e476]
+  - log [ref=e477]
+  - log [ref=e478]
+  - log [ref=e479]
+  - log [ref=e480]
+  - log [ref=e481]
+  - log [ref=e482]
+  - log [ref=e483]
+  - log [ref=e484]
+  - log [ref=e485]
+  - log [ref=e486]
+  - log [ref=e487]
+  - log [ref=e488]
+  - log [ref=e489]
+  - log [ref=e490]
+  - log [ref=e491]
+  - log [ref=e492]
+  - log [ref=e493]
+  - log [ref=e494]
+  - log [ref=e495]

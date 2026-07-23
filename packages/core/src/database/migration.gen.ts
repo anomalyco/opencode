@@ -41,5 +41,6 @@ export const migrations = (
     import("./migration/20260622170816_reset_v2_session_state"),
     import("./migration/20260622202450_simplify_session_input"),
     import("./migration/20260702195223_jittery_micromacro"),
+    import("./migration/20260723120000_add_last_allowance_month"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

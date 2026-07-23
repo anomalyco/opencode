@@ -61,6 +61,7 @@ export const TokenBalanceTable = sqliteTable("token_balance", {
     .references(() => UserIdentityTable.id, { onDelete: "cascade" }),
   balance: integer().notNull().default(0),
   lifetimeUsed: integer().notNull().default(0),
+  lastAllowanceMonth: text().$default(() => ""),
   updatedAt: integer().notNull().$default(() => Date.now()),
 })
 

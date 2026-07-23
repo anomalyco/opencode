@@ -11,6 +11,28 @@ import { Provider } from "@/provider/provider"
 
 const isEnabled = (): boolean => process.env["OPENCODE_TOKEN_MGMT"] !== undefined
 
+// --- Warning ---
+
+export interface BudgetWarning {
+  readonly remaining: number
+  readonly threshold: number
+  readonly message: string
+}
+
+/**
+ * Module-level warning state, set by deduct() and read by the processor.
+ * Safe because all calls within a single Effect fiber are sequential.
+ */
+let _warning: BudgetWarning | null = null
+
+export function getWarning(): BudgetWarning | null {
+  return _warning
+}
+
+export function setWarning(warning: BudgetWarning | null): void {
+  _warning = warning
+}
+
 // --- Errors ---
 
 export class BudgetExhaustedError extends Schema.TaggedErrorClass<BudgetExhaustedError>()(
@@ -156,7 +178,7 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         if (!isEnabled() || isFreeModel(input.providerID)) return
 
-        yield* db
+        const warning = yield* db
           .transaction(
             (tx) =>
               Effect.gen(function* () {
@@ -182,10 +204,35 @@ export const layer = Layer.effect(
                     createdAt: Date.now(),
                   })
                   .run()
+
+                // Read new balance after update.
+                const updated = yield* tx
+                  .select({ balance: TokenBalanceTable.balance })
+                  .from(TokenBalanceTable)
+                  .where(eq(TokenBalanceTable.userId, input.userId))
+                  .get()
+
+                return updated?.balance ?? 0
               }),
             { behavior: "immediate" },
           )
-          .pipe(Effect.catch(() => Effect.void))
+          .pipe(Effect.catch(() => Effect.succeed(0)))
+
+        // --- Low-balance warning ---
+        if (warning > 0) {
+          const monthlyAllowance = Number(process.env["OPENCODE_MONTHLY_ALLOWANCE"]) || 50000
+          const threshold =
+            Number(process.env["OPENCODE_LOW_BALANCE_THRESHOLD"]) || Math.max(5000, monthlyAllowance * 0.2)
+
+          if (warning < threshold) {
+            setWarning({
+              remaining: warning,
+              threshold,
+              message: `Low balance: ~${warning.toLocaleString()} tokens remaining. Contact admin for top-up.`,
+            })
+          }
+        }
+        // --- end low-balance warning ---
       })
 
     const credit: Interface["credit"] = (input) =>

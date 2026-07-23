@@ -47,6 +47,40 @@ export const adminHandlers = HttpApiBuilder.group(AdminApi, "admin", (handlers) 
       }
     })
 
-    return handlers.handle("listUsers", listUsers).handle("credit", credit)
+    const stats = Effect.fn("AdminHttpApi.stats")(function* () {
+      yield* identity.requireAdmin().pipe(
+        Effect.catch(() => Effect.fail(new HttpApiError.Unauthorized({}))),
+      )
+
+      return yield* identity.stats()
+    })
+
+    const usageStats = Effect.fn("AdminHttpApi.usageStats")(function* (ctx: {
+      query: { from?: string; to?: string }
+    }) {
+      yield* identity.requireAdmin().pipe(
+        Effect.catch(() => Effect.fail(new HttpApiError.Unauthorized({}))),
+      )
+
+      const from = ctx.query.from
+      const to = ctx.query.to
+
+      if (!from || !to) {
+        return yield* Effect.fail(new AdminBadRequestError({ message: "Both 'from' and 'to' query parameters are required (YYYY-MM-DD)" }))
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        return yield* Effect.fail(new AdminBadRequestError({ message: "Date format must be YYYY-MM-DD" }))
+      }
+
+      const entries = yield* identity.usageStats({ from, to })
+      return { usage: entries }
+    })
+
+    return handlers
+      .handle("listUsers", listUsers)
+      .handle("credit", credit)
+      .handle("stats", stats)
+      .handle("usageStats", usageStats)
   }),
 )

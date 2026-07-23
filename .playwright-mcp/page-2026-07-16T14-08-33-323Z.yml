@@ -1,0 +1,46 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - list:
+        - listitem [ref=e7]:
+          - link "Iniciar sesión" [ref=e8] [cursor=pointer]:
+            - /url: /login
+        - listitem [ref=e9]:
+          - link "Registrar" [ref=e10] [cursor=pointer]:
+            - /url: /account/register
+    - list:
+      - listitem [ref=e11]:
+        - link " Inicio" [ref=e12] [cursor=pointer]:
+          - /url: /
+      - listitem [ref=e13]:
+        - link " Proyectos" [ref=e14] [cursor=pointer]:
+          - /url: /projects
+      - listitem [ref=e15]:
+        - link "" [ref=e16] [cursor=pointer]:
+          - /url: https://www.redmine.org/guide
+          - text: 
+          - generic [ref=e17]: 
+  - generic [ref=e18]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - link "Búsqueda" [ref=e22] [cursor=pointer]:
+            - /url: /search
+          - text: ":"
+        - textbox "Búsqueda:" [ref=e23]
+      - generic [ref=e25] [cursor=pointer]: Ir al proyecto...
+    - heading "OneAdmin" [level=1] [ref=e26]
+  - generic [ref=e30]:
+    - generic [ref=e31]: Identificador
+    - textbox "Identificador" [active] [ref=e32]
+    - generic [ref=e33]:
+      - text: Contraseña
+      - link "¿Olvidaste la contraseña?" [ref=e34] [cursor=pointer]:
+        - /url: /account/lost_password
+    - textbox "Contraseña ¿Olvidaste la contraseña?" [ref=e35]
+    - button "Acceder" [ref=e36] [cursor=pointer]
+  - generic [ref=e37]:
+    - text: Powered by
+    - link "Bitnami Redmine Stack" [ref=e38] [cursor=pointer]:
+      - /url: https://bitnami.com/stack/redmine
+    - text: © 2006-2020 Jean-Philippe Lang

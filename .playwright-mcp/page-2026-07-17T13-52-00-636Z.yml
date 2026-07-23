@@ -1,0 +1,9 @@
+- generic [active] [ref=e1]:
+  - heading "Internal error" [level=1] [ref=e2]
+  - paragraph [ref=e3]:
+    - text: An error occurred on the page you were trying to access.
+    - text: If you continue to experience problems please contact your Redmine administrator for assistance.
+  - paragraph [ref=e4]: If you are the Redmine administrator, check your log files for details about the error.
+  - paragraph [ref=e5]:
+    - link "Back" [ref=e6] [cursor=pointer]:
+      - /url: javascript:history.back()

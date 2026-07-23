@@ -1,0 +1,23 @@
+[    1258ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[    1454ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://oneadmin.oneinfoconsulting.com/login?back_url=https%3A%2F%2Foneadmin.oneinfoconsulting.com%2Fprojects%2Fservice-delivery-2026%2Ftime_entries%3Fset_filter%3D1%26sort%3Dspent_on%3Adesc%26f%5B%5D%3Dspent_on%26op%5Bspent_on%5D%3D%2A%26f%5B%5D%3Duser_id%26op%5Buser_id%5D%3D%3D%26v%5Buser_id%5D%5B%5D%3Dme%26f%5B%5D%3D%26c%5B%5D%3Dspent_on%26c%5B%5D%3Duser%26c%5B%5D%3Dactivity%26c%5B%5D%3Dissue%26c%5B%5D%3Dcomments%26c%5B%5D%3Dhours%26group_by%3D%26t%5B%5D%3Dhours%26t%5B%5D%3D:0
+[    1827ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0
+[  204521ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[  204568ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://oneadmin.oneinfoconsulting.com/login:0
+[  204568ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0
+[  645265ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[  645315ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://oneadmin.oneinfoconsulting.com/login:0
+[  645315ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0
+[  760617ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[  760644ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://oneadmin.oneinfoconsulting.com/login:0
+[  760650ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0
+[  792474ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[  792542ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://oneadmin.oneinfoconsulting.com/login:0
+[  792543ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0
+[  822140ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[  822186ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0
+[  822201ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://oneadmin.oneinfoconsulting.com/login:0
+[  824779ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[  824804ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://oneadmin.oneinfoconsulting.com/login:0
+[  824809ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0
+[ 1264047ms] [LOG] JQMIGRATE: Migrate is installed, version 1.4.1 @ https://oneadmin.oneinfoconsulting.com/javascripts/jquery-2.2.4-ui-1.11.0-ujs-5.2.3.js?1586192448:6
+[ 1264157ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://oneadmin.oneinfoconsulting.com/themes/bs-redmine-theme-dark/images/sort_desc.png:0

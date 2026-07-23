@@ -1,0 +1,103 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - list:
+          - listitem [ref=e7]:
+            - link "Agenda" [ref=e8] [cursor=pointer]:
+              - /url: /work_time/index
+          - listitem [ref=e9]:
+            - link "Mi cuenta" [ref=e10] [cursor=pointer]:
+              - /url: /my/account
+          - listitem [ref=e11]:
+            - link "Terminar sesión" [ref=e12] [cursor=pointer]:
+              - /url: /logout
+      - generic [ref=e13]:
+        - text: Conectado como
+        - link "ifernandez" [ref=e14] [cursor=pointer]:
+          - /url: /users/471
+      - list:
+        - listitem [ref=e15]:
+          - link " Inicio" [ref=e16] [cursor=pointer]:
+            - /url: /
+        - listitem [ref=e17]:
+          - link " Mi página" [ref=e18] [cursor=pointer]:
+            - /url: /my/page
+        - listitem [ref=e19]:
+          - link " Proyectos" [ref=e20] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=e21]:
+          - link "" [ref=e22] [cursor=pointer]:
+            - /url: "#"
+            - text: 
+            - generic [ref=e23]: 
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - link "Búsqueda" [ref=e28] [cursor=pointer]:
+              - /url: /search
+            - text: ":"
+          - textbox "Búsqueda:" [ref=e29]
+        - generic [ref=e31] [cursor=pointer]: Ir al proyecto...
+      - heading "OneAdmin" [level=1] [ref=e32]
+    - generic [ref=e34]:
+      - generic [ref=e36]:
+        - text: "Añadir:"
+        - combobox "Añadir" [ref=e37]:
+          - option [selected]
+          - option "Peticiones que me están asignadas" [disabled]
+          - option "Peticiones registradas por mí" [disabled]
+          - option "Updated issues"
+          - option "Peticiones monitorizadas"
+          - option "Peticiones"
+          - option "Últimas noticias"
+          - option "Calendario"
+          - option "Documentos"
+          - option "Tiempo dedicado"
+          - option "Actividad"
+      - heading "Mi página" [level=2] [ref=e38]
+      - generic [ref=e39]:
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - generic "Mover" [ref=e44]: 
+            - link " Borrar" [ref=e45] [cursor=pointer]:
+              - /url: /my/remove_block?block=issuesassignedtome
+          - link " Opciones" [ref=e47] [cursor=pointer]:
+            - /url: "#"
+          - heading "Peticiones que me están asignadas (0)" [level=3] [ref=e48]:
+            - link "Peticiones que me están asignadas" [ref=e49] [cursor=pointer]:
+              - /url: /issues?c%5B%5D=project&c%5B%5D=tracker&c%5B%5D=status&c%5B%5D=subject&f%5B%5D=status_id&f%5B%5D=assigned_to_id&f%5B%5D=project.status&op%5Bassigned_to_id%5D=%3D&op%5Bproject.status%5D=%3D&op%5Bstatus_id%5D=o&set_filter=1&sort=priority%3Adesc%2Cupdated_on%3Adesc&v%5Bassigned_to_id%5D%5B%5D=me&v%5Bproject.status%5D%5B%5D=1&v%5Bstatus_id%5D%5B%5D=
+            - text: (0)
+          - paragraph [ref=e50]: Ningún dato disponible
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic "Mover" [ref=e54]: 
+            - link " Borrar" [ref=e55] [cursor=pointer]:
+              - /url: /my/remove_block?block=issuesreportedbyme
+          - link " Opciones" [ref=e57] [cursor=pointer]:
+            - /url: "#"
+          - heading "Peticiones registradas por mí (0)" [level=3] [ref=e58]:
+            - link "Peticiones registradas por mí" [ref=e59] [cursor=pointer]:
+              - /url: /issues?c%5B%5D=project&c%5B%5D=tracker&c%5B%5D=status&c%5B%5D=subject&f%5B%5D=status_id&f%5B%5D=author_id&f%5B%5D=project.status&op%5Bauthor_id%5D=%3D&op%5Bproject.status%5D=%3D&op%5Bstatus_id%5D=o&set_filter=1&sort=updated_on%3Adesc&v%5Bauthor_id%5D%5B%5D=me&v%5Bproject.status%5D%5B%5D=1&v%5Bstatus_id%5D%5B%5D=
+            - text: (0)
+          - paragraph [ref=e60]: Ningún dato disponible
+    - generic [ref=e61]:
+      - text: Powered by
+      - link "Bitnami Redmine Stack" [ref=e62] [cursor=pointer]:
+        - /url: https://bitnami.com/stack/redmine
+      - text: © 2006-2020 Jean-Philippe Lang
+  - log [ref=e63]
+  - log [ref=e64]
+  - log [ref=e65]
+  - log [ref=e66]
+  - log [ref=e67]
+  - log [ref=e68]
+  - log [ref=e69]
+  - log [ref=e70]
+  - log [ref=e71]
+  - log [ref=e72]
+  - log [ref=e73]
+  - log [ref=e74]
+  - log [ref=e75]
+  - log [ref=e76]

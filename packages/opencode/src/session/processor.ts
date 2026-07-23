@@ -31,7 +31,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
-import { Budget } from "@/provider/budget"
+import { Budget, getWarning, setWarning } from "@/provider/budget"
 import { Identity } from "@/identity"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -717,6 +717,21 @@ export const layer = Layer.effect(
                   costUsd: costNum,
                   sessionId: ctx.sessionID,
                 }).pipe(Effect.catch(() => Effect.logWarning("Budget deduct failed")))
+
+                // Surface low-balance warning as a text part in the assistant message.
+                const lowBalanceWarning = getWarning()
+                if (lowBalanceWarning) {
+                  yield* session.updatePart({
+                    id: PartID.ascending(),
+                    messageID: ctx.assistantMessage.id,
+                    sessionID: ctx.assistantMessage.sessionID,
+                    type: "text",
+                    text: lowBalanceWarning.message,
+                    time: { start: Date.now(), end: Date.now() },
+                  })
+                  // Reset so each step's warning is fresh.
+                  setWarning(null)
+                }
               }
             }
             // --- end budget enforcement ---

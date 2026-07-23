@@ -1,0 +1,122 @@
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - list:
+          - listitem [ref=e7]:
+            - link "Agenda" [ref=e8] [cursor=pointer]:
+              - /url: /work_time/index
+          - listitem [ref=e9]:
+            - link "Mi cuenta" [ref=e10] [cursor=pointer]:
+              - /url: /my/account
+          - listitem [ref=e11]:
+            - link "Terminar sesión" [ref=e12] [cursor=pointer]:
+              - /url: /logout
+      - generic [ref=e13]:
+        - text: Conectado como
+        - link "ifernandez" [ref=e14] [cursor=pointer]:
+          - /url: /users/471
+      - list:
+        - listitem [ref=e15]:
+          - link " Inicio" [ref=e16] [cursor=pointer]:
+            - /url: /
+        - listitem [ref=e17]:
+          - link " Mi página" [ref=e18] [cursor=pointer]:
+            - /url: /my/page
+        - listitem [ref=e19]:
+          - link " Proyectos" [ref=e20] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=e21]:
+          - link "" [ref=e22] [cursor=pointer]:
+            - /url: "#"
+            - text: 
+            - generic [ref=e23]: 
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - link "Búsqueda" [ref=e28] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/search
+            - text: ":"
+          - textbox "Búsqueda:" [ref=e29]
+        - generic [ref=e30]:
+          - generic [ref=e31] [cursor=pointer]: Service & Delivery 2026
+          - text: ✓
+      - heading "Service & Delivery 2026" [level=1] [ref=e32]
+      - generic [ref=e33]:
+        - list [ref=e34]:
+          - listitem [ref=e35]:
+            - link "+" [ref=e36] [cursor=pointer]:
+              - /url: "#"
+          - listitem [ref=e37]:
+            - link "Vistazo" [ref=e38] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026
+          - listitem [ref=e39]:
+            - link "Actividad" [ref=e40] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/activity
+          - listitem [ref=e41]:
+            - link "Peticiones" [ref=e42] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/issues
+          - listitem [ref=e43]:
+            - link "Tiempo dedicado" [ref=e44] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries
+          - listitem [ref=e45]:
+            - link "Archivos" [ref=e46] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/files
+          - listitem [ref=e47]:
+            - link "Configuración" [ref=e48] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/settings
+        - text:  
+    - generic [ref=e50]:
+      - heading "Tiempo dedicado" [level=2] [ref=e51]
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - paragraph [ref=e54]:
+            - generic [ref=e55]: Petición
+            - textbox "Petición" [active] [ref=e56]: "Task #15464"
+          - paragraph [ref=e57]:
+            - generic [ref=e58]: Fecha *
+            - textbox "Fecha *" [ref=e59]: 2026-07-16
+          - paragraph [ref=e60]:
+            - generic [ref=e61]: Horas *
+            - textbox "Horas *" [ref=e62]
+          - paragraph [ref=e63]:
+            - generic [ref=e64]: Comentario
+            - textbox "Comentario" [ref=e65]
+          - paragraph [ref=e66]:
+            - generic [ref=e67]: Actividad *
+            - combobox "Actividad *" [ref=e68]:
+              - option "--- Por favor seleccione ---" [selected]
+              - option "Análisis"
+              - option "Diseño"
+              - option "Desarrollo"
+              - option "Seguimiento"
+              - option "Testing"
+              - option "Prueba de Concepto"
+              - option "Reunion"
+              - option "Despliegue+Soporte QA"
+              - option "Despliegue+Soporte PROD"
+              - option "Gestión"
+          - paragraph [ref=e69]:
+            - generic [ref=e70]: Detail
+            - textbox "Detail" [ref=e71]
+        - button "Crear" [ref=e72] [cursor=pointer]
+        - button "Crear y continuar" [ref=e73] [cursor=pointer]
+        - link "Cancelar" [ref=e74] [cursor=pointer]:
+          - /url: /projects/service-delivery-2026/time_entries
+      - link "Volver al inicio" [ref=e75] [cursor=pointer]:
+        - /url: "#gototop"
+    - generic [ref=e76]:
+      - text: Powered by
+      - link "Bitnami Redmine Stack" [ref=e77] [cursor=pointer]:
+        - /url: https://bitnami.com/stack/redmine
+      - text: © 2006-2020 Jean-Philippe Lang
+  - log [ref=e78]
+  - log [ref=e79]
+  - log [ref=e80]
+  - log [ref=e81]
+  - log [ref=e82]
+  - log [ref=e83]
+  - log [ref=e84]
+  - status [ref=e85]:
+    - generic [ref=e86]: No search results.

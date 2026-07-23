@@ -1,0 +1,854 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - list:
+          - listitem [ref=e7]:
+            - link "Agenda" [ref=e8] [cursor=pointer]:
+              - /url: /work_time/index
+          - listitem [ref=e9]:
+            - link "Mi cuenta" [ref=e10] [cursor=pointer]:
+              - /url: /my/account
+          - listitem [ref=e11]:
+            - link "Terminar sesión" [ref=e12] [cursor=pointer]:
+              - /url: /logout
+      - generic [ref=e13]:
+        - text: Conectado como
+        - link "ifernandez" [ref=e14] [cursor=pointer]:
+          - /url: /users/471
+      - list:
+        - listitem [ref=e15]:
+          - link " Inicio" [ref=e16] [cursor=pointer]:
+            - /url: /
+        - listitem [ref=e17]:
+          - link " Mi página" [ref=e18] [cursor=pointer]:
+            - /url: /my/page
+        - listitem [ref=e19]:
+          - link " Proyectos" [ref=e20] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=e21]:
+          - link "" [ref=e22] [cursor=pointer]:
+            - /url: "#"
+            - text: 
+            - generic [ref=e23]: 
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - link "Búsqueda" [ref=e28] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/search
+            - text: ":"
+          - textbox "Búsqueda:" [ref=e29]
+        - generic [ref=e30]:
+          - generic [ref=e31] [cursor=pointer]: Service & Delivery 2026
+          - text: ✓
+      - heading "Service & Delivery 2026" [level=1] [ref=e32]
+      - generic [ref=e33]:
+        - list [ref=e34]:
+          - listitem [ref=e35]:
+            - link "+" [ref=e36] [cursor=pointer]:
+              - /url: "#"
+          - listitem [ref=e37]:
+            - link "Vistazo" [ref=e38] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026
+          - listitem [ref=e39]:
+            - link "Actividad" [ref=e40] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/activity
+          - listitem [ref=e41]:
+            - link "Peticiones" [ref=e42] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/issues
+          - listitem [ref=e43]:
+            - link "Tiempo dedicado" [ref=e44] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries
+          - listitem [ref=e45]:
+            - link "Archivos" [ref=e46] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/files
+          - listitem [ref=e47]:
+            - link "Configuración" [ref=e48] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/settings
+        - text:  
+    - generic [ref=e50]:
+      - link " Tiempo dedicado" [ref=e52] [cursor=pointer]:
+        - /url: /projects/service-delivery-2026/time_entries/new
+      - heading "Tiempo dedicado" [level=2] [ref=e53]
+      - generic [ref=e54]:
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - group "Filtros" [ref=e57]:
+              - generic [ref=e58] [cursor=pointer]: Filtros
+              - generic:
+                - table [ref=e59]:
+                  - rowgroup [ref=e60]:
+                    - row "Fecha todos" [ref=e61]:
+                      - cell "Fecha" [ref=e62]:
+                        - checkbox "Fecha" [checked] [ref=e63] [cursor=pointer]: ✔
+                        - text: Fecha
+                      - cell "todos" [ref=e64]:
+                        - combobox [ref=e65]:
+                          - option "igual"
+                          - option ">="
+                          - option "<="
+                          - option "entre"
+                          - option "hace menos de"
+                          - option "hace más de"
+                          - option "en los anteriores"
+                          - option "hace"
+                          - option "hoy"
+                          - option "ayer"
+                          - option "esta semana"
+                          - option "última semana"
+                          - option "en las últimas 2 semanas"
+                          - option "este mes"
+                          - option "último mes"
+                          - option "este año"
+                          - option "ninguno"
+                          - option "todos" [selected]
+                      - cell [ref=e66]
+                    - row "Usuario igual << yo mismo >> " [ref=e67]:
+                      - cell "Usuario" [ref=e68]:
+                        - checkbox "Usuario" [checked] [ref=e69] [cursor=pointer]: ✔
+                        - text: Usuario
+                      - cell "igual" [ref=e70]:
+                        - combobox [ref=e71]:
+                          - option "igual" [selected]
+                          - option "no igual"
+                          - option "ninguno"
+                          - option "todos"
+                      - cell "<< yo mismo >> " [ref=e72]:
+                        - generic [ref=e73]:
+                          - combobox [ref=e74]:
+                            - option "<< yo mismo >>" [selected]
+                            - option "Agustin Dedyn"
+                            - option "Agustin Gonzalez"
+                            - option "Alejandra Daiez"
+                            - option "Andres Suarez"
+                            - option "Cecilia Colla"
+                            - option "Claudio Olivares"
+                            - option "Daniel Palombo"
+                            - option "Enzo Miranda"
+                            - option "Eric Casanova"
+                            - option "Esteban Arlando"
+                            - option "Gonzalo Figueroa"
+                            - option "Iván José Fernández Michonovich"
+                            - option "Jairo Carrasco"
+                            - option "Jessica Alejandro"
+                            - option "Juan Jose Breuer Moreno"
+                            - option "Karen Villarreal"
+                            - option "Kevin Wastavino"
+                            - option "Laura Revel"
+                            - option "Leonardo Pineda"
+                            - option "Luciano Leyria"
+                            - option "Miguel Gutierrez"
+                            - option "Muaricio Ferrieres"
+                            - option "R Descalzi"
+                            - option "Raul Ahumada"
+                            - option "Santiago Costa"
+                            - option "Stefania Sanchiz"
+                            - option "Tomas Jurado"
+                            - option "Vitor Fugita"
+                            - option "Anónimo"
+                          - generic [ref=e75] [cursor=pointer]: 
+                - generic [ref=e76]:
+                  - text: Añadir el filtro
+                  - combobox "Añadir el filtro" [ref=e77]:
+                    - option [selected]
+                    - option "Petición"
+                    - option "Usuario" [disabled]
+                    - option "Autor"
+                    - option "Actividad"
+                    - option "Comentario"
+                    - option "Horas"
+                    - option "Fecha" [disabled]
+                    - option "Tipo de la petición"
+                    - option "Estado de la petición"
+                    - option "Versión prevista de la petición"
+                    - option "Categoría de la petición"
+                    - option "Tiempo Estimado Real de la petición"
+                    - option "Evaluación de la petición"
+                    - option "Tags de la petición"
+                    - option "Fecha de inicio del proyecto"
+                    - option "Fecha de fin del proyecto"
+                    - option "Tipo de servicio del proyecto"
+                    - option "Tecnología del proyecto"
+                    - option "Tiempo Estimado Real del proyecto"
+                    - option "Responsable del proyecto"
+            - group "Opciones" [ref=e78]:
+              - generic [ref=e79] [cursor=pointer]: Opciones
+              - text: ✔
+          - paragraph [ref=e80]:
+            - link " Aceptar" [ref=e81] [cursor=pointer]:
+              - /url: "#"
+            - link " Anular" [ref=e82] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?set_filter=1&sort=
+            - link " Guardar" [ref=e83] [cursor=pointer]:
+              - /url: "#"
+        - list [ref=e85]:
+          - listitem [ref=e86]:
+            - link "Detalles" [ref=e87] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=spent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+          - listitem [ref=e88]:
+            - link "Informe" [ref=e89] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries/report?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=spent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+      - paragraph [ref=e90]:
+        - generic [ref=e91]: "Horas: 224:00"
+      - table [ref=e94]:
+        - rowgroup [ref=e95]:
+          - row "Seleccionar todo/No seleccionar nada Fecha Usuario Actividad Petición Comentario Horas" [ref=e96]:
+            - columnheader "Seleccionar todo/No seleccionar nada" [ref=e97]:
+              - checkbox "Seleccionar todo/No seleccionar nada" [ref=e98] [cursor=pointer]
+            - columnheader "Fecha" [ref=e99]:
+              - link "Fecha" [ref=e100] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=spent_on&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+            - columnheader "Usuario" [ref=e101]:
+              - link "Usuario" [ref=e102] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=user%2Cspent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+            - columnheader "Actividad" [ref=e103]:
+              - link "Actividad" [ref=e104] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=activity%2Cspent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+            - columnheader "Petición" [ref=e105]:
+              - link "Petición" [ref=e106] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=issue%2Cspent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+            - columnheader "Comentario" [ref=e107]
+            - columnheader "Horas" [ref=e108]:
+              - link "Horas" [ref=e109] [cursor=pointer]:
+                - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=hours%2Cspent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+            - columnheader [ref=e110]
+        - rowgroup [ref=e111]:
+          - row "08/07/2026 Iván José Fernández Michonovich Desarrollo Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e112]:
+            - cell [ref=e113]:
+              - checkbox [ref=e114] [cursor=pointer]
+            - cell "08/07/2026" [ref=e115]
+            - cell "Iván José Fernández Michonovich" [ref=e116]:
+              - link "Iván José Fernández Michonovich" [ref=e117] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e118]
+            - cell [ref=e119]
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e120]
+            - cell "8:00" [ref=e121]
+            - cell " Modificar  Borrar Actions" [ref=e122]:
+              - link " Modificar" [ref=e123] [cursor=pointer]:
+                - /url: /time_entries/103031/edit
+              - link " Borrar" [ref=e124] [cursor=pointer]:
+                - /url: /time_entries/103031
+              - link "Actions" [ref=e125] [cursor=pointer]:
+                - /url: "#"
+          - row "07/07/2026 Iván José Fernández Michonovich Desarrollo Soporte a proyecto de IA 8:00  Modificar  Borrar Actions" [ref=e126]:
+            - cell [ref=e127]:
+              - checkbox [ref=e128] [cursor=pointer]
+            - cell "07/07/2026" [ref=e129]
+            - cell "Iván José Fernández Michonovich" [ref=e130]:
+              - link "Iván José Fernández Michonovich" [ref=e131] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e132]
+            - cell [ref=e133]
+            - cell "Soporte a proyecto de IA" [ref=e134]
+            - cell "8:00" [ref=e135]
+            - cell " Modificar  Borrar Actions" [ref=e136]:
+              - link " Modificar" [ref=e137] [cursor=pointer]:
+                - /url: /time_entries/103030/edit
+              - link " Borrar" [ref=e138] [cursor=pointer]:
+                - /url: /time_entries/103030
+              - link "Actions" [ref=e139] [cursor=pointer]:
+                - /url: "#"
+          - 'row "06/07/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de IA 8:00  Modificar  Borrar Actions" [ref=e140]':
+            - cell [ref=e141]:
+              - checkbox [ref=e142] [cursor=pointer]
+            - cell "06/07/2026" [ref=e143]
+            - cell "Iván José Fernández Michonovich" [ref=e144]:
+              - link "Iván José Fernández Michonovich" [ref=e145] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e146]
+            - 'cell "Task #15464: Gestión Interna" [ref=e147]':
+              - 'link "Task #15464" [ref=e148] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de IA" [ref=e149]
+            - cell "8:00" [ref=e150]
+            - cell " Modificar  Borrar Actions" [ref=e151]:
+              - link " Modificar" [ref=e152] [cursor=pointer]:
+                - /url: /time_entries/102883/edit
+              - link " Borrar" [ref=e153] [cursor=pointer]:
+                - /url: /time_entries/102883
+              - link "Actions" [ref=e154] [cursor=pointer]:
+                - /url: "#"
+          - 'row "03/07/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de IA 8:00  Modificar  Borrar Actions" [ref=e155]':
+            - cell [ref=e156]:
+              - checkbox [ref=e157] [cursor=pointer]
+            - cell "03/07/2026" [ref=e158]
+            - cell "Iván José Fernández Michonovich" [ref=e159]:
+              - link "Iván José Fernández Michonovich" [ref=e160] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e161]
+            - 'cell "Task #15464: Gestión Interna" [ref=e162]':
+              - 'link "Task #15464" [ref=e163] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de IA" [ref=e164]
+            - cell "8:00" [ref=e165]
+            - cell " Modificar  Borrar Actions" [ref=e166]:
+              - link " Modificar" [ref=e167] [cursor=pointer]:
+                - /url: /time_entries/102882/edit
+              - link " Borrar" [ref=e168] [cursor=pointer]:
+                - /url: /time_entries/102882
+              - link "Actions" [ref=e169] [cursor=pointer]:
+                - /url: "#"
+          - 'row "02/07/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e170]':
+            - cell [ref=e171]:
+              - checkbox [ref=e172] [cursor=pointer]
+            - cell "02/07/2026" [ref=e173]
+            - cell "Iván José Fernández Michonovich" [ref=e174]:
+              - link "Iván José Fernández Michonovich" [ref=e175] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e176]
+            - 'cell "Task #15464: Gestión Interna" [ref=e177]':
+              - 'link "Task #15464" [ref=e178] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e179]
+            - cell "8:00" [ref=e180]
+            - cell " Modificar  Borrar Actions" [ref=e181]:
+              - link " Modificar" [ref=e182] [cursor=pointer]:
+                - /url: /time_entries/102722/edit
+              - link " Borrar" [ref=e183] [cursor=pointer]:
+                - /url: /time_entries/102722
+              - link "Actions" [ref=e184] [cursor=pointer]:
+                - /url: "#"
+          - 'row "01/07/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e185]':
+            - cell [ref=e186]:
+              - checkbox [ref=e187] [cursor=pointer]
+            - cell "01/07/2026" [ref=e188]
+            - cell "Iván José Fernández Michonovich" [ref=e189]:
+              - link "Iván José Fernández Michonovich" [ref=e190] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e191]
+            - 'cell "Task #15464: Gestión Interna" [ref=e192]':
+              - 'link "Task #15464" [ref=e193] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e194]
+            - cell "8:00" [ref=e195]
+            - cell " Modificar  Borrar Actions" [ref=e196]:
+              - link " Modificar" [ref=e197] [cursor=pointer]:
+                - /url: /time_entries/102720/edit
+              - link " Borrar" [ref=e198] [cursor=pointer]:
+                - /url: /time_entries/102720
+              - link "Actions" [ref=e199] [cursor=pointer]:
+                - /url: "#"
+          - 'row "30/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e200]':
+            - cell [ref=e201]:
+              - checkbox [ref=e202] [cursor=pointer]
+            - cell "30/06/2026" [ref=e203]
+            - cell "Iván José Fernández Michonovich" [ref=e204]:
+              - link "Iván José Fernández Michonovich" [ref=e205] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e206]
+            - 'cell "Task #15464: Gestión Interna" [ref=e207]':
+              - 'link "Task #15464" [ref=e208] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e209]
+            - cell "8:00" [ref=e210]
+            - cell " Modificar  Borrar Actions" [ref=e211]:
+              - link " Modificar" [ref=e212] [cursor=pointer]:
+                - /url: /time_entries/102646/edit
+              - link " Borrar" [ref=e213] [cursor=pointer]:
+                - /url: /time_entries/102646
+              - link "Actions" [ref=e214] [cursor=pointer]:
+                - /url: "#"
+          - 'row "29/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e215]':
+            - cell [ref=e216]:
+              - checkbox [ref=e217] [cursor=pointer]
+            - cell "29/06/2026" [ref=e218]
+            - cell "Iván José Fernández Michonovich" [ref=e219]:
+              - link "Iván José Fernández Michonovich" [ref=e220] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e221]
+            - 'cell "Task #15464: Gestión Interna" [ref=e222]':
+              - 'link "Task #15464" [ref=e223] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e224]
+            - cell "8:00" [ref=e225]
+            - cell " Modificar  Borrar Actions" [ref=e226]:
+              - link " Modificar" [ref=e227] [cursor=pointer]:
+                - /url: /time_entries/102643/edit
+              - link " Borrar" [ref=e228] [cursor=pointer]:
+                - /url: /time_entries/102643
+              - link "Actions" [ref=e229] [cursor=pointer]:
+                - /url: "#"
+          - 'row "26/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e230]':
+            - cell [ref=e231]:
+              - checkbox [ref=e232] [cursor=pointer]
+            - cell "26/06/2026" [ref=e233]
+            - cell "Iván José Fernández Michonovich" [ref=e234]:
+              - link "Iván José Fernández Michonovich" [ref=e235] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e236]
+            - 'cell "Task #15464: Gestión Interna" [ref=e237]':
+              - 'link "Task #15464" [ref=e238] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e239]
+            - cell "8:00" [ref=e240]
+            - cell " Modificar  Borrar Actions" [ref=e241]:
+              - link " Modificar" [ref=e242] [cursor=pointer]:
+                - /url: /time_entries/102632/edit
+              - link " Borrar" [ref=e243] [cursor=pointer]:
+                - /url: /time_entries/102632
+              - link "Actions" [ref=e244] [cursor=pointer]:
+                - /url: "#"
+          - 'row "25/06/2026 Iván José Fernández Michonovich Prueba de Concepto Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e245]':
+            - cell [ref=e246]:
+              - checkbox [ref=e247] [cursor=pointer]
+            - cell "25/06/2026" [ref=e248]
+            - cell "Iván José Fernández Michonovich" [ref=e249]:
+              - link "Iván José Fernández Michonovich" [ref=e250] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Prueba de Concepto" [ref=e251]
+            - 'cell "Task #15464: Gestión Interna" [ref=e252]':
+              - 'link "Task #15464" [ref=e253] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e254]
+            - cell "8:00" [ref=e255]
+            - cell " Modificar  Borrar Actions" [ref=e256]:
+              - link " Modificar" [ref=e257] [cursor=pointer]:
+                - /url: /time_entries/102631/edit
+              - link " Borrar" [ref=e258] [cursor=pointer]:
+                - /url: /time_entries/102631
+              - link "Actions" [ref=e259] [cursor=pointer]:
+                - /url: "#"
+          - 'row "24/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e260]':
+            - cell [ref=e261]:
+              - checkbox [ref=e262] [cursor=pointer]
+            - cell "24/06/2026" [ref=e263]
+            - cell "Iván José Fernández Michonovich" [ref=e264]:
+              - link "Iván José Fernández Michonovich" [ref=e265] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e266]
+            - 'cell "Task #15464: Gestión Interna" [ref=e267]':
+              - 'link "Task #15464" [ref=e268] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e269]
+            - cell "8:00" [ref=e270]
+            - cell " Modificar  Borrar Actions" [ref=e271]:
+              - link " Modificar" [ref=e272] [cursor=pointer]:
+                - /url: /time_entries/102630/edit
+              - link " Borrar" [ref=e273] [cursor=pointer]:
+                - /url: /time_entries/102630
+              - link "Actions" [ref=e274] [cursor=pointer]:
+                - /url: "#"
+          - 'row "23/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 3:30  Modificar  Borrar Actions" [ref=e275]':
+            - cell [ref=e276]:
+              - checkbox [ref=e277] [cursor=pointer]
+            - cell "23/06/2026" [ref=e278]
+            - cell "Iván José Fernández Michonovich" [ref=e279]:
+              - link "Iván José Fernández Michonovich" [ref=e280] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e281]
+            - 'cell "Task #15464: Gestión Interna" [ref=e282]':
+              - 'link "Task #15464" [ref=e283] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e284]
+            - cell "3:30" [ref=e285]
+            - cell " Modificar  Borrar Actions" [ref=e286]:
+              - link " Modificar" [ref=e287] [cursor=pointer]:
+                - /url: /time_entries/102622/edit
+              - link " Borrar" [ref=e288] [cursor=pointer]:
+                - /url: /time_entries/102622
+              - link "Actions" [ref=e289] [cursor=pointer]:
+                - /url: "#"
+          - 'row "23/06/2026 Iván José Fernández Michonovich Análisis Task #15464: Gestión Interna Revisión de plan [Proyecto: Metropol_SIP_RRHH_ARG] [Interno: OneInfo_Consulting] 4:00  Modificar  Borrar Actions" [ref=e290]':
+            - cell [ref=e291]:
+              - checkbox [ref=e292] [cursor=pointer]
+            - cell "23/06/2026" [ref=e293]
+            - cell "Iván José Fernández Michonovich" [ref=e294]:
+              - link "Iván José Fernández Michonovich" [ref=e295] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Análisis" [ref=e296]
+            - 'cell "Task #15464: Gestión Interna" [ref=e297]':
+              - 'link "Task #15464" [ref=e298] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Revisión de plan [Proyecto: Metropol_SIP_RRHH_ARG] [Interno: OneInfo_Consulting]" [ref=e299]'
+            - cell "4:00" [ref=e300]
+            - cell " Modificar  Borrar Actions" [ref=e301]:
+              - link " Modificar" [ref=e302] [cursor=pointer]:
+                - /url: /time_entries/102619/edit
+              - link " Borrar" [ref=e303] [cursor=pointer]:
+                - /url: /time_entries/102619
+              - link "Actions" [ref=e304] [cursor=pointer]:
+                - /url: "#"
+          - 'row "23/06/2026 Iván José Fernández Michonovich Reunion Task #15464: Gestión Interna Daily - Modulo RRHH ARG [Proyecto: Metropol SIP] [Interno: OneInfo_Consulting] 0:30  Modificar  Borrar Actions" [ref=e305]':
+            - cell [ref=e306]:
+              - checkbox [ref=e307] [cursor=pointer]
+            - cell "23/06/2026" [ref=e308]
+            - cell "Iván José Fernández Michonovich" [ref=e309]:
+              - link "Iván José Fernández Michonovich" [ref=e310] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Reunion" [ref=e311]
+            - 'cell "Task #15464: Gestión Interna" [ref=e312]':
+              - 'link "Task #15464" [ref=e313] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Daily - Modulo RRHH ARG [Proyecto: Metropol SIP] [Interno: OneInfo_Consulting]" [ref=e314]'
+            - cell "0:30" [ref=e315]
+            - cell " Modificar  Borrar Actions" [ref=e316]:
+              - link " Modificar" [ref=e317] [cursor=pointer]:
+                - /url: /time_entries/102618/edit
+              - link " Borrar" [ref=e318] [cursor=pointer]:
+                - /url: /time_entries/102618
+              - link "Actions" [ref=e319] [cursor=pointer]:
+                - /url: "#"
+          - 'row "22/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 5:00  Modificar  Borrar Actions" [ref=e320]':
+            - cell [ref=e321]:
+              - checkbox [ref=e322] [cursor=pointer]
+            - cell "22/06/2026" [ref=e323]
+            - cell "Iván José Fernández Michonovich" [ref=e324]:
+              - link "Iván José Fernández Michonovich" [ref=e325] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e326]
+            - 'cell "Task #15464: Gestión Interna" [ref=e327]':
+              - 'link "Task #15464" [ref=e328] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e329]
+            - cell "5:00" [ref=e330]
+            - cell " Modificar  Borrar Actions" [ref=e331]:
+              - link " Modificar" [ref=e332] [cursor=pointer]:
+                - /url: /time_entries/102616/edit
+              - link " Borrar" [ref=e333] [cursor=pointer]:
+                - /url: /time_entries/102616
+              - link "Actions" [ref=e334] [cursor=pointer]:
+                - /url: "#"
+          - 'row "22/06/2026 Iván José Fernández Michonovich Reunion Task #15464: Gestión Interna Reuniones para verificación y estimación con Ceci 1:00  Modificar  Borrar Actions" [ref=e335]':
+            - cell [ref=e336]:
+              - checkbox [ref=e337] [cursor=pointer]
+            - cell "22/06/2026" [ref=e338]
+            - cell "Iván José Fernández Michonovich" [ref=e339]:
+              - link "Iván José Fernández Michonovich" [ref=e340] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Reunion" [ref=e341]
+            - 'cell "Task #15464: Gestión Interna" [ref=e342]':
+              - 'link "Task #15464" [ref=e343] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Reuniones para verificación y estimación con Ceci" [ref=e344]
+            - cell "1:00" [ref=e345]
+            - cell " Modificar  Borrar Actions" [ref=e346]:
+              - link " Modificar" [ref=e347] [cursor=pointer]:
+                - /url: /time_entries/102613/edit
+              - link " Borrar" [ref=e348] [cursor=pointer]:
+                - /url: /time_entries/102613
+              - link "Actions" [ref=e349] [cursor=pointer]:
+                - /url: "#"
+          - 'row "22/06/2026 Iván José Fernández Michonovich Análisis Task #15464: Gestión Interna Revisión de plan [Proyecto: Metropol_SIP_RRHH_ARG] [Interno: OneInfo_Consulting] 1:30  Modificar  Borrar Actions" [ref=e350]':
+            - cell [ref=e351]:
+              - checkbox [ref=e352] [cursor=pointer]
+            - cell "22/06/2026" [ref=e353]
+            - cell "Iván José Fernández Michonovich" [ref=e354]:
+              - link "Iván José Fernández Michonovich" [ref=e355] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Análisis" [ref=e356]
+            - 'cell "Task #15464: Gestión Interna" [ref=e357]':
+              - 'link "Task #15464" [ref=e358] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Revisión de plan [Proyecto: Metropol_SIP_RRHH_ARG] [Interno: OneInfo_Consulting]" [ref=e359]'
+            - cell "1:30" [ref=e360]
+            - cell " Modificar  Borrar Actions" [ref=e361]:
+              - link " Modificar" [ref=e362] [cursor=pointer]:
+                - /url: /time_entries/102610/edit
+              - link " Borrar" [ref=e363] [cursor=pointer]:
+                - /url: /time_entries/102610
+              - link "Actions" [ref=e364] [cursor=pointer]:
+                - /url: "#"
+          - 'row "22/06/2026 Iván José Fernández Michonovich Reunion Task #15464: Gestión Interna Daily - Modulo RRHH ARG [Proyecto: Metropol SIP] [Interno: OneInfo_Consulting] 0:30  Modificar  Borrar Actions" [ref=e365]':
+            - cell [ref=e366]:
+              - checkbox [ref=e367] [cursor=pointer]
+            - cell "22/06/2026" [ref=e368]
+            - cell "Iván José Fernández Michonovich" [ref=e369]:
+              - link "Iván José Fernández Michonovich" [ref=e370] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Reunion" [ref=e371]
+            - 'cell "Task #15464: Gestión Interna" [ref=e372]':
+              - 'link "Task #15464" [ref=e373] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Daily - Modulo RRHH ARG [Proyecto: Metropol SIP] [Interno: OneInfo_Consulting]" [ref=e374]'
+            - cell "0:30" [ref=e375]
+            - cell " Modificar  Borrar Actions" [ref=e376]:
+              - link " Modificar" [ref=e377] [cursor=pointer]:
+                - /url: /time_entries/102609/edit
+              - link " Borrar" [ref=e378] [cursor=pointer]:
+                - /url: /time_entries/102609
+              - link "Actions" [ref=e379] [cursor=pointer]:
+                - /url: "#"
+          - 'row "19/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 7:00  Modificar  Borrar Actions" [ref=e380]':
+            - cell [ref=e381]:
+              - checkbox [ref=e382] [cursor=pointer]
+            - cell "19/06/2026" [ref=e383]
+            - cell "Iván José Fernández Michonovich" [ref=e384]:
+              - link "Iván José Fernández Michonovich" [ref=e385] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e386]
+            - 'cell "Task #15464: Gestión Interna" [ref=e387]':
+              - 'link "Task #15464" [ref=e388] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e389]
+            - cell "7:00" [ref=e390]
+            - cell " Modificar  Borrar Actions" [ref=e391]:
+              - link " Modificar" [ref=e392] [cursor=pointer]:
+                - /url: /time_entries/102608/edit
+              - link " Borrar" [ref=e393] [cursor=pointer]:
+                - /url: /time_entries/102608
+              - link "Actions" [ref=e394] [cursor=pointer]:
+                - /url: "#"
+          - 'row "19/06/2026 Iván José Fernández Michonovich Reunion Task #15464: Gestión Interna Daily - Modulo RRHH ARG [Proyecto: Metropol SIP] 1:00  Modificar  Borrar Actions" [ref=e395]':
+            - cell [ref=e396]:
+              - checkbox [ref=e397] [cursor=pointer]
+            - cell "19/06/2026" [ref=e398]
+            - cell "Iván José Fernández Michonovich" [ref=e399]:
+              - link "Iván José Fernández Michonovich" [ref=e400] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Reunion" [ref=e401]
+            - 'cell "Task #15464: Gestión Interna" [ref=e402]':
+              - 'link "Task #15464" [ref=e403] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - 'cell "Daily - Modulo RRHH ARG [Proyecto: Metropol SIP]" [ref=e404]'
+            - cell "1:00" [ref=e405]
+            - cell " Modificar  Borrar Actions" [ref=e406]:
+              - link " Modificar" [ref=e407] [cursor=pointer]:
+                - /url: /time_entries/102606/edit
+              - link " Borrar" [ref=e408] [cursor=pointer]:
+                - /url: /time_entries/102606
+              - link "Actions" [ref=e409] [cursor=pointer]:
+                - /url: "#"
+          - 'row "18/06/2026 Iván José Fernández Michonovich Seguimiento Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 4:00  Modificar  Borrar Actions" [ref=e410]':
+            - cell [ref=e411]:
+              - checkbox [ref=e412] [cursor=pointer]
+            - cell "18/06/2026" [ref=e413]
+            - cell "Iván José Fernández Michonovich" [ref=e414]:
+              - link "Iván José Fernández Michonovich" [ref=e415] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Seguimiento" [ref=e416]
+            - 'cell "Task #15464: Gestión Interna" [ref=e417]':
+              - 'link "Task #15464" [ref=e418] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e419]
+            - cell "4:00" [ref=e420]
+            - cell " Modificar  Borrar Actions" [ref=e421]:
+              - link " Modificar" [ref=e422] [cursor=pointer]:
+                - /url: /time_entries/102597/edit
+              - link " Borrar" [ref=e423] [cursor=pointer]:
+                - /url: /time_entries/102597
+              - link "Actions" [ref=e424] [cursor=pointer]:
+                - /url: "#"
+          - 'row "18/06/2026 Iván José Fernández Michonovich Seguimiento Task #15464: Gestión Interna Revisión del plan interno - SIP_RRHH_ARG 2:00  Modificar  Borrar Actions" [ref=e425]':
+            - cell [ref=e426]:
+              - checkbox [ref=e427] [cursor=pointer]
+            - cell "18/06/2026" [ref=e428]
+            - cell "Iván José Fernández Michonovich" [ref=e429]:
+              - link "Iván José Fernández Michonovich" [ref=e430] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Seguimiento" [ref=e431]
+            - 'cell "Task #15464: Gestión Interna" [ref=e432]':
+              - 'link "Task #15464" [ref=e433] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Revisión del plan interno - SIP_RRHH_ARG" [ref=e434]
+            - cell "2:00" [ref=e435]
+            - cell " Modificar  Borrar Actions" [ref=e436]:
+              - link " Modificar" [ref=e437] [cursor=pointer]:
+                - /url: /time_entries/102590/edit
+              - link " Borrar" [ref=e438] [cursor=pointer]:
+                - /url: /time_entries/102590
+              - link "Actions" [ref=e439] [cursor=pointer]:
+                - /url: "#"
+          - 'row "18/06/2026 Iván José Fernández Michonovich Seguimiento Task #15464: Gestión Interna Revisión y estimación del plan RRHH 2:00  Modificar  Borrar Actions" [ref=e440]':
+            - cell [ref=e441]:
+              - checkbox [ref=e442] [cursor=pointer]
+            - cell "18/06/2026" [ref=e443]
+            - cell "Iván José Fernández Michonovich" [ref=e444]:
+              - link "Iván José Fernández Michonovich" [ref=e445] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Seguimiento" [ref=e446]
+            - 'cell "Task #15464: Gestión Interna" [ref=e447]':
+              - 'link "Task #15464" [ref=e448] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Revisión y estimación del plan RRHH" [ref=e449]
+            - cell "2:00" [ref=e450]
+            - cell " Modificar  Borrar Actions" [ref=e451]:
+              - link " Modificar" [ref=e452] [cursor=pointer]:
+                - /url: /time_entries/102588/edit
+              - link " Borrar" [ref=e453] [cursor=pointer]:
+                - /url: /time_entries/102588
+              - link "Actions" [ref=e454] [cursor=pointer]:
+                - /url: "#"
+          - 'row "17/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e455]':
+            - cell [ref=e456]:
+              - checkbox [ref=e457] [cursor=pointer]
+            - cell "17/06/2026" [ref=e458]
+            - cell "Iván José Fernández Michonovich" [ref=e459]:
+              - link "Iván José Fernández Michonovich" [ref=e460] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e461]
+            - 'cell "Task #15464: Gestión Interna" [ref=e462]':
+              - 'link "Task #15464" [ref=e463] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e464]
+            - cell "8:00" [ref=e465]
+            - cell " Modificar  Borrar Actions" [ref=e466]:
+              - link " Modificar" [ref=e467] [cursor=pointer]:
+                - /url: /time_entries/102557/edit
+              - link " Borrar" [ref=e468] [cursor=pointer]:
+                - /url: /time_entries/102557
+              - link "Actions" [ref=e469] [cursor=pointer]:
+                - /url: "#"
+          - 'row "16/06/2026 Iván José Fernández Michonovich Desarrollo Task #15464: Gestión Interna Soporte a proyecto de nueva Ide para desarrollo asistido por IA 8:00  Modificar  Borrar Actions" [ref=e470]':
+            - cell [ref=e471]:
+              - checkbox [ref=e472] [cursor=pointer]
+            - cell "16/06/2026" [ref=e473]
+            - cell "Iván José Fernández Michonovich" [ref=e474]:
+              - link "Iván José Fernández Michonovich" [ref=e475] [cursor=pointer]:
+                - /url: /users/471
+            - cell "Desarrollo" [ref=e476]
+            - 'cell "Task #15464: Gestión Interna" [ref=e477]':
+              - 'link "Task #15464" [ref=e478] [cursor=pointer]':
+                - /url: /issues/15464
+              - text: ": Gestión Interna"
+            - cell "Soporte a proyecto de nueva Ide para desarrollo asistido por IA" [ref=e479]
+            - cell "8:00" [ref=e480]
+            - cell " Modificar  Borrar Actions" [ref=e481]:
+              - link " Modificar" [ref=e482] [cursor=pointer]:
+                - /url: /time_entries/102556/edit
+              - link " Borrar" [ref=e483] [cursor=pointer]:
+                - /url: /time_entries/102556
+              - link "Actions" [ref=e484] [cursor=pointer]:
+                - /url: "#"
+      - generic [ref=e485]:
+        - list [ref=e486]:
+          - listitem [ref=e487]: « Anterior
+          - listitem [ref=e488]: "1"
+          - listitem [ref=e489]:
+            - link "2" [ref=e490] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&page=2&set_filter=1&sort=spent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+          - listitem [ref=e491]:
+            - link "Siguiente »" [ref=e492] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&page=2&set_filter=1&sort=spent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+        - generic [ref=e493]:
+          - text: (1-25/36)
+          - generic [ref=e494]:
+            - text: "Por página: 25,"
+            - link "50" [ref=e495] [cursor=pointer]:
+              - /url: /projects/service-delivery-2026/time_entries?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&per_page=50&set_filter=1&sort=spent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+      - paragraph [ref=e496]:
+        - text: "Exportar a:"
+        - link "Atom" [ref=e498] [cursor=pointer]:
+          - /url: /projects/service-delivery-2026/time_entries.atom?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&key=bc986bd28db4cb3222c65bbe746fc225833a8697&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=spent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+        - generic [ref=e499]:
+          - text: "|"
+          - link "CSV" [ref=e500] [cursor=pointer]:
+            - /url: /projects/service-delivery-2026/time_entries.csv?c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&f%5B%5D=spent_on&f%5B%5D=user_id&f%5B%5D=&group_by=&op%5Bspent_on%5D=%2A&op%5Buser_id%5D=%3D&set_filter=1&sort=spent_on%3Adesc&t%5B%5D=hours&t%5B%5D=&v%5Buser_id%5D%5B%5D=me
+      - link "Volver al inicio" [ref=e501] [cursor=pointer]:
+        - /url: "#gototop"
+    - generic [ref=e502]:
+      - text: Powered by
+      - link "Bitnami Redmine Stack" [ref=e503] [cursor=pointer]:
+        - /url: https://bitnami.com/stack/redmine
+      - text: © 2006-2020 Jean-Philippe Lang
+  - log [ref=e504]
+  - log [ref=e505]
+  - log [ref=e506]
+  - log [ref=e507]
+  - log [ref=e508]
+  - log [ref=e509]
+  - log [ref=e510]
+  - log [ref=e511]
+  - log [ref=e512]
+  - log [ref=e513]
+  - log [ref=e514]
+  - log [ref=e515]
+  - log [ref=e516]
+  - log [ref=e517]
+  - log [ref=e518]
+  - log [ref=e519]
+  - log [ref=e520]
+  - log [ref=e521]
+  - log [ref=e522]
+  - log [ref=e523]
+  - log [ref=e524]
+  - log [ref=e525]
+  - log [ref=e526]
+  - log [ref=e527]
+  - log [ref=e528]
+  - log [ref=e529]
+  - log [ref=e530]
+  - log [ref=e531]
+  - log [ref=e532]
+  - log [ref=e533]
+  - log [ref=e534]
+  - log [ref=e535]
+  - log [ref=e536]
+  - log [ref=e537]
+  - log [ref=e538]
+  - log [ref=e539]
+  - log [ref=e540]
+  - log [ref=e541]
+  - log [ref=e542]
+  - log [ref=e543]
+  - log [ref=e544]
+  - log [ref=e545]
+  - log [ref=e546]
+  - log [ref=e547]
+  - log [ref=e548]
+  - log [ref=e549]
+  - log [ref=e550]
+  - log [ref=e551]
+  - log [ref=e552]
+  - log [ref=e553]
+  - log [ref=e554]
+  - log [ref=e555]
+  - log [ref=e556]
+  - log [ref=e557]
+  - log [ref=e558]
+  - log [ref=e559]
+  - log [ref=e560]
+  - log [ref=e561]
+  - log [ref=e562]
+  - log [ref=e563]
+  - log [ref=e564]
+  - log [ref=e565]
+  - log [ref=e566]
+  - log [ref=e567]
+  - log [ref=e568]
+  - log [ref=e569]
+  - log [ref=e570]
+  - log [ref=e571]
+  - log [ref=e572]
+  - log [ref=e573]
+  - log [ref=e574]
+  - log [ref=e575]
+  - log [ref=e576]
+  - log [ref=e577]
+  - log [ref=e578]
+  - log [ref=e579]
+  - log [ref=e580]
+  - log [ref=e581]
+  - log [ref=e582]
+  - log [ref=e583]
+  - log [ref=e584]
+  - log [ref=e585]
+  - log [ref=e586]
+  - log [ref=e587]
+  - log [ref=e588]
+  - log [ref=e589]
+  - log [ref=e590]
+  - log [ref=e591]
