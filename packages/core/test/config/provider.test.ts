@@ -49,6 +49,35 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("defaults custom models to agent capabilities", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("custom")
+      const modelID = ModelV2.ID.make("chat")
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    models: { chat: {} },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* addPlugin(config)
+
+      const model = required(yield* catalog.model.get(providerID, modelID))
+      expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
+    }),
+  )
+
   it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

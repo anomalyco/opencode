@@ -54,6 +54,7 @@ export const Plugin = define({
             if (item.body !== undefined) provider.body = ProviderV2.mergeOverlay(provider.body, item.body)
           })
           for (const [id, config] of Object.entries(item.models ?? {})) {
+            const custom = catalog.model.get(providerID, id) === undefined
             catalog.model.update(providerID, id, (model) => {
               if (config.family !== undefined) model.family = config.family
               if (config.name !== undefined) model.name = config.name
@@ -72,6 +73,8 @@ export const Plugin = define({
                   output: [...config.capabilities.output],
                 }
               }
+              if (custom && config.capabilities === undefined)
+                model.capabilities = { tools: true, input: ["text", "image"], output: ["text"] }
               if (config.variants !== undefined) {
                 model.variants ??= []
                 for (const variant of config.variants) {
