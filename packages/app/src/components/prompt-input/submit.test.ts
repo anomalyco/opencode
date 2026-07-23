@@ -19,6 +19,7 @@ const optimistic: Array<{
 }> = []
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
+const sessionDirectories: Record<string, string> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
@@ -87,6 +88,27 @@ const clientFor = (directory: string) => {
       create: async () => ({ data: { directory: `${directory}/new` } }),
     },
   }
+}
+
+const api = {
+  session: {
+    async create(input: { location: { directory: string } }) {
+      await createSessionGate
+      createdSessions.push(input.location.directory)
+      const session = {
+        id: `session-${createdSessions.length}`,
+        title: `New session ${createdSessions.length}`,
+      }
+      sessionDirectories[session.id] = input.location.directory
+      return session
+    },
+    async shell(input: { sessionID: string }) {
+      sentShell.push(sessionDirectories[input.sessionID] ?? "/repo/main")
+    },
+    async prompt() {},
+    async command() {},
+    async interrupt() {},
+  },
 }
 
 beforeAll(async () => {
@@ -171,6 +193,7 @@ beforeAll(async () => {
       const sdk = {
         scope: "local",
         directory: "/repo/main",
+        api,
         client: rootClient,
         url: "http://localhost:4096",
         createClient(opts: any) {
@@ -265,6 +288,7 @@ beforeEach(() => {
   permissionServer = "server-a"
   createSessionGate = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
+  for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
 })
 
 describe("prompt submit worktree selection", () => {

@@ -318,7 +318,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       ...input.current.vcs,
       async get(value?: Parameters<ServerApi["vcs"]["get"]>[0]) {
         const result = await legacy(value?.location).vcs.get()
-        return located({ branch: result.data?.branch, defaultBranch: undefined }, value?.location)
+        return located({ branch: result.data?.branch, defaultBranch: result.data?.default_branch }, value?.location)
       },
       async status(value?: Parameters<ServerApi["vcs"]["status"]>[0]) {
         const result = await legacy(value?.location).vcs.status()

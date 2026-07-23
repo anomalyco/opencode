@@ -61,7 +61,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         route,
         path === "/api/event"
           ? [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])]
-          : events,
+          : [
+              ...(path === "/global/event"
+                ? [{ payload: { id: "evt_mock_connected", type: "server.connected", properties: {} } }]
+                : []),
+              ...(events ?? []),
+            ],
         config.eventRetry,
       )
     }
