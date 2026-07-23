@@ -281,10 +281,8 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
-  const steps: string[] = []
-  let previousCacheRead: number | undefined
-  let turnPreviousCacheRead: number | undefined
-  let measured = false
+  const steps: SessionMessageAssistant[] = []
+  let previousTurnCacheRead: number | undefined
   return [
     ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
@@ -296,12 +294,7 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       rows.push({ type: "message", messageID: message.id })
       return rows
     }
-    if (steps.length === 0) turnPreviousCacheRead = previousCacheRead
-    steps.push(message.id)
-    if (message.tokens && tokenTotal(message.tokens) > 0) {
-      previousCacheRead = message.tokens.cache.read
-      measured = true
-    }
+    steps.push(message)
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
@@ -314,18 +307,26 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       rows.push({ type: "assistant-footer", messageID: message.id })
     }
     if (terminal) {
-      if (measured)
+      const stepsWithUsage = steps.filter(hasTokenUsage)
+      const last = stepsWithUsage.at(-1)
+      if (last) {
         rows.push({
           type: "turn-usage",
-          messageIDs: [...steps],
-          ...(turnPreviousCacheRead === undefined ? {} : { previousCacheRead: turnPreviousCacheRead }),
+          messageIDs: stepsWithUsage.map((step) => step.id),
+          ...(previousTurnCacheRead === undefined ? {} : { previousCacheRead: previousTurnCacheRead }),
         })
+        previousTurnCacheRead = last.tokens.cache.read
+      }
       steps.length = 0
-      turnPreviousCacheRead = undefined
-      measured = false
     }
     return rows
   }, [])
+}
+
+function hasTokenUsage(
+  message: SessionMessageAssistant,
+): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } {
+  return message.tokens !== undefined && tokenTotal(message.tokens) > 0
 }
 
 function tokenTotal(tokens: NonNullable<SessionMessageAssistant["tokens"]>) {
