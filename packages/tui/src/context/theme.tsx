@@ -5,21 +5,20 @@ import {
   addTheme,
   allThemes,
   hasTheme,
-  isTheme,
+  normalizeTheme,
   selectedForeground,
   setCustomThemes,
   setSystemTheme,
   subscribeThemes,
   upsertTheme,
   type Theme,
-  type ThemeJson,
+  type ThemeDocument,
 } from "../theme"
 import { generateSyntax } from "../theme/v2/syntax"
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes, themeDirectories } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
-import { resolveThemeFile } from "../theme/v2/resolve"
-import { migrateV1 } from "../theme/v2/v1-migrate"
+import { resolveDecodedThemeFile } from "../theme/v2/resolve"
 import { themeModes } from "../theme/v2/select"
 import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -61,7 +60,7 @@ export {
 const THEME_REFRESH_DELAYS = [250, 1000] as const
 
 type State = {
-  themes: Record<string, ThemeJson>
+  themes: Record<string, ThemeDocument>
   mode: "dark" | "light"
   lock: "dark" | "light" | undefined
   active: string
@@ -139,12 +138,7 @@ const themeContext = createSimpleContext({
       return themes
         .discover()
         .then((themes) => {
-          setCustomThemes(
-            Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
-              if (isTheme(theme)) result[name] = theme
-              return result
-            }, {}),
-          )
+          setCustomThemes(themes)
         })
         .catch(() => setStore("active", "opencode"))
     }
@@ -269,16 +263,23 @@ const themeContext = createSimpleContext({
     })
 
     const initStarted = performance.now()
-    const source = createMemo(() => store.themes[store.active] ?? store.themes.opencode)
-    const sourceName = createMemo(() => (store.themes[store.active] ? store.active : "opencode"))
-    const file = createMemo(() => migrateV1(source()))
+    const file = createMemo(() => {
+      const name = store.themes[store.active] ? store.active : "opencode"
+      try {
+        return normalizeTheme(store.themes[name], name)
+      } catch (error) {
+        if (name === "opencode") throw error
+        setStore("active", "opencode")
+        return normalizeTheme(store.themes.opencode, "opencode")
+      }
+    })
     const modes = createMemo(() => themeModes(file()))
     const mode = () => {
       const supported = modes()
       if (supported.includes(store.mode)) return store.mode
       return supported[0] ?? store.mode
     }
-    const valuesV2 = createMemo(() => resolveThemeFile(file(), mode(), sourceName()))
+    const valuesV2 = createMemo(() => resolveDecodedThemeFile(file(), mode()))
     valuesV2()
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const themeV2 = createComponentTheme(valuesV2, mode)

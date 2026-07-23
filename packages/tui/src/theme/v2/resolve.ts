@@ -36,7 +36,7 @@ function decodeThemeDefinition(input: unknown) {
   }
 }
 
-function decodeThemeFile(input: unknown, name: string) {
+export function decodeThemeFile(input: unknown, name = "theme") {
   try {
     return decodeThemeFileSchema(input)
   } catch (error) {
@@ -51,12 +51,15 @@ function themeDecodeError(error: unknown, name: string) {
 }
 
 export function resolveThemeFile(file: ThemeFile, mode?: "light" | "dark", name = "theme") {
-  const decoded = decodeThemeFile(file, name)
-  const selected = selectThemeMode(decoded, mode)
+  return resolveDecodedThemeFile(decodeThemeFile(file, name), mode)
+}
+
+export function resolveDecodedThemeFile(file: ThemeFile, mode?: "light" | "dark") {
+  const selected = selectThemeMode(file, mode)
   const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
   const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
   const core = expandTokens(fallback())
-  const merged = decoded.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
+  const merged = file.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
   if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
   return resolveExpandedTheme({
     ...merged,

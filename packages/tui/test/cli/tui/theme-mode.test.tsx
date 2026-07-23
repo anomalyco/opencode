@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
+import { RGBA } from "@opentui/core"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
 import { ConfigProvider } from "../../../src/config"
@@ -24,6 +25,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
   const darkOnly = structuredClone(DEFAULT_THEMES.opencode)
   darkOnly.theme.background = "#111111"
   darkOnly.theme.text = "#eeeeee"
+  const native = { version: 2, dark: { text: { default: "#abcdef" } } } as const
   let theme: ReturnType<typeof useTheme> | undefined
 
   function Probe() {
@@ -42,7 +44,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
       <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "light-only", mode: "dark" } })}>
         <ThemeProvider
           mode="dark"
-          source={{ discover: () => Promise.resolve({ "light-only": lightOnly, "dark-only": darkOnly, dual }) }}
+          source={{ discover: () => Promise.resolve({ "light-only": lightOnly, "dark-only": darkOnly, dual, native }) }}
         >
           <Probe />
         </ThemeProvider>
@@ -66,6 +68,41 @@ test("uses an available mode while retaining the pinned preference", async () =>
     expect(current().set("dual")).toBeTrue()
     await wait(() => current().mode() === "dark")
     expect(current().modes()).toEqual(["light", "dark"])
+    expect(current().set("native")).toBeTrue()
+    await wait(() => current().selected === "native")
+    expect(current().modes()).toEqual(["dark"])
+    expect(current().themeV2.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("falls back to OpenCode when the configured V2 theme is invalid", async () => {
+  let theme: ReturnType<typeof useTheme> | undefined
+
+  function Probe() {
+    theme = useTheme()
+    return <text>{theme.selected}</text>
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "invalid" } })}>
+        <ThemeProvider
+          mode="dark"
+          source={{ discover: () => Promise.resolve({ invalid: { version: 2, light: { categorical: [] } } }) }}
+        >
+          <Probe />
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    { width: 20, height: 2 },
+  )
+  app.renderer.start()
+
+  try {
+    await wait(() => theme?.ready === true)
+    expect(theme?.selected).toBe("opencode")
   } finally {
     app.renderer.destroy()
   }
