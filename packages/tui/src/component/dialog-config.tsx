@@ -223,14 +223,6 @@ const settings: Setting[] = [
     labels: ["off", "on"],
   },
   {
-    title: "Time to first draw",
-    category: "Debug",
-    path: ["debug", "timing"],
-    default: false,
-    values: [false, true],
-    labels: ["off", "on"],
-  },
-  {
     title: "Turn token usage",
     category: "Debug",
     path: ["debug", "turn_tokens"],
