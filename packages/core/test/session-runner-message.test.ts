@@ -86,13 +86,6 @@ describe("toLLMMessages", () => {
           text: "Synthetic context",
           time: { created },
         }),
-        SessionMessage.Synthetic.make({
-          id: id("hidden-synthetic"),
-          type: "synthetic",
-          text: "Internal accounting",
-          metadata: { modelVisible: false },
-          time: { created },
-        }),
         SessionMessage.Shell.make({
           id: id("shell"),
           type: "shell",

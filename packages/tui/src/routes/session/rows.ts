@@ -27,6 +27,7 @@ export type SessionRow =
       completed: boolean
     }
   | { type: "assistant-footer"; messageID: string }
+  | { type: "turn-usage"; messageIDs: string[]; previousCacheRead?: number }
 
 export function createSessionRows(sessionID: Accessor<string>) {
   const data = useData()
@@ -122,6 +123,26 @@ export function createSessionRows(sessionID: Accessor<string>) {
                   },
                 ]
               : [],
+        ),
+      () => setRows(reconcile(reduce())),
+    ),
+  )
+
+  createEffect(
+    on(
+      () =>
+        data.session.message.list(sessionID()).flatMap((message) =>
+          message.type === "assistant"
+            ? [
+                {
+                  id: message.id,
+                  finish: message.finish,
+                  error: message.error,
+                  retry: message.retry,
+                  tokens: message.tokens,
+                },
+              ]
+            : [],
         ),
       () => setRows(reconcile(reduce())),
     ),
@@ -260,6 +281,10 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
+  const steps: string[] = []
+  let previousCacheRead: number | undefined
+  let turnPreviousCacheRead: number | undefined
+  let measured = false
   return [
     ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
@@ -271,18 +296,40 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       rows.push({ type: "message", messageID: message.id })
       return rows
     }
+    if (steps.length === 0) turnPreviousCacheRead = previousCacheRead
+    steps.push(message.id)
+    if (message.tokens && tokenTotal(message.tokens) > 0) {
+      previousCacheRead = message.tokens.cache.read
+      measured = true
+    }
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
       append(rows, { messageID: message.id, partID }, part)
     })
-    if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error || message.retry) {
+    const terminal = (message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error
+    if (terminal || message.retry) {
       completePrevious(rows)
       rows.push({ type: "assistant-footer", messageID: message.id })
     }
+    if (terminal) {
+      if (measured)
+        rows.push({
+          type: "turn-usage",
+          messageIDs: [...steps],
+          ...(turnPreviousCacheRead === undefined ? {} : { previousCacheRead: turnPreviousCacheRead }),
+        })
+      steps.length = 0
+      turnPreviousCacheRead = undefined
+      measured = false
+    }
     return rows
   }, [])
+}
+
+function tokenTotal(tokens: NonNullable<SessionMessageAssistant["tokens"]>) {
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
 }
 
 export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageInfo[]) {
@@ -309,6 +356,8 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
         ? row.refs[0]?.messageID
         : row.type === "assistant-footer"
           ? row.messageID
+          : row.type === "turn-usage"
+            ? row.messageIDs[0]
           : undefined
   if (!messageID) return undefined
   const message = messages.get(messageID)

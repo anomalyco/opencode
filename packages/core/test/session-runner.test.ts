@@ -2017,7 +2017,7 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
 
       const context = yield* (yield* SessionStore.Service).context(sessionID)
-      expect(context.map((message) => message.type)).toEqual(["compaction", "assistant", "synthetic"])
+      expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
       expect(context[0]).toMatchObject({
         type: "compaction",
         summary: "## Objective\n- Preserve the task",
@@ -2386,24 +2386,6 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
-        {
-          type: "synthetic",
-          description:
-            "Turn token usage:\nStep 1 [tool-calls]: New tokens: 12 · Cached: 2 · Total: 14 [8 input, 3 output, 1 reasoning]",
-          metadata: {
-            kind: "turn-token-usage",
-            modelVisible: false,
-            steps: [
-              {
-                label: "Step 1 [tool-calls]",
-                newTokens: 12,
-                cached: 2,
-                total: 14,
-                breakdown: "8 input, 3 output, 1 reasoning",
-              },
-            ],
-          },
-        },
       ])
     }),
   )
@@ -2450,112 +2432,6 @@ describe("SessionRunnerLLM", () => {
         "session.tool.success.1",
         "session.step.ended.1",
       ])
-    }),
-  )
-
-  it.effect("appends each step's token usage after a completed turn", () =>
-    Effect.gen(function* () {
-      const session = yield* setup
-      yield* admit(session, "Use a tool")
-      responses = [
-        [
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.toolCall({ id: "call-token-usage", name: "echo", input: { text: "hello" } }),
-          LLMEvent.stepFinish({
-            index: 0,
-            reason: "tool-calls",
-            usage: {
-              inputTokens: 10,
-              nonCachedInputTokens: 8,
-              outputTokens: 4,
-              reasoningTokens: 1,
-              cacheReadInputTokens: 2,
-            },
-          }),
-          LLMEvent.finish({ reason: "tool-calls" }),
-        ],
-        [
-          LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.stepFinish({
-            index: 0,
-            reason: "stop",
-            usage: {
-              inputTokens: 20,
-              nonCachedInputTokens: 15,
-              outputTokens: 6,
-              reasoningTokens: 2,
-              cacheReadInputTokens: 5,
-            },
-          }),
-          LLMEvent.finish({ reason: "stop" }),
-        ],
-      ]
-
-      yield* session.resume(sessionID)
-
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user", text: "Use a tool" },
-        { type: "assistant", tokens: { input: 8, output: 3, reasoning: 1, cache: { read: 2, write: 0 } } },
-        { type: "assistant", tokens: { input: 15, output: 4, reasoning: 2, cache: { read: 5, write: 0 } } },
-        {
-          type: "synthetic",
-          text: "",
-          description:
-            "Turn token usage:\nStep 1 [tool-calls]: New tokens: 12 · Cached: 2 · Total: 14 [8 input, 3 output, 1 reasoning]\nStep 2 [stop]: New tokens: 21 · Cached: 5 · Total: 26 [15 input, 4 output, 2 reasoning]",
-          metadata: {
-            kind: "turn-token-usage",
-            modelVisible: false,
-            steps: [
-              {
-                label: "Step 1 [tool-calls]",
-                newTokens: 12,
-                cached: 2,
-                total: 14,
-                breakdown: "8 input, 3 output, 1 reasoning",
-              },
-              {
-                label: "Step 2 [stop]",
-                newTokens: 21,
-                cached: 5,
-                total: 26,
-                breakdown: "15 input, 4 output, 2 reasoning",
-              },
-            ],
-          },
-        },
-      ])
-
-      response = [
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.stepFinish({
-          index: 0,
-          reason: "stop",
-          usage: { inputTokens: 21, nonCachedInputTokens: 20, outputTokens: 5, cacheReadInputTokens: 1 },
-        }),
-        LLMEvent.finish({ reason: "stop" }),
-      ]
-      responses = undefined
-      requests.length = 0
-      yield* admit(session, "Continue")
-      yield* session.resume(sessionID)
-
-      expect(userTexts(requests[0]!)).toEqual(["Use a tool", "Continue"])
-      expect((yield* session.context(sessionID)).findLast((message) => message.type === "synthetic")).toMatchObject({
-        description:
-          "Turn token usage:\nStep 1 [stop]: New tokens: 25 · Cached: 1 · Total: 26 [20 input, 5 output]\n! Cache bust: 4 fewer cached tokens than the previous step",
-        metadata: {
-          steps: [
-            {
-              label: "Step 1 [stop]",
-              newTokens: 25,
-              cached: 1,
-              total: 26,
-              breakdown: "20 input, 5 output",
-              cacheBust: 4,
-            },
-          ],
-        },
-      })
     }),
   )
 

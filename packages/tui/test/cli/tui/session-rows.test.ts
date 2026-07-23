@@ -255,6 +255,35 @@ test("renders synthetic messages with descriptions", () => {
   ])
 })
 
+test("derives turn usage rows from completed assistant steps", () => {
+  const usage = (read: number) => ({
+    input: 100,
+    output: 16,
+    reasoning: 0,
+    cache: { read, write: 0 },
+  })
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+    assistant("assistant-1", [], { finish: "stop", tokens: usage(10) }),
+    { type: "user", id: "user-2", text: "Second", time: { created: 2 } },
+    assistant("assistant-2", [], { finish: "tool-calls", tokens: usage(8) }),
+    assistant("assistant-3", [], { finish: "stop", tokens: usage(12) }),
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    { type: "message", messageID: "user-1" },
+    { type: "assistant-footer", messageID: "assistant-1" },
+    { type: "turn-usage", messageIDs: ["assistant-1"] },
+    { type: "message", messageID: "user-2" },
+    { type: "assistant-footer", messageID: "assistant-3" },
+    {
+      type: "turn-usage",
+      messageIDs: ["assistant-2", "assistant-3"],
+      previousCacheRead: 10,
+    },
+  ])
+})
+
 test("renders a footer for a pre-output retry assistant after replay", () => {
   const message = assistant("assistant-retry", [])
   message.retry = {
@@ -294,7 +323,11 @@ test("places a running compaction barrier before every queued user message", () 
   ])
 })
 
-function assistant(id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant {
+function assistant(
+  id: string,
+  content: SessionMessageAssistant["content"],
+  info: Partial<SessionMessageAssistant> = {},
+): SessionMessageAssistant {
   return {
     type: "assistant",
     id,
@@ -302,6 +335,7 @@ function assistant(id: string, content: SessionMessageAssistant["content"]): Ses
     model: { id: "model", providerID: "provider" },
     content,
     time: { created: 1 },
+    ...info,
   }
 }
 
