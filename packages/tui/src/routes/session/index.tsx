@@ -1108,14 +1108,6 @@ function TurnTokenUsage(props: {
         message.tokens.cache.write
       if (total === 0) return []
       const newTokens = total - message.tokens.cache.read
-      const breakdown = [
-        message.tokens.input > 0 ? `${message.tokens.input.toLocaleString()} input` : undefined,
-        message.tokens.output > 0 ? `${message.tokens.output.toLocaleString()} output` : undefined,
-        message.tokens.reasoning > 0 ? `${message.tokens.reasoning.toLocaleString()} reasoning` : undefined,
-        message.tokens.cache.write > 0 ? `${message.tokens.cache.write.toLocaleString()} cache write` : undefined,
-      ]
-        .filter((value): value is string => value !== undefined)
-        .join(", ")
       const cacheBust =
         previousCacheRead !== undefined && message.tokens.cache.read < previousCacheRead
           ? previousCacheRead - message.tokens.cache.read
@@ -1127,7 +1119,6 @@ function TurnTokenUsage(props: {
           newTokens,
           cached: message.tokens.cache.read,
           total,
-          breakdown,
           cacheBust,
         },
       ]
@@ -1148,7 +1139,7 @@ function TurnTokenUsage(props: {
               <text fg={themeV2.text.subdued}>
                 {item.label}:{" "}
                 <span style={{ attributes: TextAttributes.BOLD }}>New tokens: {item.newTokens.toLocaleString()}</span>
-                {` · Cached: ${item.cached.toLocaleString()} · Total: ${item.total.toLocaleString()}${item.breakdown ? ` [${item.breakdown}]` : ""}`}
+                {` · Cached: ${item.cached.toLocaleString()} · Total: ${item.total.toLocaleString()}`}
               </text>
               <Show when={item.cacheBust !== undefined}>
                 <text fg={themeV2.text.feedback.error.default}>
