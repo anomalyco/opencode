@@ -13,12 +13,8 @@ const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 // call wouldn't deterministically prove cache mapping works. Override with
 // BEDROCK_CACHE_MODEL_ID if your account has access elsewhere.
 const model = AmazonBedrock.configure({
-  credentials: {
-    region: RECORDING_REGION,
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "fixture",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "fixture",
-    sessionToken: process.env.AWS_SESSION_TOKEN,
-  },
+  apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
+  region: RECORDING_REGION,
 }).model(process.env.BEDROCK_CACHE_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 
 const cacheRequest = LLM.request({
@@ -36,7 +32,7 @@ const recorded = recordedTests({
   prefix: "bedrock-converse-cache",
   provider: "amazon-bedrock",
   protocol: "bedrock-converse",
-  requires: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+  requires: ["AWS_BEARER_TOKEN_BEDROCK"],
   // Two identical requests in one cassette — replay walks the cassette in
   // recording order so the second call replays the cached-hit interaction.
 })
@@ -45,10 +41,20 @@ describe("Bedrock Converse cache recorded", () => {
   recorded.effect.with("writes then reads cachePoint on identical second call", { tags: ["cache"] }, () =>
     Effect.gen(function* () {
       const first = yield* LLMClient.generate(cacheRequest)
-      expect(first.usage?.cacheReadInputTokens ?? 0).toBeGreaterThanOrEqual(0)
+      expect(first.usage?.cacheWriteInputTokens ?? 0).toBeGreaterThan(0)
+      expect(first.usage?.inputTokens).toBe(
+        (first.usage?.nonCachedInputTokens ?? 0) +
+          (first.usage?.cacheReadInputTokens ?? 0) +
+          (first.usage?.cacheWriteInputTokens ?? 0),
+      )
 
       const second = yield* LLMClient.generate(cacheRequest)
       expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThan(0)
+      expect(second.usage?.inputTokens).toBe(
+        (second.usage?.nonCachedInputTokens ?? 0) +
+          (second.usage?.cacheReadInputTokens ?? 0) +
+          (second.usage?.cacheWriteInputTokens ?? 0),
+      )
     }),
   )
 })
