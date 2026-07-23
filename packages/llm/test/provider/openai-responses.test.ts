@@ -754,6 +754,76 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves streamed assistant message phases", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_commentary", phase: "commentary" },
+              },
+              { type: "response.output_text.delta", item_id: "msg_commentary", delta: "Checking first." },
+              { type: "response.output_text.done", item_id: "msg_commentary" },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_commentary", phase: "commentary" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_final", phase: "final_answer" },
+              },
+              { type: "response.output_text.delta", item_id: "msg_final", delta: "Finished." },
+              { type: "response.output_text.done", item_id: "msg_final" },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_final", phase: "final_answer" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
+        {
+          type: "text-start",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "msg_commentary", text: "Checking first." },
+        {
+          type: "text-end",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "msg_final",
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+        },
+        { type: "text-delta", id: "msg_final", text: "Finished." },
+        {
+          type: "text-end",
+          id: "msg_final",
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+        },
+      ])
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "Checking first.",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Finished.",
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+        },
+      ])
+    }),
+  )
   it.effect("parses reasoning summary stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -1002,6 +1072,51 @@ describe("OpenAI Responses route", () => {
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
         { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("round-trips assistant message phases", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "text",
+                text: "Checking first.",
+                providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+              },
+              {
+                type: "text",
+                text: "Still checking.",
+                providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+              },
+              {
+                type: "text",
+                text: "Finished.",
+                providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "assistant",
+          phase: "commentary",
+          content: [
+            { type: "output_text", text: "Checking first." },
+            { type: "output_text", text: "Still checking." },
+          ],
+        },
+        {
+          role: "assistant",
+          phase: "final_answer",
+          content: [{ type: "output_text", text: "Finished." }],
+        },
       ])
     }),
   )
