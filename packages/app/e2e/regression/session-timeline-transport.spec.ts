@@ -89,8 +89,8 @@ test("reconnects after a stream error", async ({ page }) => {
   expect((await timeline.transport.connections())[0]?.endedBy).toBe("error")
 })
 
-test("records event IDs and reconnect Last-Event-ID headers", async ({ page }) => {
-  const timeline = await setupTimeline(page, { eventRetry: 10 })
+test("does not request replay when reconnecting the volatile V2 event stream", async ({ page }) => {
+  const timeline = await setupTimeline(page, { eventRetry: 10, protocol: "v2" })
   const first = await timeline.transport.send(partUpdated(textPart("prt_transport_id", "event with id")), {
     id: "timeline-event-7",
   })
@@ -100,7 +100,7 @@ test("records event IDs and reconnect Last-Event-ID headers", async ({ page }) =
   const connection = await timeline.transport.waitForConnection({ after: first.connectionID })
 
   expect(first.eventID).toBe("timeline-event-7")
-  expect(connection.headers["last-event-id"]).toBe("timeline-event-7")
+  expect(connection.headers["last-event-id"]).toBeUndefined()
 })
 
 test("passes through non-event fetches", async ({ page }) => {
