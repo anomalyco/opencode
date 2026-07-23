@@ -141,7 +141,7 @@ export const Plugin = {
                           Effect.mapError(
                             (error) =>
                               new ToolFailure({
-                                message: `patch verification failed: Failed to read file to delete ${target.canonical}: ${errorMessage(error)}`,
+                                message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
                               }),
                           ),
                         )
@@ -331,7 +331,10 @@ export const Plugin = {
 }
 
 function errorMessage(error: unknown) {
-  if (error instanceof PlatformError) return error.reason.description ?? error.reason.message
+  if (error instanceof PlatformError) {
+    if (error.reason._tag === "NotFound") return "file does not exist"
+    return error.reason.description ?? error.reason.message
+  }
   return error instanceof Error ? error.message : String(error)
 }
 

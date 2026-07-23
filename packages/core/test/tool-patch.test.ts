@@ -631,17 +631,15 @@ describe("PatchTool", () => {
   )
 
   it.live("identifies a missing delete target", () =>
-    withTempTool((directory, registry) =>
+    withTempTool((_directory, registry) =>
       Effect.gen(function* () {
         expect(
           yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: missing.txt\n*** End Patch")),
-        ).toMatchObject({
+        ).toEqual({
           status: "error",
           error: {
             type: "tool.execution",
-            message: expect.stringContaining(
-              `patch verification failed: Failed to read file to delete ${path.join(directory, "missing.txt")}: `,
-            ),
+            message: "patch verification failed: Failed to delete missing.txt: file does not exist",
           },
         })
       }),
