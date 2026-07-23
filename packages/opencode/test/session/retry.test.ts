@@ -437,4 +437,44 @@ describe("session.message-v2.fromError", () => {
       message: "An error occurred while processing your request.",
     })
   })
+
+  test("converts overloaded stream errors wrapped in Error to retryable APIError", () => {
+    const error = new Error(
+      JSON.stringify({
+        type: "error",
+        error: {
+          type: "service_unavailable_error",
+          code: "server_is_overloaded",
+          message: "The server is overloaded. Please try again later.",
+        },
+      }),
+    )
+    const result = MessageV2.fromError(error, { providerID: ProviderV2.ID.make("openai") })
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({
+      message: "The server is overloaded. Please try again later.",
+    })
+  })
+
+  test("preserves unknown Error messages as UnknownError", () => {
+    const result = MessageV2.fromError(new Error("Unknown error"), { providerID })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: {
+        message: "Unknown error",
+      },
+    })
+  })
+
+  test("retries flattened OpenAI-compatible overload Errors", () => {
+    const error = new Error("Our servers are currently overloaded. Please try again later.")
+    const result = MessageV2.fromError(error, { providerID: ProviderV2.ID.make("openai") })
+
+    expect(result.name).toBe("UnknownError")
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: error.message })
+  })
 })

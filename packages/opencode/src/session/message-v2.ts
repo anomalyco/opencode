@@ -700,7 +700,6 @@ export function fromError(
         { cause: e },
       ).toObject()
     case e instanceof Error:
-      return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:
       try {
         const parsed = ProviderError.parseStreamError(e)
@@ -726,7 +725,10 @@ export function fromError(
           ).toObject()
         }
       } catch {}
-      return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
+      return new NamedError.Unknown(
+        { message: e instanceof Error ? errorMessage(e) : JSON.stringify(e) },
+        { cause: e },
+      ).toObject()
   }
 }
 
