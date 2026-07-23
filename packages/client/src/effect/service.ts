@@ -3,7 +3,7 @@ import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, EnsureOptions, StopOptions } from "../service.js"
+import { EnsureSpawnGapMs, type DiscoverOptions, type Endpoint, type EnsureOptions, type StopOptions } from "../service.js"
 
 export * from "../service.js"
 /** Contents of the local service registration file. */
@@ -44,7 +44,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const contenders = new Set<Contender>()
   let announced = false
   let lastSpawn = 0
-  let spawnDelay = 5_000
+  let spawnDelay = EnsureSpawnGapMs
   let ownerHeld = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -74,7 +74,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const service = registration.service
     if (service !== undefined) {
       ownerHeld = false
-      spawnDelay = 5_000
+      spawnDelay = EnsureSpawnGapMs
       const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
       if (compatible && service.state === "ready") return Option.some(service)
       if (compatible && service.state === "failed")

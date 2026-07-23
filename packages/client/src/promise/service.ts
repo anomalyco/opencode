@@ -2,12 +2,13 @@ import { readFile } from "node:fs/promises"
 import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type {
-  DiscoverOptions,
-  Endpoint,
-  Info,
-  EnsureOptions,
-  StopOptions,
+import {
+  EnsureSpawnGapMs,
+  type DiscoverOptions,
+  type Endpoint,
+  type Info,
+  type EnsureOptions,
+  type StopOptions,
 } from "../service.js"
 import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
 
@@ -41,7 +42,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const contenders = new Set<Contender>()
   let announced = false
   let lastSpawn = 0
-  let spawnDelay = 5_000
+  let spawnDelay = EnsureSpawnGapMs
   let ownerHeld = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -70,7 +71,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
     if (registration.service !== undefined) {
       ownerHeld = false
-      spawnDelay = 5_000
+      spawnDelay = EnsureSpawnGapMs
       const service = registration.service
       const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
       if (compatible && service.state === "ready") return service.endpoint
