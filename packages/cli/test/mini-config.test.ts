@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
 import { Effect, Option } from "effect"
-import { expect, spyOn, test } from "bun:test"
+import { expect, mock, test } from "bun:test"
 import { mkdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { Config } from "../src/config"
@@ -22,11 +22,14 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
   )
   let received: MiniCommandInput["tuiConfig"]
   const mini = await import("../src/mini")
-  const validateMiniTerminal = spyOn(mini, "validateMiniTerminal").mockImplementation(() => {})
-  const runMini = spyOn(mini, "runMini").mockImplementation((input) => {
-    received = input.tuiConfig
-    return Promise.resolve()
-  })
+  mock.module("../src/mini", () => ({
+    ...mini,
+    validateMiniTerminal() {},
+    runMini(input: Pick<MiniCommandInput, "tuiConfig">) {
+      received = input.tuiConfig
+      return Promise.resolve()
+    },
+  }))
   const handler = (await import("../src/commands/handlers/mini")).default
   const server = Bun.serve({
     port: 0,
@@ -60,8 +63,7 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
     expect(config?.keybinds.get("composer.subagent.interrupt")).toMatchObject([{ key: "ctrl+i" }])
   } finally {
     server.stop(true)
-    validateMiniTerminal.mockRestore()
-    runMini.mockRestore()
+    mock.restore()
     await rm(root, { recursive: true, force: true })
   }
 })

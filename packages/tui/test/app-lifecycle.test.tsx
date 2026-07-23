@@ -340,7 +340,9 @@ test("configured app bindings execute settings and permission commands", async (
     await setup.renderOnce()
     setup.mockInput.pressKey("p", { ctrl: true })
     await setup.waitForFrame((frame) => frame.includes("Commands"))
-    await setup.mockInput.typeText("auto-approve")
+    const search = setup.renderer.currentFocusedEditor
+    if (!search) throw new Error("command palette search was not focused")
+    search.insertText("auto-approve")
     const commands = await setup.waitForFrame((frame) => frame.includes("Disable auto-approve permissions"))
     expect(commands).not.toContain("Enable auto-approve permissions")
 
