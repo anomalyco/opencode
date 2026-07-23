@@ -19,6 +19,7 @@ If REPO_DIR exists but is not a git checkout, --execute moves it aside to
 REPO_DIR.bootstrap-backup.<timestamp> before cloning a fresh checkout.
 
 Environment overrides:
+  ENV_FILE            default: .env next to this script; sourced when present
   REPO_DIR            default: /var/opt/opencode-upstream
   UPSTREAM_URL         default: https://github.com/sst/opencode.git
   FORK_URL             default: https://github.com/CryptoAlchemik/opencode.git
@@ -46,6 +47,22 @@ case "${1:-}" in
   *) usage; exit 2 ;;
 esac
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
+
+load_env_file() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    return 0
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+}
+
+load_env_file
+
 REPO_DIR="${REPO_DIR:-/var/opt/opencode-upstream}"
 UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/sst/opencode.git}"
 FORK_URL="${FORK_URL:-https://github.com/CryptoAlchemik/opencode.git}"
@@ -68,6 +85,10 @@ timestamp() {
 log() {
   printf '[%s] %s\n' "$(timestamp)" "$*"
 }
+
+if [[ -f "$ENV_FILE" ]]; then
+  log "loaded env file: $ENV_FILE"
+fi
 
 run() {
   log "+ $*"
