@@ -6,17 +6,22 @@ usage() {
 Usage: script/update-local-opencode.sh [--execute]
 
 Updates the local production OpenCode binary from this fork stack:
-  1. fetch upstream and fork remotes
-  2. rebase the base patch branch onto upstream dev
-  3. rebase the feature branch onto the base patch branch
-  4. install dependencies and build the current-platform binary
-  5. back up OpenCode session data before stopping the stack
-  6. stop the stack, make a final session backup, replace the binary, start the stack
+  1. clone the source checkout if REPO_DIR does not exist yet
+  2. fetch upstream and fork remotes
+  3. rebase the base patch branch onto upstream dev
+  4. rebase the feature branch onto the base patch branch
+  5. install dependencies and build the current-platform binary
+  6. back up OpenCode session data before stopping the stack
+  7. stop the stack, make a final session backup, replace the binary, start the stack
 
 Default mode is dry-run. Pass --execute to stop/start prod and replace the binary.
+If REPO_DIR exists but is not a git checkout, --execute moves it aside to
+REPO_DIR.bootstrap-backup.<timestamp> before cloning a fresh checkout.
 
 Environment overrides:
   REPO_DIR            default: /var/opt/opencode-upstream
+  UPSTREAM_URL         default: https://github.com/sst/opencode.git
+  FORK_URL             default: https://github.com/CryptoAlchemik/opencode.git
   UPSTREAM_REMOTE     default: origin
   UPSTREAM_BRANCH     default: dev
   FORK_REMOTE         default: fork
@@ -39,6 +44,8 @@ case "${1:-}" in
 esac
 
 REPO_DIR="${REPO_DIR:-/var/opt/opencode-upstream}"
+UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/sst/opencode.git}"
+FORK_URL="${FORK_URL:-https://github.com/CryptoAlchemik/opencode.git}"
 UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-origin}"
 UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-dev}"
 FORK_REMOTE="${FORK_REMOTE:-fork}"
@@ -87,6 +94,61 @@ git_capture() {
   env GIT_MASTER=1 git "$@"
 }
 
+ensure_repo() {
+  if [[ -d "$REPO_DIR/.git" ]]; then
+    log "using existing checkout: $REPO_DIR"
+    return 0
+  fi
+
+  if [[ -e "$REPO_DIR" ]]; then
+    local backup_dir="$REPO_DIR.bootstrap-backup.$(timestamp)"
+    if (( EXECUTE == 1 )); then
+      mv "$REPO_DIR" "$backup_dir"
+      log "moved non-git REPO_DIR aside: $backup_dir"
+    else
+      log "+ mv $REPO_DIR $backup_dir"
+      log "dry-run bootstrap stops here because REPO_DIR exists but is not a git checkout"
+      exit 0
+    fi
+  fi
+
+  local parent
+  parent="$(dirname "$REPO_DIR")"
+  if (( EXECUTE == 1 )); then
+    mkdir -p "$parent"
+    env GIT_MASTER=1 git clone --origin "$UPSTREAM_REMOTE" --branch "$UPSTREAM_BRANCH" "$UPSTREAM_URL" "$REPO_DIR"
+  else
+    log "+ mkdir -p $parent"
+    log "+ env GIT_MASTER=1 git clone --origin $UPSTREAM_REMOTE --branch $UPSTREAM_BRANCH $UPSTREAM_URL $REPO_DIR"
+    log "dry-run bootstrap stops here because REPO_DIR does not exist yet"
+    exit 0
+  fi
+}
+
+ensure_remote() {
+  local name="$1"
+  local url="$2"
+
+  if git_capture remote get-url "$name" >/dev/null 2>&1; then
+    git_run remote set-url "$name" "$url"
+    return 0
+  fi
+
+  git_run remote add "$name" "$url"
+}
+
+checkout_branch_from_remote() {
+  local branch="$1"
+  local remote="$2"
+
+  if git_capture show-ref --verify --quiet "refs/heads/$branch"; then
+    git_run checkout "$branch"
+    return 0
+  fi
+
+  git_run checkout -b "$branch" "$remote/$branch"
+}
+
 require_clean_tracked_tree() {
   if [[ "$ALLOW_DIRTY" == "1" ]]; then
     log "ALLOW_DIRTY=1 set; tracked worktree cleanliness check skipped"
@@ -133,9 +195,9 @@ main() {
   require_cmd git
   require_cmd ss
   require_cmd tar
-  require_path "$REPO_DIR/.git"
   require_path "$STACK_SCRIPT"
 
+  ensure_repo
   cd "$REPO_DIR"
 
   if (( EXECUTE == 0 )); then
@@ -144,11 +206,13 @@ main() {
 
   require_clean_tracked_tree
 
+  ensure_remote "$UPSTREAM_REMOTE" "$UPSTREAM_URL"
+  ensure_remote "$FORK_REMOTE" "$FORK_URL"
   git_run fetch "$UPSTREAM_REMOTE" "$UPSTREAM_BRANCH"
   git_run fetch "$FORK_REMOTE" "$BASE_PATCH_BRANCH" "$FEATURE_BRANCH"
-  git_run checkout "$BASE_PATCH_BRANCH"
+  checkout_branch_from_remote "$BASE_PATCH_BRANCH" "$FORK_REMOTE"
   git_run rebase "$UPSTREAM_REMOTE/$UPSTREAM_BRANCH"
-  git_run checkout "$FEATURE_BRANCH"
+  checkout_branch_from_remote "$FEATURE_BRANCH" "$FORK_REMOTE"
   git_run rebase "$BASE_PATCH_BRANCH"
 
   run bun install
