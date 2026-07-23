@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
@@ -11,11 +12,13 @@ import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
 import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
+
   return [{ name: "Files", extensions: ext }]
 }
 
@@ -41,6 +44,7 @@ type Deps = {
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
+  rebuildMenu: () => void
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -116,6 +120,9 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
     const store = getStore(name)
     return Object.keys(store.store).length
+  })
+  ipcMain.handle("menu-rebuild", () => {
+    deps.rebuildMenu()
   })
 
   ipcMain.handle(
