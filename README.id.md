@@ -100,7 +100,7 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agen
 
-OpenCode menyertakan dua agen bawaan yang dapat Anda ganti dengan tombol `Tab`.
+OpenCode disertakan dengan dua agen bawaan yang dapat Anda ubah dengan tombol `Tab`.
 
 - **build** - Agen akses penuh default untuk pekerjaan pengembangan
 - **plan** - Agen read-only untuk analisis dan eksplorasi kode
