@@ -235,6 +235,34 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("keeps tools and sends tool_choice none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_choice_none",
+          model,
+          tools: [{ name: "lookup", description: "Look things up", inputSchema: { type: "object", properties: {} } }],
+          messages: [
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+          ],
+          toolChoice: "none",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          name: "lookup",
+          description: "Look things up",
+          input_schema: { type: "object", properties: {} },
+        },
+      ])
+      expect(prepared.body.tool_choice).toEqual({ type: "none" })
+    }),
+  )
+
   // Regression: read tool results must stay structured so base64 media data is
   // not JSON-stringified into `tool_result.content`.
   it.effect("lowers media tool-result content as structured blocks", () =>
