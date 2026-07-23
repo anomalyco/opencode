@@ -21,7 +21,7 @@ function setup(protocol: "v1" | "v2") {
       }
       if (request.method === "POST" && request.url.endsWith("/prompt_async"))
         return new Response(undefined, { status: 204 })
-    if (request.method === "POST" && request.url.endsWith("/prompt")) {
+      if (request.method === "POST" && request.url.endsWith("/prompt")) {
         return Response.json({
           admittedSeq: 1,
           id: "msg_1",
@@ -30,10 +30,10 @@ function setup(protocol: "v1" | "v2") {
           type: "user",
           data: { text: "hello" },
           delivery: "steer",
-      })
-    }
-    if (request.method === "GET") return Response.json([])
-    return new Response(undefined, { status: 204 })
+        })
+      }
+      if (request.method === "GET") return Response.json([])
+      return new Response(undefined, { status: 204 })
     },
     { preconnect: globalThis.fetch.preconnect },
   )

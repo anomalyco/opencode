@@ -95,9 +95,13 @@ export async function checkServerHealth(
         : undefined,
     })
       .health.get({ signal })
-      .then((x) => ({ data: { healthy: x.healthy === true, version: x.version } }))
+      .then((x) =>
+        typeof x.healthy === "boolean"
+          ? { data: { healthy: x.healthy, version: x.version } }
+          : { error: new Error("Invalid health response") },
+      )
       .catch((error) => ({ error }))
-    if ("data" in current) return current.data
+    if ("data" in current && current.data) return current.data
     if (signal?.aborted) return { healthy: false }
 
     return createSdkForServer({ server, fetch, signal })
