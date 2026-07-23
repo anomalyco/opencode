@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
-import { parseTheme } from "../../../src/theme"
+import { parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
 import type { Mode, ThemeDefinition } from "../../../src/theme/v2"
 import { resolveTheme, resolveThemeDocument } from "../../../src/theme/v2/resolve"
@@ -9,7 +9,7 @@ import { selectTheme } from "../../../src/theme/v2/select"
 const light = selectTheme(DEFAULT_THEME, "light")
 const dark = selectTheme(DEFAULT_THEME, "dark")
 
-function resolveSource(source: unknown, mode?: Mode, name?: string) {
+function resolveSource(source: ThemeDocumentSource, mode?: Mode, name?: string) {
   return resolveThemeDocument(parseTheme(source, name), mode)
 }
 

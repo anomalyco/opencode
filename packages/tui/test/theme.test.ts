@@ -48,8 +48,7 @@ test("addTheme defers validation of versioned sources", () => {
 })
 
 test("parseTheme delegates malformed V1 sources and rejects unknown versions", () => {
-  expect(() => parseTheme(null)).toThrow()
-  expect(() => parseTheme("invalid")).toThrow()
+  expect(() => parseTheme({})).toThrow()
   expect(() => parseTheme({ version: 3 })).toThrow("Unsupported theme version: 3")
 })
 

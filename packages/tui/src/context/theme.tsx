@@ -12,6 +12,7 @@ import {
   subscribeThemes,
   upsertTheme,
   type Theme,
+  type ThemeDocumentSource,
 } from "../theme"
 import { generateSyntax } from "../theme/v2/syntax"
 import { generateSystem, terminalMode } from "../theme/system"
@@ -59,7 +60,7 @@ export {
 const THEME_REFRESH_DELAYS = [250, 1000] as const
 
 type State = {
-  themes: Record<string, unknown>
+  themes: Record<string, ThemeDocumentSource>
   mode: "dark" | "light"
   lock: "dark" | "light" | undefined
   active: string
@@ -351,7 +352,7 @@ export function ThemeContextProvider(props: ParentProps<{ context: ContextName }
   )
 }
 
-function loadTheme(source: unknown, name: string, requested: "dark" | "light") {
+function loadTheme(source: ThemeDocumentSource, name: string, requested: "dark" | "light") {
   const document = parseTheme(source, name)
   const modes = themeModes(document)
   const mode = modes.includes(requested) ? requested : (modes[0] ?? requested)
