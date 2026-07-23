@@ -29,6 +29,8 @@ Environment overrides:
   FEATURE_BRANCH      default: jump-user-message
   STACK_SCRIPT        default: /var/opt/opencode-telegram-group-topics-bot/opencode-stack.sh
   TARGET_BIN          default: /root/.opencode/bin/opencode
+  HEALTH_URL          default: http://127.0.0.1:4416/global/health
+  OPENCODE_SERVER_PASSWORD used for authenticated health checks when set
   SESSION_DIR         default: /root/.local/share/opencode
   BACKUP_ROOT         default: /root/.local/share/opencode/backups
   ALLOW_DIRTY         default: 0; set 1 to allow tracked worktree changes
@@ -53,6 +55,7 @@ BASE_PATCH_BRANCH="${BASE_PATCH_BRANCH:-tool-timestamp-metadata}"
 FEATURE_BRANCH="${FEATURE_BRANCH:-jump-user-message}"
 STACK_SCRIPT="${STACK_SCRIPT:-/var/opt/opencode-telegram-group-topics-bot/opencode-stack.sh}"
 TARGET_BIN="${TARGET_BIN:-/root/.opencode/bin/opencode}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:4416/global/health}"
 SESSION_DIR="${SESSION_DIR:-/root/.local/share/opencode}"
 BACKUP_ROOT="${BACKUP_ROOT:-/root/.local/share/opencode/backups}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-0}"
@@ -189,9 +192,94 @@ wait_for_port() {
   return 1
 }
 
+verify_binary() {
+  local binary="$1"
+  [[ -f "$binary" && -x "$binary" && ! -L "$binary" ]] || {
+    log "binary is missing, not executable, or is a symlink: $binary"
+    return 1
+  }
+
+  "$binary" --version >/dev/null
+}
+
+verify_stack_health() {
+  wait_for_port 4416 || return 1
+  verify_binary "$TARGET_BIN" || return 1
+  if [[ -n "${OPENCODE_SERVER_PASSWORD:-}" ]]; then
+    curl -fsS --max-time 5 -u "opencode:${OPENCODE_SERVER_PASSWORD}" "$HEALTH_URL" >/dev/null
+    return $?
+  fi
+  curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null
+}
+
+backup_binary() {
+  local source="$1" destination="$2"
+
+  [[ -f "$source" && -x "$source" && ! -L "$source" ]] || {
+    log "cannot create rollback backup; target binary is missing, not executable, or is a symlink: $source"
+    return 1
+  }
+  [[ ! -e "$destination" ]] || {
+    log "refusing to overwrite existing binary backup: $destination"
+    return 1
+  }
+
+  cp -a "$source" "$destination"
+  [[ -f "$destination" && -x "$destination" ]] || {
+    log "binary backup validation failed: $destination"
+    return 1
+  }
+  log "current binary backup: $destination"
+}
+
+install_binary() {
+  local source="$1" destination="$2"
+
+  install -m 755 "$source" "$destination.new"
+  mv -f "$destination.new" "$destination"
+}
+
+rollback_binary() {
+  local binary_backup="$1"
+
+  log "rolling back $TARGET_BIN from $binary_backup"
+  [[ -f "$binary_backup" && -x "$binary_backup" ]] || {
+    log "rollback backup is unavailable or invalid: $binary_backup"
+    return 1
+  }
+
+  "$STACK_SCRIPT" stop || true
+  install_binary "$binary_backup" "$TARGET_BIN"
+  "$STACK_SCRIPT" start
+  verify_stack_health
+  log "rollback completed; backup retained: $binary_backup"
+}
+
+confirm_backup_removal() {
+  local binary_backup="$1" answer=""
+
+  if [[ ! -t 0 ]]; then
+    log "non-interactive session; retaining rollback backup: $binary_backup"
+    return 0
+  fi
+
+  printf 'Confirm production was manually checked and remove rollback backup %s? [y/N] ' "$binary_backup"
+  read -r answer || answer=""
+  case "${answer,,}" in
+    y|yes)
+      rm -f -- "$binary_backup"
+      log "removed confirmed binary backup: $binary_backup"
+      ;;
+    *)
+      log "retaining rollback backup: $binary_backup"
+      ;;
+  esac
+}
+
 main() {
   require_cmd bash
   require_cmd bun
+  require_cmd curl
   require_cmd git
   require_cmd ss
   require_cmd tar
@@ -221,40 +309,54 @@ main() {
   local built_bin="$REPO_DIR/packages/opencode/dist/opencode-linux-x64/bin/opencode"
   if (( EXECUTE == 1 )); then
     require_path "$built_bin"
-    "$built_bin" --version
+    verify_binary "$built_bin"
   else
     log "would verify built binary: $built_bin --version"
   fi
 
   backup_sessions "pre-stop"
 
-  run "$STACK_SCRIPT" stop
-  backup_sessions "post-stop"
-
   local binary_backup="$TARGET_BIN.$(timestamp).bak"
   require_path "$(dirname "$TARGET_BIN")"
   if (( EXECUTE == 1 )); then
-    [[ -x "$built_bin" ]] || {
-      log "built binary is not executable: $built_bin"
+    backup_binary "$TARGET_BIN" "$binary_backup"
+
+    "$STACK_SCRIPT" stop
+    if ! backup_sessions "post-stop"; then
+      log "post-stop session backup failed; restarting old binary"
+      "$STACK_SCRIPT" start || true
       exit 1
-    }
-    if [[ -e "$TARGET_BIN" ]]; then
-      cp -a "$TARGET_BIN" "$binary_backup"
-      log "current binary backup: $binary_backup"
     fi
-    install -m 755 "$built_bin" "$TARGET_BIN.new"
-    mv -f "$TARGET_BIN.new" "$TARGET_BIN"
+
+    if ! install_binary "$built_bin" "$TARGET_BIN"; then
+      log "new binary install failed"
+      rollback_binary "$binary_backup" || log "rollback failed; backup retained: $binary_backup"
+      exit 1
+    fi
+
+    if ! "$STACK_SCRIPT" start; then
+      log "new binary failed during stack start"
+      rollback_binary "$binary_backup" || log "rollback failed; backup retained: $binary_backup"
+      exit 1
+    fi
+
+    if ! verify_stack_health; then
+      log "new binary failed health check"
+      rollback_binary "$binary_backup" || log "rollback failed; backup retained: $binary_backup"
+      exit 1
+    fi
+
+    log "new binary passed startup and health checks"
+    confirm_backup_removal "$binary_backup"
   else
     log "would back up current binary to: $binary_backup"
+    log "would stop stack with: $STACK_SCRIPT stop"
+    log "would create post-stop session backup"
     log "would install built binary to: $TARGET_BIN"
-  fi
-
-  run "$STACK_SCRIPT" start
-  if (( EXECUTE == 1 )); then
-    wait_for_port 4416
-    "$TARGET_BIN" --version
-  else
-    log "would wait for port 4416 and verify: $TARGET_BIN --version"
+    log "would start stack with: $STACK_SCRIPT start"
+    log "would roll back from $binary_backup if stack start or health check fails"
+    log "would retain rollback backup unless an interactive user confirms removal"
+    log "would wait for port 4416, verify $TARGET_BIN --version, and check $HEALTH_URL"
   fi
 }
 
