@@ -345,15 +345,15 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               if (route.type === "home") {
                 const selection = layout.home.selection()
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === selection.server)
-                const project = conn
-                  ? global
-                      .ensureServerCtx(conn)
-                      .projects.list()
-                      .find((item) => item.worktree === selection.directory)
-                  : undefined
-                if (conn && project) {
-                  tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
-                  return
+                if (conn) {
+                  const projects = global.ensureServerCtx(conn).projects.list()
+                  const project = selection.directory
+                    ? projects.find((item) => item.worktree === selection.directory)
+                    : projects[0]
+                  if (project) {
+                    tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                    return
+                  }
                 }
               }
 
