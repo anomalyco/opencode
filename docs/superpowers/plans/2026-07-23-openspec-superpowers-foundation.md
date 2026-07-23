@@ -142,7 +142,7 @@ rules:
 4. 使用 `superpowers:writing-plans` 细化实施步骤。
 5. 使用 TDD 实施；异常进入 `superpowers:systematic-debugging`。
 6. 使用 `superpowers:verification-before-completion` 检查真实命令输出。
-7. 使用 `openspec-verify-change` skill（OpenCode `/opsx:verify`）检查实现与制品一致性，然后 archive；它不是 CLI 命令。
+7. 使用 `openspec-verify-change` skill（OpenCode `/opsx-verify`）检查实现与制品一致性，然后 archive；它不是 CLI 命令。
 
 ## 规则
 
@@ -198,7 +198,7 @@ Expected: 提交成功，仅包含指定文件。
 
 ## 项目总启动
 
-请读取根 AGENTS.md、openspec/config.yaml 和 docs/workflows/openspec-superpowers.md。先确认 OpenSpec-cn 1.6.0、custom profile 和完整 12 项工作流。后续同时使用 OpenSpec 与 Superpowers：先用 Superpowers 澄清和验证设计，再把已批准内容固化为 OpenSpec proposal/specs/design/tasks；实现时使用 TDD，完成前运行真实验证命令和 `openspec-verify-change` skill（OpenCode `/opsx:verify`）。它不是 CLI 命令，不要运行不存在的 `openspec-cn verify`。不得改变既定最终架构，除非我明确批准。
+请读取根 AGENTS.md、openspec/config.yaml 和 docs/workflows/openspec-superpowers.md。先确认 OpenSpec-cn 1.6.0、custom profile 和完整 12 项工作流。后续同时使用 OpenSpec 与 Superpowers：先用 Superpowers 澄清和验证设计，再把已批准内容固化为 OpenSpec proposal/specs/design/tasks；实现时使用 TDD，完成前运行真实验证命令和 `openspec-verify-change` skill（OpenCode `/opsx-verify`）。它不是 CLI 命令，不要运行不存在的 `openspec-cn verify`。不得改变既定最终架构，除非我明确批准。
 
 ## 飞书数据库智能体一期
 
@@ -214,7 +214,7 @@ Expected: 提交成功，仅包含指定文件。
 
 ## 准确率验收
 
-请对当前变更运行双重验收：先使用 superpowers:verification-before-completion 执行相关测试、类型检查和静态检查，再使用 `openspec-verify-change` skill（OpenCode `/opsx:verify`）检查完整性、正确性和一致性。列出四层 gold cases 和飞书受信上下文 fail-closed 的实现与测试证据，不用主观判断替代命令输出。
+请对当前变更运行双重验收：先使用 superpowers:verification-before-completion 执行相关测试、类型检查和静态检查，再使用 `openspec-verify-change` skill（OpenCode `/opsx-verify`）检查完整性、正确性和一致性。列出四层 gold cases 和飞书受信上下文 fail-closed 的实现与测试证据，不用主观判断替代命令输出。
 
 ## 归档
 
@@ -253,7 +253,7 @@ Expected: 提交成功，工作树干净。
 
 - [x] **Step 1: RED — 添加适配器完整性测试并确认当前 core profile 失败**
 
-测试必须检查 Codex skills、OpenCode skills、OpenCode commands 的 12 项完整清单，以及生成文件内引用的 `openspec-*` skill 和 `/opsx:*` command 都有实际目标。
+测试必须检查 Codex skills、OpenCode skills、OpenCode commands 的 12 项完整清单，以及生成文件内引用的 `openspec-*` skill 和上游模板 `/opsx:*` 逻辑记法都有实际目标；OpenCode command 的实际入口单独按 `/opsx-<name>` 校验。
 
 Run from `script/`: `node --test openspec-foundation.test.mjs`
 
@@ -264,6 +264,9 @@ Expected: 因当前仅有 6/6/6，测试按预期失败并指出缺失的 `new/c
 Run:
 
 ```powershell
+if (-not (Get-Command openspec-cn -ErrorAction SilentlyContinue)) {
+  npm install -g @studyzy/openspec-cn@1.6.0
+}
 openspec-cn config set profile custom
 openspec-cn config set workflows '[\"propose\",\"explore\",\"new\",\"continue\",\"apply\",\"update\",\"ff\",\"sync\",\"archive\",\"bulk-archive\",\"verify\",\"onboard\"]'
 openspec-cn init --tools 'codex,opencode' --profile custom
@@ -276,8 +279,8 @@ Expected: 不手改生成文件；Codex skills、OpenCode skills、OpenCode comm
 
 要求：
 
-- 将生成模板中的 `AskUserQuestion`、`TodoWrite`、`Task tool`、`Skill tool` 和 `/opsx:*` 视为宿主抽象名，并映射到 Codex/OpenCode 当前可用的等价能力。
-- 明确 `openspec-verify-change`（OpenCode `/opsx:verify`）是工作流，而不是不存在的 `openspec-cn verify` CLI 命令。
+- 将生成模板中的 `AskUserQuestion`、`TodoWrite`、`Task tool`、`Skill tool` 视为宿主抽象名；`/opsx:*` 仅视为上游模板的逻辑记法。OpenCode 实际调用必须使用 `/opsx-<name>`，Codex 使用对应 `openspec-*` skill。
+- 明确 `openspec-verify-change`（OpenCode `/opsx-verify`）是工作流，而不是不存在的 `openspec-cn verify` CLI 命令。
 - 数据库工具使用最高数据库权限并支持完整 CRUD；项目不实现或复核用户权限，只消费飞书适配器传递的已验证接入上下文。接入上下文缺失、过期、伪造或不可验证时 fail closed，不进入数据库工具。
 - 每个数据库 change 定义 gold cases 和业务意图、SQL、执行结果、回答解释四层指标。写操作和高风险用例要求 100% 通过；读取类总体门槛默认不低于 95%，调整必须在 spec 中明确批准。
 - 覆盖歧义输入、事务失败、影响行数、写后复核/回滚、schema 漂移；未达门槛不得归档或发布。
@@ -291,6 +294,12 @@ Run from `script/`: `node --test openspec-foundation.test.mjs`
 Run from repo root: `openspec-cn --version; openspec-cn config list --json; openspec-cn doctor --json; openspec-cn templates --schema spec-driven --json; openspec-cn validate --all --strict --json; git diff --check`
 
 Expected: 测试通过；版本为 1.6.0；profile 为 custom 且含 12 个 workflows；doctor/config/templates 可解析；空 validate 明确为 0 items；依赖文件无变化。
+
+第二轮复审 RED 证据：增强后的测试新增生成 skill frontmatter `name`/`generatedBy`/正文、OpenCode command frontmatter/正文/实际入口，以及六个手写宿主文件的入口语法检查；从 `script/` 运行时 7 项中 6 项通过、1 项失败，并准确列出 9 处错误的冒号形式 verify 入口。
+
+第二轮复审 GREEN 证据：修正手写宿主入口并保留上游逻辑记法说明后，从 `script/` 运行同一命令，7 项全部通过、0 项失败。
+
+第二轮复审修复提交：`git commit -m "fix: correct opencode workflow commands"`。
 
 - [x] **Step 5: 提交修复并重新独立审查**
 

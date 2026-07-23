@@ -2,7 +2,7 @@
 
 ## 项目总启动
 
-请读取根 AGENTS.md、openspec/config.yaml 和 docs/workflows/openspec-superpowers.md。先确认 `openspec-cn --version` 为 1.6.0，`openspec-cn config list --json` 显示 custom profile 和 12 项工作流；不满足时按工作流文档的前置命令恢复。后续同时使用 OpenSpec 与 Superpowers：先用 Superpowers 澄清和验证设计，再把已批准内容固化为 OpenSpec proposal/specs/design/tasks；实现时使用 TDD，完成前运行真实验证命令和 `openspec-verify-change` skill（OpenCode `/opsx:verify`）。它不是 CLI 命令，不要运行不存在的 `openspec-cn verify`。不得改变既定最终架构，除非我明确批准。
+请读取根 AGENTS.md、openspec/config.yaml 和 docs/workflows/openspec-superpowers.md。先确认 `openspec-cn --version` 为 1.6.0，`openspec-cn config list --json` 显示 custom profile 和 12 项工作流；命令缺失或配置不满足时按工作流文档的前置命令恢复。后续同时使用 OpenSpec 与 Superpowers：先用 Superpowers 澄清和验证设计，再把已批准内容固化为 OpenSpec proposal/specs/design/tasks；实现时使用 TDD，完成前运行真实验证命令和 `openspec-verify-change` skill（OpenCode `/opsx-verify`）。它不是 CLI 命令，不要运行不存在的 `openspec-cn verify`。不得改变既定最终架构，除非我明确批准。
 
 ## 飞书数据库智能体一期
 
@@ -14,11 +14,11 @@
 
 ## 继续实施
 
-请读取当前 OpenSpec change 的全部制品和未完成 tasks，使用 `openspec-continue-change` 补齐缺失制品，使用 superpowers:writing-plans 形成可验证实施计划，再按 TDD 执行。遇到失败必须使用 systematic-debugging 查明根因；不要绕过测试或静默改变 spec。模板若写 `/opsx:*` 或宿主抽象工具名，按 docs/workflows/openspec-superpowers.md 映射为当前宿主的等价能力。
+请读取当前 OpenSpec change 的全部制品和未完成 tasks，使用 `openspec-continue-change` 补齐缺失制品，使用 superpowers:writing-plans 形成可验证实施计划，再按 TDD 执行。遇到失败必须使用 systematic-debugging 查明根因；不要绕过测试或静默改变 spec。模板若写 `/opsx:*`，只把它当作上游模板的逻辑记法；OpenCode 实际使用 `/opsx-<name>`，Codex 使用对应 `openspec-*` skill。其他宿主抽象工具名按 docs/workflows/openspec-superpowers.md 映射为当前宿主的等价能力。
 
 ## 准确率验收
 
-请对当前数据库变更运行双重验收：先使用 superpowers:verification-before-completion 执行相关测试、类型检查和静态检查，再使用 `openspec-verify-change` skill（OpenCode `/opsx:verify`）检查完整性、正确性和一致性。以 gold cases 分别报告业务意图、SQL、执行结果、回答解释四层指标；写操作和高风险用例必须 100%，读取类总体默认不低于 95%。列出歧义输入、事务失败、影响行数、写后复核或回滚、schema 漂移及飞书受信上下文 fail-closed 的实现与测试证据。任一门槛未达不得归档或发布。
+请对当前数据库变更运行双重验收：先使用 superpowers:verification-before-completion 执行相关测试、类型检查和静态检查，再使用 `openspec-verify-change` skill（OpenCode `/opsx-verify`）检查完整性、正确性和一致性。以 gold cases 分别报告业务意图、SQL、执行结果、回答解释四层指标；写操作和高风险用例必须 100%，读取类总体默认不低于 95%。列出歧义输入、事务失败、影响行数、写后复核或回滚、schema 漂移及飞书受信上下文 fail-closed 的实现与测试证据。任一门槛未达不得归档或发布。
 
 ## 归档
 

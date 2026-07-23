@@ -2,11 +2,14 @@
 
 ## 前置条件
 
-- 使用全局 `@studyzy/openspec-cn@1.6.0`，不把它加入 monorepo 的 `package.json` 或 `bun.lock`。
+- 使用全局 `@studyzy/openspec-cn@1.6.0`，不把它加入 monorepo 的 `package.json` 或 `bun.lock`。如果 `Get-Command openspec-cn` 找不到命令，先执行固定版本的全局安装。
 - 项目使用 `custom` profile，工作流固定为 `propose`、`explore`、`new`、`continue`、`apply`、`update`、`ff`、`sync`、`archive`、`bulk-archive`、`verify`、`onboard`。
 - PowerShell 中用以下命令配置并刷新官方生成文件：
 
 ```powershell
+if (-not (Get-Command openspec-cn -ErrorAction SilentlyContinue)) {
+  npm install -g @studyzy/openspec-cn@1.6.0
+}
 openspec-cn config set profile custom
 openspec-cn config set workflows '[\"propose\",\"explore\",\"new\",\"continue\",\"apply\",\"update\",\"ff\",\"sync\",\"archive\",\"bulk-archive\",\"verify\",\"onboard\"]'
 openspec-cn init --tools 'codex,opencode' --profile custom
@@ -28,7 +31,7 @@ openspec-cn update
 4. 使用 `superpowers:writing-plans` 细化实施步骤。
 5. 使用 TDD 实施；异常进入 `superpowers:systematic-debugging`。
 6. 使用 `superpowers:verification-before-completion` 检查真实命令输出。
-7. 使用 `openspec-verify-change` skill 检查实现与制品一致性；OpenCode 的等价入口是 `/opsx:verify`。
+7. 使用 `openspec-verify-change` skill 检查实现与制品一致性；OpenCode 的等价入口是 `/opsx-verify`。
 8. 测试、严格校验、工作流验证和质量门槛全部通过后，才可 sync 和 archive。
 
 `openspec-verify-change` 是 agent 驱动的工作流，不是 CLI 子命令；不存在 `openspec-cn verify`。
@@ -43,7 +46,7 @@ openspec-cn update
 | `TodoWrite` | 使用当前计划或任务跟踪能力 | 使用当前计划或任务跟踪能力 |
 | `Task tool` | 仅在当前会话允许且提供委派能力时委派，否则在本地执行同一步骤 | 使用当前可用且获授权的任务委派能力，否则本地执行 |
 | `Skill tool` | 通过当前 skill 机制调用对应 `openspec-*` skill | 通过当前 skill 机制调用对应 `openspec-*` skill |
-| `/opsx:*` | 不作为 shell 命令；调用对应 `openspec-*` skill | 调用对应 slash command |
+| `/opsx:*` | 仅视为上游模板的逻辑记法，不作为 shell 命令；调用对应 `openspec-*` skill | 仅视为上游模板的逻辑记法；实际调用 `/opsx-<name>` slash command |
 
 这些映射只解释宿主能力，不授权超出用户范围的委派、写入或外部操作，也不应通过手改生成文件固化。
 

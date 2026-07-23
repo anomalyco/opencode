@@ -38,13 +38,13 @@
 
 生成的 OpenSpec skill 与 command 文件由 `openspec-cn update` 维护，不手工修改。
 
-三个目标的清单均为 12 项：`propose`、`explore`、`new`、`continue`、`apply`、`update`、`ff`、`sync`、`archive`、`bulk-archive`、`verify`、`onboard`。对应 Codex/OpenCode skill 名称由官方生成器提供，OpenCode commands 使用 `/opsx:*` 逻辑入口。
+三个目标的清单均为 12 项：`propose`、`explore`、`new`、`continue`、`apply`、`update`、`ff`、`sync`、`archive`、`bulk-archive`、`verify`、`onboard`。对应 Codex/OpenCode skill 名称由官方生成器提供，OpenCode commands 的实际入口使用 `/opsx-<name>`。
 
 ## 宿主适配
 
-官方模板中的 `AskUserQuestion`、`TodoWrite`、`Task tool` 和 `Skill tool` 是宿主抽象名，由项目规则映射到 Codex/OpenCode 当前可用的提问、计划、获授权委派和 skill 调用能力。`/opsx:*` 在 OpenCode 中调用 slash command，在 Codex 中调用对应 `openspec-*` skill，不能当作 shell 命令。
+官方模板中的 `AskUserQuestion`、`TodoWrite`、`Task tool` 和 `Skill tool` 是宿主抽象名，由项目规则映射到 Codex/OpenCode 当前可用的提问、计划、获授权委派和 skill 调用能力。`/opsx:*` 仅是上游模板的逻辑记法：OpenCode 实际调用 `/opsx-<name>` slash command，Codex 调用对应 `openspec-*` skill；不能把逻辑记法当作 shell 命令或 OpenCode 的实际语法。
 
-一致性验证使用 `openspec-verify-change` skill；OpenCode 等价入口为 `/opsx:verify`。它不是 CLI 子命令，不存在 `openspec-cn verify`。
+一致性验证使用 `openspec-verify-change` skill；OpenCode 等价入口为 `/opsx-verify`。它不是 CLI 子命令，不存在 `openspec-cn verify`。
 
 ## 标准工作流
 
