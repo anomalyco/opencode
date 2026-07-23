@@ -28,7 +28,7 @@ describe("acp permission behavior", () => {
       cwd: "/workspace",
       toolName: "edit",
       toolInput: { filePath: "/workspace/file.ts" },
-      structured: {},
+      metadata: {},
     })
 
     expect(writes).toEqual([])
