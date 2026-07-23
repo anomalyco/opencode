@@ -462,7 +462,10 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const events: LLMEvent[] = []
   const hasToolCalls = state.toolCallEvents.length > 0
-  const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
+  const hasPendingTools = Object.keys(state.tools).length > 0
+  const reason = state.finishReason === "stop" && hasToolCalls
+    ? "tool-calls"
+    : state.finishReason ?? (!hasPendingTools ? "stop" : undefined)
   const lifecycle = state.toolCallEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
   events.push(...state.toolCallEvents)
   if (reason) Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })

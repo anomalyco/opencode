@@ -654,6 +654,21 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("emits step-finish with stop even without finish_reason in stream", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "Hello" }),
+        deltaChunk({ content: "!" }),
+      )
+      const events = Array.from(
+        yield* LLMClient.stream(request).pipe(Stream.runCollect, Effect.provide(fixedResponse(body))),
+      )
+      expect(events.filter((e) => e.type === "step-finish")).toEqual([
+        { type: "step-finish", index: 0, reason: "stop", usage: undefined, providerMetadata: undefined },
+      ])
+    }),
+  )
+
   it.effect("short-circuits the upstream stream when the consumer takes a prefix", () =>
     Effect.gen(function* () {
       // The body has more chunks than we'll consume. If `Stream.take(1)` did
