@@ -45,7 +45,7 @@ const layer = Layer.effectDiscard(
         fromProject === "" || (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
       const discovered = new Set(
         yield* Effect.forEach(
-          Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
+          Flag.OPENCODE_DISABLE_PROJECT_CONFIG || Flag.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS || !insideProject
             ? []
             : yield* fs.up({
                 targets: ["AGENTS.md"],

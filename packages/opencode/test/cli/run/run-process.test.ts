@@ -328,4 +328,61 @@ describe("opencode run (non-interactive subprocess)", () => {
       }),
     30_000,
   )
+
+  // The default test harness sets OPENCODE_DISABLE_PROJECT_CONFIG=1, which also
+  // suppresses project AGENTS.md discovery. These tests re-enable project config
+  // (so AGENTS.md discovery is on by default) and then exercise the dedicated
+  // --no-project-instructions switch end-to-end through the real CLI binary.
+  // They use --dir <home> so the sentinel AGENTS.md/CLAUDE.md written under the
+  // isolated home dir are the project instructions discovered from the cwd.
+  const sentinelAgents = "SENTINEL_PROJECT_AGENTS_CLI_MUST_NOT_LOAD"
+  const sentinelClaude = "SENTINEL_PROJECT_CLAUDE_CLI_MUST_NOT_LOAD"
+  const projectConfigEnabled = { OPENCODE_DISABLE_PROJECT_CONFIG: "" }
+
+  cliIt.live(
+    "--no-project-instructions keeps a sentinel project AGENTS.md/CLAUDE.md out of the model request",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await Bun.write(`${home}/AGENTS.md`, sentinelAgents)
+          await Bun.write(`${home}/CLAUDE.md`, sentinelClaude)
+        })
+        yield* llm.text("ok")
+
+        const result = yield* opencode.run("hi", {
+          extraArgs: ["--no-project-instructions", "--dir", home],
+          env: projectConfigEnabled,
+        })
+
+        opencode.expectExit(result, 0)
+        const input = JSON.stringify(yield* llm.inputs)
+        expect(input).not.toContain(sentinelAgents)
+        expect(input).not.toContain(sentinelClaude)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "loads a sentinel project AGENTS.md into the model request by default (regression)",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await Bun.write(`${home}/AGENTS.md`, sentinelAgents)
+          await Bun.write(`${home}/CLAUDE.md`, sentinelClaude)
+        })
+        yield* llm.text("ok")
+
+        const result = yield* opencode.run("hi", {
+          extraArgs: ["--dir", home],
+          env: { ...projectConfigEnabled, OPENCODE_DISABLE_PROJECT_INSTRUCTIONS: "" },
+        })
+
+        opencode.expectExit(result, 0)
+        const input = JSON.stringify(yield* llm.inputs)
+        // systemPaths picks the first project-level match (AGENTS.md wins over CLAUDE.md)
+        expect(input).toContain(sentinelAgents)
+        expect(input).not.toContain(sentinelClaude)
+      }),
+    60_000,
+  )
 })
