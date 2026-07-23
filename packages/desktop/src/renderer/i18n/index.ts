@@ -186,6 +186,7 @@ export function initI18n(): Promise<Locale> {
 
     state.locale = next
     state.dict = build(next)
+    window.api.menuRebuild().catch(() => {})
     return next
   })().catch(() => state.locale)
 
