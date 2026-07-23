@@ -261,13 +261,6 @@ export namespace ToolChoice {
   }
 }
 
-export const ResponseFormat = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
-  Schema.Struct({ type: Schema.Literal("json"), schema: JsonSchema }),
-  Schema.Struct({ type: Schema.Literal("tool"), tool: ToolDefinition }),
-]).pipe(Schema.toTaggedUnion("type"))
-export type ResponseFormat = Schema.Schema.Type<typeof ResponseFormat>
-
 export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   id: Schema.optional(Schema.String),
   model: ModelSchema,
@@ -278,7 +271,6 @@ export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
-  responseFormat: Schema.optional(ResponseFormat),
   cache: Schema.optional(CachePolicy),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
@@ -296,7 +288,6 @@ export namespace LLMRequest {
     generation: request.generation,
     providerOptions: request.providerOptions,
     http: request.http,
-    responseFormat: request.responseFormat,
     cache: request.cache,
     metadata: request.metadata,
   })
