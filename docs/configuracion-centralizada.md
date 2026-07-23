@@ -285,10 +285,37 @@ El fork gentle-opencode incluye componentes que reducen el consumo de tokens 60-
 
 ---
 
+## Dashboard de administración
+
+Un dashboard HTML autónomo está disponible en `docs/admin-dashboard.html`. Se conecta directamente a la API del sidecar.
+
+### Cómo usar
+
+1. Asegurate de que opencode esté corriendo con `OPENCODE_TOKEN_MGMT=1`
+2. Abrí `docs/admin-dashboard.html` en el navegador
+3. Ingresá la URL del sidecar (default: `http://localhost:4096`) y el password
+4. El dashboard muestra:
+   - Stats globales (usuarios, balance total, tokens usados)
+   - Perfil del usuario actual
+   - Tabla de usuarios con balances (solo admin)
+   - Formulario para dar crédito a usuarios (solo admin)
+
+También se puede servir estáticamente desde cualquier servidor web.
+
+### Endpoints disponibles
+
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| `GET` | `/identity/me` | Basic | Perfil del usuario actual |
+| `GET` | `/admin/users` | Basic + admin | Lista todos los usuarios |
+| `POST` | `/admin/users/:id/credit` | Basic + admin | Dar crédito a un usuario |
+
+---
+
 ## Pendiente
 
 - [ ] Dato de RRHH: devs vs admins para estimar costo real
-- [ ] Dashboard web de administración (API ya existe)
+- [x] Dashboard web de administración → `docs/admin-dashboard.html`
 - [ ] Fase 3: auto-recharge, notificaciones de saldo bajo
 - [ ] `.well-known/opencode` endpoint para carga automática
 - [ ] `.mobileconfig` para macOS MDM
