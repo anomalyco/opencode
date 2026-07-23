@@ -189,3 +189,39 @@ test("Mistral preserves native reasoning metadata while streaming", async () => 
     },
   })
 })
+
+test("Mistral preserves metadata-only thinking chunks", async () => {
+  const thinking = {
+    type: "thinking" as const,
+    thinking: [
+      { type: "tool_reference", url: "https://example.com/tool" },
+      { type: "reference", reference_ids: [1, "source-2"] },
+    ],
+    closed: true,
+    signature: "sig-123",
+  }
+  const mockFetch = Object.assign(
+    async () =>
+      Response.json({
+        id: "response-1",
+        created: 0,
+        model: "mistral-small-latest",
+        object: "chat.completion",
+        choices: [{ index: 0, message: { role: "assistant", content: [thinking] }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }),
+    { preconnect: fetch.preconnect },
+  )
+  const model = createMistral({ apiKey: "test", fetch: mockFetch })("mistral-small-latest")
+  const result = await model.doGenerate({
+    prompt: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+  })
+
+  expect(result.content).toEqual([
+    {
+      type: "reasoning",
+      text: "",
+      providerMetadata: { mistral: { thinking } },
+    },
+  ])
+})
