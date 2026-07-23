@@ -312,10 +312,84 @@ También se puede servir estáticamente desde cualquier servidor web.
 
 ---
 
+## `.well-known/opencode` — Carga automática
+
+OpenCode puede cargar configuración organizacional automáticamente desde `https://<dominio>/.well-known/opencode`. Esto permite que todos los clientes obtengan la misma configuración sin archivos locales.
+
+### Cómo funciona
+
+1. El usuario hace login con Microsoft (provider configurado para la organización)
+2. OpenCode detecta el dominio del tenant y busca `.well-known/opencode`
+3. La configuración remota se carga como capa base (menor prioridad que proyecto/global)
+
+### Server incluido
+
+```bash
+# Iniciar servidor de configuración
+cd docs/well-known && ./well-known-server.sh 8080
+
+# Probar
+curl http://localhost:8080/.well-known/opencode | jq
+curl http://localhost:8080/health
+```
+
+### Despliegue en producción
+
+**Opción A — Nginx (recomendado):**
+```nginx
+server {
+    listen 443 ssl;
+    server_name opencode-config.tu-dominio.com;
+
+    location /.well-known/opencode {
+        alias /ruta/a/docs/well-known/opencode.json;
+        default_type application/json;
+        add_header Cache-Control "public, max-age=3600";
+        add_header Access-Control-Allow-Origin "*";
+    }
+
+    location /health {
+        return 200 '{"status":"ok"}';
+        default_type application/json;
+    }
+}
+```
+
+**Opción B — Cloudflare Workers:**
+```js
+export default {
+  async fetch(request) {
+    const url = new URL(request.url)
+    if (url.pathname === '/.well-known/opencode') {
+      return Response.json(OPECODE_CONFIG, {
+        headers: { 'Cache-Control': 'public, max-age=3600' }
+      })
+    }
+    return new Response('ok')
+  }
+}
+```
+
+**Opción C — Vercel/Netlify:**
+Ubicar `docs/well-known/` como raíz del deploy. El symlink `.well-known/opencode -> opencode.json` resuelve automáticamente.
+
+### Estructura de archivos
+
+```
+docs/well-known/
+├── index.html              ← Página de estado del servidor
+├── opencode.json           ← Configuración organizacional
+├── well-known-server.sh    ← Script para desarrollo local
+└── .well-known/
+    └── opencode -> ../opencode.json  ← Symlink para servir la ruta
+```
+
+---
+
 ## Pendiente
 
 - [ ] Dato de RRHH: devs vs admins para estimar costo real
 - [x] Dashboard web de administración → `docs/admin-dashboard.html`
+- [x] `.well-known/opencode` endpoint → `docs/well-known/`
 - [ ] Fase 3: auto-recharge, notificaciones de saldo bajo
-- [ ] `.well-known/opencode` endpoint para carga automática
 - [ ] `.mobileconfig` para macOS MDM

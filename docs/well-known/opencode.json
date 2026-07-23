@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled",
+  "model": "opencode/deepseek-v4-pro",
+  "small_model": "opencode/deepseek-v4-flash",
+  "enabled_providers": ["opencode"],
+  "disabled_providers": [
+    "openai", "anthropic", "google", "amazon-bedrock", "azure",
+    "groq", "mistral", "cohere", "perplexity", "deepseek",
+    "openrouter", "github-copilot", "gitlab", "xai", "moonshotai",
+    "alibaba", "venice", "nebius", "fireworks", "together", "replicate"
+  ],
+  "autoupdate": true,
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 10000
+  },
+  "subagent_depth": 3
+}

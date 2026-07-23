@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gentle-opencode — .well-known Server</title>
+<style>
+:root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --radius:8px; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); padding:24px; }
+.container { max-width:800px; margin:0 auto; }
+h1 { font-size:1.3rem; margin-bottom:12px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:16px; }
+code { background:rgba(88,166,255,0.1); padding:2px 6px; border-radius:4px; font-size:0.9rem; }
+pre { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:16px; overflow-x:auto; font-size:0.85rem; margin:8px 0; }
+.method { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:600; margin-right:8px; }
+.method.get { background:var(--green); color:#000; }
+.status { display:inline-flex; align-items:center; gap:6px; }
+.dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.dot.online { background:var(--green); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🛡️ gentle-opencode — Config Server</h1>
+  <div class="card">
+    <div class="status"><span class="dot online"></span> Online</div>
+    <p style="margin-top:12px;color:var(--muted)">
+      Este servidor sirve la configuración organizacional de opencode vía el endpoint
+      <code>.well-known/opencode</code>. Los clientes opencode autenticados contra el
+      proveedor Microsoft de la organización cargan esta configuración automáticamente.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-bottom:8px"><span class="method get">GET</span> /.well-known/opencode</h2>
+    <p style="color:var(--muted)">Configuración que opencode carga al autenticar.</p>
+    <pre id="config-preview">Cargando...</pre>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-bottom:8px"><span class="method get">GET</span> /health</h2>
+    <p style="color:var(--muted);margin-bottom:8px">Health check.</p>
+    <code>{"status":"ok"}</code>
+  </div>
+
+  <p style="color:var(--muted);font-size:0.8rem;margin-top:24px">
+    gentle-opencode v1 — <span id="version">-</span>
+  </p>
+</div>
+<script>
+fetch('/.well-known/opencode')
+  .then(r => r.json())
+  .then(cfg => {
+    document.getElementById('config-preview').textContent = JSON.stringify(cfg, null, 2)
+    document.getElementById('version').textContent = cfg.model || '-'
+  })
+</script>
+</body>
+</html>
