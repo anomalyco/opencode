@@ -55,6 +55,7 @@ import {
   errorMessage,
   getProjectAvatarSource,
   homeProjectDirectories,
+  newSessionDirectory,
   projectForSession,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
@@ -333,12 +334,19 @@ export function NewHome() {
   )
   const homedir = createMemo(() => focusedSync().data.path.home ?? "")
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
-  const newSessionProject = createMemo(
-    () =>
-      selectedProject() ??
-      projects().find((project) => project.worktree === focusedServerCtx()?.projects.last()) ??
-      projects()[0],
-  )
+  const newSessionProject = createMemo(() => {
+    const list = projects()
+    const directory = newSessionDirectory(
+      list,
+      selectedProject()?.worktree,
+      focusedServerCtx()?.projects.last(),
+      focusedSync().data.path.directory,
+    )
+    return (
+      list.find((project) => project.worktree === directory) ??
+      (directory ? ({ worktree: directory, expanded: true } satisfies LocalProject) : undefined)
+    )
+  })
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {
     const project = selectedProject()

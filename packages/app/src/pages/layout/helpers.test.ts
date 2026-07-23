@@ -18,12 +18,33 @@ import {
   homeProjectDirectories,
   homeSessionServerStatus,
   latestRootSession,
+  newSessionDirectory,
   toggleHomeProjectSelection,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
 import { ServerConnection } from "@/context/server"
 
 const serverKey = ServerConnection.Key.make
+
+describe("newSessionDirectory", () => {
+  const projects = [{ worktree: "/first" }, { worktree: "/second" }]
+
+  test("prefers the selected project", () => {
+    expect(newSessionDirectory(projects, "/second", "/first", "/server")).toBe("/second")
+  })
+
+  test("uses the last project when no project is selected", () => {
+    expect(newSessionDirectory(projects, undefined, "/second", "/server")).toBe("/second")
+  })
+
+  test("uses the first opened project before the server directory", () => {
+    expect(newSessionDirectory(projects, undefined, undefined, "/server")).toBe("/first")
+  })
+
+  test("uses the server directory when no project has been opened", () => {
+    expect(newSessionDirectory([], undefined, undefined, "/server")).toBe("/server")
+  })
+})
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({

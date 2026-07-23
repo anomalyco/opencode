@@ -367,9 +367,20 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
-              if (!fallback) return
+              if (fallback) {
+                tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+                return
+              }
 
-              tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+              const conn = global.servers.list()[0] ?? server.current
+              if (!conn) return
+              const ctx = global.ensureServerCtx(conn)
+              const directory = ctx.sync.data.path.directory
+              if (!directory) return
+
+              ctx.projects.open(directory)
+              ctx.projects.touch(directory)
+              tabs.newDraft({ server: ServerConnection.key(conn), directory }, "")
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
