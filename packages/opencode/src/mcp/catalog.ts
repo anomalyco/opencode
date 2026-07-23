@@ -1,15 +1,43 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import {
-  CallToolResultSchema,
-  ListToolsResultSchema,
-  ToolSchema,
-  type Tool as MCPToolDef,
-} from "@modelcontextprotocol/sdk/types.js"
+import { Client, type CallToolResult, type Tool as MCPToolDef } from "@modelcontextprotocol/client"
+import { CallToolResultSchema, ListToolsResultSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
 import { Effect } from "effect"
 
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
+
+export interface McpTool {
+  readonly def: MCPToolDef
+  readonly client: Client
+  readonly timeout?: number
+}
+
+function sanitizeMCPSchemaForOpenAI(schema: JSONSchema7): JSONSchema7 {
+  const result: JSONSchema7 = { ...schema }
+  if (result.properties) {
+    const cleanedProperties: Record<string, any> = {}
+    for (const [key, prop] of Object.entries(result.properties)) {
+      if (typeof prop !== "object" || prop === null) {
+        cleanedProperties[key] = prop
+        continue
+      }
+      let cleaned: any = { ...prop }
+      if (Array.isArray(cleaned.anyOf)) {
+        const nonNullTypes = cleaned.anyOf.filter(
+          (anyOf: any) => anyOf.type !== "null"
+        )
+        if (nonNullTypes.length === 1) {
+          cleaned = { ...cleaned, ...nonNullTypes[0] }
+          delete cleaned.anyOf
+        }
+      }
+      delete cleaned.default
+      cleanedProperties[key] = cleaned
+    }
+    result.properties = cleanedProperties
+  }
+  return result
+}
 
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
@@ -35,43 +63,55 @@ export async function paginate<T, R extends { nextCursor?: string }>(
   throw new Error(`MCP list exceeded ${MAX_LIST_PAGES} pages`)
 }
 
+export async function callTool(
+  tool: McpTool,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<CallToolResult> {
+  const cleanArgs = Object.fromEntries(
+    Object.entries(args || {}).filter(
+      ([, v]) => v !== null && v !== undefined,
+    ),
+  )
+  const result = await tool.client.callTool(
+    { name: tool.def.name, arguments: cleanArgs },
+    CallToolResultSchema,
+    {
+      resetTimeoutOnProgress: true,
+      signal,
+      timeout: tool.timeout,
+      onprogress: () => {},
+    },
+  )
+  if (result.isError)
+    throw new Error(
+      result.content
+        .flatMap((item) => (item.type === "text" ? [item.text] : []))
+        .filter((text) => text.trim())
+        .join("\n\n") || "MCP tool returned an error",
+    )
+  return result
+}
+
 export function defs(client: Client, timeout?: number) {
   return listTools(client, timeout ?? DEFAULT_TIMEOUT).pipe(Effect.catch(() => Effect.void))
 }
 
-export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: number): Tool {
+export function convertTool(tool: McpTool): Tool {
+  const rawSchema = tool.def.inputSchema as JSONSchema7
   const inputSchema: JSONSchema7 = {
-    ...(mcpTool.inputSchema as JSONSchema7),
+    ...rawSchema,
     type: "object",
-    properties: (mcpTool.inputSchema.properties ?? {}) as JSONSchema7["properties"],
+    properties: (rawSchema.properties ?? {}) as JSONSchema7["properties"],
     additionalProperties: false,
   }
+  const sanitizedSchema = sanitizeMCPSchemaForOpenAI(inputSchema)
 
   return dynamicTool({
-    description: mcpTool.description ?? "",
-    inputSchema: jsonSchema(inputSchema),
+    description: tool.def.description ?? "",
+    inputSchema: jsonSchema(sanitizedSchema),
     execute: async (args: unknown, options) => {
-      const result = await client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        CallToolResultSchema,
-        {
-          resetTimeoutOnProgress: true,
-          signal: options.abortSignal,
-          timeout,
-          // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
-          onprogress: () => {},
-        },
-      )
-      if (result.isError)
-        throw new Error(
-          result.content
-            .flatMap((item) => (item.type === "text" ? [item.text] : []))
-            .filter((text) => text.trim())
-            .join("\n\n") || "MCP tool returned an error",
-        )
+      const result = await callTool(tool, (args || {}) as Record<string, unknown>, options.abortSignal)
       if (result.content.length > 0 || result.structuredContent === undefined || result.structuredContent === null)
         return result
       return {
@@ -101,7 +141,6 @@ export function fetch<T extends { name: string }>(
     ),
     Effect.map((items) => {
       const sanitizedClient = sanitize(clientName)
-      // Escape both the separator and escape marker so `server:uri` keys remain unambiguous.
       const resourceClient = clientName.replaceAll("%", "%25").replaceAll(":", "%3A")
       return Object.fromEntries(
         items.map((item) => [
