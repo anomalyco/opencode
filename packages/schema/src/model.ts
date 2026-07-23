@@ -112,7 +112,7 @@ export const Info = Schema.Struct({
           modelID: id,
           providerID,
           name: id,
-          capabilities: { tools: false, input: [], output: [] },
+          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           variants: [],
           time: { released: 0 },
           cost: [],
