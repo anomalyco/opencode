@@ -1,23 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { OpenCode } from "@opencode-ai/client/promise"
-import type {
-  AgentApi,
-  CatalogApi,
-  CommandApi,
-  EventApi,
-  FileApi,
-  IntegrationApi,
-  McpApi,
-  MessageApi,
-  PathApi,
-  PermissionApi,
-  ProjectApi,
-  PtyApi,
-  QuestionApi,
-  ReferenceApi,
-  SessionApi,
-  VcsApi,
-} from "@opencode-ai/client/promise"
 import type { ServerConnection } from "@/context/server"
 import { decode64 } from "@/utils/base64"
 
@@ -59,28 +41,10 @@ export function createSdkForServer({
   })
 }
 
-export interface ServerApi extends CatalogApi {
-  readonly agent: AgentApi
-  readonly command: CommandApi
-  readonly event: EventApi
-  readonly file: FileApi
-  readonly integration: IntegrationApi
-  readonly mcp: McpApi
-  readonly message: MessageApi
-  readonly path: PathApi
-  readonly permission: PermissionApi
-  readonly project: ProjectApi
-  readonly pty: PtyApi
-  readonly question: QuestionApi
-  readonly reference: ReferenceApi
-  readonly session: SessionApi
-  readonly vcs: VcsApi
-}
-
 export function createApiForServer(input: {
   server: ServerConnection.HttpBase
   fetch?: typeof globalThis.fetch
-}): ServerApi {
+}) {
   return OpenCode.make({
     baseUrl: input.server.url,
     fetch: input.fetch,
@@ -94,3 +58,5 @@ export function createApiForServer(input: {
       : undefined,
   })
 }
+
+export type ServerApi = ReturnType<typeof createApiForServer>
