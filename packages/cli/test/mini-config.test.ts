@@ -1,22 +1,32 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
 import { Effect, Option } from "effect"
-import { expect, mock, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
+import { mkdir, rm } from "node:fs/promises"
+import path from "node:path"
 import { Config } from "../src/config"
 import type { MiniCommandInput } from "../src/mini"
 import { OPENCODE_VERSION } from "../src/version"
 
 test("mini handler passes resolved CLI keybinds to the runtime", async () => {
+  const root = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const configDirectory = path.join(root, "config")
+  const stateDirectory = path.join(root, "state")
+  await mkdir(configDirectory, { recursive: true })
+  await Bun.write(
+    path.join(configDirectory, "cli.json"),
+    JSON.stringify({
+      keybinds: { "composer.subagent.interrupt": "ctrl+i" },
+      leader: { timeout: 321 },
+    }),
+  )
   let received: MiniCommandInput["tuiConfig"]
   const mini = await import("../src/mini")
-  mock.module("../src/mini", () => ({
-    ...mini,
-    validateMiniTerminal() {},
-    runMini(input: Pick<MiniCommandInput, "tuiConfig">) {
-      received = input.tuiConfig
-      return Promise.resolve()
-    },
-  }))
+  const validateMiniTerminal = spyOn(mini, "validateMiniTerminal").mockImplementation(() => {})
+  const runMini = spyOn(mini, "runMini").mockImplementation((input: MiniCommandInput) => {
+    received = input.tuiConfig
+    return Promise.resolve()
+  })
   const handler = (await import("../src/commands/handlers/mini")).default
   const server = Bun.serve({
     port: 0,
@@ -38,18 +48,8 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
         prompt: Option.none(),
         demo: false,
       }).pipe(
-        Effect.provideService(
-          Config.Service,
-          Config.Service.of({
-            path: "/tmp/cli.json",
-            get: () => Effect.succeed({
-              keybinds: { "composer.subagent.interrupt": "ctrl+i" },
-              leader: { timeout: 321 },
-            }),
-            update: () => Effect.fail(new Error("not used")),
-          }),
-        ),
-        Effect.provide(Global.layerWith({ config: "/tmp", state: "/tmp" })),
+        Effect.provide(Config.layer),
+        Effect.provide(Global.layerWith({ config: configDirectory, state: stateDirectory })),
         Effect.provide(NodeFileSystem.layer),
         Effect.scoped,
       ),
@@ -60,6 +60,8 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
     expect(config?.keybinds.get("composer.subagent.interrupt")).toMatchObject([{ key: "ctrl+i" }])
   } finally {
     server.stop(true)
-    mock.restore()
+    validateMiniTerminal.mockRestore()
+    runMini.mockRestore()
+    await rm(root, { recursive: true, force: true })
   }
 })

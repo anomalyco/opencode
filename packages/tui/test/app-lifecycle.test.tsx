@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -292,5 +292,63 @@ test("session startup prompt is submitted exactly once", async () => {
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
+  }
+})
+
+test("configured app bindings execute settings and permission commands", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  const core = await import("@opentui/core")
+  const createCliRenderer = spyOn(core, "createCliRenderer").mockImplementation(async () => setup.renderer)
+  const ready = Promise.withResolvers<void>()
+  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
+  setup.renderer.setTerminalTitle = (title) => {
+    if (title === "OpenCode") ready.resolve()
+    setTitle(title)
+  }
+  const events = createEventStream()
+  const calls = createFetch(undefined, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({
+            animations: false,
+            keybinds: { "opencode.settings": "f6", "permission.mode": "f7" },
+          }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    await ready.promise
+
+    setup.mockInput.pressKey("F6")
+    const settings = await setup.waitForFrame((frame) => frame.includes("Settings"))
+    expect(settings).toContain("Color mode")
+    expect(settings).toContain("Animations")
+
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Settings"))
+    setup.mockInput.pressKey("F7")
+    await setup.renderOnce()
+    setup.mockInput.pressKey("p", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Commands"))
+    await setup.mockInput.typeText("auto-approve")
+    const commands = await setup.waitForFrame((frame) => frame.includes("Disable auto-approve permissions"))
+    expect(commands).not.toContain("Enable auto-approve permissions")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+    createCliRenderer.mockRestore()
   }
 })

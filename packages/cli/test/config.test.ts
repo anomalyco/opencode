@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode-ai/util/global"
-import { Effect, FileSystem } from "effect"
+import { Effect, Fiber, FileSystem, Latch } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
 import path from "path"
@@ -14,6 +14,36 @@ function run<A, E>(directory: string, effect: Effect.Effect<A, E, Config.Service
       Effect.provide(NodeFileSystem.layer),
     ),
   )
+}
+
+function gateMigrationWrite(file: string, initial: string) {
+  return Effect.gen(function* () {
+    const node = yield* FileSystem.FileSystem
+    const release = Latch.makeUnsafe()
+    const state = { blocked: true, writes: 0 }
+    const exists: FileSystem.FileSystem["exists"] = (target) =>
+      state.blocked && target === file ? Effect.succeed(true) : node.exists(target)
+    const readFileString: FileSystem.FileSystem["readFileString"] = (target, encoding) =>
+      state.blocked && target === file ? Effect.succeed(initial) : node.readFileString(target, encoding)
+    const writeFileString: FileSystem.FileSystem["writeFileString"] = (target, data, options) => {
+      state.writes++
+      if (state.writes !== 1) return node.writeFileString(target, data, options)
+      return Effect.gen(function* () {
+        yield* release.await
+        state.blocked = false
+        yield* node.writeFileString(target, data, options)
+      })
+    }
+    const fs = new Proxy(node, {
+      get(target, property, receiver) {
+        if (property === "exists") return exists
+        if (property === "readFileString") return readFileString
+        if (property === "writeFileString") return writeFileString
+        return Reflect.get(target, property, receiver)
+      },
+    })
+    return { fs, release, state }
+  })
 }
 
 test("migrates tui and kv config into cli.json", async () => {
@@ -256,58 +286,37 @@ test("migrates the effective duplicate top-level keybinds", async () => {
 test("does not overwrite a concurrent config update during migration", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
-  await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+d"}}`)
-  const node = await Effect.runPromise(
-    Effect.gen(function* () {
-      return yield* FileSystem.FileSystem
-    }).pipe(Effect.provide(NodeFileSystem.layer)),
-  )
-  const started = Promise.withResolvers<void>()
-  const resume = Promise.withResolvers<void>()
-  const state = { writes: 0 }
-  const writeFileString: FileSystem.FileSystem["writeFileString"] = (path, data, options) => {
-    state.writes++
-    if (state.writes !== 1) return node.writeFileString(path, data, options)
-    started.resolve()
-    return Effect.gen(function* () {
-      yield* Effect.promise(() => resume.promise)
-      yield* node.writeFileString(path, data, options)
-    })
-  }
-  const fs = new Proxy(node, {
-    get(target, property, receiver) {
-      if (property === "writeFileString") return writeFileString
-      return Reflect.get(target, property, receiver)
-    },
-  })
+  const initial = `{"keybinds":{"session_delete":"ctrl+d"}}`
+  await Bun.write(file, initial)
+  const gated = await Effect.runPromise(gateMigrationWrite(file, initial).pipe(Effect.provide(NodeFileSystem.layer)))
 
   try {
     const config = await Effect.runPromise(
       Effect.gen(function* () {
         const service = yield* Config.Service
-        return yield* Effect.promise(async () => {
-          const reading = Effect.runPromise(service.get())
-          await started.promise
-          const updating = Effect.runPromise(
-            service.update((draft) => {
-              draft.mouse = false
-            }),
-          )
-          await Promise.race([updating, Bun.sleep(100)]).finally(() => resume.resolve())
-          await Promise.all([reading, updating])
-          return Effect.runPromise(service.get())
-        })
+        const reading = yield* service.get().pipe(Effect.forkChild({ startImmediately: true }))
+        expect(gated.state.writes).toBe(1)
+        const updating = yield* service
+          .update((draft) => {
+            draft.mouse = false
+          })
+          .pipe(Effect.forkChild({ startImmediately: true }))
+        expect(gated.state.writes).toBe(1)
+        yield* gated.release.open
+        yield* Fiber.join(reading)
+        yield* Fiber.join(updating)
+        return yield* service.get()
       }).pipe(
         Effect.provide(Config.layer),
         Effect.provide(Global.layerWith({ config: directory, state: directory })),
-        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(FileSystem.FileSystem, gated.fs),
       ),
     )
 
     expect(config).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
     expect(await Bun.file(file).json()).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
   } finally {
-    resume.resolve()
+    gated.release.openUnsafe()
     await Bun.$`rm -rf ${directory}`
   }
 })
@@ -315,30 +324,9 @@ test("does not overwrite a concurrent config update during migration", async () 
 test("does not overwrite a concurrent update from another config layer", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
-  await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+d"}}`)
-  const node = await Effect.runPromise(
-    Effect.gen(function* () {
-      return yield* FileSystem.FileSystem
-    }).pipe(Effect.provide(NodeFileSystem.layer)),
-  )
-  const started = Promise.withResolvers<void>()
-  const resume = Promise.withResolvers<void>()
-  const state = { writes: 0 }
-  const writeFileString: FileSystem.FileSystem["writeFileString"] = (path, data, options) => {
-    state.writes++
-    if (state.writes !== 1) return node.writeFileString(path, data, options)
-    started.resolve()
-    return Effect.gen(function* () {
-      yield* Effect.promise(() => resume.promise)
-      yield* node.writeFileString(path, data, options)
-    })
-  }
-  const fs = new Proxy(node, {
-    get(target, property, receiver) {
-      if (property === "writeFileString") return writeFileString
-      return Reflect.get(target, property, receiver)
-    },
-  })
+  const initial = `{"keybinds":{"session_delete":"ctrl+d"}}`
+  await Bun.write(file, initial)
+  const gated = await Effect.runPromise(gateMigrationWrite(file, initial).pipe(Effect.provide(NodeFileSystem.layer)))
   const make = () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -346,28 +334,34 @@ test("does not overwrite a concurrent update from another config layer", async (
       }).pipe(
         Effect.provide(Config.layer),
         Effect.provide(Global.layerWith({ config: directory, state: directory })),
-        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(FileSystem.FileSystem, gated.fs),
       ),
     )
 
   try {
     const first = await make()
     const second = await make()
-    const reading = Effect.runPromise(first.get())
-    await started.promise
-    const updating = Effect.runPromise(
-      second.update((draft) => {
-        draft.mouse = false
+    const config = await Effect.runPromise(
+      Effect.gen(function* () {
+        const reading = yield* first.get().pipe(Effect.forkChild({ startImmediately: true }))
+        expect(gated.state.writes).toBe(1)
+        const updating = yield* second
+          .update((draft) => {
+            draft.mouse = false
+          })
+          .pipe(Effect.forkChild({ startImmediately: true }))
+        expect(gated.state.writes).toBe(1)
+        yield* gated.release.open
+        yield* Fiber.join(reading)
+        yield* Fiber.join(updating)
+        return yield* second.get()
       }),
     )
-    await Promise.race([updating, Bun.sleep(100)]).finally(() => resume.resolve())
-    await Promise.all([reading, updating])
-    const config = await Effect.runPromise(second.get())
 
     expect(config).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
     expect(await Bun.file(file).json()).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
   } finally {
-    resume.resolve()
+    gated.release.openUnsafe()
     await Bun.$`rm -rf ${directory}`
   }
 })
