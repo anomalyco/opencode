@@ -393,8 +393,13 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints()
   const toolConfig =
-    request.tools.length > 0 && request.toolChoice?.type !== "none"
-      ? { tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools), toolChoice }
+    request.tools.length > 0
+      ? {
+          tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools),
+          // Converse has no native "none". Keep definitions stable for prompt
+          // caching and omit only the unsupported choice.
+          toolChoice,
+        }
       : undefined
   const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)
   const messages = yield* lowerMessages(request, breakpoints)
@@ -438,21 +443,22 @@ const mapFinishReason = (reason: string): FinishReason => {
   return "unknown"
 }
 
-// AWS Bedrock Converse reports `inputTokens` (inclusive total) with
-// `cacheReadInputTokens` and `cacheWriteInputTokens` as subsets. Pass
-// the total through and derive the non-cached breakdown. Bedrock does
-// not break reasoning out of `outputTokens` for any current model.
+// AWS reports inputTokens separately from cache reads and writes.
+// Bedrock does not break reasoning out of outputTokens for current models.
 const mapUsage = (usage: BedrockUsageSchema | undefined): Usage | undefined => {
   if (!usage) return undefined
-  const cacheTotal = (usage.cacheReadInputTokens ?? 0) + (usage.cacheWriteInputTokens ?? 0)
-  const nonCached = ProviderShared.subtractTokens(usage.inputTokens, cacheTotal)
+  const inputTokens = ProviderShared.sumTokens(
+    usage.inputTokens,
+    usage.cacheReadInputTokens,
+    usage.cacheWriteInputTokens,
+  )
   return new Usage({
-    inputTokens: usage.inputTokens,
+    inputTokens,
     outputTokens: usage.outputTokens,
-    nonCachedInputTokens: nonCached,
+    nonCachedInputTokens: usage.inputTokens,
     cacheReadInputTokens: usage.cacheReadInputTokens,
     cacheWriteInputTokens: usage.cacheWriteInputTokens,
-    totalTokens: ProviderShared.totalTokens(usage.inputTokens, usage.outputTokens, usage.totalTokens),
+    totalTokens: ProviderShared.totalTokens(inputTokens, usage.outputTokens, usage.totalTokens),
     providerMetadata: { bedrock: usage },
   })
 }

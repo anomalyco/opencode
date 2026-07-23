@@ -367,8 +367,7 @@ Recent work
               state: SessionMessage.ToolStateRunning.make({
                 status: "running",
                 input: { path: "README.md" },
-                content: [],
-                structured: { type: "media", mime: "image/png" },
+                metadata: { type: "media", mime: "image/png" },
               }),
               time: { created },
             }),
@@ -388,7 +387,6 @@ Recent work
                     name: "hello.png",
                   },
                 ],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -403,7 +401,6 @@ Recent work
                 status: "completed",
                 input: { query: "Effect" },
                 content: [{ type: "text", text: "Found it" }],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -416,8 +413,6 @@ Recent work
               state: SessionMessage.ToolStateError.make({
                 status: "error",
                 input: { path: "README.md" },
-                content: [],
-                structured: {},
                 error: { type: "unknown", message: "Denied" },
               }),
               time: { created, completed: created },
@@ -473,7 +468,7 @@ Recent work
         providerMetadata: { provider: { continuation: "failed" } },
         result: {
           type: "error",
-          value: { error: { type: "unknown", message: "Denied" }, content: [], structured: {} },
+          value: { error: { type: "unknown", message: "Denied" }, content: [] },
         },
       },
     ])
@@ -575,9 +570,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { query: "Effect" },
-                content: [],
-                structured: {},
-                result: { type: "json", value: { found: true } },
+                content: [{ type: "text", text: '{"found":true}' }],
               }),
               time: { created, completed: created },
             }),
@@ -592,8 +585,6 @@ Recent work
                 status: "error",
                 input: { query: "Effect" },
                 error: { type: "unknown", message: "Step interrupted" },
-                content: [],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -620,8 +611,10 @@ Recent work
         type: "tool-result",
         id: "hosted-completed",
         name: "web_search",
-        result: { type: "json", value: { found: true } },
+        result: { type: "text", value: '{"found":true}' },
         providerExecuted: true,
+        cache: undefined,
+        metadata: undefined,
         providerMetadata: { provider: { itemId: "result_completed" } },
       },
       {
@@ -630,7 +623,7 @@ Recent work
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: undefined,
+        providerMetadata: { provider: { itemId: "call_failed" } },
       },
       {
         type: "tool-result",
@@ -641,18 +634,17 @@ Recent work
           value: {
             error: { type: "unknown", message: "Step interrupted" },
             content: [],
-            structured: {},
           },
         },
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: undefined,
+        providerMetadata: { provider: { itemId: "result_failed" } },
       },
     ])
   })
 
-  test("drops provider-native continuation metadata after a model switch", () => {
+  test("drops model-scoped continuation metadata after a model switch but keeps hosted result payloads", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -676,9 +668,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { query: "Effect" },
-                content: [],
-                structured: {},
-                result: { type: "json", value: { status: "completed" } },
+                content: [{ type: "text", text: '{"status":"completed"}' }],
               }),
               time: { created, completed: created },
             }),
@@ -692,8 +682,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { path: "README.md" },
-                content: [],
-                structured: { text: "Hello" },
+                content: [{ type: "text", text: "Hello" }],
               }),
               time: { created, completed: created },
             }),
@@ -718,11 +707,13 @@ Recent work
         type: "tool-result",
         id: "hosted-old-model",
         name: "web_search",
-        result: { type: "json", value: { status: "completed" } },
+        result: { type: "text", value: '{"status":"completed"}' },
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: undefined,
+        // Hosted result payloads are provider-format state and must survive a
+        // model switch within the same provider for replay to stay valid.
+        providerMetadata: { provider: { itemId: "hosted-old-model" } },
       },
       {
         type: "tool-call",
@@ -738,7 +729,7 @@ Recent work
         type: "tool-result",
         id: "local-old-model",
         name: "read",
-        result: { type: "json", value: { text: "Hello" } },
+        result: { type: "text", value: "Hello" },
         providerExecuted: false,
         cache: undefined,
         metadata: undefined,

@@ -473,10 +473,7 @@ export namespace Backend {
       : `${registration.options.namespace.replaceAll(".", "_")}_${registration.name}`
   }
 
-  export const ToolProgress = Schema.Struct({
-    structured: Schema.Record(Schema.String, Schema.Json),
-    content: Schema.optionalKey(Schema.Array(ToolContent)),
-  })
+  export const ToolProgress = Schema.Record(Schema.String, Schema.Json)
   export interface ToolProgress extends Schema.Schema.Type<typeof ToolProgress> {}
 
   export const ToolOutput = Schema.Struct({

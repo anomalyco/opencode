@@ -1,4 +1,4 @@
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, type Renderable } from "@opentui/core"
 import { TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { open } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -33,6 +33,7 @@ export function DevToolsBar() {
   const plugins = usePlugin()
   const theme = useTheme()
   const keymap = Keymap.use()
+  const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const { themeV2, mode, supports, setMode } = theme
   const elevatedTheme = theme.contextual("elevated").themeV2
@@ -41,6 +42,7 @@ export function DevToolsBar() {
   const [dumpPath, setDumpPath] = createSignal<string>()
   const [dumpError, setDumpError] = createSignal<string>()
   const [frontendSamples, setFrontendSamples] = createSignal<readonly ProcessSample[]>([])
+  let focus: Renderable | null
   const connected = createMemo(() => client.connection.status() === "connected")
   const serverIndicator = createMemo(() => connectionIndicator(client.connection.status(), client.connection.attempt()))
   const themePerformance = createMemo(
@@ -54,11 +56,27 @@ export function DevToolsBar() {
       address: info.urls[0] ? new URL(info.urls[0]).host : "Unknown",
     }
   })
-  const toggle = (next: Panel) => setPanel((current) => (current === next ? undefined : next))
+  const close = () => {
+    setPanel()
+    setTimeout(() => {
+      if (panel() || !focus || focus.isDestroyed) return
+      focus.focus()
+      focus = null
+    }, 1)
+  }
+  const toggle = (next: Panel) => {
+    if (panel() === next) return close()
+    if (!panel()) {
+      focus = renderer.currentFocusedRenderable
+      focus?.blur()
+    }
+    setPanel(next)
+  }
   const nextMode = () => (mode() === "dark" ? "light" : "dark")
   const canSwitchMode = () => supports(nextMode())
   const runtime = createMemo(() => runtimeStatus(frontendSamples()))
   const timing = () => config.data.debug?.timing ?? false
+  const turnTokens = () => config.data.debug?.turn_tokens ?? false
 
   const offEscape = keymap.intercept(
     "key",
@@ -66,7 +84,7 @@ export function DevToolsBar() {
       if (!panel() || event.name !== "escape") return
       event.preventDefault()
       event.stopPropagation()
-      setPanel()
+      close()
     },
     { priority: 10 },
   )
@@ -204,7 +222,7 @@ export function DevToolsBar() {
           width={dimensions().width}
           height={Math.max(0, dimensions().height - 1)}
           backgroundColor="transparent"
-          onMouseUp={() => setPanel()}
+          onMouseUp={close}
         />
       </Show>
       <BarItem active={panel() === "server"} onClick={() => toggle("server")}>
@@ -352,6 +370,16 @@ export function DevToolsBar() {
               >
                 {timing() ? "[x]" : "[ ]"} Time to first draw
               </Action>
+              <Action
+                onClick={() =>
+                  void config.update((draft) => {
+                    draft.debug = { ...draft.debug, turn_tokens: !turnTokens() }
+                  })
+                }
+                hoverBackground
+              >
+                {turnTokens() ? "[x]" : "[ ]"} Turn token usage
+              </Action>
             </box>
             <For each={groups()}>
               {(group) => (
@@ -403,7 +431,7 @@ function PanelBox(props: ParentProps) {
       position="absolute"
       zIndex={2600}
       bottom={1}
-      left={0}
+      left={-1}
       width={42}
       paddingLeft={2}
       paddingRight={2}

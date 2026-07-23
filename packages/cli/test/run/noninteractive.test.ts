@@ -134,15 +134,14 @@ function failedTool(inputID: string): V2Event[] {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_tool",
         callID: "call_failed_tool",
-        structured: { checkpoint: 1 },
-        content: [{ type: "text", text: "partial output" }],
+        metadata: { checkpoint: 1 },
       },
     },
     {
       id: "evt_failed_tool_terminal",
       created: 4,
       type: "session.tool.failed",
-      durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+      durable: { aggregateID: "ses_1", seq: 4, version: 2 },
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_tool",
@@ -190,12 +189,12 @@ function successfulGrep(inputID: string): V2Event[] {
       id: "evt_grep_success",
       created: 3,
       type: "session.tool.success",
-      durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+      durable: { aggregateID: "ses_1", seq: 3, version: 2 },
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_grep",
         callID: "call_grep",
-        structured: { matches: 2 },
+        metadata: { matches: 2 },
         content: [{ type: "text", text }],
         executed: false,
       },
@@ -258,9 +257,7 @@ async function run(input: {
   spyOn(sdk.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
   spyOn(sdk.message, "list").mockImplementation(() =>
     ok({
-      data: input.messages?.(promptID) ?? [
-        { id: promptID, type: "user", text: "hello", time: { created: 1 } },
-      ],
+      data: input.messages?.(promptID) ?? [{ id: promptID, type: "user", text: "hello", time: { created: 1 } }],
       cursor: {},
     }),
   )
@@ -316,7 +313,7 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
-  test("keeps formatted tool output and compact structured metadata in JSON", async () => {
+  test("keeps formatted tool output and compact tool metadata in JSON", async () => {
     const output = await capture({ format: "json", turn: successfulGrep })
     const events = output.stdout
       .split("\n")
@@ -332,13 +329,13 @@ describe("runNonInteractivePrompt", () => {
           status: "completed",
           output: expect.stringContaining("Found 2 matches"),
           metadata: {
-            structured: { matches: 2 },
+            metadata: { matches: 2 },
             content: [{ type: "text", text: expect.stringContaining("/src/a.ts") }],
           },
         },
       },
     })
-    expect(events[0].part.state.metadata.structured).toEqual({ matches: 2 })
+    expect(events[0].part.state.metadata.metadata).toEqual({ matches: 2 })
     expect(events[0].part.state.metadata.result).toBeUndefined()
   })
 
@@ -534,7 +531,7 @@ describe("runNonInteractivePrompt", () => {
         id: "call_failed_tool",
         state: {
           status: "completed",
-          structured: { checkpoint: 1 },
+          metadata: { checkpoint: 1 },
           content: [{ type: "text", text: "partial output" }],
         },
       },
@@ -544,7 +541,7 @@ describe("runNonInteractivePrompt", () => {
         id: "call_failed_tool",
         state: {
           status: "error",
-          structured: { checkpoint: 1 },
+          metadata: { checkpoint: 1 },
           content: [{ type: "text", text: "partial output" }],
           error: { message: "tool failed" },
         },
@@ -574,7 +571,7 @@ describe("runNonInteractivePrompt", () => {
       },
     })
     expect(events[0].part.state.output).toBeUndefined()
-    expect(events[0].part.state.metadata.structured).toBeUndefined()
+    expect(events[0].part.state.metadata.metadata).toBeUndefined()
     expect(events[0].part.state.metadata.content).toBeUndefined()
     expect(output.stderr).toBe("")
   })

@@ -116,7 +116,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
           yield* addPlugin(GoogleVertexAnthropicPlugin)
           const result = yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(
+              ...ModelV2.Info.default(
                 ProviderV2.ID.make("google-vertex-anthropic"),
                 ModelV2.ID.make("claude-sonnet-4-5"),
               ),
@@ -143,7 +143,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
           yield* addPlugin(GoogleVertexAnthropicPlugin)
           const result = yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(
+              ...ModelV2.Info.default(
                 ProviderV2.ID.make("google-vertex-anthropic"),
                 ModelV2.ID.make("claude-sonnet-4-5"),
               ),
@@ -167,7 +167,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
       yield* addPlugin(GoogleVertexAnthropicPlugin)
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("claude-sonnet-4-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("claude-sonnet-4-5")),
           modelID: ModelV2.ID.make("claude-sonnet-4-5"),
           package: "aisdk:test-provider",
         }),
@@ -187,7 +187,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
       yield* addPlugin(GoogleVertexAnthropicPlugin)
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("claude-sonnet-4-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("claude-sonnet-4-5")),
           modelID: ModelV2.ID.make("claude-sonnet-4-5"),
           package: "aisdk:test-provider",
         }),
@@ -206,7 +206,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
       yield* addPlugin(GoogleVertexAnthropicPlugin)
       const sdkResult = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make(" claude-sonnet-4-5 ")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make(" claude-sonnet-4-5 ")),
           modelID: ModelV2.ID.make(" claude-sonnet-4-5 "),
           package: "aisdk:test-provider",
         }),
@@ -215,7 +215,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
       })
       const languageResult = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make(" claude-sonnet-4-5 ")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make(" claude-sonnet-4-5 ")),
           modelID: ModelV2.ID.make(" claude-sonnet-4-5 "),
           package: "aisdk:test-provider",
         }),
@@ -238,7 +238,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
       yield* addPlugin(GoogleVertexAnthropicPlugin)
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex-anthropic"), ModelV2.ID.make(" claude-sonnet-4-5 ")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex-anthropic"), ModelV2.ID.make(" claude-sonnet-4-5 ")),
           modelID: ModelV2.ID.make(" claude-sonnet-4-5 "),
           package: "aisdk:test-provider",
         }),
@@ -257,7 +257,7 @@ describe("GoogleVertexAnthropicPlugin", () => {
       yield* addPlugin(GoogleVertexAnthropicPlugin)
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("claude-sonnet-4-5")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("claude-sonnet-4-5")),
           modelID: ModelV2.ID.make("claude-sonnet-4-5"),
           package: "aisdk:test-provider",
         }),

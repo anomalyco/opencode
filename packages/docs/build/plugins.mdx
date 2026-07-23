@@ -248,7 +248,7 @@ mutable fields:
 | `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
 | `ctx.session.hook("request", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
 | `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
-| `ctx.tool.hook("execute.after", callback)`  | `result`, `output`, and `outputPaths`, after execution settles                 |
+| `ctx.tool.hook("execute.after", callback)`  | Terminal `content`, `metadata`, and `outputPaths`; `error` on failure          |
 
 For example, remove a tool from selected model requests and normalize another
 tool's input:
@@ -278,52 +278,66 @@ handle expected errors inside the callback.
 
 ### Add a tool
 
-Pass a tool declaration to `tools.add`. Define its input with JSON Schema and
-use an async executor:
+Create an executable tool with `Tool.make`, then register it with a name
+and registration options. Define its input with JSON Schema and use an async
+executor:
 
 ```js title=".opencode/plugins/greeting.js"
 import { Plugin } from "@opencode-ai/plugin/v2"
+import { Tool } from "@opencode-ai/plugin/v2/tool"
 
 export default Plugin.define({
   id: "acme.greeting",
   setup: async (ctx) => {
     await ctx.tool.transform((tools) => {
-      tools.add({
-        name: "greeting",
-        description: "Create a greeting",
-        jsonSchema: {
-          type: "object",
-          properties: {
-            name: { type: "string" },
+      tools.add(
+        "greeting",
+        Tool.make({
+          description: "Create a greeting",
+          input: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+            },
+            required: ["name"],
+            additionalProperties: false,
           },
-          required: ["name"],
-          additionalProperties: false,
-        },
-        execute: async ({ name }) => {
-          const text = `Hello, ${name}!`
-          return {
-            structured: { greeting: text },
-            content: [{ type: "text", text }],
-          }
-        },
-      })
+          output: {
+            type: "object",
+            properties: { greeting: { type: "string" } },
+            required: ["greeting"],
+            additionalProperties: false,
+          },
+          execute: async ({ name }) => {
+            const text = `Hello, ${name}!`
+            return {
+              output: { greeting: text },
+              content: text,
+            }
+          },
+        }),
+      )
     })
   },
 })
 ```
 
-Unsupported characters in tool and group names are normalized to underscores.
-The resulting exposed key must begin with a letter and contain at most 64
-letters, digits, underscores, or hyphens. Set `options` on the declaration to
-configure registration with `{ group, codemode }`:
+Unsupported characters in tool names are normalized to underscores. Namespace
+segments must begin with a letter, contain at most 64 letters, digits,
+underscores, or hyphens, and are joined with dots. Pass the optional third
+argument to `tools.add` to configure the registration with
+`{ namespace, codemode }`:
 
-- `group` prefixes and groups the exposed tool name.
+- `namespace` prefixes and groups the exposed tool name.
 - `codemode` defaults to `true` and makes the tool available through the
   `execute` CodeMode tool. Set `codemode: false` to expose it directly to the
   provider.
 
 The executor receives a second context argument containing `sessionID`,
-`agent`, `assistantMessageID`, and `toolCallID`.
+`agent`, `messageID`, `callID`, and `progress`. A tool with `output`
+must return `output`; Effect and Standard Schema codecs validate it, while raw
+JSON Schema definitions enforce JSON compatibility only. A tool
+without `output` returns model-visible `content` instead.
 
 ### Add a command
 
@@ -426,6 +440,7 @@ fibers, and registrations are released when the plugin reloads or unloads.
 OpenCode does not expose its private Core services to the plugin; use the
 capabilities on `ctx`.
 
-Typed tools can use `Schema` from `effect` and the contracts exported from
-`@opencode-ai/plugin/v2/effect/tool`. Their executors return an Effect and may
-fail with the typed tool failure channel.
+Typed tools can use `Schema` from `effect` and `Tool.make` from
+`@opencode-ai/plugin/v2/effect/tool`. Effect and Promise plugins use the same
+`tools.add(name, tool, options?)` registration shape. Effect executors
+return an Effect and may fail with the typed tool failure channel.

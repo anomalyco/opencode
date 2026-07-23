@@ -49,14 +49,15 @@ const client = Layer.mock(LLMClient.Service)({
   generate: () => Effect.die("unused"),
 })
 const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
-const models = SessionRunnerModel.layerWith(() =>
-  Effect.succeed(
-    SessionRunnerModel.resolved(model, {
-      capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-      cost: [],
-    }),
-  ),
-)
+const models = Layer.mock(SessionRunnerModel.Service)({
+  resolve: () =>
+    Effect.succeed(
+      SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        cost: [],
+      }),
+    ),
+})
 const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(

@@ -1,6 +1,7 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { useConfig } from "../../config"
 import { useData } from "../../context/data"
 import { useClient } from "../../context/client"
 
@@ -27,18 +28,25 @@ export type SessionRow =
       completed: boolean
     }
   | { type: "assistant-footer"; messageID: string }
+  | { type: "turn-usage"; messageIDs: string[]; previousCacheRead?: number }
 
 export function createSessionRows(sessionID: Accessor<string>) {
   const data = useData()
   const client = useClient()
+  const config = useConfig()
   const [rows, setRows] = createStore<SessionRow[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
+  const turnTokens = () => config.data.debug?.turn_tokens === true
 
   function reduce() {
     const messages = data.session.message.list(sessionID())
     const inputs = new Set(data.session.input.list(sessionID()))
     const boundary = revertBoundary()
-    const rows = reduceSessionRows(boundary ? messages.filter((message) => message.id < boundary) : messages, inputs)
+    const rows = reduceSessionRows(
+      boundary ? messages.filter((message) => message.id < boundary) : messages,
+      inputs,
+      turnTokens(),
+    )
     partitionPending(rows, pendingPermissions())
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
     rows.splice(
@@ -125,6 +133,10 @@ export function createSessionRows(sessionID: Accessor<string>) {
         ),
       () => setRows(reconcile(reduce())),
     ),
+  )
+
+  createEffect(
+    on(turnTokens, () => setRows(reconcile(reduce()))),
   )
 
   const appendMessage = (messageID: string) =>
@@ -246,9 +258,12 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
       appendFooter(event.data.assistantMessageID)
+      if (turnTokens()) setRows(reconcile(reduce()))
     }),
     data.on("session.step.failed", (event) => {
-      if (event.data.sessionID === sessionID()) appendFooter(event.data.assistantMessageID)
+      if (event.data.sessionID !== sessionID()) return
+      appendFooter(event.data.assistantMessageID)
+      if (turnTokens()) setRows(reconcile(reduce()))
     }),
   ]
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
@@ -256,10 +271,17 @@ export function createSessionRows(sessionID: Accessor<string>) {
   return rows
 }
 
-export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>()) {
+export function reduceSessionRows(
+  messages: SessionMessageInfo[],
+  inputs = new Set<string>(),
+  turnTokens = false,
+) {
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
+  const usage = turnTokens
+    ? { steps: [] as SessionMessageAssistant[], previousTurnCacheRead: undefined as number | undefined }
+    : undefined
   return [
     ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
@@ -271,18 +293,45 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       rows.push({ type: "message", messageID: message.id })
       return rows
     }
+    usage?.steps.push(message)
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
       append(rows, { messageID: message.id, partID }, part)
     })
-    if ((message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error || message.retry) {
+    const terminal = (message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error
+    if (terminal || message.retry) {
       completePrevious(rows)
       rows.push({ type: "assistant-footer", messageID: message.id })
     }
+    if (terminal && usage) {
+      const stepsWithUsage = usage.steps.filter(hasTokenUsage)
+      const last = stepsWithUsage.at(-1)
+      if (last) {
+        rows.push({
+          type: "turn-usage",
+          messageIDs: stepsWithUsage.map((step) => step.id),
+          ...(usage.previousTurnCacheRead === undefined
+            ? {}
+            : { previousCacheRead: usage.previousTurnCacheRead }),
+        })
+        usage.previousTurnCacheRead = last.tokens.cache.read
+      }
+      usage.steps.length = 0
+    }
     return rows
   }, [])
+}
+
+function hasTokenUsage(
+  message: SessionMessageAssistant,
+): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } {
+  return message.tokens !== undefined && tokenTotal(message.tokens) > 0
+}
+
+function tokenTotal(tokens: NonNullable<SessionMessageAssistant["tokens"]>) {
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
 }
 
 export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageInfo[]) {
@@ -309,6 +358,8 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
         ? row.refs[0]?.messageID
         : row.type === "assistant-footer"
           ? row.messageID
+          : row.type === "turn-usage"
+            ? row.messageIDs[0]
           : undefined
   if (!messageID) return undefined
   const message = messages.get(messageID)

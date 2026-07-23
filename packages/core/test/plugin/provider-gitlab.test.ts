@@ -69,7 +69,7 @@ describe("GitLabPlugin", () => {
           yield* addPlugin()
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
               modelID: ModelV2.ID.make("claude"),
               package: "aisdk:test-provider",
             }),
@@ -107,7 +107,7 @@ describe("GitLabPlugin", () => {
           yield* addPlugin()
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
               modelID: ModelV2.ID.make("claude"),
               package: "aisdk:test-provider",
             }),
@@ -133,7 +133,7 @@ describe("GitLabPlugin", () => {
           yield* addPlugin()
           yield* aisdk.runSDK({
             model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+              ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
               modelID: ModelV2.ID.make("claude"),
               package: "aisdk:test-provider",
             }),
@@ -175,7 +175,7 @@ describe("GitLabPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
           modelID: ModelV2.ID.make("claude"),
           package: "aisdk:test-provider",
         }),
@@ -195,7 +195,7 @@ describe("GitLabPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
           modelID: ModelV2.ID.make("duo-workflow-custom"),
           package: "aisdk:test-provider",
           headers: {},
@@ -229,7 +229,7 @@ describe("GitLabPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-exact")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-exact")),
           modelID: ModelV2.ID.make("duo-workflow-exact"),
           package: "aisdk:test-provider",
         }),
@@ -257,7 +257,7 @@ describe("GitLabPlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
           modelID: ModelV2.ID.make("duo-workflow-custom"),
           package: "aisdk:test-provider",
           headers: {},
@@ -284,7 +284,7 @@ describe("GitLabPlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
           modelID: ModelV2.ID.make("claude"),
           package: "aisdk:test-provider",
           headers: { h: "v" },

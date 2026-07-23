@@ -106,13 +106,13 @@ export const Info = Schema.Struct({
   .annotate({ identifier: "Model.Info" })
   .pipe(
     statics(() => ({
-      empty: (providerID: Provider.ID, id: ID) =>
+      default: (providerID: Provider.ID, id: ID) =>
         ({
           id,
           modelID: id,
           providerID,
           name: id,
-          capabilities: { tools: false, input: [], output: [] },
+          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           variants: [],
           time: { released: 0 },
           cost: [],

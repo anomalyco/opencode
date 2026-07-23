@@ -33,7 +33,7 @@ import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
-import { settleTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<PermissionV2.AssertInput> | undefined
 let decision: Effect.Effect<void, PermissionV2.Error> = Effect.void
@@ -241,10 +241,41 @@ const mcp = Layer.mock(MCP.Service, {
         description: "Lookup",
         inputSchema: { type: "object", properties: {} },
       }),
+      new MCP.Tool({
+        server: MCP.ServerName.make("direct"),
+        name: "fail",
+        codemode: false,
+        description: "Always fails",
+        inputSchema: { type: "object", properties: {} },
+      }),
+      new MCP.Tool({
+        server: MCP.ServerName.make("direct"),
+        name: "media",
+        codemode: false,
+        description: "Returns text and an image",
+        inputSchema: { type: "object", properties: {} },
+      }),
     ]),
   callTool: (input) =>
     Effect.sync(() => {
       calls += 1
+      if (input.name === "fail")
+        return new MCP.ToolResult({
+          server: MCP.ServerName.make(input.server),
+          tool: input.name,
+          isError: true,
+          content: [{ type: "text", text: "search index unavailable" }],
+        })
+      if (input.name === "media")
+        return new MCP.ToolResult({
+          server: MCP.ServerName.make(input.server),
+          tool: input.name,
+          isError: false,
+          content: [
+            { type: "text", text: "rendered chart" },
+            { type: "media", data: "aGVsbG8=", mimeType: "image/png" },
+          ],
+        })
       return new MCP.ToolResult({
         server: MCP.ServerName.make(input.server),
         tool: input.name,
@@ -647,9 +678,7 @@ test("loads and reads MCP resources", async () => {
           })
           expect(server.clientVersion()).toMatchObject({ name: "sdk", version: "1.2.3" })
         }).pipe(
-          Effect.provide(
-            resourceMcpLayer(server.url, undefined, { clientInfo: { name: "sdk", version: "1.2.3" } }),
-          ),
+          Effect.provide(resourceMcpLayer(server.url, undefined, { clientInfo: { name: "sdk", version: "1.2.3" } })),
         )
       }),
     ),
@@ -774,8 +803,8 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
-    const materialized = yield* registry.materialize()
-    const execute = materialized.definitions.find((tool) => tool.name === "execute")
+    const definitions = yield* toolDefinitions(registry)
+    const execute = definitions.find((tool) => tool.name === "execute")
 
     expect(execute?.description).not.toContain("tools.demo.search")
   }),
@@ -793,6 +822,50 @@ it.effect("advertises MCP tools directly when Code Mode is disabled for the serv
   }),
 )
 
+// Baseline (PLAN.md step 1): MCP isError must become one failed tool call, not a
+// success whose text happens to describe an error.
+it.effect("fails the call when MCP reports isError", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<PermissionV2.AssertInput>()
+    decision = Effect.void
+    const registry = yield* ToolRegistry.Service
+    yield* waitForTool(registry, "direct_fail")
+
+    const execution = yield* executeTool(registry, {
+      sessionID: SessionV2.ID.make("ses_mcp_is_error"),
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call_mcp_is_error", name: "direct_fail", input: {} },
+    })
+
+    expect(execution).toMatchObject({ status: "error", error: { message: "search index unavailable" } })
+    expect(execution.content).toBeUndefined()
+  }),
+)
+
+// Baseline (PLAN.md step 1): mixed MCP text and media content must reach the model intact.
+it.effect("preserves MCP text and media content for the model", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<PermissionV2.AssertInput>()
+    decision = Effect.void
+    const registry = yield* ToolRegistry.Service
+    yield* waitForTool(registry, "direct_media")
+
+    const execution = yield* executeTool(registry, {
+      sessionID: SessionV2.ID.make("ses_mcp_media"),
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call_mcp_media", name: "direct_media", input: {} },
+    })
+
+    expect(execution.status).toBe("completed")
+    if (execution.status !== "completed") return
+    expect(execution.output).toBe("rendered chart")
+    expect(execution.content).toMatchObject([
+      { type: "text", text: "rendered chart" },
+      { type: "file", mime: "image/png" },
+    ])
+  }),
+)
+
 it.effect("waits for permission before calling an MCP tool", () =>
   Effect.gen(function* () {
     calls = 0
@@ -802,7 +875,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
 
-    const fiber = yield* settleTool(registry, {
+    const fiber = yield* executeTool(registry, {
       sessionID: SessionV2.ID.make("ses_mcp_permission"),
       ...toolIdentity,
       call: {
@@ -841,7 +914,7 @@ it.effect("does not call MCP when permission is blocked", () =>
     const registry = yield* ToolRegistry.Service
     yield* waitForTool(registry, "execute")
 
-    const settlement = yield* settleTool(registry, {
+    const execution = yield* executeTool(registry, {
       sessionID: SessionV2.ID.make("ses_mcp_blocked"),
       ...toolIdentity,
       call: {
@@ -851,8 +924,9 @@ it.effect("does not call MCP when permission is blocked", () =>
         input: { code: "return await tools.demo.search({})" },
       },
     })
-    expect(settlement.result).toEqual({ type: "text", value: "Unable to execute demo_search" })
-    expect(settlement.output?.structured).toEqual({
+    expect(execution.status).toBe("completed")
+    expect(execution.content).toEqual([{ type: "text", text: "Unable to execute demo_search" }])
+    expect(execution.metadata).toEqual({
       toolCalls: [{ tool: "demo.search", status: "error" }],
       error: true,
     })

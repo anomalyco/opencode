@@ -154,6 +154,36 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("keeps tools and omits the unsupported choice when tool choice is none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.updateRequest(baseRequest, {
+          tools: [
+            {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: { type: "object", properties: { query: { type: "string" } } },
+            },
+          ],
+          toolChoice: ToolChoice.make({ type: "none" }),
+        }),
+      )
+
+      expect(prepared.body.toolConfig).toMatchObject({
+        tools: [
+          {
+            toolSpec: {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: { json: { type: "object", properties: { query: { type: "string" } } } },
+            },
+          },
+        ],
+      })
+      expect(prepared.body.toolConfig?.toolChoice).toBeUndefined()
+    }),
+  )
+
   it.effect("lowers assistant tool-call + tool-result message history", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
@@ -286,6 +316,39 @@ describe("Bedrock Converse route", () => {
         )
         expect(response.finishReason).toEqual({ normalized, raw })
       }
+    }),
+  )
+
+  it.effect("adds cache reads and writes to Bedrock input usage", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["messageStart", { role: "assistant" }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { text: "Hello" } }],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["messageStop", { stopReason: "end_turn" }],
+        [
+          "metadata",
+          {
+            usage: {
+              inputTokens: 5,
+              outputTokens: 2,
+              totalTokens: 12,
+              cacheReadInputTokens: 3,
+              cacheWriteInputTokens: 2,
+            },
+          },
+        ],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 10,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: 3,
+        cacheWriteInputTokens: 2,
+        outputTokens: 2,
+        totalTokens: 12,
+      })
     }),
   )
 

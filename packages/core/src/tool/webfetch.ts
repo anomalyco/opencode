@@ -37,10 +37,6 @@ const Output = Schema.Struct({
   format: Input.fields.format,
   output: Schema.String,
 })
-const StructuredOutput = Schema.Struct({
-  contentType: Output.fields.contentType,
-})
-
 type Format = (typeof Input.Type)["format"]
 
 const acceptHeader = (format: Format) => {
@@ -129,9 +125,6 @@ export const Plugin = {
             description,
             input: Input,
             output: Output,
-            structured: StructuredOutput,
-            toStructuredOutput: ({ output }) => ({ contentType: output.contentType }),
-            toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
             execute: (input, context) =>
               Effect.gen(function* () {
                 yield* Effect.try({
@@ -171,12 +164,13 @@ export const Plugin = {
                   try: () => convert(content, contentType, input.format),
                   catch: (error) => error,
                 })
-                return {
+                const result = {
                   url: input.url,
                   contentType,
                   format: input.format,
                   output,
                 }
+                return { output: result, content: result.output, metadata: { contentType: result.contentType } }
               }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
           }),
           { codemode: false },

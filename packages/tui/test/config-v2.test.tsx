@@ -1,12 +1,24 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
+import { Schema } from "effect"
 import {
   resolve,
   ConfigProvider,
+  Info,
   useConfig,
   type Interface,
 } from "../src/config"
+
+test("validates mini replay settings", () => {
+  const decode = Schema.decodeUnknownSync(Info)
+
+  expect(decode({ mini: { replay: false, replay_limit: 50 } })).toEqual({
+    mini: { replay: false, replay_limit: 50 },
+  })
+  expect(() => decode({ mini: { replay_limit: 0 } })).toThrow()
+  expect(() => decode({ mini: { replay_limit: 1.5 } })).toThrow()
+})
 
 test("resolves nested config and keybind defaults", () => {
   const config = resolve(

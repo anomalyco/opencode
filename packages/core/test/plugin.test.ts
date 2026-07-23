@@ -258,7 +258,7 @@ describe("PluginV2", () => {
                   description: "Plugin tool",
                   input: Schema.Struct({}),
                   output: Schema.Struct({ ok: Schema.Boolean }),
-                  execute: () => Effect.succeed({ ok: true }),
+                  execute: () => Effect.succeed({ output: { ok: true } }),
                 }),
                 { codemode: false },
               ),
@@ -267,10 +267,10 @@ describe("PluginV2", () => {
       })
 
       yield* plugins.activate([versioned(plugin)])
-      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain("plugin_tool")
+      expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain("plugin_tool")
 
       yield* plugins.activate([])
-      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).not.toContain("plugin_tool")
+      expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).not.toContain("plugin_tool")
     }),
   )
 
@@ -283,7 +283,7 @@ describe("PluginV2", () => {
           description,
           input: Schema.Struct({}),
           output: Schema.Struct({ ok: Schema.Boolean }),
-          execute: () => Effect.succeed({ ok: true }),
+          execute: () => Effect.succeed({ output: { ok: true } }),
         })
       const plugin = EffectPlugin.define({
         id: "grouped-tools",
@@ -299,7 +299,7 @@ describe("PluginV2", () => {
 
       yield* plugins.activate([versioned(plugin)])
 
-      expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toEqual([
+      expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toEqual([
         "plain",
         "context7_look_up",
         "execute",
@@ -307,14 +307,14 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("fires before/after tool hooks with mutable events around settlement", () =>
+  it.effect("fires before/after tool hooks with mutable events around execution", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
       const executed: unknown[] = []
       const seen: {
         before?: unknown
-        after?: { input: unknown; result: unknown; output: unknown }
+        after?: { input: unknown; status: string; content: unknown; metadata: unknown }
       } = {}
 
       const plugin = EffectPlugin.define({
@@ -329,7 +329,8 @@ describe("PluginV2", () => {
                     description: "Echo",
                     input: Schema.Struct({ text: Schema.String }),
                     output: Schema.Struct({ text: Schema.String }),
-                    execute: ({ text }) => Effect.sync(() => executed.push({ text })).pipe(Effect.as({ text })),
+                    execute: ({ text }) =>
+                      Effect.sync(() => executed.push({ text })).pipe(Effect.as({ output: { text } })),
                   }),
                   { codemode: false },
                 ),
@@ -348,9 +349,23 @@ describe("PluginV2", () => {
             yield* ctx.tool
               .hook("execute.after", (event) =>
                 Effect.sync(() => {
-                  seen.after = { input: event.input, result: event.result, output: event.output }
-                  event.result = { type: "text", value: "after-mutated" }
-                  event.output = { structured: { rewritten: true }, content: [] }
+                  seen.after = {
+                    input: event.input,
+                    status: event.status,
+                    content: event.content,
+                    metadata: event.metadata,
+                  }
+                  if (event.status !== "completed") return
+                  event.content = [{ type: "text", text: "after-mutated" }]
+                  event.metadata = { rewritten: true }
+                }),
+              )
+              .pipe(Effect.asVoid)
+
+            yield* ctx.tool
+              .hook("execute.after", (event) =>
+                Effect.sync(() => {
+                  if (event.status === "completed") (event.content as unknown as unknown[]).splice(0)
                 }),
               )
               .pipe(Effect.asVoid)
@@ -359,8 +374,8 @@ describe("PluginV2", () => {
 
       yield* plugins.activate([versioned(plugin)])
 
-      const materialized = yield* registry.materialize()
-      const settlement = yield* materialized.settle({
+      const toolSet = yield* registry.snapshot()
+      const execution = yield* toolSet.execute({
         sessionID: SessionV2.ID.make("ses_hooks"),
         agent: AgentV2.ID.make("build"),
         messageID: SessionMessage.ID.make("msg_hooks"),
@@ -371,11 +386,15 @@ describe("PluginV2", () => {
       expect(executed).toEqual([{ text: "before-mutated" }])
       expect(seen.after).toEqual({
         input: { text: "before-mutated" },
-        result: { type: "json", value: { text: "before-mutated" } },
-        output: { structured: { text: "before-mutated" }, content: [] },
+        status: "completed",
+        content: [{ type: "text", text: '{"text":"before-mutated"}' }],
+        metadata: undefined,
       })
-      expect(settlement.result).toEqual({ type: "text", value: "after-mutated" })
-      expect(settlement.output).toEqual({ structured: { rewritten: true }, content: [] })
+      expect(execution).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "after-mutated" }],
+        metadata: { rewritten: true },
+      })
     }),
   )
 })

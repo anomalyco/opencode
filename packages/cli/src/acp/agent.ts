@@ -5,6 +5,7 @@ import {
   type AuthenticateRequest,
   type CancelNotification,
   type CloseSessionRequest,
+  type DeleteSessionRequest,
   type ForkSessionRequest,
   type InitializeRequest,
   type ListSessionsRequest,
@@ -13,7 +14,6 @@ import {
   type PromptRequest,
   type ResumeSessionRequest,
   type SetSessionConfigOptionRequest,
-  type SetSessionModelRequest,
   type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode-ai/client/promise"
@@ -28,12 +28,12 @@ export function create(client: OpenCodeClient, connection: AgentSideConnection) 
     newSession: (params: NewSessionRequest) => run(service.newSession(params)),
     loadSession: (params: LoadSessionRequest) => run(service.loadSession(params)),
     listSessions: (params: ListSessionsRequest) => run(service.listSessions(params)),
+    deleteSession: (params: DeleteSessionRequest) => run(service.deleteSession(params)),
     resumeSession: (params: ResumeSessionRequest) => run(service.resumeSession(params)),
     closeSession: (params: CloseSessionRequest) => run(service.closeSession(params)),
     unstable_forkSession: (params: ForkSessionRequest) => run(service.forkSession(params)),
     setSessionConfigOption: (params: SetSessionConfigOptionRequest) => run(service.setSessionConfigOption(params)),
     setSessionMode: (params: SetSessionModeRequest) => run(service.setSessionMode(params)),
-    unstable_setSessionModel: (params: SetSessionModelRequest) => run(service.setSessionModel(params)),
     prompt: (params: PromptRequest) => run(service.prompt(params)),
     cancel: (params: CancelNotification) => run(service.cancel(params)),
   } satisfies Agent

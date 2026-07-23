@@ -81,7 +81,7 @@ const GENERATE_OBJECT_TOOL_NAME = "generate_object"
 
 const GENERATE_OBJECT_TOOL_DESCRIPTION = "Return the structured result by calling this tool."
 
-type GenerateObjectBase = Omit<RequestInput, "tools" | "toolChoice" | "responseFormat">
+type GenerateObjectBase = Omit<RequestInput, "tools" | "toolChoice">
 
 export class GenerateObjectResponse<T> {
   constructor(

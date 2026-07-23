@@ -14,6 +14,7 @@ import { SessionPending } from "@opencode-ai/core/session/pending"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Plugin } from "@opencode-ai/plugin/v2"
+import { Tool } from "@opencode-ai/plugin/v2/tool"
 import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
@@ -270,7 +271,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("constructs plain Promise tool declarations in the host", () =>
+  it.effect("constructs plain Promise tool definitions in the host", () =>
     Effect.gen(function* () {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
@@ -280,35 +281,41 @@ describe("fromPromise", () => {
         id: "promise-tool",
         setup: async (ctx) => {
           await ctx.tool.transform((tools) => {
-            tools.add({
-              name: "hello",
-              options: { codemode: false },
-              description: "Hello",
-              input: Schema.Struct({ name: Schema.String }),
-              output: Schema.String,
-              execute: async ({ name }, context) => {
-                await context.progress({ structured: { phase: "greeting" } })
-                return `Hello, ${name}!`
-              },
-            })
+            tools.add(
+              "hello",
+              Tool.make({
+                description: "Hello",
+                input: Schema.Struct({ name: Schema.String }),
+                output: Schema.String,
+                execute: async ({ name }, context) => {
+                  await context.progress({ phase: "greeting" })
+                  return { output: `Hello, ${name}!` }
+                },
+              }),
+              { codemode: false },
+            )
           })
         },
       })
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
 
-      const materialized = yield* registry.materialize()
-      expect(materialized.definitions).toContainEqual(expect.objectContaining({ name: "hello", description: "Hello" }))
+      const toolSet = yield* registry.snapshot()
+      expect(toolSet.definitions).toContainEqual(expect.objectContaining({ name: "hello", description: "Hello" }))
       expect(
-        yield* materialized.settle({
+        yield* toolSet.execute({
           sessionID: SessionV2.ID.make("ses_promise_tool"),
           agent: AgentV2.ID.make("build"),
           messageID: SessionMessage.ID.make("msg_promise_tool"),
           progress: (update) => Effect.sync(() => progress.push(update)),
           call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
         }),
-      ).toMatchObject({ result: { type: "text", value: "Hello, world!" } })
-      expect(progress).toEqual([{ structured: { phase: "greeting" }, content: [] }])
+      ).toMatchObject({
+        status: "completed",
+        output: "Hello, world!",
+        content: [{ type: "text", text: "Hello, world!" }],
+      })
+      expect(progress).toEqual([{ phase: "greeting" }])
     }),
   )
 })

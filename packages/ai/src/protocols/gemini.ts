@@ -313,7 +313,7 @@ const thinkingConfig = (request: LLMRequest) => {
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
-  const toolsEnabled = request.tools.length > 0 && request.toolChoice?.type !== "none"
+  const hasTools = request.tools.length > 0
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
@@ -329,7 +329,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     contents: yield* lowerMessages(request),
     systemInstruction:
       request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
-    tools: toolsEnabled
+    tools: hasTools
       ? [
           {
             functionDeclarations: request.tools.map((tool) =>
@@ -338,7 +338,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
           },
         ]
       : undefined,
-    toolConfig: toolsEnabled && request.toolChoice ? yield* lowerToolConfig(request.toolChoice) : undefined,
+    toolConfig: hasTools && request.toolChoice ? yield* lowerToolConfig(request.toolChoice) : undefined,
     generationConfig: Object.values(generationConfig).some((value) => value !== undefined)
       ? generationConfig
       : undefined,

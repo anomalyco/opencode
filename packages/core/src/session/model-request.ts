@@ -14,13 +14,15 @@ import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
 
-type ToolCallResolution =
-  | { readonly type: "reject"; readonly error: SessionError.Error }
-  | { readonly type: "settle"; readonly settle: ToolRegistry.Materialization["settle"] }
-
 interface Prepared {
   readonly request: LLMRequest
-  readonly resolveToolCall: (name: string) => ToolCallResolution
+  /**
+   * One request-scoped execution operation. Unknown, hook-removed, and
+   * step-limit-violating calls fail individually through the same seam.
+   */
+  readonly executeTool: ToolRegistry.ToolSet["execute"]
+  /** True when this request is the final Step; violating calls are rejected and no continuation follows. */
+  readonly stepLimitReached: boolean
 }
 
 interface PrepareInput {
@@ -94,14 +96,16 @@ export const layer = Layer.effect(
       const model = resolved.model
       const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
       const stepLimitReached = agent.info.steps !== undefined && input.step >= agent.info.steps
-      const executableTools = stepLimitReached ? undefined : yield* registry.materialize(agent.info.permissions)
+      // The final Step keeps definitions available to protocols with native "none",
+      // preserving their prompt cache prefix. Calls are still rejected at execution.
+      const toolSet = yield* registry.snapshot(agent.info.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
       const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
       const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
-      const toolDefinitions = executableTools?.definitions ?? []
+      const toolDefinitions = toolSet.definitions
       const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
       // Hooks may reshape available definitions but cannot advertise tools omitted by permissions or the Step limit.
       const contextEvent = yield* hooks.trigger("session", "context", {
@@ -131,22 +135,23 @@ export const layer = Layer.effect(
         tools: hookedTools,
         toolChoice: stepLimitReached ? "none" : undefined,
       })
-      const resolveToolCall = (name: string): ToolCallResolution => {
-        if (!executableTools)
-          return {
-            type: "reject",
+      const executeTool: ToolRegistry.ToolSet["execute"] = (executeInput) => {
+        if (stepLimitReached)
+          return Effect.succeed({
+            status: "error",
             error: { type: "tool.execution", message: "Tools are disabled after the maximum agent steps" },
-          }
-        if (toolsByName.has(name) && !Object.hasOwn(contextEvent.tools, name))
-          return {
-            type: "reject",
-            error: { type: "tool.execution", message: `Tool is not available for this request: ${name}` },
-          }
-        return { type: "settle", settle: executableTools.settle }
+          })
+        if (toolsByName.has(executeInput.call.name) && !Object.hasOwn(contextEvent.tools, executeInput.call.name))
+          return Effect.succeed({
+            status: "error",
+            error: { type: "tool.unknown", message: `Tool is not available for this request: ${executeInput.call.name}` },
+          })
+        return toolSet.execute(executeInput)
       }
       return {
         request,
-        resolveToolCall,
+        executeTool,
+        stepLimitReached,
       }
     })
 

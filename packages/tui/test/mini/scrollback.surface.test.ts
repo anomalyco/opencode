@@ -217,7 +217,7 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
   try {
     await out.scrollback.append(assistant("# H"))
     expect(Reflect.get(out.scrollback, "active")?.renderable).toBeInstanceOf(MarkdownRenderable)
-    await out.scrollback.append(assistant('éading →\n\n> “quote”\n\n---\n\n| A | B |\n| - | - |\n| α | β |'))
+    await out.scrollback.append(assistant("éading →\n\n> “quote”\n\n---\n\n| A | B |\n| - | - |\n| α | β |"))
     await out.scrollback.complete()
     out.renderer.writeToScrollback((ctx) => ({
       root: new TextRenderable(ctx.renderContext, {
@@ -386,8 +386,7 @@ test("renders question summaries without boilerplate footer copy", async () => {
               },
             ],
           },
-          structured: {},
-          content: [],
+          metadata: {},
         },
       }),
       final: toolCommit({
@@ -406,10 +405,10 @@ test("renders question summaries without boilerplate footer copy", async () => {
               },
             ],
           },
-          structured: {
+          metadata: {
             answers: [["Bug fix"]],
           },
-          content: [],
+          content: [{ type: "text", text: "" }],
         },
       }),
     },
@@ -481,8 +480,7 @@ test("inserts spacers for new visible groups", async () => {
           input: {
             pattern: "**/run.ts",
           },
-          structured: {},
-          content: [],
+          metadata: {},
         },
       }),
     )
@@ -617,8 +615,7 @@ test("does not double-space before completed shell output when inline tool heade
             command: "ls",
             workdir: "src/cli/cmd/run",
           },
-          structured: {},
-          content: [],
+          metadata: {},
         },
       }),
     )
@@ -634,8 +631,7 @@ test("does not double-space before completed shell output when inline tool heade
             pattern: "**/*tool*",
             path: "src/cli/cmd/run",
           },
-          structured: {},
-          content: [],
+          metadata: {},
         },
       }),
     )
@@ -651,8 +647,7 @@ test("does not double-space before completed shell output when inline tool heade
             pattern: "tool",
             path: "src/cli/cmd/run",
           },
-          structured: {},
-          content: [],
+          metadata: {},
         },
       }),
     )
@@ -670,7 +665,7 @@ test("does not double-space before completed shell output when inline tool heade
             workdir: "src/cli/cmd/run",
           },
           content: [{ type: "text", text: ["src/cli/cmd/run", "ls", "demo.ts", "entry.body.ts", "", ""].join("\n") }],
-          structured: { exit: 0, truncated: false },
+          metadata: { exit: 0, truncated: false },
         },
       }),
     )
@@ -735,8 +730,7 @@ test("renders structured write finals once as code blocks", async () => {
             path: "src/a.ts",
             content: "const x = 1\nconst y = 2\n",
           },
-          structured: {},
-          content: [],
+          metadata: {},
         },
       }),
     )
@@ -755,8 +749,8 @@ test("renders structured write finals once as code blocks", async () => {
             path: "src/a.ts",
             content: "const x = 1\nconst y = 2\n",
           },
-          structured: {},
-          content: [],
+          metadata: {},
+          content: [{ type: "text", text: "" }],
         },
       }),
     )

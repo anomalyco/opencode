@@ -12,7 +12,7 @@ const it = testEffect(AISDK.locationLayer)
 
 const model = (packageName: string, settings: Record<string, unknown> = {}) =>
   ModelV2.Info.make({
-    ...ModelV2.Info.empty(ProviderV2.ID.make("test-provider"), ModelV2.ID.make("catalog-model")),
+    ...ModelV2.Info.default(ProviderV2.ID.make("test-provider"), ModelV2.ID.make("catalog-model")),
     modelID: ModelV2.ID.make("api-model"),
     package: ProviderV2.aisdk(packageName),
     settings,

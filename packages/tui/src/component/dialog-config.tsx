@@ -223,10 +223,10 @@ const settings: Setting[] = [
     labels: ["off", "on"],
   },
   {
-    title: "DevTools: Timing",
+    title: "Turn token usage",
     category: "Debug",
-    path: ["debug", "timing"],
-    default: true,
+    path: ["debug", "turn_tokens"],
+    default: false,
     values: [false, true],
     labels: ["off", "on"],
   },

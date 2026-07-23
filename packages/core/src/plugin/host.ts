@@ -127,8 +127,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             ),
       },
       model: {
-        get: (providerID, modelID) =>
-          catalog.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
+        get: (providerID, modelID) => catalog.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
         list: () => response(catalog.model.available()),
         default: () => response(catalog.model.default()),
       },
@@ -358,7 +357,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         Effect.gen(function* () {
           const registrations: Array<{
             readonly name: string
-            readonly tool: Tool.AnyTool
+            readonly tool: Tool.Any
             readonly options?: Tool.RegisterOptions
           }> = []
           yield* Effect.sync(() =>
@@ -395,6 +394,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           })
         }
         return toolHooks.hook.after((event) => {
+          // Decode first so plugin mutations cannot alias the canonical outcome.
           const output = {
             tool: event.tool,
             sessionID: event.sessionID,
@@ -402,18 +402,30 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             messageID: event.messageID,
             callID: event.callID,
             input: event.input,
-            result: event.result,
-            output: event.output,
-            outputPaths: event.outputPaths,
+            ...Schema.decodeUnknownSync(Tool.ExecuteAfterOutcome)(event),
           }
           return Reflect.apply(callback, undefined, [output]).pipe(
-            Effect.tap(() =>
-              Effect.sync(() => {
-                event.result = output.result
-                event.output = output.output
-                event.outputPaths = output.outputPaths
-              }),
-            ),
+            Effect.tap(() => {
+              const decoded = Schema.decodeUnknownOption(Tool.ExecuteAfterOutcome)(output)
+              if (decoded._tag === "None")
+                return Effect.logWarning("ignoring invalid execute.after tool outcome", { tool: event.tool })
+              if (decoded.value.status !== event.status)
+                return Effect.logWarning("ignoring execute.after tool status change", { tool: event.tool })
+              return Effect.sync(() => {
+                if (event.status === "completed" && decoded.value.status === "completed") {
+                  event.content = decoded.value.content
+                  event.metadata = decoded.value.metadata
+                  event.outputPaths = decoded.value.outputPaths
+                  return
+                }
+                if (event.status === "error" && decoded.value.status === "error") {
+                  event.error = decoded.value.error
+                  event.content = decoded.value.content
+                  event.metadata = decoded.value.metadata
+                  event.outputPaths = decoded.value.outputPaths
+                }
+              })
+            }),
           )
         })
       },

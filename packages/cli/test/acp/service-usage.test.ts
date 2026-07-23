@@ -45,17 +45,14 @@ describe("acp service prompt routing and usage", () => {
 
     const commandResult = await fixture.service.prompt({
       sessionId: session.sessionId,
-      messageId: "client-command",
       prompt: [{ type: "text", text: "/review now" }],
     })
     const skillResult = await fixture.service.prompt({
       sessionId: session.sessionId,
-      messageId: "client-skill",
       prompt: [{ type: "text", text: "/verify" }],
     })
     const compactResult = await fixture.service.prompt({
       sessionId: session.sessionId,
-      messageId: "client-compact",
       prompt: [{ type: "text", text: "/compact" }],
     })
 
@@ -154,13 +151,11 @@ describe("acp service prompt routing and usage", () => {
 
     const response = await fixture.service.prompt({
       sessionId: session.sessionId,
-      messageId: "client-message",
       prompt: [{ type: "text", text: "hello" }],
     })
 
     expect(response).toEqual({
       stopReason: "end_turn",
-      userMessageId: "client-message",
       usage: {
         inputTokens: 100,
         outputTokens: 40,

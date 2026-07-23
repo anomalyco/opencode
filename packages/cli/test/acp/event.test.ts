@@ -85,7 +85,6 @@ test("acp prompt resolves after ordered turn updates", async () => {
 
   try {
     const id = "msg_prompt"
-    const userMessageID = "client-message"
     const response = await streamTurn({
       client,
       connection: {
@@ -97,7 +96,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
       sessionID: "ses_test",
       cwd: "/workspace",
       start: { type: "input", id },
-      userMessageID,
+      writeTextFile: false,
       control: { cancelled: false, admission: new AbortController() },
       submit: () => client.session.prompt({ sessionID: "ses_test", id, text: "hi" }),
     })
@@ -112,7 +111,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
         },
       },
     ])
-    expect(response).toMatchObject({ stopReason: "end_turn", userMessageId: userMessageID, usage: { totalTokens: 2 } })
+    expect(response).toMatchObject({ stopReason: "end_turn", usage: { totalTokens: 2 } })
   } finally {
     events?.close()
     await server.stop(true)

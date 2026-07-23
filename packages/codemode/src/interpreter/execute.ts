@@ -45,7 +45,7 @@ export const executeWithLimits = <const Provided extends Record<string, unknown>
           const program = parseProgram(options.code)
           const promises = new PromiseRuntime<Services<Provided>>(scope)
           const interpreter = new Interpreter<Services<Provided>>(
-            tools.invoke,
+            tools.execute,
             tools.search,
             tools.keys,
             promises,

@@ -21,6 +21,7 @@ import {
   canonicalToolName,
   finiteNumber,
   primitiveInputSummary,
+  toolDisplayContent,
   toolDisplayMetadata,
   webSearchProviderLabel,
 } from "../util/tool-display"
@@ -157,10 +158,36 @@ function text(v: unknown): string {
   return typeof v === "string" ? v : ""
 }
 
-export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }>) {
+export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }> | undefined) {
+  if (!content) return ""
   // V2 shell content appends model-only status after the user-visible command output.
   if (canonicalToolName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
-  return content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
+  const joined = content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
+  if (canonicalToolName(name) === "read") return readDisplayText(joined) ?? joined
+  return joined
+}
+
+/** Read's model content is a JSON page envelope; unwrap the human-facing text. */
+export function readDisplayText(text: string): string | undefined {
+  if (!text.startsWith("{")) return undefined
+  const parsed = (() => {
+    try {
+      return JSON.parse(text) as unknown
+    } catch {
+      return undefined
+    }
+  })()
+  const envelope = dict(parsed)
+  if (typeof envelope.content === "string" && (envelope.type === "text-page" || envelope.encoding === "utf8"))
+    return envelope.content
+  if (!Array.isArray(envelope.entries)) return undefined
+  return envelope.entries
+    .flatMap((entry): string[] => {
+      if (typeof entry === "string") return [entry]
+      const path = dict(entry).path
+      return typeof path === "string" ? [path] : []
+    })
+    .join("\n")
 }
 
 function normalizeInput(name: string, value: unknown) {
@@ -202,16 +229,16 @@ function normalizeFile(value: unknown): PatchFile | undefined {
   }
 }
 
-function normalizeStructured(name: string, value: unknown) {
-  const structured = dict(value)
-  const files = list(structured.files).flatMap((item) => {
+function normalizeMetadata(name: string, value: unknown) {
+  const metadata = dict(value)
+  const files = list(metadata.files).flatMap((item) => {
     const file = normalizeFile(item)
     return file ? [file] : []
   })
-  const sessionID = text(structured.sessionID) || text(structured.sessionId)
+  const sessionID = text(metadata.sessionID) || text(metadata.sessionId)
   return {
-    ...structured,
-    ...(["edit", "patch"].includes(name) && Array.isArray(structured.files) ? { files } : {}),
+    ...metadata,
+    ...(["edit", "patch"].includes(name) && Array.isArray(metadata.files) ? { files } : {}),
     ...(name === "subagent" && sessionID ? { sessionID } : {}),
   }
 }
@@ -225,7 +252,7 @@ export function normalizeTool(tool: SessionMessageAssistantTool): SessionMessage
     state: {
       ...tool.state,
       input: normalizeInput(name, tool.state.input),
-      structured: normalizeStructured(name, toolDisplayMetadata(tool.state)),
+      metadata: normalizeMetadata(name, toolDisplayMetadata(tool.state)),
     },
   } as SessionMessageAssistantTool
 }
@@ -1089,13 +1116,13 @@ function frame(part: SessionMessageAssistantTool, directory?: string): ToolFrame
       output: "",
       time: { start: tool.time.created },
     }
-  const output = toolOutputText(tool.name, tool.state.content)
+  const output = toolOutputText(tool.name, toolDisplayContent(tool.state))
   return {
     directory,
     raw: output,
     name: tool.name,
     input: normalizeInput(tool.name, tool.state.input),
-    meta: normalizeStructured(tool.name, tool.state.structured),
+    meta: normalizeMetadata(tool.name, tool.state.metadata),
     state: dict(tool.state),
     status: tool.state.status,
     error: tool.state.status === "error" ? tool.state.error.message : "",

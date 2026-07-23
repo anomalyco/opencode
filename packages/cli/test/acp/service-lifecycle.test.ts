@@ -225,6 +225,33 @@ describe("acp service lifecycle", () => {
       "/api/session/missing/interrupt",
     ])
   })
+
+  test("deletes sessions from backing and local storage", async () => {
+    await using fixture = makeACPFixture({
+      fetch(request) {
+        if (request.method === "POST" && request.path === "/api/session") {
+          return Response.json({ data: makeSession("ses_delete") })
+        }
+        if (request.method === "DELETE" && request.path === "/api/session/ses_delete") {
+          return new Response(null, { status: 204 })
+        }
+        return undefined
+      },
+    })
+    const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+
+    expect(await fixture.service.deleteSession({ sessionId: session.sessionId })).toEqual({})
+    expect(fixture.requests).toContainEqual({
+      method: "DELETE",
+      path: "/api/session/ses_delete",
+      query: {},
+      body: undefined,
+    })
+    const missing = await fixture.service
+      .setSessionConfigOption({ sessionId: session.sessionId, configId: "effort", value: "high" })
+      .catch((error: unknown) => error)
+    expect(missing).toMatchObject({ _tag: "ACPSessionNotFoundError", sessionId: session.sessionId })
+  })
 })
 
 function currentValue(result: { readonly configOptions?: readonly SessionConfigOption[] | null }, id: string) {

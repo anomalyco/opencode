@@ -75,6 +75,10 @@ export const define = sdk.Plugin.define`
   const effectPluginModule = promisePluginModule
     .replace("opencode.plugin.v2.promise", "opencode.plugin.v2.effect")
     .replace("Promise plugin", "Effect plugin")
+  const promiseToolModule = `const sdk = globalThis[Symbol.for("opencode.plugin.v2.promise")]
+if (!sdk) throw new Error("OpenCode Promise plugin SDK is unavailable")
+export const Tool = sdk.Tool
+export const make = sdk.Tool.make`
   const effectToolModule = `const sdk = globalThis[Symbol.for("opencode.plugin.v2.effect")]
 if (!sdk) throw new Error("OpenCode Effect plugin SDK is unavailable")
 export const Tool = sdk.Tool
@@ -83,10 +87,8 @@ export const RegistrationError = sdk.Tool.RegistrationError
 export const make = sdk.Tool.make
 export const validateName = sdk.Tool.validateName
 export const registrationEntries = sdk.Tool.registrationEntries
-export const withPermission = sdk.Tool.withPermission
-export const permission = sdk.Tool.permission
-export const definition = sdk.Tool.definition
-export const settle = sdk.Tool.settle`
+export const validateNamespace = sdk.Tool.validateNamespace
+export const toLLMDefinition = sdk.Tool.toLLMDefinition`
   return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
 import __cjs_mod__ from "node:module"
 import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
@@ -100,6 +102,7 @@ const require = __cjs_mod__.createRequire(import.meta.url)
 const __ocPluginModules = ${JSON.stringify({
     "@opencode-ai/plugin/v2": "opencode:plugin-v2",
     "@opencode-ai/plugin/v2/plugin": "opencode:plugin-v2-plugin",
+    "@opencode-ai/plugin/v2/tool": "opencode:plugin-v2-tool",
     "@opencode-ai/plugin/v2/effect": "opencode:plugin-v2-effect",
     "@opencode-ai/plugin/v2/effect/plugin": "opencode:plugin-v2-effect-plugin",
     "@opencode-ai/plugin/v2/effect/tool": "opencode:plugin-v2-effect-tool",
@@ -107,6 +110,7 @@ const __ocPluginModules = ${JSON.stringify({
 const __ocPluginSources = ${JSON.stringify({
     "opencode:plugin-v2": promiseModule,
     "opencode:plugin-v2-plugin": promisePluginModule,
+    "opencode:plugin-v2-tool": promiseToolModule,
     "opencode:plugin-v2-effect": effectModule,
     "opencode:plugin-v2-effect-plugin": effectPluginModule,
     "opencode:plugin-v2-effect-tool": effectToolModule,

@@ -1,7 +1,7 @@
 export * as ToolRegistry from "./registry"
 
-import { ToolOutput, type ToolCall, type ToolDefinition, type ToolResultValue } from "@opencode-ai/ai"
-import { Context, Effect, Layer, Scope, Semaphore } from "effect"
+import { type ToolCall, type ToolContent, type ToolDefinition } from "@opencode-ai/ai"
+import { Context, Effect, Layer, Schema, Scope, Semaphore } from "effect"
 import type { AgentV2 } from "../agent"
 import { Image } from "../image"
 import { PermissionV2 } from "../permission"
@@ -10,19 +10,10 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { CodeMode } from "../codemode"
-import {
-  definition,
-  permission,
-  registrationEntries,
-  RegistrationError,
-  settle,
-  validateNamespace,
-  type AnyTool,
-} from "./tool"
+import { Tool, nonEmpty, registrationEntries, toLLMDefinition, validateName, validateNamespace } from "./tool"
 import { Tools } from "./tools"
 import { ToolHooks } from "./hooks"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { SessionError } from "@opencode-ai/schema/session-error"
 import { toSessionError } from "../session/to-session-error"
 
 export type ExecuteInput = {
@@ -33,38 +24,42 @@ export type ExecuteInput = {
   readonly progress?: (update: Progress) => Effect.Effect<void>
 }
 
-export interface Progress {
-  readonly structured: Readonly<Record<string, unknown>>
-  readonly content: ToolOutput["content"]
-}
+/** Live replacement metadata for a running tool. */
+export type Progress = Tool.Metadata
 
 export interface Interface {
-  readonly materialize: (permissions?: PermissionV2.Ruleset) => Effect.Effect<Materialization>
+  readonly snapshot: (permissions?: PermissionV2.Ruleset) => Effect.Effect<ToolSet>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (
-    tools: Readonly<Record<string, AnyTool>>,
+    tools: Readonly<Record<string, Tool.Any>>,
     options?: Tools.RegisterOptions,
-  ) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
   /** Internal atomic registration capability used by plugin transforms. */
   readonly registerBatch: (
     registrations: ReadonlyArray<{
-      readonly tools: Readonly<Record<string, AnyTool>>
+      readonly tools: Readonly<Record<string, Tool.Any>>
       readonly options?: Tools.RegisterOptions
     }>,
-  ) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  ) => Effect.Effect<void, Tool.RegistrationError, Scope.Scope>
 }
 
-export interface Materialization {
+/**
+ * One request-scoped snapshot pairing advertised definitions with captured
+ * tools. A model request executes exactly the tool values it advertised
+ * even if registration changes while the request is in flight.
+ */
+export interface ToolSet {
   readonly definitions: ReadonlyArray<ToolDefinition>
-  readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement, ToolOutputStore.Error>
+  readonly execute: (input: ExecuteInput) => Effect.Effect<ToolOutcome, ToolOutputStore.Error>
 }
 
-export interface Settlement {
-  readonly result: ToolResultValue
-  readonly output?: ToolOutput
-  readonly outputPaths?: ReadonlyArray<string>
-  readonly error?: SessionError.Error
-}
+/**
+ * The canonical outcome of one local tool execution. `output` is the validated
+ * machine value for Code Mode and remains ephemeral; durable publication drops it.
+ */
+export type ToolOutcome =
+  | (Extract<Tool.Outcome, { readonly status: "completed" }> & { readonly output?: unknown })
+  | Extract<Tool.Outcome, { readonly status: "error" }>
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
 
@@ -76,26 +71,24 @@ const registryLayer = Layer.effect(
     const image = yield* Image.Service
     const codeMode = yield* CodeMode.Service
 
-    type NormalizedItem = ToolOutput["content"][number] | "decode" | "size"
-    const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (content: ToolOutput["content"]) {
+    type NormalizedItem = ToolContent | "decode" | "size"
+    const normalizeImages = Effect.fn("ToolRegistry.normalizeImages")(function* (content: ReadonlyArray<ToolContent>) {
       const normalized = yield* Effect.forEach(content, (item): Effect.Effect<NormalizedItem> => {
         if (item.type !== "file" || !item.mime.startsWith("image/")) return Effect.succeed(item)
         // RFC 2397 permits parameters between the mime and ";base64".
         const base64 = /^data:[^,]*;base64,(.*)$/s.exec(item.uri)?.[1]
         if (base64 === undefined) return Effect.succeed(item)
         const resource = item.name ?? `${item.mime} tool output`
-        return image
-          .normalize(resource, { uri: resource, content: base64, encoding: "base64", mime: item.mime })
-          .pipe(
-            Effect.map((result) => ({
-              ...item,
-              uri: `data:${result.mime};base64,${result.content}`,
-              mime: result.mime,
-            })),
-            Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
-            Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
-            Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
-          )
+        return image.normalize(resource, { uri: resource, content: base64, encoding: "base64", mime: item.mime }).pipe(
+          Effect.map((result) => ({
+            ...item,
+            uri: `data:${result.mime};base64,${result.content}`,
+            mime: result.mime,
+          })),
+          Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(item)),
+          Effect.catchTag("Image.DecodeError", () => Effect.succeed("decode" as const)),
+          Effect.catchTag("Image.SizeError", () => Effect.succeed("size" as const)),
+        )
       })
       const note = (reason: "decode" | "size", text: string) => {
         const count = normalized.filter((item) => item === reason).length
@@ -108,16 +101,24 @@ const registryLayer = Layer.effect(
         ...note("size", "could not be resized below the image size limit."),
       ]
     })
-    type Registration = {
-      readonly tool: AnyTool
-      readonly name: string
-      readonly namespace?: string
-    }
+
+    // Invalid or oversized metadata is dropped with a warning; it never fails a
+    // successful side-effecting tool.
+    const validMetadata = Effect.fnUntraced(function* (tool: string, metadata: Tool.Metadata | undefined) {
+      if (metadata === undefined) return undefined
+      const limits = yield* resources.limits()
+      const valid = Tool.jsonMetadata(metadata, limits.maxBytes)
+      if (valid === undefined)
+        yield* Effect.logWarning("dropping invalid or oversized tool metadata").pipe(Effect.annotateLogs({ tool }))
+      return valid
+    })
+
+    type Registration = Tool.Registration
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
     const registrationLock = Semaphore.makeUnsafe(1)
 
-    const settleTool = Effect.fn("ToolRegistry.settleTool")(function* (input: ExecuteInput, tool: AnyTool) {
-      // Hooks fire only for hosted/local tools; provider-executed calls never reach settleTool.
+    const executeTool = Effect.fn("ToolRegistry.executeTool")(function* (input: ExecuteInput, tool: Tool.Any) {
+      // Hooks fire only for hosted/local tools; provider-executed calls never reach executeTool.
       const beforeEvent: ToolHooks.BeforeEvent = {
         tool: input.call.name,
         sessionID: input.sessionID,
@@ -127,76 +128,100 @@ const registryLayer = Layer.effect(
         input: input.call.input,
       }
       yield* toolHooks.runBefore(beforeEvent)
-      const pending = yield* settle(
-        tool,
-        { ...input.call, input: beforeEvent.input },
-        {
-          sessionID: input.sessionID,
-          agent: input.agent,
-          messageID: input.messageID,
-          callID: input.call.id,
-          progress: (update) => {
-            const progress = input.progress
-            if (!progress) return Effect.void
-            return normalizeImages(
-              (update.content ?? []).map((part) =>
-                part.type === "text"
-                  ? { type: "text" as const, text: part.text }
-                  : {
-                      type: "file" as const,
-                      uri: `data:${part.mime};base64,${part.data}`,
-                      mime: part.mime,
-                      name: part.name,
-                    },
-              ),
-            ).pipe(Effect.flatMap((content) => progress({ structured: update.structured, content })))
-          },
+      const execution = yield* Tool.execute(tool, beforeEvent.input, {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        messageID: input.messageID,
+        callID: input.call.id,
+        progress: (metadata) => {
+          const progress = input.progress
+          if (!progress) return Effect.void
+          return validMetadata(input.call.name, metadata).pipe(
+            Effect.flatMap((valid) => (valid === undefined ? Effect.void : progress(valid))),
+          )
         },
-      ).pipe(
-        Effect.map((output) => ({ output })),
-        Effect.catchTag("LLM.ToolFailure", (failure) =>
-          Effect.succeed({
-            result: { type: "error" as const, value: failure.message },
-            error: toSessionError(failure),
-          }),
-        ),
+      }).pipe(
+        Effect.map((value) => ({ value })),
+        Effect.catchTag("LLM.ToolFailure", (failure) => Effect.succeed({ failure: toSessionError(failure) })),
       )
-      let settlement: Settlement
-      if ("result" in pending) {
-        settlement = pending
-      } else {
+
+      const outcome: ToolOutcome = yield* Effect.gen(function* () {
+        if ("failure" in execution) return { status: "error" as const, error: execution.failure }
         const bounded = yield* resources.bound({
           sessionID: input.sessionID,
           callID: input.call.id,
-          output: { structured: pending.output.structured, content: yield* normalizeImages(pending.output.content) },
+          content: yield* normalizeImages(execution.value.content),
         })
-        const result = ToolOutput.toResultValue(bounded.output)
-        settlement =
-          result.type === "error"
-            ? bounded.outputPaths.length > 0
-              ? { result, outputPaths: bounded.outputPaths }
-              : { result }
-            : bounded.outputPaths.length > 0
-              ? { result, output: bounded.output, outputPaths: bounded.outputPaths }
-              : { result, output: bounded.output }
-      }
-      const afterEvent: ToolHooks.AfterEvent = {
+        const metadata = yield* validMetadata(input.call.name, execution.value.metadata)
+        return {
+          status: "completed" as const,
+          ...(execution.value.output === undefined ? {} : { output: execution.value.output }),
+          content: nonEmpty(bounded.content) ?? execution.value.content,
+          ...(metadata === undefined ? {} : { metadata }),
+          ...(bounded.outputPaths.length > 0 ? { outputPaths: bounded.outputPaths } : {}),
+        }
+      })
+
+      const base = {
         tool: input.call.name,
         sessionID: input.sessionID,
         agent: input.agent,
         messageID: input.messageID,
         callID: input.call.id,
         input: beforeEvent.input,
-        result: settlement.result,
-        output: settlement.output,
-        outputPaths: settlement.outputPaths,
       }
+      const afterEvent: ToolHooks.AfterEvent =
+        outcome.status === "completed"
+          ? {
+              ...base,
+              status: "completed",
+              content: outcome.content,
+              ...(outcome.metadata === undefined ? {} : { metadata: outcome.metadata }),
+              ...(outcome.outputPaths === undefined ? {} : { outputPaths: outcome.outputPaths }),
+            }
+          : {
+              ...base,
+              status: "error",
+              error: outcome.error,
+              ...(outcome.content === undefined ? {} : { content: outcome.content }),
+              ...(outcome.metadata === undefined ? {} : { metadata: outcome.metadata }),
+              ...(outcome.outputPaths === undefined ? {} : { outputPaths: outcome.outputPaths }),
+            }
       yield* toolHooks.runAfter(afterEvent)
+      const afterMetadata = yield* validMetadata(input.call.name, afterEvent.metadata)
+      const afterContent = yield* Effect.gen(function* () {
+        if (
+          afterEvent.content === undefined ||
+          (outcome.status === "completed" && afterEvent.content === outcome.content)
+        )
+          return { content: afterEvent.content, outputPaths: afterEvent.outputPaths }
+        const bounded = yield* resources.bound({
+          sessionID: input.sessionID,
+          callID: input.call.id,
+          content: yield* normalizeImages(afterEvent.content),
+        })
+        return {
+          content: nonEmpty(bounded.content),
+          outputPaths:
+            bounded.outputPaths.length === 0
+              ? afterEvent.outputPaths
+              : Array.from(new Set([...(afterEvent.outputPaths ?? []), ...bounded.outputPaths])),
+        }
+      })
+      if (afterEvent.status === "completed")
+        return {
+          status: "completed" as const,
+          ...(outcome.status === "completed" && outcome.output !== undefined ? { output: outcome.output } : {}),
+          content: afterContent.content ?? afterEvent.content,
+          ...(afterMetadata === undefined ? {} : { metadata: afterMetadata }),
+          ...(afterContent.outputPaths === undefined ? {} : { outputPaths: afterContent.outputPaths }),
+        }
       return {
-        result: afterEvent.result,
-        ...(afterEvent.output !== undefined ? { output: afterEvent.output } : {}),
-        ...(afterEvent.outputPaths !== undefined ? { outputPaths: afterEvent.outputPaths } : {}),
-        ...(settlement.error !== undefined ? { error: settlement.error } : {}),
+        status: "error" as const,
+        error: afterEvent.error,
+        ...(afterContent.content === undefined ? {} : { content: afterContent.content }),
+        ...(afterMetadata === undefined ? {} : { metadata: afterMetadata }),
+        ...(afterContent.outputPaths === undefined ? {} : { outputPaths: afterContent.outputPaths }),
       }
     })
 
@@ -205,12 +230,26 @@ const registryLayer = Layer.effect(
         const planned = yield* Effect.forEach(registrations, ({ tools, options }) =>
           Effect.gen(function* () {
             if (options?.namespace !== undefined) yield* validateNamespace(options.namespace)
-            const entries = registrationEntries(tools, options?.namespace)
+            const entries = registrationEntries(tools, options)
+            yield* Effect.forEach(entries, (entry) => validateName(entry.name), { discard: true })
+            const collision = entries.find(
+              (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
+            )
+            if (collision)
+              return yield* Effect.fail(
+                new Tool.RegistrationError({
+                  name: collision.key,
+                  message: `Duplicate normalized tool name: ${collision.key}`,
+                }),
+              )
             const codemode = options?.codemode ?? true
             const reserved = codemode ? undefined : entries.find((entry) => entry.key === "execute")
             if (reserved)
               return yield* Effect.fail(
-                new RegistrationError({ name: reserved.key, message: 'Tool name "execute" is reserved for CodeMode' }),
+                new Tool.RegistrationError({
+                  name: reserved.key,
+                  message: 'Tool name "execute" is reserved for CodeMode',
+                }),
               )
             return { tools, options, entries, codemode }
           }),
@@ -218,7 +257,7 @@ const registryLayer = Layer.effect(
         // CodeMode registrations live in the CodeMode service; the registry keeps only direct tools.
         yield* Effect.forEach(
           planned.filter((plan) => plan.codemode && plan.entries.length > 0),
-          (plan) => codeMode.register(plan.tools, plan.options),
+          (plan) => codeMode.register(plan.entries),
           { discard: true },
         )
         const direct = planned.filter((plan) => !plan.codemode)
@@ -237,6 +276,7 @@ const registryLayer = Layer.effect(
                         tool: entry.tool,
                         name: entry.name,
                         namespace: entry.namespace,
+                        permission: entry.permission,
                       },
                     },
                   ])
@@ -269,7 +309,7 @@ const registryLayer = Layer.effect(
         ]),
       ),
       registerBatch,
-      materialize: Effect.fn("ToolRegistry.materialize")((permissions) =>
+      snapshot: Effect.fn("ToolRegistry.snapshot")((permissions) =>
         registrationLock.withPermit(
           Effect.gen(function* () {
             const direct = new Map<string, Registration>()
@@ -277,21 +317,21 @@ const registryLayer = Layer.effect(
             for (const [name, entries] of local) {
               const registration = entries.at(-1)?.registration
               if (!registration) continue
-              if (whollyDisabled(permission(registration.tool, name), rules)) continue
+              if (whollyDisabled(registration.permission, rules)) continue
               direct.set(name, registration)
             }
-            const execute = (yield* codeMode.materialize(permissions)).tool
+            const codemodeTool = (yield* codeMode.materialize(permissions)).tool
             return {
               definitions: [
-                ...Array.from(direct, ([name, registration]) => definition(name, registration.tool)),
-                ...(execute ? [definition("execute", execute)] : []),
+                ...Array.from(direct, ([name, registration]) => toLLMDefinition(name, registration.tool)),
+                ...(codemodeTool ? [toLLMDefinition("execute", codemodeTool)] : []),
               ],
-              settle: (input: ExecuteInput) => {
-                if (input.call.name === "execute" && execute) return settleTool(input, execute)
+              execute: (input: ExecuteInput) => {
+                if (input.call.name === "execute" && codemodeTool) return executeTool(input, codemodeTool)
                 const registration = direct.get(input.call.name)
-                if (registration) return settleTool(input, registration.tool)
-                return Effect.succeed({
-                  result: { type: "error", value: `Unknown tool: ${input.call.name}` },
+                if (registration) return executeTool(input, registration.tool)
+                return Effect.succeed<ToolOutcome>({
+                  status: "error",
                   error: { type: "tool.unknown", message: `Unknown tool: ${input.call.name}` },
                 })
               },

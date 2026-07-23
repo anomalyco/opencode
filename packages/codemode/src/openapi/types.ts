@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import type { Definition, JsonSchema } from "../tool.js"
+import type { Tool, JsonSchema } from "../tool.js"
 
 /** A parsed OpenAPI 3.x document. YAML must be parsed by the host. */
 export type Document = Record<string, unknown>
@@ -58,7 +58,7 @@ export type Skipped = {
   readonly reason: string
 }
 
-export type Tools = { [name: string]: Definition<HttpClient.HttpClient> | Tools }
+export type Tools = { [name: string]: Tool<HttpClient.HttpClient> | Tools }
 
 export type Result = {
   /** Namespaced tools; the host places them under a key in its `tools` object. */

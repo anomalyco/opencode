@@ -41,7 +41,7 @@ providers.forEach((item) =>
       const host = yield* PluginHost.make(plugin)
       yield* item.plugin.effect(host)
       const model = ModelV2.Info.make({
-        ...ModelV2.Info.empty(ProviderV2.ID.make(item.id), modelID),
+        ...ModelV2.Info.default(ProviderV2.ID.make(item.id), modelID),
         modelID,
         package: ProviderV2.aisdk(item.package),
       })

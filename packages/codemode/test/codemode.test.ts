@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool, toolError } from "../src/index.js"
 
-const run = (tool: Tool.Definition<never>) =>
+const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
 class UnsafeHostError extends Schema.TaggedErrorClass<UnsafeHostError>()("UnsafeHostError", {
@@ -16,7 +16,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Fail safely",
         input: Schema.Struct({}),
         output: Schema.String,
-        run: () => Effect.fail(toolError("Authorized request was refused")),
+        execute: () => Effect.fail(toolError("Authorized request was refused")),
       }),
     )
 
@@ -32,7 +32,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Fail safely",
         input: Schema.Struct({}),
         output: Schema.String,
-        run: () => Effect.fail(toolError("File not found: /tmp/report.json")),
+        execute: () => Effect.fail(toolError("File not found: /tmp/report.json")),
       }),
     )
 
@@ -52,7 +52,7 @@ describe("CodeMode host failure boundary", () => {
           description: "Fail internally",
           input: Schema.Struct({}),
           output: Schema.String,
-          run: () => failure,
+          execute: () => failure,
         }),
       )
 
@@ -71,7 +71,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Return invalid output",
         input: Schema.Struct({}),
         output: Schema.Struct({ safe: Schema.String }),
-        run: () => Effect.succeed({ safe: 1, secret } as unknown as { readonly safe: string }),
+        execute: () => Effect.succeed({ safe: 1, secret } as unknown as { readonly safe: string }),
       }),
     )
 
@@ -88,7 +88,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Return hostile output",
         input: Schema.Struct({}),
         output: Schema.Unknown,
-        run: () =>
+        execute: () =>
           Effect.succeed(
             new Proxy(
               {},
@@ -118,7 +118,7 @@ describe("CodeMode host failure boundary", () => {
               description: "Refuse",
               input: Schema.Struct({}),
               output: Schema.String,
-              run: () => Effect.fail(toolError("Refused")),
+              execute: () => Effect.fail(toolError("Refused")),
             }),
           },
         },
@@ -145,7 +145,7 @@ describe("CodeMode host failure boundary", () => {
               description: "Interrupt",
               input: Schema.Struct({}),
               output: Schema.String,
-              run: () => Effect.interrupt,
+              execute: () => Effect.interrupt,
             }),
           },
         },
@@ -166,7 +166,7 @@ describe("CodeMode tool-call observation", () => {
       description: "Look up a value",
       input: Schema.Struct({ query: Schema.String }),
       output: Schema.String,
-      run: ({ query }) => Effect.succeed(query),
+      execute: ({ query }) => Effect.succeed(query),
     })
 
     const result = await Effect.runPromise(
@@ -189,7 +189,7 @@ describe("CodeMode tool-call observation", () => {
       description: "Look up a value",
       input: Schema.Struct({ query: Schema.String }),
       output: Schema.String,
-      run: ({ query }) => (query === "boom" ? Effect.fail(toolError("Lookup refused")) : Effect.succeed(query)),
+      execute: ({ query }) => (query === "boom" ? Effect.fail(toolError("Lookup refused")) : Effect.succeed(query)),
     })
 
     const runtime = CodeMode.make({
@@ -430,7 +430,7 @@ describe("CodeMode schema flexibility", () => {
         properties: { id: { type: "string" }, count: { type: "number" } },
         required: ["id"],
       },
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return { echoed: input }
@@ -442,14 +442,14 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "adapter.call",
         description: "Call an adapter-described tool",
-        signature: "tools.adapter.call(input: {\n  id: string,\n  count?: number,\n}): Promise<unknown>",
+        signature: "tools.adapter.call(input: {\n  id: string,\n  count?: number,\n}): Promise<void>",
       },
     ])
 
     // JSON Schema is render-only: mistyped input passes through unvalidated.
     const result = await Effect.runPromise(runtime.execute(`return await tools.adapter.call({ id: 42 })`))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toStrictEqual({ echoed: { id: 42 } })
+    if (result.ok) expect(result.value).toBeNull()
     expect(observed).toStrictEqual([{ id: 42 }])
   })
 
@@ -458,7 +458,7 @@ describe("CodeMode schema flexibility", () => {
     const call = Tool.make({
       description: "Observe raw input",
       input: { type: "object" },
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return "ok"
@@ -483,7 +483,7 @@ describe("CodeMode schema flexibility", () => {
     const find = Tool.make({
       description: "Find things",
       input: Schema.Struct({ query: Schema.optionalKey(Schema.String), limit: Schema.optionalKey(Schema.Number) }),
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return "ok"
@@ -517,7 +517,7 @@ describe("CodeMode schema flexibility", () => {
           },
         },
       },
-      run: () => Effect.succeed({ login: "kit", id: 7 }),
+      execute: () => Effect.succeed({ login: "kit", id: 7 }),
     })
     const runtime = CodeMode.make({ tools: { users: { lookup } } })
 
@@ -534,18 +534,18 @@ describe("CodeMode schema flexibility", () => {
     if (result.ok) expect(result.value).toStrictEqual({ login: "kit", id: 7 })
   })
 
-  test("Effect Schema output without an input transform still renders unknown when omitted", async () => {
+  test("Effect Schema output without an input transform renders void when omitted", async () => {
     const ping = Tool.make({
       description: "Ping",
       input: Schema.Struct({ host: Schema.String }),
-      run: () => Effect.succeed("pong"),
+      execute: () => Effect.succeed("pong"),
     })
     const runtime = CodeMode.make({ tools: { net: { ping } } })
-    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: {\n  host: string,\n}): Promise<unknown>")
+    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: {\n  host: string,\n}): Promise<void>")
 
     const result = await Effect.runPromise(runtime.execute(`return await tools.net.ping({ host: "example.test" })`))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toBe("pong")
+    if (result.ok) expect(result.value).toBeNull()
   })
 })
 
@@ -554,7 +554,7 @@ describe("CodeMode public contract", () => {
     description: "Look up an order by ID",
     input: Schema.Struct({ id: Schema.String }),
     output: Schema.Struct({ id: Schema.String, status: Schema.String }),
-    run: ({ id }) => Effect.succeed({ id, status: "open" }),
+    execute: ({ id }) => Effect.succeed({ id, status: "open" }),
   })
   const tools = { orders: { lookup } }
   const source = `return await tools.orders.lookup({ id: "order_42" })`
@@ -577,7 +577,7 @@ describe("CodeMode public contract", () => {
       description: "echo",
       input: Schema.Struct({}),
       output: Schema.Number,
-      run: () => Effect.succeed(1),
+      execute: () => Effect.succeed(1),
     })
     const effect = CodeMode.execute({
       tools: { host: { echo } },
@@ -634,7 +634,7 @@ describe("CodeMode public contract", () => {
       description: "Resolve a library ID",
       input: Schema.Struct({ libraryName: Schema.String }),
       output: Schema.String,
-      run: ({ libraryName }) => Effect.succeed(`/resolved/${libraryName}`),
+      execute: ({ libraryName }) => Effect.succeed(`/resolved/${libraryName}`),
     })
     const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
 
@@ -760,18 +760,18 @@ describe("CodeMode public contract", () => {
     expect(instructions).not.toContain("search(")
   })
 
-  test("uses one ranked search returning complete definitions for large catalogs", async () => {
+  test("uses one ranked search returning complete tools for large catalogs", async () => {
     const upload = Tool.make({
       description: "Upload one readable local file to the current Discord thread",
       input: Schema.Struct({ path: Schema.String }),
       output: Schema.Struct({ sent: Schema.Boolean }),
-      run: () => Effect.succeed({ sent: true }),
+      execute: () => Effect.succeed({ sent: true }),
     })
     const generate = Tool.make({
       description: "Generate an image and upload it to the current Discord thread",
       input: Schema.Struct({ prompt: Schema.String }),
       output: Schema.Struct({ sent: Schema.Boolean }),
-      run: () => Effect.succeed({ sent: true }),
+      execute: () => Effect.succeed({ sent: true }),
     })
     const runtime = CodeMode.make({
       tools: { thread: { uploadFile: upload, generateImage: generate }, orders: { lookup } },
@@ -865,7 +865,7 @@ describe("CodeMode public contract", () => {
         description: `Numbered tool ${index}`,
         input: Schema.Struct({ id: Schema.String }),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     const runtime = CodeMode.make({
       tools: {
@@ -911,7 +911,7 @@ describe("CodeMode public contract", () => {
         description,
         input: Schema.Struct({ id: Schema.String }),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     const runtime = CodeMode.make({
       tools: {
@@ -954,13 +954,13 @@ describe("CodeMode public contract", () => {
         properties: { attachment: { type: "string", description: "Local path of the payload to send" } },
         required: ["attachment"],
       },
-      run: () => Effect.succeed("ok"),
+      execute: () => Effect.succeed("ok"),
     })
     const other = Tool.make({
       description: "Rename the workspace",
       input: Schema.Struct({ name: Schema.String }),
       output: Schema.String,
-      run: () => Effect.succeed("ok"),
+      execute: () => Effect.succeed("ok"),
     })
     const runtime = CodeMode.make({ tools: { files: { upload, other } } })
 
@@ -990,7 +990,7 @@ describe("CodeMode public contract", () => {
         description,
         input: Schema.Struct({ id: Schema.String }),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     const runtime = CodeMode.make({
       tools: {
@@ -1029,7 +1029,7 @@ describe("CodeMode public contract", () => {
         description,
         input: Schema.Struct({}),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     // Deliberately declared out of alphabetical order.
     const runtime = CodeMode.make({
@@ -1071,7 +1071,7 @@ describe("CodeMode public contract", () => {
       description: "Cheap",
       input: Schema.Struct({ q: Schema.String }),
       output: Schema.String,
-      run: () => Effect.succeed("ok"),
+      execute: () => Effect.succeed("ok"),
     })
     const expensive = Tool.make({
       description:
@@ -1081,7 +1081,7 @@ describe("CodeMode public contract", () => {
         anotherEvenLongerParameterName: Schema.Number,
       }),
       output: Schema.String,
-      run: () => Effect.succeed("ok"),
+      execute: () => Effect.succeed("ok"),
     })
     // Round 1 places alpha.cheap (~17 estimated tokens) and beta.cheap (~17); in round 2
     // alpha.expensive does not fit, which marks only alpha done - it must NOT prevent
@@ -1112,7 +1112,7 @@ describe("CodeMode public contract", () => {
         },
         required: ["id"],
       } as const,
-      run: () => Effect.succeed("ok"),
+      execute: () => Effect.succeed("ok"),
     })
     const runtime = CodeMode.make({
       tools: { records: { lookup: documented } },
@@ -1130,7 +1130,7 @@ describe("CodeMode public contract", () => {
       description: "Double a number",
       input: Schema.Struct({ value: Schema.NumberFromString }),
       output: Schema.NumberFromString,
-      run: ({ value }) =>
+      execute: ({ value }) =>
         Effect.sync(() => {
           observed.push(value)
           return String(value * 2)
@@ -1226,7 +1226,7 @@ describe("CodeMode public contract", () => {
       description: "Count invocations",
       input: Schema.Struct({}),
       output: Schema.Number,
-      run: () => Effect.succeed(1),
+      execute: () => Effect.succeed(1),
     })
     const result = await Effect.runPromise(
       CodeMode.execute({

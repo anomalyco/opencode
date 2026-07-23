@@ -233,11 +233,11 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("omits tools when tool choice is none", () =>
+  it.effect("keeps tools and sends function calling mode NONE", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
-          id: "req_no_tools",
+          id: "req_tool_choice_none",
           model,
           prompt: "Say hello.",
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
@@ -245,8 +245,10 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
+        tools: [{ functionDeclarations: [{ name: "lookup", description: "Lookup data" }] }],
+        toolConfig: { functionCallingConfig: { mode: "NONE" } },
       })
     }),
   )

@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
+import { readDisplayText } from "@opencode-ai/tui/mini/tool"
 
 export type ToolInput = Record<string, unknown>
 export type ToolContent = ReadonlyArray<
@@ -100,11 +101,12 @@ export function completedToolUpdate(input: {
   readonly toolName: string
   readonly input: ToolInput
   readonly content: ToolContent
-  readonly structured: Readonly<Record<string, unknown>>
-  readonly result?: unknown
+  readonly metadata?: Readonly<Record<string, unknown>>
 }): ToolCallUpdate {
   const normalized = toolContent(input.content)
-  const read = input.toolName.toLocaleLowerCase() === "read" ? readDisplayText(input.structured) : undefined
+  // Read's model content is a JSON page envelope; show the clean text instead.
+  const firstText = input.content.find((part) => part.type === "text")
+  const read = input.toolName.toLocaleLowerCase() === "read" && firstText ? readDisplayText(firstText.text) : undefined
   const images = normalized.filter((part) => part.type === "content" && part.content.type === "image")
   const primary =
     read === undefined
@@ -128,8 +130,7 @@ export function completedToolUpdate(input: {
     status: "completed",
     content: [...primary, ...diff, ...images],
     rawOutput: {
-      structured: input.structured,
-      ...(input.result === undefined ? {} : { result: input.result }),
+      ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
     },
   }
 }
@@ -138,8 +139,8 @@ export function errorToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly input: ToolInput
-  readonly content: ToolContent
-  readonly structured: Readonly<Record<string, unknown>>
+  readonly content?: ToolContent
+  readonly metadata?: Readonly<Record<string, unknown>>
   readonly error: string
   readonly cwd?: string
 }): ToolCallUpdate {
@@ -150,8 +151,11 @@ export function errorToolUpdate(input: {
     title: toolTitle(input.toolName, input.input, undefined),
     locations: toLocations(input.toolName, input.input, input.cwd),
     rawInput: rawInput(input.toolName, input.input, input.cwd),
-    content: [...toolContent(input.content), { type: "content", content: { type: "text", text: input.error } }],
-    rawOutput: { structured: input.structured, error: input.error },
+    content: [...toolContent(input.content ?? []), { type: "content", content: { type: "text", text: input.error } }],
+    rawOutput: {
+      ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+      error: input.error,
+    },
   }
 }
 
@@ -162,21 +166,6 @@ function toolContent(content: ToolContent): ToolCallContent[] {
     if (!match?.[1]?.startsWith("image/") || match[2] === undefined) return []
     return [{ type: "content", content: { type: "image", mimeType: match[1], data: match[2] } }]
   })
-}
-
-function readDisplayText(structured: Readonly<Record<string, unknown>>) {
-  if (typeof structured.content === "string") {
-    if (structured.type === "text-page" || structured.encoding === "utf8") return structured.content
-  }
-  if (!Array.isArray(structured.entries)) return undefined
-  return structured.entries
-    .flatMap((entry): string[] => {
-      if (typeof entry === "string") return [entry]
-      if (!entry || typeof entry !== "object") return []
-      const path = Reflect.get(entry, "path")
-      return typeof path === "string" ? [path] : []
-    })
-    .join("\n")
 }
 
 function toolTitle(toolName: string, input: ToolInput, fallback: string | undefined) {

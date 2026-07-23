@@ -170,8 +170,8 @@ test("Core reuses the canonical shared schemas", async () => {
   for (const [core, shared] of schemas) expect(core).toBe(shared)
 
   expect(Agent.Info.empty(Agent.ID.make("test"))).toEqual(AgentV2.Info.empty(AgentV2.ID.make("test")))
-  expect(Model.Info.empty(Provider.ID.make("test"), Model.ID.make("model"))).toEqual(
-    ModelV2.Info.empty(ProviderV2.ID.make("test"), ModelV2.ID.make("model")),
+  expect(Model.Info.default(Provider.ID.make("test"), Model.ID.make("model"))).toEqual(
+    ModelV2.Info.default(ProviderV2.ID.make("test"), ModelV2.ID.make("model")),
   )
   expect(Provider.Info.empty(Provider.ID.make("test"))).toEqual(ProviderV2.Info.empty(ProviderV2.ID.make("test")))
   expect(Skill.Source.key(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/tmp") }))).toBe(

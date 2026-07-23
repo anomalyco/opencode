@@ -409,40 +409,49 @@ export namespace Tool {
   })
   export type Called = typeof Called.Type
 
-  /** Live replacement snapshot for a running tool. */
+  /** Live replacement metadata for a running tool. */
   export const Progress = Event.ephemeral({
     type: "session.tool.progress",
     schema: {
       ...ToolBase,
-      structured: Schema.Record(Schema.String, Schema.Unknown),
-      content: Schema.Array(ToolContent),
+      metadata: Schema.Record(Schema.String, Schema.Json),
     },
   })
   export type Progress = typeof Progress.Type
 
+  /** Canonical terminal success: one non-empty model representation plus optional UI metadata. */
   export const Success = Event.durable({
     type: "session.tool.success",
-    ...options,
+    durable: {
+      aggregate: "sessionID",
+      version: 2,
+    },
     schema: {
       ...ToolBase,
-      structured: Schema.Record(Schema.String, Schema.Unknown),
-      content: Schema.Array(ToolContent),
-      result: Schema.Unknown.pipe(optional),
+      content: Schema.NonEmptyArray(ToolContent),
+      metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
     },
   })
   export type Success = typeof Success.Type
 
+  /**
+   * Canonical terminal failure: one error plus the final bounded snapshot of
+   * partial progress. The event is self-contained; projection never reaches
+   * into ephemeral progress history.
+   */
   export const Failed = Event.durable({
     type: "session.tool.failed",
-    ...options,
+    durable: {
+      aggregate: "sessionID",
+      version: 2,
+    },
     schema: {
       ...ToolBase,
       error: SessionError.Error,
       content: Schema.NonEmptyArray(ToolContent).pipe(optional),
-      metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
-      result: Schema.Unknown.pipe(optional),
+      metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),
     },

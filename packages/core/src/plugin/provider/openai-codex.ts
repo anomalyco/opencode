@@ -1,7 +1,7 @@
 export * as OpenAICodex from "./openai-codex"
 
 // TEMPORARY SEAM (#34765): plugins have no hook into LLM route construction, so
-// codex routing lives in SessionRunnerModel.fromCatalogModel and catalog filtering
+// Codex routing lives in ModelResolver and catalog filtering.
 // in OpenAIPlugin, sharing this module. Once the native provider packages land
 // (#33689/#33925/#34462) this should collapse into the native OpenAI provider.
 // The eligibility rules mirror V1's CodexAuthPlugin allowlist; models.dev has no

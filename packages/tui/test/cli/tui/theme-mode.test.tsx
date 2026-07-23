@@ -1,10 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
+import { RGBA } from "@opentui/core"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
+import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
+import { selectTheme } from "../../../src/theme/v2/select"
 import { ConfigProvider } from "../../../src/config"
-import { ThemeProvider, useTheme } from "../../../src/context/theme"
+import { ThemeProvider, useTheme, type ThemeError } from "../../../src/context/theme"
 
 async function wait(fn: () => boolean) {
   const started = Date.now()
@@ -24,6 +27,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
   const darkOnly = structuredClone(DEFAULT_THEMES.opencode)
   darkOnly.theme.background = "#111111"
   darkOnly.theme.text = "#eeeeee"
+  const native = { version: 2, dark: { text: { default: "#abcdef" } } } as const
   let theme: ReturnType<typeof useTheme> | undefined
 
   function Probe() {
@@ -42,7 +46,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
       <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "light-only", mode: "dark" } })}>
         <ThemeProvider
           mode="dark"
-          source={{ discover: () => Promise.resolve({ "light-only": lightOnly, "dark-only": darkOnly, dual }) }}
+          source={{ discover: () => Promise.resolve({ "light-only": lightOnly, "dark-only": darkOnly, dual, native }) }}
         >
           <Probe />
         </ThemeProvider>
@@ -66,6 +70,85 @@ test("uses an available mode while retaining the pinned preference", async () =>
     expect(current().set("dual")).toBeTrue()
     await wait(() => current().mode() === "dark")
     expect(current().modes()).toEqual(["light", "dark"])
+    expect(current().set("native")).toBeTrue()
+    await wait(() => current().selected === "native")
+    expect(current().modes()).toEqual(["dark"])
+    expect(current().themeV2.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each([
+  ["schema", { version: 2, light: { categorical: [] } }],
+  ["mode merging", { version: 2, light: { mergeMode: true } }],
+  ["token reference", { version: 2, light: { text: { default: "$missing" } } }],
+] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
+  let theme: ReturnType<typeof useTheme> | undefined
+  let failure: ThemeError | undefined
+  let unsubscribe: (() => void) | undefined
+
+  function Probe() {
+    const value = useTheme()
+    theme = value
+    unsubscribe = value.onError((error) => (failure = error))
+    return <text>{value.selected}</text>
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "invalid" } })}>
+        <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({ invalid: source }) }}>
+          <Probe />
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    { width: 20, height: 2 },
+  )
+  app.renderer.start()
+
+  try {
+    await wait(() => theme?.ready === true)
+    expect(theme?.selected).toBe("opencode")
+    expect(failure?.name).toBe("invalid")
+    expect(failure?.error).toBeInstanceOf(Error)
+    expect(failure?.error.message.length).toBeGreaterThan(0)
+  } finally {
+    unsubscribe?.()
+    app.renderer.destroy()
+  }
+})
+
+test("contextual themes fall back to a standalone theme's base view", async () => {
+  const standalone = {
+    version: 2,
+    standalone: true,
+    dark: { hue: selectTheme(DEFAULT_THEME, "dark").hue },
+  } as const
+  let theme: ReturnType<typeof useTheme> | undefined
+
+  function Probe() {
+    theme = useTheme()
+    return <text>{theme.selected}</text>
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "standalone", mode: "dark" } })}>
+        <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({ standalone }) }}>
+          <Probe />
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    { width: 20, height: 2 },
+  )
+  app.renderer.start()
+
+  try {
+    await wait(() => theme?.ready === true)
+    if (!theme) throw new Error("Theme provider is not mounted")
+    expect(theme.contextual("elevated").themeV2.text.default).toBe(theme.themeV2.text.default)
+    expect(theme.contextual("overlay").themeV2.background.default).toBe(theme.themeV2.background.default)
   } finally {
     app.renderer.destroy()
   }

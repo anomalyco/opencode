@@ -28,7 +28,19 @@ export function webSearchProviderLabel(provider: unknown) {
 export function toolDisplayMetadata(state: unknown): Record<string, unknown> {
   if (!state || typeof state !== "object" || Array.isArray(state)) return {}
   if (!("status" in state) || state.status === "streaming") return {}
-  if (!("structured" in state) || !state.structured || typeof state.structured !== "object") return {}
-  if (Array.isArray(state.structured)) return {}
-  return state.structured as Record<string, unknown>
+  if (!("metadata" in state) || !state.metadata || typeof state.metadata !== "object") return {}
+  if (Array.isArray(state.metadata)) return {}
+  return state.metadata as Record<string, unknown>
 }
+
+export function toolDisplayContent(state: SessionMessageAssistantTool["state"]) {
+  if (state.status === "streaming" || state.status === "running") return []
+  return state.content ?? []
+}
+
+export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [T, ...T[]] | undefined {
+  if (!content) return undefined
+  const [first, ...rest] = content
+  return first === undefined ? undefined : [first, ...rest]
+}
+import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"

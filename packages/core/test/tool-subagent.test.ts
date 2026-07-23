@@ -28,7 +28,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, settleTool, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, toolIdentity, waitForTool } from "./lib/tool"
 
 const childText = "child final response"
 const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: ProviderV2.ID.make("test") })
@@ -148,7 +148,7 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
-          expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
+          expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,
@@ -160,7 +160,10 @@ describe("SubagentTool", () => {
                 input: { agent: "primary", description: "primary", prompt: "should fail" },
               },
             }),
-          ).toEqual({ type: "error", value: "Agent primary cannot run as a subagent" })
+          ).toEqual({
+            status: "error",
+            error: { type: "tool.execution", message: "Agent primary cannot run as a subagent" },
+          })
         }),
       ),
     ),
@@ -193,7 +196,13 @@ describe("SubagentTool", () => {
                 input: { agent: "reviewer", description: "nested", prompt: "should fail" },
               },
             }),
-          ).toEqual({ type: "error", value: expect.stringContaining("Subagent depth limit reached (1)") })
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: expect.stringContaining("Subagent depth limit reached (1)"),
+            },
+          })
           expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
         }),
       ),
@@ -219,7 +228,7 @@ describe("SubagentTool", () => {
           const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
 
-          const settled = yield* settleTool(registry, {
+          const settled = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             call: {
@@ -231,17 +240,15 @@ describe("SubagentTool", () => {
           })
 
           expect(settled).toMatchObject({
-            result: { type: "text", value: childText },
-            output: {
-              structured: { status: "completed" },
-              content: [{ type: "text", text: childText }],
-            },
+            status: "completed",
+            metadata: { status: "completed" },
+            content: [{ type: "text", text: childText }],
           })
-          expect(settled.output?.structured).toEqual({
-            sessionID: outputSessionID(settled.output?.structured),
+          expect(settled.metadata).toEqual({
+            sessionID: outputSessionID(settled.metadata),
             status: "completed",
           })
-          expect((yield* sessions.get(outputSessionID(settled.output?.structured))).parentID).toBe(parent.id)
+          expect((yield* sessions.get(outputSessionID(settled.metadata))).parentID).toBe(parent.id)
         }),
       ),
     ),
@@ -263,7 +270,7 @@ describe("SubagentTool", () => {
           yield* waitForTool(registry, SubagentTool.name)
           const progress: ToolRegistry.Progress[] = []
 
-          const settled = yield* settleTool(registry, {
+          const settled = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             progress: (update) => Effect.sync(() => progress.push(update)),
@@ -276,15 +283,13 @@ describe("SubagentTool", () => {
           })
 
           expect(settled).toMatchObject({
-            result: { type: "text", value: childText },
-            output: {
-              structured: { status: "completed" },
-              content: [{ type: "text", text: childText }],
-            },
+            status: "completed",
+            metadata: { status: "completed" },
+            content: [{ type: "text", text: childText }],
           })
-          const child = yield* sessions.get(outputSessionID(settled.output?.structured))
-          expect(settled.output?.structured).toEqual({ sessionID: child.id, status: "completed" })
-          expect(progress[0]?.structured).toEqual({ sessionID: child.id, status: "running" })
+          const child = yield* sessions.get(outputSessionID(settled.metadata))
+          expect(settled.metadata).toEqual({ sessionID: child.id, status: "completed" })
+          expect(progress[0]?.metadata).toEqual({ sessionID: child.id, status: "running" })
           expect(child).toMatchObject({
             parentID: parent.id,
             location: parent.location,
@@ -295,7 +300,7 @@ describe("SubagentTool", () => {
             "You are a subagent spawned by another session.\nreview this",
           )
 
-          const fallback = yield* settleTool(registry, {
+          const fallback = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             call: {
@@ -305,7 +310,7 @@ describe("SubagentTool", () => {
               input: { agent: "fallback", description: "fallback", prompt: "fallback" },
             },
           })
-          const fallbackChild = yield* sessions.get(outputSessionID(fallback.output?.structured))
+          const fallbackChild = yield* sessions.get(outputSessionID(fallback.metadata))
           expect(fallbackChild).toMatchObject({ parentID: parent.id, model: parentModel })
         }),
       ),
@@ -338,7 +343,13 @@ describe("SubagentTool", () => {
                 input: { agent: "reviewer", description: "fail review", prompt: "please fail" },
               },
             }),
-          ).toEqual({ type: "error", value: expect.stringContaining("No model is available for session") })
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: expect.stringContaining("No model is available for session"),
+            },
+          })
         }),
       ),
     ),
@@ -366,7 +377,7 @@ describe("SubagentTool", () => {
             Effect.forkScoped({ startImmediately: true }),
           )
 
-          const settled = yield* settleTool(registry, {
+          const settled = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             call: {
@@ -376,13 +387,12 @@ describe("SubagentTool", () => {
               input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
             },
           })
-          const childID = outputSessionID(settled.output?.structured)
-          expect(settled.output?.structured).toMatchObject({
+          const childID = outputSessionID(settled.metadata)
+          expect(settled.metadata).toMatchObject({
             status: "running",
           })
-          expect(settled.output?.structured).toEqual({ sessionID: childID, status: "running" })
-          expect(settled.result).toEqual({ type: "text", value: expect.stringContaining(`id: ${childID}`) })
-          expect(settled.output?.content).toEqual([{ type: "text", text: expect.stringContaining(`id: ${childID}`) }])
+          expect(settled.metadata).toEqual({ sessionID: childID, status: "running" })
+          expect(settled.content).toEqual([{ type: "text", text: expect.stringContaining(`id: ${childID}`) }])
 
           const admission = Array.from(yield* Fiber.join(admitted))[0]
           expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)

@@ -1,16 +1,21 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
+import { parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
-import type { ThemeDefinition } from "../../../src/theme/v2"
-import { resolveTheme, resolveThemeFile } from "../../../src/theme/v2/resolve"
+import type { Mode, ThemeDefinition } from "../../../src/theme/v2"
+import { resolveTheme, resolveThemeDocument } from "../../../src/theme/v2/resolve"
 import { selectTheme } from "../../../src/theme/v2/select"
 
 const light = selectTheme(DEFAULT_THEME, "light")
 const dark = selectTheme(DEFAULT_THEME, "dark")
 
-test("resolves one-mode files with defaults for the available mode", () => {
-  const resolvedLight = resolveThemeFile({ version: 2, light: {} }, "dark")
-  const resolvedDark = resolveThemeFile({ version: 2, dark: {} }, "light")
+function resolveSource(source: ThemeDocumentSource, mode?: Mode, name?: string) {
+  return resolveThemeDocument(parseTheme(source, name), mode)
+}
+
+test("resolves one-mode documents with defaults for the available mode", () => {
+  const resolvedLight = resolveSource({ version: 2, light: {} }, "dark")
+  const resolvedDark = resolveSource({ version: 2, dark: {} }, "light")
 
   expect(resolvedLight.background.default.equals(resolveTheme(light).background.default)).toBeTrue()
   expect(resolvedDark.background.default.equals(resolveTheme(dark).background.default)).toBeTrue()
@@ -18,26 +23,19 @@ test("resolves one-mode files with defaults for the available mode", () => {
   expect(resolvedDark.categorical.length).toBeGreaterThan(0)
 })
 
-test("rejects theme files without a mode", () => {
-  // @ts-expect-error Runtime decoding also enforces the at-least-one-mode invariant.
-  expect(() => resolveThemeFile({ version: 2 })).toThrow("Invalid theme")
+test("rejects theme documents without a mode", () => {
+  expect(() => resolveSource({ version: 2 })).toThrow("Invalid theme")
 })
 
 test("validates and resolves categorical hues in configured order", () => {
-  const theme = resolveThemeFile({ version: 2, light: { categorical: ["accent", "red", "interactive"] } }, "light")
+  const theme = resolveSource({ version: 2, light: { categorical: ["accent", "red", "interactive"] } }, "light")
 
   expect(theme.categorical[0]).toBe(theme.hue.accent)
   expect(theme.categorical[1]).toBe(theme.hue.red)
   expect(theme.categorical[2]).toBe(theme.hue.interactive)
   expect(theme.contexts["@context:elevated"]?.categorical).toBe(theme.categorical)
-  expect(() => resolveThemeFile({ version: 2, light: { categorical: [] } }, "light")).toThrow("Invalid theme")
-  expect(() =>
-    resolveThemeFile(
-      // @ts-expect-error Runtime decoding rejects unknown categorical hue names.
-      { version: 2, light: { categorical: ["magenta"] } },
-      "light",
-    ),
-  ).toThrow("Invalid theme")
+  expect(() => resolveSource({ version: 2, light: { categorical: [] } }, "light")).toThrow("Invalid theme")
+  expect(() => resolveSource({ version: 2, light: { categorical: ["magenta"] } }, "light")).toThrow("Invalid theme")
 })
 
 test("uses the default categorical order for direct definitions", () => {
@@ -93,7 +91,7 @@ test("resolves base hue aliases and rejects circular hue aliases", () => {
     ...light,
     hue: { ...light.hue, blue: "$hue.red", purple: "$hue.blue" },
   })
-  const overridden = resolveThemeFile({ version: 2, light: { hue: { blue: "$hue.red" } }, dark: {} }, "light")
+  const overridden = resolveSource({ version: 2, light: { hue: { blue: "$hue.red" } }, dark: {} }, "light")
 
   expect(aliased.hue.blue).not.toBe(aliased.hue.red)
   expect(aliased.hue.blue[500].equals(aliased.hue.red[500])).toBeTrue()
@@ -131,8 +129,8 @@ test("steps by hue source when adjacent colors have equal values", () => {
   expect(theme.increase(theme.hue.neutral[300])).toBe(theme.hue.neutral[400])
 })
 
-test("merges partial files with the selected OpenCode defaults", () => {
-  const theme = resolveThemeFile(
+test("merges partial documents with the selected OpenCode defaults", () => {
+  const theme = resolveSource(
     {
       version: 2,
       light: {
@@ -150,7 +148,7 @@ test("merges partial files with the selected OpenCode defaults", () => {
 })
 
 test("expands user structural fallbacks before merging defaults", () => {
-  const expanded = resolveThemeFile(
+  const expanded = resolveSource(
     {
       version: 2,
       light: {
@@ -161,7 +159,7 @@ test("expands user structural fallbacks before merging defaults", () => {
     },
     "light",
   )
-  const isolatedState = resolveThemeFile(
+  const isolatedState = resolveSource(
     {
       version: 2,
       light: {
@@ -181,9 +179,9 @@ test("expands user structural fallbacks before merging defaults", () => {
 })
 
 test("standalone themes skip OpenCode defaults and use the red core fallback", () => {
-  const file = { version: 2, standalone: true, light: { hue: light.hue }, dark: { hue: dark.hue } } as const
-  const lightTheme = resolveThemeFile(file, "light")
-  const darkTheme = resolveThemeFile(file, "dark")
+  const document = { version: 2, standalone: true, light: { hue: light.hue }, dark: { hue: dark.hue } } as const
+  const lightTheme = resolveSource(document, "light")
+  const darkTheme = resolveSource(document, "dark")
 
   expect(lightTheme.text.default.toInts()).toEqual([255, 0, 0, 255])
   expect(lightTheme.background.default.toInts()).toEqual([255, 0, 0, 255])
@@ -192,7 +190,7 @@ test("standalone themes skip OpenCode defaults and use the red core fallback", (
 })
 
 test("uses defaults for the selected mode when it merges the other mode", () => {
-  const theme = resolveThemeFile(
+  const theme = resolveSource(
     {
       version: 2,
       light: { hue: light.hue, background: { default: "#123456" } },
@@ -217,7 +215,7 @@ test("resolves matched action variants and states", () => {
 })
 
 test("resolves elevated hover surfaces from direct colors", () => {
-  const theme = resolveThemeFile(
+  const theme = resolveSource(
     {
       version: 2,
       light: { background: { surface: { offset: "#123456", overlay: "#234567" } } },
@@ -231,7 +229,7 @@ test("resolves elevated hover surfaces from direct colors", () => {
 })
 
 test("resolves transparent colors", () => {
-  const theme = resolveThemeFile({
+  const theme = resolveSource({
     version: 2,
     light: { background: { formfield: { default: "transparent" } } },
     dark: { background: { formfield: { default: "transparent" } } },
@@ -241,7 +239,7 @@ test("resolves transparent colors", () => {
 
 test("reports theme decoding failures as native errors", () => {
   expect(() =>
-    resolveThemeFile(
+    resolveSource(
       {
         version: 2,
         light: { text: { default: "opaque" } },

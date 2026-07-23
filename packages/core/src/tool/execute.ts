@@ -1,9 +1,10 @@
 export * as ExecuteTool from "./execute"
+export type { Registration } from "./tool"
 
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
-import { ToolOutput } from "@opencode-ai/ai"
+import type { ToolContent } from "@opencode-ai/ai"
 import { Effect, Ref, Schema } from "effect"
-import { definition, make, settle, type AnyTool } from "./tool"
+import { execute, make, toLLMDefinition, type Content, type Metadata, type Registration } from "./tool"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -14,15 +15,10 @@ const ExecuteFile = Schema.Struct({
 const ExecuteCall = Schema.Struct({
   tool: Schema.String,
   status: Schema.Literals(["running", "completed", "error"]),
-  input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
 })
 
 type ExecuteCall = typeof ExecuteCall.Type
-
-const ExecuteMetadata = Schema.Struct({
-  toolCalls: Schema.Array(ExecuteCall),
-  error: Schema.optionalKey(Schema.Literal(true)),
-})
 
 const ExecuteOutput = Schema.Struct({
   output: Schema.String,
@@ -34,12 +30,6 @@ const ExecuteOutput = Schema.Struct({
 type CollectedFiles = {
   readonly index: number
   readonly files: Array<typeof ExecuteFile.Type>
-}
-
-export interface Registration {
-  readonly tool: AnyTool
-  readonly name: string
-  readonly namespace?: string
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
@@ -55,20 +45,6 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
     description,
     input: CodeMode.Input,
     output: ExecuteOutput,
-    structured: ExecuteMetadata,
-    toStructuredOutput: ({ output }) => ({
-      toolCalls: output.toolCalls,
-      ...(output.error ? { error: true as const } : {}),
-    }),
-    toModelOutput: ({ output }) => [
-      { type: "text" as const, text: output.output },
-      ...output.files.map((file) => ({
-        type: "file" as const,
-        data: file.data,
-        mime: file.mime,
-        ...(file.name === undefined ? {} : { name: file.name }),
-      })),
-    ],
     execute: ({ code }, context) =>
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
@@ -85,21 +61,17 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           (name, registration, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const output = yield* settle(
-                registration.tool,
-                { type: "tool-call", id: context.callID, name, input },
-                {
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  messageID: context.messageID,
-                  callID: context.callID,
-                  progress: context.progress,
-                },
-              ).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
-              const outputFileParts = outputFiles(output)
+              const executed = yield* execute(registration.tool, input, {
+                sessionID: context.sessionID,
+                agent: context.agent,
+                messageID: context.messageID,
+                callID: context.callID,
+                progress: context.progress,
+              }).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
+              const outputFileParts = outputFiles(executed.content)
               if (outputFileParts.length > 0)
                 yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-              return output.structured
+              return executed.output
             }),
           {
             onToolCallStart: ({ index, name, input }) =>
@@ -126,7 +98,30 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
         const output = formatResult(result)
-        return { output, toolCalls, files: collected, ...(result.ok ? {} : { error: true as const }) }
+        const value: typeof ExecuteOutput.Type = {
+          output,
+          toolCalls,
+          files: collected,
+          ...(result.ok ? {} : { error: true }),
+        }
+        const content: [Content, ...Content[]] = [{ type: "text", text: value.output }]
+        content.push(
+          ...value.files.map((file) => ({
+            type: "file" as const,
+            data: file.data,
+            mime: file.mime,
+            ...(file.name === undefined ? {} : { name: file.name }),
+          })),
+        )
+        const metadata: Metadata = {
+          toolCalls: value.toolCalls,
+          ...(value.error ? { error: true } : {}),
+        }
+        return {
+          output: value,
+          content,
+          metadata,
+        }
       }),
   })
 }
@@ -137,28 +132,30 @@ export const instructions = (registrations: ReadonlyMap<string, Registration>) =
 
 function runtime(
   registrations: ReadonlyMap<string, Registration>,
-  invoke: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
+  executeTool: (name: string, registration: Registration, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.ToolCallHooks,
 ) {
-  const tools: Record<string, Tool.Definition<never>> = {}
+  const tools: Record<string, Tool.Tool<never>> = {}
   for (const [name, registration] of registrations) {
-    const child = definition(name, registration.tool)
-    const path = registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
+    const child = toLLMDefinition(name, registration.tool)
+    const path =
+      registration.namespace === undefined ? registration.name : `${registration.namespace}.${registration.name}`
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
       output: child.outputSchema,
-      run: (input) => invoke(name, registration, input),
+      execute: (input) => executeTool(name, registration, input),
     })
   }
   return CodeMode.make<typeof tools>({ tools, ...hooks })
 }
 
-function displayInput(input: unknown): Record<string, unknown> | undefined {
+// Tool inputs arrive as parsed JSON, so the JSON value cast is a boundary fact.
+function displayInput(input: unknown): Record<string, typeof Schema.Json.Type> | undefined {
   if (input === null || input === undefined) return
-  if (typeof input !== "object" || Array.isArray(input)) return { input }
+  if (typeof input !== "object" || Array.isArray(input)) return { input: input as typeof Schema.Json.Type }
   if (Object.keys(input).length === 0) return
-  return input as Record<string, unknown>
+  return input as Record<string, typeof Schema.Json.Type>
 }
 
 function formatResult(result: CodeMode.Result) {
@@ -180,8 +177,8 @@ function formatValue(value: CodeMode.DataValue) {
   return JSON.stringify(value, null, 2) ?? String(value)
 }
 
-function outputFiles(output: ToolOutput): Array<typeof ExecuteFile.Type> {
-  return output.content.flatMap((part) => {
+function outputFiles(content: ReadonlyArray<ToolContent>): Array<typeof ExecuteFile.Type> {
+  return content.flatMap((part) => {
     if (part.type !== "file") return []
     const prefix = `data:${part.mime};base64,`
     if (!part.uri.startsWith(prefix)) return []

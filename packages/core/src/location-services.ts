@@ -20,6 +20,7 @@ import { Integration } from "./integration"
 import { Location } from "./location"
 import { LocationMutation } from "./location-mutation"
 import { LocationServiceMap } from "./location-service-map"
+import { ModelResolver } from "./model-resolver"
 import { MCP } from "./mcp/index"
 import { PermissionV2 } from "./permission"
 import { PluginV2 } from "./plugin"
@@ -58,6 +59,7 @@ const locationServiceNodes = [
   Reference.node,
   Integration.node,
   Catalog.node,
+  ModelResolver.node,
   AISDK.node,
   PluginV2.node,
   PluginSupervisor.node,

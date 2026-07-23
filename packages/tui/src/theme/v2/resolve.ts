@@ -11,7 +11,7 @@ import {
   HueAlias,
   HueStep,
   ThemeDefinition,
-  ThemeFile,
+  ThemeDocument,
 } from "./schema"
 import type {
   ActionStateKey,
@@ -26,7 +26,6 @@ import type {
 import { selectTheme, selectThemeMode } from "./select"
 
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition)
-const decodeThemeFileSchema = Schema.decodeUnknownSync(ThemeFile)
 
 function decodeThemeDefinition(input: unknown) {
   try {
@@ -36,27 +35,18 @@ function decodeThemeDefinition(input: unknown) {
   }
 }
 
-function decodeThemeFile(input: unknown, name: string) {
-  try {
-    return decodeThemeFileSchema(input)
-  } catch (error) {
-    throw themeDecodeError(error, name)
-  }
-}
-
-function themeDecodeError(error: unknown, name: string) {
+export function themeDecodeError(error: unknown, name: string) {
   const message = Schema.isSchemaError(error) ? error.message : String(error)
   const value = /got ("[^"]*"|\S+)/.exec(message)?.[1] ?? "value"
   return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
 }
 
-export function resolveThemeFile(file: ThemeFile, mode?: "light" | "dark", name = "theme") {
-  const decoded = decodeThemeFile(file, name)
-  const selected = selectThemeMode(decoded, mode)
+export function resolveThemeDocument(document: ThemeDocument, mode?: "light" | "dark") {
+  const selected = selectThemeMode(document, mode)
   const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
   const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
   const core = expandTokens(fallback())
-  const merged = decoded.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
+  const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
   if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
   return resolveExpandedTheme({
     ...merged,

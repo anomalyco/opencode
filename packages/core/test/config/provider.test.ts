@@ -49,6 +49,86 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("defaults custom models to agent capabilities", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("custom")
+      const modelID = ModelV2.ID.make("chat")
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    models: { chat: {} },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* addPlugin(config)
+
+      const model = required(yield* catalog.model.get(providerID, modelID))
+      expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
+    }),
+  )
+
+  it.effect("preserves catalog capabilities unless config overrides them", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("custom")
+      const inheritedID = ModelV2.ID.make("inherited")
+      const overriddenID = ModelV2.ID.make("overridden")
+      yield* catalog.transform((draft) => {
+        draft.model.update(providerID, inheritedID, (model) => {
+          model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+        })
+        draft.model.update(providerID, overriddenID, (model) => {
+          model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+        })
+      })
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    models: {
+                      inherited: { name: "Inherited" },
+                      overridden: {
+                        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* addPlugin(config)
+
+      expect((yield* catalog.model.get(providerID, inheritedID))?.capabilities).toEqual({
+        tools: false,
+        input: ["text"],
+        output: ["text"],
+      })
+      expect((yield* catalog.model.get(providerID, overriddenID))?.capabilities).toEqual({
+        tools: true,
+        input: ["text", "image"],
+        output: ["text"],
+      })
+    }),
+  )
+
   it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

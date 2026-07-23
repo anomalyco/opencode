@@ -121,7 +121,7 @@ describe("AzureCognitiveServicesPlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: "aisdk:test-provider",
         }),
@@ -140,7 +140,7 @@ describe("AzureCognitiveServicesPlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: "aisdk:test-provider",
         }),
@@ -149,7 +149,7 @@ describe("AzureCognitiveServicesPlugin", () => {
       })
       const ignored = yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.openai, ModelV2.ID.make("deployment")),
           modelID: ModelV2.ID.make("deployment"),
           package: "aisdk:test-provider",
         }),
@@ -170,7 +170,7 @@ describe("AzureCognitiveServicesPlugin", () => {
       yield* addPlugin()
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("messages-deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("messages-deployment")),
           modelID: ModelV2.ID.make("messages-deployment"),
           package: "aisdk:test-provider",
         }),
@@ -179,7 +179,7 @@ describe("AzureCognitiveServicesPlugin", () => {
       })
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("chat-deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("chat-deployment")),
           modelID: ModelV2.ID.make("chat-deployment"),
           package: "aisdk:test-provider",
         }),
@@ -188,7 +188,7 @@ describe("AzureCognitiveServicesPlugin", () => {
       })
       yield* aisdk.runLanguage({
         model: ModelV2.Info.make({
-          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("language-deployment")),
+          ...ModelV2.Info.default(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("language-deployment")),
           modelID: ModelV2.ID.make("language-deployment"),
           package: "aisdk:test-provider",
         }),

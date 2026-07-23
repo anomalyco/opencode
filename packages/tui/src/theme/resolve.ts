@@ -1,9 +1,9 @@
 import { RGBA } from "@opentui/core"
 import { ansiToRgba } from "./color"
-import type { ColorValue, Theme, ThemeColor, ThemeJson } from "./v1"
+import type { ColorValue, Theme, ThemeColor, ThemeV1Json } from "./v1"
 
 export function resolveThemeColors(
-  theme: ThemeJson,
+  theme: ThemeV1Json,
   mode: "dark" | "light",
   resolveAnsi: (code: number) => RGBA = ansiToRgba,
 ) {
@@ -43,7 +43,9 @@ export function resolveThemeColors(
         ? resolveColor(theme.theme.selectedListItemText!)
         : resolved.background!,
       backgroundMenu:
-        theme.theme.backgroundMenu === undefined ? resolved.backgroundElement! : resolveColor(theme.theme.backgroundMenu),
+        theme.theme.backgroundMenu === undefined
+          ? resolved.backgroundElement!
+          : resolveColor(theme.theme.backgroundMenu),
     } satisfies Omit<Theme, "_hasSelectedListItemText" | "thinkingOpacity">,
     hasSelectedListItemText,
     thinkingOpacity: theme.theme.thinkingOpacity ?? 0.6,

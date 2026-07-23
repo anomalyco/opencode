@@ -159,7 +159,7 @@ const AnthropicTool = Schema.Struct({
 type AnthropicTool = Schema.Schema.Type<typeof AnthropicTool>
 
 const AnthropicToolChoice = Schema.Union([
-  Schema.Struct({ type: Schema.Literals(["auto", "any"]) }),
+  Schema.Struct({ type: Schema.Literals(["auto", "any", "none"]) }),
   Schema.Struct({ type: Schema.tag("tool"), name: Schema.String }),
 ])
 
@@ -297,7 +297,7 @@ const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSc
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
   ProviderShared.matchToolChoice("Anthropic Messages", toolChoice, {
     auto: () => ({ type: "auto" as const }),
-    none: () => undefined,
+    none: () => ({ type: "none" as const }),
     required: () => ({ type: "any" as const }),
     tool: (name) => ({ type: "tool" as const, name }),
   })
@@ -330,7 +330,10 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
   const wireType = serverToolResultType(part.name)
   if (!wireType)
     return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
-  return { type: wireType, tool_use_id: part.id, content: part.result.value } satisfies AnthropicServerToolResultBlock
+  // Prefer the provider-owned replay payload; fall back to the result value for
+  // histories constructed directly from provider events.
+  const payload = part.providerMetadata?.anthropic?.["result"] ?? part.result.value
+  return { type: wireType, tool_use_id: part.id, content: payload } satisfies AnthropicServerToolResultBlock
 })
 
 const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
@@ -542,7 +545,6 @@ const outputConfig = (request: LLMRequest) => {
 }
 
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
-  const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const outputLimit = request.model.defaults?.limits?.output ?? request.model.route.defaults.limits?.output ?? 4096
@@ -551,7 +553,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
   const tools =
-    request.tools.length === 0 || request.toolChoice?.type === "none"
+    request.tools.length === 0
       ? undefined
       : request.tools.map((tool) =>
           lowerTool(
@@ -560,6 +562,9 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
             ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
           ),
         )
+  // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
+  const toolChoice =
+    tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const system =
     request.system.length === 0
       ? undefined
@@ -680,7 +685,9 @@ const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"
     name: SERVER_TOOL_RESULT_NAMES[block.type],
     result: isError ? { type: "error", value: block.content } : { type: "json", value: block.content },
     providerExecuted: true,
-    providerMetadata: anthropicMetadata({ blockType: block.type }),
+    // The complete payload is irreducible provider replay state: subsequent
+    // stateless requests must round-trip the typed result block verbatim.
+    providerMetadata: anthropicMetadata({ blockType: block.type, result: block.content }),
   })
 }
 

@@ -12,7 +12,7 @@ import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_question_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -99,13 +99,13 @@ describe("QuestionTool", () => {
 
       expect(yield* toolDefinitions(registry, [{ action: "question", resource: "*", effect: "deny" }])).toEqual([])
       expect(
-        yield* settleTool(registry, {
+        yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
           call: { type: "tool-call", id: "call-question-denied", name: "question", input: questionInput },
         }),
       ).toEqual({
-        result: { type: "error", value: "Permission denied: question" },
+        status: "error",
         error: {
           type: "permission.rejected",
           message: "Permission denied: question",
@@ -144,26 +144,21 @@ describe("QuestionTool", () => {
 
       expect((yield* toolDefinitions(registry)).map((definition) => definition.name)).toEqual(["question"])
       expect(
-        yield* settleTool(registry, {
+        yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
           call: { type: "tool-call", id: "call-question", name: "question", input: { questions } },
         }),
       ).toEqual({
-        result: {
-          type: "text",
-          value:
-            'User has answered your questions: "What should happen?"="Build", "Which environment?"="Dev", "Anything else?"="Unanswered". You can now continue with the user\'s answers in mind.',
-        },
-        output: {
-          structured: { answers: [["Build"], ["Dev"], []] },
-          content: [
-            {
-              type: "text",
-              text: 'User has answered your questions: "What should happen?"="Build", "Which environment?"="Dev", "Anything else?"="Unanswered". You can now continue with the user\'s answers in mind.',
-            },
-          ],
-        },
+        status: "completed",
+        output: { answers: [["Build"], ["Dev"], []] },
+        content: [
+          {
+            type: "text",
+            text: 'User has answered your questions: "What should happen?"="Build", "Which environment?"="Dev", "Anything else?"="Unanswered". You can now continue with the user\'s answers in mind.',
+          },
+        ],
+        metadata: { answers: [["Build"], ["Dev"], []] },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "question", resources: ["*"] }])
       expect(capturedInput()).toEqual({

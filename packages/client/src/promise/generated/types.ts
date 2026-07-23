@@ -104,6 +104,12 @@ export type SessionMessageProviderState = { [x: string]: JsonValue }
 
 export type SessionMessageToolStateStreaming = { status: "streaming"; input: string }
 
+export type SessionMessageToolStateRunning = {
+  status: "running"
+  input: { [x: string]: JsonValue }
+  metadata: { [x: string]: JsonValue }
+}
+
 export type ToolTextContent = { type: "text"; text: string }
 
 export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string }
@@ -916,6 +922,15 @@ export type SessionToolInputDelta = {
   type: "session.tool.input.delta"
   location?: LocationRef
   data: { sessionID: string; assistantMessageID: string; callID: string; delta: string }
+}
+
+export type SessionToolProgress = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.tool.progress"
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; callID: string; metadata: { [x: string]: JsonValue } }
 }
 
 export type SessionCompactionDelta = {
@@ -1809,28 +1824,19 @@ export type SessionPendingUserData1 = {
   metadata?: { [x: string]: any }
 }
 
-export type SessionMessageToolStateRunning = {
-  status: "running"
-  input: { [x: string]: JsonValue }
-  structured: { [x: string]: JsonValue }
-  content: Array<LLMToolContent>
-}
-
 export type SessionMessageToolStateCompleted = {
   status: "completed"
   input: { [x: string]: JsonValue }
-  content: Array<LLMToolContent>
-  structured: { [x: string]: JsonValue }
-  result?: JsonValue
+  content: [LLMToolContent, ...Array<LLMToolContent>]
+  metadata?: { [x: string]: JsonValue }
 }
 
 export type SessionMessageToolStateError = {
   status: "error"
   input: { [x: string]: JsonValue }
-  content: Array<LLMToolContent>
-  structured: { [x: string]: JsonValue }
   error: SessionStructuredError
-  result?: JsonValue
+  content?: [LLMToolContent, ...Array<LLMToolContent>]
+  metadata?: { [x: string]: JsonValue }
 }
 
 export type SessionToolSuccess = {
@@ -1838,15 +1844,14 @@ export type SessionToolSuccess = {
   created: number
   metadata?: { [x: string]: any }
   type: "session.tool.success"
-  durable: { aggregateID: string; seq: number; version: 1 }
+  durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
   data: {
     sessionID: string
     assistantMessageID: string
     callID: string
-    structured: { [x: string]: any }
-    content: Array<LLMToolContent>
-    result?: any
+    content: [LLMToolContent, ...Array<LLMToolContent>]
+    metadata?: { [x: string]: JsonValue }
     executed: boolean
     resultState?: SessionMessageProviderState6
   }
@@ -1857,7 +1862,7 @@ export type SessionToolFailed = {
   created: number
   metadata?: { [x: string]: any }
   type: "session.tool.failed"
-  durable: { aggregateID: string; seq: number; version: 1 }
+  durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
   data: {
     sessionID: string
@@ -1865,25 +1870,9 @@ export type SessionToolFailed = {
     callID: string
     error: SessionStructuredError
     content?: [LLMToolContent, ...Array<LLMToolContent>]
-    metadata?: { [x: string]: any }
-    result?: any
+    metadata?: { [x: string]: JsonValue }
     executed: boolean
     resultState?: SessionMessageProviderState7
-  }
-}
-
-export type SessionToolProgress = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.tool.progress"
-  location?: LocationRef
-  data: {
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    structured: { [x: string]: any }
-    content: Array<LLMToolContent>
   }
 }
 

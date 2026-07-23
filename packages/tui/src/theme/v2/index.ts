@@ -16,7 +16,7 @@ export {
   SyntaxDefinition,
   SyntaxToken,
   ThemeDefinition,
-  ThemeFile,
+  ThemeDocument,
   type BackgroundDefinition,
   type DiffDefinition,
   type FileThemeDefinition,

@@ -1,33 +1,14 @@
 export * as ToolHooks from "./hooks"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionMessage } from "../session/message"
 import { State } from "../state"
 import { Context, Effect, Layer, Scope } from "effect"
-import type { ToolOutput, ToolResultValue } from "@opencode-ai/ai"
+import type { Tool } from "./tool"
 
-export interface BeforeEvent {
-  readonly tool: string
-  readonly sessionID: Session.ID
-  readonly agent: Agent.ID
-  readonly messageID: SessionMessage.ID
-  readonly callID: string
-  input: unknown
-}
+export type BeforeEvent = Tool.ToolExecuteBeforeEvent
 
-export interface AfterEvent {
-  readonly tool: string
-  readonly sessionID: Session.ID
-  readonly agent: Agent.ID
-  readonly messageID: SessionMessage.ID
-  readonly callID: string
-  readonly input: unknown
-  result: ToolResultValue
-  output?: ToolOutput
-  outputPaths?: ReadonlyArray<string>
-}
+/** The canonical execution outcome. Hooks never observe the raw domain output. */
+export type AfterEvent = Tool.ToolExecuteAfterEvent
 
 export interface Interface {
   readonly hook: {
