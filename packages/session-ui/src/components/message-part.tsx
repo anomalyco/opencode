@@ -1347,7 +1347,7 @@ export function UserMessageDisplay(props: {
         }
       >
         <div data-slot="user-message-body">
-          <div data-slot="user-message-text" data-comments={messageComments().length > 0 ? "true" : undefined}>
+          <div data-slot="user-message-text" dir="auto" data-comments={messageComments().length > 0 ? "true" : undefined}>
             <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             <Show when={messageComments().length > 0}>
               <UserMessageComments comments={messageComments()} bounded />
@@ -1740,7 +1740,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   return (
     <Show when={text()}>
       <div data-component="text-part" data-timeline-part-id={part().id}>
-        <div data-slot="text-part-body">
+        <div data-slot="text-part-body" dir="auto">
           <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
             <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
           </Show>
@@ -1777,7 +1777,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 
   return (
     <Show when={text()}>
-      <div data-component="reasoning-part" data-timeline-part-id={part().id}>
+      <div data-component="reasoning-part" data-timeline-part-id={part().id} dir="auto">
         <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
           <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
         </Show>

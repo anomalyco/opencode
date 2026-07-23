@@ -11,6 +11,7 @@
   min-width: 0;
   max-width: 100%;
   overflow-wrap: break-word;
+  text-align: start;
   color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */

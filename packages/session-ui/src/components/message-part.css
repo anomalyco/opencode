@@ -138,6 +138,7 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
+    text-align: start;
     background: var(--v2-background-bg-layer-02);
     border: none;
     padding: 8px 12px;
