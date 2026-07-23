@@ -165,6 +165,7 @@ const OpenAIChatDelta = Schema.StructWithRest(
 const OpenAIChatChoice = Schema.Struct({
   delta: optionalNull(OpenAIChatDelta),
   finish_reason: optionalNull(Schema.String),
+  native_finish_reason: optionalNull(Schema.String),
 })
 
 export const OpenAIChatEvent = Schema.Struct({
@@ -537,7 +538,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const usage = mapUsage(event.usage) ?? state.usage
     const choice = event.choices[0]
     const finishReason = choice?.finish_reason
-      ? { normalized: mapFinishReason(choice.finish_reason), raw: choice.finish_reason }
+      ? { normalized: mapFinishReason(choice.finish_reason), raw: choice.native_finish_reason ?? choice.finish_reason }
       : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
