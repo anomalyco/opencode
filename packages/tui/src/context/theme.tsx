@@ -28,6 +28,36 @@ import { Global } from "@opencode-ai/util/global"
 import { DevTools } from "../devtools"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
+export type ThemeError = { name: string; error: Error }
+type ThemeErrorHandler = (event: ThemeError) => void
+
+function createThemeErrors() {
+  let handler: ThemeErrorHandler | undefined
+  let pending: ThemeError | undefined
+
+  return {
+    emit(name: string, cause: unknown) {
+      const event = { name, error: cause instanceof Error ? cause : new Error(String(cause)) }
+      if (handler) {
+        handler(event)
+        return
+      }
+      pending = event
+    },
+    onError(next: ThemeErrorHandler) {
+      handler = next
+      if (pending) {
+        next(pending)
+        pending = undefined
+      }
+      return () => {
+        if (handler === next) handler = undefined
+      }
+    },
+  }
+}
+
+const themeErrors = createThemeErrors()
 
 export type ThemeSource = Readonly<{
   discover(): Promise<Record<string, unknown>>
@@ -83,6 +113,7 @@ type ThemeService = {
   unlock(): void
   setMode(mode?: "dark" | "light", persist?: boolean): boolean
   set(theme: string): boolean
+  onError(handler: ThemeErrorHandler): () => void
   readonly ready: boolean
 }
 
@@ -269,6 +300,7 @@ const themeContext = createSimpleContext({
         return loadTheme(store.themes[name], name, store.mode)
       } catch (error) {
         if (name === "opencode") throw error
+        themeErrors.emit(name, error)
         setStore("active", "opencode")
         return loadTheme(store.themes.opencode, "opencode", store.mode)
       }
@@ -320,6 +352,7 @@ const themeContext = createSimpleContext({
           .catch(() => {})
         return true
       },
+      onError: themeErrors.onError,
       get ready() {
         return store.ready
       },

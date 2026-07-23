@@ -7,7 +7,7 @@ import { DEFAULT_THEMES } from "../../../src/theme"
 import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
 import { selectTheme } from "../../../src/theme/v2/select"
 import { ConfigProvider } from "../../../src/config"
-import { ThemeProvider, useTheme } from "../../../src/context/theme"
+import { ThemeProvider, useTheme, type ThemeError } from "../../../src/context/theme"
 
 async function wait(fn: () => boolean) {
   const started = Date.now()
@@ -85,10 +85,14 @@ test.each([
   ["token reference", { version: 2, light: { text: { default: "$missing" } } }],
 ] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
   let theme: ReturnType<typeof useTheme> | undefined
+  let failure: ThemeError | undefined
+  let unsubscribe: (() => void) | undefined
 
   function Probe() {
-    theme = useTheme()
-    return <text>{theme.selected}</text>
+    const value = useTheme()
+    theme = value
+    unsubscribe = value.onError((error) => (failure = error))
+    return <text>{value.selected}</text>
   }
 
   const app = await testRender(
@@ -106,7 +110,11 @@ test.each([
   try {
     await wait(() => theme?.ready === true)
     expect(theme?.selected).toBe("opencode")
+    expect(failure?.name).toBe("invalid")
+    expect(failure?.error).toBeInstanceOf(Error)
+    expect(failure?.error.message.length).toBeGreaterThan(0)
   } finally {
+    unsubscribe?.()
     app.renderer.destroy()
   }
 })
