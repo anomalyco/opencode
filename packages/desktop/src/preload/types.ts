@@ -64,6 +64,7 @@ export type ElectronAPI = {
   storeClear: (name: string) => Promise<void>
   storeKeys: (name: string) => Promise<string[]>
   storeLength: (name: string) => Promise<number>
+  menuRebuild: () => Promise<void>
 
   getWindowCount: () => Promise<number>
   getWindowID: () => Promise<string>
