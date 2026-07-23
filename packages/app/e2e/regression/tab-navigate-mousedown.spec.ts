@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { currentSession } from "../utils/mock-server"
 
 const server = "http://127.0.0.1:4096"
 const sessionA = session("ses_tab_a", "Tab A session")
@@ -56,9 +57,14 @@ async function mockServer(page: Page) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== server) return route.fallback()
-    if (url.pathname === "/global/event" || url.pathname === "/event") return sse(route)
+    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event") return sse(route)
     if (url.pathname === "/global/health") return json(route, { healthy: true })
-    if (url.pathname === "/session") return json(route, sessions)
+    if (url.pathname === "/api/session") return json(route, { data: sessions.map(currentSession), cursor: {} })
+    if (url.pathname === "/api/session/active") return json(route, { data: {} })
+    const currentSessionInfo = sessions.find((item) => url.pathname === `/api/session/${item.id}`)
+    if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
+    if (sessions.some((item) => url.pathname === `/api/session/${item.id}/message`))
+      return json(route, { data: [], cursor: {} })
     const byId = sessions.find((item) => url.pathname === `/session/${item.id}`)
     if (byId) return json(route, byId)
     if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
@@ -66,7 +72,7 @@ async function mockServer(page: Page) {
     if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
     if (["/skill", "/command", "/lsp", "/formatter", "/permission", "/question", "/vcs/diff"].includes(url.pathname))
       return json(route, [])
-    if (["/global/config", "/config", "/provider/auth", "/mcp", "/session/status"].includes(url.pathname))
+    if (["/global/config", "/config", "/provider/auth", "/mcp"].includes(url.pathname))
       return json(route, {})
     if (url.pathname === "/provider")
       return json(route, { all: [], connected: [], default: { providerID: "", modelID: "" } })
@@ -89,7 +95,20 @@ async function mockServer(page: Page) {
         directory: sessionA.directory,
         home: sessionA.directory,
       })
+    if (url.pathname === "/api/path")
+      return json(route, {
+        state: sessionA.directory,
+        config: sessionA.directory,
+        worktree: sessionA.directory,
+        directory: sessionA.directory,
+        home: sessionA.directory,
+      })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
+    if (url.pathname === "/api/vcs")
+      return json(route, {
+        location: { directory: sessionA.directory },
+        data: { branch: "main", defaultBranch: "main" },
+      })
     return json(route, {})
   })
 }

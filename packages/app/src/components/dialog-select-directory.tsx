@@ -60,9 +60,8 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [fallbackPath] = createResource(
     () => (missingBase() ? true : undefined),
     async () => {
-      return sdk.client.path
+      return sdk.api.path
         .get()
-        .then((x) => x.data)
         .catch(() => undefined)
     },
     { initialValue: undefined },
