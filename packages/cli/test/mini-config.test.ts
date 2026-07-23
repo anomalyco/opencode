@@ -23,7 +23,7 @@ test("mini handler passes resolved CLI keybinds to the runtime", async () => {
   let received: MiniCommandInput["tuiConfig"]
   const mini = await import("../src/mini")
   const validateMiniTerminal = spyOn(mini, "validateMiniTerminal").mockImplementation(() => {})
-  const runMini = spyOn(mini, "runMini").mockImplementation((input: MiniCommandInput) => {
+  const runMini = spyOn(mini, "runMini").mockImplementation((input) => {
     received = input.tuiConfig
     return Promise.resolve()
   })
