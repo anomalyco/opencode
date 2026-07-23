@@ -235,7 +235,7 @@ export function SessionFileView(props: SessionFileViewProps) {
     const source = props.diff
     if (!source) return
     const loaded = loadedDiff()
-    return normalize(loaded?.source === source && loaded.version === props.diffVersion ? loaded.value : source)
+    return normalize(loaded && loaded.source === source && loaded.version === props.diffVersion ? loaded.value : source)
   })
 
   return (
