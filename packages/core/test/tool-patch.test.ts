@@ -764,7 +764,7 @@ describe("PatchTool", () => {
                       registry,
                       call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`),
                     ),
-                  ).toMatchObject({ status: "error" })
+                  ).toMatchObject({ status: "error", error: { type: "permission.rejected" } })
                   expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
                   expect(readsBeforeEditApproval).toBe(0)
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
@@ -778,6 +778,24 @@ describe("PatchTool", () => {
         Effect.promise(() =>
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
         ),
+    ),
+  )
+
+  it.live("preserves edit permission rejection", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const target = path.join(directory, "target.txt")
+        yield* Effect.promise(() => fs.writeFile(target, "before\n"))
+        denyAction = "edit"
+        expect(
+          yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Update File: target.txt\n@@\n-before\n+after\n*** End Patch"),
+          ),
+        ).toMatchObject({ status: "error", error: { type: "permission.rejected" } })
+        expect(assertions.map((input) => input.action)).toEqual(["edit"])
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
+      }),
     ),
   )
 

@@ -91,6 +91,8 @@ export const Plugin = {
                     message: `Patch partially applied before failing at ${path}${detail}. Completed before failure: ${applied.map((item) => item.resource).join(", ")}`,
                   })
                 }
+                const failPreservingCause = (path: string, error: unknown) =>
+                  new ToolFailure({ message: fail(path, error).message, error })
                 const failMoveRemoval = (source: string, destination: string, error: unknown) => {
                   const previous =
                     applied.length === 0
@@ -220,7 +222,11 @@ export const Plugin = {
                         moveTarget,
                       })
                       if (!moveTarget) updates.set(target.canonical, Patch.joinBom(update.content, update.bom))
-                    }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail(hunk.path, error))))
+                    }).pipe(
+                      Effect.mapError((error) =>
+                        error instanceof ToolFailure ? error : failPreservingCause(hunk.path, error),
+                      ),
+                    )
                   }
 
                   const patchFiles = prepared.map(patchFile)
@@ -304,7 +310,9 @@ export const Plugin = {
                     content: toModelOutput(output),
                     metadata: { files: output.files },
                   })),
-                  Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch", error))),
+                  Effect.mapError((error) =>
+                    error instanceof ToolFailure ? error : failPreservingCause("patch", error),
+                  ),
                 )
               },
             }),
