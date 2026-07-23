@@ -106,17 +106,6 @@ test("replacement sources receive independent parse caches", () => {
   expect(parseTheme(allThemes()[name]!, name)).toBe(next)
 })
 
-test("upsert invalidates a mutated source object's parse cache", () => {
-  const name = `plugin-theme-mutate-${Date.now()}`
-  const source = structuredClone(DEFAULT_THEMES.opencode)
-
-  expect(addTheme(name, source)).toBe(true)
-  const previous = parseTheme(allThemes()[name]!, name)
-  source.theme.primary = "#123456"
-  expect(upsertTheme(name, source)).toBe(true)
-  expect(parseTheme(allThemes()[name]!, name)).not.toBe(previous)
-})
-
 test("custom themes retain precedence over plugin themes", () => {
   const name = `plugin-theme-precedence-${Date.now()}`
   const plugin = structuredClone(DEFAULT_THEMES.opencode)

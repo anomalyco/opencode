@@ -67,12 +67,10 @@ export function subscribeThemes(listener: (themes: Record<string, unknown>) => v
 
 export function setCustomThemes(themes: Record<string, unknown>) {
   customThemes = Object.fromEntries(Object.entries(themes).filter((entry) => isThemeSource(entry[1])))
-  for (const theme of Object.values(customThemes)) invalidateTheme(theme)
   syncThemes()
 }
 
 export function setSystemTheme(theme: unknown) {
-  if (theme) invalidateTheme(theme)
   systemTheme = theme
   syncThemes()
 }
@@ -86,7 +84,6 @@ export function addTheme(name: string, theme: unknown) {
   if (!name) return false
   if (!isThemeSource(theme)) return false
   if (hasTheme(name)) return false
-  invalidateTheme(theme)
   pluginThemes[name] = theme
   syncThemes()
   return true
@@ -95,7 +92,6 @@ export function addTheme(name: string, theme: unknown) {
 export function upsertTheme(name: string, theme: unknown) {
   if (!name) return false
   if (!isThemeSource(theme)) return false
-  invalidateTheme(theme)
   if (customThemes[name] !== undefined) {
     customThemes[name] = theme
   } else {
@@ -124,8 +120,4 @@ function decodeV2Theme(source: unknown, name: string) {
 
 function unsupportedThemeVersion(version: unknown): never {
   throw new Error(`Unsupported theme version: ${String(version)}`)
-}
-
-function invalidateTheme(theme: unknown) {
-  if (typeof theme === "object" && theme !== null) parsed.delete(theme)
 }
