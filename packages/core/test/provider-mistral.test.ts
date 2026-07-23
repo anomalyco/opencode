@@ -47,7 +47,14 @@ test("Mistral round-trips native reasoning in assistant history", async () => {
                   type: "thinking",
                   thinking: [
                     { type: "text", text: "The user is greeting me." },
-                    { type: "tool_reference", url: "https://example.com/tool" },
+                    {
+                      type: "tool_reference",
+                      tool: "web_search",
+                      title: "Example result",
+                      url: "https://example.com/tool",
+                      favicon: "https://example.com/favicon.ico",
+                      description: "Example description",
+                    },
                     { type: "reference", reference_ids: [1, "source-2"] },
                   ],
                   closed: true,
@@ -91,7 +98,14 @@ test("Mistral round-trips native reasoning in assistant history", async () => {
         type: "thinking",
         thinking: [
           { type: "text", text: "The user is greeting me." },
-          { type: "tool_reference", url: "https://example.com/tool" },
+          {
+            type: "tool_reference",
+            tool: "web_search",
+            title: "Example result",
+            url: "https://example.com/tool",
+            favicon: "https://example.com/favicon.ico",
+            description: "Example description",
+          },
           { type: "reference", reference_ids: [1, "source-2"] },
         ],
         closed: true,
@@ -100,6 +114,21 @@ test("Mistral round-trips native reasoning in assistant history", async () => {
       { type: "text", text: "Hi" },
     ],
   })
+
+  await model.doGenerate({
+    prompt: [
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking" },
+          { type: "text", text: "Hi" },
+        ],
+      },
+      { role: "user", content: [{ type: "text", text: "Hello again" }] },
+    ],
+  })
+  expect(body?.messages?.[1]).toEqual({ role: "assistant", content: "thinkingHi" })
 })
 
 test("Mistral preserves native reasoning metadata while streaming", async () => {
@@ -118,7 +147,14 @@ test("Mistral preserves native reasoning metadata while streaming", async () => 
                 type: "thinking",
                 thinking: [
                   { type: "text", text: "thinking" },
-                  { type: "tool_reference", url: "https://example.com/tool" },
+                  {
+                    type: "tool_reference",
+                    tool: "web_search",
+                    title: "Example result",
+                    url: "https://example.com/tool",
+                    favicon: "https://example.com/favicon.ico",
+                    description: "Example description",
+                  },
                 ],
               },
             ],
@@ -180,7 +216,14 @@ test("Mistral preserves native reasoning metadata while streaming", async () => 
         type: "thinking",
         thinking: [
           { type: "text", text: "thinking" },
-          { type: "tool_reference", url: "https://example.com/tool" },
+          {
+            type: "tool_reference",
+            tool: "web_search",
+            title: "Example result",
+            url: "https://example.com/tool",
+            favicon: "https://example.com/favicon.ico",
+            description: "Example description",
+          },
           { type: "reference", reference_ids: [1, "source-2"] },
         ],
         closed: true,
@@ -188,13 +231,25 @@ test("Mistral preserves native reasoning metadata while streaming", async () => 
       },
     },
   })
+  expect(
+    events
+      .filter((event) => event.type === "reasoning-start" || event.type === "reasoning-delta")
+      .every((event) => event.providerMetadata === undefined),
+  ).toBe(true)
 })
 
 test("Mistral preserves metadata-only thinking chunks", async () => {
   const thinking = {
     type: "thinking" as const,
     thinking: [
-      { type: "tool_reference", url: "https://example.com/tool" },
+      {
+        type: "tool_reference",
+        tool: "web_search",
+        title: "Example result",
+        url: "https://example.com/tool",
+        favicon: "https://example.com/favicon.ico",
+        description: "Example description",
+      },
       { type: "reference", reference_ids: [1, "source-2"] },
     ],
     closed: true,

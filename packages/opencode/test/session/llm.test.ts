@@ -960,7 +960,14 @@ describe("session.llm.stream", () => {
           type: "thinking",
           thinking: [
             { type: "text", text: "thinking" },
-            { type: "tool_reference", url: "https://example.com/tool" },
+            {
+              type: "tool_reference",
+              tool: "web_search",
+              title: "Example result",
+              url: "https://example.com/tool",
+              favicon: "https://example.com/favicon.ico",
+              description: "Example description",
+            },
             { type: "reference", reference_ids: [1, "source-2"] },
           ],
           closed: true,
