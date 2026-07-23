@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createApiForServer, createSdkForServer } from "./server"
 import { createCompatibleApi } from "./server-compat"
 
-function setup(protocol: "v1" | "v2") {
+function setup(protocol: "v1" | "v2" | Promise<"v1" | "v2">) {
   const requests: Request[] = []
   const fetcher = Object.assign(
     async (input: string | URL | Request, init?: RequestInit) => {
@@ -39,7 +39,7 @@ function setup(protocol: "v1" | "v2") {
   )
   const server = { url: "http://localhost:4096" }
   const api = createCompatibleApi({
-    protocol: Promise.resolve(protocol),
+    protocol: typeof protocol === "string" ? Promise.resolve(protocol) : protocol,
     current: createApiForServer({ server, fetch: fetcher }),
     legacy: (directory) => createSdkForServer({ server, fetch: fetcher, directory, throwOnError: true }),
     directory: "/repo",
@@ -84,6 +84,24 @@ describe("createCompatibleApi", () => {
 
     expect(new URL(requests[0]!.url).pathname).toBe("/api/session/ses_1/archive")
     expect(requests[0]!.method).toBe("POST")
+  })
+
+  test("resolves protocol detection once across implementation methods", async () => {
+    let detections = 0
+    const resolved = Promise.resolve<"v1" | "v2">("v2")
+    const protocol = new Proxy(resolved, {
+      get(target, property) {
+        if (property !== "then") return Reflect.get(target, property, target)
+        detections++
+        return target.then.bind(target)
+      },
+    })
+    const { api } = setup(protocol)
+
+    await api.session.archive({ sessionID: "ses_1" })
+    await api.session.list()
+
+    expect(detections).toBe(1)
   })
 
   test("uses the global V1 session search endpoint", async () => {

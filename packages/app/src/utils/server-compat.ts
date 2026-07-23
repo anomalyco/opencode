@@ -37,6 +37,12 @@ type LegacyPrompt = {
   variant?: string
 }
 type LegacyLocation = { directory?: string }
+type CompatibleInput = {
+  protocol: Promise<ServerProtocol>
+  current: ServerApi
+  legacy: LegacyFor
+  directory?: string
+}
 
 function mime(uri: string) {
   const match = /^data:([^;,]+)/.exec(uri)
@@ -68,15 +74,48 @@ function sessionInfo(session: Session): SessionInfo {
   }
 }
 
-export function createCompatibleApi(input: {
-  protocol: Promise<ServerProtocol>
-  current: ServerApi
-  legacy: LegacyFor
-  directory?: string
-}): CompatibleApi {
+export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
+  const v1 = createV1Api(input)
+  return lazyApi(
+    input.protocol.then((protocol) => (protocol === "v1" ? v1 : input.current)),
+    input.current,
+  )
+}
+
+function lazyApi<T extends object>(implementation: Promise<T>, shape: T): T {
+  const cache = new Map<PropertyKey, unknown>()
+  return new Proxy(shape, {
+    get(target, property, receiver) {
+      const sample = Reflect.get(target, property, receiver)
+      if (typeof sample === "function") {
+        return (...args: unknown[]) =>
+          implementation.then((value) => {
+            const method = Reflect.get(value, property)
+            if (typeof method !== "function") throw new Error(`API method unavailable: ${String(property)}`)
+            return Reflect.apply(method, value, args)
+          })
+      }
+      if (sample === null || typeof sample !== "object") return sample
+      if (cache.has(property)) return cache.get(property)
+      const nested = lazyApi(
+        implementation.then((value) => {
+          const result = Reflect.get(value, property)
+          if (result === null || typeof result !== "object") {
+            throw new Error(`API namespace unavailable: ${String(property)}`)
+          }
+          return result
+        }),
+        sample,
+      )
+      cache.set(property, nested)
+      return nested
+    },
+  })
+}
+
+function createV1Api(input: CompatibleInput): CompatibleApi {
   const directory = (location?: { directory?: string }) => location?.directory ?? input.directory
   const legacy = (location?: { directory?: string }) => input.legacy(directory(location))
-  const isV1 = () => input.protocol.then((protocol) => protocol === "v1")
   const located = <T>(data: T, value?: { directory?: string }) => ({
     location: {
       directory: directory(value) ?? "",
@@ -93,7 +132,6 @@ export function createCompatibleApi(input: {
         value?: Parameters<ServerApi["session"]["list"]>[0],
         options?: Parameters<ServerApi["session"]["list"]>[1],
       ) {
-        if (!(await isV1())) return input.current.session.list(value, options)
         if (!value?.directory && value?.search !== undefined) {
           const result = await legacy().experimental.session.list(
             {
@@ -114,7 +152,6 @@ export function createCompatibleApi(input: {
         return { data: (result.data ?? []).map(sessionInfo), cursor: {} }
       },
       async create(value?: Parameters<ServerApi["session"]["create"]>[0]) {
-        if (!(await isV1())) return input.current.session.create(value)
         const result = await legacy(value?.location ?? undefined).session.create({
           directory: directory(value?.location ?? undefined),
         })
@@ -122,13 +159,11 @@ export function createCompatibleApi(input: {
         return sessionInfo(result.data)
       },
       async get(value: Parameters<ServerApi["session"]["get"]>[0]) {
-        if (!(await isV1())) return input.current.session.get(value)
         const result = await legacy().session.get(value)
         if (!result.data) throw new Error(`Session not found: ${value.sessionID}`)
         return sessionInfo(result.data)
       },
       async active() {
-        if (!(await isV1())) return input.current.session.active()
         const result = await legacy().session.status()
         return Object.fromEntries(
           Object.entries(result.data ?? {}).flatMap(([sessionID, status]) =>
@@ -137,29 +172,23 @@ export function createCompatibleApi(input: {
         )
       },
       async rename(value: Parameters<ServerApi["session"]["rename"]>[0] & LegacyLocation) {
-        if (!(await isV1())) return input.current.session.rename(value)
         await legacy(value).session.update({ sessionID: value.sessionID, title: value.title })
       },
       async archive(value: Parameters<ServerApi["session"]["archive"]>[0] & LegacyLocation) {
-        if (!(await isV1())) return input.current.session.archive(value)
         await legacy(value).session.update({ sessionID: value.sessionID, time: { archived: Date.now() } })
       },
       async remove(value: Parameters<ServerApi["session"]["remove"]>[0] & LegacyLocation) {
-        if (!(await isV1())) return input.current.session.remove(value)
         await legacy(value).session.delete(value)
       },
       async fork(value: Parameters<ServerApi["session"]["fork"]>[0]) {
-        if (!(await isV1())) return input.current.session.fork(value)
         const result = await legacy().session.fork(value)
         if (!result.data) throw new Error("Failed to fork session")
         return sessionInfo(result.data)
       },
       async interrupt(value: Parameters<ServerApi["session"]["interrupt"]>[0]) {
-        if (!(await isV1())) return input.current.session.interrupt(value)
         await legacy().session.abort(value)
       },
       async prompt(value: SessionPromptInput & LegacyPrompt) {
-        if (!(await isV1())) return input.current.session.prompt(value)
         await legacy().session.promptAsync({
           sessionID: value.sessionID,
           messageID: value.id ?? undefined,
@@ -194,7 +223,6 @@ export function createCompatibleApi(input: {
         }
       },
       async command(value: SessionCommandInput) {
-        if (!(await isV1())) return input.current.session.command(value)
         await legacy().session.command({
           sessionID: value.sessionID,
           messageID: value.id ?? undefined,
@@ -221,7 +249,6 @@ export function createCompatibleApi(input: {
         }
       },
       async shell(value: SessionShellInput & LegacyPrompt) {
-        if (!(await isV1())) return input.current.session.shell(value)
         await legacy().session.shell({
           sessionID: value.sessionID,
           command: value.command,
@@ -230,7 +257,6 @@ export function createCompatibleApi(input: {
         })
       },
       compact: async (value: SessionCompactInput & { model?: LegacyPrompt["model"] }) => {
-        if (!(await isV1())) return input.current.session.compact(value)
         if (!value.model) throw new Error("A model is required to compact a V1 session")
         await legacy().session.summarize({
           sessionID: value.sessionID,
@@ -247,12 +273,10 @@ export function createCompatibleApi(input: {
       },
       revert: {
         stage: async (value: Parameters<ServerApi["session"]["revert"]["stage"]>[0]) => {
-          if (!(await isV1())) return input.current.session.revert.stage(value)
           await legacy().session.revert(value)
           return { messageID: value.messageID }
         },
         clear: async (value: Parameters<ServerApi["session"]["revert"]["clear"]>[0]) => {
-          if (!(await isV1())) return input.current.session.revert.clear(value)
           await legacy().session.unrevert(value)
         },
         commit: input.current.session.revert.commit,
@@ -261,17 +285,14 @@ export function createCompatibleApi(input: {
     project: {
       ...input.current.project,
       async list() {
-        if (!(await isV1())) return input.current.project.list()
         return ((await legacy().project.list()).data ?? []) as Project[]
       },
       async current(value?: Parameters<ServerApi["project"]["current"]>[0]) {
-        if (!(await isV1())) return input.current.project.current(value)
         const result = await legacy(value?.location).project.current()
         if (!result.data) throw new Error("Project not found")
         return { id: result.data.id, directory: result.data.worktree } satisfies ProjectCurrent
       },
       async update(value: Parameters<ServerApi["project"]["update"]>[0]) {
-        if (!(await isV1())) return input.current.project.update(value)
         const project = (await legacy().project.list()).data?.find((item) => item.id === value.projectID)
         const result = await legacy({ directory: project?.worktree }).project.update({
           ...value,
@@ -281,7 +302,6 @@ export function createCompatibleApi(input: {
         return result.data as Project
       },
       async directories(value: Parameters<ServerApi["project"]["directories"]>[0]) {
-        if (!(await isV1())) return input.current.project.directories(value)
         const result = await legacy(value.location).worktree.list()
         return (result.data ?? []).map((item) => ({ directory: item }))
       },
@@ -289,7 +309,6 @@ export function createCompatibleApi(input: {
     path: {
       ...input.current.path,
       async get(value?: Parameters<ServerApi["path"]["get"]>[0]) {
-        if (!(await isV1())) return input.current.path.get(value)
         const result = await legacy(value?.location).path.get()
         if (!result.data) throw new Error("Path unavailable")
         return result.data
@@ -298,17 +317,14 @@ export function createCompatibleApi(input: {
     vcs: {
       ...input.current.vcs,
       async get(value?: Parameters<ServerApi["vcs"]["get"]>[0]) {
-        if (!(await isV1())) return input.current.vcs.get(value)
         const result = await legacy(value?.location).vcs.get()
         return located({ branch: result.data?.branch, defaultBranch: undefined }, value?.location)
       },
       async status(value?: Parameters<ServerApi["vcs"]["status"]>[0]) {
-        if (!(await isV1())) return input.current.vcs.status(value)
         const result = await legacy(value?.location).vcs.status()
         return located(result.data ?? [], value?.location)
       },
       async diff(value: Parameters<ServerApi["vcs"]["diff"]>[0]) {
-        if (!(await isV1())) return input.current.vcs.diff(value)
         const result = await legacy(value.location).vcs.diff({
           mode: value.mode === "working" ? "git" : value.mode,
           context: value.context,
@@ -328,12 +344,10 @@ export function createCompatibleApi(input: {
     file: {
       ...input.current.file,
       async list(value?: Parameters<ServerApi["file"]["list"]>[0]) {
-        if (!(await isV1())) return input.current.file.list(value)
         const result = await legacy(value?.location).file.list({ path: value?.path ?? "" })
         return located(result.data ?? [], value?.location)
       },
       async find(value: Parameters<ServerApi["file"]["find"]>[0]) {
-        if (!(await isV1())) return input.current.file.find(value)
         const result = await legacy(value.location).find.files({
           query: value.query,
           type: value.type,
@@ -348,7 +362,6 @@ export function createCompatibleApi(input: {
     integration: {
       ...input.current.integration,
       async get(value: Parameters<ServerApi["integration"]["get"]>[0]) {
-        if (!(await isV1())) return input.current.integration.get(value)
         const methods = ((await legacy(value.location).provider.auth()).data?.[value.integrationID] ?? []).map(
           (method, index) =>
             method.type === "api"
@@ -368,7 +381,6 @@ export function createCompatibleApi(input: {
       connect: {
         ...input.current.integration.connect,
         key: async (value: Parameters<ServerApi["integration"]["connect"]["key"]>[0]) => {
-          if (!(await isV1())) return input.current.integration.connect.key(value)
           await legacy(value.location).auth.set({
             providerID: value.integrationID,
             auth: { type: "api", key: value.key },
@@ -378,7 +390,6 @@ export function createCompatibleApi(input: {
       oauth: {
         ...input.current.integration.oauth,
         connect: async (value: Parameters<ServerApi["integration"]["oauth"]["connect"]>[0]) => {
-          if (!(await isV1())) return input.current.integration.oauth.connect(value)
           const method = Number(value.methodID)
           const result = await legacy(value.location).provider.oauth.authorize(
             { providerID: value.integrationID, method, inputs: value.inputs },
@@ -397,7 +408,6 @@ export function createCompatibleApi(input: {
           )
         },
         complete: async (value: Parameters<ServerApi["integration"]["oauth"]["complete"]>[0]) => {
-          if (!(await isV1())) return input.current.integration.oauth.complete(value)
           const method = Number(value.attemptID.split(":").at(-1))
           await legacy(value.location).provider.oauth.callback(
             { providerID: value.integrationID, method, code: value.code },
@@ -405,7 +415,6 @@ export function createCompatibleApi(input: {
           )
         },
         status: async (value: Parameters<ServerApi["integration"]["oauth"]["status"]>[0]) => {
-          if (!(await isV1())) return input.current.integration.oauth.status(value)
           const method = Number(value.attemptID.split(":").at(-1))
           await legacy(value.location).provider.oauth.callback(
             { providerID: value.integrationID, method },
@@ -421,15 +430,12 @@ export function createCompatibleApi(input: {
     pty: {
       ...input.current.pty,
       async shells(value?: Parameters<ServerApi["pty"]["shells"]>[0]) {
-        if (!(await isV1())) return input.current.pty.shells(value)
         return located((await legacy(value?.location).pty.shells()).data ?? [], value?.location)
       },
       async list(value?: Parameters<ServerApi["pty"]["list"]>[0]) {
-        if (!(await isV1())) return input.current.pty.list(value)
         return located((await legacy(value?.location).pty.list()).data ?? [], value?.location)
       },
       async create(value?: Parameters<ServerApi["pty"]["create"]>[0]) {
-        if (!(await isV1())) return input.current.pty.create(value)
         const result = await legacy(value?.location).pty.create({
           command: value?.command,
           args: value?.args ? [...value.args] : undefined,
@@ -441,13 +447,11 @@ export function createCompatibleApi(input: {
         return located(result.data, value?.location)
       },
       async get(value: Parameters<ServerApi["pty"]["get"]>[0]) {
-        if (!(await isV1())) return input.current.pty.get(value)
         const result = await legacy(value.location).pty.get({ ptyID: value.ptyID })
         if (!result.data) throw new Error(`Terminal not found: ${value.ptyID}`)
         return located(result.data, value.location)
       },
       async update(value: Parameters<ServerApi["pty"]["update"]>[0]) {
-        if (!(await isV1())) return input.current.pty.update(value)
         const result = await legacy(value.location).pty.update({
           ptyID: value.ptyID,
           title: value.title,
@@ -457,11 +461,9 @@ export function createCompatibleApi(input: {
         return located(result.data, value.location)
       },
       async remove(value: Parameters<ServerApi["pty"]["remove"]>[0]) {
-        if (!(await isV1())) return input.current.pty.remove(value)
         await legacy(value.location).pty.remove({ ptyID: value.ptyID })
       },
       async connectToken(value: Parameters<ServerApi["pty"]["connectToken"]>[0]) {
-        if (!(await isV1())) return input.current.pty.connectToken(value)
         const result = await legacy(value.location).pty.connectToken({ ptyID: value.ptyID })
         if (!result.data) throw new Error(`Failed to connect terminal: ${value.ptyID}`)
         return located(result.data, value.location)
@@ -470,7 +472,6 @@ export function createCompatibleApi(input: {
     permission: {
       ...input.current.permission,
       async reply(value: Parameters<ServerApi["permission"]["reply"]>[0]) {
-        if (!(await isV1())) return input.current.permission.reply(value)
         await legacy().permission.respond({
           sessionID: value.sessionID,
           permissionID: value.requestID,
@@ -481,14 +482,12 @@ export function createCompatibleApi(input: {
     question: {
       ...input.current.question,
       async reply(value: Parameters<ServerApi["question"]["reply"]>[0]) {
-        if (!(await isV1())) return input.current.question.reply(value)
         await legacy().question.reply({
           requestID: value.requestID,
           answers: value.answers.map((answer) => [...answer]),
         })
       },
       async reject(value: Parameters<ServerApi["question"]["reject"]>[0]) {
-        if (!(await isV1())) return input.current.question.reject(value)
         await legacy().question.reject({ requestID: value.requestID })
       },
     },

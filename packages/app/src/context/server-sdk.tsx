@@ -4,15 +4,15 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
-import { createApiForServer, createSdkForServer } from "@/utils/server"
+import { createApiForServer, createSdkForServer, type ServerApi } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { ServerConnection, useServer } from "./server"
 import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
-import { detectServerProtocol } from "@/utils/server-protocol"
-import { createCompatibleApi } from "@/utils/server-compat"
+import { detectServerProtocol, type ServerProtocol } from "@/utils/server-protocol"
+import { createCompatibleApi, type CompatibleApi } from "@/utils/server-compat"
 
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
@@ -164,7 +164,26 @@ export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () 
   start()
 }
 
-function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope) {
+type ServerEventEmitter = ReturnType<typeof createGlobalEmitter<{ [key: string]: ServerEvent }>>
+type ServerSDKBase = {
+  server: ServerConnection.Any
+  scope: ServerScope
+  protocol: Promise<ServerProtocol>
+  url: string
+  client: ReturnType<typeof createSdkForServer>
+  api: CompatibleApi
+  currentApi: ServerApi
+  event: {
+    on: ServerEventEmitter["on"]
+    listen: ServerEventEmitter["listen"]
+    start: () => Promise<void> | undefined
+  }
+  createClient: (
+    opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">,
+  ) => ReturnType<typeof createSdkForServer>
+}
+
+function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
   const abort = new AbortController()
 
@@ -314,7 +333,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     fetch: platform.fetch,
     throwOnError: true,
   })
-  const currentApi = createApiForServer({ server: server.http, fetch: platform.fetch })
+  const currentApi: ServerApi = createApiForServer({ server: server.http, fetch: platform.fetch })
   const legacy = (directory?: string) =>
     createSdkForServer({
       server: server.http,
@@ -347,7 +366,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   }
 }
 
-type ServerSDKBase = ReturnType<typeof createServerSdkContextBase>
 export type ServerSDK = ServerSDKBase & {
   ensureDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
 }
