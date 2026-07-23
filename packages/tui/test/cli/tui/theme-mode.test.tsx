@@ -4,6 +4,8 @@ import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
+import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
+import { selectTheme } from "../../../src/theme/v2/select"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider, useTheme } from "../../../src/context/theme"
 
@@ -104,6 +106,41 @@ test.each([
   try {
     await wait(() => theme?.ready === true)
     expect(theme?.selected).toBe("opencode")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("contextual themes fall back to a standalone theme's base view", async () => {
+  const standalone = {
+    version: 2,
+    standalone: true,
+    dark: { hue: selectTheme(DEFAULT_THEME, "dark").hue },
+  } as const
+  let theme: ReturnType<typeof useTheme> | undefined
+
+  function Probe() {
+    theme = useTheme()
+    return <text>{theme.selected}</text>
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "standalone", mode: "dark" } })}>
+        <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({ standalone }) }}>
+          <Probe />
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    { width: 20, height: 2 },
+  )
+  app.renderer.start()
+
+  try {
+    await wait(() => theme?.ready === true)
+    if (!theme) throw new Error("Theme provider is not mounted")
+    expect(theme.contextual("elevated").themeV2.text.default).toBe(theme.themeV2.text.default)
+    expect(theme.contextual("overlay").themeV2.background.default).toBe(theme.themeV2.background.default)
   } finally {
     app.renderer.destroy()
   }

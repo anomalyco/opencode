@@ -280,16 +280,8 @@ const themeContext = createSimpleContext({
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const themeV2 = createComponentTheme(valuesV2, mode)
     const contextsV2 = {
-      elevated: createComponentTheme(() => {
-        const theme = valuesV2().contexts["@context:elevated"]
-        if (!theme) throw new Error("Theme context is not defined: elevated")
-        return theme
-      }, mode),
-      overlay: createComponentTheme(() => {
-        const theme = valuesV2().contexts["@context:overlay"]
-        if (!theme) throw new Error("Theme context is not defined: overlay")
-        return theme
-      }, mode),
+      elevated: createComponentTheme(() => valuesV2().contexts["@context:elevated"] ?? valuesV2(), mode),
+      overlay: createComponentTheme(() => valuesV2().contexts["@context:overlay"] ?? valuesV2(), mode),
     }
 
     createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
