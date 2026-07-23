@@ -37,8 +37,15 @@ export const migrations = (
     import("./migration/20260611035744_credential"),
     import("./migration/20260611192811_lush_chimera"),
     import("./migration/20260612174303_project_dir_strategy"),
+    import("./migration/20260621201623_add_issue_table"),
     import("./migration/20260622142730_simplify_session_context_epoch"),
     import("./migration/20260622170816_reset_v2_session_state"),
     import("./migration/20260622202450_simplify_session_input"),
+    import("./migration/20260708183506_add_issue_linear_updated_at"),
+    import("./migration/20260708191709_add_issue_cloud_shadow"),
+    import("./migration/20260709122008_status_type_refactor"),
+    import("./migration/20260710134140_revert_todo_linear_columns"),
+    import("./migration/20260710205322_remove_status_type"),
+    import("./migration/20260717043303_rename_linear_updated_at_to_last_pulled_at"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

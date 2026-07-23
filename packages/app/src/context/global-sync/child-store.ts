@@ -235,6 +235,8 @@ export function createChildStoreManager(input: {
             },
             session_diff: {},
             todo: {},
+            workspace_todo: [],
+            workspace_todo_archived: [],
             permission: {},
             question: {},
             get mcp_ready() {

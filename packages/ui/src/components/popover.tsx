@@ -67,6 +67,12 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       if (content && content.contains(node)) return true
       const trigger = state.triggerRef
       if (trigger && trigger.contains(node)) return true
+      // Kobalte Select (and other portal-based components) render their
+      // dropdown content in a Portal at the document body level — outside
+      // the popover content DOM. Treat clicks inside those portals as
+      // "inside" so the popover doesn't close when the user interacts
+      // with a Select hosted within it.
+      if (node instanceof Element && node.closest('[data-component="select-content"]')) return true
       return false
     }
 

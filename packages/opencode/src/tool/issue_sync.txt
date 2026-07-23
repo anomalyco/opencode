@@ -1,0 +1,30 @@
+Trigger a Linear sync for the current workspace. Reconciles the local IssueTable with Linear after either the agent or the user has made changes on the other side.
+
+## When to use this tool
+
+Call `issue_sync` AFTER you have edited a Linear-linked issue via Linear MCP (`save_issue`) or `linear_graphql`. The local IssueTable does not automatically reflect changes you make on Linear — this tool pulls the cloud state back into the local copy so subsequent `issue_list` calls show the updated data.
+
+You can also call `issue_sync` with `direction: "push"` to push local-only issues (those with `linear_issue_id == null`) to Linear. This is rare — the agent path refuses writes to Linear-linked issues, so push only matters for local issues you want to appear on Linear.
+
+## Parameters
+
+- `direction` (optional): `"pull"` (default) or `"push"`
+  - `"pull"` — fetch the latest Linear state and reconcile local. Use this after editing Linear via MCP/GraphQL.
+  - `"push"` — send local-only issues to Linear. Use this after creating local issues that should appear on Linear.
+
+## What the counts mean
+
+For `pull`:
+- `pulled` — new Linear issues inserted locally (first sync)
+- `updated` — linked issues whose cloud state changed since last pull (local row reconciled)
+- `skipped` — linked issues unchanged since last pull (no write needed)
+- `deleted` — local rows removed because the Linear issue was hard-deleted on cloud
+- `failed` — issues that errored during pull
+
+For `push`:
+- `pushed` — issues successfully sent to Linear
+- `failed` — issues that errored during push
+
+## Linear connection
+
+The tool uses the same Linear connection as the UI Push/Pull buttons: it prefers the project's registered Linear MCP server, and falls back to `LINEAR_API_KEY` if no MCP server is registered. If neither is available, the tool returns `{ ok: false, error: "Linear client not available" }`.

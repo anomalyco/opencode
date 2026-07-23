@@ -1,0 +1,62 @@
+Execute a GraphQL mutation or query directly against the Linear API. This is the Agent's escape hatch for editing Linear-linked issues when the Linear MCP server's `save_issue` tool cannot express the desired change.
+
+## When to use this tool
+
+Use `linear_graphql` ONLY when ALL of the following are true:
+
+1. The target issue is Linear-linked (its `linear_issue_id` field is non-null — check via `issue_list`).
+2. The change CANNOT be done through the Linear MCP server's `save_issue` tool. Specifically:
+   - Clearing a field by setting it to `null` (e.g., `dueDate: null`, `description: null`). The MCP `save_issue` Zod schema rejects `null` for string-typed fields, and `""` is silently ignored by Linear.
+   - Deleting a Linear issue. The MCP server has no `delete_issue` tool.
+   - Any other Linear GraphQL operation not exposed via MCP.
+
+For all other Linear-linked edits (title, description, status, priority, labels, assignee, dueDate with a value), prefer the Linear MCP server's `save_issue` tool — it is simpler and validates input.
+
+## When NOT to use this tool
+
+- For LOCAL issues (issues whose `linear_issue_id` is null). Use `issue_update` / `issue_archive` / `issue_delete` instead. Local edits to Linear-linked issues via `issue_update` will desync the local copy from Linear — always edit Linear directly for Linear-linked issues.
+- For reading Linear data. Use `issue_list` (local) or Linear MCP's `list_issues` / `get_issue`.
+
+## Authentication
+
+Reads `LINEAR_API_KEY` from the environment. The key is sent as the raw `Authorization: <key>` header (Linear's accepted format — not `Bearer <key>`). If the env var is missing, the tool fails with `LINEAR_API_KEY not set`.
+
+## Parameters
+
+- `mutation`: the GraphQL operation body. Example:
+  ```
+  mutation($id: String!, $input: IssueUpdateInput!) {
+    issueUpdate(id: $id, input: $input) {
+      success
+      issue { id dueDate }
+    }
+  }
+  ```
+- `variables`: a JSON object of variables referenced in the mutation. Example:
+  `{ "id": "LIN-123", "input": { "dueDate": null } }`
+
+## Common use cases
+
+### Clear dueDate on a Linear-linked issue
+```
+mutation: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { id dueDate } } }"
+variables: { "id": "<linear_issue_id>", "input": { "dueDate": null } }
+```
+
+### Clear description on a Linear-linked issue
+```
+mutation: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { id description } } }"
+variables: { "id": "<linear_issue_id>", "input": { "description": null } }
+```
+
+### Delete a Linear issue (hard delete — cannot be undone)
+```
+mutation: "mutation($id: String!) { issueDelete(id: $id) { success deletedIssueId } }"
+variables: { "id": "<linear_issue_id>" }
+```
+
+## Response shape
+
+Returns the `data` field of the Linear GraphQL response as JSON. On HTTP failure, transport error, or GraphQL `errors` array, the tool returns `{ ok: false, error: <message> }` instead of failing the tool call — so the Agent can read the error message and retry or report to the user.
+
+Always inspect the `success` field inside the mutation's payload (e.g., `data.issueUpdate.success`) — Linear may return a 200 with `success: false` if the operation was rejected.

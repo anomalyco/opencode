@@ -29,6 +29,17 @@ import { WebSearchTool } from "./websearch"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { IssueAddTool } from "./issue_add"
+import { IssueUpdateTool } from "./issue_update"
+import { IssueDeleteTool } from "./issue_delete"
+import { IssueReorderTool } from "./issue_reorder"
+import { IssueArchiveTool } from "./issue_archive"
+import { IssueListTool } from "./issue_list"
+import { IssueSyncTool } from "./issue_sync"
+import { LinearGraphqlTool } from "./linear_graphql"
+import { Issue } from "@/issue/issue"
+import { LinearGraphqlClient } from "@/issue/linear-graphql"
+import { LinearBinding } from "@/issue/linear-binding"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -109,6 +120,14 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const issueAdd = yield* IssueAddTool
+    const issueUpdate = yield* IssueUpdateTool
+    const issueDelete = yield* IssueDeleteTool
+    const issueReorder = yield* IssueReorderTool
+    const issueArchive = yield* IssueArchiveTool
+    const issueList = yield* IssueListTool
+    const issueSync = yield* IssueSyncTool
+    const linearGraphql = yield* LinearGraphqlTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -214,6 +233,14 @@ const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          issueAdd: Tool.init(issueAdd),
+          issueUpdate: Tool.init(issueUpdate),
+          issueDelete: Tool.init(issueDelete),
+          issueReorder: Tool.init(issueReorder),
+          issueArchive: Tool.init(issueArchive),
+          issueList: Tool.init(issueList),
+          issueSync: Tool.init(issueSync),
+          linearGraphql: Tool.init(linearGraphql),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -237,6 +264,14 @@ const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.issueAdd,
+            tool.issueUpdate,
+            tool.issueDelete,
+            tool.issueReorder,
+            tool.issueArchive,
+            tool.issueList,
+            tool.issueSync,
+            tool.linearGraphql,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -444,6 +479,9 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    Issue.node,
+    LinearGraphqlClient.node,
+    LinearBinding.node,
   ],
 })
 

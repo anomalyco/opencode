@@ -105,6 +105,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   })
 
   const path = () => `${location.pathname}${location.search}${location.hash}`
+
   const creating = createMemo(() => {
     const route = layout.route()
     if (route.type === "draft" || route.type === "dir-new-sesssion") return true
