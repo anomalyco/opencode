@@ -42,31 +42,31 @@
 - Consumes: Node.js `>=20.19.0`、npm 全局包目录、当前 Git 工作树。
 - Produces: `openspec-cn` CLI 和 Codex/OpenCode 可发现的 OpenSpec skills/commands。
 
-- [ ] **Step 1: 安装固定版本 CLI**
+- [x] **Step 1: 安装固定版本 CLI**
 
 Run: `npm install -g @studyzy/openspec-cn@1.6.0`
 
 Expected: npm 以退出码 0 完成安装。
 
-- [ ] **Step 2: 验证 CLI 版本**
+- [x] **Step 2: 验证 CLI 版本**
 
 Run: `openspec-cn --version`
 
 Expected: 输出 `1.6.0`。
 
-- [ ] **Step 3: 初始化 core profile 和双工具适配**
+- [x] **Step 3: 初始化 core profile 和双工具适配**
 
 Run: `$env:OPENSPEC_TELEMETRY='0'; openspec-cn init --tools codex,opencode --profile core`
 
 Expected: 创建 `openspec/`、`.codex/skills/openspec-*`、`.opencode/skills/openspec-*` 和 `.opencode/commands/opsx-*.md`，退出码为 0。
 
-- [ ] **Step 4: 检查生成结果和上游文件共存**
+- [x] **Step 4: 检查生成结果和上游文件共存**
 
 Run: `Test-Path openspec/config.yaml; Test-Path .codex/skills/openspec-propose/SKILL.md; Test-Path .opencode/skills/openspec-propose/SKILL.md; Test-Path .opencode/commands/opsx-propose.md; Test-Path .opencode/skills/effect/SKILL.md`
 
 Expected: 五项均输出 `True`。
 
-- [ ] **Step 5: 提交生成的基础文件**
+- [x] **Step 5: 提交生成的基础文件**
 
 Run: `git add -- openspec .codex .opencode; git commit -m "chore: initialize openspec workflows"`
 
@@ -83,7 +83,7 @@ Expected: 提交成功，且提交不包含 `package.json` 或 `bun.lock`。
 - Consumes: Task 1 生成的 `openspec/config.yaml` 和仓库现有 `AGENTS.md`。
 - Produces: 每个 OpenSpec change 自动继承的项目上下文，以及所有项目 agent 可读取的协作顺序。
 
-- [ ] **Step 1: 写入 OpenSpec 项目上下文**
+- [x] **Step 1: 写入 OpenSpec 项目上下文**
 
 用以下完整内容替换 `openspec/config.yaml`：
 
@@ -114,7 +114,7 @@ rules:
     - 实现任务遵循 Superpowers TDD 和 verification-before-completion
 ```
 
-- [ ] **Step 2: 添加协作说明文档**
+- [x] **Step 2: 添加协作说明文档**
 
 创建 `docs/workflows/openspec-superpowers.md`，内容如下：
 
@@ -144,7 +144,7 @@ rules:
 - 归档前必须有测试或其他可重复验证证据，并完成 OpenSpec verify。
 ```
 
-- [ ] **Step 3: 在 AGENTS.md 追加项目工作流规则**
+- [x] **Step 3: 在 AGENTS.md 追加项目工作流规则**
 
 在现有文件末尾追加以下内容，不改动前文：
 
@@ -159,13 +159,13 @@ rules:
 - Do not manually edit generated OpenSpec skills or commands; refresh them with `openspec-cn update`.
 ```
 
-- [ ] **Step 4: 校验配置和差异**
+- [x] **Step 4: 校验配置和差异**
 
 Run: `openspec-cn validate --all; git diff --check; git diff -- package.json bun.lock`
 
 Expected: OpenSpec 校验成功；无空白错误；依赖文件无差异。
 
-- [ ] **Step 5: 提交项目上下文与规则**
+- [x] **Step 5: 提交项目上下文与规则**
 
 Run: `git add -- openspec/config.yaml AGENTS.md docs/workflows/openspec-superpowers.md; git commit -m "docs: define openspec superpowers workflow"`
 
@@ -181,7 +181,7 @@ Expected: 提交成功，仅包含指定文件。
 - Consumes: Task 1 的 OpenSpec 命令/skills 和 Task 2 的工作流规则。
 - Produces: 用户可直接复制的项目启动、需求探索、提案、实现、验证和归档提示词，以及可审计的完成状态。
 
-- [ ] **Step 1: 编写执行提示词**
+- [x] **Step 1: 编写执行提示词**
 
 创建 `docs/workflows/execution-prompts.md`，包含以下可复制模板：
 
@@ -213,19 +213,19 @@ Expected: 提交成功，仅包含指定文件。
 请确认所有 OpenSpec tasks 完成、测试通过且 verify 无关键问题；随后同步增量 specs 并 archive 当前 change。最后报告归档路径、主 specs 变化、验证命令和提交记录。
 ```
 
-- [ ] **Step 2: 验证生成文件数量和关键文件**
+- [x] **Step 2: 验证生成文件数量和关键文件**
 
 Run: `(Get-ChildItem .codex/skills -Directory -Filter 'openspec-*').Count; (Get-ChildItem .opencode/skills -Directory -Filter 'openspec-*').Count; (Get-ChildItem .opencode/commands -File -Filter 'opsx-*.md').Count`
 
-Expected: core profile 对 Codex 和 OpenCode 各生成 5 个 skills，对 OpenCode 生成 5 个 commands。
+Expected: OpenSpec-cn 1.6.0 core profile 对 Codex 和 OpenCode 各生成 6 个 skills，对 OpenCode 生成 6 个 commands（包含 `update-change` 工作流）。
 
-- [ ] **Step 3: 运行最终静态验收**
+- [x] **Step 3: 运行最终静态验收**
 
 Run: `openspec-cn --version; openspec-cn validate --all; git diff --check; git status --short`
 
 Expected: 版本为 1.6.0；校验成功；无空白错误；只剩计划勾选和执行提示词的预期改动。
 
-- [ ] **Step 4: 更新计划勾选状态并提交**
+- [x] **Step 4: 更新计划勾选状态并提交**
 
 Run: `git add -- docs/workflows/execution-prompts.md docs/superpowers/plans/2026-07-23-openspec-superpowers-foundation.md; git commit -m "docs: add agent execution prompts"`
 
