@@ -1,0 +1,84 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 1ca9113bed2728a616db773a8e08d8d6957447d7..15408ec429dc210b5fa43589d81b69c93bf27b2d 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -14,6 +14,7 @@ declare const mistralLanguageModelOptions: z.ZodObject<{
+         none: "none";
+         high: "high";
+     }>>;
++    promptCacheKey: z.ZodOptional<z.ZodString>;
+ }, z.core.$strip>;
+ type MistralLanguageModelOptions = z.infer<typeof mistralLanguageModelOptions>;
+ 
+diff --git a/dist/index.js b/dist/index.js
+index 45735e524aaff54ea058c99c729c5ffd3c507058..6aca5f6f13da0054ede31c1f1a692e4eaed37d34 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -268,7 +268,8 @@ var mistralLanguageModelOptions = import_v4.z.object({
+    * - `'high'`: Enable reasoning
+    * - `'none'`: Disable reasoning
+    */
+-  reasoningEffort: import_v4.z.enum(["high", "none"]).optional()
++  reasoningEffort: import_v4.z.enum(["high", "none"]).optional(),
++  promptCacheKey: import_v4.z.string().optional()
+ });
+ 
+ // src/mistral-error.ts
+@@ -413,6 +414,7 @@ var MistralChatLanguageModel = class {
+       top_p: topP,
+       random_seed: seed,
+       reasoning_effort: options.reasoningEffort,
++      prompt_cache_key: options.promptCacheKey,
+       // response format:
+       response_format: (responseFormat == null ? void 0 : responseFormat.type) === "json" ? structuredOutputs && (responseFormat == null ? void 0 : responseFormat.schema) != null ? {
+         type: "json_schema",
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 4c22df1cd78a1ba81309c8a86ceecefef4ba4aea..30cd3b1f503860109b7fa2107cd1eb17b70c96be 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -256,7 +256,8 @@ var mistralLanguageModelOptions = z.object({
+    * - `'high'`: Enable reasoning
+    * - `'none'`: Disable reasoning
+    */
+-  reasoningEffort: z.enum(["high", "none"]).optional()
++  reasoningEffort: z.enum(["high", "none"]).optional(),
++  promptCacheKey: z.string().optional()
+ });
+ 
+ // src/mistral-error.ts
+@@ -403,6 +404,7 @@ var MistralChatLanguageModel = class {
+       top_p: topP,
+       random_seed: seed,
+       reasoning_effort: options.reasoningEffort,
++      prompt_cache_key: options.promptCacheKey,
+       // response format:
+       response_format: (responseFormat == null ? void 0 : responseFormat.type) === "json" ? structuredOutputs && (responseFormat == null ? void 0 : responseFormat.schema) != null ? {
+         type: "json_schema",
+diff --git a/src/mistral-chat-language-model.ts b/src/mistral-chat-language-model.ts
+index 480c472d534bedbe8897979673453bd1c29a70b7..e46496da94f7d4af9822897202ca6baae67dae3a 100644
+--- a/src/mistral-chat-language-model.ts
++++ b/src/mistral-chat-language-model.ts
+@@ -129,6 +129,7 @@ export class MistralChatLanguageModel implements LanguageModelV3 {
+       top_p: topP,
+       random_seed: seed,
+       reasoning_effort: options.reasoningEffort,
++      prompt_cache_key: options.promptCacheKey,
+ 
+       // response format:
+       response_format:
+diff --git a/src/mistral-chat-options.ts b/src/mistral-chat-options.ts
+index 80fff45fba2c378fa06962f071946bcd2b882a0b..b4fdfa51f3bf11a4220e010c8aca92482cb0c3db 100644
+--- a/src/mistral-chat-options.ts
++++ b/src/mistral-chat-options.ts
+@@ -62,6 +62,11 @@ export const mistralLanguageModelOptions = z.object({
+    * - `'none'`: Disable reasoning
+    */
+   reasoningEffort: z.enum(['high', 'none']).optional(),
++
++  /**
++   * A stable identifier used to route requests with shared prompt prefixes.
++   */
++  promptCacheKey: z.string().optional(),
+ });
+ 
+ export type MistralLanguageModelOptions = z.infer<
