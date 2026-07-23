@@ -124,6 +124,10 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
+### Community Tools
+
+- [oos](https://github.com/wsaaaqqq/oos) — TUI fuzzy finder for OpenCode sessions. Search all sessions across all projects with real-time keyword filtering, open any session in a new terminal tab. Works around the TUI session list's 30-day window and cross-project limits by reading the local SQLite database directly. MIT-licensed.
+
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
