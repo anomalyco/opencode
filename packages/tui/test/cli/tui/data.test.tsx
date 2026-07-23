@@ -5,12 +5,14 @@ import type { OpenCodeEvent } from "@opencode-ai/client"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { EventV2 } from "@opencode-ai/core/event"
 import { createEffect, onMount, type ParentProps } from "solid-js"
+import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
 import { DataProvider as DataProviderBase, useData } from "../../../src/context/data"
 import { LocationProvider, useLocation } from "../../../src/context/location"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const formFields = [{ key: "authorization", type: "external", url: "https://example.com" }] satisfies [
   {
@@ -32,14 +34,18 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
+const config = createTuiResolvedConfig()
+
 function DataProvider(props: ParentProps) {
   return (
-    <DataProviderBase>
-      <LocationProvider>
-        <SyncLocation />
-        {props.children}
-      </LocationProvider>
-    </DataProviderBase>
+    <ConfigProvider config={config}>
+      <DataProviderBase>
+        <LocationProvider>
+          <SyncLocation />
+          {props.children}
+        </LocationProvider>
+      </DataProviderBase>
+    </ConfigProvider>
   )
 }
 
