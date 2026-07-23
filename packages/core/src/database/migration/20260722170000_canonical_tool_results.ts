@@ -34,8 +34,8 @@ const completedContent = (state: Record<string, unknown>) => {
  * One-time rewrite of projected tool rows into the canonical result shape:
  * terminal states store model content plus optional metadata; the generic
  * `structured` and `result` fields disappear. Provider-hosted result payloads
- * move into provider-owned result state so hosted continuation survives. The
- * corresponding durable terminal events are rewritten to remain replayable.
+ * move into provider-owned result state so hosted continuation survives.
+ * Pre-release durable event versions are intentionally left untouched.
  */
 export default {
   id: "20260722170000_canonical_tool_results",
@@ -52,15 +52,6 @@ export default {
         if (messages.length === 0) break
         cursor = messages[messages.length - 1].id
         yield* rewrite(tx, messages)
-      }
-      let eventCursor = ""
-      while (true) {
-        const events = yield* tx.all<{ id: string; type: string; data: string }>(
-          sql`SELECT id, type, data FROM event WHERE type IN ('session.tool.success.1', 'session.tool.failed.1') AND id > ${eventCursor} ORDER BY id LIMIT 1000`,
-        )
-        if (events.length === 0) break
-        eventCursor = events[events.length - 1].id
-        yield* rewriteEvents(tx, events)
       }
     })
   },
@@ -127,52 +118,6 @@ function rewrite(tx: Parameters<DatabaseMigration.Migration["up"]>[0], messages:
       })
       if (!changed) continue
       yield* tx.run(sql`UPDATE session_message SET data = ${JSON.stringify({ ...data, content })} WHERE id = ${row.id}`)
-    }
-  })
-}
-
-function rewriteEvents(
-  tx: Parameters<DatabaseMigration.Migration["up"]>[0],
-  events: { id: string; type: string; data: string }[],
-) {
-  return Effect.gen(function* () {
-    for (const row of events) {
-      const decoded = decodeJson(row.data)
-      if (decoded._tag === "None") {
-        yield* Effect.logWarning("skipping undecodable tool event").pipe(Effect.annotateLogs({ id: row.id }))
-        continue
-      }
-      const data = object(decoded.value)
-      const preserved = contentOf(data)
-      const result = resultOf(data)
-      const resultState =
-        data.executed === true && result !== undefined
-          ? { resultState: { ...object(data.resultState), result } }
-          : data.resultState === undefined
-            ? {}
-            : { resultState: data.resultState }
-      const base = {
-        sessionID: data.sessionID,
-        assistantMessageID: data.assistantMessageID,
-        callID: data.callID,
-        executed: data.executed,
-        ...resultState,
-      }
-      const next =
-        row.type === "session.tool.success.1"
-          ? {
-              ...base,
-              content: completedContent(data),
-              ...metadataOf(data),
-            }
-          : {
-              ...base,
-              error: data.error,
-              ...(preserved.length > 0 ? { content: preserved } : {}),
-              ...metadataOf(data),
-            }
-      const type = row.type === "session.tool.success.1" ? "session.tool.success.2" : "session.tool.failed.2"
-      yield* tx.run(sql`UPDATE event SET type = ${type}, data = ${JSON.stringify(next)} WHERE id = ${row.id}`)
     }
   })
 }

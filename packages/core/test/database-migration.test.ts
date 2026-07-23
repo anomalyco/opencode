@@ -756,24 +756,25 @@ describe("DatabaseMigration", () => {
           },
         })
         const event = yield* db.get<{ type: string; data: string }>(sql`SELECT type, data FROM event WHERE id = 'evt_success'`)
-        expect(event!.type).toBe("session.tool.success.2")
+        expect(event!.type).toBe("session.tool.success.1")
         expect(JSON.parse(event!.data)).toEqual({
           sessionID: "ses_test",
           assistantMessageID: "msg_tools",
           callID: "call_hosted",
+          structured: {},
+          content: [],
+          result: { type: "json", value: [{ url: "https://example.com" }] },
           executed: true,
-          resultState: { result: [{ url: "https://example.com" }] },
-          content: [{ type: "text", text: JSON.stringify([{ url: "https://example.com" }], null, 2) }],
         })
         const failedEvent = yield* db.get<{ type: string; data: string }>(sql`SELECT type, data FROM event WHERE id = 'evt_failed'`)
-        expect(failedEvent!.type).toBe("session.tool.failed.2")
+        expect(failedEvent!.type).toBe("session.tool.failed.1")
         expect(JSON.parse(failedEvent!.data)).toEqual({
           sessionID: "ses_test",
           assistantMessageID: "msg_tools",
           callID: "call_failed",
-          executed: false,
           error: { type: "tool.execution", message: "timed out" },
           metadata: { truncated: false },
+          executed: false,
         })
         expect(yield* db.get(sql`SELECT data FROM session_message WHERE id = 'msg_user'`)).toEqual({
           data: '{"text":"hi","time":{"created":1}}',
