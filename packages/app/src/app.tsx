@@ -361,7 +361,7 @@ function NewLayoutDeepLinks() {
       void context.sdk.api.session
         .get({ sessionID })
         .then((session) => {
-          open(session.directory)
+          open(session.location.directory)
           tabs.select(tabs.addSessionTab({ server: key, sessionId: session.id }))
         })
         .catch(() =>

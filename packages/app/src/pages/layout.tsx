@@ -1282,8 +1282,8 @@ export default function LegacyLayout(props: ParentProps) {
       void serverSDK()
         .api.session.get({ sessionID })
         .then((session) => {
-          void openProject(session.directory, false)
-          navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+          void openProject(session.location.directory, false)
+          navigateWithSidebarReset(`/${base64Encode(session.location.directory)}/session/${session.id}`)
         })
         .catch(() =>
           showToast({
