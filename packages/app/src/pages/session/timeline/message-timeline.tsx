@@ -283,6 +283,12 @@ export function MessageTimeline(props: {
     return sync().data.session_status[id] ?? idle
   })
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
+  const orderedMessages = createMemo(() => {
+    const msgs = sessionMessages()
+    return [...msgs].sort(
+      (a, b) => (a.time?.created ?? 0) - (b.time?.created ?? 0) || String(a.id ?? "").localeCompare(String(b.id ?? "")),
+    )
+  })
   const projectedMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return []
@@ -331,7 +337,7 @@ export function MessageTimeline(props: {
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const projection = createTimelineProjection({
-    messages: sessionMessages,
+    messages: orderedMessages,
     sessionMessages: projectedMessages,
     parts: getMsgParts,
     status: sessionStatus,

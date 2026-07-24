@@ -41,7 +41,9 @@ export function createTimelineModel(input: {
   )
   const messages = createMemo(() => {
     const id = input.sessionID()
-    return id ? (sync().data.message[id] ?? []) : []
+    if (!id) return []
+    const msgs = sync().data.message[id] ?? []
+    return [...msgs].sort((a, b) => (a.time?.created ?? 0) - (b.time?.created ?? 0) || String(a.id ?? "").localeCompare(String(b.id ?? "")))
   })
   const ready = createMemo(() => {
     const id = input.sessionID()
