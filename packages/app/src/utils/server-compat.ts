@@ -85,14 +85,15 @@ function sessionInfo(session: Session): SessionInfo {
 
 export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
   const v1 = createV1Api(input)
+  const currentSession = (input.current as any)?.sessions ?? input.current?.session ?? {}
   const currentWithRevert: ServerApi = {
     ...input.current,
     session: {
-      ...input.current.session,
-      revert: (input.current.session as any).revert ?? {
-        stage: (value: any, opts?: any) => (input.current.session as any).stage?.(value, opts),
-        clear: (value: any, opts?: any) => (input.current.session as any).clear?.(value, opts),
-        commit: (value: any, opts?: any) => (input.current.session as any).commit?.(value, opts),
+      ...currentSession,
+      revert: currentSession.revert ?? {
+        stage: (value: any, opts?: any) => currentSession.stage?.(value, opts),
+        clear: (value: any, opts?: any) => currentSession.clear?.(value, opts),
+        commit: (value: any, opts?: any) => currentSession.commit?.(value, opts),
       },
     },
   } as unknown as ServerApi
@@ -145,10 +146,20 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     data,
   })
 
+  const currentSession = (input.current as any)?.sessions ?? input.current?.session ?? {}
+  const currentProject = (input.current as any)?.projects ?? input.current?.project ?? {}
+  const currentPath = (input.current as any)?.paths ?? input.current?.path ?? {}
+  const currentFile = (input.current as any)?.files ?? input.current?.file ?? {}
+  const currentVcs = (input.current as any)?.vcs ?? {}
+  const currentIntegration = (input.current as any)?.integrations ?? input.current?.integration ?? {}
+  const currentPty = (input.current as any)?.ptys ?? input.current?.pty ?? {}
+  const currentPermission = (input.current as any)?.permissions ?? input.current?.permission ?? {}
+  const currentQuestion = (input.current as any)?.questions ?? input.current?.question ?? {}
+
   return {
     ...input.current,
     session: {
-      ...input.current.session,
+      ...currentSession,
       async list(
         value?: Parameters<ServerApi["session"]["list"]>[0],
         options?: Parameters<ServerApi["session"]["list"]>[1],
