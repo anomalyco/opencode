@@ -108,9 +108,7 @@ describe("SessionExecution lifecycle", () => {
   it.effect("starts every suspended execution without waiting for earlier drains to finish", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const sessionIDs = Array.from({ length: 5 }, (_, index) =>
-        SessionV2.ID.make(`ses_resume_concurrent_${index}`),
-      )
+      const sessionIDs = Array.from({ length: 5 }, (_, index) => SessionV2.ID.make(`ses_resume_concurrent_${index}`))
       yield* seedSessions(database, sessionIDs, { time_suspended: Date.now() })
 
       const fourStarted = yield* Deferred.make<void>()
@@ -123,11 +121,12 @@ describe("SessionExecution lifecycle", () => {
           if (started.length === 4) Deferred.doneUnsafe(fourStarted, Effect.void)
         }).pipe(Effect.andThen(Effect.never)),
       )
+      const execution = Context.get(context, SessionExecution.Service)
       const restart = Context.get(context, SessionRestart.Service)
       yield* restart.resumeSuspendedSessions.pipe(Effect.forkIn(scope))
       yield* Deferred.await(fourStarted)
 
-      expect(started.toSorted()).toEqual(sessionIDs.toSorted())
+      expect([...(yield* execution.active)].toSorted()).toEqual(sessionIDs.toSorted())
     }),
   )
 
@@ -141,9 +140,11 @@ describe("SessionExecution lifecycle", () => {
       const drained: string[] = []
       const scope = yield* Scope.make()
       const context = yield* buildExecution(scope, ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)))
+      const execution = Context.get(context, SessionExecution.Service)
       const restart = Context.get(context, SessionRestart.Service)
 
       yield* restart.resumeSuspendedSessions
+      yield* Effect.forEach([first, second], execution.awaitIdle, { discard: true })
       expect(drained.toSorted()).toEqual([first, second])
       expect(yield* suspensions(database)).toEqual({ [first]: false, [second]: false })
 

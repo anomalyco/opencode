@@ -24,6 +24,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const scope = yield* Effect.scope
     const store = yield* SessionStore.Service
     const execution = yield* SessionExecution.Service
     return Service.of({
@@ -38,9 +39,9 @@ export const layer = Layer.effect(
             Effect.gen(function* () {
               if (!(yield* store.consumeSuspended(sessionID))) return
               // Drain failures are already logged and durably recorded by the execution layer.
-              yield* Effect.ignore(execution.resume(sessionID))
+              yield* execution.resume(sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
             }),
-          // Each suspension is consumed atomically right before its drain; at most four drains run at once.
+          // Bound recovery setup without waiting for long-running drains to finish.
           { concurrency: 4, discard: true },
         )
       }),
