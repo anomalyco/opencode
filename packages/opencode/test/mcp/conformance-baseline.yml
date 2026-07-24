@@ -1,0 +1,34 @@
+# Known conformance failures for opencode's MCP client against
+# @modelcontextprotocol/conformance 0.2.0-alpha.9. Run via:
+#   bun run test:conformance
+# Every entry documents why the failure is expected; remove entries as the
+# underlying capability lands.
+client:
+  # opencode does not register an elicitation handler (capability deliberately
+  # disabled; see the issue links on CLIENT_OPTIONS in src/mcp/index.ts).
+  # Impact: servers requesting user input via elicitation get a capability
+  # error instead of a form.
+  - elicitation-sep1034-client-defaults
+
+  # SHOULD-level only: the SDK's built-in provider uses Dynamic Client
+  # Registration instead of a URL-based Client ID Metadata Document.
+  # Impact: servers that require CIMD rather than DCR need clientId config.
+  - auth/basic-cimd
+
+  # SHOULD-level: one escalation check remains — the driver's headless
+  # browser playback completes the step-up exchange, but the SDK surfaces the
+  # completed re-authorization as UnauthorizedError before the escalated
+  # authorization request is observed by the referee.
+  - auth/scope-step-up
+
+  # MRTR (input_required continuation) requires elicitation/sampling
+  # handlers, which opencode does not register (see above).
+  # Impact: none for tools that do not request mid-call input.
+  - sep-2322-client-request-state
+
+  # Extension scenarios: client-credentials and enterprise-managed
+  # authorization grants are not used by opencode (authorization-code + PKCE
+  # only).
+  - auth/client-credentials-jwt
+  - auth/client-credentials-basic
+  - auth/enterprise-managed-authorization

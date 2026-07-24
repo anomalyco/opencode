@@ -2,7 +2,7 @@ import path from "node:path"
 import { describe, expect, test } from "bun:test"
 
 describe("mcp session recovery", () => {
-  test("reinitializes and retries once after a session-bound POST returns 404", async () => {
+  test("reconnects and retries once after a session-bound POST returns 404", async () => {
     const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "../fixture/mcp-session-recovery.ts")], {
       cwd: path.join(import.meta.dir, "../.."),
       stdout: "pipe",
@@ -18,10 +18,11 @@ describe("mcp session recovery", () => {
     expect(JSON.parse(stdout)).toEqual([
       { method: "initialize", session: null },
       { method: "notifications/initialized", session: "expired" },
-      { method: "ping", session: "expired" },
+      { method: "tools/list", session: "expired" },
+      { method: "tools/call", session: "expired" },
       { method: "initialize", session: null },
       { method: "notifications/initialized", session: "replacement" },
-      { method: "ping", session: "replacement" },
+      { method: "tools/call", session: "replacement" },
     ])
   })
 })

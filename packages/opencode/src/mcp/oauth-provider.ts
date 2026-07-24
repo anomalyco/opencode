@@ -1,10 +1,9 @@
-import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
+  OAuthClientProvider,
   OAuthClientMetadata,
-  OAuthTokens,
-  OAuthClientInformation,
-  OAuthClientInformationFull,
-} from "@modelcontextprotocol/sdk/shared/auth.js"
+  StoredOAuthTokens,
+  StoredOAuthClientInformation,
+} from "@modelcontextprotocol/client"
 import { Effect } from "effect"
 import { McpAuth } from "./auth"
 
@@ -52,7 +51,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
     }
   }
 
-  async clientInformation(): Promise<OAuthClientInformation | undefined> {
+  async clientInformation(): Promise<StoredOAuthClientInformation | undefined> {
     if (this.config.clientId) {
       return {
         client_id: this.config.clientId,
@@ -71,6 +70,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
       return {
         client_id: entry.clientInfo.clientId,
         client_secret: entry.clientInfo.clientSecret,
+        issuer: entry.clientInfo.issuer,
       }
     }
 
@@ -78,22 +78,25 @@ export class McpOAuthProvider implements OAuthClientProvider {
     return undefined
   }
 
-  async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
+  async saveClientInformation(info: StoredOAuthClientInformation): Promise<void> {
+    // Mixed union: registration metadata is only present on the "full" (DCR) shape.
+    const full: Partial<Record<"client_id_issued_at" | "client_secret_expires_at", number>> = info
     await Effect.runPromise(
       this.auth.updateClientInfo(
         this.mcpName,
         {
           clientId: info.client_id,
           clientSecret: info.client_secret,
-          clientIdIssuedAt: info.client_id_issued_at,
-          clientSecretExpiresAt: info.client_secret_expires_at,
+          clientIdIssuedAt: full.client_id_issued_at,
+          clientSecretExpiresAt: full.client_secret_expires_at,
+          issuer: info.issuer,
         },
         this.serverUrl,
       ),
     )
   }
 
-  async tokens(): Promise<OAuthTokens | undefined> {
+  async tokens(): Promise<StoredOAuthTokens | undefined> {
     // Use getForUrl to validate tokens are for the current server URL
     const entry = await Effect.runPromise(this.auth.getForUrl(this.mcpName, this.serverUrl))
     if (!entry?.tokens) return undefined
@@ -106,10 +109,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
         ? Math.max(0, Math.floor(entry.tokens.expiresAt - Date.now() / 1000))
         : undefined,
       scope: entry.tokens.scope,
+      issuer: entry.tokens.issuer,
     }
   }
 
-  async saveTokens(tokens: OAuthTokens): Promise<void> {
+  async saveTokens(tokens: StoredOAuthTokens): Promise<void> {
     await Effect.runPromise(
       this.auth.updateTokens(
         this.mcpName,
@@ -118,6 +122,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
           refreshToken: tokens.refresh_token,
           expiresAt: tokens.expires_in ? Date.now() / 1000 + tokens.expires_in : undefined,
           scope: tokens.scope,
+          issuer: tokens.issuer,
         },
         this.serverUrl,
       ),
@@ -181,10 +186,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
 }
 
 export class McpOAuthPendingProvider extends McpOAuthProvider {
-  private pendingClientInfo?: OAuthClientInformationFull
-  private pendingTokens?: OAuthTokens
+  private pendingClientInfo?: StoredOAuthClientInformation
+  private pendingTokens?: StoredOAuthTokens
 
-  override async clientInformation(): Promise<OAuthClientInformation | undefined> {
+  override async clientInformation(): Promise<StoredOAuthClientInformation | undefined> {
     if (!this.config.clientId) return this.pendingClientInfo
     return {
       client_id: this.config.clientId,
@@ -192,15 +197,15 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
     }
   }
 
-  override async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
+  override async saveClientInformation(info: StoredOAuthClientInformation): Promise<void> {
     this.pendingClientInfo = info
   }
 
-  override async tokens(): Promise<OAuthTokens | undefined> {
+  override async tokens(): Promise<StoredOAuthTokens | undefined> {
     return this.pendingTokens
   }
 
-  override async saveTokens(tokens: OAuthTokens): Promise<void> {
+  override async saveTokens(tokens: StoredOAuthTokens): Promise<void> {
     this.pendingTokens = tokens
   }
 
@@ -211,6 +216,8 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
 
   async commit(): Promise<void> {
     if (!this.pendingTokens) return
+    const pendingFull: Partial<Record<"client_id_issued_at" | "client_secret_expires_at", number>> | undefined =
+      this.pendingClientInfo
     await Effect.runPromise(
       this.auth.set(
         this.mcpName,
@@ -220,14 +227,16 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
             refreshToken: this.pendingTokens.refresh_token,
             expiresAt: this.pendingTokens.expires_in ? Date.now() / 1000 + this.pendingTokens.expires_in : undefined,
             scope: this.pendingTokens.scope,
+            issuer: this.pendingTokens.issuer,
           },
           clientInfo:
             this.pendingClientInfo && !this.config.clientId
               ? {
                   clientId: this.pendingClientInfo.client_id,
                   clientSecret: this.pendingClientInfo.client_secret,
-                  clientIdIssuedAt: this.pendingClientInfo.client_id_issued_at,
-                  clientSecretExpiresAt: this.pendingClientInfo.client_secret_expires_at,
+                  clientIdIssuedAt: pendingFull?.client_id_issued_at,
+                  clientSecretExpiresAt: pendingFull?.client_secret_expires_at,
+                  issuer: this.pendingClientInfo.issuer,
                 }
               : undefined,
         },
