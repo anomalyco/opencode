@@ -127,12 +127,16 @@ const layer = Layer.effect(
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
-      if (!input.messageID) return []
-      const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-        (item) => item.info.id === input.messageID,
-      )
+      if (!input.messageID) {
+        const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+        if (!all.length) return []
+        return yield* computeDiff({ messages: all })
+      }
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      const message = all.find((item) => item.info.id === input.messageID)
       if (!message || message.info.role !== "user") return []
       const diffs = message.info.summary?.diffs ?? []
+      if (diffs.length === 0) return yield* computeDiff({ messages: all })
       return diffs.map((item) => {
         if (item.file === undefined) return item
         const file = unquoteGitPath(item.file)

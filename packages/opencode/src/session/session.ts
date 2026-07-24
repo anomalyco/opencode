@@ -488,7 +488,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | Snapshot.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -497,6 +497,7 @@ const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const shot = yield* Snapshot.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -823,8 +824,24 @@ const layer: Layer.Layer<
     })
 
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-      void sessionID
-      return [] as Snapshot.FileDiff[]
+      const msgs = yield* messages({ sessionID }).pipe(Effect.orDie)
+      let from: string | undefined
+      let to : string | undefined
+      for (const item of msgs) {
+        if (!from) {
+          for (const part of item.parts) {
+            if (part.type === "step-start" && part.snapshot) {
+              from = part.snapshot
+              break
+            }
+          }
+        }
+        for (const part of item.parts) {
+          if (part.type === "step-finish" && part.snapshot) to = part.snapshot
+        }
+      }
+      if (from && to) return yield* shot.diffFull(from, to)
+      return []
     })
 
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {
@@ -1012,7 +1029,7 @@ function listByProject(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, Snapshot.node],
 })
 
 export * as Session from "./session"
