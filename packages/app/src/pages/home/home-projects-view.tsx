@@ -33,14 +33,14 @@ export type HomeProjectsViewProps = {
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
-  menuOpen: (id: string) => boolean
+  contextMenuOpen: (id: string) => boolean
   canDefaultServer: Accessor<boolean>
   isDefaultServer: (server: ServerConnection.Any) => boolean
   canRevealProject: (server: ServerConnection.Any) => boolean
   fileManagerActionLabel: Accessor<string>
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
-  serverMenuID: (server: ServerConnection.Any) => string
-  projectMenuID: (server: ServerConnection.Any, directory: string) => string
+  serverContextMenuID: (server: ServerConnection.Any) => string
+  projectContextMenuID: (server: ServerConnection.Any, directory: string) => string
   onWheel: (event: WheelEvent) => void
   onChooseProject: (server: ServerConnection.Any) => void
   onFocusServer: (server: ServerConnection.Any) => void
@@ -48,7 +48,7 @@ export type HomeProjectsViewProps = {
   onEditServer: (server: ServerConnection.Http) => void
   onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
   onRemoveServer: (server: ServerConnection.Any) => void
-  onSetMenuOpen: (id: string, open: boolean) => void
+  onSetContextMenuOpen: (id: string, open: boolean) => void
   onMoveProject: (server: ServerConnection.Any, worktree: string, index: number) => void
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
   onAddProjects: (server: ServerConnection.Any, directories: string[]) => void
@@ -172,16 +172,16 @@ export function HomeUtilityNav(props: {
 function HomeServerRow(props: {
   language: HomeProjectsViewProps["language"]
   projectsForServer: HomeProjectsViewProps["projectsForServer"]
-  menuOpen: HomeProjectsViewProps["menuOpen"]
+  contextMenuOpen: HomeProjectsViewProps["contextMenuOpen"]
   canDefaultServer: HomeProjectsViewProps["canDefaultServer"]
   isDefaultServer: HomeProjectsViewProps["isDefaultServer"]
-  serverMenuID: HomeProjectsViewProps["serverMenuID"]
+  serverContextMenuID: HomeProjectsViewProps["serverContextMenuID"]
   onFocusServer: HomeProjectsViewProps["onFocusServer"]
   onToggleCollapsed: HomeProjectsViewProps["onToggleCollapsed"]
   onEditServer: HomeProjectsViewProps["onEditServer"]
   onSetDefaultServer: HomeProjectsViewProps["onSetDefaultServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
-  onSetMenuOpen: HomeProjectsViewProps["onSetMenuOpen"]
+  onSetContextMenuOpen: HomeProjectsViewProps["onSetContextMenuOpen"]
   onChooseProject: HomeProjectsViewProps["onChooseProject"]
   server: ServerConnection.Any
   selected: boolean
@@ -190,7 +190,7 @@ function HomeServerRow(props: {
 }) {
   const healthy = () => !!props.health?.healthy
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
-  const menuID = () => props.serverMenuID(props.server)
+  const contextMenuID = () => props.serverContextMenuID(props.server)
   return (
     <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
@@ -243,7 +243,7 @@ function HomeServerRow(props: {
       </button>
       <div
         class="hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
-        data-menu={props.menuOpen(menuID())}
+        data-menu={props.contextMenuOpen(contextMenuID())}
       >
         <ServerRowMenuView
           server={props.server}
@@ -254,8 +254,8 @@ function HomeServerRow(props: {
           onSetDefault={() => props.onSetDefaultServer(props.server)}
           onRemoveDefault={() => props.onSetDefaultServer(undefined)}
           onRemove={() => props.onRemoveServer(props.server)}
-          open={props.menuOpen(menuID())}
-          onOpenChange={(open) => props.onSetMenuOpen(menuID(), open)}
+          open={props.contextMenuOpen(contextMenuID())}
+          onOpenChange={(open) => props.onSetContextMenuOpen(contextMenuID(), open)}
         />
         <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("home.project.add")}>
           <IconButtonV2
@@ -429,7 +429,7 @@ function HomeProjectRow(
     },
   })
   let pointerDownSelected: boolean | undefined
-  const menuID = () => props.projectMenuID(props.server, props.project.worktree)
+  const contextMenuID = () => props.projectContextMenuID(props.server, props.project.worktree)
   return (
     <div
       ref={sortable.ref}
@@ -480,14 +480,14 @@ function HomeProjectRow(
       </button>
       <div
         class="hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
-        data-menu={props.menuOpen(menuID())}
+        data-menu={props.contextMenuOpen(contextMenuID())}
       >
         <MenuV2
           gutter={6}
           modal={false}
           placement="bottom-end"
-          open={props.menuOpen(menuID())}
-          onOpenChange={(open) => props.onSetMenuOpen(menuID(), open)}
+          open={props.contextMenuOpen(contextMenuID())}
+          onOpenChange={(open) => props.onSetContextMenuOpen(contextMenuID(), open)}
         >
           <MenuV2.Trigger
             as={IconButtonV2}

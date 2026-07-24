@@ -126,21 +126,25 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
   }
 
   return {
-    thumbTrack,
-    hoverTarget,
-    setThumbTrack,
-    setHoverTarget,
-    setViewport,
-    setContent,
-    setHeader,
-    update,
-    containWheel,
-    containOuterWheel: (event: WheelEvent) => {
-      if (!viewport) return
-      if (event.target instanceof Node && viewport.contains(event.target)) return
-      containWheel(event)
+    viewport: {
+      thumbTrack,
+      hoverTarget,
+      setThumbTrack,
+      setHoverTarget,
+      setViewport,
+      update,
+      containWheel,
+      containOuterWheel: (event: WheelEvent) => {
+        if (!viewport) return
+        if (event.target instanceof Node && viewport.contains(event.target)) return
+        containWheel(event)
+      },
     },
-    titleOpacity: (id: HomeSessionGroup["id"]) => state.titleOpacity[id] ?? 1,
+    header: {
+      setContent,
+      setHeader,
+      titleOpacity: (id: HomeSessionGroup["id"]) => state.titleOpacity[id] ?? 1,
+    },
   }
 }
 

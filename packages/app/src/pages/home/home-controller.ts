@@ -83,25 +83,31 @@ export function createHomeController() {
   }
 
   return {
-    selection,
-    focusedServer,
-    focusedServerCtx,
-    focusedSync,
-    projects,
-    recentlyClosed,
-    homedir,
-    selectedProject,
-    newSessionProject,
-    servers: global.servers.list,
-    serverHealth: (conn: ServerConnection.Any) => global.servers.health[ServerConnection.key(conn)],
-    serverContext: (conn: ServerConnection.Any) => global.ensureServerCtx(conn),
-    projectsForServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.list(),
-    setSelection,
-    focusServer: (conn: ServerConnection.Any) => setSelection({ server: ServerConnection.key(conn) }),
-    selectProject,
-    addProjects,
-    openNewSession,
-    openProjectNewSession,
+    selection: {
+      value: selection,
+      set: setSelection,
+      focusServer: (conn: ServerConnection.Any) => setSelection({ server: ServerConnection.key(conn) }),
+    },
+    server: {
+      list: global.servers.list,
+      health: (conn: ServerConnection.Any) => global.servers.health[ServerConnection.key(conn)],
+      context: (conn: ServerConnection.Any) => global.ensureServerCtx(conn),
+      focused: focusedServer,
+      focusedContext: focusedServerCtx,
+      focusedSync,
+    },
+    project: {
+      list: projects,
+      recentlyClosed,
+      homedir,
+      selected: selectedProject,
+      newSession: newSessionProject,
+      forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.list(),
+      select: selectProject,
+      add: addProjects,
+      openNewSession,
+      openProjectNewSession,
+    },
   }
 }
 

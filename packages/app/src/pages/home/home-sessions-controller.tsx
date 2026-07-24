@@ -46,14 +46,14 @@ export function createHomeSessionsController(home: HomeController) {
   const language = useLanguage()
   const marked = useMarked()
   const projectDirectories = createMemo(() => {
-    const project = home.selectedProject()
-    if (!project) return home.projects().flatMap(directories)
+    const project = home.project.selected()
+    if (!project) return home.project.list().flatMap(directories)
     return directories(project)
   })
   const projectByID = createMemo(
-    () => new Map(home.projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+    () => new Map(home.project.list().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
-  const homeSessions = () => home.focusedSync().homeSessions
+  const homeSessions = () => home.server.focusedSync().homeSessions
   const sessionEventLoad = useQuery(() => ({
     queryKey: homeSessions().eventsKey,
     queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
@@ -62,9 +62,9 @@ export function createHomeSessionsController(home: HomeController) {
   }))
   const sessionLoad = useQuery(() => ({
     queryKey: homeSessions().indexKey,
-    enabled: !!home.focusedServerCtx(),
+    enabled: !!home.server.focusedContext(),
     queryFn: async ({ signal }) => {
-      const ctx = home.focusedServerCtx()
+      const ctx = home.server.focusedContext()
       if (!ctx) return { sessions: [], eventSequence: 0 }
       const cache = homeSessions()
       const eventSequence = cache.eventSequence()
@@ -92,7 +92,7 @@ export function createHomeSessionsController(home: HomeController) {
     buildHomeSessionRecords({
       sessions: indexedSessions,
       projectDirectories,
-      projects: home.projects,
+      projects: home.project.list,
       projectByID,
     }),
   )
@@ -101,8 +101,8 @@ export function createHomeSessionsController(home: HomeController) {
   const prefetched = new Set<string>()
 
   createEffect(() => {
-    const ctx = home.focusedServerCtx()
-    const conn = home.focusedServer()
+    const ctx = home.server.focusedContext()
+    const conn = home.server.focused()
     if (!ctx || !conn) return
     records()
       .slice(0, 2)
@@ -139,9 +139,9 @@ export function createHomeSessionsController(home: HomeController) {
       title: language.t("command.palette"),
       hidden: true,
       onSelect: async () => {
-        const conn = home.focusedServer()
+        const conn = home.server.focused()
         if (!conn) return
-        const ctx = home.focusedServerCtx()
+        const ctx = home.server.focusedContext()
         if (!ctx) return
         const { DialogHomeCommandPaletteV2 } = await import("@/components/dialog-command-palette-v2")
         void dialog.show(() => (
@@ -168,17 +168,17 @@ export function createHomeSessionsController(home: HomeController) {
   function openSession(session: Session, options?: OpenSessionOptions) {
     const directoryKey = pathKey(session.directory)
     const project =
-      home
-        .projects()
+      home.project
+        .list()
         .find(
           (item) =>
             pathKey(item.worktree) === directoryKey ||
             item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
-        ) ?? projectForSession(session, home.projects(), projectByID())
-    const conn = home.focusedServer()
+        ) ?? projectForSession(session, home.project.list(), projectByID())
+    const conn = home.server.focused()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
-    const ctx = home.focusedServerCtx()
+    const ctx = home.server.focusedContext()
     if (!ctx) return
     ctx.projects.open(directory)
     if (options?.background) {
@@ -193,8 +193,8 @@ export function createHomeSessionsController(home: HomeController) {
   }
 
   async function archiveSession(session: Session) {
-    const conn = home.focusedServer()
-    const ctx = home.focusedServerCtx()
+    const conn = home.server.focused()
+    const ctx = home.server.focusedContext()
     if (!conn || !ctx) return
     const [, setStore] = ctx.sync.child(session.directory)
     await archiveHomeSession({
@@ -217,18 +217,27 @@ export function createHomeSessionsController(home: HomeController) {
   }
 
   return {
-    language,
-    records,
-    groups,
-    loading: () => sessionLoad.isLoading,
-    searchRecords: allRecords,
-    showProjectName: () => !home.selectedProject(),
-    server: () => home.selection().server,
-    canCreateSession: () => !!home.newSessionProject(),
-    createSession: home.openNewSession,
-    openSession,
-    archiveSession,
-    hasOpenTab: (record: HomeSessionRecord) => sessionHasOpenTab(tabs.store, home.selection().server, record.session),
+    copy: {
+      language,
+    },
+    data: {
+      records,
+      groups,
+      loading: () => sessionLoad.isLoading,
+      searchRecords: allRecords,
+    },
+    session: {
+      showProjectName: () => !home.project.selected(),
+      server: () => home.selection.value().server,
+      canCreate: () => !!home.project.newSession(),
+      create: home.project.openNewSession,
+      open: openSession,
+      archive: archiveSession,
+    },
+    tab: {
+      isOpen: (record: HomeSessionRecord) =>
+        sessionHasOpenTab(tabs.store, home.selection.value().server, record.session),
+    },
   }
 }
 

@@ -24,7 +24,7 @@ export function createHomeProjectsController(home: HomeController) {
   const notification = useNotification()
   const openSettings = useSettingsCommand()
   const serverManagement = useServerManagementController({ navigateOnAdd: false })
-  const [menu, setMenu] = createStore({ open: undefined as string | undefined })
+  const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
   const [_state, setState, _, ready] = persisted(
     Persist.global("home.servers", ["home.servers.v1"]),
     createStore({ collapsed: {} as Record<string, boolean> }),
@@ -35,16 +35,16 @@ export function createHomeProjectsController(home: HomeController) {
     { initialValue: _state },
   )
   createEffect(() => {
-    const id = menu.open
+    const id = contextMenu.open
     if (!id) return
-    const connections = home.servers()
+    const connections = home.server.list()
     const valid = connections.some((conn) => {
-      if (serverMenuID(conn) === id) return true
-      if (connections.length > 1 && (home.serverHealth(conn)?.healthy !== true || collapsed(conn))) return false
-      const list = connections.length === 1 ? home.projects() : home.projectsForServer(conn)
-      return list.some((project) => projectMenuID(conn, project.worktree) === id)
+      if (serverContextMenuID(conn) === id) return true
+      if (connections.length > 1 && (home.server.health(conn)?.healthy !== true || collapsed(conn))) return false
+      const list = connections.length === 1 ? home.project.list() : home.project.forServer(conn)
+      return list.some((project) => projectContextMenuID(conn, project.worktree) === id)
     })
-    if (!valid) setMenu("open", undefined)
+    if (!valid) setContextMenu("open", undefined)
   })
 
   function editProject(conn: ServerConnection.Any, project: LocalProject) {
@@ -70,27 +70,27 @@ export function createHomeProjectsController(home: HomeController) {
   }
 
   function chooseProject(conn: ServerConnection.Any) {
-    if (home.serverHealth(conn)?.healthy === false) return
+    if (home.server.health(conn)?.healthy === false) return
     pickDirectory({
       server: conn,
       title: language.t("command.project.open"),
       multiple: true,
-      onSelect: (result) => home.addProjects(conn, homeProjectDirectories(result)),
+      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
     })
   }
 
   function closeProject(conn: ServerConnection.Any, directory: string) {
     const next = closeHomeProject(
-      home.selection(),
+      home.selection.value(),
       ServerConnection.key(conn),
-      home.serverContext(conn).projects,
+      home.server.context(conn).projects,
       directory,
     )
-    if (next) home.setSelection(next)
+    if (next) home.selection.set(next)
   }
 
   function moveProject(conn: ServerConnection.Any, worktree: string, index: number) {
-    home.serverContext(conn).projects.move(worktree, index)
+    home.server.context(conn).projects.move(worktree, index)
   }
 
   function revealProject(conn: ServerConnection.Any, project: LocalProject) {
@@ -111,54 +111,68 @@ export function createHomeProjectsController(home: HomeController) {
     return state().collapsed[ServerConnection.key(conn)] ?? false
   }
 
-  function serverMenuID(conn: ServerConnection.Any) {
+  function serverContextMenuID(conn: ServerConnection.Any) {
     return `server:${ServerConnection.key(conn)}`
   }
 
-  function projectMenuID(conn: ServerConnection.Any, directory: string) {
+  function projectContextMenuID(conn: ServerConnection.Any, directory: string) {
     return `project:${ServerConnection.key(conn)}:${directory}`
   }
 
   return {
-    language,
-    selection: home.selection,
-    projects: home.projects,
-    recentlyClosed: home.recentlyClosed,
-    homedir: home.homedir,
-    servers: home.servers,
-    serverHealth: home.serverHealth,
-    projectsForServer: home.projectsForServer,
-    collapsed,
-    toggleCollapsed: (conn: ServerConnection.Any) => {
-      const key = ServerConnection.key(conn)
-      setState("collapsed", key, !state().collapsed[key])
+    copy: {
+      language,
+      fileManagerActionLabel: () =>
+        language.t(
+          fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown").actionLabel,
+        ),
     },
-    menuOpen: (id: string) => menu.open === id,
-    setMenuOpen: (id: string, open: boolean) => setMenu("open", open ? id : undefined),
-    serverMenuID,
-    projectMenuID,
-    canDefaultServer: serverManagement.canDefault,
-    isDefaultServer: (conn: ServerConnection.Any) => serverManagement.defaultKey() === ServerConnection.key(conn),
-    setDefaultServer: (conn: ServerConnection.Any | undefined) =>
-      serverManagement.setDefault(conn ? ServerConnection.key(conn) : null),
-    removeServer: (conn: ServerConnection.Any) => serverManagement.handleRemove(ServerConnection.key(conn)),
-    openEditServer: (conn: ServerConnection.Http) => dialog.show(() => <DialogServerV2 mode="edit" server={conn} />),
-    focusServer: home.focusServer,
-    selectProject: home.selectProject,
-    addProjects: home.addProjects,
-    openProjectNewSession: home.openProjectNewSession,
-    editProject,
-    unseenCount,
-    clearNotifications,
-    chooseProject,
-    closeProject,
-    moveProject,
-    canRevealProject,
-    revealProject,
-    fileManagerActionLabel: () =>
-      language.t(fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown").actionLabel),
-    openSettings,
-    openHelp: () => platform.openLink("https://opencode.ai/desktop-feedback"),
+    selection: {
+      value: home.selection.value,
+    },
+    server: {
+      list: home.server.list,
+      health: home.server.health,
+      projects: home.project.forServer,
+      collapsed,
+      toggleCollapsed: (conn: ServerConnection.Any) => {
+        const key = ServerConnection.key(conn)
+        setState("collapsed", key, !state().collapsed[key])
+      },
+      canDefault: serverManagement.canDefault,
+      isDefault: (conn: ServerConnection.Any) => serverManagement.defaultKey() === ServerConnection.key(conn),
+      setDefault: (conn: ServerConnection.Any | undefined) =>
+        serverManagement.setDefault(conn ? ServerConnection.key(conn) : null),
+      remove: (conn: ServerConnection.Any) => serverManagement.handleRemove(ServerConnection.key(conn)),
+      edit: (conn: ServerConnection.Http) => dialog.show(() => <DialogServerV2 mode="edit" server={conn} />),
+      focus: home.selection.focusServer,
+    },
+    project: {
+      list: home.project.list,
+      recentlyClosed: home.project.recentlyClosed,
+      homedir: home.project.homedir,
+      select: home.project.select,
+      add: home.project.add,
+      openNewSession: home.project.openProjectNewSession,
+      edit: editProject,
+      unseenCount,
+      clearNotifications,
+      choose: chooseProject,
+      close: closeProject,
+      move: moveProject,
+      canReveal: canRevealProject,
+      reveal: revealProject,
+    },
+    contextMenu: {
+      open: (id: string) => contextMenu.open === id,
+      setOpen: (id: string, open: boolean) => setContextMenu("open", open ? id : undefined),
+      serverID: serverContextMenuID,
+      projectID: projectContextMenuID,
+    },
+    utility: {
+      settings: openSettings,
+      help: () => platform.openLink("https://opencode.ai/desktop-feedback"),
+    },
   }
 }
 
