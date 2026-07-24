@@ -2329,9 +2329,6 @@ export default function Page() {
                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
-                    diffVersion={vcsQuery.dataUpdatedAt}
-                    loadDiff={loadReviewDiff}
-                    expandUnchanged={reviewV2State.expandMode() === "expand"}
                     reviewSidebarToggle={(disabled) => (
                       <SessionReviewV2SidebarToggle
                         opened={reviewV2State.sidebarOpened()}
