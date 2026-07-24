@@ -427,10 +427,86 @@ docs/well-known/
 
 ---
 
+## Configuración Azure AD
+
+### Roles de administrador
+
+Hay dos tipos de permisos en Azure AD:
+
+| Permiso | Te permite | Cómo obtenerlo |
+|---------|-----------|----------------|
+| **Dueño del grupo** | Agregar/quitar miembros | El admin te agrega en el grupo → Owners |
+| **Dueño de la App Registration** | Editar manifest, crear App Roles, configurar tokens | App Registration → Owners → Add |
+
+Para configurar los App Roles necesitás ser dueño de la **App Registration**, no del grupo.
+
+### Cómo verificar si tenés acceso
+
+```
+portal.azure.com → Microsoft Entra ID → App registrations → "OpenCode Cli"
+```
+
+Si ves el botón **"Manifest"** en el menú izquierdo → podés hacerlo vos.  
+Si no aparece → pedirle al admin que te agregue como Owner.
+
+### Configuración mínima (solo App Roles)
+
+Para tener control de acceso sin modificar nada más:
+
+1. El admin edita el **Manifest** de la App Registration `OpenCode Cli`
+2. Agrega los App Roles:
+
+```json
+"appRoles": [
+  {
+    "allowedMemberTypes": ["User"],
+    "displayName": "Admin",
+    "isEnabled": true,
+    "value": "opencode-admins",
+    "id": "<guid>"
+  },
+  {
+    "allowedMemberTypes": ["User"],
+    "displayName": "Dev",
+    "isEnabled": true,
+    "value": "opencode-devs",
+    "id": "<guid>"
+  },
+  {
+    "allowedMemberTypes": ["User"],
+    "displayName": "User",
+    "isEnabled": true,
+    "value": "opencode-users",
+    "id": "<guid>"
+  }
+]
+```
+
+3. Asigna el grupo a un rol: **Enterprise Applications → "OpenCode Cli" → Users and groups → Add** → seleccionar `opencode-devs-group` → rol `opencode-devs`
+
+Con solo eso, el código ya detecta los roles del JWT y aplica:
+- `opencode-admins` → acceso total
+- `opencode-devs` → modelos pagos permitidos
+- `opencode-users` → solo Zen gratuito
+- Sin rol asignado → acceso bloqueado
+
+### Configuración avanzada (extension attributes — para después)
+
+Cuando necesiten gestionar allowance, modelos y preferencias por usuario desde Azure Portal:
+
+1. Registrar extension attributes (PowerShell)
+2. Setear valores por usuario (MS Graph API)
+3. Agregar optional claims en el manifest
+
+El código ya está preparado con fallback a env vars para todo.
+
+---
+
 ## Pendiente
 
-- [ ] Dato de RRHH: devs vs admins para estimar costo real
+- [x] Dato de RRHH: ratio 3:1 admin:dev confirmado
 - [x] Dashboard web de administración → `docs/admin-dashboard.html`
 - [x] `.well-known/opencode` endpoint → `docs/well-known/`
-- [ ] Fase 3: auto-recharge, notificaciones de saldo bajo
+- [x] Fase 3: auto-recharge, notificaciones de saldo bajo
+- [ ] App Roles en Azure AD (pendiente del admin)
 - [ ] `.mobileconfig` para macOS MDM
