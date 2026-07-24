@@ -24,7 +24,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const scope = yield* Effect.scope
     const store = yield* SessionStore.Service
     const execution = yield* SessionExecution.Service
     return Service.of({
@@ -39,9 +38,9 @@ export const layer = Layer.effect(
             Effect.gen(function* () {
               if (!(yield* store.consumeSuspended(sessionID))) return
               // Drain failures are already logged and durably recorded by the execution layer.
-              yield* execution.resume(sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
+              yield* Effect.ignore(execution.resume(sessionID))
             }),
-          { discard: true },
+          { concurrency: "unbounded", discard: true },
         )
       }),
     })
