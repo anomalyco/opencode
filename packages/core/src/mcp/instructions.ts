@@ -11,13 +11,16 @@ import { Instructions } from "../instructions/index"
 const Summary = Schema.Struct({
   server: Schema.String,
   instructions: Schema.String,
+  codemode: Schema.optionalKey(Schema.Boolean),
 })
 type Summary = typeof Summary.Type
 
 const entries = (servers: ReadonlyArray<Summary>) =>
   servers.flatMap((server) => [
     `  <server name="${server.server}">`,
-    `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.namespace(server.server))}]\`.`,
+    server.codemode !== false
+      ? `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.namespace(server.server))}]\`.`
+      : "    Use tools from this server directly as top-level tools.",
     ...server.instructions.split("\n").map((line) => `    ${line}`),
     "  </server>",
   ])
@@ -30,7 +33,8 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     previous,
     current,
     (server) => server.server,
-    (before, after) => before.instructions !== after.instructions,
+    (before, after) =>
+      before.instructions !== after.instructions || (before.codemode !== false) !== (after.codemode !== false),
   )
   // Additions and removals render as small deltas; anything else restates the full list.
   if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
@@ -76,21 +80,30 @@ export const layer = Layer.effect(
               removed: () => "MCP server instructions are no longer available.",
             },
           })
-        if (PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny")
-          return source(Instructions.removed)
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
         // Instructions are useful only when this agent can reach at least one server tool.
         const visible = instructions
-          .filter((item) => {
+          .flatMap((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
-            return owned.some(
-              (tool) =>
-                PermissionV2.evaluate(McpTool.name(tool.server, tool.name), "*", agent.permissions).effect !== "deny",
+            const codemode = owned[0]?.codemode !== false
+            if (codemode && PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny") return []
+            if (
+              !owned.some(
+                (tool) =>
+                  PermissionV2.evaluate(McpTool.name(tool.server, tool.name), "*", agent.permissions).effect !== "deny",
+              )
             )
+              return []
+            return [
+              {
+                server: item.server,
+                instructions: item.instructions,
+                ...(codemode ? {} : { codemode: false }),
+              },
+            ]
           })
-          .map((item) => ({ server: item.server, instructions: item.instructions }))
           .toSorted((a, b) => a.server.localeCompare(b.server))
         return source(visible.length === 0 ? Instructions.removed : visible)
       }),

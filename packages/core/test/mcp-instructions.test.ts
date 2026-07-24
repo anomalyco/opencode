@@ -20,6 +20,8 @@ const instructions = (server: string, text: string) =>
   new MCP.ServerInstructions({ server: MCP.ServerName.make(server), instructions: text })
 
 const tool = (server: string, name = "search") => new MCP.Tool({ server: MCP.ServerName.make(server), name })
+const nativeTool = (server: string, name = "search") =>
+  new MCP.Tool({ server: MCP.ServerName.make(server), name, codemode: false })
 
 const layer = (catalog: () => MCP.ServerInstructions[], tools: () => MCP.Tool[]) =>
   AppNodeBuilder.build(McpInstructions.node, [
@@ -92,6 +94,62 @@ describe("McpInstructions", () => {
       ),
     ),
   )
+
+  it.effect("renders native guidance when Code Mode is disabled for the server", () =>
+    Effect.gen(function* () {
+      const service = yield* McpInstructions.Service
+      const generation = yield* service
+        .load(selection([{ action: "execute", resource: "*", effect: "deny" }]))
+        .pipe(Effect.flatMap(readInitial))
+
+      expect(generation.text).toBe(
+        [
+          "<mcp_instructions>",
+          '  <server name="native">',
+          "    Use tools from this server directly as top-level tools.",
+          "    Native instructions",
+          "  </server>",
+          "</mcp_instructions>",
+        ].join("\n"),
+      )
+    }).pipe(
+      Effect.provide(
+        layer(
+          () => [instructions("native", "Native instructions")],
+          () => [nativeTool("native")],
+        ),
+      ),
+    ),
+  )
+
+  it.effect("restates guidance when a server moves to top-level tools", () => {
+    let tools = [tool("alpha")]
+    return Effect.gen(function* () {
+      const service = yield* McpInstructions.Service
+      const initialized = yield* service.load(selection()).pipe(Effect.flatMap(readInitial))
+
+      tools = [nativeTool("alpha")]
+      const changed = yield* readUpdate(yield* service.load(selection()), initialized)
+      expect(changed.text).toBe(
+        [
+          "The available MCP server instructions have changed. This list supersedes the previous one.",
+          "<mcp_instructions>",
+          '  <server name="alpha">',
+          "    Use tools from this server directly as top-level tools.",
+          "    Alpha instructions",
+          "  </server>",
+          "</mcp_instructions>",
+        ].join("\n"),
+      )
+    }).pipe(
+      Effect.provide(
+        layer(
+          () => [instructions("alpha", "Alpha instructions")],
+          () => tools,
+        ),
+      ),
+    )
+  })
 
   it.effect("renders additions, changes, and removal", () => {
     let catalog = [instructions("alpha", "Alpha instructions")]
