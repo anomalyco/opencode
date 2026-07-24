@@ -85,8 +85,20 @@ function sessionInfo(session: Session): SessionInfo {
 
 export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
   const v1 = createV1Api(input)
+  const currentWithRevert: ServerApi = {
+    ...input.current,
+    session: {
+      ...input.current.session,
+      revert: (input.current.session as any).revert ?? {
+        stage: (value: any, opts?: any) => (input.current.session as any).stage?.(value, opts),
+        clear: (value: any, opts?: any) => (input.current.session as any).clear?.(value, opts),
+        commit: (value: any, opts?: any) => (input.current.session as any).commit?.(value, opts),
+      },
+    },
+  } as unknown as ServerApi
+
   return lazyApi(
-    input.protocol.then((protocol) => (protocol === "v1" ? v1 : input.current)),
+    input.protocol.then((protocol) => (protocol === "v1" ? v1 : currentWithRevert)),
     v1,
   )
 }
@@ -295,7 +307,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         clear: async (value: Parameters<ServerApi["session"]["revert"]["clear"]>[0]) => {
           await legacy().session.unrevert(value)
         },
-        commit: input.current.session.revert?.commit,
+        commit: (input.current.session as any).revert?.commit ?? ((input.current.session as any).commit ? (value: any, opts?: any) => (input.current.session as any).commit(value, opts) : undefined),
       },
     },
     project: {
