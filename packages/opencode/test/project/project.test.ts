@@ -396,6 +396,28 @@ describe("Project.fromDirectory with worktrees", () => {
       expect(result.project.sandboxes).not.toContain(tmp)
     }),
   )
+
+  it.live("updates worktree when project directory is moved", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      const original = yield* project.fromDirectory(tmp)
+      expect(original.project.worktree).toBe(tmp)
+
+      const moved = tmp + "-moved"
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => $`rm -rf ${moved}`.quiet().nothrow()).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => $`mv ${tmp} ${moved}`.quiet())
+
+      const result = yield* project.fromDirectory(moved)
+
+      expect(result.project.id).toBe(original.project.id)
+      expect(result.project.worktree).toBe(moved)
+      expect(result.project.sandboxes).not.toContain(tmp)
+    }),
+  )
 })
 
 describe("Project.discover", () => {

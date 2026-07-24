@@ -232,9 +232,14 @@ const layer = Layer.effect(
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
+      // Update worktree to the freshly resolved path when the stored path no
+      // longer exists on disk (project was moved or renamed). Otherwise keep
+      // the existing value so linked-worktree accumulation is preserved.
+      const staleWorktree =
+        projectID !== ProjectV2.ID.global && !(yield* fs.existsSafe(existing.worktree))
       const result: Info = {
         ...existing,
-        worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
+        worktree: projectID === ProjectV2.ID.global || staleWorktree ? worktree : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
