@@ -12,7 +12,7 @@ import { fileManagerApp } from "@/utils/file-manager"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@/utils/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createEffect, createResource } from "solid-js"
+import { createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "./home-controller"
 
@@ -34,19 +34,6 @@ export function createHomeProjectsController(home: HomeController) {
     (promise) => promise.then(() => _state),
     { initialValue: _state },
   )
-  createEffect(() => {
-    const id = contextMenu.open
-    if (!id) return
-    const connections = home.server.list()
-    const valid = connections.some((conn) => {
-      if (serverContextMenuID(conn) === id) return true
-      if (connections.length > 1 && (home.server.health(conn)?.healthy !== true || collapsed(conn))) return false
-      const list = connections.length === 1 ? home.project.list() : home.project.forServer(conn)
-      return list.some((project) => projectContextMenuID(conn, project.worktree) === id)
-    })
-    if (!valid) setContextMenu("open", undefined)
-  })
-
   function directories(project: LocalProject) {
     return [project.worktree, ...(project.sandboxes ?? [])]
   }

@@ -1,4 +1,4 @@
-import { type Accessor, createMemo, For, Show } from "solid-js"
+import { type Accessor, createMemo, For, onCleanup, Show } from "solid-js"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -191,6 +191,10 @@ function HomeServerRow(props: {
   const healthy = () => !!props.health?.healthy
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => props.serverContextMenuID(props.server)
+  onCleanup(() => {
+    const id = contextMenuID()
+    if (props.contextMenuOpen(id)) props.onSetContextMenuOpen(id, false)
+  })
   return (
     <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
       <button
@@ -430,6 +434,10 @@ function HomeProjectRow(
   })
   let pointerDownSelected: boolean | undefined
   const contextMenuID = () => props.projectContextMenuID(props.server, props.project.worktree)
+  onCleanup(() => {
+    const id = contextMenuID()
+    if (props.contextMenuOpen(id)) props.onSetContextMenuOpen(id, false)
+  })
   return (
     <div
       ref={sortable.ref}
