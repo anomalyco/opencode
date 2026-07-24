@@ -1,6 +1,6 @@
 export * as SessionRunnerLLM from "./llm"
 
-import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent } from "@opencode-ai/ai"
+import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent, type ToolCall } from "@opencode-ai/ai"
 import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Semaphore, Stream } from "effect"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
@@ -203,8 +203,9 @@ const layer = Layer.effect(
         context: loaded,
         step: currentStep,
       })
-      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
-      const ownedToolFibers: Array<Fiber.Fiber<void, ToolOutputStore.Error>> = []
+      // Every local tool call forked here is owned until it reaches one durable settlement.
+      const toolRuns: Array<{ readonly call: ToolCall; readonly fiber: Fiber.Fiber<void, ToolOutputStore.Error> }> = []
+      const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
       let needsContinuation = false
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
@@ -277,8 +278,9 @@ const layer = Layer.effect(
             // continuation depends only on remaining Step allowance.
             if (!prepared.stepLimitReached) needsContinuation = true
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
-            ownedToolFibers.push(
-              yield* Effect.uninterruptibleMask((restore) =>
+            toolRuns.push({
+              call: event,
+              fiber: yield* Effect.uninterruptibleMask((restore) =>
                 restore(
                   prepared.executeTool({
                     sessionID: session.id,
@@ -290,8 +292,8 @@ const layer = Layer.effect(
                 ).pipe(
                   Effect.flatMap((execution) => serialized(publisher.toolExecution(event.id, event.name, execution))),
                 ),
-              ).pipe(FiberSet.run(toolFibers)),
-            )
+              ).pipe(Effect.forkScoped),
+            })
           }),
         ),
         Effect.ensuring(serialized(publisher.flush())),
@@ -339,13 +341,13 @@ const layer = Layer.effect(
           // Provider error events only arrive from the stream, so the flag is final here.
           const providerFailed = publisher.hasProviderError()
 
-          // Settle every owned tool fiber. FiberSet.join returns on the first failure, so retain
-          // the individual fibers and await all exits before publishing the terminal step event.
-          if (streamInterrupted) yield* FiberSet.clear(toolFibers)
+          // Settle every owned tool run: await all exits, not just the first failure,
+          // before publishing the terminal step event.
+          if (streamInterrupted) yield* interruptTools
           const settled = yield* restore(
-            Effect.forEach(ownedToolFibers, Fiber.await, { concurrency: "unbounded" }),
+            Effect.forEach(toolRuns, (run) => Fiber.await(run.fiber), { concurrency: "unbounded" }),
           ).pipe(Effect.exit)
-          if (settled._tag === "Failure") yield* FiberSet.clear(toolFibers)
+          if (settled._tag === "Failure") yield* interruptTools
           const tools = classifyToolExits(settled)
 
           if (tools.declined || streamInterrupted || tools.interrupted) {
