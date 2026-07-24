@@ -64,7 +64,7 @@ describe("MCP queries", () => {
 })
 
 describe("active session query", () => {
-  test("loads active sessions once per server cache", async () => {
+  test("loads active sessions immediately and once per server cache", async () => {
     let calls = 0
     const queryClient = new QueryClient()
     const options = loadActiveSessionsQuery(ServerScope.local, {
@@ -77,6 +77,7 @@ describe("active session query", () => {
     expect(await queryClient.fetchQuery(options)).toEqual({ ses_running: { type: "running" } })
     expect(await queryClient.fetchQuery(options)).toEqual({ ses_running: { type: "running" } })
     expect(calls).toBe(1)
+    expect(options.enabled).toBe(true)
     expect([...options.queryKey]).toEqual([ServerScope.local, "activeSessions"])
   })
 
