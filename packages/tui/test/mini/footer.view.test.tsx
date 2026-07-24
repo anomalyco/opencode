@@ -381,6 +381,83 @@ test("run entry content updates when live commit text changes", async () => {
   }
 })
 
+test("run entry content preserves monochrome markdown grammar", async () => {
+  const [commit, setCommit] = createSignal<StreamCommit>({
+    kind: "assistant",
+    text: "• literal\n\n———\n\narrow →",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+  const app = await testRender(
+    () => (
+      <box width={60} height={8}>
+        <RunEntryContent commit={commit()} theme={RUN_THEME_FALLBACK} opts={{ mono: true }} />
+      </box>
+    ),
+    { width: 60, height: 8 },
+  )
+
+  try {
+    await app.renderOnce()
+    const rows = app
+      .captureCharFrame()
+      .split("\n")
+      .map((row) => row.trimEnd())
+    expect(rows).toContain("* literal")
+    expect(rows).toContain("------")
+    expect(rows).toContain("arrow ->")
+    expect(rows.join("\n")).not.toMatch(/[^\x00-\x7f]/)
+
+    setCommit({ ...commit(), text: "- Café\n- arrow →\n- third …" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("- arrow ->")
+    expect(app.captureCharFrame()).toContain("- third ...")
+
+    setCommit({ ...commit(), text: "| A | B |\n| - | - |\n| Café | → |" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Caf?")
+    expect(app.captureCharFrame()).toContain("->")
+    setCommit({ ...commit(), text: "| A | B |\n| - | - |\n| Café | … |" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("...")
+
+    setCommit({ ...commit(), text: "```\nCafé → …\n```" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Caf? -> ...")
+    expect(app.captureCharFrame()).not.toMatch(/[^\x00-\x7f]/)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("run entry content eagerly renders final monochrome markdown", async () => {
+  const app = await testRender(
+    () => (
+      <box width={60} height={6}>
+        <RunEntryContent
+          commit={{ kind: "tool", text: "", phase: "final", source: "tool", tool: "subagent" }}
+          body={{ type: "markdown", content: "# Café →\n\n```markdown\nCafé →\n```" }}
+          theme={RUN_THEME_FALLBACK}
+          opts={{ mono: true }}
+        />
+      </box>
+    ),
+    { width: 60, height: 6 },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("# Caf? ->")
+    expect(frame).toContain("Caf? ->")
+    expect(frame).not.toMatch(/[^\x00-\x7f]/)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("direct command panel renders grouped actions without catalog commands", async () => {
   const [commands] = createSignal<RunCommand[] | undefined>([
     command({ name: "review", description: "Review code" }),

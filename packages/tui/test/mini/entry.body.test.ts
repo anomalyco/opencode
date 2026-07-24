@@ -231,29 +231,28 @@ describe("run entry body", () => {
   })
 
   test("promotes subagent results to markdown and falls back to structured summaries", () => {
-    expect(
-      entryBody(
-        toolCommit({
-          tool: "subagent",
-          state: {
-            status: "completed",
-            input: {
-              description: "Inspect reducer",
-              agent: "explore",
-            },
-            content: [{ type: "text", text: "# Findings\n\n- Footer stays live" }],
-            metadata: {
-              sessionID: "ses-child-1",
-              status: "completed",
-              output: "# Findings\n\n- Footer stays live",
-            },
-          },
-        }),
-      ),
-    ).toEqual({
+    const result = toolCommit({
+      tool: "subagent",
+      state: {
+        status: "completed",
+        input: {
+          description: "Inspect reducer",
+          agent: "explore",
+        },
+        content: [{ type: "text", text: "# Findings\n\n- Footer stays live" }],
+        metadata: {
+          sessionID: "ses-child-1",
+          status: "completed",
+          output: "# Findings\n\n- Footer stays live",
+        },
+      },
+    })
+    const markdown = {
       type: "markdown",
       content: "# Findings\n\n- Footer stays live",
-    })
+    } as const
+    expect(entryBody(result)).toEqual(markdown)
+    expect(entryBody(result, { mono: true })).toEqual(markdown)
 
     expect(
       structured(
