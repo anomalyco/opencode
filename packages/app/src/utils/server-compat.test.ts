@@ -69,18 +69,62 @@ describe("createCompatibleApi", () => {
     await api.session.prompt({
       sessionID: "ses_1",
       id: "msg_1",
-      text: "hello",
+      text: "hello @src/index.ts",
       agent: "build",
       model: { providerID: "provider", modelID: "model" },
+      files: [
+        { uri: "file:///repo/src/index.ts", name: "index.ts", mention: { text: "@src/index.ts", start: 6, end: 19 } },
+        { uri: "data:text/plain;base64,aGVsbG8=", name: "notes.txt" },
+      ],
     })
 
     expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/prompt_async")
-    expect(await requests[0]!.json()).toMatchObject({
+    const body = await requests[0]!.json()
+    expect(body).toMatchObject({
       messageID: "msg_1",
       agent: "build",
       model: { providerID: "provider", modelID: "model" },
-      parts: [{ type: "text", text: "hello" }],
+      parts: [
+        { type: "text", text: "hello @src/index.ts" },
+        {
+          type: "file",
+          mime: "text/plain",
+          url: "file:///repo/src/index.ts",
+          filename: "index.ts",
+          source: {
+            type: "file",
+            text: { value: "@src/index.ts", start: 6, end: 19 },
+            path: "file:///repo/src/index.ts",
+          },
+        },
+        {
+          type: "file",
+          mime: "text/plain",
+          url: "data:text/plain;base64,aGVsbG8=",
+          filename: "notes.txt",
+        },
+      ],
     })
+    expect(body.parts[2]).not.toHaveProperty("source")
+  })
+
+  test("preserves original parts for V1 optimistic reconciliation", async () => {
+    const { api, requests } = setup("v1")
+    await api.session.prompt({
+      sessionID: "ses_1",
+      id: "msg_1",
+      text: "look",
+      files: [{ uri: "data:image/png;base64,AAAA", name: "image.png" }],
+      legacyParts: [
+        { id: "prt_text", type: "text", text: "look" },
+        { id: "prt_image", type: "file", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "image.png" },
+      ],
+    })
+
+    expect((await requests[0]!.json()).parts).toEqual([
+      { id: "prt_text", type: "text", text: "look" },
+      { id: "prt_image", type: "file", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "image.png" },
+    ])
   })
 
   test("keeps V2 session actions on the current API", async () => {
@@ -122,5 +166,28 @@ describe("createCompatibleApi", () => {
     expect(await api.vcs.get({ location: { directory: "/repo" } })).toMatchObject({
       data: { branch: "feature", defaultBranch: "dev" },
     })
+  })
+
+  test("translates current file searches to the V1 dirs parameter", async () => {
+    const { api, requests } = setup("v1")
+    await api.file.find({ location: { directory: "/repo" }, query: "src", type: "file", limit: 20 })
+
+    const url = new URL(requests[0]!.url)
+    expect(url.pathname).toBe("/find/file")
+    expect(url.searchParams.get("dirs")).toBe("false")
+    expect(url.searchParams.get("limit")).toBe("20")
+  })
+
+  test("routes V1 permission replies through the requested directory", async () => {
+    const { api, requests } = setup("v1")
+    await api.permission.reply({
+      sessionID: "ses_1",
+      requestID: "permission_1",
+      reply: "once",
+      location: { directory: "/other" },
+    })
+
+    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/permissions/permission_1")
+    expect(new URL(requests[0]!.url).searchParams.get("directory")).toBe("/other")
   })
 })

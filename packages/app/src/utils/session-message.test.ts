@@ -15,13 +15,20 @@ describe("normalizeSessionMessages", () => {
       {
         id: "msg_3",
         type: "user",
-        text: "inspect this",
+        text: "inspect @src/client.ts",
         files: [
           {
             data: "aGVsbG8=",
             mime: "text/plain",
             name: "note.txt",
             source: { type: "inline" },
+          },
+          {
+            data: "ZXhwb3J0IHt9",
+            mime: "text/plain",
+            name: "client.ts",
+            source: { type: "inline" },
+            mention: { text: "@src/client.ts", start: 8, end: 22 },
           },
         ],
         agents: [{ name: "review", mention: { text: "@review", start: 0, end: 7 } }],
@@ -76,9 +83,18 @@ describe("normalizeSessionMessages", () => {
     expect(result.parts.get("msg_3")?.map((part) => part.id)).toEqual([
       "msg_3:text:0",
       "msg_3:file:0",
+      "msg_3:file:1",
       "msg_3:agent:0",
       "msg_5:compaction",
     ])
+    expect(result.parts.get("msg_3")?.[2]).toMatchObject({
+      type: "file",
+      source: {
+        type: "file",
+        path: "src/client.ts",
+        text: { value: "@src/client.ts", start: 8, end: 22 },
+      },
+    })
     expect(result.parts.get("msg_4")?.map((part) => part.id)).toEqual(["msg_4:reasoning:0", "msg_4:text:0", "call_1"])
     expect(result.parts.get("msg_4")?.[2]).toMatchObject({
       type: "tool",
