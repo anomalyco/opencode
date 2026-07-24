@@ -149,6 +149,33 @@ describe("plugin.codex", () => {
     await enabled.dispose?.()
   })
 
+  test("keeps the Codex chat.params override after the core output envelope is calculated", async () => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const output = {
+      temperature: 0,
+      topP: 1,
+      topK: 0,
+      maxOutputTokens: 131_072 as number | undefined,
+      options: {},
+    }
+
+    await hooks["chat.params"]!(
+      {
+        sessionID: "session",
+        agent: "build",
+        provider: {},
+        message: {},
+        model: {
+          providerID: "openai",
+          api: { id: "gpt-5.4-codex", npm: "@ai-sdk/openai" },
+        },
+      } as never,
+      output,
+    )
+
+    expect(output.maxOutputTokens).toBeUndefined()
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     let auth = {
       type: "oauth" as const,

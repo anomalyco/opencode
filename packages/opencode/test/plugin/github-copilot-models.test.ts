@@ -378,6 +378,109 @@ test("clears existing variants so refreshed models calculate provider-specific v
   expect(models["claude-opus-4.7"].variants).toBeUndefined()
 })
 
+test("builds legal numeric variants from Copilot thinking bounds", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      Response.json({
+        data: [
+          {
+            model_picker_enabled: true,
+            id: "claude-numeric",
+            name: "Claude Numeric",
+            version: "claude-numeric-2026-07-01",
+            supported_endpoints: ["/v1/messages"],
+            capabilities: {
+              family: "claude",
+              limits: {
+                max_context_window_tokens: 100000,
+                max_output_tokens: 64000,
+                max_prompt_tokens: 80000,
+              },
+              supports: {
+                max_thinking_budget: 10000,
+                min_thinking_budget: 7000,
+                streaming: true,
+                tool_calls: true,
+              },
+            },
+          },
+          {
+            model_picker_enabled: true,
+            id: "claude-contradictory",
+            name: "Claude Contradictory",
+            version: "claude-contradictory-2026-07-01",
+            supported_endpoints: ["/v1/messages"],
+            capabilities: {
+              family: "claude",
+              limits: {
+                max_context_window_tokens: 100000,
+                max_output_tokens: 64000,
+                max_prompt_tokens: 80000,
+              },
+              supports: {
+                max_thinking_budget: 5000,
+                min_thinking_budget: 5000,
+                streaming: true,
+                tool_calls: true,
+              },
+            },
+          },
+        ],
+      }),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = (await CopilotModels.get("https://api.githubcopilot.com")).models
+
+  expect(models["claude-numeric"].variants).toEqual({
+    max: { thinking: { type: "enabled", budgetTokens: 9_999 } },
+    high: { thinking: { type: "enabled", budgetTokens: 7_000 } },
+  })
+  expect(models["claude-contradictory"].variants).toBeUndefined()
+  expect(models["claude-numeric"].options).toEqual({})
+  expect(JSON.stringify(models["claude-numeric"])).not.toContain("min_thinking_budget")
+})
+
+test("Copilot chat params keeps non-GPT max output and removes it for GPT", async () => {
+  const hooks = await CopilotAuthPlugin({
+    client: {} as never,
+    project: {} as never,
+    directory: "",
+    worktree: "",
+    experimental_workspace: {
+      register() {},
+    },
+    serverUrl: new URL("https://example.com"),
+    $: {} as never,
+  })
+  const output = () => ({
+    temperature: 0,
+    topP: 1,
+    topK: 0,
+    maxOutputTokens: 131_072 as number | undefined,
+    options: {},
+  })
+  const incoming = (apiID: string) =>
+    ({
+      sessionID: "session",
+      agent: "build",
+      provider: {},
+      message: {},
+      model: {
+        providerID: "github-copilot",
+        api: { id: apiID, npm: "@ai-sdk/github-copilot" },
+      },
+    }) as never
+
+  const gpt = output()
+  await hooks["chat.params"]!(incoming("gpt-5.4"), gpt)
+  expect(gpt.maxOutputTokens).toBeUndefined()
+
+  const claude = output()
+  await hooks["chat.params"]!(incoming("claude-sonnet-4.6"), claude)
+  expect(claude.maxOutputTokens).toBe(131_072)
+})
+
 test("remaps fallback oauth model urls to the enterprise host", async () => {
   globalThis.fetch = mock(() => Promise.reject(new Error("timeout"))) as unknown as typeof fetch
 

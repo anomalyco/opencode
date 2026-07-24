@@ -4636,6 +4636,365 @@ describe("ProviderTransform.variants", () => {
   })
 })
 
+describe("ProviderTransform.maxOutputTokens", () => {
+  const model = (input: { output: number; reasoning: boolean }) =>
+    ({
+      limit: { output: input.output },
+      capabilities: { reasoning: input.reasoning },
+    }) as any
+
+  test("uses the declared output limit for reasoning models without an explicit override", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ output: 131_072, reasoning: true }))).toBe(131_072)
+  })
+
+  test("keeps the 32k default for non-reasoning models", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ output: 131_072, reasoning: false }))).toBe(32_000)
+  })
+
+  test("uses an explicit override as a cap for reasoning models", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ output: 131_072, reasoning: true }), 64_000)).toBe(64_000)
+  })
+
+  test("never exceeds the declared model output limit", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ output: 16_384, reasoning: true }), 64_000)).toBe(16_384)
+  })
+
+  test("uses a positive fallback when the model declares output zero", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ output: 0, reasoning: true }))).toBe(32_000)
+    expect(ProviderTransform.maxOutputTokens(model({ output: 0, reasoning: true }), 48_000)).toBe(48_000)
+  })
+
+  test("generates positive built-in Anthropic numeric variants when output is zero", () => {
+    const result = ProviderTransform.variants({
+      id: "anthropic/claude-4",
+      providerID: "anthropic",
+      api: { id: "claude-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+      capabilities: { reasoning: true },
+      limit: { output: 0 },
+    } as any)
+
+    expect(result.high.thinking.budgetTokens).toBeGreaterThan(0)
+    expect(result.max.thinking.budgetTokens).toBeGreaterThan(0)
+  })
+})
+
+describe("ProviderTransform.normalizeReasoningBudget", () => {
+  const model = (overrides: Record<string, unknown> = {}) =>
+    ({
+      id: "anthropic/claude-4",
+      providerID: "anthropic",
+      api: {
+        id: "claude-4",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+      name: "Claude 4",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 200_000, output: 131_072 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
+      ...overrides,
+    }) as any
+
+  const normalize = (mdl: any, variant: string | undefined, options: Record<string, any>, maxOutputTokens: number) =>
+    ProviderTransform.normalizeReasoningBudget({
+      model: mdl,
+      variant,
+      options,
+      maxOutputTokens,
+    })
+
+  for (const testCase of [
+    {
+      name: "Anthropic camelCase",
+      model: model(),
+      options: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+      read: (result: Record<string, any>) => result.thinking.budgetTokens,
+    },
+    {
+      name: "Anthropic snake_case",
+      model: model(),
+      options: { thinking: { type: "enabled", budget_tokens: 31_999 } },
+      read: (result: Record<string, any>) => result.thinking.budget_tokens,
+    },
+    {
+      name: "Bedrock Anthropic",
+      model: model({
+        providerID: "amazon-bedrock",
+        api: {
+          id: "anthropic.claude-4",
+          url: "https://bedrock.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+      }),
+      options: { reasoningConfig: { type: "enabled", budgetTokens: 31_999 } },
+      read: (result: Record<string, any>) => result.reasoningConfig.budgetTokens,
+    },
+    {
+      name: "SAP Anthropic",
+      model: model({
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-4",
+          url: "https://sap.example.com",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      }),
+      options: { modelParams: { thinking: { type: "enabled", budget_tokens: 31_999 } } },
+      read: (result: Record<string, any>) => result.modelParams.thinking.budget_tokens,
+    },
+  ]) {
+    test(`${testCase.name} max uses the configured output envelope`, () => {
+      const result = normalize(testCase.model, "max", testCase.options, 131_072)
+      expect(testCase.read(result)).toBe(117_964)
+    })
+  }
+
+  test("uses a 4096-token reserve for a 32768-token envelope", () => {
+    const result = normalize(
+      model({ limit: { context: 200_000, output: 32_768 } }),
+      "max",
+      { thinking: { type: "enabled", budgetTokens: 31_999 } },
+      32_768,
+    )
+    expect(result.thinking.budgetTokens).toBe(28_672)
+  })
+
+  test("clamps Gemini 2.5 max to its provider-specific cap", () => {
+    const pro = model({
+      id: "google/gemini-2.5-pro",
+      providerID: "google",
+      api: { id: "gemini-2.5-pro", url: "https://google.example.com", npm: "@ai-sdk/google" },
+      limit: { context: 200_000, output: 65_536 },
+    })
+    const flash = model({
+      id: "google/gemini-2.5-flash",
+      providerID: "google",
+      api: { id: "gemini-2.5-flash", url: "https://google.example.com", npm: "@ai-sdk/google" },
+      limit: { context: 200_000, output: 65_536 },
+    })
+
+    expect(
+      normalize(pro, "max", { thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 } }, 65_536)
+        .thinkingConfig.thinkingBudget,
+    ).toBe(32_768)
+    expect(
+      normalize(flash, "max", { thinkingConfig: { includeThoughts: true, thinkingBudget: 24_576 } }, 65_536)
+        .thinkingConfig.thinkingBudget,
+    ).toBe(24_576)
+  })
+
+  test("uses the model-specific Gemini 2.5 minimum when the headroom target is too small", () => {
+    const pro = model({
+      id: "google/gemini-2.5-pro",
+      providerID: "google",
+      api: { id: "gemini-2.5-pro", url: "https://google.example.com", npm: "@ai-sdk/google" },
+      limit: { context: 200_000, output: 200 },
+    })
+    const flashLite = model({
+      id: "google/gemini-2.5-flash-lite",
+      providerID: "google",
+      api: { id: "gemini-2.5-flash-lite", url: "https://google.example.com", npm: "@ai-sdk/google" },
+      limit: { context: 200_000, output: 600 },
+    })
+
+    expect(
+      normalize(pro, "max", { thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 } }, 200).thinkingConfig
+        .thinkingBudget,
+    ).toBe(128)
+    expect(
+      normalize(flashLite, "max", { thinkingConfig: { includeThoughts: true, thinkingBudget: 24_576 } }, 600)
+        .thinkingConfig.thinkingBudget,
+    ).toBe(512)
+    expect(() =>
+      normalize(pro, "max", { thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 } }, 128),
+    ).toThrow(/provider=google.*maxOutputTokens=128.*minimum=128/)
+  })
+
+  test("does not raise high or custom numeric budgets and only clamps them downward", () => {
+    expect(
+      normalize(model(), "high", { thinking: { type: "enabled", budgetTokens: 8_000 } }, 131_072).thinking.budgetTokens,
+    ).toBe(8_000)
+    expect(
+      normalize(model(), "custom", { thinking: { type: "enabled", budgetTokens: 125_000 } }, 131_072).thinking
+        .budgetTokens,
+    ).toBe(117_964)
+  })
+
+  test("rejects an existing Anthropic budget below the provider minimum", () => {
+    expect(() => normalize(model(), "custom", { thinking: { type: "enabled", budgetTokens: 512 } }, 131_072)).toThrow(
+      /provider=anthropic.*variant=custom.*minimum=1024/,
+    )
+  })
+
+  test("degrades the headroom target to the provider minimum when possible", () => {
+    const result = normalize(model(), "max", { thinking: { type: "enabled", budgetTokens: 31_999 } }, 4_000)
+    expect(result.thinking.budgetTokens).toBe(1_024)
+  })
+
+  test("fails locally when the output envelope cannot contain the provider minimum", () => {
+    expect(() => normalize(model(), "max", { thinking: { type: "enabled", budgetTokens: 31_999 } }, 1_024)).toThrow(
+      /provider=anthropic.*variant=max.*maxOutputTokens=1024.*minimum=1024/,
+    )
+  })
+
+  test("uses the Copilot encoded max as a trusted cap and rejects an unprovable downward adjustment", () => {
+    const copilot = model({
+      id: "github-copilot/claude-legacy",
+      providerID: "github-copilot",
+      api: {
+        id: "claude-legacy",
+        url: "https://api.githubcopilot.com/v1",
+        npm: "@ai-sdk/anthropic",
+      },
+      limit: { context: 100_000, output: 64_000 },
+      variants: {
+        high: { thinking: { type: "enabled", budgetTokens: 15_000 } },
+        max: { thinking: { type: "enabled", budgetTokens: 30_000 } },
+      },
+    })
+
+    expect(
+      normalize(copilot, "max", { thinking: { type: "enabled", budgetTokens: 30_000 } }, 64_000).thinking.budgetTokens,
+    ).toBe(30_000)
+    expect(() => normalize(copilot, "max", { thinking: { type: "enabled", budgetTokens: 30_000 } }, 32_000)).toThrow(
+      /provider=github-copilot.*variant=max.*maximum=30000/,
+    )
+  })
+
+  test("leaves effort, adaptive, and thinking-level controls unchanged", () => {
+    const options = {
+      reasoningEffort: "max",
+      reasoning: { effort: "high" },
+      thinking: { type: "adaptive", display: "summarized" },
+      thinkingConfig: { thinkingLevel: "high" },
+      reasoningConfig: { type: "adaptive", maxReasoningEffort: "high" },
+    }
+    const result = normalize(
+      model({
+        id: "zai/glm-5.2",
+        providerID: "zai",
+        api: { id: "glm-5.2", url: "https://z.ai", npm: "@ai-sdk/openai-compatible" },
+      }),
+      "max",
+      options,
+      131_072,
+    )
+
+    expect(result).toEqual(options)
+    expect(result).not.toBe(options)
+  })
+
+  test("is immutable and deterministic while preserving unknown fields", () => {
+    const mdl = model({
+      variants: {
+        max: {
+          thinking: { type: "enabled", budgetTokens: 31_999 },
+          providerPrivate: { keep: true },
+        },
+      },
+    })
+    const options = {
+      thinking: { type: "enabled", budgetTokens: 31_999 },
+      providerPrivate: { keep: true },
+    }
+    const beforeModel = structuredClone(mdl)
+    const beforeOptions = structuredClone(options)
+
+    const first = normalize(mdl, "max", options, 131_072)
+    const second = normalize(mdl, "max", options, 131_072)
+
+    expect(first).toEqual(second)
+    expect(first.providerPrivate).toEqual({ keep: true })
+    expect(first).not.toBe(options)
+    expect(options).toEqual(beforeOptions)
+    expect(mdl).toEqual(beforeModel)
+  })
+
+  test("subtracts numeric thinking for SDK transports that add it back to the wire maximum", () => {
+    const directOptions = normalize(model(), "max", { thinking: { type: "enabled", budgetTokens: 31_999 } }, 131_072)
+    expect(
+      ProviderTransform.transportMaxOutputTokens({
+        model: model(),
+        options: directOptions,
+        maxOutputTokens: 131_072,
+      }),
+    ).toBe(13_108)
+
+    const bedrock = model({
+      providerID: "amazon-bedrock",
+      api: {
+        id: "anthropic.claude-4",
+        url: "https://bedrock.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    })
+    const bedrockOptions = normalize(
+      bedrock,
+      "max",
+      { reasoningConfig: { type: "enabled", budgetTokens: 31_999 } },
+      131_072,
+    )
+    expect(
+      ProviderTransform.transportMaxOutputTokens({
+        model: bedrock,
+        options: bedrockOptions,
+        maxOutputTokens: 131_072,
+      }),
+    ).toBe(13_108)
+  })
+
+  test("accounts for the Anthropic SDK implicit 1024 budget without mutating options", () => {
+    const options = { thinking: { type: "enabled" } }
+    const normalized = normalize(model(), undefined, options, 32_000)
+
+    expect(normalized).toEqual(options)
+    expect(
+      ProviderTransform.transportMaxOutputTokens({
+        model: model(),
+        options: normalized,
+        maxOutputTokens: 32_000,
+      }),
+    ).toBe(30_976)
+    expect(() => normalize(model(), undefined, options, 1_024)).toThrow(
+      /provider=anthropic.*maxOutputTokens=1024.*minimum=1024/,
+    )
+  })
+
+  test("does not subtract numeric thinking for transports that already treat max output as the total envelope", () => {
+    const google = model({
+      id: "google/gemini-2.5-pro",
+      providerID: "google",
+      api: { id: "gemini-2.5-pro", url: "https://google.example.com", npm: "@ai-sdk/google" },
+    })
+    const options = normalize(
+      google,
+      "max",
+      { thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 } },
+      65_536,
+    )
+
+    expect(
+      ProviderTransform.transportMaxOutputTokens({
+        model: google,
+        options,
+        maxOutputTokens: 65_536,
+      }),
+    ).toBe(65_536)
+  })
+})
+
 describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
   const createModel = (apiId: string) => {
     const model = {

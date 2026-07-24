@@ -178,19 +178,23 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
           effort,
         }
       })
-    } else if (remote.capabilities.supports.max_thinking_budget) {
-      const max = remote.capabilities.supports.max_thinking_budget
-      variants["max"] = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: max - 1,
-        },
-      }
-      variants["high"] = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: Math.floor(max / 2),
-        },
+    } else if (remote.capabilities.supports.max_thinking_budget !== undefined) {
+      const remoteMaximum = remote.capabilities.supports.max_thinking_budget
+      const discoveredCap = Math.floor(remoteMaximum) - 1
+      const discoveredMin = Math.max(1, Math.ceil(remote.capabilities.supports.min_thinking_budget ?? 1))
+      if (discoveredCap >= discoveredMin) {
+        variants["max"] = {
+          thinking: {
+            type: "enabled",
+            budgetTokens: discoveredCap,
+          },
+        }
+        variants["high"] = {
+          thinking: {
+            type: "enabled",
+            budgetTokens: Math.min(discoveredCap, Math.max(discoveredMin, Math.floor(remoteMaximum / 2))),
+          },
+        }
       }
     }
   }

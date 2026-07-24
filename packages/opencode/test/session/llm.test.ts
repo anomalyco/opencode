@@ -9,6 +9,7 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import z from "zod"
 import { LLM } from "../../src/session/llm"
+import { LLMRequestPrep } from "../../src/session/llm/request"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -27,6 +28,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { ProviderTest } from "../fake/provider"
 
 type ConfigModel = NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 
@@ -552,6 +554,165 @@ describe("session.llm.ai-sdk adapter", () => {
     expect(events[1]).toMatchObject({ type: "step-finish", providerMetadata: { anthropic: {} } })
     if (events[1].type !== "step-finish") throw new Error("expected step-finish")
     expect(events[1].providerMetadata?.copilot).toBeUndefined()
+  })
+})
+
+describe("session.llm.request reasoning envelope", () => {
+  const anthropic = (output = 131_072) =>
+    ProviderTest.model({
+      id: ModelV2.ID.make("claude-4"),
+      providerID: ProviderV2.ID.make("anthropic"),
+      api: {
+        id: "claude-4",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+      capabilities: {
+        ...ProviderTest.model().capabilities,
+        reasoning: true,
+      },
+      limit: { context: 200_000, output },
+      variants: {
+        high: { thinking: { type: "enabled", budgetTokens: 8_000 } },
+        max: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+      },
+    })
+
+  function input(options?: {
+    model?: Provider.Model
+    small?: boolean
+    outputTokenMax?: number
+    trigger?: (name: string, output: Record<string, any>) => Effect.Effect<Record<string, any>>
+  }) {
+    const model = options?.model ?? anthropic()
+    const sessionID = SessionID.make("session-request-envelope")
+    return {
+      user: {
+        id: MessageID.make("msg_request-envelope"),
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: {
+          providerID: model.providerID,
+          modelID: model.id,
+          variant: "max",
+        },
+      } satisfies SessionV1.User,
+      sessionID,
+      model,
+      agent: {
+        name: "build",
+        mode: "primary",
+        options: {},
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      } satisfies Agent.Info,
+      system: [],
+      messages: [{ role: "user", content: "Hello" }] satisfies ModelMessage[],
+      small: options?.small,
+      tools: {},
+      provider: ProviderTest.info({ id: model.providerID }, model),
+      auth: undefined,
+      plugin: {
+        trigger: (name: string, _hookInput: unknown, output: Record<string, any>) =>
+          options?.trigger?.(name, output) ?? Effect.succeed(output),
+        list: () => Effect.succeed([]),
+        init: () => Effect.void,
+      } as never,
+      flags: {
+        client: "test",
+        outputTokenMax: options?.outputTokenMax,
+      } as RuntimeFlags.Info,
+      isWorkflow: false,
+    }
+  }
+
+  test("keeps Anthropic's SDK input plus numeric max inside one core envelope", async () => {
+    const result = await Effect.runPromise(LLMRequestPrep.prepare(input()))
+
+    expect(result.params.maxOutputTokens).toBe(13_108)
+    expect(result.params.options.thinking.budgetTokens).toBe(117_964)
+    expect((result.params.maxOutputTokens ?? 0) + result.params.options.thinking.budgetTokens).toBe(131_072)
+  })
+
+  test("applies the explicit runtime cap to Anthropic's SDK input and numeric max together", async () => {
+    const result = await Effect.runPromise(LLMRequestPrep.prepare(input({ outputTokenMax: 32_000 })))
+
+    expect(result.params.maxOutputTokens).toBe(4_096)
+    expect(result.params.options.thinking.budgetTokens).toBe(27_904)
+    expect((result.params.maxOutputTokens ?? 0) + result.params.options.thinking.budgetTokens).toBe(32_000)
+  })
+
+  test("keeps effort-only reasoning controls unchanged", async () => {
+    const model = ProviderTest.model({
+      id: ModelV2.ID.make("glm-5.2"),
+      providerID: ProviderV2.ID.make("custom-glm"),
+      api: { id: "glm-5.2", url: "https://z.ai", npm: "@ai-sdk/openai-compatible" },
+      capabilities: {
+        ...ProviderTest.model().capabilities,
+        reasoning: true,
+      },
+      limit: { context: 200_000, output: 131_072 },
+      variants: {
+        max: { reasoningEffort: "max" },
+      },
+    })
+
+    const result = await Effect.runPromise(LLMRequestPrep.prepare(input({ model })))
+
+    expect(result.params.maxOutputTokens).toBe(131_072)
+    expect(result.params.options.reasoningEffort).toBe("max")
+    expect(result.params.options.thinking).toBeUndefined()
+  })
+
+  test("keeps small-request options without activating the user's numeric max variant", async () => {
+    const result = await Effect.runPromise(LLMRequestPrep.prepare(input({ small: true })))
+
+    expect(result.params.options.thinking.budgetTokens).toBe(8_000)
+    expect(result.params.options.thinking.budgetTokens).not.toBe(117_964)
+  })
+
+  test("passes normalized values to chat.params while preserving its final override", async () => {
+    let seen: Record<string, any> | undefined
+    const result = await Effect.runPromise(
+      LLMRequestPrep.prepare(
+        input({
+          trigger: (name, output) => {
+            if (name !== "chat.params") return Effect.succeed(output)
+            seen = structuredClone(output)
+            return Effect.succeed({
+              ...output,
+              maxOutputTokens: 20_000,
+              options: { thinking: { type: "enabled", budgetTokens: 10_000 } },
+            })
+          },
+        }),
+      ),
+    )
+
+    expect(seen?.maxOutputTokens).toBe(13_108)
+    expect(seen?.options.thinking.budgetTokens).toBe(117_964)
+    expect(result.params.maxOutputTokens).toBe(20_000)
+    expect(result.params.options.thinking.budgetTokens).toBe(10_000)
+  })
+
+  test("fails before chat.params when the numeric provider minimum cannot fit", async () => {
+    let chatParamsCalls = 0
+    const exit = await Effect.runPromiseExit(
+      LLMRequestPrep.prepare(
+        input({
+          model: anthropic(1_024),
+          trigger: (name, output) => {
+            if (name === "chat.params") chatParamsCalls += 1
+            return Effect.succeed(output)
+          },
+        }),
+      ),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(String(Cause.squash(exit.cause))).toContain("maxOutputTokens=1024")
+    expect(chatParamsCalls).toBe(0)
   })
 })
 
@@ -1598,6 +1759,114 @@ describe("session.llm.stream", () => {
         expect(capture.url.pathname.endsWith("/responses")).toBe(true)
       }),
     { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
+  )
+
+  const reasoningAnthropic = { providerID: "reasoning-anthropic", modelID: "claude-4" }
+  it.instance(
+    "sends the reasoning model output envelope and normalized numeric max on the wire",
+    () =>
+      Effect.gen(function* () {
+        const chunks = [
+          {
+            type: "message_start",
+            message: {
+              id: "msg-reasoning-envelope",
+              model: reasoningAnthropic.modelID,
+              usage: {
+                input_tokens: 3,
+                cache_creation_input_tokens: null,
+                cache_read_input_tokens: null,
+              },
+            },
+          },
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "Hello" },
+          },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+            usage: {
+              input_tokens: 3,
+              output_tokens: 2,
+              cache_creation_input_tokens: null,
+              cache_read_input_tokens: null,
+            },
+          },
+          { type: "message_stop" },
+        ]
+        const request = waitRequest("/messages", createEventResponse(chunks))
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(reasoningAnthropic.providerID),
+          ModelV2.ID.make(reasoningAnthropic.modelID),
+        )
+        const sessionID = SessionID.make("session-reasoning-envelope-wire")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-reasoning-envelope-wire"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: {
+              providerID: resolved.providerID,
+              modelID: resolved.id,
+              variant: "max",
+            },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const thinking = capture.body.thinking as { type?: string; budget_tokens?: number } | undefined
+
+        expect(capture.body.max_tokens).toBe(131_072)
+        expect(thinking).toEqual({ type: "enabled", budget_tokens: 117_964 })
+      }),
+    {
+      config: () => ({
+        enabled_providers: [reasoningAnthropic.providerID],
+        provider: {
+          [reasoningAnthropic.providerID]: {
+            name: "Reasoning Anthropic",
+            npm: "@ai-sdk/anthropic",
+            api: `${state.server!.url.origin}/v1`,
+            env: [],
+            models: {
+              [reasoningAnthropic.modelID]: {
+                name: "Claude 4",
+                reasoning: true,
+                tool_call: true,
+                limit: { context: 200_000, output: 131_072 },
+              },
+            },
+            options: {
+              apiKey: "test-anthropic-key",
+              baseURL: `${state.server!.url.origin}/v1`,
+            },
+          },
+        },
+      }),
+    },
   )
 
   const minimaxFixture = { providerID: "minimax", modelID: "MiniMax-M2.5" }

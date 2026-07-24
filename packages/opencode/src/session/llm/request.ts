@@ -77,10 +77,8 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system.push(header, rest.join("\n"))
   }
 
-  const variant =
-    !input.small && input.model.variants && input.user.model.variant
-      ? input.model.variants[input.user.model.variant]
-      : {}
+  const activeVariant = input.small ? undefined : input.user.model.variant
+  const variant = activeVariant && input.model.variants ? input.model.variants[activeVariant] : {}
   const base = input.small
     ? ProviderTransform.smallOptions(input.model)
     : ProviderTransform.options({
@@ -88,15 +86,37 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         sessionID: input.sessionID,
         providerOptions: input.provider.options,
       })
-  const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
+  const mergedOptions = mergeOptions(
+    mergeOptions(mergeOptions(base, input.model.options), input.agent.options),
+    variant,
+  )
   if (
     input.model.api.npm === "@ai-sdk/azure" &&
-    (input.provider.options.useCompletionUrls || input.model.options.useCompletionUrls || options.useCompletionUrls)
+    (input.provider.options.useCompletionUrls ||
+      input.model.options.useCompletionUrls ||
+      mergedOptions.useCompletionUrls)
   ) {
-    delete options.reasoningSummary
-    delete options.include
+    delete mergedOptions.reasoningSummary
+    delete mergedOptions.include
   }
-  if (isOpenaiOauth) options.instructions = system.join("\n")
+  if (isOpenaiOauth) mergedOptions.instructions = system.join("\n")
+
+  const coreMaxOutputTokens = ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax)
+  const options = yield* Effect.try({
+    try: () =>
+      ProviderTransform.normalizeReasoningBudget({
+        model: input.model,
+        variant: activeVariant,
+        options: mergedOptions,
+        maxOutputTokens: coreMaxOutputTokens,
+      }),
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+  const maxOutputTokens = ProviderTransform.transportMaxOutputTokens({
+    model: input.model,
+    options,
+    maxOutputTokens: coreMaxOutputTokens,
+  })
 
   const messages =
     isOpenaiOauth || input.isWorkflow
@@ -126,7 +146,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         : undefined,
       topP: input.agent.topP ?? ProviderTransform.topP(input.model),
       topK: ProviderTransform.topK(input.model),
-      maxOutputTokens: ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax),
+      maxOutputTokens,
       options,
     },
   )

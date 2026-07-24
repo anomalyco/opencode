@@ -23,6 +23,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderTest } from "../fake/provider"
 
 const originalEnv = new Map<string, string | undefined>()
 
@@ -86,6 +87,56 @@ const languageBaseURL = (language: unknown) => (language as { config: { baseURL:
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Provider.node, Env.node, Plugin.node])))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
+const copilotModel = () =>
+  ProviderTest.model({
+    id: ModelV2.ID.make("claude-numeric"),
+    providerID: ProviderV2.ID.make("github-copilot"),
+    api: {
+      id: "claude-numeric",
+      url: "https://api.githubcopilot.com/v1",
+      npm: "@ai-sdk/anthropic",
+    },
+    capabilities: {
+      ...ProviderTest.model().capabilities,
+      reasoning: true,
+    },
+    limit: { context: 100_000, input: 80_000, output: 64_000 },
+    variants: {
+      high: { thinking: { type: "enabled", budgetTokens: 15_000 } },
+      max: { thinking: { type: "enabled", budgetTokens: 30_000 } },
+    },
+  })
+const copilotPlugin = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    trigger: (_name, _input, output) => Effect.succeed(output),
+    init: () => Effect.void,
+    list: () =>
+      Effect.succeed([
+        {
+          provider: {
+            id: "github-copilot",
+            models: async () => ({ "claude-numeric": copilotModel() }),
+          },
+        } as never,
+      ]),
+  }),
+)
+const copilot = testEffect(
+  LayerNode.compile(
+    LayerNode.group([
+      Provider.node,
+      FSUtil.node,
+      Env.node,
+      Config.node,
+      Auth.node,
+      Plugin.node,
+      ModelsDev.node,
+      RuntimeFlags.node,
+    ]),
+    [[Plugin.node, copilotPlugin]],
+  ),
+)
 
 const alphaProviderConfig = {
   provider: {
@@ -1462,6 +1513,37 @@ it.instance("model variants are generated for reasoning models", () =>
     expect(model.variants).toBeDefined()
     expect(Object.keys(model.variants!).length).toBeGreaterThan(0)
   }),
+)
+
+copilot.instance(
+  "Copilot config variants preserve the discovered max cap",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("github-copilot")].models["claude-numeric"]
+
+    expect(model.variants?.max.thinking.budgetTokens).toBe(30_000)
+    expect(model.variants?.high.thinking.budgetTokens).toBe(30_000)
+    expect(model.variants?.custom.thinking.budgetTokens).toBe(30_000)
+    expect(model.variants?.fixed.thinking.budgetTokens).toBe(8_000)
+  }),
+  {
+    config: {
+      provider: {
+        "github-copilot": {
+          models: {
+            "claude-numeric": {
+              variants: {
+                max: { disabled: true, thinking: { type: "enabled", budgetTokens: 60_000 } },
+                high: { thinking: { type: "enabled", budgetTokens: 50_000 } },
+                custom: { thinking: { type: "enabled", budgetTokens: 45_000 } },
+                fixed: { thinking: { type: "enabled", budgetTokens: 8_000 } },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 )
 
 it.instance(

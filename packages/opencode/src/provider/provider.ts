@@ -1043,6 +1043,37 @@ export const Model = Schema.Struct({
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
+function mergeModelVariants(
+  providerID: ProviderV2.ID,
+  base: NonNullable<Model["variants"]>,
+  configured: Record<string, Record<string, any>> | undefined,
+): NonNullable<Model["variants"]> {
+  const discoveredCap =
+    providerID === ProviderV2.ID.githubCopilot && typeof base.max?.thinking?.budgetTokens === "number"
+      ? base.max.thinking.budgetTokens
+      : undefined
+  const merged = mergeDeep(base, configured ?? {})
+  const result = mapValues(
+    pickBy(merged, (variant) => !variant.disabled),
+    (variant) => omit(variant, ["disabled"]),
+  ) as NonNullable<Model["variants"]>
+
+  if (discoveredCap === undefined) return result
+
+  if (!result.max) result.max = omit(base.max, ["disabled"])
+  for (const [name, variant] of Object.entries(result)) {
+    const budget = variant.thinking?.budgetTokens
+    if (typeof budget !== "number") continue
+    const normalized = name === "max" ? discoveredCap : Math.min(budget, discoveredCap)
+    result[name] = mergeDeep(variant, {
+      thinking: {
+        budgetTokens: normalized,
+      },
+    })
+  }
+  return result
+}
+
 export const Info = Schema.Struct({
   id: ProviderV2.ID,
   name: Schema.String,
@@ -1492,11 +1523,11 @@ const layer = Layer.effect(
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
             }
-            const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
-            parsedModel.variants = mapValues(
-              pickBy(merged, (v) => !v.disabled),
-              (v) => omit(v, ["disabled"]),
-            )
+            const catalogVariants =
+              providerID === ProviderV2.ID.githubCopilot && existingModel?.variants
+                ? existingModel.variants
+                : ProviderTransform.variants(parsedModel)
+            parsedModel.variants = mergeModelVariants(ProviderV2.ID.make(providerID), catalogVariants, model.variants)
             parsed.models[modelID] = parsedModel
           }
           database[providerID] = parsed
@@ -1626,11 +1657,7 @@ const layer = Layer.effect(
 
             const configVariants = configProvider?.models?.[modelID]?.variants
             if (configVariants && model.variants) {
-              const merged = mergeDeep(model.variants, configVariants)
-              model.variants = mapValues(
-                pickBy(merged, (v) => !v.disabled),
-                (v) => omit(v, ["disabled"]),
-              )
+              model.variants = mergeModelVariants(providerID, model.variants, configVariants)
             }
           }
 

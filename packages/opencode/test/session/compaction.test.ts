@@ -9,6 +9,7 @@ import * as Stream from "effect/Stream"
 import { Config } from "@/config/config"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
+import { usable } from "../../src/session/overflow"
 import { Token } from "@/util/token"
 import { Plugin } from "../../src/plugin"
 import { provideTmpdirInstance, TestInstance } from "../fixture/fixture"
@@ -364,6 +365,31 @@ function autocontinue(enabled: boolean) {
     init: () => Effect.void,
   })
 }
+
+describe("session.compaction.usable", () => {
+  const config: ConfigV1.Info = {}
+
+  test("reserves the full core output envelope when the model has no input limit", () => {
+    const model = createModel({ context: 400_000, output: 128_000 })
+    model.capabilities.reasoning = true
+
+    expect(usable({ cfg: config, model })).toBe(272_000)
+  })
+
+  test("keeps the 20k reservation ceiling when the model has an input limit", () => {
+    const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
+    model.capabilities.reasoning = true
+
+    expect(usable({ cfg: config, model })).toBe(252_000)
+  })
+
+  test("uses the explicit output cap in the no-input-limit reservation", () => {
+    const model = createModel({ context: 400_000, output: 128_000 })
+    model.capabilities.reasoning = true
+
+    expect(usable({ cfg: config, model, outputTokenMax: 64_000 })).toBe(336_000)
+  })
+})
 
 describe("session.compaction.isOverflow", () => {
   it.live(
