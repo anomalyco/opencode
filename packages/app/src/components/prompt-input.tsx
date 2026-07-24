@@ -540,7 +540,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const [composing, setComposing] = createSignal(false)
-  const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
+  let lastCompositionEnd = 0
+  // Safari fires compositionend BEFORE the confirming Enter keydown, so that
+  // event reports isComposing=false and keyCode=13. Treat any key event within
+  // 100ms of compositionend as part of the IME confirmation.
+  const isImeComposing = (event: KeyboardEvent) =>
+    event.isComposing || composing() || event.keyCode === 229 || event.timeStamp - lastCompositionEnd < 100
 
   const handleBlur = () => {
     const cursor = currentCursor()
@@ -554,8 +559,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setComposing(true)
   }
 
-  const handleCompositionEnd = () => {
+  const handleCompositionEnd = (event: CompositionEvent) => {
     setComposing(false)
+    lastCompositionEnd = event.timeStamp
+    // Input events are ignored while composing, so sync DOM -> state once now.
+    handleInput()
     requestAnimationFrame(() => {
       if (composing()) return
       reconcile(prompt.current().filter((part) => part.type !== "image"))
@@ -865,7 +873,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     on(
       () => prompt.current(),
       (parts) => {
-        if (composing()) return
+        // The time window also covers the gap between compositionend and the
+        // next compositionstart when Japanese IMEs confirm segment by segment;
+        // a DOM rewrite landing there aborts the rest of the composition.
+        if (composing() || performance.now() - lastCompositionEnd < 100) return
         reconcile(parts.filter((part) => part.type !== "image"))
       },
     ),
@@ -970,7 +981,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return parts
   }
 
-  const handleInput = () => {
+  const handleInput = (event?: InputEvent) => {
+    // During IME composition, never sync DOM -> state -> DOM: any programmatic
+    // DOM/selection mutation makes Safari abort the composition mid-way. Check
+    // the event too because Safari fires the first input event BEFORE
+    // compositionstart, when composing() is still false.
+    if (composing() || event?.isComposing || event?.inputType === "insertCompositionText") return
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
