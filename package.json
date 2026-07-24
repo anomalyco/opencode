@@ -149,7 +149,7 @@
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@ai-sdk/xai@3.0.102": "patches/@ai-sdk%2Fxai@3.0.102.patch",
-    "@ai-sdk/mistral@3.0.34": "patches/@ai-sdk%2Fmistral@3.0.34.patch",
+    "@ai-sdk/mistral@3.0.51": "patches/@ai-sdk%2Fmistral@3.0.51.patch",
     "gcp-metadata@8.1.2": "patches/gcp-metadata@8.1.2.patch",
     "pacote@21.5.0": "patches/pacote@21.5.0.patch",
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",

@@ -36,6 +36,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { toaster } from "@opencode-ai/ui/toast"
 import { setV2Toast, showToast, ToastRegion } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
+import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import { clearWorkspaceTerminals } from "@/context/terminal"
 import { pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import { useNotification } from "@/context/notification"
@@ -48,6 +49,7 @@ import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
+import { listAllSessions } from "@/utils/session"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
@@ -875,11 +877,7 @@ export default function LegacyLayout(props: ParentProps) {
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
-    await serverSDK().client.session.update({
-      directory: session.directory,
-      sessionID: session.id,
-      time: { archived: Date.now() },
-    })
+    await serverSDK().api.session.archive({ sessionID: session.id, directory: session.directory })
     setStore(
       produce((draft) => {
         const match = Binary.search(draft.session, session.id, (s) => s.id)
@@ -1185,9 +1183,12 @@ export default function LegacyLayout(props: ParentProps) {
     }
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
-      const listed = await serverSDK()
-        .client.worktree.list({ directory: root })
-        .then((x) => x.data ?? [])
+      const listed = await Promise.resolve(
+        project?.id ?? serverSDK().api.project.current({ location: { directory: root } }),
+      )
+        .then((value) => (typeof value === "string" ? value : value.id))
+        .then((projectID) => serverSDK().api.project.directories({ projectID, location: { directory: root } }))
+        .then((items) => items.map((item) => item.directory).filter((item) => pathKey(item) !== pathKey(root)))
         .catch(() => [] as string[])
       dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
       return canOpen(target)
@@ -1231,10 +1232,11 @@ export default function LegacyLayout(props: ParentProps) {
       await Promise.all(
         dirs.map(async (item) => ({
           path: { directory: item },
-          session: await serverSDK()
-            .client.session.list({ directory: item })
-            .then((x) => x.data ?? [])
-            .catch(() => []),
+          session: await listAllSessions(serverSDK().api.session, {
+            directory: item,
+            parentID: null,
+            order: "desc",
+          }).catch(() => []),
         })),
       ),
       Date.now(),
@@ -1294,7 +1296,10 @@ export default function LegacyLayout(props: ParentProps) {
     const name = next === getFilename(project.worktree) ? "" : next
 
     if (project.id && project.id !== "global") {
-      await serverSDK().client.project.update({ projectID: project.id, directory: project.worktree, name })
+      const result = await serverSDK().api.project.update({ projectID: project.id, name })
+      serverSync().set("project", (items) =>
+        items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
+      )
       return
     }
 
@@ -1445,10 +1450,7 @@ export default function LegacyLayout(props: ParentProps) {
     })
     const dismiss = () => toaster.dismiss(progress)
 
-    const sessions: Session[] = await serverSDK()
-      .client.session.list({ directory })
-      .then((x) => x.data ?? [])
-      .catch(() => [])
+    const sessions = await listAllSessions(serverSDK().api.session, { directory, order: "desc" }).catch(() => [])
 
     clearWorkspaceTerminals(
       directory,
@@ -1477,17 +1479,12 @@ export default function LegacyLayout(props: ParentProps) {
       return
     }
 
-    const archivedAt = Date.now()
     await Promise.all(
       sessions
         .filter((session) => session.time.archived === undefined)
         .map((session) =>
           serverSDK()
-            .client.session.update({
-              sessionID: session.id,
-              directory: session.directory,
-              time: { archived: archivedAt },
-            })
+            .api.session.archive({ sessionID: session.id, directory: session.directory })
             .catch(() => undefined),
         ),
     )
@@ -1524,9 +1521,9 @@ export default function LegacyLayout(props: ParentProps) {
 
     onMount(() => {
       serverSDK()
-        .client.vcs.status({ directory: props.directory })
-        .then((x) => {
-          const files = x.data ?? []
+        .api.vcs.status({ location: { directory: props.directory } })
+        .then((result) => {
+          const files = result.data
           const dirty = files.length > 0
           setData({ status: "ready", dirty })
         })
@@ -1582,19 +1579,19 @@ export default function LegacyLayout(props: ParentProps) {
     })
 
     const refresh = async () => {
-      const sessions = await serverSDK()
-        .client.session.list({ directory: props.directory })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
+      const sessions = await listAllSessions(serverSDK().api.session, {
+        directory: props.directory,
+        order: "desc",
+      }).catch(() => [])
       const active = sessions.filter((session) => session.time.archived === undefined)
       setState({ sessions: active })
     }
 
     onMount(() => {
       serverSDK()
-        .client.vcs.status({ directory: props.directory })
-        .then((x) => {
-          const files = x.data ?? []
+        .api.vcs.status({ location: { directory: props.directory } })
+        .then((result) => {
+          const files = result.data
           const dirty = files.length > 0
           setState({ status: "ready", dirty })
           void refresh()

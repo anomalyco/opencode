@@ -153,7 +153,7 @@ describe("OpenAI Responses route", () => {
             { type: "input_text", text: "<system-update>\nTreat &lt;/system-update&gt; literally.\n</system-update>" },
           ],
         },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { role: "assistant", content: "After." },
       ])
     }),
   )
@@ -529,11 +529,11 @@ describe("OpenAI Responses route", () => {
             encrypted_content: "encrypted-continuation-state",
             summary: [{ type: "summary_text", text: "I inspected the previous turn." }],
           },
-          { role: "assistant", content: [{ type: "output_text", text: "It shows a small test image." }] },
+          { role: "assistant", content: "It shows a small test image." },
           { role: "user", content: [{ type: "input_text", text: "Check the weather in Paris before continuing." }] },
           { type: "function_call", call_id: "call_weather_1", name: "get_weather", arguments: '{"city":"Paris"}' },
           { type: "function_call_output", call_id: "call_weather_1", output: '{"temperature":22}' },
-          { role: "assistant", content: [{ type: "output_text", text: "Paris is 22 degrees." }] },
+          { role: "assistant", content: "Paris is 22 degrees." },
           {
             role: "user",
             content: [{ type: "input_text", text: "Continue from this conversation in one short sentence." }],
@@ -754,6 +754,395 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves streamed assistant message phases", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_commentary", phase: "commentary" },
+              },
+              { type: "response.output_text.delta", item_id: "msg_commentary", delta: "Checking first." },
+              { type: "response.output_text.done", item_id: "msg_commentary" },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_commentary", phase: "commentary" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_final", phase: "final_answer" },
+              },
+              { type: "response.output_text.delta", item_id: "msg_final", delta: "Finished." },
+              { type: "response.output_text.done", item_id: "msg_final" },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_final", phase: "final_answer" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
+        {
+          type: "text-start",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "msg_commentary", text: "Checking first." },
+        {
+          type: "text-end",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "msg_final",
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+        },
+        { type: "text-delta", id: "msg_final", text: "Finished." },
+        {
+          type: "text-end",
+          id: "msg_final",
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+        },
+      ])
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "Checking first.",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Finished.",
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves phased message and content boundaries", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_commentary", phase: "commentary" },
+              },
+              {
+                type: "response.output_text.delta",
+                item_id: "msg_commentary",
+                content_index: 0,
+                delta: "First.",
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_commentary" },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_commentary",
+                content_index: 0,
+                text: "First.",
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_commentary",
+                content_index: 1,
+                text: "Second.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_commentary" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_commentary_2", phase: "commentary" },
+              },
+              {
+                type: "response.output_text.delta",
+                item_id: "msg_commentary_2",
+                content_index: 0,
+                delta: "Thi",
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_commentary_2",
+                content_index: 0,
+                text: "Third.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_commentary_2", phase: "commentary" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "openai-text-0" },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "openai-text-0",
+                content_index: 0,
+                text: "Final.",
+              },
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "message",
+                  id: "openai-text-0",
+                  phase: "final_answer",
+                  content: [
+                    {
+                      type: "output_text",
+                      text: "Final.",
+                      annotations: [
+                        {
+                          type: "url_citation",
+                          url: "https://example.com",
+                          title: "Example",
+                          start_index: 0,
+                          end_index: 6,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_null", phase: null },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_null",
+                content_index: 0,
+                text: "Nullable.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_null", phase: null },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_unphased" },
+              },
+              {
+                type: "response.output_text.done",
+                item_id: "msg_unphased",
+                content_index: 0,
+                text: "Unphased.",
+              },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_unphased" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "First.",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Second.",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Third.",
+          providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Final.",
+          providerMetadata: {
+            openai: {
+              itemId: "openai-text-0",
+              phase: "final_answer",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://example.com",
+                  title: "Example",
+                  start_index: 0,
+                  end_index: 6,
+                },
+              ],
+            },
+          },
+        },
+        {
+          type: "text",
+          text: "Nullable.",
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
+        },
+        {
+          type: "text",
+          text: "Unphased.",
+          providerMetadata: { openai: { itemId: "msg_unphased" } },
+        },
+      ])
+
+      expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
+        {
+          type: "text-start",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "msg_commentary", text: "First." },
+        {
+          type: "text-end",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "openai-text-0",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "openai-text-0", text: "Second." },
+        {
+          type: "text-end",
+          id: "openai-text-0",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "msg_commentary_2",
+          providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "msg_commentary_2", text: "Thi" },
+        { type: "text-delta", id: "msg_commentary_2", text: "rd." },
+        {
+          type: "text-end",
+          id: "msg_commentary_2",
+          providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "openai-text-1",
+          providerMetadata: { openai: { itemId: "openai-text-0" } },
+        },
+        { type: "text-delta", id: "openai-text-1", text: "Final." },
+        {
+          type: "text-end",
+          id: "openai-text-1",
+          providerMetadata: {
+            openai: {
+              itemId: "openai-text-0",
+              phase: "final_answer",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://example.com",
+                  title: "Example",
+                  start_index: 0,
+                  end_index: 6,
+                },
+              ],
+            },
+          },
+        },
+        {
+          type: "text-start",
+          id: "msg_null",
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
+        },
+        { type: "text-delta", id: "msg_null", text: "Nullable." },
+        {
+          type: "text-end",
+          id: "msg_null",
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
+        },
+        {
+          type: "text-start",
+          id: "msg_unphased",
+          providerMetadata: { openai: { itemId: "msg_unphased" } },
+        },
+        { type: "text-delta", id: "msg_unphased", text: "Unphased." },
+        {
+          type: "text-end",
+          id: "msg_unphased",
+          providerMetadata: { openai: { itemId: "msg_unphased" } },
+        },
+      ])
+
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          type: "message",
+          id: "msg_commentary",
+          status: "completed",
+          role: "assistant",
+          phase: "commentary",
+          content: [
+            { type: "output_text", text: "First.", annotations: [] },
+            { type: "output_text", text: "Second.", annotations: [] },
+          ],
+        },
+        {
+          type: "message",
+          id: "msg_commentary_2",
+          status: "completed",
+          role: "assistant",
+          phase: "commentary",
+          content: [{ type: "output_text", text: "Third.", annotations: [] }],
+        },
+        {
+          type: "message",
+          id: "openai-text-0",
+          status: "completed",
+          role: "assistant",
+          phase: "final_answer",
+          content: [
+            {
+              type: "output_text",
+              text: "Final.",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://example.com",
+                  title: "Example",
+                  start_index: 0,
+                  end_index: 6,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "message",
+          id: "msg_null",
+          status: "completed",
+          role: "assistant",
+          phase: null,
+          content: [{ type: "output_text", text: "Nullable.", annotations: [] }],
+        },
+        {
+          type: "message",
+          id: "msg_unphased",
+          status: "completed",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Unphased.", annotations: [] }],
+        },
+      ])
+    }),
+  )
+
   it.effect("parses reasoning summary stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -947,7 +1336,7 @@ describe("OpenAI Responses route", () => {
                     encrypted_content: "encrypted-state",
                     summary: [{ type: "summary_text", text: "Checked the previous diff." }],
                   },
-                  { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
+                  { role: "assistant", content: "The parser changed." },
                   { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
                 ],
               })
@@ -995,13 +1384,69 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([
-        { role: "assistant", content: [{ type: "output_text", text: "Before." }] },
+        { role: "assistant", content: "Before." },
         {
           type: "reasoning",
           encrypted_content: "encrypted-state",
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { role: "assistant", content: "After." },
+      ])
+    }),
+  )
+
+  it.effect("round-trips assistant message phases", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "text",
+                text: "Checking first.",
+                providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+              },
+              {
+                type: "text",
+                text: "Still checking.",
+                providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+              },
+              {
+                type: "text",
+                text: "Finished.",
+                providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "message",
+          id: "msg_commentary",
+          status: "completed",
+          role: "assistant",
+          phase: "commentary",
+          content: [{ type: "output_text", text: "Checking first.", annotations: [] }],
+        },
+        {
+          type: "message",
+          id: "msg_commentary_2",
+          status: "completed",
+          role: "assistant",
+          phase: "commentary",
+          content: [{ type: "output_text", text: "Still checking.", annotations: [] }],
+        },
+        {
+          type: "message",
+          id: "msg_final",
+          status: "completed",
+          role: "assistant",
+          phase: "final_answer",
+          content: [{ type: "output_text", text: "Finished.", annotations: [] }],
+        },
       ])
     }),
   )
@@ -1120,7 +1565,13 @@ describe("OpenAI Responses route", () => {
                   },
                 },
               },
-              { type: "text", text: "The parser changed." },
+              {
+                type: "text",
+                text: "The parser changed.",
+                providerMetadata: {
+                  openai: { itemId: "msg_1", phase: "final_answer", status: "completed" },
+                },
+              },
             ]),
             Message.user("Summarize it."),
           ],
@@ -1131,7 +1582,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body).toMatchObject({
         input: [
           { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
-          { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
+          { role: "assistant", content: "The parser changed.", phase: "final_answer" },
           { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
         ],
         store: false,

@@ -119,7 +119,7 @@ const storedSession = {
 
 const openAIResponses = {
   user: (text: string) => ({ role: "user", content: [{ type: "input_text", text }] }),
-  assistant: (text: string) => ({ role: "assistant", content: [{ type: "output_text", text }] }),
+  assistant: (text: string) => ({ role: "assistant", content: text }),
   openaiReasoning: (text: string, encryptedContent: string) => ({
     type: "reasoning",
     encrypted_content: encryptedContent,

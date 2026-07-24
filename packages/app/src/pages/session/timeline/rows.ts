@@ -1,4 +1,5 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
@@ -31,6 +32,71 @@ export type TimelineRowMap = {
 }
 
 export namespace Timeline {
+  export function constructSessionMessageRows(
+    messages: SessionMessageInfo[],
+    getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
+    getMessageParts: (messageID: string) => Part[],
+    showReasoning: boolean,
+    status: SessionStatus["type"],
+    inlineComments: boolean,
+    projectedUserMessages: UserMessage[],
+  ) {
+    const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
+    const turnByUserID = new Map<string, (typeof turns)[number]>()
+    messages.forEach((message) => {
+      const projected = getMessage(message.id)
+      if (message.type === "shell" && projected?.role === "user") {
+        const assistant = getMessage(`${message.id}:assistant`)
+        const turn = { user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        return
+      }
+      if (projected?.role === "user") {
+        if (turnByUserID.has(projected.id)) return
+        const turn = { user: projected, assistants: [] }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        return
+      }
+      if (projected?.role !== "assistant") return
+      const existing = turnByUserID.get(projected.parentID)
+      if (existing) {
+        existing.assistants.push(projected)
+        return
+      }
+      const user = getMessage(projected.parentID)
+      if (user?.role !== "user") return
+      const turn = { user, assistants: [projected] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+    })
+    const latestUserMessageID = turns.at(-1)?.user.id
+    projectedUserMessages.forEach((user) => {
+      if (turnByUserID.has(user.id)) return
+      if (latestUserMessageID && user.id < latestUserMessageID) return
+      const turn = { user, assistants: [] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+    })
+    const activeMessageID = turns.at(-1)?.user.id
+    return {
+      activeMessageID,
+      rows: turns.flatMap((turn, index) =>
+        constructMessageRows(
+          turn.user,
+          getMessageParts,
+          turn.assistants,
+          index,
+          showReasoning,
+          status,
+          turn.user.id === activeMessageID,
+          inlineComments,
+        ),
+      ),
+    }
+  }
+
   export function constructMessageRows(
     userMessage: UserMessage,
     getMessageParts: (messageID: string) => Part[],

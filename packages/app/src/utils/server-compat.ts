@@ -1,6 +1,6 @@
 import type { ServerApi } from "./server"
 import type { ServerProtocol } from "./server-protocol"
-import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client"
+import type { AgentPartInput, FilePartInput, OpencodeClient, Session, TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type {
   Project,
   ProjectCurrent,
@@ -30,11 +30,20 @@ type CompatibleSessionApi = Omit<
   archive: (input: Parameters<SessionApi["archive"]>[0] & LegacyLocation) => ReturnType<SessionApi["archive"]>
   remove: (input: Parameters<SessionApi["remove"]>[0] & LegacyLocation) => ReturnType<SessionApi["remove"]>
 }
-export type CompatibleApi = Omit<ServerApi, "session"> & { readonly session: CompatibleSessionApi }
+type CompatiblePermissionApi = Omit<ServerApi["permission"], "reply"> & {
+  reply: (
+    input: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
+  ) => ReturnType<ServerApi["permission"]["reply"]>
+}
+export type CompatibleApi = Omit<ServerApi, "session" | "permission"> & {
+  readonly session: CompatibleSessionApi
+  readonly permission: CompatiblePermissionApi
+}
 type LegacyPrompt = {
   agent?: string
   model?: { providerID: string; modelID: string }
   variant?: string
+  legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
 }
 type LegacyLocation = { directory?: string }
 type CompatibleInput = {
@@ -195,13 +204,20 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           agent: value.agent,
           model: value.model,
           variant: value.variant,
-          parts: [
+          parts: value.legacyParts ?? [
             { type: "text", text: value.text },
             ...(value.files ?? []).map((file) => ({
               type: "file" as const,
-              mime: mime(file.uri),
+              mime: file.mention ? "text/plain" : mime(file.uri),
               url: file.uri,
               filename: file.name,
+              source: file.mention
+                ? {
+                    type: "file" as const,
+                    text: { value: file.mention.text, start: file.mention.start, end: file.mention.end },
+                    path: file.uri,
+                  }
+                : undefined,
             })),
             ...(value.agents ?? []).map((agent) => ({
               type: "agent" as const,
@@ -318,7 +334,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       ...input.current.vcs,
       async get(value?: Parameters<ServerApi["vcs"]["get"]>[0]) {
         const result = await legacy(value?.location).vcs.get()
-        return located({ branch: result.data?.branch, defaultBranch: undefined }, value?.location)
+        return located({ branch: result.data?.branch, defaultBranch: result.data?.default_branch }, value?.location)
       },
       async status(value?: Parameters<ServerApi["vcs"]["status"]>[0]) {
         const result = await legacy(value?.location).vcs.status()
@@ -350,7 +366,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       async find(value: Parameters<ServerApi["file"]["find"]>[0]) {
         const result = await legacy(value.location).find.files({
           query: value.query,
-          type: value.type,
+          dirs: value.type === undefined ? undefined : value.type === "directory" ? "true" : "false",
           limit: value.limit,
         })
         return located(
@@ -471,11 +487,12 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     },
     permission: {
       ...input.current.permission,
-      async reply(value: Parameters<ServerApi["permission"]["reply"]>[0]) {
-        await legacy().permission.respond({
+      async reply(value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } }) {
+        await legacy(value.location).permission.respond({
           sessionID: value.sessionID,
           permissionID: value.requestID,
           response: value.reply,
+          directory: directory(value.location),
         })
       },
     },
