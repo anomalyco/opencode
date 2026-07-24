@@ -12,3 +12,11 @@
 @import "../components/tool-count-summary.css" layer(components);
 @import "../components/tool-error-card.css" layer(components);
 @import "../components/tool-status-title.css" layer(components);
+
+[data-component="prompt-input-v2"],
+[data-component="prompt-input"],
+[data-dock-surface="shell"],
+form.group\/prompt-input,
+.group\/prompt-input {
+  border-radius: 20px !important;
+}

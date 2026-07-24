@@ -139,9 +139,12 @@
     word-break: break-word;
     overflow: hidden;
     background: var(--v2-background-bg-layer-02);
-    border: none;
-    padding: 8px 12px;
+    border: 1px solid var(--v2-border-border-muted);
+    padding: 10px 16px;
     border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    font-size: 14px;
+    line-height: 1.55;
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -217,7 +220,7 @@
 
 [data-component="text-part"] {
   width: 100%;
-  margin-top: 24px;
+  margin-top: 4px;
 
   [data-slot="text-part-body"] {
     margin-top: 0;
@@ -262,26 +265,37 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
+  margin: 16px 0;
 
   [data-slot="compaction-part-divider"] {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 0;
+    gap: 16px;
+    padding: 6px 0;
     width: 100%;
   }
 
   [data-slot="compaction-part-line"] {
     flex: 1 1 auto;
     height: 1px;
-    background: var(--v2-border-border-base);
+    background: linear-gradient(90deg, transparent, var(--v2-border-border-base), transparent);
   }
 
   [data-slot="compaction-part-label"] {
     flex: 0 0 auto;
     white-space: nowrap;
     text-align: center;
+    font-size: 11px;
+    font-weight: 550;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--v2-text-text-muted);
+    background: var(--v2-background-bg-layer-02);
+    border: 1px solid var(--v2-border-border-muted);
+    padding: 3px 12px;
+    border-radius: 9999px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   }
 }
 
@@ -291,7 +305,7 @@
   line-height: var(--line-height-normal);
 
   [data-component="markdown"] {
-    margin-top: 16px;
+    margin-top: 4px;
     font-style: normal;
     font-size: 13px;
     color: var(--v2-text-text-muted);
@@ -321,7 +335,7 @@
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;
-  margin-bottom: 24px;
+  margin-bottom: 4px;
   height: fit-content;
   display: flex;
   flex-direction: column;
@@ -1324,7 +1338,13 @@ body[data-new-layout] [data-component="user-message"] {
   font-weight: 440;
 
   [data-slot="user-message-text"] {
-    background: var(--v2-background-bg-layer-01);
+    background: var(--v2-background-bg-layer-02);
+    border: 1px solid var(--v2-border-border-muted);
+    border-radius: 10px;
+    padding: 10px 16px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    font-size: 14px;
+    line-height: 1.55;
   }
 
   [data-slot="user-message-comments"] {

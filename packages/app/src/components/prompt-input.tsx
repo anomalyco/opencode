@@ -1462,6 +1462,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       <DockShellForm
         data-dock-border-underlay="legacy"
         onSubmit={handleSubmit}
+        class="min-h-[104px] rounded-[20px]"
         classList={{
           "group/prompt-input": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,

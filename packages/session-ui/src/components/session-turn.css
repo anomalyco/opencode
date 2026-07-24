@@ -26,7 +26,8 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 0px;
+    gap: 8px;
+    padding: 4px 0;
     overflow-anchor: none;
   }
 
@@ -47,7 +48,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 12px;
+    margin-top: 6px;
     width: 100%;
     min-width: 0;
     color: var(--text-weak);
@@ -85,7 +86,7 @@
     display: flex;
     flex-direction: column;
     align-self: stretch;
-    gap: 12px;
+    gap: 4px;
   }
 
   [data-slot="session-turn-diffs"] {

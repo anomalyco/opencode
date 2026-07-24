@@ -368,11 +368,20 @@ export function SessionTurn(
   })
   const assistantVisible = createMemo(() => assistantDerived().visible)
   const reasoningHeading = createMemo(() => assistantDerived().reason)
+  const hasTextOrToolOutput = createMemo(() => {
+    for (const message of assistantMessages()) {
+      for (const part of list(data.store.part?.[message.id], emptyParts)) {
+        if (part.type === "text" && part.text?.trim()) return true
+        if (part.type === "tool" && !hidden.has(part.tool) && part.tool !== "question") return true
+      }
+    }
+    return false
+  })
+
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
     if (status().type === "retry") return false
-    if (showReasoningSummaries()) return assistantVisible() === 0
-    return true
+    return !hasTextOrToolOutput()
   })
 
   const autoScroll = createAutoScroll({

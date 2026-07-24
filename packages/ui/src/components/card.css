@@ -110,6 +110,15 @@ body:not([data-new-layout]) [data-component="card"] {
   }
 
   &[data-variant="error"] {
-    --card-accent: var(--icon-critical-base) !important;
+    --card-accent: var(--icon-critical-base, #ef4444) !important;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: var(--v2-text-text-base);
+
+    &::before {
+      display: none;
+    }
   }
 }

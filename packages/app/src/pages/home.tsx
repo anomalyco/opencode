@@ -657,7 +657,7 @@ export function NewHome() {
           containHomeWheel(event, sessionViewport)
         }}
       >
-        <div class="mx-auto grid min-h-full w-full max-w-[1240px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:grid-rows-1 lg:gap-8 lg:px-6">
+        <div class="mx-auto grid min-h-full w-full max-w-[1100px] grid-rows-[auto_minmax(0,1fr)_auto] gap-4 px-3 lg:grid-cols-[250px_minmax(0,1fr)] lg:grid-rows-1 lg:gap-8 lg:px-6">
           <HomeProjectColumn
             projects={projects()}
             recentlyClosed={recentlyClosed()}
@@ -694,59 +694,11 @@ export function NewHome() {
             aria-label={language.t("sidebar.project.recentSessions")}
           >
             <div
-              class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base/95 backdrop-blur-md pb-3 pt-6 lg:pt-8"
+              class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base/95 backdrop-blur-md pb-3 pt-6 lg:pt-[52px]"
               onWheel={(event) => {
                 if (sessionViewport) containHomeWheel(event, sessionViewport)
               }}
             >
-              <Show when={platform.platform === "desktop"}>
-                <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-v2-border-border-muted/40 bg-v2-background-bg-layer-01/60 p-3.5 backdrop-blur-md shadow-sm">
-                  <div class="flex items-center gap-2.5">
-                    <div class="flex size-7 items-center justify-center rounded-lg bg-v2-icon-icon-accent/15 text-v2-icon-icon-accent">
-                      <IconV2 name="laptop" size="small" />
-                    </div>
-                    <div class="flex flex-col">
-                      <div class="flex items-center gap-2">
-                        <span class="text-[13px] font-semibold text-v2-text-text-base">Desktop App</span>
-                        <Show when={platform.os}>
-                          {(os) => (
-                            <span class="rounded bg-v2-background-bg-layer-02 px-1.5 py-0.5 text-[10px] font-medium capitalize text-v2-text-text-muted">
-                              {os()}
-                            </span>
-                          )}
-                        </Show>
-                      </div>
-                      <span class="text-[11px] text-v2-text-text-muted/70">Native workspace environment</span>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <Show when={focusedServer()}>
-                      {(conn) => (
-                        <ButtonV2
-                          variant="ghost-muted"
-                          size="small"
-                          icon="folder-add-left"
-                          class="h-7.5 px-2.5 text-[12px]"
-                          onClick={() => chooseProject(conn())}
-                        >
-                          {language.t("command.project.open")}
-                        </ButtonV2>
-                      )}
-                    </Show>
-                    <Show when={newSessionProject()}>
-                      <ButtonV2
-                        variant="neutral"
-                        size="small"
-                        icon="edit"
-                        class="h-7.5 px-2.5 text-[12px] shadow-sm"
-                        onClick={openNewSession}
-                      >
-                        {language.t("command.session.new")}
-                      </ButtonV2>
-                    </Show>
-                  </div>
-                </div>
-              </Show>
               <HomeSessionSearch
                 value={state.search}
                 placeholder={searchPlaceholder()}
@@ -764,30 +716,16 @@ export function NewHome() {
                 onClose={closeSearch}
                 onSelect={selectSearchSession}
               />
-              <Show when={groups().length > 0 && newSessionProject()}>
-                <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
-                  <ButtonV2
-                    data-action="home-new-session"
-                    variant="ghost-muted"
-                    size="normal"
-                    icon="edit"
-                    class="pointer-events-auto h-7 px-2 [font-weight:530]"
-                    onClick={openNewSession}
-                  >
-                    {language.t("command.session.new")}
-                  </ButtonV2>
-                </div>
-              </Show>
             </div>
             {/* Sticky chrome for the portaled session scrollbar — matches old sessions ScrollView bounds */}
-            <div class="pointer-events-none sticky top-[84px] z-40 h-0 -mr-3 lg:top-[108px]">
+            <div class="pointer-events-none sticky top-[48px] z-40 h-0 -mr-3 lg:top-[102px]">
               <div
                 ref={setSessionThumbTrack}
                 data-component="home-session-scroll-track"
-                class="relative ml-auto h-[calc(100cqh-84px)] w-3 lg:h-[calc(100cqh-108px)]"
+                class="relative ml-auto h-[calc(100cqh-48px)] w-3 lg:h-[calc(100cqh-102px)]"
               />
             </div>
-            <div class="-mr-3 min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
+            <div class="-mr-3 min-h-[calc(100cqh-48px)] lg:min-h-[calc(100cqh-102px)]">
               <Show
                 when={!sessionLoad.isLoading}
                 fallback={
@@ -809,6 +747,8 @@ export function NewHome() {
                             titleOpacity={sessionHeaderOpacity.titleOpacity(group.id)}
                             ref={(el) => sessionHeaderOpacity.setHeaderRef(group.id, el)}
                             elevated={index() === 0}
+                            onNewSession={index() === 0 && newSessionProject() ? openNewSession : undefined}
+                            newSessionLabel={language.t("command.session.new")}
                           />
                           <div
                             class={`flex min-w-0 flex-col gap-px pt-4 ${index() === groups().length - 1 ? "" : "mb-6"}`}
@@ -1643,11 +1583,7 @@ function HomeSessionSearch(props: {
               }
             }}
           />
-          <Show when={props.value} fallback={
-            <span class="hidden sm:inline-flex items-center rounded border border-v2-border-border-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-v2-text-text-muted/60 select-none">
-              ⌘F
-            </span>
-          }>
+          <Show when={props.value}>
             <IconButtonV2
               type="button"
               variant="ghost-muted"
@@ -1729,17 +1665,33 @@ function HomeSessionGroupHeader(props: {
   titleOpacity: number
   ref: ComponentProps<"div">["ref"]
   elevated?: boolean
+  onNewSession?: () => void
+  newSessionLabel?: string
 }) {
   return (
     <div
       ref={props.ref}
-      class={`pointer-events-none sticky top-[84px] lg:top-[108px] flex h-8 min-w-0 items-center justify-between pl-2 bg-v2-background-bg-base/90 backdrop-blur-md ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
+      class={`sticky top-[48px] lg:top-[102px] flex h-8 min-w-0 items-center justify-between pl-2 bg-v2-background-bg-base/90 backdrop-blur-md ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
     >
       <div class="flex items-center gap-2" style={{ opacity: props.titleOpacity }}>
         <span class="size-1.5 rounded-full bg-v2-icon-icon-accent/80" />
         <span class={HOME_SECTION_LABEL}>{props.title}</span>
       </div>
-      <div class="h-px flex-1 ml-3 bg-v2-border-border-muted/20" />
+      <div class="h-px flex-1 mx-3 bg-v2-border-border-muted/20" />
+      <Show when={props.onNewSession}>
+        {(onNewSession) => (
+          <ButtonV2
+            data-action="home-new-session"
+            variant="ghost-muted"
+            size="small"
+            icon="edit"
+            class="pointer-events-auto h-6 px-2 text-[12px] [font-weight:530]"
+            onClick={onNewSession()}
+          >
+            {props.newSessionLabel}
+          </ButtonV2>
+        )}
+      </Show>
     </div>
   )
 }
