@@ -20,6 +20,7 @@ const branchDiffs = [
 test("keeps the review tree and terminal sized when both panels are open", async ({ page }) => {
   test.setTimeout(120_000)
   const events: Array<{ directory: string; payload: Record<string, unknown> }> = []
+  const sessionStatus = { [sessionID]: { type: "idle" as "busy" | "idle" } }
   let detailVersion = 1
   let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
@@ -55,7 +56,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
         time: { created: 1700000000000, updated: 1700000000000 },
       },
     ],
-    sessionStatus: { [sessionID]: { type: "idle" } },
+    sessionStatus: () => sessionStatus,
     pageMessages: () => ({ items: [] }),
     events: () => events.splice(0, 1),
     eventRetry: 16,
@@ -143,6 +144,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   const preview = page.locator('[data-slot="session-review-v2-diff-scroll"]')
   await expect(preview).toContainText("after-1")
   detailVersion = 2
+  sessionStatus[sessionID] = { type: "busy" }
   events.push(statusEvent("busy"))
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
   const refreshedDiff = page.waitForRequest((request) => {
@@ -152,6 +154,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       url.searchParams.get("directory")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
     )
   })
+  sessionStatus[sessionID] = { type: "idle" }
   events.push(statusEvent("idle"))
   await refreshedDiff
   await expect(preview).toContainText("after-2")

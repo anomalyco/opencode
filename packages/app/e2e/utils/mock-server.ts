@@ -24,7 +24,7 @@ export interface MockServerConfig {
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
-  sessionStatus?: unknown
+  sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -79,7 +79,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
     if (path === "/question")
       return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
-    if (path === "/session/status") return json(route, config.sessionStatus ?? {})
+    if (path === "/session/status")
+      return json(route, typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {}))
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
     if (path === "/file" && config.fileList)
       return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
