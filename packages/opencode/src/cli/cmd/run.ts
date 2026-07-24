@@ -832,7 +832,6 @@ export const RunCommand = effectCmd({
             process.exitCode = 1
           })
           async function finish() {
-            if (args.attach) return
             const error = await completed
             if (error) process.exitCode = 1
           }
