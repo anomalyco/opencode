@@ -197,8 +197,8 @@ beforeAll(async () => {
       const sdk = {
         scope: "local",
         directory: "/repo/main",
-        client: rootClient,
         api: rootClient.api,
+        client: rootClient,
         url: "http://localhost:4096",
         createClient(opts: any) {
           return clientFor(opts.directory)
