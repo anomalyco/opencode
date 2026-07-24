@@ -1,8 +1,9 @@
 export * as Reference from "./reference"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Effect, Layer, Scope, Types } from "effect"
+import { Context, Effect, Layer, Schedule, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
+import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
@@ -46,8 +47,19 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const events = yield* EventV2.Service
     const cache = yield* RepositoryCache.Service
+    const fs = yield* FSUtil.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
+
+    // Guards late fork completions: a reload bumps the generation, so a clone
+    // finishing for a replaced configuration never resurrects its reference.
+    let generation = 0
+    const announce = (expected: number, name: string, entry: Info) =>
+      Effect.suspend(() => {
+        if (expected !== generation || materialized.has(name)) return Effect.void
+        materialized.set(name, entry)
+        return events.publish(Event.Updated, {})
+      })
     const state = State.create<Data, Draft>({
       initial: () => ({ sources: new Map() }),
       draft: (draft) => ({
@@ -57,8 +69,8 @@ const layer = Layer.effect(
       }),
       finalize: (draft) =>
         Effect.gen(function* () {
+          const current = ++generation
           materialized.clear()
-          const seen = new Map<string, string | undefined>()
           for (const [name, source] of draft.list()) {
             if (source.type === "local") {
               materialized.set(
@@ -82,20 +94,25 @@ const layer = Layer.effect(
                 continue
               }
             }
-            const target = Repository.cachePath(global.repos, repository)
-            if (seen.has(target) && seen.get(target) !== source.branch) continue
-            seen.set(target, source.branch)
-            materialized.set(
+            const entry = new Info({
               name,
-              new Info({
-                name,
-                path: AbsolutePath.make(target),
-                ...(source.description === undefined ? {} : { description: source.description }),
-                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                source,
-              }),
-            )
+              path: AbsolutePath.make(Repository.cachePath(global.repos, repository, source.branch)),
+              ...(source.description === undefined ? {} : { description: source.description }),
+              ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
+              source,
+            })
+            // A checkout already on disk serves immediately; a missing one is
+            // announced only after materialization succeeds, so consumers
+            // never see a path that does not exist.
+            if (yield* fs.existsSafe(entry.path)) materialized.set(name, entry)
             yield* cache.ensure({ reference: repository, branch: source.branch, refresh: true }).pipe(
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "RepositoryCacheCloneFailedError" || error._tag === "RepositoryCacheFetchFailedError",
+                schedule: Schedule.exponential(2000).pipe(Schedule.jittered),
+                times: 3,
+              }),
+              Effect.flatMap(() => announce(current, name, entry)),
               Effect.catchCause((cause) =>
                 Effect.logWarning("failed to materialize reference", {
                   name,
@@ -125,5 +142,5 @@ export const locationLayer = layer
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Global.node, EventV2.node, RepositoryCache.node],
+  deps: [Global.node, EventV2.node, RepositoryCache.node, FSUtil.node],
 })
