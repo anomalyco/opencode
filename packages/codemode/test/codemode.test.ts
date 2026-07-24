@@ -189,7 +189,12 @@ describe("CodeMode tool-call observation", () => {
       description: "Look up a value",
       input: Schema.Struct({ query: Schema.String }),
       output: Schema.String,
-      execute: ({ query }) => (query === "boom" ? Effect.fail(toolError("Lookup refused")) : Effect.succeed(query)),
+      execute: ({ query }) =>
+        query === "boom"
+          ? Effect.fail(toolError("Lookup refused"))
+          : query === "defect"
+            ? Effect.die("broken")
+            : Effect.succeed(query),
     })
 
     const runtime = CodeMode.make({
@@ -215,13 +220,97 @@ describe("CodeMode tool-call observation", () => {
     expect(success.ok).toBe(true)
     const failure = await Effect.runPromise(runtime.execute(`return await tools.context.lookup({ query: "boom" })`))
     expect(failure.ok).toBe(false)
+    const defect = await Effect.runPromise(runtime.execute(`return await tools.context.lookup({ query: "defect" })`))
+    expect(defect.ok).toBe(false)
 
     expect(events).toStrictEqual([
       { phase: "start", index: 0, name: "context.lookup" },
       { phase: "end", index: 0, name: "context.lookup", outcome: "success" },
       { phase: "start", index: 0, name: "context.lookup" },
       { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "Lookup refused" },
+      { phase: "start", index: 0, name: "context.lookup" },
+      { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "Tool execution failed" },
     ])
+  })
+
+  test("observes interrupted calls", async () => {
+    const events: Array<string> = []
+    const call = Tool.make({
+      description: "Interrupt",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.interrupt,
+    })
+    const exit = await Effect.runPromiseExit(
+      CodeMode.make({
+        tools: { host: { call } },
+        onToolCallStart: () => Effect.sync(() => events.push("start")),
+        onToolCallEnd: (call) => Effect.sync(() => events.push(`end:${call.outcome}`)),
+      }).execute("return await tools.host.call({})"),
+    )
+
+    expect(exit._tag).toBe("Failure")
+    expect(events).toEqual(["start", "end:interrupted"])
+  })
+
+  test("observes running calls interrupted during completion", async () => {
+    const events: Array<string> = []
+    const call = Tool.make({
+      description: "Pending",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.never,
+    })
+    const result = await Effect.runPromise(
+      CodeMode.make({
+        tools: { host: { call } },
+        onToolCallStart: () => Effect.sync(() => events.push("start")),
+        onToolCallEnd: (call) => Effect.sync(() => events.push(`end:${call.outcome}`)),
+      }).execute('tools.host.call({}); return "done"'),
+    )
+
+    expect(result).toMatchObject({ ok: true, value: "done" })
+    expect(events).toEqual(["start", "end:interrupted"])
+  })
+
+  test("ends calls interrupted during start observation", async () => {
+    const events: Array<string> = []
+    const call = Tool.make({
+      description: "Unused",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.succeed("unused"),
+    })
+    const exit = await Effect.runPromiseExit(
+      CodeMode.make({
+        tools: { host: { call } },
+        onToolCallStart: () => Effect.interrupt,
+        onToolCallEnd: (call) => Effect.sync(() => events.push(call.outcome)),
+      }).execute("return await tools.host.call({})"),
+    )
+
+    expect(exit._tag).toBe("Failure")
+    expect(events).toEqual(["interrupted"])
+  })
+
+  test("observes calls interrupted by the execution timeout", async () => {
+    const outcomes: Array<string> = []
+    const call = Tool.make({
+      description: "Pending",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.never,
+    })
+    const result = await Effect.runPromise(
+      CodeMode.make({
+        tools: { host: { call } },
+        limits: { timeoutMs: 10 },
+        onToolCallEnd: (call) => Effect.sync(() => outcomes.push(call.outcome)),
+      }).execute("return await tools.host.call({})"),
+    )
+
+    expect(result).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
+    expect(outcomes).toEqual(["interrupted"])
   })
 })
 

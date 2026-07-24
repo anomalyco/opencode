@@ -40,7 +40,7 @@ export type ExecuteOptions<Provided extends Record<string, unknown> = {}> = {
   limits?: ExecutionLimits
   /** Observes decoded tool input immediately before tool execution. */
   onToolCallStart?: (call: ToolRuntime.ToolCallStarted) => Effect.Effect<void, never, Services<Provided>>
-  /** Observes each admitted tool call as it settles, with outcome and duration. */
+  /** Observes each admitted tool call as it succeeds, fails, or is interrupted. */
   onToolCallEnd?: (call: ToolRuntime.ToolCallEnded) => Effect.Effect<void, never, Services<Provided>>
 }
 

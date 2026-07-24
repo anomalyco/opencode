@@ -1,4 +1,4 @@
-import { Cause, Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { ToolError, toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
@@ -52,7 +52,7 @@ export type ToolCallEnded = {
   readonly name: string
   readonly input: unknown
   readonly durationMs: number
-  readonly outcome: "success" | "failure"
+  readonly outcome: "success" | "failure" | "interrupted"
   readonly message?: string
 }
 
@@ -495,22 +495,19 @@ export const make = <R>(
   const root = toolTrie(tools)
   const searchTool = makeSearchTool(searchIndex)
 
-  // End hooks observe settled success or failure; interruption emits neither outcome.
   const observeEnd = <A, E>(effect: Effect.Effect<A, E, R>, call: ToolCallStarted): Effect.Effect<A, E, R> => {
     const onEnd = hooks?.onToolCallEnd
     if (onEnd === undefined) return effect
     const startedAt = Date.now()
     return effect.pipe(
-      Effect.tap(() => onEnd({ ...call, durationMs: Date.now() - startedAt, outcome: "success" })),
-      Effect.tapError((error) => {
+      Effect.onExit((exit) => {
+        const durationMs = Date.now() - startedAt
+        if (Exit.isSuccess(exit)) return onEnd({ ...call, durationMs, outcome: "success" })
+        if (Cause.hasInterruptsOnly(exit.cause)) return onEnd({ ...call, durationMs, outcome: "interrupted" })
+        const error = Cause.squash(exit.cause)
         const message =
           error instanceof ToolError || error instanceof ToolRuntimeError ? error.message : "Tool execution failed"
-        return onEnd({
-          ...call,
-          durationMs: Date.now() - startedAt,
-          outcome: "failure",
-          message,
-        })
+        return onEnd({ ...call, durationMs, outcome: "failure", message })
       }),
     )
   }
@@ -528,12 +525,6 @@ export const make = <R>(
     calls.push(call)
   }
 
-  const recordAndObserve = (name: string, input: unknown) =>
-    Effect.sync(() => {
-      recordCall({ name })
-      return calls.length - 1
-    }).pipe(Effect.tap((index) => hooks?.onToolCallStart?.({ index, name, input }) ?? Effect.void))
-
   const executeTool = (name: string, tool: Tool<R>, externalArgs: Array<unknown>) =>
     Effect.gen(function* () {
       if (externalArgs.length !== 1)
@@ -547,9 +538,14 @@ export const make = <R>(
             name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
           ),
       })
-      const index = yield* recordAndObserve(name, input)
+      const index = yield* Effect.sync(() => {
+        recordCall({ name })
+        return calls.length - 1
+      })
+      const call = { index, name, input }
       return yield* observeEnd(
         Effect.gen(function* () {
+          if (hooks?.onToolCallStart !== undefined) yield* hooks.onToolCallStart(call)
           const raw = yield* runHost(Effect.suspend(() => tool.execute(input)))
           const result = yield* Effect.try({
             try: () => decodeToolOutput(tool, raw),
@@ -557,7 +553,7 @@ export const make = <R>(
           })
           return yield* decodeOutput(result, name)
         }),
-        { index, name, input },
+        call,
       )
     })
 
