@@ -1589,6 +1589,8 @@ describe("session.message-v2.fromError", () => {
     ["UND_ERR_HEADERS_TIMEOUT", "Network error (UND_ERR_HEADERS_TIMEOUT)"],
     ["UND_ERR_BODY_TIMEOUT", "Network error (UND_ERR_BODY_TIMEOUT)"],
     ["UND_ERR_SOCKET", "Network error (UND_ERR_SOCKET)"],
+    ["ConnectionClosed", "Network error (ConnectionClosed)"],
+    ["Timeout", "Network error (Timeout)"],
   ])("classifies %s SystemError as retryable APIError", (code, expectedMessage) => {
     const err = Object.assign(new Error(`${code} from test`), { code })
     const result = MessageV2.fromError(err, { providerID })
@@ -1608,6 +1610,10 @@ describe("session.message-v2.fromError", () => {
   test.each([
     ["ENOTFOUND", "getaddrinfo"],
     ["ECONNREFUSED", "connect"],
+    ["ConnectionRefused", "connect"],
+    ["DNSResolveFailed", "getaddrinfo"],
+    ["DNSResolutionFailed", "getaddrinfo"],
+    ["FailedToOpenSocket", "connect"],
   ])("overrides retryable APICallError caused by %s", (code, syscall) => {
     const cause = Object.assign(new Error(`${syscall} ${code} api.invalid`), { code, syscall })
     const wrapper = Object.assign(new TypeError("fetch failed", { cause }), { code: "ERR_FETCH_FAILED" })

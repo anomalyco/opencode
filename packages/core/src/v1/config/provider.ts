@@ -108,14 +108,9 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
         }),
-        chunkTimeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description:
-              "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted. Default is 120000 (2 minutes). Set to false to disable.",
-          }),
-        ).annotate({
+        chunkTimeout: Schema.optional(PositiveInt).annotate({
           description:
-            "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted. Default is 120000 (2 minutes). Set to false to disable.",
+            "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],

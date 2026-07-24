@@ -1754,11 +1754,8 @@ export type ProviderConfig = {
      * Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.
      */
     headerTimeout?: number | false
-    /**
-     * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted. Default is 120000 (2 minutes). Set to false to disable.
-     */
-    chunkTimeout?: number | false
-    [key: string]: unknown | string | boolean | number | false | number | false | number | false | undefined
+    chunkTimeout?: number
+    [key: string]: unknown | string | boolean | number | false | number | false | number | undefined
   }
   models?: {
     [key: string]: {

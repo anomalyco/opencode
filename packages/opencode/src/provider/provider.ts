@@ -34,16 +34,6 @@ import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
-// Default between-chunk timeout for streamed SSE responses. Without this,
-// a TCP socket that goes silent (wifi hiccup, NAT eviction, server crash
-// with no FIN/RST) parks the AI SDK's fullStream forever — Linux TCP
-// keepalive defaults to ~2 hours of idle before probing. 120s is short
-// enough to surface a freeze quickly, long enough that even slow
-// reasoning models emit *something* (token, ping, thinking chunk) in
-// between. Per-provider `chunkTimeout` overrides this; set to `false` to
-// disable entirely for providers with legitimately silent long pauses.
-const DEFAULT_CHUNK_TIMEOUT_MS = 120_000
-
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
@@ -1740,23 +1730,15 @@ const layer = Layer.effect(
         if (existing) return existing
 
         const customFetch = options["fetch"]
-        const configuredChunkTimeout = options["chunkTimeout"]
+        const chunkTimeout = options["chunkTimeout"]
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
-        // Default to DEFAULT_CHUNK_TIMEOUT_MS unless the provider config
-        // explicitly sets a value (number) or disables it (false).
-        const chunkTimeout =
-          configuredChunkTimeout === false
-            ? 0
-            : typeof configuredChunkTimeout === "number"
-              ? configuredChunkTimeout
-              : DEFAULT_CHUNK_TIMEOUT_MS
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
-          const chunkAbortCtl = chunkTimeout > 0 ? new AbortController() : undefined
+          const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
           const signals: AbortSignal[] = []

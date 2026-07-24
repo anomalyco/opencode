@@ -614,12 +614,32 @@ const TRANSIENT_SYS_CODES = new Set([
   "UND_ERR_HEADERS_TIMEOUT",
   "UND_ERR_BODY_TIMEOUT",
   "UND_ERR_SOCKET",
+  "ConnectionClosed",
+  "Timeout",
 ])
-const PERMANENT_SYS_CODES = new Set(["ENOTFOUND", "ECONNREFUSED"])
+const PERMANENT_SYS_CODES = new Set([
+  "ENOTFOUND",
+  "ECONNREFUSED",
+  "ConnectionRefused",
+  "DNSResolveFailed",
+  "DNSResolutionFailed",
+  "FailedToOpenSocket",
+])
+const TRANSIENT_ERROR_CODES = new Set([
+  "TimeoutError",
+  "NETWORK_ERROR",
+  "ZlibError",
+  "ProviderHeaderTimeoutError",
+  "ProviderResponseStreamError",
+])
 const CAUSE_MAX_DEPTH = 8
 
 export function isPermanentTransportCode(code: unknown) {
   return typeof code === "string" && PERMANENT_SYS_CODES.has(code)
+}
+
+export function isTransientTransportCode(code: unknown) {
+  return typeof code === "string" && (TRANSIENT_SYS_CODES.has(code) || TRANSIENT_ERROR_CODES.has(code))
 }
 
 // Exact messages emitted for a prematurely closed transport. Generic text
@@ -653,22 +673,9 @@ export function fromError(
   const sysCode = transient?.code
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":
-      // A *bare* AbortError only ever originates from `controller.abort()`
-      // with no reason — i.e. a user/parent cancel (see provider.ts fetch
-      // wrapper + processor onInterrupt). Every transport timeout we control
-      // aborts with a *specific* reason and therefore surfaces as its own
-      // identifiable error instead: AbortSignal.timeout() -> "TimeoutError"
-      // DOMException (next case), the header-timeout -> HeaderTimeoutError,
-      // and the SSE chunk-timeout -> ResponseStreamError ("SSE read timed
-      // out"). Those are all classified retryable on their own below, so we
-      // do NOT need to second-guess a bare AbortError here. Classifying by
-      // error identity (rather than the externally-set `ctx.aborted` flag,
-      // which races the abort propagating through the failure channel) keeps
-      // a genuine cancel from being retried.
+      // Controlled timeouts carry their own error types. A bare AbortError is a cancellation.
       return new AbortedError({ message: e.message }, { cause: e }).toObject()
     case e instanceof DOMException && e.name === "TimeoutError":
-      // Modern fetch surfaces AbortSignal.timeout() as a DOMException with
-      // name "TimeoutError" rather than "AbortError". Always retryable.
       return new APIError(
         { message: e.message || "Request timed out", isRetryable: true, metadata: { code: "TimeoutError" } },
         { cause: e },
@@ -689,7 +696,7 @@ export function fromError(
           message: sysCode === "ECONNRESET" ? "Connection reset by server" : `Network error (${sysCode})`,
           isRetryable: true,
           metadata: {
-            code: sysCode ?? "",
+            code: sysCode,
             syscall: transient?.syscall ?? "",
             message: transient?.message ?? "",
           },

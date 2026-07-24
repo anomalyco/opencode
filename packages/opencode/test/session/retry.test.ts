@@ -18,12 +18,17 @@ const providerID = ProviderV2.ID.make("test")
 const retryProvider = "test"
 const it = testEffect(LayerNode.compile(LayerNode.group([SessionStatus.node, CrossSpawnSpawner.node])))
 
-function apiError(headers?: Record<string, string>, message = "boom"): SessionV1.APIError {
+function apiError(
+  headers?: Record<string, string>,
+  message = "boom",
+  metadata?: Record<string, string>,
+): SessionV1.APIError {
   return Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
     new SessionV1.APIError({
       message,
       isRetryable: true,
       responseHeaders: headers,
+      metadata,
     }).toObject(),
   )
 }
@@ -116,13 +121,14 @@ describe("session.retry.delay", () => {
     }),
   )
 
-  it.effect("policy stops after the maximum retry attempts", () =>
+  it.effect("policy bounds transient transport retries", () =>
     Effect.gen(function* () {
+      const retryLimit = 5
       const attempts: number[] = []
       const failures: SessionV1.APIError[] = []
 
       const failure = yield* Effect.gen(function* () {
-        const current = apiError({ "retry-after-ms": "0" }, `boom ${failures.length + 1}`)
+        const current = apiError({ "retry-after-ms": "0" }, `boom ${failures.length + 1}`, { code: "ECONNRESET" })
         failures.push(current)
         return yield* Effect.fail(current)
       }).pipe(
@@ -141,9 +147,9 @@ describe("session.retry.delay", () => {
       if (!first || !terminal) throw new Error("expected retry failures")
       expect(failure).not.toBe(first)
       expect(failure).toBe(terminal)
-      expect(failure.data.message).toBe(`boom ${SessionRetry.RETRY_MAX_ATTEMPTS + 1}`)
-      expect(attempts).toEqual(Array.from({ length: SessionRetry.RETRY_MAX_ATTEMPTS }, (_, index) => index + 1))
-      expect(failures).toHaveLength(SessionRetry.RETRY_MAX_ATTEMPTS + 1)
+      expect(failure.data.message).toBe(`boom ${retryLimit + 1}`)
+      expect(attempts).toEqual(Array.from({ length: retryLimit }, (_, index) => index + 1))
+      expect(failures).toHaveLength(retryLimit + 1)
     }),
   )
 })
