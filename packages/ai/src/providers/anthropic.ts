@@ -2,7 +2,7 @@ import type { RouteDefaultsInput } from "../route/client"
 import { Auth } from "../route/auth"
 import type { ProviderAuthOption } from "../route/auth-options"
 import type { ProviderPackage } from "../provider-package"
-import { ProviderID, type ModelID } from "../schema"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import { AnthropicMessages } from "../protocols/anthropic-messages"
 import { AnthropicCompatible } from "./anthropic-compatible"
 
@@ -18,6 +18,7 @@ export type Settings = ProviderPackage.Settings &
     | { readonly apiKey?: never; readonly authToken?: string }
   ) & {
     readonly baseURL?: string
+    readonly providerOptions?: ProviderOptions
   }
 
 const auth = (options: ProviderAuthOption<"optional">) => {
@@ -52,5 +53,6 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
+    providerOptions: settings.providerOptions,
   }).model(modelID)
 }

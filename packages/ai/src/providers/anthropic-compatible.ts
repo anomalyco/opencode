@@ -3,7 +3,7 @@ import { AnthropicMessages } from "../protocols/anthropic-messages"
 import { Auth } from "../route/auth"
 import type { ProviderAuthOption } from "../route/auth-options"
 import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID } from "../schema"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 
 export const id = ProviderID.make("anthropic-compatible")
 
@@ -20,6 +20,7 @@ export type Settings = ProviderPackage.Settings &
   ) & {
     readonly baseURL: string
     readonly provider?: string
+    readonly providerOptions?: ProviderOptions
   }
 
 export const routes = [AnthropicMessages.route]
@@ -61,6 +62,7 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
     provider: settings.provider,
+    providerOptions: settings.providerOptions,
   }).model(modelID)
 }
 
