@@ -373,6 +373,33 @@ export async function bootstrapDirectory(input: {
           .then((data) => input.setStore("agent", data)),
       () =>
         retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
+      () =>
+        retry(() =>
+          (async () => {
+            if ((await input.protocol) !== "v1") return
+            const x = await input.sdk.session.status()
+            if (!input.session) {
+              input.setStore("session_status", x.data!)
+              return
+            }
+            const statuses = x.data ?? {}
+            input.session.set(
+              "session_status",
+              produce((draft) => {
+                for (const sessionID of Object.keys(draft)) {
+                  if (statuses[sessionID]) continue
+                  if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
+                }
+              }),
+            )
+            for (const [sessionID, status] of Object.entries(statuses)) {
+              input.session.set("session_status", sessionID, reconcile(status))
+            }
+            await Promise.all(
+              Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)),
+            )
+          })(),
+        ),
       !seededProject &&
         (() =>
           retry(() => input.api.project.current({ location: { directory: input.directory } })).then((project) =>
