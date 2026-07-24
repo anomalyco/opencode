@@ -43,6 +43,26 @@ const eventFrame = (type: string, payload: object) =>
     body: utf8Encoder.encode(JSON.stringify(payload)),
   })
 
+const exceptionFrame = (type: string, payload: object) =>
+  codec.encode({
+    headers: {
+      ":message-type": { type: "string", value: "exception" },
+      ":exception-type": { type: "string", value: type },
+      ":content-type": { type: "string", value: "application/json" },
+    },
+    body: utf8Encoder.encode(JSON.stringify(payload)),
+  })
+
+const errorFrame = (code: string, message: string) =>
+  codec.encode({
+    headers: {
+      ":message-type": { type: "string", value: "error" },
+      ":error-code": { type: "string", value: code },
+      ":error-message": { type: "string", value: message },
+    },
+    body: new Uint8Array(),
+  })
+
 const concat = (frames: ReadonlyArray<Uint8Array>) => {
   const total = frames.reduce((sum, frame) => sum + frame.length, 0)
   const out = new Uint8Array(total)
@@ -363,6 +383,19 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("preserves usage across later metadata events without usage", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["messageStop", { stopReason: "end_turn" }],
+        ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
+        ["metadata", { metrics: { latencyMs: 100 } }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
@@ -478,6 +511,95 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("preserves reasoning signatures when contentBlockStop is missing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } },
+              ],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } },
+              ],
+              ["messageStop", { stopReason: "end_turn" }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toEqual({
+        type: "reasoning-delta",
+        id: "reasoning-0",
+        text: "",
+        providerMetadata: { bedrock: { signature: "sig_1" } },
+      })
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Let me think.",
+          providerMetadata: { bedrock: { signature: "sig_1" } },
+        },
+      ])
+
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.request({ model, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ reasoningContent: { reasoningText: { text: "Let me think.", signature: "sig_1" } } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves signature-only reasoning blocks", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["messageStart", { role: "assistant" }],
+        [
+          "contentBlockDelta",
+          { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } },
+        ],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["messageStop", { stopReason: "end_turn" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { signature: "sig_1" } } },
+      ])
+    }),
+  )
+
+  it.effect("accepts Vercel-compatible redacted reasoning data deltas", () =>
+    Effect.gen(function* () {
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const body = eventStreamBody(
+        ["messageStart", { role: "assistant" }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { data: redactedData } } }],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["messageStop", { stopReason: "end_turn" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toEqual({
+        type: "reasoning-delta",
+        id: "reasoning-0",
+        text: "",
+        providerMetadata: { bedrock: { redactedData } },
+      })
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData } } },
+      ])
+    }),
+  )
+
   it.effect("round-trips streamed redacted reasoning with tool use into a continuation request", () =>
     Effect.gen(function* () {
       // Bedrock represents redactedContent blobs as base64 strings on its JSON
@@ -511,6 +633,12 @@ describe("Bedrock Converse route", () => {
           ),
         ),
       )
+      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toEqual({
+        type: "reasoning-delta",
+        id: "reasoning-0",
+        text: "",
+        providerMetadata: { bedrock: { redactedData } },
+      })
       const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
         LLM.request({
           model,
@@ -543,10 +671,10 @@ describe("Bedrock Converse route", () => {
 
   it.effect("classifies throttlingException as a rate limit", () =>
     Effect.gen(function* () {
-      const body = eventStreamBody(
-        ["messageStart", { role: "assistant" }],
-        ["throttlingException", { message: "Slow down" }],
-      )
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        exceptionFrame("throttlingException", { message: "Slow down" }),
+      ])
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
       expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "Slow down" })
@@ -557,7 +685,7 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(baseRequest).pipe(
         Effect.provide(
-          fixedBytes(eventStreamBody(["validationException", { message: "Input is too long for requested model" }])),
+          fixedBytes(exceptionFrame("validationException", { message: "Input is too long for requested model" })),
         ),
         Effect.flip,
       )
@@ -566,6 +694,38 @@ describe("Bedrock Converse route", () => {
         _tag: "InvalidRequest",
         message: "Input is too long for requested model",
         classification: "context-overflow",
+      })
+    }),
+  )
+
+  it.effect("uses originalMessage from model stream exception frames", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            exceptionFrame("modelStreamErrorException", {
+              originalMessage: "Upstream model failed",
+              originalStatusCode: 500,
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Upstream model failed" })
+    }),
+  )
+
+  it.effect("fails unmodeled AWS event-stream errors", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(errorFrame("BadStream", "Stream failed"))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "BadStream: Stream failed",
       })
     }),
   )

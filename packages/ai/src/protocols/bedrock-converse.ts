@@ -155,6 +155,12 @@ const BedrockUsageSchema = Schema.Struct({
 })
 type BedrockUsageSchema = Schema.Schema.Type<typeof BedrockUsageSchema>
 
+const BedrockStreamException = Schema.Struct({
+  message: Schema.optional(Schema.String),
+  originalMessage: Schema.optional(Schema.String),
+  originalStatusCode: Schema.optional(Schema.Number),
+})
+
 // Streaming event shape — the AWS event stream wraps each JSON payload by its
 // `:event-type` header (e.g. `messageStart`, `contentBlockDelta`). We
 // reconstruct that wrapping in `decodeFrames` below so the event schema can
@@ -184,6 +190,9 @@ const BedrockEvent = Schema.Struct({
               signature: Schema.optional(Schema.String),
               // Blob fields in Bedrock's JSON event stream are base64 strings.
               redactedContent: Schema.optional(Schema.String),
+              // Vercel's Bedrock provider exposes the same delta under
+              // Anthropic's shorter `data` spelling.
+              data: Schema.optional(Schema.String),
             }),
           ),
         }),
@@ -203,11 +212,11 @@ const BedrockEvent = Schema.Struct({
       metrics: Schema.optional(Schema.Unknown),
     }),
   ),
-  internalServerException: Schema.optional(Schema.Struct({ message: Schema.String })),
-  modelStreamErrorException: Schema.optional(Schema.Struct({ message: Schema.String })),
-  validationException: Schema.optional(Schema.Struct({ message: Schema.String })),
-  throttlingException: Schema.optional(Schema.Struct({ message: Schema.String })),
-  serviceUnavailableException: Schema.optional(Schema.Struct({ message: Schema.String })),
+  internalServerException: Schema.optional(BedrockStreamException),
+  modelStreamErrorException: Schema.optional(BedrockStreamException),
+  validationException: Schema.optional(BedrockStreamException),
+  throttlingException: Schema.optional(BedrockStreamException),
+  serviceUnavailableException: Schema.optional(BedrockStreamException),
 })
 type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
 
@@ -531,14 +540,20 @@ const step = (state: ParserState, event: BedrockEvent) =>
       const index = event.contentBlockDelta.contentBlockIndex
       const reasoning = event.contentBlockDelta.delta.reasoningContent
       const events: LLMEvent[] = []
-      const lifecycle = reasoning.text
-        ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text)
-        : reasoning.redactedContent !== undefined
-          ? Lifecycle.reasoningStart(
+      const redactedData = reasoning.redactedContent ?? reasoning.data
+      const providerMetadata = reasoning.signature
+        ? bedrockMetadata({ signature: reasoning.signature })
+        : redactedData !== undefined
+          ? bedrockMetadata({ redactedData })
+          : undefined
+      const lifecycle =
+        reasoning.text !== undefined || providerMetadata !== undefined
+          ? Lifecycle.reasoningDelta(
               state.lifecycle,
               events,
               `reasoning-${index}`,
-              bedrockMetadata({ redactedData: reasoning.redactedContent }),
+              reasoning.text ?? "",
+              providerMetadata,
             )
           : state.lifecycle
       return [
@@ -618,7 +633,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.metadata) {
-      const usage = mapUsage(event.metadata.usage)
+      const usage = mapUsage(event.metadata.usage) ?? state.pendingFinish?.usage
       return [
         {
           ...state,
@@ -645,7 +660,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
         module: ADAPTER,
         method: "stream",
         reason: classifyProviderFailure({
-          message: exception[1]?.message ?? "Bedrock Converse stream error",
+          message: exception[1]?.message ?? exception[1]?.originalMessage ?? "Bedrock Converse stream error",
           code: exception[0],
         }),
       })
