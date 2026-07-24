@@ -7,7 +7,7 @@ import type { PromptProjectControls } from "@/components/prompt-project-selector
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { useGlobal } from "@/context/global"
 import { useLayout } from "@/context/layout"
-import { useLocal, type ModelSelection } from "@/context/local"
+import { useLocal, type ModelKey, type ModelSelection } from "@/context/local"
 import type { QueryOptionsApi } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServer } from "@/context/server"
@@ -16,6 +16,17 @@ import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { useProviders } from "@/hooks/use-providers"
 import { pathKey } from "@/utils/path-key"
+
+export function createNewSessionAgentSelect(input: {
+  selectAgent: (name: string | undefined) => void
+  currentAgent: () => { model?: ModelKey } | undefined
+  selectModel: (model: ModelKey | undefined) => void
+}) {
+  return (name: string | undefined) => {
+    input.selectAgent(name)
+    input.selectModel(input.currentAgent()?.model)
+  }
+}
 
 export function createPromptInputController(input: {
   sessionKey: Accessor<string>
@@ -32,6 +43,13 @@ export function createPromptInputController(input: {
   const agentsQuery = createQuery(() => input.queryOptions.agents(pathKey(sdk().directory)))
   const globalProvidersQuery = createQuery(() => input.queryOptions.providers(null))
   const providersQuery = createQuery(() => input.queryOptions.providers(pathKey(sdk().directory)))
+  const selectAgent = input.model
+    ? createNewSessionAgentSelect({
+        selectAgent: local.agent.set,
+        currentAgent: local.agent.current,
+        selectModel: input.model.set,
+      })
+    : local.agent.set
 
   return createMemo<PromptInputControls>(() => ({
     agents: {
@@ -40,7 +58,7 @@ export function createPromptInputController(input: {
       current: local.agent.current()?.name ?? "",
       loading: agentsQuery.isLoading,
       visible: local.agent.visible(),
-      select: local.agent.set,
+      select: selectAgent,
     },
     model: {
       selection: input.model ?? local.model,
