@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <!-- Background rounded square -->
+  <rect width="40" height="40" rx="8" fill="#1E2535"/>
+
+  <!-- Honeycomb hexagon -->
+  <polygon
+    points="20,7 29,12.5 29,23.5 20,29 11,23.5 11,12.5"
+    fill="none"
+    stroke="#F5A623"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+
+  <!-- Inner bee body (oval) -->
+  <ellipse cx="20" cy="20" rx="3.5" ry="5" fill="#F5A623"/>
+
+  <!-- Bee stripes -->
+  <rect x="16.5" y="18" width="7" height="1.5" rx="0.75" fill="#1E2535"/>
+  <rect x="16.5" y="21" width="7" height="1.5" rx="0.75" fill="#1E2535"/>
+
+  <!-- Wings -->
+  <ellipse cx="15" cy="16.5" rx="3" ry="1.8" fill="#F5A623" fill-opacity="0.5" transform="rotate(-20,15,16.5)"/>
+  <ellipse cx="25" cy="16.5" rx="3" ry="1.8" fill="#F5A623" fill-opacity="0.5" transform="rotate(20,25,16.5)"/>
+
+  <!-- Stinger -->
+  <line x1="20" y1="25" x2="20" y2="28" stroke="#F5A623" stroke-width="1.2" stroke-linecap="round"/>
+
+  <!-- Antennae -->
+  <line x1="18.5" y1="15" x2="16" y2="11.5" stroke="#F5A623" stroke-width="1" stroke-linecap="round"/>
+  <line x1="21.5" y1="15" x2="24" y2="11.5" stroke="#F5A623" stroke-width="1" stroke-linecap="round"/>
+  <circle cx="15.8" cy="11.2" r="1" fill="#F5A623"/>
+  <circle cx="24.2" cy="11.2" r="1" fill="#F5A623"/>
+</svg>

@@ -56,6 +56,7 @@ export const provider = {
   configure,
 }
 
+export const apiario = define(profiles.apiario)
 export const baseten = define(profiles.baseten)
 export const cerebras = define(profiles.cerebras)
 export const deepinfra = define(profiles.deepinfra)
