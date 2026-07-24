@@ -109,7 +109,16 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
             }),
           ),
           ...input.messages,
-        ]
+        ].reduce((acc, m) => {
+          if (m.role !== "system") { acc.push(m); return acc; }
+          const last = acc[acc.length - 1] as ModelMessage | undefined;
+          if (last && last.role === "system") {
+            last.content = (last.content as string) + "\n" + (m.content as string);
+          } else {
+            acc.push(m);
+          }
+          return acc;
+        }, [] as ModelMessage[])
 
   const params = yield* input.plugin.trigger(
     "chat.params",
