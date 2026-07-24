@@ -41,8 +41,7 @@ export const layer = Layer.effect(
               // Drain failures are already logged and durably recorded by the execution layer.
               yield* execution.resume(sessionID).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
             }),
-          // Bound recovery setup without waiting for long-running drains to finish.
-          { concurrency: 4, discard: true },
+          { discard: true },
         )
       }),
     })
