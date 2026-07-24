@@ -216,7 +216,7 @@ describe("SessionV2.prompt", () => {
         text: "boundary",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, sessionID)
+      yield* SessionPending.promote(db, events, sessionID, "steer")
       const stale = SessionMessage.ID.make("msg_stale_assistant")
       yield* db.insert(SessionMessageTable).values(assistantRow(stale, 100)).run().pipe(Effect.orDie)
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
@@ -248,7 +248,7 @@ describe("SessionV2.prompt", () => {
         text: "boundary",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, sessionID)
+      yield* SessionPending.promote(db, events, sessionID, "steer")
       yield* events.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
         revert: { messageID: boundary.id, files: [] },
@@ -448,7 +448,7 @@ describe("SessionV2.prompt", () => {
 
       yield* session.prompt({ sessionID, text: "First", resume: false })
       yield* session.prompt({ sessionID, text: "Second", resume: false })
-      yield* SessionPending.promoteSteers(db, events, sessionID)
+      yield* SessionPending.promote(db, events, sessionID, "steer")
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event): [number | undefined, string] => [event.durable?.seq, event.type])).toEqual([
@@ -625,7 +625,7 @@ describe("SessionV2.prompt", () => {
       })
 
       yield* Effect.all(
-        [SessionPending.promoteSteers(db, events, sessionID), SessionPending.promoteSteers(db, events, sessionID)],
+        [SessionPending.promote(db, events, sessionID, "steer"), SessionPending.promote(db, events, sessionID, "steer")],
         { concurrency: "unbounded" },
       )
 
@@ -855,7 +855,7 @@ describe("SessionV2.prompt", () => {
         },
       })
 
-      yield* SessionPending.promoteSteers(db, events, sessionID)
+      yield* SessionPending.promote(db, events, sessionID, "steer")
 
       expect(yield* session.messages({ sessionID })).toMatchObject([
         {
@@ -880,7 +880,7 @@ describe("SessionV2.prompt", () => {
       const entries = yield* Effect.all([session.synthetic(input), session.synthetic(input)], {
         concurrency: "unbounded",
       })
-      yield* SessionPending.promoteSteers(database.db, events, sessionID)
+      yield* SessionPending.promote(database.db, events, sessionID, "steer")
       const promotedRetry = yield* session.synthetic(input)
       const failure = yield* session.synthetic({ ...input, text: "Different completion" }).pipe(Effect.flip)
 
@@ -892,7 +892,7 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("keeps synthetic queue input pending until the queue boundary", () =>
+  it.effect("keeps queued input pending until the idle boundary", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -907,9 +907,15 @@ describe("SessionV2.prompt", () => {
       })
 
       expect(input.delivery).toBe("queue")
-      expect(yield* SessionPending.promoteSteers(db, events, sessionID)).toBe(0)
+      expect(yield* SessionPending.has(db, sessionID, "input")).toBe(true)
+      expect(
+        yield* SessionPending.promote(db, events, sessionID, "steer"),
+      ).toBe(0)
       expect(yield* session.messages({ sessionID })).toEqual([])
-      expect(yield* SessionPending.promoteNextQueued(db, events, sessionID)).toBe(true)
+      expect(
+        yield* SessionPending.promote(db, events, sessionID, "input"),
+      ).toBe(1)
+      expect(yield* SessionPending.has(db, sessionID, "input")).toBe(false)
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: input.id, type: "synthetic", text: "Queued completion" },
       ])
@@ -935,7 +941,7 @@ describe("SessionV2.prompt", () => {
         resume: false,
       })
 
-      yield* SessionPending.promoteSteers(db, events, sessionID)
+      yield* SessionPending.promote(db, events, sessionID, "steer")
 
       expect(
         (yield* session.messages({ sessionID, order: "asc" })).map((message) =>
@@ -978,10 +984,14 @@ describe("SessionV2.pending", () => {
         { id: second.id, type: "user", delivery: "steer" },
       ])
 
-      yield* SessionPending.promoteSteers(db, events, sessionID)
+      expect(
+        yield* SessionPending.promote(db, events, sessionID, "input"),
+      ).toBe(2)
       expect(yield* session.pending(sessionID)).toMatchObject([{ id: queued.id, type: "synthetic" }])
 
-      yield* SessionPending.promoteNextQueued(db, events, sessionID)
+      expect(
+        yield* SessionPending.promote(db, events, sessionID, "input"),
+      ).toBe(1)
       expect(yield* session.pending(sessionID)).toEqual([])
     }),
   )
@@ -993,9 +1003,12 @@ describe("SessionV2.pending", () => {
       const { db } = yield* Database.Service
 
       const barrier = yield* session.compact({ sessionID })
+      expect(yield* SessionPending.has(db, sessionID, "any")).toBe(true)
+      expect(yield* SessionPending.has(db, sessionID, "input")).toBe(false)
       expect(yield* session.pending(sessionID)).toMatchObject([{ id: barrier.id, type: "compaction" }])
 
       yield* SessionPending.settleCompaction(db, { sessionID })
+      expect(yield* SessionPending.has(db, sessionID, "any")).toBe(false)
       expect(yield* session.pending(sessionID)).toEqual([])
     }),
   )

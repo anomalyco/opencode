@@ -3049,7 +3049,7 @@ describe("SessionRunnerLLM", () => {
       streamFailure = undefined
       streamGate = undefined
       streamStarted = undefined
-      yield* Effect.yieldNow
+      yield* session.wait(sessionID)
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[1]!)).toEqual(["Start working", "Recover with this"])
@@ -3061,7 +3061,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       const events = yield* EventV2.Service
       yield* admit(session, "Recover interrupted tool")
-      yield* SessionPending.promoteSteers((yield* Database.Service).db, events, sessionID)
+      yield* SessionPending.promote((yield* Database.Service).db, events, sessionID, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
@@ -3118,7 +3118,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       const events = yield* EventV2.Service
       yield* admit(session, "Recover interrupted hosted tool")
-      yield* SessionPending.promoteSteers((yield* Database.Service).db, events, sessionID)
+      yield* SessionPending.promote((yield* Database.Service).db, events, sessionID, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
@@ -3169,7 +3169,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       const events = yield* EventV2.Service
       yield* admit(session, "Recover interrupted tool input")
-      yield* SessionPending.promoteSteers((yield* Database.Service).db, events, sessionID)
+      yield* SessionPending.promote((yield* Database.Service).db, events, sessionID, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Step.Started, {
         sessionID,
@@ -4170,7 +4170,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("retries a physical attempt without consuming the logical agent step", () =>
+  it.effect("retries a model call without consuming the logical agent step", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const agents = yield* AgentV2.Service

@@ -1,8 +1,7 @@
 export * as SessionRunnerLLM from "./llm"
 
 import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent } from "@opencode-ai/ai"
-import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Semaphore, Stream } from "effect"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { PermissionV2 } from "../../permission"
@@ -28,6 +27,14 @@ import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
 import { SessionUsage } from "../usage"
 
+/** How one model call ended: settled, awaiting a scheduled retry, or restarted by compaction. */
+type CallOutcome = Data.TaggedEnum<{
+  Completed: { readonly needsContinuation: boolean; readonly step: number }
+  Retry: { readonly step: number; readonly assistantMessageID: SessionMessage.ID }
+  Restart: { readonly step: number; readonly recoveredOverflow: boolean }
+}>
+const CallOutcome = Data.taggedEnum<CallOutcome>()
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -43,14 +50,21 @@ const layer = Layer.effect(
     // Title generation is a side effect of the first step; it must not delay step continuation.
     // Tracked per process so repeated wakes before the second user message arrives don't
     // re-fire a redundant LLM call; `SessionTitle` itself is idempotent based on durable history.
-    const titleAttempted = new Set<SessionSchema.ID>()
+    const titleStarted = new Set<SessionSchema.ID>()
     const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       return session
     })
-    const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
+    /** Fires title generation once per process after the first step makes a user message visible. */
+    const startTitleOnce = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      if (titleStarted.has(sessionID)) return
+      titleStarted.add(sessionID)
+      forkTitle(title.generateForFirstPrompt(yield* getSession(sessionID)).pipe(Effect.ignore))
+    })
+    /** Closes stale tool calls left active by an earlier interrupted drain. */
+    const settleStaleToolCalls = Effect.fn("SessionRunner.settleStaleToolCalls")(function* (
       sessionID: SessionSchema.ID,
     ) {
       for (const message of yield* store.context(sessionID)) {
@@ -76,11 +90,15 @@ const layer = Layer.effect(
           (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionTool.CancelledError),
       )
 
-    const attemptStep = Effect.fn("SessionRunner.attemptStep")(function* (
+    /**
+     * Prepares and runs at most one model call, executes its local tools, and durably
+     * settles the step. Compaction may instead request that the logical step restart.
+     */
+    const callModel = Effect.fn("SessionRunner.callModel")(function* (
       sessionID: SessionSchema.ID,
-      promotion: SessionPending.Delivery | undefined,
+      promotable: SessionPending.Promotable | undefined,
       step: number,
-      recoverOverflow?: typeof compaction.compact,
+      recoverOverflow: boolean,
       assistantMessageID?: SessionMessage.ID,
     ) {
       const selected = yield* context.select(sessionID)
@@ -88,24 +106,20 @@ const layer = Layer.effect(
       // a blocked first step leaves pending inputs untouched.
       yield* InstructionState.prepare(db, events, selected.instructions, selected.session.id)
       let currentStep = step
-      if (promotion) {
-        let promoted = 0
-        if (promotion === "steer") promoted = yield* SessionPending.promoteSteers(db, events, selected.session.id)
-        if (promotion === "queue") {
-          promoted += Number(yield* SessionPending.promoteNextQueued(db, events, selected.session.id))
-          promoted += yield* SessionPending.promoteSteers(db, events, selected.session.id)
-        }
+      if (promotable) {
+        const promoted = yield* SessionPending.promote(db, events, selected.session.id, promotable)
         if (promoted > 0) currentStep = 1
       }
       const loaded = yield* context.load(selected)
-      const session = loaded.session
-      const agent = loaded.agent
+      const { session, agent } = loaded
       const resolved = loaded.model
       const model = resolved.model
+      // Make room: history must fit the context window before the call. A pending manual
+      // compaction owns this instead; the runner executes it between steps.
       const compactionInput = { session, messages: loaded.messages, model, cost: resolved.cost }
       if (compaction.required(compactionInput) && !(yield* SessionPending.compaction(db, session.id))) {
         const compacted = yield* compaction.compact(compactionInput)
-        if (compacted.status === "completed") return { _tag: "RestartAfterCompaction", step: currentStep } as const
+        if (compacted.status === "completed") return CallOutcome.Restart({ step: currentStep, recoveredOverflow: false })
         return yield* new StepFailedError({ error: compacted.error })
       }
       const prepared = yield* modelRequests.prepare({
@@ -131,6 +145,40 @@ const layer = Layer.effect(
       // mid-event.
       const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
       const publish = (event: LLMEvent) => serialized(publisher.publish(event))
+
+      const stepUsage = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) => ({
+        cost: SessionUsage.calculateCost(resolved.cost, settlement.tokens),
+        tokens: settlement.tokens,
+      })
+
+      const captureStepEnd = Effect.fnUntraced(function* () {
+        const snapshot = yield* snapshots.capture()
+        const files =
+          startSnapshot && snapshot
+            ? yield* snapshots
+                .files({ from: startSnapshot, to: snapshot })
+                .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            : undefined
+        return { snapshot, files }
+      })
+
+      const publishStepEnd = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) =>
+        Effect.gen(function* () {
+          const end = yield* captureStepEnd()
+          yield* serialized(
+            events.publish(SessionEvent.Step.Ended, {
+              sessionID: session.id,
+              assistantMessageID: yield* publisher.startAssistant(),
+              finish: settlement.finish,
+              ...stepUsage(settlement),
+              ...end,
+            }),
+          )
+        })
+
+      // The stream is defined here but runs inside the settlement mask below: publish each
+      // event durably, fork one fiber per local tool call, and hold back a virgin
+      // context-overflow provider error so settlement may recover it via compaction.
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(prepared.request).pipe(
         Stream.runForEach((event) =>
@@ -172,39 +220,10 @@ const layer = Layer.effect(
         Effect.ensuring(serialized(publisher.flush())),
       )
 
-      const stepUsage = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) => ({
-        cost: SessionUsage.calculateCost(resolved.cost, settlement.tokens),
-        tokens: settlement.tokens,
-      })
-
-      const captureStepEnd = Effect.fnUntraced(function* () {
-        const snapshot = yield* snapshots.capture()
-        const files =
-          startSnapshot && snapshot
-            ? yield* snapshots
-                .files({ from: startSnapshot, to: snapshot })
-                .pipe(Effect.catch(() => Effect.succeed(undefined)))
-            : undefined
-        return { snapshot, files }
-      })
-
-      const publishStepEnd = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) =>
-        Effect.gen(function* () {
-          const end = yield* captureStepEnd()
-          yield* serialized(
-            events.publish(SessionEvent.Step.Ended, {
-              sessionID: session.id,
-              assistantMessageID: yield* publisher.startAssistant(),
-              finish: settlement.finish,
-              ...stepUsage(settlement),
-              ...end,
-            }),
-          )
-        })
-
+      // Settle: only the stream itself is interruptible (restore); every line after it is
+      // protected so a started call always reaches one durable outcome.
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          // Gather the evidence: how did the provider stream end?
           const stream = yield* restore(providerStream).pipe(Effect.exit)
           const streamFailure = Option.getOrUndefined(Exit.findErrorOption(stream))
           // Note: Exit.hasInterrupts is a type guard whose false branch unsoundly narrows
@@ -217,10 +236,10 @@ const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasRetryEvidence() &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
-            (yield* restore(recoverOverflow({ session, messages: loaded.messages, model, cost: resolved.cost })))
+            (yield* restore(compaction.compact({ session, messages: loaded.messages, model, cost: resolved.cost })))
               .status === "completed"
           )
-            return { _tag: "RestartAfterOverflowCompaction", step: currentStep } as const
+            return CallOutcome.Restart({ step: currentStep, recoveredOverflow: true })
 
           // An unrecovered held-back overflow becomes the step's durable provider error. A
           // thrown LLM failure records the assistant failure unless a provider error was
@@ -324,63 +343,59 @@ const layer = Layer.effect(
             return yield* Effect.failCause(settledFailure)
           if (toolsInterrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
           if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
-          return {
-            _tag: "Completed",
-            needsContinuation,
-            step: currentStep,
-          } as const
+          return CallOutcome.Completed({ needsContinuation, step: currentStep })
         }),
       )
     }, Effect.scoped)
 
+    /** Completes one logical model step, transparently retrying or rebuilding after compaction. */
     const runStep = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
-      promotion: SessionPending.Delivery | undefined,
+      promotable: SessionPending.Promotable,
       step: number,
     ) {
-      // Compaction restarts rebuild the request from compacted history without re-promoting.
-      // Overflow recovery is one-shot: a post-compaction attempt must not recover another
-      // overflow, so the recovery hook is dropped after it fires.
-      let recoverOverflow: typeof compaction.compact | undefined = compaction.compact
-      let currentPromotion = promotion
-      let currentStep = step
-      let assistantMessageID: SessionMessage.ID | undefined
-      while (true) {
-        const attempt = yield* Effect.suspend(() =>
-          attemptStep(sessionID, currentPromotion, currentStep, recoverOverflow, assistantMessageID),
-        ).pipe(
-          Effect.tapError((error) =>
-            error instanceof SessionRunnerRetry.RetryableFailure
-              ? Effect.sync(() => {
-                  currentStep = error.step
-                  assistantMessageID = error.assistantMessageID
-                  currentPromotion = undefined
-                })
-              : Effect.void,
-          ),
-          Effect.retryOrElse(SessionRunnerRetry.schedule(events, sessionID), (error) => {
-            if (!(error instanceof SessionRunnerRetry.RetryableFailure)) return Effect.fail(error)
-            return events
+      const retry = yield* Schedule.toStepWithSleep(SessionRunnerRetry.schedule(events, sessionID))
+      /**
+       * Consumes one retry allowance: sleeps the scheduled backoff and reports what the next
+       * attempt should reuse, or publishes Step.Failed and fails once attempts are exhausted.
+       * The step loop performs the retry itself on the next iteration.
+       */
+      const waitForRetry = (failure: SessionRunnerRetry.RetryableFailure) =>
+        retry(failure).pipe(
+          Effect.as(CallOutcome.Retry({ step: failure.step, assistantMessageID: failure.assistantMessageID })),
+          Pull.catchDone(() =>
+            events
               .publish(SessionEvent.Step.Failed, {
                 sessionID,
-                assistantMessageID: error.assistantMessageID,
-                error: error.error,
+                assistantMessageID: failure.assistantMessageID,
+                error: failure.error,
               })
-              .pipe(Effect.andThen(Effect.fail(error.cause)))
-          }),
+              .pipe(Effect.andThen(Effect.fail(failure.cause))),
+          ),
         )
-        if (attempt._tag === "Completed")
-          return {
-            needsContinuation: attempt.needsContinuation,
-            step: attempt.step,
-          }
-        if (attempt._tag === "RestartAfterOverflowCompaction") recoverOverflow = undefined
-        yield* Effect.yieldNow
-        currentPromotion = undefined
-        currentStep = attempt.step
+      let currentPromotable: SessionPending.Promotable | undefined = promotable
+      let currentStep = step
+      let assistantMessageID: SessionMessage.ID | undefined
+      // Overflow recovery is one-shot: a call after recovery must not recover another overflow.
+      let recoverOverflow = true
+      while (true) {
+        const outcome = yield* callModel(
+          sessionID,
+          currentPromotable,
+          currentStep,
+          recoverOverflow,
+          assistantMessageID,
+        ).pipe(Effect.catchTag("SessionRunner.RetryableFailure", waitForRetry))
+        if (outcome._tag === "Completed") return { needsContinuation: outcome.needsContinuation, step: outcome.step }
+        if (outcome._tag === "Retry") assistantMessageID = outcome.assistantMessageID
+        if (outcome._tag === "Restart" && outcome.recoveredOverflow) recoverOverflow = false
+        // Neither a retry nor a compaction restart re-promotes input.
+        currentPromotable = undefined
+        currentStep = outcome.step
       }
     })
 
+    /** Executes a previously admitted manual compaction request, if one is pending. */
     const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
       sessionID: SessionSchema.ID,
     ) {
@@ -399,67 +414,54 @@ const layer = Layer.effect(
             }),
           ).pipe(Effect.exit)
           if (Exit.isSuccess(compacted)) return
-          if (Exit.isFailure(compacted)) {
-            const unsettled = yield* SessionPending.compaction(db, sessionID)
-            if (unsettled)
-              yield* events.publish(SessionEvent.Compaction.Failed, {
-                sessionID,
-                reason: "manual",
-                error: Cause.hasInterruptsOnly(compacted.cause)
-                  ? { type: "aborted", message: "Compaction cancelled" }
-                  : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
-                inputID: unsettled.id,
-              })
-            return yield* Effect.failCause(compacted.cause)
-          }
+          const unsettled = yield* SessionPending.compaction(db, sessionID)
+          if (unsettled)
+            yield* events.publish(SessionEvent.Compaction.Failed, {
+              sessionID,
+              reason: "manual",
+              error: Cause.hasInterruptsOnly(compacted.cause)
+                ? { type: "aborted", message: "Compaction cancelled" }
+                : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
+              inputID: unsettled.id,
+            })
+          return yield* Effect.failCause(compacted.cause)
         }),
       )
     })
 
-    // Execution lifecycle is published per busy period by SessionExecution, not per drain here.
+    /**
+     * Runs logical steps until no tool result or newly admitted steer requires another
+     * model call. Queued inputs remain pending until the current model work reaches idle.
+     */
+    const runSteps = Effect.fn("SessionRunner.runSteps")(function* (sessionID: SessionSchema.ID) {
+      // Fresh work may promote queued input; later steps absorb steers only.
+      let promotable: SessionPending.Promotable = "input"
+      let step = 1
+      while (true) {
+        const result = yield* runStep(sessionID, promotable, step)
+        yield* startTitleOnce(sessionID)
+        yield* runPendingCompaction(sessionID)
+        if (!result.needsContinuation && !(yield* SessionPending.has(db, sessionID, "steer"))) return
+        promotable = "steer"
+        step = result.step + 1
+      }
+    })
+
+    /**
+     * Drains eligible manual compaction and user input until the Session becomes idle.
+     * Execution lifecycle is published per busy period by SessionExecution, not here.
+     */
     const drain = Effect.fn("SessionRunner.drain")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
+      if (!input.force && !(yield* SessionPending.has(db, input.sessionID, "any"))) return
+      yield* settleStaleToolCalls(input.sessionID)
       yield* runPendingCompaction(input.sessionID)
-      const hasSteer = yield* SessionPending.has(db, input.sessionID, "steer")
-      const hasQueue = hasSteer ? false : yield* SessionPending.has(db, input.sessionID, "queue")
-      if (!input.force && !hasSteer && !hasQueue) return
-      yield* failInterruptedTools(input.sessionID)
-      let promotion: SessionPending.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
-      let shouldRun = input.force || hasSteer || hasQueue
-      while (shouldRun) {
-        let needsContinuation = true
-        let step = 1
-        // Repeat steps while continuation is needed. A step needs continuation only
-        // when it recorded local tool calls whose results the model has not yet seen;
-        // a provider error suppresses it. Pending steers also continue the loop so
-        // interjections are answered before the session goes idle.
-        while (needsContinuation) {
-          const result = yield* runStep(input.sessionID, promotion, step)
-          // Steer/queue promotion inside runStep has already made the pending input a visible
-          // user message by this point, so the first-user-message check below is reliable.
-          if (!titleAttempted.has(input.sessionID)) {
-            titleAttempted.add(input.sessionID)
-            forkTitle(title.generateForFirstPrompt(yield* getSession(input.sessionID)).pipe(Effect.ignore))
-          }
-          needsContinuation = result.needsContinuation
-          step = result.step + 1
-          if (needsContinuation) {
-            yield* runPendingCompaction(input.sessionID)
-            promotion = "steer"
-            continue
-          }
-          yield* runPendingCompaction(input.sessionID)
-          promotion = "steer"
-          needsContinuation = yield* SessionPending.has(db, input.sessionID, "steer")
-        }
-        yield* runPendingCompaction(input.sessionID)
-        const hasSteer = yield* SessionPending.has(db, input.sessionID, "steer")
-        const hasQueue = hasSteer ? false : yield* SessionPending.has(db, input.sessionID, "queue")
-        shouldRun = hasSteer || hasQueue
-        promotion = hasSteer ? "steer" : hasQueue ? "queue" : undefined
-      }
+      if (!input.force && !(yield* SessionPending.has(db, input.sessionID, "input"))) return
+      do {
+        yield* runSteps(input.sessionID)
+      } while (yield* SessionPending.has(db, input.sessionID, "input"))
     })
 
     return Service.of({ drain })

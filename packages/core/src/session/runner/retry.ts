@@ -7,7 +7,6 @@ import { EventV2 } from "../../event"
 import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
-import type { SessionRunner } from "./index"
 
 export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableFailure")<{
   readonly cause: LLMError
@@ -45,22 +44,18 @@ const retryAfter = (failure: RetryableFailure) => {
 
 export const schedule = (events: EventV2.Interface, sessionID: SessionSchema.ID) =>
   Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
-    Schedule.setInputType<RetryableFailure | SessionRunner.RunError>(),
-    Schedule.passthrough,
-    Schedule.while(({ input }) => input instanceof RetryableFailure),
+    Schedule.setInputType<RetryableFailure>(),
     Schedule.modifyDelay(({ input: failure, duration: delay }) => {
-      const minimum = failure instanceof RetryableFailure ? retryAfter(failure) : undefined
+      const minimum = retryAfter(failure)
       return Effect.succeed(minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum)))
     }),
     Schedule.tap((metadata) =>
-      metadata.input instanceof RetryableFailure
-        ? events.publish(SessionEvent.RetryScheduled, {
-            sessionID,
-            assistantMessageID: metadata.input.assistantMessageID,
-            attempt: metadata.attempt + 1,
-            at: metadata.now + Duration.toMillis(metadata.duration),
-            error: metadata.input.error,
-          })
-        : Effect.void,
+      events.publish(SessionEvent.RetryScheduled, {
+        sessionID,
+        assistantMessageID: metadata.input.assistantMessageID,
+        attempt: metadata.attempt + 1,
+        at: metadata.now + Duration.toMillis(metadata.duration),
+        error: metadata.input.error,
+      }),
     ),
   )
