@@ -3,7 +3,7 @@ import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
+import { type Accessor, batch, createMemo, createResource, onCleanup, onMount } from "solid-js"
 import { createApiForServer, createSdkForServer, type ServerApi } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
@@ -169,6 +169,7 @@ type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
   protocol: Promise<ServerProtocol>
+  protocolKind: Accessor<ServerProtocol | undefined>
   url: string
   client: ReturnType<typeof createSdkForServer>
   api: CompatibleApi
@@ -205,6 +206,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     server: server.http,
   })
   const protocol = detectServerProtocol(server.http, platform.fetch ?? globalThis.fetch)
+  const [protocolKind] = createResource(
+    () => protocol,
+    (value) => value,
+  )
   const emitter = createGlobalEmitter<{
     [key: string]: ServerEvent
   }>()
@@ -347,6 +352,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     server,
     scope,
     protocol,
+    protocolKind,
     url: server.http.url,
     client: sdk,
     api,
@@ -393,6 +399,11 @@ export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleCo
     })
   },
 })
+
+export function useServerProtocol() {
+  const serverSDK = useServerSDK()
+  return createMemo(() => serverSDK().protocolKind())
+}
 
 type SDKEventMap = {
   [key in Event["type"]]: Extract<ServerEvent, { type: key }>
