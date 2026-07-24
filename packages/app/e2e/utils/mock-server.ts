@@ -4,6 +4,7 @@ const emptyList = new Set(["/skill", "/command", "/lsp", "/formatter", "/vcs/sta
 const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp", "/experimental/resource"])
 
 export interface MockServerConfig {
+  protocol?: "v1" | "v2"
   provider: unknown
   directory: string
   project: unknown
@@ -54,14 +55,21 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (url.port !== targetPort && url.port !== appPort) return route.fallback()
 
     const path = url.pathname
-    if (path === "/global/event" || path === "/event") return sse(route, config.events?.(), config.eventRetry)
-    if (path === "/global/health") return json(route, { healthy: true })
-    if (path === "/api/session")
-      return json(route, {
-        data: config.sessions.map((session) => v2Session(session, config.directory)),
-        cursor: {},
-      })
-    if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: false })
+    if (path === "/global/event" || path === "/event" || path === "/api/event") {
+      const events = config.events?.()
+      return sse(
+        route,
+        path === "/api/event"
+          ? [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])]
+          : events,
+        config.eventRetry,
+      )
+    }
+    if (path === "/global/health")
+      return config.protocol === "v2" ? json(route, {}, undefined, 404) : json(route, { healthy: true })
+    if (path === "/api/health" && config.protocol === "v2")
+      return json(route, { healthy: true, version: "2.0.0", pid: 1 })
+    if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })
     if (path === "/permission")
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
     if (path === "/question")
@@ -89,9 +97,128 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         },
         data: [],
       })
+    if (path === "/api/agent")
+      return json(route, {
+        location: location(config),
+        data: [
+          {
+            id: "build",
+            name: "Build",
+            mode: "primary",
+            hidden: false,
+            request: { settings: {}, headers: {}, body: {} },
+            permissions: [],
+          },
+        ],
+      })
+    if (path === "/api/command") return json(route, { location: location(config), data: [] })
+    if (path === "/api/mcp") return json(route, { location: location(config), data: [] })
+    if (path === "/api/mcp/resource")
+      return json(route, { location: location(config), data: { resources: [], templates: [] } })
+    const integration = path.match(/^\/api\/integration\/([^/]+)$/)?.[1]
+    if (integration && route.request().method() === "GET")
+      return json(route, {
+        location: location(config),
+        data: { id: integration, name: integration, methods: [{ type: "key", label: "API key" }], connections: [] },
+      })
+    if (/^\/api\/integration\/[^/]+\/connect\/key$/.test(path) && route.request().method() === "POST")
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    if (path === "/api/project") return json(route, [config.project])
+    if (path === "/api/project/current")
+      return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
+    if (path.startsWith("/api/project/") && route.request().method() === "PATCH") return json(route, config.project)
+    if (path === "/api/path")
+      return json(route, {
+        state: config.directory,
+        config: config.directory,
+        worktree: config.directory,
+        directory: config.directory,
+        home: "C:/OpenCode",
+      })
+    if (path === "/api/permission/request")
+      return json(route, {
+        location: location(config),
+        data: (typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])).map(
+          currentPermission,
+        ),
+      })
+    if (path === "/api/question/request")
+      return json(route, {
+        location: location(config),
+        data: typeof config.questions === "function" ? config.questions() : (config.questions ?? []),
+      })
+    if (path === "/api/vcs")
+      return json(route, { location: location(config), data: { branch: "main", defaultBranch: "main" } })
+    if (path === "/api/vcs/status") return json(route, { location: location(config), data: [] })
+    if (path === "/api/vcs/diff") return json(route, { location: location(config), data: config.vcsDiff ?? [] })
+    if (path === "/api/pty/shells") return json(route, { location: location(config), data: [] })
+    if (/^\/api\/pty\/[^/]+\/connect-token$/.test(path))
+      return json(route, { location: location(config), data: { ticket: "e2e-ticket", expires_in: 60 } })
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
+    if (path === "/api/session") {
+      const directory = url.searchParams.get("directory")
+      const parentID = url.searchParams.get("parentID")
+      const limit = Number(url.searchParams.get("limit") ?? 50)
+      const offset = Number(url.searchParams.get("cursor") ?? 0)
+      const sessions = config.sessions
+        .filter((session) => !directory || session.directory === directory)
+        .filter((session) => parentID !== "null" || session.parentID === undefined)
+        .filter((session) => {
+          const search = url.searchParams.get("search")?.toLowerCase()
+          return (
+            !search ||
+            String(session.title ?? "")
+              .toLowerCase()
+              .includes(search)
+          )
+        })
+      const ordered = url.searchParams.get("order") === "asc" ? sessions.toReversed() : sessions
+      const data = ordered.slice(offset, offset + limit)
+      const next = offset + limit < ordered.length ? String(offset + limit) : undefined
+      return json(route, {
+        data: data.map((session) => currentSession(session, config.directory)),
+        cursor: { next },
+      })
+    }
+    if (path === "/api/session/active") {
+      const statuses = (config.sessionStatus ?? {}) as Record<string, { type?: string }>
+      return json(route, {
+        data: Object.fromEntries(
+          Object.entries(statuses).flatMap(([id, status]) =>
+            status.type === "idle" ? [] : [[id, { type: "running" }]],
+          ),
+        ),
+      })
+    }
+    if (/^\/api\/session\/[^/]+\/shell$/.test(path) && route.request().method() === "POST") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (/^\/api\/session\/[^/]+\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (
+      /^\/api\/session\/[^/]+\/(archive|rename|interrupt|revert\/clear|revert\/commit)$/.test(path) &&
+      route.request().method() === "POST"
+    ) {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (/^\/api\/session\/[^/]+$/.test(path) && route.request().method() === "DELETE") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
     if (path in staticRoutes) return json(route, staticRoutes[path])
+
+    const currentSessionMatch = path.match(/^\/api\/session\/([^/]+)$/)
+    if (currentSessionMatch) {
+      const session = config.sessions.find((item) => item.id === currentSessionMatch[1])
+      if (!session) return json(route, { error: "Session not found" }, undefined, 404)
+      return json(route, {
+        data: currentSession(session, config.directory),
+      })
+    }
 
     const sessionMatch = path.match(/^\/session\/([^/]+)$/)
     if (sessionMatch) {
@@ -115,6 +242,24 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
     if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
 
+    const currentMessagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)
+    if (currentMessagesMatch) {
+      const token = url.searchParams.get("cursor") ?? undefined
+      const before = token ? cursors.get(token) : undefined
+      if (token && !before) return json(route, { error: "Invalid cursor" }, undefined, 400)
+      config.onMessages?.({ sessionID: currentMessagesMatch[1], before, phase: "start" })
+      await config.beforeMessagesResponse?.({ sessionID: currentMessagesMatch[1]!, before })
+      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
+      const pageData = config.pageMessages(currentMessagesMatch[1], Number(url.searchParams.get("limit") ?? 50), before)
+      config.onMessages?.({ sessionID: currentMessagesMatch[1], before, phase: "end" })
+      const cursor = pageData.cursor ? `cursor_${++nextCursor}` : undefined
+      if (cursor) cursors.set(cursor, pageData.cursor!)
+      return json(route, {
+        data: pageData.items.map(currentMessage).reverse(),
+        cursor: { next: cursor },
+      })
+    }
+
     const messagesMatch = path.match(/^\/session\/([^/]+)\/message$/)
     if (messagesMatch) {
       const token = url.searchParams.get("before") ?? undefined
@@ -137,12 +282,37 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   })
 }
 
-function v2Session(session: { id: string } & Record<string, unknown>, fallbackDirectory: string) {
+function location(config: MockServerConfig) {
+  return {
+    directory: config.directory,
+    project: { id: (config.project as { id?: string }).id, directory: config.directory },
+  }
+}
+
+function currentPermission(value: unknown) {
+  const permission = value as Record<string, unknown>
+  if (permission.action) return permission
+  const tool = permission.tool as { messageID?: string; callID?: string } | undefined
+  return {
+    id: permission.id,
+    sessionID: permission.sessionID,
+    action: permission.permission,
+    resources: permission.patterns ?? [],
+    save: permission.always,
+    metadata: permission.metadata,
+    source:
+      tool?.messageID && tool.callID ? { type: "tool", messageID: tool.messageID, callID: tool.callID } : undefined,
+  }
+}
+
+export function currentSession(session: { id: string } & Record<string, unknown>, fallbackDirectory?: string) {
   const time = session.time && typeof session.time === "object" ? session.time : {}
   return {
     id: session.id,
     parentID: session.parentID,
     projectID: session.projectID ?? "project",
+    agent: session.agent ?? "build",
+    model: session.model ?? { id: "mock-model", providerID: "mock-provider" },
     cost: session.cost ?? 0,
     tokens: session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: {
@@ -157,7 +327,67 @@ function v2Session(session: { id: string } & Record<string, unknown>, fallbackDi
       directory: typeof session.directory === "string" ? session.directory : fallbackDirectory,
       ...(typeof session.workspaceID === "string" ? { workspaceID: session.workspaceID } : {}),
     },
-    ...(typeof session.path === "string" ? { subpath: session.path } : {}),
+    subpath: session.path,
+    revert: session.revert,
+  }
+}
+
+function currentMessage(value: unknown) {
+  const item = value as {
+    info: Record<string, unknown> & { id: string; role: "user" | "assistant"; time: { created: number } }
+    parts: Array<Record<string, unknown> & { type: string }>
+  }
+  if (item.info.role === "user") {
+    return {
+      id: item.info.id,
+      type: "user",
+      time: item.info.time,
+      text: item.parts
+        .flatMap((part) => (part.type === "text" && typeof part.text === "string" ? [part.text] : []))
+        .join("\n"),
+    }
+  }
+  return {
+    id: item.info.id,
+    type: "assistant",
+    time: item.info.time,
+    agent: item.info.agent ?? "build",
+    model: { id: item.info.modelID ?? "model", providerID: item.info.providerID ?? "provider" },
+    cost: item.info.cost,
+    tokens: item.info.tokens,
+    error: item.info.error,
+    content: item.parts.flatMap<unknown>((part) => {
+      if (part.type === "text" || part.type === "reasoning") return [{ type: part.type, text: part.text ?? "" }]
+      if (part.type !== "tool") return []
+      const state = part.state as Record<string, unknown>
+      return [
+        {
+          type: "tool",
+          id: part.id,
+          name: part.tool,
+          time: state.time ?? { created: item.info.time.created },
+          state:
+            state.status === "pending"
+              ? { status: "streaming", input: state.raw ?? JSON.stringify(state.input ?? {}) }
+              : state.status === "completed"
+                ? {
+                    status: "completed",
+                    input: state.input ?? {},
+                    structured: state.metadata ?? {},
+                    content: [{ type: "text", text: state.output ?? "" }],
+                  }
+                : state.status === "error"
+                  ? {
+                      status: "error",
+                      input: state.input ?? {},
+                      structured: state.metadata ?? {},
+                      content: [],
+                      error: { type: "ToolError", message: state.error ?? "Tool failed" },
+                    }
+                  : { status: "running", input: state.input ?? {}, structured: state.metadata ?? {}, content: [] },
+        },
+      ]
+    }),
   }
 }
 
@@ -180,4 +410,19 @@ function sse(route: Route, events?: unknown[], retry?: number) {
     contentType: "text/event-stream",
     body: `${retry === undefined ? "" : `retry: ${retry}\n\n`}${events?.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") || ": ok\n\n"}`,
   })
+}
+
+function currentEvent(input: unknown) {
+  if (!input || typeof input !== "object" || !("payload" in input)) return input
+  const envelope = input as { directory?: string; payload?: unknown }
+  if (!envelope.payload || typeof envelope.payload !== "object") return input
+  const payload = envelope.payload as { id?: string; type?: string; properties?: unknown }
+  if (!payload.type) return input
+  return {
+    id: payload.id ?? `evt_mock_${Date.now()}`,
+    created: Date.now(),
+    type: payload.type,
+    data: payload.properties ?? {},
+    location: envelope.directory && envelope.directory !== "global" ? { directory: envelope.directory } : undefined,
+  }
 }

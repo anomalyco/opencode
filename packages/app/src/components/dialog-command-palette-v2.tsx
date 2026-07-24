@@ -5,13 +5,20 @@ import { Dialog, DialogBody } from "@opencode-ai/ui/v2/dialog-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { createEffect, createMemo, createResource, createSignal, For, Match, Show, Switch } from "solid-js"
-import { formatKeybindParts } from "@/context/command"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { commandPaletteOptions, formatKeybindParts, useCommand } from "@/context/command"
+import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
+import { ServerConnection } from "@/context/server"
+import { useTabs } from "@/context/tabs"
+import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { getRelativeTime } from "@/utils/time"
 import {
+  createCommandPaletteCommandEntry,
   createCommandPaletteFileEntry,
   createCommandPaletteModel,
+  createServerSessionEntries,
   uniqueCommandPaletteEntries,
   type CommandPaletteEntry,
 } from "./command-palette"
@@ -30,9 +37,6 @@ function matchesEntry(entry: CommandPaletteEntry, query: string) {
 
 export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => void }) {
   const palette = createCommandPaletteModel(props)
-  const [query, setQuery] = createSignal("")
-  const [active, setActive] = createSignal(0)
-
   const loadItems = async (text: string) => {
     const q = text.trim()
     if (!q) return [...palette.preferredCommandEntries(), ...palette.recentFileEntries()]
@@ -41,16 +45,105 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
     const category = palette.language.t("palette.group.files")
     return [
       ...palette.commandEntries().filter((entry) => matchesEntry(entry, q)),
-      ...nextSessions.filter((entry) => matchesEntry(entry, q)),
+      ...nextSessions,
       ...files.map((path) => createCommandPaletteFileEntry(path, category)),
     ]
   }
 
-  const [entries] = createResource(query, loadItems, { initialValue: [] as CommandPaletteEntry[] })
+  return (
+    <CommandPaletteView
+      placeholder={palette.language.t("palette.search.placeholder")}
+      loadItems={loadItems}
+      highlight={palette.highlight}
+      select={palette.select}
+      close={palette.close}
+    />
+  )
+}
+
+export function DialogHomeCommandPaletteV2(props: {
+  server: ServerConnection.Any
+  onSelectSession: (entry: CommandPaletteEntry) => void
+}) {
+  const command = useCommand()
+  const dialog = useDialog()
+  const global = useGlobal()
+  const language = useLanguage()
+  const serverCtx = global.ensureServerCtx(props.server)
+  const state = { cleanup: undefined as (() => void) | void, committed: false }
+  const commandEntries = createMemo(() => {
+    const category = language.t("palette.group.commands")
+    return commandPaletteOptions(command.options).map((option) => createCommandPaletteCommandEntry(option, category))
+  })
+  const sessions = createServerSessionEntries({
+    server: ServerConnection.key(props.server),
+    opened: serverCtx.projects.list,
+    stored: () => serverCtx.sync.data.project,
+    load: (search, signal) =>
+      serverCtx.sdk.client.experimental.session.list({ roots: true, search, limit: 50 }, { signal }),
+    untitled: () => language.t("command.session.new"),
+    category: () => language.t("command.category.session"),
+  })
+
+  const highlight = (item: CommandPaletteEntry | undefined) => {
+    state.cleanup?.()
+    state.cleanup = undefined
+    if (item?.type !== "command") return
+    state.cleanup = item.option?.onHighlight?.()
+  }
+  const select = (item: CommandPaletteEntry | undefined) => {
+    if (!item) return
+    state.committed = true
+    state.cleanup = undefined
+    dialog.close()
+    if (item.type === "command") {
+      item.option?.onSelect?.("palette")
+      return
+    }
+    if (item.type === "session") props.onSelectSession(item)
+  }
+  const loadItems = async (text: string) => {
+    const query = text.trim()
+    if (!query) return commandEntries().slice(0, 5)
+    return [...commandEntries().filter((entry) => matchesEntry(entry, query)), ...(await sessions(query))]
+  }
+
+  onCleanup(() => {
+    if (state.committed) return
+    state.cleanup?.()
+  })
+
+  return (
+    <CommandPaletteView
+      placeholder={language.t("palette.search.placeholder.home")}
+      loadItems={loadItems}
+      highlight={highlight}
+      select={select}
+      close={() => dialog.close()}
+    />
+  )
+}
+
+function CommandPaletteView(props: {
+  placeholder: string
+  loadItems: (text: string) => CommandPaletteEntry[] | Promise<CommandPaletteEntry[]>
+  highlight: (item: CommandPaletteEntry | undefined) => void
+  select: (item: CommandPaletteEntry | undefined) => void
+  close: () => void
+}) {
+  const language = useLanguage()
+  const tabs = useTabs()
+  const [query, setQuery] = createSignal("")
+  const [active, setActive] = createSignal(0)
+
+  const [entries] = createResource(query, props.loadItems, { initialValue: [] as CommandPaletteEntry[] })
   // Render stale results while a new query loads to avoid flashing "Loading" per keystroke.
   const visibleEntries = createMemo(() => uniqueCommandPaletteEntries(entries.latest ?? []))
   const groupedEntries = createMemo(() => groups(visibleEntries()))
   const activeEntry = createMemo(() => visibleEntries()[active()])
+  const openSessions = createMemo(
+    () => new Set(tabs.store.flatMap((tab) => (tab.type === "session" ? [`${tab.server}\0${tab.sessionId}`] : []))),
+  )
 
   createEffect(() => {
     query()
@@ -59,7 +152,7 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
   })
 
   createEffect(() => {
-    palette.highlight(activeEntry())
+    props.highlight(activeEntry())
   })
 
   let resultsRef: HTMLDivElement | undefined
@@ -86,12 +179,12 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
     }
     if (event.key === "Enter") {
       event.preventDefault()
-      palette.select(activeEntry())
+      props.select(activeEntry())
       return
     }
     if (event.key === "Escape") {
       event.preventDefault()
-      palette.close()
+      props.close()
     }
   }
 
@@ -105,7 +198,7 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
             autocomplete="off"
             spellcheck={false}
             appearance="large"
-            placeholder={palette.language.t("palette.search.placeholder")}
+            placeholder={props.placeholder}
             leadingIcon={<Icon name="magnifying-glass" />}
             onInput={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
@@ -117,7 +210,7 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
               when={visibleEntries().length > 0}
               fallback={
                 <div class="command-palette-v2-state">
-                  {entries.loading ? palette.language.t("common.loading") : palette.language.t("palette.empty")}
+                  {entries.loading ? language.t("common.loading") : language.t("palette.empty")}
                 </div>
               }
             >
@@ -132,9 +225,14 @@ export function DialogCommandPaletteV2(props: { onOpenFile?: (path: string) => v
                         <PaletteRow
                           item={item}
                           active={activeEntry()?.id === item.id}
-                          language={palette.language}
+                          language={language}
+                          sessionOpen={
+                            item.server && item.sessionID
+                              ? openSessions().has(`${item.server}\0${item.sessionID}`)
+                              : false
+                          }
                           onActive={() => setActive(visibleEntries().findIndex((entry) => entry.id === item.id))}
-                          onSelect={() => palette.select(item)}
+                          onSelect={() => props.select(item)}
                         />
                       )}
                     </For>
@@ -153,13 +251,19 @@ function PaletteRow(props: {
   item: CommandPaletteEntry
   active: boolean
   language: ReturnType<typeof useLanguage>
+  sessionOpen: boolean
   onActive: () => void
   onSelect: () => void
 }) {
+  const session = () =>
+    props.item.server && props.item.directory && props.item.sessionID
+      ? { server: props.item.server, directory: props.item.directory, sessionID: props.item.sessionID }
+      : undefined
+
   return (
     <button
       type="button"
-      class="command-palette-v2-row"
+      class="command-palette-v2-row group"
       role="option"
       aria-selected={props.active}
       data-active={props.active ? "" : undefined}
@@ -197,7 +301,25 @@ function PaletteRow(props: {
         </Match>
         <Match when={props.item.type === "session"}>
           <div class="command-palette-v2-row-main">
-            <Icon name="status" class="command-palette-v2-row-icon" />
+            <div class="relative shrink-0">
+              <Show when={props.sessionOpen}>
+                <span
+                  aria-hidden="true"
+                  class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+                  style={{ right: "calc(100% + 4px)" }}
+                />
+              </Show>
+              <Show when={session()}>
+                {(session) => (
+                  <SessionTabAvatar
+                    project={props.item.project}
+                    directory={session().directory}
+                    sessionId={session().sessionID}
+                    server={session().server}
+                  />
+                )}
+              </Show>
+            </div>
             <div class="command-palette-v2-row-text">
               <span class="command-palette-v2-title" classList={{ "opacity-70": !!props.item.archived }}>
                 {props.item.title}
