@@ -2,6 +2,7 @@ export * as SessionContext from "./context"
 
 import { Context, Effect, Layer } from "effect"
 import { AgentV2 } from "../agent"
+import { CodeModeInstructions } from "../codemode/instructions"
 import { Database } from "../database/database"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery"
@@ -12,7 +13,7 @@ import { McpInstructions } from "../mcp/instructions"
 import { PluginSupervisor } from "../plugin/supervisor"
 import { ReferenceInstructions } from "../reference/instructions"
 import { SkillInstructions } from "../skill/instructions"
-import { CodeModeInstructions } from "../codemode/instructions"
+import { ToolRegistry } from "../tool/registry"
 import { AgentNotFoundError } from "./error"
 import { SessionHistory } from "./history"
 import { InstructionEntry } from "./instruction-entry"
@@ -25,6 +26,7 @@ export interface Selection {
   readonly session: SessionSchema.Info
   readonly agent: AgentV2.Selection & { readonly info: AgentV2.Info }
   readonly instructions: Instructions.Instructions
+  readonly toolSet: ToolRegistry.ToolSet
 }
 
 export interface Loaded {
@@ -33,15 +35,17 @@ export interface Loaded {
   readonly model: SessionRunnerModel.Resolved
   readonly initial: string
   readonly messages: ReadonlyArray<SessionMessage.Info>
+  readonly toolSet: ToolRegistry.ToolSet
 }
 
 /**
  * Resolves model-request state in two phases: `select` fixes the Session,
- * agent, and instruction sources; `load` adds the model and active history for
- * that selection. This module does not build or execute the model request.
+ * agent, instruction sources, and tool snapshot; `load` adds the model and
+ * active history for that selection. This module does not build or execute the
+ * model request.
  */
 export interface Interface {
-  /** Selects the Session, agent, and instruction sources used by subsequent work. */
+  /** Selects the Session, agent, instructions, and tools used by subsequent work. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
@@ -55,7 +59,6 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const agents = yield* AgentV2.Service
     const builtins = yield* InstructionBuiltIns.Service
-    const codeModeInstructions = yield* CodeModeInstructions.Service
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
@@ -66,6 +69,7 @@ const layer = Layer.effect(
     const referenceInstructions = yield* ReferenceInstructions.Service
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
+    const registry = yield* ToolRegistry.Service
 
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
@@ -76,19 +80,32 @@ const layer = Layer.effect(
       yield* plugins.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
-      const instructions = yield* Effect.all(
-        [
-          builtins.load(sessionID),
-          codeModeInstructions.load(agent),
-          discovery.load(),
-          skillInstructions.load(agent),
-          referenceInstructions.load(),
-          mcpInstructions.load(agent),
-          entries.load(sessionID),
-        ],
+      const loaded = yield* Effect.all(
+        {
+          toolSet: registry.snapshot(agent.info.permissions),
+          builtins: builtins.load(sessionID),
+          discovery: discovery.load(),
+          skills: skillInstructions.load(agent),
+          references: referenceInstructions.load(),
+          mcp: mcpInstructions.load(agent),
+          entries: entries.load(sessionID),
+        },
         { concurrency: "unbounded" },
-      ).pipe(Effect.map(Instructions.combine))
-      return { session, agent: { ...agent, info: agent.info }, instructions }
+      )
+      return {
+        session,
+        agent: { ...agent, info: agent.info },
+        instructions: Instructions.combine([
+          loaded.builtins,
+          CodeModeInstructions.make(loaded.toolSet.codeModeInstructions),
+          loaded.discovery,
+          loaded.skills,
+          loaded.references,
+          loaded.mcp,
+          loaded.entries,
+        ]),
+        toolSet: loaded.toolSet,
+      }
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
@@ -100,6 +117,7 @@ const layer = Layer.effect(
         model,
         initial: history.initial,
         messages: history.entries.map((entry) => entry.message),
+        toolSet: selection.toolSet,
       }
     })
 
@@ -112,7 +130,6 @@ export const node = makeLocationNode({
   layer,
   deps: [
     AgentV2.node,
-    CodeModeInstructions.node,
     Database.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
@@ -124,5 +141,6 @@ export const node = makeLocationNode({
     SessionRunnerModel.node,
     SessionStore.node,
     SkillInstructions.node,
+    ToolRegistry.node,
   ],
 })
