@@ -463,7 +463,7 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Tool<R> => 
   const node = lookup(root, segments)
   if (node === undefined) {
     throw new ToolRuntimeError("UnknownTool", `Unknown tool '${segments.join(".")}'.`, [
-      "Use search({ query }) to find available described tools.",
+      "The tool may have been removed or renamed. Use search to find available tools.",
     ])
   }
   if (node.tool === undefined) {
@@ -536,7 +536,11 @@ export const make = <R>(
       const input = yield* Effect.try({
         try: () => decodeToolInput(tool, externalArgs[0]),
         catch: (cause) =>
-          new ToolRuntimeError("InvalidToolInput", `Invalid input for tool '${name}': ${String(cause)}`),
+          new ToolRuntimeError(
+            "InvalidToolInput",
+            `Invalid input for tool '${name}': ${String(cause)}`,
+            name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
+          ),
       })
       const index = yield* recordAndObserve(name, input)
       return yield* observeEnd(

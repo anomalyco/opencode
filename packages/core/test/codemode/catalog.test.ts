@@ -22,10 +22,7 @@ const update = (
   current: ReadonlyArray<CodeModeCatalog.Entry>,
   budget?: number,
 ) =>
-  CodeModeInstructions.update(
-    CodeModeCatalog.summarize(previous, budget),
-    CodeModeCatalog.summarize(current, budget),
-  )
+  CodeModeInstructions.update(CodeModeCatalog.summarize(previous, budget), CodeModeCatalog.summarize(current, budget))
 
 describe("CodeModeCatalog.summarize", () => {
   test("retains namespace inventory without retaining tools outside the inline budget", () => {
@@ -63,62 +60,37 @@ describe("CodeModeCatalog.summarize", () => {
 })
 
 describe("CodeModeInstructions.render", () => {
-  test("inlines complete catalogs with markdown sections and placeholder-only call forms", () => {
+  test("inlines complete catalogs without search guidance", () => {
     const instructions = render([lookup])
-    expect(instructions).toContain("## Available tools (COMPLETE list")
+    expect(instructions).toContain("## Available tools")
     expect(instructions).toContain("- orders (1 tool)")
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
-    expect(instructions).not.toContain("search(")
-
-    expect(instructions).toContain("## Workflow")
-    expect(instructions).toContain("## Rules")
-    expect(instructions).toContain("## Language")
-    expect(instructions.indexOf("## Workflow")).toBeLessThan(instructions.indexOf("## Rules"))
-    expect(instructions.indexOf("## Rules")).toBeLessThan(instructions.indexOf("## Language"))
-    expect(instructions.indexOf("## Language")).toBeLessThan(instructions.indexOf("\n## Available tools (COMPLETE"))
+    expect(instructions).not.toContain("## Search")
     expect(instructions).toContain("Do not infer or normalize tool names")
-    expect(instructions).toContain("bracket notation and quotes are part of the path")
-    expect(instructions).toContain("surrounding agent tools are not available")
-    expect(instructions).toContain("Only tools listed here are available")
-    expect(instructions).toContain("`const result = await tools.<namespace>.<tool>(input)`")
-    expect(instructions).toContain("check that it is a non-null object and not an array")
-    expect(instructions).not.toContain("tools.orders.lookup({")
-    expect(instructions).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(instructions).not.toContain("Browse one namespace")
+    expect(instructions).toContain('`tools.<namespace>["tool-name"](input)`')
   })
 
-  test("describes the restricted runtime without overclaiming", () => {
+  test("describes the runtime and execution lifecycle concisely", () => {
     const instructions = render([lookup])
-    expect(instructions).toContain("restricted JavaScript language for calling tools")
-    expect(instructions).toContain("not a general-purpose runtime")
-    for (const missing of ["Modules/imports", "classes", "fetch"]) {
-      expect(instructions).toContain(missing)
-    }
-    // Generators are supported by the interpreter and must not be listed as unavailable.
-    expect(instructions).not.toContain("generators")
-    expect(instructions).toContain("URL, URLSearchParams, and URI encoding helpers")
-    expect(instructions).toContain("Use tools for external operations")
+    expect(instructions).toContain("Run JavaScript to orchestrate tool calls and compose their results.")
+    expect(instructions).toContain("Imports, filesystem access, and timers are unavailable.")
+    expect(instructions).toContain("Do not use `fetch`; all API calls go through `tools`.")
     expect(instructions).toContain(
-      "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
+      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
     )
-    expect(instructions).toContain(
-      "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
-    )
+    expect(instructions).toContain("any calls still pending when execution ends are interrupted")
+    expect(instructions).toContain("Run independent calls concurrently with `Promise.all`.")
   })
 
-  test("switches to search-first guidance when the catalog exceeds the budget", () => {
+  test("adds search guidance when the catalog exceeds the budget", () => {
     const partial = render([lookup], 0)
-    expect(partial).toContain("## Available tools (PARTIAL - 0 of 1 shown; find the rest with search(...))")
+    expect(partial).toContain("## Available tools")
     expect(partial).toContain("- orders (1 tool, none shown)")
-    expect(partial).toContain(
-      '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
-    )
-    expect(partial).toContain("In the next execution, copy a returned path exactly")
-    expect(partial).toContain("Only tools listed here or returned by the built-in `search` function")
-    expect(partial).toContain('- Browse one namespace: `search({ query: "", namespace: "<name>" })`.')
-    expect(partial).toContain("repeat the same search with `offset: next.offset`")
-    expect(partial).toContain("Search returns complete callable signatures:\n- search(input: {")
+    expect(partial).toContain("## Search")
+    expect(partial).toContain("Only some tool signatures are shown.")
+    expect(partial).toContain("- search(input: {")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
+    expect(partial).toContain("or returned by `search`")
     expect(partial).not.toContain("tools.orders.lookup(input:")
   })
 
@@ -133,7 +105,7 @@ describe("CodeModeInstructions.render", () => {
     // Round 1 places alpha.cheap and beta.cheap; in round 2 alpha.expensive does not fit,
     // which marks only alpha done - it must NOT prevent other namespaces from inlining.
     const instructions = render([cheapAlpha, expensive, cheapBeta], 40)
-    expect(instructions).toContain("## Available tools (PARTIAL - 2 of 3 shown; find the rest with search(...))")
+    expect(instructions).toContain("## Search")
     expect(instructions).toContain("- alpha (2 tools, 1 shown)")
     expect(instructions).toContain(`  - ${cheapAlpha.signature} // Cheap`)
     expect(instructions).not.toContain("tools.alpha.expensive(")
@@ -148,18 +120,12 @@ describe("CodeModeInstructions.render", () => {
       `tools.records.lookup(input: {\n  /** ${"A detailed identifier description. ".repeat(20).trim()} */\n  id: string,\n}): Promise<string>`,
     )
     const instructions = render([documented], 40)
-    expect(instructions).toContain("## Available tools (PARTIAL - 0 of 1 shown; find the rest with search(...))")
+    expect(instructions).toContain("- records (1 tool, none shown)")
     expect(instructions).not.toContain("tools.records.lookup(input:")
   })
 
-  test("renders the no-tools notice with minimal sections for an empty catalog", () => {
-    const instructions = render([])
-    expect(instructions).toContain("No tools are currently available.")
-    expect(instructions).toContain("## Language")
-    expect(instructions).not.toContain("## Available tools")
-    expect(instructions).not.toContain("## Workflow")
-    expect(instructions).not.toContain("## Rules")
-    expect(instructions).not.toContain("search(")
+  test("renders only the no-tools notice for an empty catalog", () => {
+    expect(render([])).toBe("No tools are currently available.")
   })
 })
 
@@ -193,14 +159,16 @@ describe("CodeModeInstructions.update", () => {
     expect(text).toContain(
       "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.",
     )
-    expect(text).toContain("## Available tools (PARTIAL")
+    expect(text).toContain("## Search")
+    expect(text).toContain("## Available tools")
   })
 
   test("falls back to full replacement when the delta is larger than the catalog", () => {
     const previous = Array.from({ length: 200 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
     const text = update([...previous, echo], [echo])
     expect(text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
-    expect(text).toContain("## Available tools (COMPLETE list")
+    expect(text).toContain("## Available tools")
+    expect(text).not.toContain("## Search")
     expect(text).not.toContain("must not be called")
   })
 

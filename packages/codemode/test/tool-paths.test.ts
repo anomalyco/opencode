@@ -85,6 +85,9 @@ describe("callable namespaces", () => {
     const diagnostic = await failure(runtime, `return await tools.issues.missing({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
     expect(diagnostic.message).toContain("Unknown tool 'issues.missing'")
+    expect(diagnostic.suggestions).toEqual([
+      "The tool may have been removed or renamed. Use search to find available tools.",
+    ])
   })
 
   test("a namespace without its own tool stays non-callable", async () => {
@@ -92,6 +95,31 @@ describe("callable namespaces", () => {
     const diagnostic = await failure(nested, `return await tools.issues({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
     expect(diagnostic.message).toContain("Tool 'issues' is not callable")
+  })
+})
+
+describe("tool input diagnostics", () => {
+  const runtime = CodeMode.make({
+    tools: {
+      "notes.echo": Tool.make({
+        description: "Echo text",
+        input: Schema.Struct({ text: Schema.String }),
+        output: Schema.String,
+        execute: ({ text }) => Effect.succeed(text),
+      }),
+    },
+  })
+
+  test("a schema mismatch suggests searching for the current signature", async () => {
+    const diagnostic = await failure(runtime, `return await tools.notes.echo({ message: "hello" })`)
+    expect(diagnostic.kind).toBe("InvalidToolInput")
+    expect(diagnostic.suggestions).toEqual(["The signature may have changed. Use search to get the current signature."])
+  })
+
+  test("a wrong argument count keeps the existing error without a stale-signature hint", async () => {
+    const diagnostic = await failure(runtime, `return await tools.notes.echo()`)
+    expect(diagnostic.kind).toBe("InvalidToolInput")
+    expect(diagnostic.suggestions).toBeUndefined()
   })
 })
 

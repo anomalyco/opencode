@@ -38,7 +38,8 @@ describe("CodeModeInstructions", () => {
     return Effect.gen(function* () {
       const instructions = yield* CodeModeInstructions.Service
       const initialized = yield* instructions.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(readInitial))
-      expect(initialized.text).toContain("## Available tools (COMPLETE list")
+      expect(initialized.text).toContain("## Available tools")
+      expect(initialized.text).not.toContain("## Search")
       expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
 
       catalog = [echo, lookup]

@@ -8,106 +8,44 @@ import { CodeMode } from "../codemode"
 import { Instructions } from "../instructions/index"
 import { CodeModeCatalog } from "./catalog"
 
-const completeWorkflow = `## Workflow
+// prettier-ignore
+const prompt = (hasMoreTools: boolean) => `Run JavaScript to orchestrate tool calls and compose their results. Imports, filesystem access, and timers are unavailable. Do not use \`fetch\`; all API calls go through \`tools\`.
 
-1. Pick a tool from the list under \`## Available tools\` - each line is the exact call signature; use it as-is rather than guessing segments.
-2. Call it using the exact signature shown: \`const result = await tools.<namespace>.<tool>(input)\`; bracket notation and quotes are part of the path.
-3. Return only the fields you need from structured results; narrow unknown results before reading fields, and avoid returning large raw payloads.`
+Prefer an explicit \`return\`; if omitted, the final top-level expression becomes the result. Await tool calls before returning; any calls still pending when execution ends are interrupted. Run independent calls concurrently with \`Promise.all\`.
 
-const partialWorkflow = `## Workflow
+Do not infer or normalize tool names; use only the exact signatures shown below${hasMoreTools ? " or returned by `search`" : ""}, preserving bracket notation such as \`tools.<namespace>["tool-name"](input)\`.${hasMoreTools ? `
 
-1. If needed, discover tools with the built-in search function: \`return search({ query: "<intent + key nouns>" })\`.
-2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.`
+## Search
 
-const language = `## Language
+Only some tool signatures are shown. Use \`search\` to discover exact paths and signatures for additional tools:
 
-Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.
-Modules/imports, classes, timers, fetch, eval, prototype access, and unlisted methods are unavailable. Use tools for external operations. Use await with try/catch.
-Prefer explicit \`return\`; otherwise only the final top-level expression becomes the result.
-Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to \`{}\`.`
+- ${searchSignature}` : ""}
+
+## Available tools`
 
 export function render(catalog: CodeModeCatalog.Summary) {
-  const complete = catalog.shown === catalog.total
-  const sections: Array<string> = []
+  if (catalog.total === 0) return "No tools are currently available."
 
-  if (catalog.total === 0) {
-    sections.push("This is a restricted JavaScript language for calling tools, not a general-purpose runtime.")
-  } else {
-    const availability = (() => {
-      if (complete) return "listed below"
-      return "listed or searchable below"
-    })()
-    sections.push(
-      `This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, \`tools\` contains the tools ${availability}; surrounding agent tools are not available.\nDo not infer or normalize tool names; use only exact signatures shown below or returned by search.`,
-    )
+  const tools = catalog.namespaces.flatMap((namespace) => {
+    const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`
+    const label =
+      namespace.entries.length === namespace.count
+        ? count
+        : namespace.entries.length === 0
+          ? `${count}, none shown`
+          : `${count}, ${namespace.entries.length} shown`
+    return [`- ${namespace.name} (${label})`, ...namespace.entries.map((entry) => entry.line)]
+  })
 
-    if (complete) sections.push(completeWorkflow)
-    if (!complete) sections.push(partialWorkflow)
+  return `${prompt(catalog.shown < catalog.total)}
 
-    const availabilityRule = (() => {
-      if (complete) return "- Only tools listed here are available; surrounding agent tools are not implicitly exposed."
-      return "- Only tools listed here or returned by the built-in `search` function are available; surrounding agent tools are not implicitly exposed."
-    })()
-    const rules = [
-      "## Rules",
-      "",
-      availabilityRule,
-      "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
-      "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
-      '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
-      "- Execution ends when the program returns; pending promises are interrupted, so await every call whose completion matters.",
-      "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
-    ]
-    if (!complete) {
-      rules.push(
-        '- Browse one namespace: `search({ query: "", namespace: "<name>" })`.',
-        "- If search returns `next`, repeat the same search with `offset: next.offset`.",
-      )
-    }
-    sections.push(rules.join("\n"))
-  }
-
-  sections.push(language)
-
-  if (catalog.total === 0) {
-    sections.push("No tools are currently available.")
-    return sections.join("\n\n")
-  }
-
-  const tools: Array<string> = []
-  if (complete) {
-    tools.push("## Available tools (COMPLETE list - every tool is shown below with its full call signature)", "")
-  } else {
-    tools.push(
-      `## Available tools (PARTIAL - ${catalog.shown} of ${catalog.total} shown; find the rest with search(...))`,
-      "",
-    )
-  }
-
-  for (const namespace of catalog.namespaces) {
-    const count = (() => {
-      if (namespace.count === 1) return "1 tool"
-      return `${namespace.count} tools`
-    })()
-    const label = (() => {
-      if (namespace.entries.length === namespace.count) return count
-      if (namespace.entries.length === 0) return `${count}, none shown`
-      return `${count}, ${namespace.entries.length} shown`
-    })()
-    tools.push(`- ${namespace.name} (${label})`, ...namespace.entries.map((entry) => entry.line))
-  }
-
-  if (!complete) tools.push("", "Search returns complete callable signatures:", `- ${searchSignature}`)
-  sections.push(tools.join("\n"))
-
-  return sections.join("\n\n")
+${tools.join("\n")}`
 }
 
 export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatalog.Summary) {
-  const full = [
-    "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.",
-    render(current),
-  ].join("\n\n")
+  const full = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
+
+${render(current)}`
   const previousComplete = previous.shown === previous.total
   const currentComplete = current.shown === current.total
   if (previousComplete !== currentComplete) return full
@@ -162,9 +100,10 @@ export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatal
   const parts = ["The Code Mode tool catalog has changed."]
   if (diff.added.length > 0) {
     parts.push(
-      ["New tools are available in addition to those previously listed:", ...diff.added.map((entry) => entry.line)].join(
-        "\n",
-      ),
+      [
+        "New tools are available in addition to those previously listed:",
+        ...diff.added.map((entry) => entry.line),
+      ].join("\n"),
     )
   }
   if (diff.changed.length > 0) {
@@ -200,9 +139,7 @@ const layer = Layer.effect(
 
     return Service.of({
       load: Effect.fn("CodeModeInstructions.load")(function* (selection) {
-        const entries = selection.info
-          ? ((yield* codeMode.materialize(selection.info.permissions)).catalog ?? [])
-          : []
+        const entries = selection.info ? ((yield* codeMode.materialize(selection.info.permissions)).catalog ?? []) : []
         const catalog = CodeModeCatalog.summarize(entries)
         return Instructions.make<CodeModeCatalog.Summary>({
           key: Instructions.Key.make("core/codemode"),
