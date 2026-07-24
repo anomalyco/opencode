@@ -87,7 +87,7 @@ export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
   const v1 = createV1Api(input)
   return lazyApi(
     input.protocol.then((protocol) => (protocol === "v1" ? v1 : input.current)),
-    input.current,
+    v1,
   )
 }
 
