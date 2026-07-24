@@ -212,6 +212,7 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
   )
 
   function enableConfiguredDirectory(directory: string) {
+    if (input.sdk.protocolKind() !== "v1") return
     if (meta.disposed || !ready()) return
     const [childStore] = input.sync.child(directory)
     if (childStore.config.permission !== "allow") return
