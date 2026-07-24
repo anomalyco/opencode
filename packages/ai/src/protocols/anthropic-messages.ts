@@ -75,6 +75,15 @@ const AnthropicThinkingBlock = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
+// Safety-filtered thinking arrives as an opaque encrypted `data` payload with
+// no visible text. It must round-trip verbatim so multi-turn thinking + tool
+// use conversations keep their reasoning continuity.
+const AnthropicRedactedThinkingBlock = Schema.Struct({
+  type: Schema.tag("redacted_thinking"),
+  data: Schema.String,
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+
 const AnthropicToolUseBlock = Schema.Struct({
   type: Schema.tag("tool_use"),
   id: Schema.String,
@@ -136,6 +145,7 @@ type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
 const AnthropicAssistantBlock = Schema.Union([
   AnthropicTextBlock,
   AnthropicThinkingBlock,
+  AnthropicRedactedThinkingBlock,
   AnthropicToolUseBlock,
   AnthropicServerToolUseBlock,
   AnthropicServerToolResultBlock,
@@ -214,6 +224,9 @@ const AnthropicStreamBlock = Schema.Struct({
   text: Schema.optional(Schema.String),
   thinking: Schema.optional(Schema.String),
   signature: Schema.optional(Schema.String),
+  // redacted_thinking blocks arrive whole in content_block_start with the
+  // encrypted payload in `data`; there is no streaming delta sequence.
+  data: Schema.optional(Schema.String),
   input: Schema.optional(Schema.Unknown),
   // *_tool_result blocks arrive whole as content_block_start (no streaming
   // delta) with the structured payload in `content` and the originating
@@ -285,6 +298,12 @@ const signatureFromMetadata = (metadata: ProviderMetadata | undefined): string |
   const anthropic = metadata?.anthropic
   if (!ProviderShared.isRecord(anthropic)) return undefined
   return typeof anthropic.signature === "string" ? anthropic.signature : undefined
+}
+
+const redactedDataFromMetadata = (metadata: ProviderMetadata | undefined): string | undefined => {
+  const anthropic = metadata?.anthropic
+  if (!ProviderShared.isRecord(anthropic)) return undefined
+  return typeof anthropic.redactedData === "string" ? anthropic.redactedData : undefined
 }
 
 const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSchema: JsonSchema): AnthropicTool => ({
@@ -472,11 +491,16 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          content.push({
-            type: "thinking",
-            thinking: part.text,
-            signature: part.encrypted ?? signatureFromMetadata(part.providerMetadata),
-          })
+          // Mirrors Vercel's @ai-sdk/anthropic: a signature marks visible
+          // thinking; only signature-less parts carrying redactedData
+          // round-trip as opaque redacted_thinking blocks.
+          const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata)
+          const redactedData = redactedDataFromMetadata(part.providerMetadata)
+          if (signature === undefined && redactedData !== undefined) {
+            content.push({ type: "redacted_thinking", data: redactedData })
+            continue
+          }
+          content.push({ type: "thinking", thinking: part.text, signature })
           continue
         }
         if (part.type === "tool-call") {
@@ -742,6 +766,25 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
       {
         ...state,
         lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${event.index ?? 0}`, block.thinking),
+      },
+      events,
+    ]
+  }
+
+  // Redacted thinking surfaces as an empty reasoning part carrying the opaque
+  // payload as `redactedData` metadata (same model as Vercel's
+  // @ai-sdk/anthropic). The existing content_block_stop closes the part.
+  if (block.type === "redacted_thinking" && block.data) {
+    const events: LLMEvent[] = []
+    return [
+      {
+        ...state,
+        lifecycle: Lifecycle.reasoningStart(
+          state.lifecycle,
+          events,
+          `reasoning-${event.index ?? 0}`,
+          anthropicMetadata({ redactedData: block.data }),
+        ),
       },
       events,
     ]

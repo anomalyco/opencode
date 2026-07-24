@@ -409,6 +409,34 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("round-trips redacted thinking as redacted_thinking blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "", providerMetadata: { anthropic: { redactedData: "opaque_1" } } },
+              { type: "reasoning", text: "visible", providerMetadata: { anthropic: { signature: "sig_1" } } },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "redacted_thinking", data: "opaque_1" },
+              { type: "thinking", thinking: "visible", signature: "sig_1" },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -451,6 +479,30 @@ describe("Anthropic Messages route", () => {
         reason: { normalized: "stop", raw: "end_turn" },
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
+    }),
+  )
+
+  it.effect("parses redacted thinking into empty reasoning with redactedData metadata", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "redacted_thinking", data: "opaque_1" } },
+        { type: "content_block_stop", index: 0 },
+        { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+        { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Hello" } },
+        { type: "content_block_stop", index: 1 },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
+        { type: "message_stop" },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find((event) => event.type === "reasoning-start")).toMatchObject({
+        providerMetadata: { anthropic: { redactedData: "opaque_1" } },
+      })
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { anthropic: { redactedData: "opaque_1" } } },
+        { type: "text", text: "Hello" },
+      ])
     }),
   )
 
