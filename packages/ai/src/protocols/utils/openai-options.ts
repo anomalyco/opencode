@@ -18,13 +18,6 @@ export const OpenAIServiceTier = OpenResponsesOptions.ServiceTierSchema
 
 export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEffort => typeof effort === "string"
 
-export const store = OpenResponsesOptions.store
-export const reasoningEffort = OpenResponsesOptions.reasoningEffort
-export const reasoningSummary = OpenResponsesOptions.reasoningSummary
-export const include = OpenResponsesOptions.include
-export const promptCacheKey = OpenResponsesOptions.promptCacheKey
-export const textVerbosity = OpenResponsesOptions.textVerbosity
-export const serviceTier = OpenResponsesOptions.serviceTier
-export const instructions = OpenResponsesOptions.instructions
+export const resolve = OpenResponsesOptions.resolve
 
 export * as OpenAIOptions from "./openai-options"

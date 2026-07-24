@@ -396,14 +396,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   return messages
 })
 
-const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
-  const store = OpenAIOptions.store(request)
-  const reasoningEffort = OpenAIOptions.reasoningEffort(request)
+const lowerOptions = (request: LLMRequest) => {
+  const options = OpenAIOptions.resolve(request)
   return {
-    ...(store !== undefined ? { store } : {}),
-    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
   }
-})
+}
 
 const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMRequest) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
@@ -434,7 +433,7 @@ const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMR
     presence_penalty: generation?.presencePenalty,
     seed: generation?.seed,
     stop: generation?.stop,
-    ...(yield* lowerOptions(request)),
+    ...lowerOptions(request),
   }
 })
 

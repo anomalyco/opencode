@@ -30,49 +30,36 @@ export const TextVerbositySchema = TextVerbosity
 export const ResponseIncludableSchema = Schema.Literals(ResponseIncludables)
 export const ServiceTierSchema = Schema.Literals(ServiceTiers)
 
-const options = (request: LLMRequest) =>
-  request.providerOptions?.[request.model.route.providerMetadataKey ?? "openresponses"]
-
-export const store = (request: LLMRequest): boolean | undefined => {
-  const value = options(request)?.store
-  return typeof value === "boolean" ? value : undefined
+export interface Resolved {
+  readonly instructions?: string
+  readonly store?: boolean
+  readonly promptCacheKey?: string
+  readonly reasoningEffort?: string
+  readonly reasoningSummary?: "auto" | "concise" | "detailed"
+  readonly include?: ReadonlyArray<ResponseIncludable>
+  readonly textVerbosity?: Schema.Schema.Type<typeof TextVerbosity>
+  readonly serviceTier?: ServiceTier
 }
 
-export const reasoningEffort = (request: LLMRequest): string | undefined => {
-  const value = options(request)?.reasoningEffort
-  return typeof value === "string" ? value : undefined
-}
-
-export const reasoningSummary = (request: LLMRequest): "auto" | "concise" | "detailed" | undefined => {
-  const value = options(request)?.reasoningSummary
-  return value === "auto" || value === "concise" || value === "detailed" ? value : undefined
-}
-
-export const include = (request: LLMRequest): ReadonlyArray<ResponseIncludable> | undefined => {
-  const value = options(request)?.include
-  if (!Array.isArray(value)) return undefined
-  const filtered = value.filter((entry): entry is ResponseIncludable => INCLUDABLES.has(entry))
-  return filtered.length > 0 ? filtered : undefined
-}
-
-export const promptCacheKey = (request: LLMRequest) => {
-  const value = options(request)?.promptCacheKey
-  return typeof value === "string" ? value : undefined
-}
-
-export const textVerbosity = (request: LLMRequest) => {
-  const value = options(request)?.textVerbosity
-  return isTextVerbosity(value) ? value : undefined
-}
-
-export const serviceTier = (request: LLMRequest) => {
-  const value = options(request)?.serviceTier
-  return isServiceTier(value) ? value : undefined
-}
-
-export const instructions = (request: LLMRequest) => {
-  const value = options(request)?.instructions
-  return typeof value === "string" ? value : undefined
+export const resolve = (request: LLMRequest): Resolved => {
+  const input = request.providerOptions?.[request.model.route.providerMetadataKey ?? "openresponses"]
+  const include = Array.isArray(input?.include)
+    ? input.include.filter((entry): entry is ResponseIncludable => INCLUDABLES.has(entry))
+    : []
+  const reasoningSummary = input?.reasoningSummary
+  return {
+    instructions: typeof input?.instructions === "string" ? input.instructions : undefined,
+    store: typeof input?.store === "boolean" ? input.store : undefined,
+    promptCacheKey: typeof input?.promptCacheKey === "string" ? input.promptCacheKey : undefined,
+    reasoningEffort: typeof input?.reasoningEffort === "string" ? input.reasoningEffort : undefined,
+    reasoningSummary:
+      reasoningSummary === "auto" || reasoningSummary === "concise" || reasoningSummary === "detailed"
+        ? reasoningSummary
+        : undefined,
+    include: include.length > 0 ? include : undefined,
+    textVerbosity: isTextVerbosity(input?.textVerbosity) ? input.textVerbosity : undefined,
+    serviceTier: isServiceTier(input?.serviceTier) ? input.serviceTier : undefined,
+  }
 }
 
 export * as OpenResponsesOptions from "./open-responses-options"

@@ -376,7 +376,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
   const system: OpenResponsesInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const input: OpenResponsesInputItem[] = [...system]
-  const store = OpenResponsesOptions.store(request)
+  const store = OpenResponsesOptions.resolve(request).store
   const providerMetadataKey = request.model.route.providerMetadataKey ?? "openresponses"
 
   for (const message of request.messages) {
@@ -494,22 +494,17 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 })
 
 const lowerOptions = (request: LLMRequest) => {
-  const store = OpenResponsesOptions.store(request)
-  const promptCacheKey = OpenResponsesOptions.promptCacheKey(request)
-  const effort = OpenResponsesOptions.reasoningEffort(request)
-  const summary = OpenResponsesOptions.reasoningSummary(request)
-  const include = OpenResponsesOptions.include(request)
-  const verbosity = OpenResponsesOptions.textVerbosity(request)
-  const instructions = OpenResponsesOptions.instructions(request)
-  const serviceTier = OpenResponsesOptions.serviceTier(request)
+  const options = OpenResponsesOptions.resolve(request)
   return {
-    ...(instructions ? { instructions } : {}),
-    ...(store !== undefined ? { store } : {}),
-    ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
-    ...(include ? { include } : {}),
-    ...(effort || summary ? { reasoning: { effort, summary } } : {}),
-    ...(verbosity ? { text: { verbosity } } : {}),
-    ...(serviceTier ? { service_tier: serviceTier } : {}),
+    ...(options.instructions ? { instructions: options.instructions } : {}),
+    ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(options.promptCacheKey ? { prompt_cache_key: options.promptCacheKey } : {}),
+    ...(options.include ? { include: options.include } : {}),
+    ...(options.reasoningEffort || options.reasoningSummary
+      ? { reasoning: { effort: options.reasoningEffort, summary: options.reasoningSummary } }
+      : {}),
+    ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
+    ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
   }
 }
 
@@ -932,7 +927,7 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
   reasoningItems: {},
-  store: OpenResponsesOptions.store(request),
+  store: OpenResponsesOptions.resolve(request).store,
 })
 
 export const protocol = Protocol.make({
