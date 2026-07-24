@@ -24,7 +24,7 @@ test("coalesces progress only within the same message and tool state", () => {
   )
 })
 
-test("resolves the first selectable agent when none is selected", () => {
+test("falls back only when no agent is selected", () => {
   const agents: RunAgent[] = [
     { id: "task", name: "Task", mode: "subagent", hidden: false },
     { id: "secret", name: "Secret", mode: "primary", hidden: true },
@@ -34,5 +34,5 @@ test("resolves the first selectable agent when none is selected", () => {
 
   expect(resolveRunAgent(agents, undefined)?.id).toBe("build")
   expect(resolveRunAgent(agents, "plan")?.id).toBe("plan")
-  expect(resolveRunAgent(agents, "missing")?.id).toBe("build")
+  expect(resolveRunAgent(agents, "missing")).toBeUndefined()
 })
