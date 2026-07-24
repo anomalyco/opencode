@@ -1080,6 +1080,7 @@ function SessionRowView(props: SessionRowViewProps) {
             <TurnTokenUsage
               messageIDs={row().messageIDs}
               previousCacheRead={row().previousCacheRead}
+              previousTotal={row().previousTotal}
               message={props.message}
             />
           )}
@@ -1092,12 +1093,14 @@ function SessionRowView(props: SessionRowViewProps) {
 function TurnTokenUsage(props: {
   messageIDs: string[]
   previousCacheRead?: number
+  previousTotal?: number
   message: (messageID: string) => SessionMessageInfo | undefined
 }) {
   const config = useConfig()
   const { themeV2 } = useTheme()
   const steps = createMemo(() => {
     let previousCacheRead = props.previousCacheRead
+    let previousTotal: number | undefined = props.previousTotal
     return props.messageIDs.flatMap((messageID) => {
       const message = props.message(messageID)
       if (message?.type !== "assistant" || !message.tokens) return []
@@ -1113,7 +1116,9 @@ function TurnTokenUsage(props: {
         previousCacheRead !== undefined && message.tokens.cache.read < previousCacheRead
           ? previousCacheRead - message.tokens.cache.read
           : undefined
+      const missed = previousTotal !== undefined ? previousTotal - message.tokens.cache.read : undefined
       previousCacheRead = message.tokens.cache.read
+      previousTotal = total
       return [
         {
           finish: message.finish === "tool-calls" ? "tool-call" : (message.finish ?? "unknown"),
@@ -1121,6 +1126,7 @@ function TurnTokenUsage(props: {
           cached: message.tokens.cache.read,
           total,
           cacheBust,
+          missed,
         },
       ]
     })
@@ -1129,6 +1135,10 @@ function TurnTokenUsage(props: {
     step: Math.max("Step".length, ...steps().map((item) => item.finish.length)),
     newTokens: Math.max("New".length, ...steps().map((item) => item.newTokens.toLocaleString().length)),
     cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
+    missed: Math.max(
+      "Missed".length,
+      ...steps().map((item) => (item.missed !== undefined ? item.missed.toLocaleString().length : 1)),
+    ),
     total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
   }))
   return (
@@ -1149,6 +1159,8 @@ function TurnTokenUsage(props: {
             {"  "}
             {"Cached".padStart(columns().cached)}
             {"  "}
+            {"Missed".padStart(columns().missed)}
+            {"  "}
             {"Total".padStart(columns().total)}
           </text>
         </box>
@@ -1162,6 +1174,8 @@ function TurnTokenUsage(props: {
                 </span>
                 {"  "}
                 {item.cached.toLocaleString().padStart(columns().cached)}
+                {"  "}
+                {item.missed !== undefined ? item.missed.toLocaleString().padStart(columns().missed) : "-".padStart(columns().missed)}
                 {"  "}
                 {item.total.toLocaleString().padStart(columns().total)}
               </text>

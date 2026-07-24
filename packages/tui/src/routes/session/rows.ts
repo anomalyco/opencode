@@ -28,7 +28,7 @@ export type SessionRow =
       completed: boolean
     }
   | { type: "assistant-footer"; messageID: string }
-  | { type: "turn-usage"; messageIDs: string[]; previousCacheRead?: number }
+  | { type: "turn-usage"; messageIDs: string[]; previousCacheRead?: number; previousTotal?: number }
 
 export function createSessionRows(sessionID: Accessor<string>) {
   const data = useData()
@@ -280,7 +280,11 @@ export function reduceSessionRows(
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
   const usage = turnTokens
-    ? { steps: [] as SessionMessageAssistant[], previousTurnCacheRead: undefined as number | undefined }
+    ? {
+        steps: [] as SessionMessageAssistant[],
+        previousTurnCacheRead: undefined as number | undefined,
+        previousTurnTotal: undefined as number | undefined,
+      }
     : undefined
   return [
     ...messages.filter((message) => !pending.has(message.id)),
@@ -315,8 +319,10 @@ export function reduceSessionRows(
           ...(usage.previousTurnCacheRead === undefined
             ? {}
             : { previousCacheRead: usage.previousTurnCacheRead }),
+          ...(usage.previousTurnTotal === undefined ? {} : { previousTotal: usage.previousTurnTotal }),
         })
         usage.previousTurnCacheRead = last.tokens.cache.read
+        usage.previousTurnTotal = tokenTotal(last.tokens)
       }
       usage.steps.length = 0
     }
