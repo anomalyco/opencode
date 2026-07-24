@@ -139,3 +139,67 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
     app.renderer.destroy()
   }
 })
+
+// Regression: two-pane model dialog used to pass Favorite/Unfavorite as a
+// function title into useBindings. Keymap metadata requires a string title —
+// registration throws and the command is skipped, so ctrl+f never binds.
+test("command registration requires string titles", async () => {
+  const result: { functionTitle: string[]; stringTitle: string[] } = {
+    functionTitle: [],
+    stringTitle: [],
+  }
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const config = createResolvedKeymapConfig()
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+
+    keymap.registerLayer({
+      commands: [
+        {
+          name: "model.dialog.favorite",
+          title: (() => "Unfavorite") as unknown as string,
+          category: "Model dialog",
+          run() {},
+        },
+      ],
+      bindings: config.keybinds.get("model.dialog.favorite"),
+    })
+    result.functionTitle = keymap
+      .getCommands({ visibility: "registered" })
+      .map((command) => command.name)
+      .filter((name) => name === "model.dialog.favorite")
+
+    keymap.registerLayer({
+      commands: [
+        {
+          name: "model.dialog.favorite",
+          title: "Unfavorite",
+          category: "Model dialog",
+          run() {},
+        },
+      ],
+      bindings: config.keybinds.get("model.dialog.favorite"),
+    })
+    result.stringTitle = keymap
+      .getCommands({ visibility: "registered" })
+      .map((command) => command.name)
+      .filter((name) => name === "model.dialog.favorite")
+
+    onCleanup(offKeymap)
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <box />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />)
+  try {
+    expect(result.functionTitle).toEqual([])
+    expect(result.stringTitle).toEqual(["model.dialog.favorite"])
+  } finally {
+    app.renderer.destroy()
+  }
+})

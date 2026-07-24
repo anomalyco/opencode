@@ -558,11 +558,16 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     return labels
   })
   const currentOption = createMemo(() => rightOptions()[rightSelected()])
+  // Keymap metadata requires string titles — a function title (Favorite/Unfavorite)
+  // throws during register and the command is skipped, so the keybind never binds.
+  function actionTitle(item: Action) {
+    return typeof item.title === "function" ? item.title(currentOption()) : item.title
+  }
   const visibleActions = createMemo(() =>
     shownActions()
       .map((a) => ({
         ...a,
-        title: typeof a.title === "function" ? a.title(currentOption()) : a.title,
+        title: actionTitle(a),
         label: actionLabels().get(a.command) ?? "",
       }))
       .filter((a) => a.label)
@@ -853,7 +858,7 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
       enabled: () => dialogActive(),
       commands: visible.map((a) => ({
         name: a.command,
-        title: a.title,
+        title: actionTitle(a),
         category: "Model dialog",
         run() {
           a.onTrigger()
@@ -863,18 +868,21 @@ export function DialogModelTwoPane(props: DialogModelTwoPaneProps) {
     }
   })
 
-  useBindings(() => ({
-    enabled: () => dialogActive() && focusedPane() === "right",
-    commands: singleKeyActions().map((a) => ({
-      name: a.command,
-      title: a.title,
-      category: "Model dialog",
-      run() {
-        a.onTrigger()
-      },
-    })),
-    bindings: singleKeyActions().flatMap((a) => tuiConfig.keybinds.get(a.command)),
-  }))
+  useBindings(() => {
+    const visible = singleKeyActions()
+    return {
+      enabled: () => dialogActive() && focusedPane() === "right",
+      commands: visible.map((a) => ({
+        name: a.command,
+        title: actionTitle(a),
+        category: "Model dialog",
+        run() {
+          a.onTrigger()
+        },
+      })),
+      bindings: visible.flatMap((a) => tuiConfig.keybinds.get(a.command)),
+    }
+  })
 
   // ----- Layout -----
   const title = () => props.title ?? "Select model"
