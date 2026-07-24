@@ -47,7 +47,7 @@ it.instance("negotiates a modern stateless server and calls tools through it", (
     if (!entry) return
     expect(entry.client.getProtocolEra()).toBe("modern")
 
-    const converted = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
+    const converted = McpCatalog.convertTool(entry)
     const output = yield* Effect.promise(() =>
       Promise.resolve(
         converted.execute?.({}, {

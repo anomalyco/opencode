@@ -61,10 +61,14 @@ try {
   const { tools } = await client.listTools()
   const def = tools.at(0)
   if (!def) throw new Error("server returned no tools")
-  const tool = McpCatalog.convertTool(def, client, undefined, async () => {
-    await client.close().catch(() => {})
-    client = await connect()
-    return client
+  const tool = McpCatalog.convertTool({
+    def,
+    client,
+    reconnect: async () => {
+      await client.close().catch(() => {})
+      client = await connect()
+      return client
+    },
   })
   const result = (await tool.execute?.(
     {},

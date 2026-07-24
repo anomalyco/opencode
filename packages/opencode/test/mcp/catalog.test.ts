@@ -28,7 +28,10 @@ describe("McpCatalog.convertTool", () => {
   test("preserves content when structuredContent is also present", async () => {
     const content = [{ type: "image" as const, mimeType: "image/png", data: "AAAA" }]
     const structuredContent = { image: { mimeType: "image/png", data: "AAAA" } }
-    const converted = McpCatalog.convertTool(mcpTool(), clientReturning({ content, structuredContent }))
+    const converted = McpCatalog.convertTool({
+      def: mcpTool(),
+      client: clientReturning({ content, structuredContent }),
+    })
 
     const output = await converted.execute?.({}, options)
 
@@ -37,7 +40,10 @@ describe("McpCatalog.convertTool", () => {
 
   test("falls back to structuredContent only when content is absent", async () => {
     const structuredContent = { results: [{ title: "one" }] }
-    const converted = McpCatalog.convertTool(mcpTool(), clientReturning({ content: [], structuredContent }))
+    const converted = McpCatalog.convertTool({
+      def: mcpTool(),
+      client: clientReturning({ content: [], structuredContent }),
+    })
 
     const output = await converted.execute?.({}, options)
 

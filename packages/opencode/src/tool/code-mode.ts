@@ -1,5 +1,5 @@
 import * as Tool from "./tool"
-import { type CallToolResult, type Client } from "@modelcontextprotocol/client"
+import { type CallToolResult } from "@modelcontextprotocol/client"
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
@@ -145,35 +145,7 @@ const invokeChildTool = Effect.fn("CodeMode.invokeChildTool")(function* (input: 
   )
   const result: CallToolResult = yield* Effect.gen(function* () {
     yield* input.ctx.ask({ permission: input.entry.key, metadata: {}, patterns: ["*"], always: ["*"] })
-    // Deliberately mirrors McpCatalog.convertTool's transport call so the MCP service stays free of tool-loop concerns.
-    return yield* Effect.promise(async () => {
-      const call = (target: Client) =>
-        target.callTool(
-          { name: input.entry.tool.def.name, arguments: input.args },
-          {
-            resetTimeoutOnProgress: true,
-            signal: input.ctx.abort,
-            timeout: input.entry.tool.timeout,
-            // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
-            onprogress: () => {},
-          },
-        )
-      const raw = await call(input.entry.tool.client).catch(async (error) => {
-        const reconnect = input.entry.tool.reconnect
-        if (!reconnect || !McpCatalog.isStaleSessionError(error)) throw error
-        const fresh = await reconnect()
-        if (!fresh) throw error
-        return call(fresh)
-      })
-      if (raw.isError)
-        throw new Error(
-          raw.content
-            .flatMap((item) => (item.type === "text" ? [item.text] : []))
-            .filter((text) => text.trim())
-            .join("\n\n") || "MCP tool returned an error",
-        )
-      return raw
-    })
+    return yield* Effect.promise(() => McpCatalog.callTool(input.entry.tool, input.args, input.ctx.abort))
   }).pipe(
     Effect.withSpan("Tool.execute", {
       attributes: {

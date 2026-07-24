@@ -9,8 +9,6 @@ import {
   StreamableHTTPClientTransport,
   SSEClientTransport,
   UnauthorizedError,
-  RegistrationRejectedError,
-  SdkHttpError,
   type LoggingMessageNotification,
   type Tool as MCPToolDef,
 } from "@modelcontextprotocol/client"
@@ -32,6 +30,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
+import { McpError } from "./errors"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
@@ -77,29 +76,24 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
   name: Schema.String,
 }) {}
 
-type MCPClient = Client
-
-interface ClientHooks {
-  onToolsChanged?: () => void
-}
-
-// Set by watch() once a server is stored; routed through ClientOptions.listChanged
-// so tool-list changes arrive on both legacy (unsolicited notification) and
-// modern (subscriptions/listen) connections.
-const clientHooks = new WeakMap<Client, ClientHooks>()
+/**
+ * SDK client with a late-bound tools-changed hook, assigned by watch() once a
+ * server is stored. Routed through ClientOptions.listChanged so tool-list
+ * changes arrive on both legacy (unsolicited notification) and modern
+ * (subscriptions/listen) connections.
+ */
+type MCPClient = Client & { onToolsChanged?: () => void }
 
 function createClient(directory: string) {
-  const hooks: ClientHooks = {}
-  const client = new Client(
+  const client: MCPClient = new Client(
     { name: "opencode", version: InstallationVersion },
     {
       ...CLIENT_OPTIONS,
       listChanged: {
-        tools: { autoRefresh: false, onChanged: () => hooks.onToolsChanged?.() },
+        tools: { autoRefresh: false, onChanged: () => client.onToolsChanged?.() },
       },
     },
   )
-  clientHooks.set(client, hooks)
   client.setRequestHandler("roots/list", async () => ({ roots: [{ uri: pathToFileURL(directory).href }] }))
   return client
 }
@@ -177,18 +171,7 @@ export interface ServerInstructions {
   tools: string[]
 }
 
-/** An MCP tool in its native shape; consumers adapt it to their own tool format. */
-export interface McpTool {
-  /** Shared cached definition; consumers must copy rather than mutate it. */
-  readonly def: MCPToolDef
-  readonly client: MCPClient
-  readonly timeout?: number
-  /**
-   * Reconnects the owning server after a stale-session failure (HTTP 404 on an
-   * established session) and returns the replacement client, if any.
-   */
-  readonly reconnect?: () => Promise<MCPClient | undefined>
-}
+export type McpTool = McpCatalog.McpTool
 
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
@@ -320,18 +303,10 @@ const layer = Layer.effect(
           Effect.map((client) => ({ client, transportName: name })),
           Effect.catch((error) => {
             const lastError = error instanceof Error ? error : new Error(String(error))
-            const isAuthError =
-              error instanceof UnauthorizedError ||
-              error instanceof RegistrationRejectedError ||
-              (error instanceof SdkHttpError && error.status === 401) ||
-              (authProvider && lastError.message.includes("OAuth"))
+            const isAuthError = McpError.isUnauthorized(error) || (authProvider && lastError.message.includes("OAuth"))
 
             if (isAuthError) {
-              if (
-                error instanceof RegistrationRejectedError ||
-                lastError.message.includes("registration") ||
-                lastError.message.includes("client_id")
-              ) {
+              if (McpError.isRegistrationRejected(error)) {
                 lastStatus = {
                   status: "needs_client_registration" as const,
                   error: "Server does not support dynamic client registration. Please provide clientId in config.",
@@ -495,9 +470,7 @@ const layer = Layer.effect(
       )
 
       if (!client.getServerCapabilities()?.tools) return
-      const hooks = clientHooks.get(client)
-      if (!hooks) return
-      hooks.onToolsChanged = async () => {
+      client.onToolsChanged = async () => {
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         const listed = await bridge.promise(McpCatalog.defs(client, timeout))

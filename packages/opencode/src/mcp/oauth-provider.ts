@@ -22,6 +22,16 @@ export interface McpOAuthCallbacks {
   onRedirect: (url: URL) => void | Promise<void>
 }
 
+/**
+ * Registration metadata exists only on the "full" (DCR) member of the stored
+ * client-information union; read it as optional fields instead of narrowing.
+ */
+function registrationMetadata(
+  info: StoredOAuthClientInformation,
+): Partial<Record<"client_id_issued_at" | "client_secret_expires_at", number>> {
+  return info
+}
+
 export class McpOAuthProvider implements OAuthClientProvider {
   constructor(
     protected mcpName: string,
@@ -79,8 +89,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveClientInformation(info: StoredOAuthClientInformation): Promise<void> {
-    // Mixed union: registration metadata is only present on the "full" (DCR) shape.
-    const full: Partial<Record<"client_id_issued_at" | "client_secret_expires_at", number>> = info
+    const full = registrationMetadata(info)
     await Effect.runPromise(
       this.auth.updateClientInfo(
         this.mcpName,
@@ -216,8 +225,7 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
 
   async commit(): Promise<void> {
     if (!this.pendingTokens) return
-    const pendingFull: Partial<Record<"client_id_issued_at" | "client_secret_expires_at", number>> | undefined =
-      this.pendingClientInfo
+    const pendingFull = this.pendingClientInfo ? registrationMetadata(this.pendingClientInfo) : undefined
     await Effect.runPromise(
       this.auth.set(
         this.mcpName,
