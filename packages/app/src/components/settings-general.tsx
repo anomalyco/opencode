@@ -13,7 +13,7 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "./updater-action"
 import {
   monoDefault,
@@ -125,10 +125,12 @@ export const SettingsGeneral: Component = () => {
 
   const serverSync = useServerSync()
   const serverSdk = useServerSDK()
+  const protocol = useServerProtocol()
 
   const [shells] = createResource(
-    () =>
-      serverSdk()
+    () => (protocol() === "v1" ? serverSdk() : undefined),
+    (sdk) =>
+      sdk
         .client.pty.shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),
@@ -322,27 +324,29 @@ export const SettingsGeneral: Component = () => {
           </div>
         </SettingsRow>
 
-        <SettingsRow
-          title={language.t("settings.general.row.shell.title")}
-          description={language.t("settings.general.row.shell.description")}
-        >
-          <Select
-            data-action="settings-shell"
-            options={shellOptions()}
-            current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
-            value={(o) => o.id}
-            label={(o) => o.label}
-            onSelect={(option) => {
-              if (!option) return
-              if (option.value === currentShell()) return
-              serverSync().updateConfig({ shell: option.value })
-            }}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "min-width": "180px" }}
-          />
-        </SettingsRow>
+        <Show when={protocol() === "v1"}>
+          <SettingsRow
+            title={language.t("settings.general.row.shell.title")}
+            description={language.t("settings.general.row.shell.description")}
+          >
+            <Select
+              data-action="settings-shell"
+              options={shellOptions()}
+              current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
+              value={(o) => o.id}
+              label={(o) => o.label}
+              onSelect={(option) => {
+                if (!option) return
+                if (option.value === currentShell()) return
+                serverSync().updateConfig({ shell: option.value })
+              }}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+              triggerStyle={{ "min-width": "180px" }}
+            />
+          </SettingsRow>
+        </Show>
 
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}

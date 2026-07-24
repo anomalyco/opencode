@@ -10,7 +10,7 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "../updater-action"
 import {
   monoDefault,
@@ -92,6 +92,7 @@ export const SettingsGeneralV2: Component<{
   const settings = useSettings()
   const serverSync = useServerSync()
   const serverSdk = useServerSDK()
+  const protocol = useServerProtocol()
   const mobile = createMediaQuery("(max-width: 767px)")
 
   const updater = useUpdaterAction()
@@ -122,8 +123,9 @@ export const SettingsGeneralV2: Component<{
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
   const [shells] = createResource(
-    () =>
-      serverSdk()
+    () => (protocol() === "v1" ? serverSdk() : undefined),
+    (sdk) =>
+      sdk
         .client.pty.shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),
@@ -281,26 +283,28 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.shell.title")}
-          description={language.t("settings.general.row.shell.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-shell"
-            options={shellOptions()}
-            current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
-            placement="bottom-end"
-            gutter={6}
-            value={(o) => o.id}
-            label={(o) => o.label}
-            onSelect={(option) => {
-              if (!option) return
-              if (option.value === currentShell()) return
-              serverSync().updateConfig({ shell: option.value })
-            }}
-          />
-        </SettingsRowV2>
+        <Show when={protocol() === "v1"}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.shell.title")}
+            description={language.t("settings.general.row.shell.description")}
+          >
+            <SelectV2
+              appearance="inline"
+              data-action="settings-shell"
+              options={shellOptions()}
+              current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
+              placement="bottom-end"
+              gutter={6}
+              value={(o) => o.id}
+              label={(o) => o.label}
+              onSelect={(option) => {
+                if (!option) return
+                if (option.value === currentShell()) return
+                serverSync().updateConfig({ shell: option.value })
+              }}
+            />
+          </SettingsRowV2>
+        </Show>
 
         <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}
