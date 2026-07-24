@@ -84,6 +84,7 @@ test("stages a submitted line comment in the prompt context", async ({ page }) =
 async function openReview(page: Page) {
   await page.setViewportSize({ width: 700, height: 900 })
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: "proj_review_line_comment_regression",
