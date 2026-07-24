@@ -4,9 +4,48 @@
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
 // `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+
+const TaskEventPart = Schema.Struct({
+  tool: Schema.optional(Schema.String),
+  state: Schema.optional(
+    Schema.Struct({
+      status: Schema.optional(Schema.String),
+      error: Schema.optional(Schema.String),
+      metadata: Schema.optional(
+        Schema.Struct({
+          sessionId: Schema.optional(Schema.String),
+        }),
+      ),
+    }),
+  ),
+})
+const MessageRows = Schema.Array(
+  Schema.Struct({
+    id: Schema.optional(Schema.String),
+    data: Schema.optional(Schema.String),
+  }),
+)
+const PartRows = Schema.Array(
+  Schema.Struct({
+    message_id: Schema.optional(Schema.String),
+    data: Schema.optional(Schema.String),
+  }),
+)
+const StoredMessage = Schema.Struct({
+  role: Schema.optional(Schema.String),
+  finish: Schema.optional(Schema.String),
+  error: Schema.optional(
+    Schema.Struct({
+      name: Schema.optional(Schema.String),
+    }),
+  ),
+})
+const StoredPart = Schema.Struct({
+  type: Schema.optional(Schema.String),
+})
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -36,6 +75,98 @@ describe("opencode run (non-interactive subprocess)", () => {
         expect(result.stderr).toContain("MessageOutputLengthError")
         // One prompt request plus the independently forked session-title request.
         expect(yield* llm.calls).toBe(2)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "persists a child length error and reports the parent task as failed without replay",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        const parentPrompt = "delegate a task that will truncate"
+        const childPrompt = "produce an answer that reaches the output limit"
+        const bodyIncludes = (body: Record<string, unknown>, value: string) => JSON.stringify(body).includes(value)
+        const hasUserText = (body: Record<string, unknown>, value: string) => {
+          if (!Array.isArray(body.messages)) return false
+          return body.messages.some((message) => {
+            if (!message || typeof message !== "object" || !("role" in message) || message.role !== "user") return false
+            return JSON.stringify("content" in message ? message.content : undefined).includes(value)
+          })
+        }
+
+        yield* llm.pushMatch(
+          ({ body }) => hasUserText(body, parentPrompt),
+          reply().tool("task", {
+            description: "trigger child truncation",
+            prompt: childPrompt,
+            subagent_type: "general",
+          }),
+        )
+        yield* llm.pushMatch(
+          ({ body }) => hasUserText(body, childPrompt),
+          reply().usage({ input: 10, output: 10 }).length(),
+        )
+        yield* llm.pushMatch(
+          ({ body }) => bodyIncludes(body, "MessageOutputLengthError"),
+          reply().text("parent observed the task failure").stop(),
+        )
+
+        const result = yield* opencode.run(parentPrompt, {
+          format: "json",
+          extraArgs: ["--dangerously-skip-permissions"],
+        })
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        const taskEvent = events.find((event) => {
+          if (event.type !== "tool_use") return false
+          const part = Schema.decodeUnknownSync(TaskEventPart)(event.part)
+          return part?.tool === "task"
+        })
+        const taskPart = taskEvent ? Schema.decodeUnknownSync(TaskEventPart)(taskEvent.part) : undefined
+        const childID = taskPart?.state?.metadata?.sessionId
+
+        expect(taskPart?.state?.status).toBe("error")
+        expect(taskPart?.state?.error).toContain("MessageOutputLengthError")
+        expect(taskPart?.state?.error).toContain("No visible output was produced")
+        expect(events.some((event) => event.type === "text")).toBe(true)
+        expect(childID).toEqual(expect.any(String))
+        if (!childID) return
+
+        const escapedChildID = childID.replaceAll("'", "''")
+        const stored = yield* opencode.spawn([
+          "db",
+          `select id, data from message where session_id = '${escapedChildID}' order by time_created`,
+          "--format",
+          "json",
+        ])
+        opencode.expectExit(stored, 0, "query child transcript")
+        const rows = Schema.decodeUnknownSync(MessageRows)(JSON.parse(stored.stdout))
+        const messages = rows.map((row) => ({
+          id: row.id,
+          info: Schema.decodeUnknownSync(StoredMessage)(JSON.parse(row.data ?? "{}")),
+        }))
+        const storedParts = yield* opencode.spawn([
+          "db",
+          `select message_id, data from part where session_id = '${escapedChildID}'`,
+          "--format",
+          "json",
+        ])
+        opencode.expectExit(storedParts, 0, "query child parts")
+        const partRows = Schema.decodeUnknownSync(PartRows)(JSON.parse(storedParts.stdout))
+        const childAssistant = messages.find((message) => message.info.role === "assistant")
+        const childParts = partRows
+          .filter((row) => row.message_id === childAssistant?.id)
+          .map((row) => Schema.decodeUnknownSync(StoredPart)(JSON.parse(row.data ?? "{}")))
+        const inputs = yield* llm.inputs
+        const childInputs = inputs.filter((body) => hasUserText(body, childPrompt))
+
+        expect(childAssistant?.info.finish).toBe("length")
+        expect(childAssistant?.info.error?.name).toBe("MessageOutputLengthError")
+        expect(childParts.some((part) => part.type === "text")).toBe(false)
+        expect(childInputs).toHaveLength(1)
+        expect(childInputs[0]?.max_tokens ?? childInputs[0]?.max_output_tokens).toBe(10_000)
+        expect(yield* llm.pending).toBe(0)
       }),
     60_000,
   )

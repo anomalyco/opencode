@@ -67,6 +67,7 @@ function isolatedEnv(home: string, configJson: string): Record<string, string> {
     XDG_DATA_HOME: path.join(home, ".local/share"),
     XDG_STATE_HOME: path.join(home, ".local/state"),
     XDG_CACHE_HOME: path.join(home, ".cache"),
+    OPENCODE_DB: path.join(home, "opencode.db"),
     OPENCODE_CONFIG_CONTENT: configJson,
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
     OPENCODE_PURE: "1",

@@ -14,6 +14,7 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { Truncate } from "./truncate"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -61,6 +62,111 @@ export const Parameters = Schema.Struct({
   }),
 })
 
+function escapeTaskMarkup(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;"
+      case "<":
+        return "&lt;"
+      case ">":
+        return "&gt;"
+      case '"':
+        return "&quot;"
+      case "'":
+        return "&apos;"
+      default:
+        return char
+    }
+  })
+}
+
+function escapeTaskMarkupAttribute(value: string) {
+  return escapeTaskMarkup(value)
+}
+
+function escapeTaskMarkupText(value: string) {
+  return escapeTaskMarkup(value)
+}
+
+function boundTaskMarkupText(value: string, limits: { maxLines: number; maxBytes: number }) {
+  const maxLines = Math.max(1, limits.maxLines)
+  const maxBytes = Math.max(1, limits.maxBytes)
+  let text = ""
+  let bytes = 0
+  let lines = 1
+
+  for (const point of value) {
+    if (point === "\n" && lines >= maxLines) break
+    const size = Buffer.byteLength(escapeTaskMarkupText(point), "utf8")
+    if (bytes + size > maxBytes) break
+    text += point
+    bytes += size
+    if (point === "\n") lines += 1
+  }
+
+  return {
+    text,
+    truncated: text.length < value.length,
+  }
+}
+
+function visibleText(result: SessionV1.WithParts) {
+  return result.parts
+    .filter((part): part is SessionV1.TextPart => part.type === "text")
+    .map((part) => part.text)
+    .join("\n\n")
+}
+
+function formatOutputLengthFailure(
+  result: SessionV1.WithParts & { info: SessionV1.Assistant },
+  sessionID: SessionID,
+  limits: { maxLines: number; maxBytes: number },
+) {
+  const text = visibleText(result)
+  const output = [
+    "Subagent task failed: MessageOutputLengthError",
+    `Child session: ${sessionID}`,
+    "finish_reason=length",
+    `reasoning_tokens=${result.info.tokens.reasoning}`,
+    `output_tokens=${result.info.tokens.output}`,
+    "The task is incomplete; the filesystem and version-control state may contain partial changes.",
+  ]
+  if (!text) {
+    output.push("No visible output was produced")
+    return output.join("\n")
+  }
+
+  const excerpt = boundTaskMarkupText(text, limits)
+  output.push("Partial output excerpt:", excerpt.text)
+  if (excerpt.truncated) {
+    output.push("", `Partial output truncated. Full content is available in child session ${sessionID}`)
+  }
+  return output.join("\n")
+}
+
+function formatAssistantFailure(
+  result: SessionV1.WithParts & { info: SessionV1.Assistant },
+  sessionID: SessionID,
+  limits: { maxLines: number; maxBytes: number },
+) {
+  const error = result.info.error
+  if (!error || error.name === "MessageOutputLengthError") {
+    return formatOutputLengthFailure(result, sessionID, limits)
+  }
+
+  const output = [`Subagent task failed: ${error.name}`, `Child session: ${sessionID}`]
+  const message = typeof error.data?.message === "string" ? error.data.message : undefined
+  if (!message) return output.join("\n")
+
+  const bounded = boundTaskMarkupText(message, limits)
+  output.push("Message:", bounded.text)
+  if (bounded.truncated) {
+    output.push("", `Error message truncated. Full context is available in child session ${sessionID}`)
+  }
+  return output.join("\n")
+}
+
 function renderOutput(input: {
   sessionID: SessionID
   state: "running" | "completed" | "error"
@@ -69,10 +175,10 @@ function renderOutput(input: {
 }) {
   const tag = input.state === "error" ? "task_error" : "task_result"
   return [
-    `<task id="${input.sessionID}" state="${input.state}">`,
-    ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
+    `<task id="${escapeTaskMarkupAttribute(input.sessionID)}" state="${escapeTaskMarkupAttribute(input.state)}">`,
+    ...(input.summary ? [`<summary>${escapeTaskMarkupText(input.summary)}</summary>`] : []),
     `<${tag}>`,
-    input.text,
+    escapeTaskMarkupText(input.text),
     `</${tag}>`,
     "</task>",
   ].join("\n")
@@ -88,6 +194,7 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const truncate = yield* Truncate.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -196,7 +303,19 @@ export const TaskTool = Tool.define(
           agent: next.name,
           parts,
         })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+        if (result.info.role !== "assistant") {
+          return yield* Effect.fail(new Error("Task prompt returned a non-assistant result"))
+        }
+
+        const text = visibleText(result)
+        if (result.info.error?.name === "MessageAbortedError") return yield* Effect.interrupt
+        const limits = yield* truncate.limits()
+        if (result.info.error || result.info.finish === "length") {
+          return yield* Effect.fail(
+            new Error(formatAssistantFailure({ info: result.info, parts: result.parts }, nextSession.id, limits)),
+          )
+        }
+        return text
       })
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
