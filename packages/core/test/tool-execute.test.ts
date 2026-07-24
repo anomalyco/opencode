@@ -132,10 +132,10 @@ test("execute supports callable namespace tools", async () => {
   expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
 })
 
-test("execute marks running child calls failed when interrupted", async () => {
+test("execute marks every admitted child call failed when interrupted", async () => {
   const child = Tool.make({
     description: "Wait forever",
-    input: Schema.Struct({}),
+    input: Schema.Struct({ id: Schema.Number }),
     output: Schema.String,
     execute: () => Effect.never,
   })
@@ -147,23 +147,30 @@ test("execute marks running child calls failed when interrupted", async () => {
       const started = yield* Deferred.make<void>()
       const fiber = yield* Tool.execute(
         execute,
-        { code: "return await tools.wait({})" },
+        { code: "return await Promise.all([tools.wait({ id: 1 }), tools.wait({ id: 2 })])" },
         {
           ...context,
           progress: (update) =>
             Effect.gen(function* () {
               updates.push(update)
+              if (updates.length > 1) return
               yield* Deferred.succeed(started, undefined)
+              yield* Effect.never
             }),
         },
       ).pipe(Effect.forkChild)
       yield* Deferred.await(started)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
       yield* Fiber.interrupt(fiber)
     }),
   )
 
-  expect(updates).toEqual([
-    { toolCalls: [{ tool: "wait", status: "running" }] },
-    { error: true, toolCalls: [{ tool: "wait", status: "error" }] },
-  ])
+  expect(updates[0]).toEqual({ toolCalls: [{ tool: "wait", status: "running", input: { id: 1 } }] })
+  expect(updates.at(-1)).toEqual({
+    toolCalls: [
+      { tool: "wait", status: "error", input: { id: 1 } },
+      { tool: "wait", status: "error", input: { id: 2 } },
+    ],
+  })
 })

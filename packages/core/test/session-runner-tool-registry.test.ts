@@ -565,7 +565,6 @@ describe("ToolRegistry", () => {
       expect(executed).toEqual(["old:request"])
       expect(progress).toEqual([
         { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
-        { stage: "old", toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
         { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
       ])
     }),

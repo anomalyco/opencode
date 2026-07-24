@@ -50,27 +50,11 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
-        const publication = Semaphore.makeUnsafe(1)
-        const publishCalls = (metadata: Metadata = {}) =>
-          publication.withPermit(
-            Ref.get(calls).pipe(Effect.flatMap((toolCalls) => context.progress({ ...metadata, toolCalls }))),
+        const lock = Semaphore.makeUnsafe(1)
+        const updateCalls = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
+          lock.withPermit(
+            Ref.updateAndGet(calls, update).pipe(Effect.flatMap((toolCalls) => context.progress({ toolCalls }))),
           )
-        const updateCalls = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>, metadata: Metadata = {}) =>
-          publication.withPermit(
-            Ref.updateAndGet(calls, update).pipe(
-              Effect.flatMap((toolCalls) => context.progress({ ...metadata, toolCalls })),
-            ),
-          )
-        const failCalls = () =>
-          updateCalls(
-            (items) => items.map((call) => (call.status === "running" ? { ...call, status: "error" as const } : call)),
-            { error: true },
-          )
-        const finalCalls = Ref.get(calls).pipe(
-          Effect.map((items) =>
-            items.map((call) => (call.status === "running" ? { ...call, status: "error" as const } : call)),
-          ),
-        )
         const result = yield* runtime(
           registrations,
           (name, registration, input) =>
@@ -81,7 +65,7 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
                 agent: context.agent,
                 messageID: context.messageID,
                 callID: context.callID,
-                progress: publishCalls,
+                progress: () => Effect.void,
               }).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
               const outputFileParts = outputFiles(executed.content)
               if (outputFileParts.length > 0)
@@ -89,28 +73,28 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
               return executed.output
             }),
           {
-            onToolCallStart: ({ index, name, input }) =>
-              Effect.gen(function* () {
-                const shown = displayInput(input)
-                yield* updateCalls((items) => {
-                  const next = [...items]
-                  next[index] = { tool: name, status: "running", ...(shown ? { input: shown } : {}) }
-                  return next
-                })
-              }),
-            onToolCallEnd: ({ index, outcome }) =>
-              updateCalls((items) => {
-                const current = items[index]
-                if (!current) return items
+            onToolCallStart: ({ index, name, input }) => {
+              const shown = displayInput(input)
+              return updateCalls((items) => {
                 const next = [...items]
-                next[index] = { ...current, status: outcome === "success" ? "completed" : "error" }
+                next[index] = { tool: name, status: "running", ...(shown ? { input: shown } : {}) }
                 return next
-              }),
+              })
+            },
+            onToolCallEnd: ({ index, name, input, outcome }) => {
+              const shown = displayInput(input)
+              return updateCalls((items) => {
+                const next = [...items]
+                next[index] = {
+                  ...(items[index] ?? { tool: name, ...(shown ? { input: shown } : {}) }),
+                  status: outcome === "success" ? "completed" : "error",
+                }
+                return next
+              })
+            },
           },
-        )
-          .execute(code)
-          .pipe(Effect.onInterrupt(failCalls))
-        const toolCalls = yield* finalCalls
+        ).execute(code)
+        const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
