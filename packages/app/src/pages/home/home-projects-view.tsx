@@ -1,4 +1,5 @@
-import { type Accessor, createMemo, For, onCleanup, Show } from "solid-js"
+import { type Accessor, createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -13,15 +14,18 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { getProjectAvatarVariant, type HomeProjectSelection, type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/server"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { ServerRowMenuView, serverMenuLabels } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
+import { fileManagerApp } from "@/utils/file-manager"
 
-const HOME_ROW_LAYOUT =
-  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
-const HOME_PROJECT_NAV_ROW = `${HOME_ROW_LAYOUT} h-7 gap-2 px-1.5 [font-weight:440] text-v2-text-text-muted hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base hover:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base data-[selected]:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:hover:bg-v2-background-bg-layer-03 focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]`
+
+const serverContextMenuID = (server: ServerConnection.Any) => `server:${ServerConnection.key(server)}`
+const projectContextMenuID = (server: ServerConnection.Any, directory: string) =>
+  `project:${ServerConnection.key(server)}:${directory}`
 
 export type HomeProjectsViewProps = {
   language: ReturnType<typeof useLanguage>
@@ -33,14 +37,10 @@ export type HomeProjectsViewProps = {
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
-  contextMenuOpen: (id: string) => boolean
   canDefaultServer: Accessor<boolean>
-  isDefaultServer: (server: ServerConnection.Any) => boolean
+  defaultServerKey: Accessor<ServerConnection.Key | null | undefined>
   canRevealProject: (server: ServerConnection.Any) => boolean
-  fileManagerActionLabel: Accessor<string>
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
-  serverContextMenuID: (server: ServerConnection.Any) => string
-  projectContextMenuID: (server: ServerConnection.Any, directory: string) => string
   onWheel: (event: WheelEvent) => void
   onChooseProject: (server: ServerConnection.Any) => void
   onFocusServer: (server: ServerConnection.Any) => void
@@ -48,7 +48,6 @@ export type HomeProjectsViewProps = {
   onEditServer: (server: ServerConnection.Http) => void
   onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
   onRemoveServer: (server: ServerConnection.Any) => void
-  onSetContextMenuOpen: (id: string, open: boolean) => void
   onMoveProject: (server: ServerConnection.Any, worktree: string, index: number) => void
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
   onAddProjects: (server: ServerConnection.Any, directories: string[]) => void
@@ -62,9 +61,17 @@ export type HomeProjectsViewProps = {
 }
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
+  const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
+  const contextMenuProps = {
+    contextMenuOpen: (id: string) => contextMenu.open === id,
+    onSetContextMenuOpen: (id: string, open: boolean) => setContextMenu("open", open ? id : undefined),
+  }
   return (
     <aside
-      class="mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]"
+      class={`
+        mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
+        lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
+      `}
       aria-label={props.language.t("home.projects")}
       onWheel={(event) => {
         if (event.target === event.currentTarget) return
@@ -99,7 +106,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                 when={props.projects().length > 0}
                 fallback={<HomeProjectEmpty {...props} server={props.servers()[0]} items={props.recentlyClosed()} />}
               >
-                <HomeProjectList {...props} server={props.servers()[0]} items={props.projects()} />
+                <HomeProjectList {...props} {...contextMenuProps} server={props.servers()[0]} items={props.projects()} />
               </Show>
             </div>
           }
@@ -116,13 +123,14 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                     <HomeServerRow
                       server={item}
                       {...props}
+                      {...contextMenuProps}
                       selected={props.selection().server === ServerConnection.key(item) && !props.selection().directory}
                       collapsed={collapsed()}
                       health={props.serverHealth(item)}
                     />
                     <Show when={healthy() && hasProjects() && !collapsed()}>
                       <div class="mx-3 h-px bg-v2-border-border-base" />
-                      <HomeProjectList {...props} server={item} items={projects()} />
+                      <HomeProjectList {...props} {...contextMenuProps} server={item} items={projects()} />
                     </Show>
                   </div>
                 )
@@ -149,22 +157,22 @@ export function HomeUtilityNav(props: {
 }) {
   return (
     <div class={`${props.class ?? ""} min-w-0 flex-col gap-1 pr-3`}>
-      <button
+      <HomeProjectNavButton
         type="button"
-        class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
         onClick={props.onOpenSettings}
       >
         <IconV2 name="settings-gear" size="small" />
         <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
-      </button>
-      <button
+      </HomeProjectNavButton>
+      <HomeProjectNavButton
         type="button"
-        class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
         onClick={props.onOpenHelp}
       >
         <IconV2 name="help" size="small" />
         <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
-      </button>
+      </HomeProjectNavButton>
     </div>
   )
 }
@@ -172,16 +180,15 @@ export function HomeUtilityNav(props: {
 function HomeServerRow(props: {
   language: HomeProjectsViewProps["language"]
   projectsForServer: HomeProjectsViewProps["projectsForServer"]
-  contextMenuOpen: HomeProjectsViewProps["contextMenuOpen"]
+  contextMenuOpen: HomeProjectsContextMenuProps["contextMenuOpen"]
   canDefaultServer: HomeProjectsViewProps["canDefaultServer"]
-  isDefaultServer: HomeProjectsViewProps["isDefaultServer"]
-  serverContextMenuID: HomeProjectsViewProps["serverContextMenuID"]
+  defaultServerKey: HomeProjectsViewProps["defaultServerKey"]
   onFocusServer: HomeProjectsViewProps["onFocusServer"]
   onToggleCollapsed: HomeProjectsViewProps["onToggleCollapsed"]
   onEditServer: HomeProjectsViewProps["onEditServer"]
   onSetDefaultServer: HomeProjectsViewProps["onSetDefaultServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
-  onSetContextMenuOpen: HomeProjectsViewProps["onSetContextMenuOpen"]
+  onSetContextMenuOpen: HomeProjectsContextMenuProps["onSetContextMenuOpen"]
   onChooseProject: HomeProjectsViewProps["onChooseProject"]
   server: ServerConnection.Any
   selected: boolean
@@ -190,23 +197,26 @@ function HomeServerRow(props: {
 }) {
   const healthy = () => !!props.health?.healthy
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
-  const contextMenuID = () => props.serverContextMenuID(props.server)
+  const contextMenuID = () => serverContextMenuID(props.server)
   onCleanup(() => {
     const id = contextMenuID()
     if (props.contextMenuOpen(id)) props.onSetContextMenuOpen(id, false)
   })
   return (
     <div class="group/server relative flex h-7 min-w-0 items-center rounded-[6px]">
-      <button
+      <HomeProjectNavButton
         type="button"
-        class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
+        class="pr-16 disabled:opacity-60"
         data-selected={props.selected ? "" : undefined}
         disabled={!healthy()}
         onClick={() => props.onFocusServer(props.server)}
       >
         <span
           data-action="home-server-collapse"
-          class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted"
+          class={`
+            -ml-0.5 -mr-1.5 inline-flex size-5 shrink-0 items-center justify-center
+            rounded-[4px] text-v2-icon-icon-muted
+          `}
           classList={{
             "hover:bg-v2-overlay-simple-overlay-hover": canToggle(),
             "cursor-default opacity-40": !canToggle(),
@@ -238,22 +248,30 @@ function HomeServerRow(props: {
           <span class={HOME_PROJECT_NAV_LABEL}>{props.server.displayName ?? new URL(props.server.http.url).host}</span>
           <Show when={props.server.label}>
             {(label) => (
-              <span class="shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5 text-[9px] leading-none text-v2-text-text-muted">
+              <span
+                class={`
+                  shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5
+                  text-[9px] leading-none text-v2-text-text-muted
+                `}
+              >
                 {label()}
               </span>
             )}
           </Show>
         </span>
-      </button>
+      </HomeProjectNavButton>
       <div
-        class="hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+        class={`
+          hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1
+          group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
+        `}
         data-menu={props.contextMenuOpen(contextMenuID())}
       >
         <ServerRowMenuView
           server={props.server}
           labels={serverMenuLabels(props.language)}
           canDefault={props.canDefaultServer()}
-          isDefault={props.isDefaultServer(props.server)}
+          isDefault={props.defaultServerKey() === ServerConnection.key(props.server)}
           onEdit={props.onEditServer}
           onSetDefault={() => props.onSetDefaultServer(props.server)}
           onRemoveDefault={() => props.onSetDefaultServer(undefined)}
@@ -277,7 +295,12 @@ function HomeServerRow(props: {
   )
 }
 
-type HomeProjectListProps = HomeProjectsViewProps & {
+type HomeProjectsContextMenuProps = {
+  contextMenuOpen: (id: string) => boolean
+  onSetContextMenuOpen: (id: string, open: boolean) => void
+}
+
+type HomeProjectListProps = HomeProjectsViewProps & HomeProjectsContextMenuProps & {
   server: ServerConnection.Any
   items: LocalProject[]
 }
@@ -362,16 +385,16 @@ function HomeProjectEmpty(
   const unreachable = () => props.serverHealth(props.server)?.healthy === false
   return (
     <div class="flex min-w-0 flex-col gap-1">
-      <button
+      <HomeProjectNavButton
         type="button"
         data-action="home-add-project-row"
-        class={`${HOME_PROJECT_NAV_ROW} disabled:opacity-60 [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+        class="disabled:opacity-60 [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
         disabled={unreachable()}
         onClick={() => props.onChooseProject(props.server)}
       >
         <IconV2 name="folder-add-left" size="small" />
         <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
-      </button>
+      </HomeProjectNavButton>
       <Show when={props.items.length > 0}>
         <div class="mt-3 flex h-7 min-w-0 shrink-0 items-center pl-1.5 pr-3">
           <div class="text-v2-text-text-faint [font-weight:530]">{props.language.t("home.recentlyClosed")}</div>
@@ -399,22 +422,22 @@ function HomeRecentlyClosedRow(
   }
   return (
     <TooltipV2 placement="right" value={path()}>
-      <button
+      <HomeProjectNavButton
         type="button"
         data-component="home-recently-closed-row"
-        class={`${HOME_PROJECT_NAV_ROW} disabled:opacity-60`}
+        class="disabled:opacity-60"
         disabled={unreachable()}
         onClick={() => props.onAddProjects(props.server, [props.project.worktree])}
       >
         <HomeProjectAvatar project={props.project} outline />
         <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
-      </button>
+      </HomeProjectNavButton>
     </TooltipV2>
   )
 }
 
 function HomeProjectRow(
-  props: HomeProjectsViewProps & {
+  props: HomeProjectsViewProps & HomeProjectsContextMenuProps & {
     project: LocalProject
     server: ServerConnection.Any
     index: () => number
@@ -423,6 +446,7 @@ function HomeProjectRow(
     unseen: number
   },
 ) {
+  const platform = usePlatform()
   const serverUnreachable = () => props.serverHealth(props.server)?.healthy === false
   const sortable = useSortable({
     get id() {
@@ -433,7 +457,7 @@ function HomeProjectRow(
     },
   })
   let pointerDownSelected: boolean | undefined
-  const contextMenuID = () => props.projectContextMenuID(props.server, props.project.worktree)
+  const contextMenuID = () => projectContextMenuID(props.server, props.project.worktree)
   onCleanup(() => {
     const id = contextMenuID()
     if (props.contextMenuOpen(id)) props.onSetContextMenuOpen(id, false)
@@ -444,13 +468,13 @@ function HomeProjectRow(
       class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
       classList={{ "z-10": sortable.isDragSource() }}
     >
-      <button
+      <HomeProjectNavButton
         type="button"
         data-component="home-project-row"
-        class={`${HOME_PROJECT_NAV_ROW} pr-16 disabled:opacity-60`}
+        class="pr-16 disabled:opacity-60"
         classList={{
-          "bg-v2-background-bg-layer-01 text-v2-text-text-base [box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]":
-            sortable.isDragSource(),
+          "bg-v2-background-bg-layer-01 text-v2-text-text-base": sortable.isDragSource(),
+          "[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]": sortable.isDragSource(),
         }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
@@ -485,9 +509,12 @@ function HomeProjectRow(
       >
         <HomeProjectAvatar project={props.project} />
         <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
-      </button>
+      </HomeProjectNavButton>
       <div
-        class="hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+        class={`
+          hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1
+          group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
+        `}
         data-menu={props.contextMenuOpen(contextMenuID())}
       >
         <MenuV2
@@ -515,7 +542,10 @@ function HomeProjectRow(
               </MenuV2.Item>
               <Show when={props.canRevealProject(props.server)}>
                 <MenuV2.Item onSelect={() => props.onRevealProject(props.server, props.project)}>
-                  {props.fileManagerActionLabel()}
+                  {props.language.t(
+                    fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown")
+                      .actionLabel,
+                  )}
                 </MenuV2.Item>
               </Show>
               <MenuV2.Item
@@ -541,6 +571,28 @@ function HomeProjectRow(
         />
       </div>
     </div>
+  )
+}
+
+function HomeProjectNavButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const [local, rest] = splitProps(props, ["class", "classList", "children"])
+  return (
+    <button
+      {...rest}
+      class={`
+        flex h-7 min-w-0 w-full shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-1.5 text-left
+        text-v2-text-text-muted [font-weight:440] transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
+        hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base hover:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]
+        data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base
+        data-[selected]:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:hover:bg-v2-background-bg-layer-03
+        focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none
+        focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]
+        ${local.class ?? ""}
+      `}
+      classList={local.classList}
+    >
+      {local.children}
+    </button>
   )
 }
 

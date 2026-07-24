@@ -20,18 +20,8 @@ import {
 } from "./home-sessions-controller"
 
 const SHOW_HOME_SESSION_ARCHIVE = false
-const HOME_ROW_LAYOUT =
-  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
-const HOME_ROW_BASE = `${HOME_ROW_LAYOUT} border-0`
-const HOME_ROW = `${HOME_ROW_BASE} [font-weight:530] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover`
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
-const HOME_SEARCH_RESULT_ROW =
-  "flex h-10 w-full shrink-0 cursor-default items-center gap-2 border-0 py-3 pl-[18px] pr-6 text-left transition-[background-color] duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-const HOME_SEARCH_RESULT_TITLE =
-  "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-base [font-weight:530]"
-const HOME_SEARCH_RESULT_META =
-  "min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]"
 
 // Middle-click or Cmd+click on macOS (Ctrl+click elsewhere) opens a session
 // tab in the background without navigating, matching browser conventions.
@@ -193,7 +183,10 @@ function HomeSessionLeading(props: {
       <Show when={props.open}>
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+          class={`
+            pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2
+            rounded-[2px] bg-v2-background-bg-layer-04
+          `}
           style={{ right: "calc(100% + 4px)" }}
         />
       </Show>
@@ -215,7 +208,10 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
         <Show when={props.searchOpen()}>
           <div
             data-component="home-session-search-panel"
-            class="absolute flex flex-col overflow-hidden rounded-[12px] bg-v2-background-bg-base shadow-[var(--v2-elevation-floating)]"
+            class={`
+              absolute flex flex-col overflow-hidden rounded-[12px]
+              bg-v2-background-bg-base shadow-[var(--v2-elevation-floating)]
+            `}
             style={{ top: "-6px", left: "-6px", width: "calc(100% + 12px)" }}
           >
             <div class="flex flex-col pt-9">
@@ -231,13 +227,23 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                   <Show
                     when={props.searchResults().length > 0}
                     fallback={
-                      <p class="my-1.5 px-4 pb-2 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]">
+                      <p
+                        class={`
+                          my-1.5 px-4 pb-2 text-[13px] leading-4 tracking-[-0.04px]
+                          text-v2-text-text-muted [font-weight:440]
+                        `}
+                      >
                         {props.searchNoResultsLabel()}
                       </p>
                     }
                   >
                     <div class="flex flex-col">
-                      <p class="my-1.5 pl-[18px] pr-6 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]">
+                      <p
+                        class={`
+                          my-1.5 pl-[18px] pr-6 text-[13px] leading-4 tracking-[-0.04px]
+                          text-v2-text-text-muted [font-weight:440]
+                        `}
+                      >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
                       <ScrollView class="max-h-80" viewportRef={props.onSetSearchList}>
@@ -260,11 +266,20 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
             </div>
           </div>
         </Show>
-        <label class="relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 py-1 pl-3 pr-2 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02">
+        <label
+          class={`
+            relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 pl-3 pr-2
+            bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
+            duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02
+          `}
+        >
           <IconV2 name="magnifying-glass" />
           <input
             ref={props.onSetSearchInput}
-            class="relative z-20 min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-0 [font-weight:440] placeholder:text-v2-text-text-faint"
+            class={`
+              relative z-20 min-w-0 flex-1 border-0 bg-transparent outline-0
+              text-v2-text-text-base [font-weight:440] placeholder:text-v2-text-text-faint
+            `}
             value={props.searchValue()}
             placeholder={props.searchPlaceholder()}
             aria-label={props.searchPlaceholder()}
@@ -341,8 +356,12 @@ function HomeSessionSearchResultRow(
       data-component="home-session-search-row"
       role="option"
       aria-selected={props.selected}
+      class={`
+        flex h-10 w-full shrink-0 cursor-default items-center gap-2 border-0 py-3 pl-[18px] pr-6 text-left
+        transition-[background-color] duration-[120ms] ease-in-out
+        hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+      `}
       classList={{
-        [HOME_SEARCH_RESULT_ROW]: true,
         "bg-v2-overlay-simple-overlay-hover": props.selected,
         group: !!showProjectName(),
       }}
@@ -364,13 +383,9 @@ function HomeSessionSearchResultRow(
         revealProjectOnHover={!!showProjectName()}
       />
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
-        <span
-          class={`${HOME_SEARCH_RESULT_TITLE} ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
-        >
-          {title()}
-        </span>
+        <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
         <Show when={showProjectName()}>
-          <span class={HOME_SEARCH_RESULT_META}>{props.record.projectName}</span>
+          <HomeSessionProjectName name={props.record.projectName} search />
         </Show>
       </div>
     </button>
@@ -386,7 +401,11 @@ function HomeSessionGroupHeader(props: {
   return (
     <div
       ref={props.onSetRef}
-      class={`pointer-events-none sticky top-[84px] lg:top-[108px] flex h-7 min-w-0 items-center justify-between pl-3 bg-v2-background-bg-base ${props.elevated ? "home-session-group-header z-[5]" : "z-10"}`}
+      class={`
+        pointer-events-none sticky top-[84px] flex h-7 min-w-0 items-center justify-between
+        bg-v2-background-bg-base pl-3 lg:top-[108px]
+      `}
+      classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >
       <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
         {props.title}
@@ -407,7 +426,12 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
       <button
         type="button"
         data-component="home-session-row"
-        class={`${HOME_ROW} h-10 min-w-0 flex-1 gap-2 py-3 pl-3 pr-10`}
+        class={`
+          flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
+          bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
+          transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
+          hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+        `}
         onMouseDown={(event) => {
           if (event.button === 1) event.preventDefault()
         }}
@@ -424,19 +448,18 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
           record={props.record}
           revealProjectOnHover={!!showProjectName()}
         />
-        <span
-          class={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530] ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}`}
-        >
-          {title()}
-        </span>
+        <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
         <Show when={showProjectName()}>
-          <span class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]">
-            {props.record.projectName}
-          </span>
+          <HomeSessionProjectName name={props.record.projectName} />
         </Show>
       </button>
       <Show when={SHOW_HOME_SESSION_ARCHIVE}>
-        <div class="hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover/session:opacity-100 focus-within:opacity-100">
+        <div
+          class={`
+            hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
+            group-hover/session:opacity-100 focus-within:opacity-100
+          `}
+        >
           <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
             <IconButtonV2
               data-action="home-session-archive"
@@ -457,13 +480,49 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
   )
 }
 
+function HomeSessionTitle(props: { title: string; showProjectName: boolean; search?: boolean }) {
+  return (
+    <span
+      class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530]"
+      classList={{
+        "text-[13px] leading-4 tracking-[-0.04px]": !!props.search,
+        "max-w-[min(70%,480px)] flex-[0_1_auto]": props.showProjectName,
+        "flex-[1_1_auto]": !props.showProjectName,
+      }}
+    >
+      {props.title}
+    </span>
+  )
+}
+
+function HomeSessionProjectName(props: { name: string; search?: boolean }) {
+  return (
+    <span
+      class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
+      classList={{ "text-[13px] leading-4 tracking-[-0.04px]": !!props.search }}
+    >
+      {props.name}
+    </span>
+  )
+}
+
 function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnType<typeof useLanguage> }) {
   return (
     <div class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center">
-      <div class="shrink-0 text-[13px] leading-[13px] tracking-[-0.04px] text-v2-text-text-base [font-weight:530]">
+      <div
+        class={`
+          shrink-0 text-[13px] leading-[13px] tracking-[-0.04px]
+          text-v2-text-text-base [font-weight:530]
+        `}
+      >
         {props.language.t("home.sessions.empty")}
       </div>
-      <p class="mb-1 text-center text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]">
+      <p
+        class={`
+          mb-1 text-center text-[13px] leading-5 tracking-[-0.04px]
+          text-v2-text-text-muted [font-weight:440]
+        `}
+      >
         {props.language.t("home.sessions.empty.description")}
       </p>
       <Show when={props.onNewSession}>

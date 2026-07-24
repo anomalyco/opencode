@@ -14,14 +14,10 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
       serverHealth={props.projects.server.health}
       projectsForServer={props.projects.server.projects}
       collapsed={props.projects.server.collapsed}
-      contextMenuOpen={props.projects.contextMenu.open}
       canDefaultServer={props.projects.server.canDefault}
-      isDefaultServer={props.projects.server.isDefault}
+      defaultServerKey={props.projects.server.defaultKey}
       canRevealProject={props.projects.project.canReveal}
-      fileManagerActionLabel={props.projects.copy.fileManagerActionLabel}
       unseenCount={props.projects.project.unseenCount}
-      serverContextMenuID={props.projects.contextMenu.serverID}
-      projectContextMenuID={props.projects.contextMenu.projectID}
       onWheel={props.scroll.viewport.containWheel}
       onChooseProject={props.projects.project.choose}
       onFocusServer={props.projects.server.focus}
@@ -29,7 +25,6 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
       onEditServer={props.projects.server.edit}
       onSetDefaultServer={props.projects.server.setDefault}
       onRemoveServer={props.projects.server.remove}
-      onSetContextMenuOpen={props.projects.contextMenu.setOpen}
       onMoveProject={props.projects.project.move}
       onSelectProject={props.projects.project.select}
       onAddProjects={props.projects.project.add}

@@ -8,7 +8,6 @@ import { useNotification } from "@/context/notification"
 import { usePlatform } from "@/context/platform"
 import { ServerConnection } from "@/context/server"
 import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
-import { fileManagerApp } from "@/utils/file-manager"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@/utils/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -24,7 +23,6 @@ export function createHomeProjectsController(home: HomeController) {
   const notification = useNotification()
   const openSettings = useSettingsCommand()
   const serverManagement = useServerManagementController({ navigateOnAdd: false })
-  const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
   const [_state, setState, _, ready] = persisted(
     Persist.global("home.servers", ["home.servers.v1"]),
     createStore({ collapsed: {} as Record<string, boolean> }),
@@ -42,25 +40,9 @@ export function createHomeProjectsController(home: HomeController) {
     return platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(conn)
   }
 
-  function collapsed(conn: ServerConnection.Any) {
-    return state().collapsed[ServerConnection.key(conn)] ?? false
-  }
-
-  function serverContextMenuID(conn: ServerConnection.Any) {
-    return `server:${ServerConnection.key(conn)}`
-  }
-
-  function projectContextMenuID(conn: ServerConnection.Any, directory: string) {
-    return `project:${ServerConnection.key(conn)}:${directory}`
-  }
-
   return {
     copy: {
       language,
-      fileManagerActionLabel: () =>
-        language.t(
-          fileManagerApp(platform.platform === "desktop" ? (platform.os ?? "unknown") : "unknown").actionLabel,
-        ),
     },
     selection: {
       value: home.selection.value,
@@ -69,13 +51,13 @@ export function createHomeProjectsController(home: HomeController) {
       list: home.server.list,
       health: home.server.health,
       projects: home.project.forServer,
-      collapsed,
+      collapsed: (conn: ServerConnection.Any) => state().collapsed[ServerConnection.key(conn)] ?? false,
       toggleCollapsed: (conn: ServerConnection.Any) => {
         const key = ServerConnection.key(conn)
         setState("collapsed", key, !state().collapsed[key])
       },
       canDefault: serverManagement.canDefault,
-      isDefault: (conn: ServerConnection.Any) => serverManagement.defaultKey() === ServerConnection.key(conn),
+      defaultKey: serverManagement.defaultKey,
       setDefault: (conn: ServerConnection.Any | undefined) =>
         serverManagement.setDefault(conn ? ServerConnection.key(conn) : null),
       remove: (conn: ServerConnection.Any) => serverManagement.handleRemove(ServerConnection.key(conn)),
@@ -135,12 +117,6 @@ export function createHomeProjectsController(home: HomeController) {
           }),
         )
       },
-    },
-    contextMenu: {
-      open: (id: string) => contextMenu.open === id,
-      setOpen: (id: string, open: boolean) => setContextMenu("open", open ? id : undefined),
-      serverID: serverContextMenuID,
-      projectID: projectContextMenuID,
     },
     utility: {
       settings: openSettings,
