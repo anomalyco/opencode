@@ -36,27 +36,44 @@ type CallOutcome = Data.TaggedEnum<{
 const CallOutcome = Data.taggedEnum<CallOutcome>()
 
 // Declining an interactive prompt halts the drain instead of becoming model-facing tool output.
-const isUserDeclined = (cause: Cause.Cause<unknown>) =>
-  cause.reasons.some(
-    (reason) =>
-      Cause.isDieReason(reason) &&
-      (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionTool.CancelledError),
-  )
+const isDecline = (
+  error: SessionModelRequest.ExecuteError,
+): error is PermissionV2.DeclinedError | QuestionTool.CancelledError =>
+  error._tag === "PermissionV2.DeclinedError" || error._tag === "QuestionTool.CancelledError"
 
 /**
- * Classifies how the owned tool fibers ended. Interrupts and interactive declines abort
- * the step; a defect from a tool implementation becomes a failed tool call the model can
- * read; a typed infrastructure failure must fail the assistant and then the drain.
+ * Classifies how the owned tool fibers ended. Interrupts abort the step; a user decline
+ * settles its own call and then aborts the step; a defect from a tool implementation
+ * becomes a failed tool call the model can read; a typed infrastructure failure must
+ * fail the assistant and then the drain.
  */
-const classifyToolExits = (settled: Exit.Exit<Array<Exit.Exit<void, ToolOutputStore.Error>>, never>) => {
+const classifyToolExits = (
+  settled: Exit.Exit<Array<Exit.Exit<void, SessionModelRequest.ExecuteError>>, never>,
+  calls: ReadonlyArray<ToolCall>,
+) => {
+  // Exits align with calls by construction: one owned fiber per accepted local call.
+  const exits = settled._tag === "Success" ? settled.value : []
+  const declines = exits.flatMap((exit, index) =>
+    exit._tag === "Failure"
+      ? exit.cause.reasons.flatMap((reason) =>
+          Cause.isFailReason(reason) && isDecline(reason.error) ? [{ call: calls[index], reason: reason.error }] : [],
+        )
+      : [],
+  )
   const causes =
-    settled._tag === "Failure"
-      ? [settled.cause]
-      : settled.value.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
-  const failure = causes.find((cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause))
+    settled._tag === "Failure" ? [settled.cause] : exits.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
+  // The first non-interrupt, non-decline failure, rebuilt without decline reasons so the
+  // drain's error channel never carries a decline.
+  const failure = causes.flatMap((cause) => {
+    if (Cause.hasInterrupts(cause)) return []
+    const reasons = cause.reasons.flatMap((reason): Array<Cause.Reason<ToolOutputStore.Error>> =>
+      Cause.isFailReason(reason) ? (isDecline(reason.error) ? [] : [Cause.makeFailReason(reason.error)]) : [reason],
+    )
+    return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
+  })[0]
   return {
     interrupted: causes.some(Cause.hasInterrupts),
-    declined: causes.some(isUserDeclined),
+    declines,
     failure,
     infraError: failure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(failure)),
   }
@@ -204,7 +221,10 @@ const layer = Layer.effect(
         step: currentStep,
       })
       // Every local tool call forked here is owned until it reaches one durable settlement.
-      const toolRuns: Array<{ readonly call: ToolCall; readonly fiber: Fiber.Fiber<void, ToolOutputStore.Error> }> = []
+      const toolRuns: Array<{
+        readonly call: ToolCall
+        readonly fiber: Fiber.Fiber<void, SessionModelRequest.ExecuteError>
+      }> = []
       const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
       let needsContinuation = false
       const startSnapshot = yield* snapshots.capture()
@@ -348,9 +368,23 @@ const layer = Layer.effect(
             Effect.forEach(toolRuns, (run) => Fiber.await(run.fiber), { concurrency: "unbounded" }),
           ).pipe(Effect.exit)
           if (settled._tag === "Failure") yield* interruptTools
-          const tools = classifyToolExits(settled)
+          const tools = classifyToolExits(
+            settled,
+            toolRuns.map((run) => run.call),
+          )
 
-          if (tools.declined || streamInterrupted || tools.interrupted) {
+          // A declined call settles durably with its reason before the generic sweeps.
+          for (const decline of tools.declines)
+            yield* serialized(
+              publisher.failTool(decline.call.id, {
+                type: "aborted",
+                message:
+                  decline.reason._tag === "QuestionTool.CancelledError"
+                    ? decline.reason.message
+                    : "The user declined this tool call",
+              }),
+            )
+          if (tools.declines.length > 0 || streamInterrupted || tools.interrupted) {
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
             yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
           }
@@ -390,7 +424,7 @@ const layer = Layer.effect(
           }
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
-          if (tools.declined) return yield* Effect.interrupt
+          if (tools.declines.length > 0) return yield* Effect.interrupt
           if ((tools.interrupted || tools.infraError !== undefined) && tools.failure)
             return yield* Effect.failCause(tools.failure)
           if (tools.interrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)

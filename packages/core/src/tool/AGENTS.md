@@ -24,7 +24,7 @@ const source = {
 }
 ```
 
-Leaves own resolution, permission, and side-effect ordering. Translate only expected typed errors into `ToolFailure`; do not use `catchCause`, because interruption and defects must survive.
+Leaves own resolution, permission, and side-effect ordering. Translate only expected typed errors into `ToolFailure`; do not use `catchCause`, because interruption and defects must survive. User declines from `PermissionV2.assert` and question dismissals travel as defects beneath leaf `mapError` blankets and resurface as typed failures at `SessionModelRequest.executeTool`; leaves must never catch or convert them. A decline with feedback (`PermissionV2.CorrectedError`) stays typed so the leaf converts it into `ToolFailure` and the model continues.
 
 ## Registration
 

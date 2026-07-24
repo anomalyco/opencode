@@ -91,6 +91,9 @@ export const Plugin = {
                       .pipe(Effect.orDie),
                   ),
                   Effect.flatMap((state) => {
+                    // Deliberate defect tunnel (see PermissionV2.assert): a dismissal must dodge
+                    // leaf `mapError` blankets so it never becomes model-facing tool output; it
+                    // resurfaces as a typed failure at SessionModelRequest.executeTool.
                     if (state.status === "cancelled") return Effect.die(new CancelledError())
                     const output = {
                       answers: input.questions.map((_, index): QuestionV2.Answer => {

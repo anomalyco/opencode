@@ -3569,7 +3569,7 @@ describe("SessionRunnerLLM", () => {
             {
               type: "tool",
               id: "call-declined",
-              state: { status: "error", error: { message: "Tool execution interrupted" } },
+              state: { status: "error", error: { type: "aborted", message: "The user declined this tool call" } },
             },
           ],
         },
@@ -3721,7 +3721,7 @@ describe("SessionRunnerLLM", () => {
             {
               type: "tool",
               id: "call-question",
-              state: { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } },
+              state: { status: "error", error: { type: "aborted", message: "The user dismissed this question" } },
             },
           ],
         },

@@ -2,11 +2,14 @@ export * as SessionModelRequest from "./model-request"
 
 import { LLM, Message, SystemPart, type LLMRequest, type ToolContent } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { ModelV2 } from "../model"
+import { PermissionV2 } from "../permission"
 import { PluginHooks } from "../plugin/hooks"
+import { QuestionTool } from "../tool/question"
+import { ToolOutputStore } from "../tool-output-store"
 import { ToolRegistry } from "../tool/registry"
 import { SessionContext } from "./context"
 import { SessionModelHeaders } from "./model-headers"
@@ -14,13 +17,32 @@ import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
 
+/** Failures a prepared execution can surface: infrastructure errors plus user declines resurfaced from the defect tunnel. */
+export type ExecuteError = ToolOutputStore.Error | PermissionV2.DeclinedError | QuestionTool.CancelledError
+
+// User declines dive under the leaves' blanket `mapError` as defects (the deliberate
+// tunnel entered in PermissionV2.assert and the question tool), so a user's "no" can
+// never become model-facing tool output. They resurface as typed failures exactly once,
+// here at the seam the runner executes through.
+const declineDefect = (cause: Cause.Cause<ToolOutputStore.Error>) => {
+  const decline = cause.reasons.flatMap((reason) =>
+    Cause.isDieReason(reason) &&
+    (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionTool.CancelledError)
+      ? [reason.defect]
+      : [],
+  )[0]
+  return decline ? Result.succeed(decline) : Result.fail(cause)
+}
+
 interface Prepared {
   readonly request: LLMRequest
   /**
    * One request-scoped execution operation. Unknown, hook-removed, and
    * step-limit-violating calls fail individually through the same seam.
    */
-  readonly executeTool: ToolRegistry.ToolSet["execute"]
+  readonly executeTool: (
+    input: ToolRegistry.ExecuteInput,
+  ) => Effect.Effect<ToolRegistry.ToolOutcome, ExecuteError>
   /** True when this request is the final Step; violating calls are rejected and no continuation follows. */
   readonly stepLimitReached: boolean
 }
@@ -134,7 +156,7 @@ export const layer = Layer.effect(
         tools: hookedTools,
         toolChoice: stepLimitReached ? "none" : undefined,
       })
-      const executeTool: ToolRegistry.ToolSet["execute"] = (executeInput) => {
+      const executeTool: Prepared["executeTool"] = (executeInput) => {
         if (stepLimitReached)
           return Effect.succeed({
             status: "error",
@@ -145,7 +167,9 @@ export const layer = Layer.effect(
             status: "error",
             error: { type: "tool.unknown", message: `Tool is not available for this request: ${executeInput.call.name}` },
           })
-        return toolSet.execute(executeInput)
+        return toolSet
+          .execute(executeInput)
+          .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
       }
       return {
         request,

@@ -232,21 +232,27 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     yield* flushFragments()
   })
 
+  const failTool = Effect.fnUntraced(function* (callID: string, error: SessionError.Error) {
+    const tool = tools.get(callID)
+    if (!tool || tool.settled) return false
+    tool.settled = true
+    yield* events.publish(SessionEvent.Tool.Failed, {
+      sessionID: input.sessionID,
+      assistantMessageID: tool.assistantMessageID,
+      callID,
+      error,
+      ...failureSnapshot(tool),
+      executed: tool.providerExecuted,
+    })
+    return true
+  })
+
   const failTools = Effect.fnUntraced(function* (error: SessionError.Error, mode: "all" | "hosted" | "uncalled") {
     let failed = false
     for (const [callID, tool] of tools) {
       if (tool.settled || (mode === "hosted" && !tool.providerExecuted) || (mode === "uncalled" && tool.called))
         continue
-      tool.settled = true
-      failed = true
-      yield* events.publish(SessionEvent.Tool.Failed, {
-        sessionID: input.sessionID,
-        assistantMessageID: tool.assistantMessageID,
-        callID,
-        error,
-        ...failureSnapshot(tool),
-        executed: tool.providerExecuted,
-      })
+      failed = (yield* failTool(callID, error)) || failed
     }
     return failed
   })
@@ -525,6 +531,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     toolExecution,
     flush,
     failAssistant,
+    failTool,
     publishStepFailure,
     failUnsettledTools,
     hasProviderError: () => providerFailed,
