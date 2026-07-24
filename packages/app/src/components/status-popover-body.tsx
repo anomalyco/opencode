@@ -16,6 +16,7 @@ import { type ServerHealth } from "@/utils/server-health"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
 import { useMcpToggle } from "@/context/mcp"
+import { useServerProtocol } from "@/context/server-sdk"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -257,6 +258,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const settings = useSettings()
+  const protocol = useServerProtocol()
 
   const fail = (err: unknown) => {
     showToast({
@@ -320,10 +322,12 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
             {lspCount() > 0 ? `${lspCount()} ` : ""}
             {language.t("status.popover.tab.lsp")}
           </Tabs.Trigger>
-          <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
-            {pluginCount() > 0 ? `${pluginCount()} ` : ""}
-            {language.t("status.popover.tab.plugins")}
-          </Tabs.Trigger>
+          <Show when={protocol() === "v1"}>
+            <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
+              {pluginCount() > 0 ? `${pluginCount()} ` : ""}
+              {language.t("status.popover.tab.plugins")}
+            </Tabs.Trigger>
+          </Show>
         </Tabs.List>
 
         {!settings.general.newLayoutDesigns() && (
@@ -483,25 +487,27 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           </div>
         </Tabs.Content>
 
-        <Tabs.Content value="plugins">
-          <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-              <Show
-                when={plugins().length > 0}
-                fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
-              >
-                <For each={plugins()}>
-                  {(plugin) => (
-                    <div class="flex items-center gap-2 w-full px-2 py-1">
-                      <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                      <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                    </div>
-                  )}
-                </For>
-              </Show>
+        <Show when={protocol() === "v1"}>
+          <Tabs.Content value="plugins">
+            <div class="flex flex-col px-2 pb-2">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                <Show
+                  when={plugins().length > 0}
+                  fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
+                >
+                  <For each={plugins()}>
+                    {(plugin) => (
+                      <div class="flex items-center gap-2 w-full px-2 py-1">
+                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
             </div>
-          </div>
-        </Tabs.Content>
+          </Tabs.Content>
+        </Show>
       </Tabs>
     </div>
   )
