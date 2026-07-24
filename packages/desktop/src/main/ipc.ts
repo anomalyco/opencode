@@ -5,14 +5,28 @@ import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } f
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
-import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
+import type {
+  BrowserPaneCommand,
+  BrowserPaneLayout,
+  FatalRendererError,
+  ServerReadyData,
+  TitlebarTheme,
+} from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
-import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import {
+  getPinchZoomEnabled,
+  getWindowID,
+  isTrustedRendererUrl,
+  setPinchZoomEnabled,
+  setTitlebar,
+  updateTitlebar,
+} from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import type { BrowserPaneController } from "./browser-pane"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -41,6 +55,7 @@ type Deps = {
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
+  browserPane: BrowserPaneController
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -88,6 +103,23 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
+  ipcMain.on("browser-pane-layout", (event: IpcMainEvent, input: unknown) => {
+    const win = browserWindow(event)
+    const layout = browserLayout(input)
+    if (!win || !layout) return
+    deps.browserPane.setLayout(win, layout)
+  })
+  ipcMain.handle("browser-pane-command", (event: IpcMainInvokeEvent, input: unknown) => {
+    const win = browserWindow(event)
+    const command = browserCommand(input)
+    if (!win || !command) throw new Error("Invalid browser pane request")
+    return deps.browserPane.command(win, command)
+  })
+  ipcMain.handle("browser-pane-state", (event: IpcMainInvokeEvent) => {
+    const win = browserWindow(event)
+    if (!win) throw new Error("Invalid browser pane request")
+    return deps.browserPane.state(win)
+  })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)
@@ -263,6 +295,65 @@ export function registerIpcHandlers(deps: Deps) {
       relaunch: deps.relaunch,
     })
   })
+}
+
+function browserWindow(event: IpcMainEvent | IpcMainInvokeEvent): BrowserWindow | undefined {
+  if (event.senderFrame !== event.sender.mainFrame) return undefined
+  if (!isTrustedRendererUrl(event.senderFrame.url)) return undefined
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.webContents !== event.sender) return undefined
+  return win
+}
+
+function browserLayout(input: unknown): BrowserPaneLayout | undefined {
+  if (!record(input)) return undefined
+  if (typeof input.attached !== "boolean" || typeof input.visible !== "boolean") return undefined
+  if (input.destroy !== undefined && typeof input.destroy !== "boolean") return undefined
+  if (input.background !== undefined && typeof input.background !== "string") return undefined
+  if (input.sessionID !== undefined && typeof input.sessionID !== "string") return undefined
+  if (input.bounds !== undefined) {
+    if (!record(input.bounds)) return undefined
+    if (
+      !finite(input.bounds.x) ||
+      !finite(input.bounds.y) ||
+      !finite(input.bounds.width) ||
+      !finite(input.bounds.height)
+    ) {
+      return undefined
+    }
+    return {
+      attached: input.attached,
+      visible: input.visible,
+      ...(input.destroy !== undefined ? { destroy: input.destroy } : {}),
+      ...(input.background !== undefined ? { background: input.background } : {}),
+      ...(input.sessionID !== undefined ? { sessionID: input.sessionID } : {}),
+      bounds: { x: input.bounds.x, y: input.bounds.y, width: input.bounds.width, height: input.bounds.height },
+    }
+  }
+  return {
+    attached: input.attached,
+    visible: input.visible,
+    ...(input.destroy !== undefined ? { destroy: input.destroy } : {}),
+    ...(input.background !== undefined ? { background: input.background } : {}),
+    ...(input.sessionID !== undefined ? { sessionID: input.sessionID } : {}),
+  }
+}
+
+function browserCommand(input: unknown): BrowserPaneCommand | undefined {
+  if (!record(input) || typeof input.type !== "string") return undefined
+  if (input.type === "back" || input.type === "forward" || input.type === "reload" || input.type === "stop") {
+    return { type: input.type }
+  }
+  if (input.type === "navigate" && typeof input.url === "string") return { type: "navigate", url: input.url }
+  return undefined
+}
+
+function record(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+}
+
+function finite(input: unknown): input is number {
+  return typeof input === "number" && Number.isFinite(input)
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {

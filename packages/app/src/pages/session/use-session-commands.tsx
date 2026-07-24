@@ -19,6 +19,8 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionOwnership } from "./session-ownership"
+import { usePlatform } from "@/context/platform"
+import { ServerConnection, useServer } from "@/context/server"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -48,6 +50,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
+  const platform = usePlatform()
+  const server = useServer()
   const navigate = useNavigate()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
@@ -515,6 +519,20 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
+    ...(platform.browserPane &&
+    params.id &&
+    settings.general.experimentalBrowser() &&
+    server.current &&
+    ServerConnection.builtin(server.current)
+      ? [
+          viewCommand({
+            id: "browser.toggle",
+            title: language.t("command.browser.toggle"),
+            keybind: "mod+shift+b",
+            onSelect: () => view().browserPanel.toggle(),
+          }),
+        ]
+      : []),
     ...(shown()
       ? [
           viewCommand({

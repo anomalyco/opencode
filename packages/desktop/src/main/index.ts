@@ -48,6 +48,7 @@ import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
+import { createBrowserPaneController } from "./browser-pane"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -269,6 +270,8 @@ const main = Effect.gen(function* () {
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
+  const browserPane = createBrowserPaneController()
+  app.once("will-quit", browserPane.dispose)
   const updater = setupAutoUpdater(stopSidecars)
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
@@ -298,6 +301,7 @@ const main = Effect.gen(function* () {
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
+    browserPane,
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()
@@ -352,6 +356,7 @@ const main = Effect.gen(function* () {
         onStdout: (message) => writeLog("server", "stdout", { message }),
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
         onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
+        onBrowserRequest: (request, abort) => browserPane.request(request, abort),
       }),
     )
     server = listener

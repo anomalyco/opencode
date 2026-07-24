@@ -13,6 +13,7 @@ const OS_NAME = (() => {
 
 const [webviewZoom, setWebviewZoom] = createSignal(1)
 let requestedZoom = 1
+let zoomInitialized = false
 let pinchZoomEnabled = false
 let wheelPinch = undefined as
   | {
@@ -32,6 +33,7 @@ const WHEEL_PINCH_END_DELAY = 160
 const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
 
 const applyZoom = (next: number) => {
+  zoomInitialized = true
   requestedZoom = next
   void window.api
     .setZoomFactor(next)
@@ -46,6 +48,14 @@ const applyZoom = (next: number) => {
 }
 
 window.api.onZoomFactorChanged((factor) => {
+  zoomInitialized = true
+  requestedZoom = clamp(factor)
+  setWebviewZoom(requestedZoom)
+})
+
+void window.api.getZoomFactor().then((factor) => {
+  if (zoomInitialized) return
+  zoomInitialized = true
   requestedZoom = clamp(factor)
   setWebviewZoom(requestedZoom)
 })

@@ -49,7 +49,7 @@ const output = (entryFileNames: string, banner?: string) => ({
   banner,
 })
 
-function nodePrelude(input: NodeBuildInput) {
+function nodePrelude(input: NodeBuildInput, standalone = true) {
   const nodePtySpawnHelper =
     input.target.platform === "darwin"
       ? `${input.target.nodePtyPackage}/prebuilds/darwin-${input.target.arch}/spawn-helper`
@@ -89,8 +89,9 @@ export const validateName = sdk.Tool.validateName
 export const registrationEntries = sdk.Tool.registrationEntries
 export const validateNamespace = sdk.Tool.validateNamespace
 export const toLLMDefinition = sdk.Tool.toLLMDefinition`
-  return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
-import __cjs_mod__ from "node:module"
+  const module = standalone ? "__cjs_mod__" : "__ocModule"
+  const shim = standalone
+    ? `import __cjs_mod__ from "node:module"
 import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
 import { tmpdir as __ocTmpdir } from "node:os"
 import __ocPath from "node:path"
@@ -98,7 +99,15 @@ import { getAssetKeys as __ocAssetKeys, getRawAsset as __ocRawAsset, isSea as __
 import { fileURLToPath as __ocFileURLToPath } from "node:url"
 const __filename = import.meta.filename
 const __dirname = import.meta.dirname
-const require = __cjs_mod__.createRequire(import.meta.url)
+const require = __cjs_mod__.createRequire(import.meta.url)`
+    : `import __ocModule from "node:module"
+import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
+import { tmpdir as __ocTmpdir } from "node:os"
+import __ocPath from "node:path"
+import { getAssetKeys as __ocAssetKeys, getRawAsset as __ocRawAsset, isSea as __ocIsSea } from "node:sea"
+import { fileURLToPath as __ocFileURLToPath } from "node:url"`
+  return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
+${shim}
 const __ocPluginModules = ${JSON.stringify({
     "@opencode-ai/plugin/v2": "opencode:plugin-v2",
     "@opencode-ai/plugin/v2/plugin": "opencode:plugin-v2-plugin",
@@ -115,7 +124,7 @@ const __ocPluginSources = ${JSON.stringify({
     "opencode:plugin-v2-effect-plugin": effectPluginModule,
     "opencode:plugin-v2-effect-tool": effectToolModule,
   })}
-__cjs_mod__.registerHooks({
+${module}.registerHooks({
   resolve(__ocSpecifier, __ocContext, __ocNextResolve) {
     const __ocUrl = __ocPluginModules[__ocSpecifier]
     return __ocUrl ? { url: __ocUrl, shortCircuit: true } : __ocNextResolve(__ocSpecifier, __ocContext)
@@ -210,6 +219,34 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       rollupOptions: {
         external: [/^@opencode-ai\/simulation(?:\/|$)/],
         output: output("opencode.mjs", nodePrelude(input)),
+      },
+    },
+  })
+}
+
+export function serverConfig(input: NodeBuildInput): UserConfig {
+  return defineConfig({
+    root: dir,
+    plugins: [rawTextPlugin(), runtimeRequirePlugin()],
+    resolve,
+    define: {
+      OPENCODE_VERSION: JSON.stringify(input.version),
+      OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
+      OPENCODE_MODELS_DEV: input.models,
+      OPENCODE_CHANNEL: JSON.stringify(input.channel),
+      OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
+      FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
+    },
+    ssr: { noExternal: true },
+    build: {
+      ssr: "src/node/server.ts",
+      target: "node26",
+      outDir: "dist-node",
+      emptyOutDir: false,
+      minify: true,
+      rollupOptions: {
+        external: [/^@opencode-ai\/simulation(?:\/|$)/],
+        output: output("server.js", nodePrelude(input, false)),
       },
     },
   })

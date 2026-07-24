@@ -388,6 +388,20 @@ export const SettingsGeneral: Component = () => {
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.advanced")}</h3>
 
       <SettingsList>
+        <Show when={platform.browserPane}>
+          <SettingsRow
+            title={language.t("settings.general.row.experimentalBrowser.title")}
+            description={language.t("settings.general.row.experimentalBrowser.description")}
+          >
+            <div data-action="settings-experimental-browser">
+              <Switch
+                checked={settings.general.experimentalBrowser()}
+                onChange={(checked) => settings.general.setExperimentalBrowser(checked)}
+              />
+            </div>
+          </SettingsRow>
+        </Show>
+
         <SettingsRow
           title={language.t("settings.general.row.showFileTree.title")}
           description={language.t("settings.general.row.showFileTree.description")}

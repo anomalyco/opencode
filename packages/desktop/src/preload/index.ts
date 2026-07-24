@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import type { ElectronAPI, WslServersEvent } from "./types"
+import type { BrowserPaneState, ElectronAPI, WslServersEvent } from "./types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
@@ -123,6 +123,16 @@ const api: ElectronAPI = {
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
+  browserPane: {
+    setLayout: (layout) => ipcRenderer.send("browser-pane-layout", layout),
+    command: (command) => ipcRenderer.invoke("browser-pane-command", command),
+    subscribe: async (cb) => {
+      const handler = (_: unknown, state: BrowserPaneState) => cb(state)
+      ipcRenderer.on("browser-pane-state", handler)
+      cb(await ipcRenderer.invoke("browser-pane-state"))
+      return () => ipcRenderer.removeListener("browser-pane-state", handler)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld("api", api)

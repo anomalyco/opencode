@@ -502,6 +502,26 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("keeps direct tools and Code Mode reserved when request providers collide", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ echo: constant("direct") }, { codemode: false })
+      yield* service.register({ nested: constant("codemode") })
+      yield* service.registerProvider(() =>
+        Effect.succeed({
+          echo: { tool: constant("provider") },
+          nested: { tool: constant("provider nested") },
+          execute: { tool: constant("provider execute") },
+        }),
+      )
+
+      const toolSet = yield* service.snapshot(undefined, sessionID)
+      expect(toolSet.definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
+      expect(toolSet.codeModeInstructions).toContain("tools.nested")
+      expect((yield* toolSet.execute(call("echo"))).content).toEqual([{ type: "text", text: "direct" }])
+    }),
+  )
+
   it.effect("reveals the previous registration after an overlay closes", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service

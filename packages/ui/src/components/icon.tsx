@@ -26,6 +26,7 @@ const icons = {
   "terminal-active": `<path d="M2 18H18V2H2V18Z" fill="currentColor" fill-opacity="0.1"/>
 <path d="M6.5 8L8.64286 10L6.5 12M10.9286 12H13.5M2 18H18V2H2V18Z" stroke="currentColor" stroke-linecap="square"/>`,
   review: `<path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
+  refresh: `<path d="M15.8333 9.99935C15.8333 13.221 13.2217 15.8327 10 15.8327C6.77838 15.8327 4.16671 13.221 4.16671 9.99935C4.16671 6.77769 6.77838 4.16602 10 4.16602C11.6946 4.16602 13.2203 4.88889 14.2851 6.0431M14.2851 6.0431V2.91602M14.2851 6.0431H17.0834" stroke="currentColor" stroke-linecap="square"/>`,
   "review-active": `<path d="M18 18V2L2 2L2 18H18Z" fill="currentColor" fill-opacity="0.1"/>
 <path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
   expand: `<path d="M4.58301 10.4163V15.4163H9.58301M10.4163 4.58301H15.4163V9.58301" stroke="currentColor" stroke-linecap="square"/>`,

@@ -71,6 +71,17 @@ export const dict = {
   "command.fileTree.toggle": "切换文件树",
 
   "command.review.toggle": "切换审查",
+  "command.browser.toggle": "Toggle browser",
+  "settings.general.row.experimentalBrowser.title": "Browser pane",
+  "settings.general.row.experimentalBrowser.description":
+    "Enable the experimental browser pane and agent browser tools",
+  "session.panel.browser": "Browser",
+  "browser.back": "Back",
+  "browser.forward": "Forward",
+  "browser.reload": "Reload",
+  "browser.address.placeholder": "Enter a URL",
+  "browser.address.label": "Browser address",
+  "settings.permissions.tool.browser.description": "Control the browser attached to this session",
 
   "command.terminal.new": "新建终端",
   "command.terminal.new.description": "创建新的终端标签页",

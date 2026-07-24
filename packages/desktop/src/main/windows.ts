@@ -437,7 +437,7 @@ function allowRendererPermissions(win: BrowserWindow) {
   })
 }
 
-function isTrustedRendererUrl(value?: string) {
+export function isTrustedRendererUrl(value?: string) {
   return isRendererUrl(value)
 }
 

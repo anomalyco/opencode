@@ -7,13 +7,14 @@ interface ImportMeta {
 }
 
 declare module "virtual:opencode-server" {
-  export namespace Server {
-    export const listen: typeof import("../../../opencode/dist/types/src/node").Server.listen
-    export type Listener = import("../../../opencode/dist/types/src/node").Server.Listener
+  import type { BrowserControl } from "@opencode-ai/core/browser-control"
+
+  export const Server: {
+    listen(options: {
+      hostname: string
+      port: number
+      password: string
+      browserControl?: BrowserControl.Interface
+    }): Promise<{ stop(close?: boolean): Promise<void> }>
   }
-  export namespace Config {
-    export const get: typeof import("../../../opencode/dist/types/src/node").Config.get
-    export type Info = import("../../../opencode/dist/types/src/node").Config.Info
-  }
-  export const bootstrap: typeof import("../../../opencode/dist/types/src/node").bootstrap
 }

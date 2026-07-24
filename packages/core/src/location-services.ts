@@ -7,7 +7,6 @@ import { CommandV2 } from "./command"
 import { Config } from "./config"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Node } from "@opencode-ai/util/effect/app-node"
-import { EventV2 } from "./event"
 import { FileMutation } from "./file-mutation"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
@@ -45,6 +44,7 @@ import { SessionGenerateNode } from "./session/generate-node"
 import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
+import { BrowserTool } from "./tool/browser"
 import { ToolOutputStore } from "./tool-output-store"
 import { Vcs } from "./vcs"
 
@@ -79,6 +79,8 @@ const locationServiceNodes = [
   ToolOutputStore.node,
   ToolRegistry.node,
   ToolRegistry.toolsNode,
+  ToolRegistry.providersNode,
+  BrowserTool.node,
   Image.node,
   SkillInstructions.node,
   ReferenceInstructions.node,

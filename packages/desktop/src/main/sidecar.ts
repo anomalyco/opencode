@@ -1,5 +1,6 @@
 import * as http from "node:http"
 import * as tls from "node:tls"
+import { BrowserControl } from "@opencode-ai/core/browser-control"
 
 type NodeHttpWithEnvProxy = typeof http & {
   setGlobalProxyFromEnv: () => void
@@ -27,7 +28,7 @@ type SidecarMessage =
   | { type: "error"; error: { message: string; stack?: string } }
 
 type ParentPort = {
-  postMessage(message: SidecarMessage): void
+  postMessage(message: SidecarMessage | BrowserControl.Request | BrowserControl.Cancel): void
   on(event: "message", listener: (event: { data: unknown }) => void): void
 }
 
@@ -36,9 +37,51 @@ type Listener = {
 }
 
 const parentPort = getParentPort()
+const pending = new Map<
+  string,
+  {
+    readonly resolve: (response: BrowserControl.Response) => void
+    readonly reject: (error: Error) => void
+    readonly cleanup: () => void
+  }
+>()
+const browserControl: BrowserControl.Interface = {
+  request: (request, signal) =>
+    new Promise((resolve, reject) => {
+      const onAbort = () => {
+        parentPort.postMessage({
+          type: "desktop.browser.cancel",
+          version: BrowserControl.VERSION,
+          requestID: request.requestID,
+        })
+        cleanup()
+        const error = new Error("The browser action was aborted")
+        error.name = "AbortError"
+        reject(error)
+      }
+      const cleanup = () => {
+        signal.removeEventListener("abort", onAbort)
+        pending.delete(request.requestID)
+      }
+      pending.set(request.requestID, { resolve, reject, cleanup })
+      signal.addEventListener("abort", onAbort, { once: true })
+      if (signal.aborted) {
+        onAbort()
+        return
+      }
+      parentPort.postMessage(request)
+    }),
+}
 let listener: Listener | undefined
 
 parentPort.on("message", (event) => {
+  if (BrowserControl.isResponse(event.data)) {
+    const request = pending.get(event.data.requestID)
+    if (!request) return
+    request.cleanup()
+    request.resolve(event.data)
+    return
+  }
   const command = parseCommand(event.data)
   if (!command) return
   if (command.type === "stop") {
@@ -59,9 +102,8 @@ async function start(command: StartCommand) {
     listener = await Server.listen({
       port: command.port,
       hostname: command.hostname,
-      username: "opencode",
       password: command.password,
-      cors: ["oc://renderer"],
+      browserControl,
     })
     parentPort.postMessage({ type: "ready" })
   } catch (error) {
@@ -75,6 +117,11 @@ async function stop() {
     await listener?.stop()
   } finally {
     listener = undefined
+    for (const request of pending.values()) {
+      request.cleanup()
+      request.reject(new Error("The desktop sidecar stopped"))
+    }
+    pending.clear()
     parentPort.postMessage({ type: "stopped" })
     setImmediate(() => process.exit(0))
   }

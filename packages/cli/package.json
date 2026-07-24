@@ -25,6 +25,7 @@
     "@agentclientprotocol/sdk": "1.2.1",
     "@effect/platform-node": "catalog:",
     "@opencode-ai/client": "workspace:*",
+    "@opencode-ai/core": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/server": "workspace:*",

@@ -16,7 +16,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
@@ -242,6 +242,17 @@ export function SessionHeader() {
     reviewVisible: isDesktop(),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
+    browserLabel: language.t("command.browser.toggle"),
+    browserKeybind: command.keybindParts("browser.toggle"),
+    browserVisible:
+      isDesktop() &&
+      !!params.id &&
+      !!platform.browserPane &&
+      settings.general.experimentalBrowser() &&
+      !!server.current &&
+      ServerConnection.builtin(server.current),
+    browserOpened: view().browserPanel.opened(),
+    onBrowserToggle: () => view().browserPanel.toggle(),
   }))
 
   const selectApp = (app: OpenApp) => {
@@ -478,6 +489,39 @@ export function SessionHeader() {
                         </Button>
                       </TooltipKeybind>
 
+                      <Show
+                        when={
+                          platform.browserPane &&
+                          params.id &&
+                          settings.general.experimentalBrowser() &&
+                          server.current &&
+                          ServerConnection.builtin(server.current)
+                        }
+                      >
+                        <TooltipKeybind
+                          title={language.t("command.browser.toggle")}
+                          keybind={command.keybind("browser.toggle")}
+                        >
+                          <Button
+                            variant="ghost"
+                            class="group/browser-toggle titlebar-icon w-8 h-6 p-0 box-border"
+                            onClick={() => view().browserPanel.toggle()}
+                            aria-label={language.t("command.browser.toggle")}
+                            aria-expanded={view().browserPanel.opened()}
+                            aria-controls="browser-panel"
+                          >
+                            <Icon
+                              size="small"
+                              name="window-cursor"
+                              classList={{
+                                "text-icon-strong": view().browserPanel.opened(),
+                                "text-icon-weak": !view().browserPanel.opened(),
+                              }}
+                            />
+                          </Button>
+                        </TooltipKeybind>
+                      </Show>
+
                       <TooltipKeybind
                         title={language.t("command.fileTree.toggle")}
                         keybind={command.keybind("fileTree.toggle")}
@@ -524,11 +568,14 @@ type SessionHeaderV2ActionsState = {
   reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
+  browserLabel: string
+  browserKeybind: string[]
+  browserVisible: boolean
+  browserOpened: boolean
+  onBrowserToggle: () => void
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
-  const language = useLanguage()
-
   return (
     <div class="flex items-center gap-2">
       <Show when={props.state.statusVisible}>
@@ -560,6 +607,33 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
             aria-expanded={props.state.reviewOpened}
             aria-controls="review-panel"
             icon={<IconV2 name="sidebar-right" />}
+          />
+        </TooltipV2>
+      </Show>
+      <Show when={props.state.browserVisible}>
+        <TooltipV2
+          class="shrink-0"
+          placement="bottom"
+          value={
+            <>
+              {props.state.browserLabel}
+              <Show when={props.state.browserKeybind.length > 0}>
+                <KeybindV2 keys={props.state.browserKeybind} variant="neutral" />
+              </Show>
+            </>
+          }
+        >
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.browserOpened ? "pressed" : undefined}
+            onClick={props.state.onBrowserToggle}
+            aria-label={props.state.browserLabel}
+            aria-expanded={props.state.browserOpened}
+            aria-controls="browser-panel"
+            icon={<Icon name="window-cursor" size="small" />}
           />
         </TooltipV2>
       </Show>

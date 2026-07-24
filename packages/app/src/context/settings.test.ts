@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  experimentalBrowserDefault,
   isAppUpgrade,
   layoutTransitionState,
   maximumSunsetTimeout,
@@ -11,6 +12,10 @@ import {
 } from "./settings"
 
 describe("layout transition", () => {
+  test("keeps the advanced browser feature off by default", () => {
+    expect(experimentalBrowserDefault).toBe(false)
+  })
+
   test("blank profiles default to the new layout", () => {
     expect(newLayoutDesignsDefault).toBe(true)
   })

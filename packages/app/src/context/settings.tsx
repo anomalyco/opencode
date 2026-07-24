@@ -33,6 +33,7 @@ export interface Settings {
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
+    experimentalBrowser: boolean
     mobileTitlebarPosition: "top" | "bottom"
     newLayoutDesigns?: boolean
     layoutTransitionEligible?: boolean
@@ -58,6 +59,7 @@ export const sansDefault = "System Sans"
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
 const legacyNewLayoutDesignsDefault = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 export const newLayoutDesignsDefault = true
+export const experimentalBrowserDefault = false
 // Existing users can switch layouts until local midnight on this date. Set new Date(YYYY, M-1, D) to show.
 export const oldInterfaceSunset = new Date(2026, 8, 14)
 const newLayoutDesignsUpgradeCutoff = "1.17.19"
@@ -184,6 +186,7 @@ const defaultSettings: Settings = {
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
+    experimentalBrowser: experimentalBrowserDefault,
     mobileTitlebarPosition: "top",
   },
   appearance: {
@@ -395,6 +398,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
+        },
+        experimentalBrowser: withFallback(
+          () => store.general?.experimentalBrowser,
+          defaultSettings.general.experimentalBrowser,
+        ),
+        setExperimentalBrowser(value: boolean) {
+          setStore("general", "experimentalBrowser", value)
+          if (!value) platform.browserPane?.setLayout({ attached: false, visible: false, destroy: true })
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,

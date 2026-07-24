@@ -10,7 +10,7 @@ import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 import { modelsData } from "./generate"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
-import { mainConfig } from "../vite.node.config"
+import { mainConfig, serverConfig } from "../vite.node.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 
 const NODE_VERSION = "26.4.0"
@@ -26,6 +26,7 @@ if (outdir === path.join(dir, "dist-node")) {
 const bundleOnly = process.argv.includes("--bundle-only")
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
+const serverOnly = process.argv.includes("--server-only")
 const requested = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
 const allTargets = [
   nodeTarget("linux", "arm64"),
@@ -52,7 +53,8 @@ process.chdir(dir)
 if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
-  !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
+  !serverOnly &&
+  (!bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch))
     ? await resolveHostNode()
     : undefined
 
@@ -62,6 +64,11 @@ for (const target of targets) {
   await rm("dist-node", { recursive: true, force: true })
   const assetHash = await hashNodeAssets(assets)
   const input = { version: Script.version, channel: Script.channel, models: modelsData, assetHash, target }
+  if (serverOnly) {
+    await build(serverConfig(input))
+    await copyNodeAssets(assets)
+    continue
+  }
   await build(mainConfig(input))
   await copyNodeAssets(assets)
 
