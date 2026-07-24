@@ -8,6 +8,7 @@ import { Effect, Layer } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
+import sessionListIndexesMigration from "@opencode-ai/core/database/migration/20260724103001_session_list_indexes"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
@@ -59,6 +60,55 @@ describe("DatabaseMigration", () => {
       expect(result.stdout.toString()).toContain("No schema changes, nothing to migrate")
     }, 30_000)
   }
+
+  test("updates session list indexes", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE session (id text PRIMARY KEY, project_id text NOT NULL, parent_id text, time_updated integer NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE INDEX session_project_idx ON session (project_id)`)
+        yield* db.run(sql`CREATE INDEX session_parent_idx ON session (parent_id)`)
+        yield* db.run(sql`CREATE INDEX session_time_updated_idx ON session (time_updated)`)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionListIndexesMigration])
+
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA index_info(session_project_idx)`)).map((column) => column.name),
+        ).toEqual(["project_id", "time_updated"])
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA index_info(session_parent_idx)`)).map((column) => column.name),
+        ).toEqual(["parent_id", "time_updated", "id"])
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA index_info(session_time_updated_idx)`)).map(
+            (column) => column.name,
+          ),
+        ).toEqual(["time_updated", "id"])
+      }),
+    )
+  })
+
+  test("creates the session update index when absent", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE session (id text PRIMARY KEY, project_id text NOT NULL, parent_id text, time_updated integer NOT NULL)`,
+        )
+        yield* db.run(sql`CREATE INDEX session_project_idx ON session (project_id)`)
+        yield* db.run(sql`CREATE INDEX session_parent_idx ON session (parent_id)`)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionListIndexesMigration])
+
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA index_info(session_time_updated_idx)`)).map(
+            (column) => column.name,
+          ),
+        ).toEqual(["time_updated", "id"])
+      }),
+    )
+  })
 
   test("applies tracked migrations to an empty database", async () => {
     await run(
