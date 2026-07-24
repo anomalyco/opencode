@@ -506,6 +506,81 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("round-trips streamed redacted thinking with tool use into a continuation request", () =>
+    Effect.gen(function* () {
+      // Anthropic types `redacted_thinking.data` as an opaque string. Its
+      // contents are provider-owned and must be replayed without inspection.
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "redacted_thinking", data: redactedData },
+              },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: { type: "tool_use", id: "call_1", name: "lookup" },
+              },
+              {
+                type: "content_block_delta",
+                index: 1,
+                delta: { type: "input_json_delta", partial_json: '{"query":"weather"}' },
+              },
+              { type: "content_block_stop", index: 1 },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Say hello."),
+            response.message,
+            Message.tool({ id: "call_1", name: "lookup", result: "sunny", resultType: "text" }),
+          ],
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Say hello." }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "redacted_thinking", data: redactedData },
+            { type: "tool_use", id: "call_1", name: "lookup", input: { query: "weather" } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: "sunny",
+              is_error: undefined,
+              cache_control: undefined,
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("maps context-window truncation to length", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
