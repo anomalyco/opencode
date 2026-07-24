@@ -24,6 +24,23 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
+    "exits nonzero while preserving partial output when the provider reaches length",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(reply().text("partial before truncation").length())
+
+        const result = yield* opencode.run("produce a long answer")
+
+        expect(result.exitCode).not.toBe(0)
+        expect(result.stdout).toBe("partial before truncation\n")
+        expect(result.stderr).toContain("MessageOutputLengthError")
+        // One prompt request plus the independently forked session-title request.
+        expect(yield* llm.calls).toBe(2)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
     "prints each completed text part in order around a tool continuation",
     ({ llm, opencode }) =>
       Effect.gen(function* () {

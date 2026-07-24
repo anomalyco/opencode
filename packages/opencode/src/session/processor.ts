@@ -441,6 +441,13 @@ const layer = Layer.effect(
               metadata: value.providerMetadata,
             })
             ctx.assistantMessage.finish = value.reason
+            const createdLengthError =
+              value.reason === "length" && !ctx.assistantMessage.error
+                ? new SessionV1.OutputLengthError({}).toObject()
+                : undefined
+            if (createdLengthError) {
+              ctx.assistantMessage.error = createdLengthError
+            }
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
             yield* session.updatePart({
@@ -454,6 +461,12 @@ const layer = Layer.effect(
               cost: usage.cost,
             })
             yield* session.updateMessage(ctx.assistantMessage)
+            if (createdLengthError) {
+              yield* events.publish(Session.Event.Error, {
+                sessionID: ctx.assistantMessage.sessionID,
+                error: createdLengthError,
+              })
+            }
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {
@@ -603,6 +616,10 @@ const layer = Layer.effect(
           error: errorMessage(e),
           stack: e instanceof Error ? e.stack : undefined,
         })
+        if (ctx.assistantMessage.error) {
+          yield* status.set(ctx.sessionID, { type: "idle" })
+          return
+        }
         const error = parse(e)
         if (SessionV1.ContextOverflowError.isInstance(error)) {
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
@@ -673,7 +690,14 @@ const layer = Layer.effect(
               }),
             ),
             Effect.catch(halt),
-            Effect.ensuring(cleanup()),
+            Effect.ensuring(
+              cleanup().pipe(
+                Effect.catchCauseIf(
+                  (cause) => !Cause.hasInterruptsOnly(cause) && !!ctx.assistantMessage.error,
+                  (cause) => halt(Cause.squash(cause)),
+                ),
+              ),
+            ),
           )
 
           if (ctx.needsCompaction) return "compact"

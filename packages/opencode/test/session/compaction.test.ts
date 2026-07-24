@@ -863,6 +863,56 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "keeps a length-truncated summary out of completed compactions",
+    () => {
+      const stub = llm()
+      stub.push(
+        Stream.make(
+          LLMEvent.textStart({ id: "txt-length" }),
+          LLMEvent.textDelta({ id: "txt-length", text: "partial summary" }),
+          LLMEvent.textEnd({ id: "txt-length" }),
+          LLMEvent.stepFinish({ index: 0, reason: "length", usage: basicUsage() }),
+          LLMEvent.finish({ reason: "length", usage: basicUsage() }),
+        ),
+      )
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const events = yield* EventV2Bridge.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const seen: string[] = []
+        const off = yield* events.listen((event) => {
+          seen.push(event.type)
+          return Effect.void
+        })
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: msg.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+        yield* off
+
+        const compacted = yield* ssn.messages({ sessionID: session.id })
+        const summary = compacted.find((item) => item.info.role === "assistant" && item.info.summary)
+
+        expect(result).toBe("stop")
+        expect(summary?.info.role).toBe("assistant")
+        if (summary?.info.role === "assistant") {
+          expect(summary.info.finish).toBe("length")
+          expect(summary.info.error?.name).toBe("MessageOutputLengthError")
+        }
+        expect(summary?.parts).toContainEqual(expect.objectContaining({ type: "text", text: "partial summary" }))
+        expect(seen).toContain(SessionNs.Event.Error.type)
+        expect(seen).not.toContain(SessionCompaction.Event.Compacted.type)
+      }).pipe(withCompaction({ llm: stub.llmLayer }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "marks summary message as errored on compact result",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service

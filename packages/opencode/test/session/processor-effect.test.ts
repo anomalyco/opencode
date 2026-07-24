@@ -17,6 +17,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
+import { Snapshot } from "../../src/snapshot"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -226,6 +227,42 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const lengthLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.stepFinish({ index: 0, reason: "length" }),
+        LLMEvent.finish({ reason: "length" }),
+      ),
+  }),
+)
+const lengthEnv = LayerNode.compile(root, [...replacements, [LLM.node, lengthLLM]])
+const itLength = testEffect(lengthEnv)
+
+const failingSnapshot = Layer.effect(
+  Snapshot.Service,
+  Effect.sync(() => {
+    return Snapshot.Service.of({
+      init: () => Effect.void,
+      cleanup: () => Effect.void,
+      track: () => Effect.succeed("snapshot"),
+      patch: () => Effect.die(new Error("secondary snapshot failure")),
+      restore: () => Effect.void,
+      revert: () => Effect.void,
+      diff: () => Effect.succeed(""),
+      diffFull: () => Effect.succeed([]),
+    })
+  }),
+)
+const lengthThenFailureEnv = LayerNode.compile(root, [
+  ...replacements,
+  [LLM.node, lengthLLM],
+  [Snapshot.node, failingSnapshot],
+])
+const itLengthThenFailure = testEffect(lengthThenFailureEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -236,6 +273,164 @@ const boot = Effect.fn("test.boot")(function* () {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+itLength.live("session.processor normalizes length into one durable terminal error", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "truncate")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+        const off = yield* events.listen((event) => {
+          if (event.type !== Session.Event.Error.type) return Effect.void
+          const data = event.data as typeof Session.Event.Error.data.Type
+          if (data.sessionID === chat.id && data.error) errors.push(data.error)
+          return Effect.void
+        })
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "truncate" }],
+          tools: {},
+        })
+        yield* off
+
+        const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("stop")
+        expect(handle.message.finish).toBe("length")
+        expect(handle.message.error?.name).toBe("MessageOutputLengthError")
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role === "assistant") {
+          expect(stored.info.finish).toBe("length")
+          expect(stored.info.error?.name).toBe("MessageOutputLengthError")
+        }
+        expect(parts).toContainEqual(expect.objectContaining({ type: "step-finish", reason: "length" }))
+        expect(errors.map((error) => error.name)).toEqual(["MessageOutputLengthError"])
+      }),
+    { config: cfg },
+  ),
+)
+
+itLength.live("session.processor preserves an earlier terminal error on length", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "preserve")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        msg.error = new SessionV1.ContentFilterError({ message: "blocked first" }).toObject()
+        yield* session.updateMessage(msg)
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+        const off = yield* events.listen((event) => {
+          if (event.type !== Session.Event.Error.type) return Effect.void
+          const data = event.data as typeof Session.Event.Error.data.Type
+          if (data.sessionID === chat.id && data.error) errors.push(data.error)
+          return Effect.void
+        })
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "preserve" }],
+          tools: {},
+        })
+        yield* off
+
+        const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        expect(value).toBe("stop")
+        expect(handle.message.finish).toBe("length")
+        expect(handle.message.error).toEqual(msg.error)
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role === "assistant") expect(stored.info.error).toEqual(msg.error)
+        expect(errors).toEqual([])
+      }),
+    { config: cfg },
+  ),
+)
+
+itLengthThenFailure.live("session.processor preserves length across a later snapshot failure", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "secondary")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+        const off = yield* events.listen((event) => {
+          if (event.type !== Session.Event.Error.type) return Effect.void
+          const data = event.data as typeof Session.Event.Error.data.Type
+          if (data.sessionID === chat.id && data.error) errors.push(data.error)
+          return Effect.void
+        })
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "secondary" }],
+          tools: {},
+        })
+        yield* off
+
+        const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        expect(value).toBe("stop")
+        expect(handle.message.finish).toBe("length")
+        expect(handle.message.error?.name).toBe("MessageOutputLengthError")
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role === "assistant") {
+          expect(stored.info.finish).toBe("length")
+          expect(stored.info.error?.name).toBe("MessageOutputLengthError")
+        }
+        expect(errors.map((error) => error.name)).toEqual(["MessageOutputLengthError"])
+      }),
+    { config: cfg },
+  ),
+)
 
 it.live("session.processor effect tests capture llm input cleanly", () =>
   provideTmpdirServer(

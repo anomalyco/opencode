@@ -1285,6 +1285,13 @@ const layer = Layer.effect(
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
 
+            if (
+              handle.message.error?.name === "MessageOutputLengthError" ||
+              handle.message.finish === "length"
+            ) {
+              return "break" as const
+            }
+
             if (structured !== undefined) {
               handle.message.structured = structured
               handle.message.finish = handle.message.finish ?? "stop"

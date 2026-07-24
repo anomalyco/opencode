@@ -1064,6 +1064,27 @@ describe("ACP service sessions", () => {
     expect(result.stopReason).toBe("cancelled")
   })
 
+  it("maps output-length assistant prompt errors to max_tokens", async () => {
+    const { service } = makeService([], {
+      prompt: () =>
+        Promise.resolve({
+          data: {
+            info: assistantInfo(
+              { input: 8, output: 32, reasoning: 24, cache: { read: 0, write: 0 } },
+              { name: "MessageOutputLengthError", data: {} },
+            ),
+          },
+        }),
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    const result = await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+
+    expect(result.stopReason).toBe("max_tokens")
+  })
+
   it("prompt maps assistant and user audience annotations", async () => {
     const { service, prompts } = makeService()
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))

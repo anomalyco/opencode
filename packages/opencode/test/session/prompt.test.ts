@@ -634,6 +634,166 @@ it.instance("loop surfaces content-filter finishes as session errors", () =>
   }),
 )
 
+it.instance("loop persists length without visible output and publishes one error", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+    const off = yield* events.listen((event) => {
+      if (event.type !== Session.Event.Error.type) return Effect.void
+      const data = event.data as typeof Session.Event.Error.data.Type
+      if (data.sessionID === chat.id && data.error) errors.push(data.error)
+      return Effect.void
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "truncate" }],
+    })
+    yield* llm.push(reply().usage({ input: 10, output: 10 }).length())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: result.info.id })
+    yield* off
+
+    expect(yield* llm.hits).toHaveLength(1)
+    expect(result.info.role).toBe("assistant")
+    expect(stored.info.role).toBe("assistant")
+    if (result.info.role === "assistant" && stored.info.role === "assistant") {
+      expect(result.info.finish).toBe("length")
+      expect(result.info.error?.name).toBe("MessageOutputLengthError")
+      expect(stored.info.finish).toBe("length")
+      expect(stored.info.error).toEqual(result.info.error)
+    }
+    expect(result.parts.some((part) => part.type === "text")).toBe(false)
+    expect(errors.map((error) => error.name)).toEqual(["MessageOutputLengthError"])
+  }),
+)
+
+it.instance("loop preserves partial text and reasoning on length without replay", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+    const off = yield* events.listen((event) => {
+      if (event.type !== Session.Event.Error.type) return Effect.void
+      const data = event.data as typeof Session.Event.Error.data.Type
+      if (data.sessionID === chat.id && data.error) errors.push(data.error)
+      return Effect.void
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "truncate with partial" }],
+    })
+    yield* llm.push(reply().reason("unfinished reasoning").text("partial answer").usage({ input: 12, output: 8 }).length())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: result.info.id })
+    yield* off
+
+    expect(yield* llm.hits).toHaveLength(1)
+    expect(yield* llm.pending).toBe(0)
+    expect(result.info.role).toBe("assistant")
+    expect(stored.info.role).toBe("assistant")
+    if (result.info.role === "assistant" && stored.info.role === "assistant") {
+      expect(result.info.finish).toBe("length")
+      expect(result.info.error?.name).toBe("MessageOutputLengthError")
+      expect(stored.info.error).toEqual(result.info.error)
+    }
+    expect(result.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "reasoning", text: "unfinished reasoning" }),
+        expect.objectContaining({ type: "text", text: "partial answer" }),
+      ]),
+    )
+    expect(errors.map((error) => error.name)).toEqual(["MessageOutputLengthError"])
+  }),
+)
+
+unix("loop does not replay a completed tool after a later length finish", () =>
+  Effect.gen(function* () {
+    if (!(yield* hasBash)) return
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const marker = path.join(dir, "charged.txt")
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "run once" }],
+    })
+    yield* llm.push(
+      reply().tool("bash", {
+        command: `printf 'charged\\n' >> '${marker}'`,
+        description: "Append one marker",
+      }),
+      reply().length(),
+    )
+
+    const result = yield* withSh(() => prompt.loop({ sessionID: chat.id }))
+
+    expect(yield* llm.hits).toHaveLength(2)
+    expect(yield* llm.pending).toBe(0)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.error?.name).toBe("MessageOutputLengthError")
+    expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("charged\n")
+  }),
+)
+
+it.instance("length wins over a successful StructuredOutput tool result", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      format: new SessionV1.OutputFormatJsonSchema({
+        type: "json_schema",
+        schema: {
+          type: "object",
+          properties: { result: { type: "number" } },
+          required: ["result"],
+          additionalProperties: false,
+        },
+        retryCount: 0,
+      }),
+      parts: [{ type: "text", text: "return structured output" }],
+    })
+    yield* llm.push(reply().tool("StructuredOutput", { result: 2 }).length())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+
+    expect(yield* llm.hits).toHaveLength(1)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("length")
+      expect(result.info.error?.name).toBe("MessageOutputLengthError")
+      expect(result.info.structured).toBeUndefined()
+    }
+  }),
+)
+
 it.instance("loop stops provider overflow instead of auto-compacting when disabled", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig((url) => ({
