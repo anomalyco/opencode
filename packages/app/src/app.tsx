@@ -34,6 +34,7 @@ import {
   type JSX,
   lazy,
   onCleanup,
+  onMount,
   type ParentProps,
   Show,
 } from "solid-js"
@@ -65,10 +66,18 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { createSessionLineage } from "@/pages/session/session-lineage"
+import { showToast } from "@/utils/toast"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
 import { LegacyHome } from "@/pages/home/legacy-home"
+import {
+  collectNewSessionDeepLinks,
+  collectOpenProjectDeepLinks,
+  collectOpenSessionDeepLinks,
+  deepLinkEvent,
+  drainPendingDeepLinks,
+} from "@/pages/layout/deep-links"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -311,10 +320,69 @@ function SharedProviders(props: ParentProps) {
       <BodyDesignClass />
       <CommandProvider>
         <DesktopCommands />
+        <NewLayoutDeepLinks />
         <HighlightsProvider>{props.children}</HighlightsProvider>
       </CommandProvider>
     </>
   )
+}
+
+function NewLayoutDeepLinks() {
+  const settings = useSettings()
+  const server = useServer()
+  const global = useGlobal()
+  const tabs = useTabs()
+  const language = useLanguage()
+
+  const handle = (urls: string[]) => {
+    if (!settings.general.newLayoutDesigns()) return
+    if (!server.isLocal()) return
+    const current = server.current
+    if (!current) return
+    const key = ServerConnection.key(current)
+    const context = global.ensureServerCtx(current)
+    const projects = context.projects
+    const open = (directory: string) => {
+      projects.open(directory)
+      projects.touch(directory)
+    }
+
+    for (const directory of collectOpenProjectDeepLinks(urls)) {
+      open(directory)
+      void tabs.newDraft({ server: key, directory })
+    }
+
+    for (const link of collectNewSessionDeepLinks(urls)) {
+      open(link.directory)
+      void tabs.newDraft({ server: key, directory: link.directory }, link.prompt)
+    }
+
+    for (const sessionID of collectOpenSessionDeepLinks(urls)) {
+      void context.sdk.api.session
+        .get({ sessionID })
+        .then((session) => {
+          open(session.directory)
+          tabs.select(tabs.addSessionTab({ server: key, sessionId: session.id }))
+        })
+        .catch(() =>
+          showToast({
+            title: language.t("session.error.notFound"),
+            description: language.t("session.error.notFound.description"),
+          }),
+        )
+    }
+  }
+
+  onMount(() => {
+    const listener = (event: Event) => {
+      const urls = (event as CustomEvent<{ urls: string[] }>).detail?.urls ?? []
+      if (urls.length) handle(urls)
+    }
+    handle(drainPendingDeepLinks(window))
+    makeEventListener(window, deepLinkEvent, listener as EventListener)
+  })
+
+  return null
 }
 
 function DesktopCommands() {

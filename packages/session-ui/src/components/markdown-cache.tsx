@@ -20,6 +20,17 @@ const config = {
 }
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
+  DOMPurify.addHook("uponSanitizeAttribute", (node: Element, data) => {
+    if (!(node instanceof HTMLAnchorElement)) return
+    if (data.attrName !== "href") return
+    try {
+      const url = new URL(data.attrValue)
+      if (url.protocol === "opencode:") data.forceKeepAttr = true
+    } catch {
+      return
+    }
+  })
+
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
     if (node.target !== "_blank") return
