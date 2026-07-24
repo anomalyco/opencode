@@ -87,6 +87,7 @@ export interface Interface {
    * fires. Subscription lifetime is tied to the per-instance state scope.
    */
   readonly init: () => Effect.Effect<void>
+  readonly resolveDirectory: (directory: string) => Effect.Effect<string>
   readonly fromDirectory: (directory: string) => Effect.Effect<{ project: Info; sandbox: string }>
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
@@ -113,6 +114,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const { db } = yield* Database.Service
+    const directoryAliases = new Map<string, AbsolutePath>()
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -210,10 +212,41 @@ const layer = Layer.effect(
         )
     })
 
+    const resolveDirectory = Effect.fn("Project.resolveDirectory")(function* (directory: string) {
+      const requested = AbsolutePath.make(FSUtil.resolve(directory))
+      if (yield* fs.isDir(requested)) return requested
+      const alias = directoryAliases.get(requested)
+      if (alias && (yield* fs.isDir(alias))) return alias
+      directoryAliases.delete(requested)
+
+      const row = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.worktree, requested))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return requested
+
+      const candidates = yield* Effect.forEach(
+        row.sandboxes,
+        (sandbox) => fs.isDir(sandbox).pipe(Effect.map((exists) => (exists ? sandbox : undefined))),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((items) => items.filter((item): item is AbsolutePath => item !== undefined)))
+      if (candidates.length !== 1) return requested
+
+      yield* Effect.logInfo("recovering moved project directory", {
+        projectID: row.id,
+        previous: requested,
+        directory: candidates[0],
+      })
+      directoryAliases.set(requested, candidates[0])
+      return candidates[0]
+    })
+
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
       yield* Effect.logInfo("fromDirectory", { directory })
 
-      const data = yield* projectV2.resolve(AbsolutePath.make(directory))
+      const data = yield* projectV2.resolve(yield* resolveDirectory(directory))
       const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
 
       // Phase 2: upsert
@@ -296,6 +329,7 @@ const layer = Layer.effect(
           .set({
             project_id: projectID,
             directory: data.directory,
+            path: "",
             time_updated: sql`${SessionTable.time_updated}`,
           })
           .where(
@@ -475,6 +509,7 @@ const layer = Layer.effect(
 
     return Service.of({
       init,
+      resolveDirectory,
       fromDirectory,
       discover,
       list,

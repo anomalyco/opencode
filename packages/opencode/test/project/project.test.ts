@@ -460,18 +460,27 @@ describe("Project.fromDirectory with worktrees", () => {
       const moved = tmp + "-moved"
       yield* Effect.addFinalizer(() => Effect.promise(() => rm(moved, { recursive: true, force: true })))
       yield* Effect.promise(() => rename(tmp, moved))
+      yield* db
+        .update(ProjectTable)
+        .set({ sandboxes: [AbsolutePath.make(moved)] })
+        .where(eq(ProjectTable.id, initial.project.id))
+        .run()
+        .pipe(Effect.orDie)
 
-      const result = yield* project.fromDirectory(moved)
+      expect(yield* project.resolveDirectory(tmp)).toBe(moved)
+      const result = yield* project.fromDirectory(tmp)
 
       expect(result.project.id).toBe(initial.project.id)
       expect(result.project.worktree).toBe(moved)
       expect(result.project.sandboxes).not.toContain(tmp)
       expect(result.project.sandboxes).not.toContain(moved)
+      expect(yield* project.resolveDirectory(tmp)).toBe(moved)
       expect((yield* project.get(result.project.id))?.worktree).toBe(moved)
       for (const id of [projectSessionID, globalSessionID]) {
         const session = yield* db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie)
         expect(session?.project_id).toBe(result.project.id)
         expect(session?.directory).toBe(moved)
+        expect(session?.path).toBe("")
         expect(session?.time_updated).toBe(now)
       }
       expect(

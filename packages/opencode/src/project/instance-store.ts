@@ -5,7 +5,6 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
-import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -105,8 +104,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       return true
     })
 
-    const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
-      const directory = FSUtil.resolve(input.directory)
+    const loadResolved = (input: LoadInput, directory: string): Effect.Effect<InstanceContext> => {
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
@@ -123,8 +121,12 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       ).pipe(Effect.withSpan("InstanceStore.load"))
     }
 
-    const reload = (input: LoadInput): Effect.Effect<InstanceContext> => {
-      const directory = FSUtil.resolve(input.directory)
+    const load = (input: LoadInput): Effect.Effect<InstanceContext> =>
+      project
+        .resolveDirectory(input.directory)
+        .pipe(Effect.flatMap((directory) => loadResolved({ ...input, directory }, directory)))
+
+    const reloadResolved = (input: LoadInput, directory: string): Effect.Effect<InstanceContext> => {
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const previous = cache.get(directory)
@@ -144,6 +146,11 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       ).pipe(Effect.withSpan("InstanceStore.reload"))
     }
 
+    const reload = (input: LoadInput): Effect.Effect<InstanceContext> =>
+      project
+        .resolveDirectory(input.directory)
+        .pipe(Effect.flatMap((directory) => reloadResolved({ ...input, directory }, directory)))
+
     const dispose = Effect.fn("InstanceStore.dispose")(function* (ctx: InstanceContext) {
       const entry = cache.get(ctx.directory)
       if (!entry) return yield* disposeContext(ctx)
@@ -155,7 +162,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     })
 
     const disposeDirectory = Effect.fn("InstanceStore.disposeDirectory")(function* (input: string) {
-      const directory = FSUtil.resolve(input)
+      const directory = yield* project.resolveDirectory(input)
       const entry = cache.get(directory)
       if (!entry) return
       const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
