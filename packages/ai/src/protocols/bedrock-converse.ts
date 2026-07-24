@@ -66,14 +66,15 @@ const BedrockToolResultBlock = Schema.Struct({
 type BedrockToolResultBlock = Schema.Schema.Type<typeof BedrockToolResultBlock>
 
 const BedrockReasoningBlock = Schema.Struct({
-  reasoningContent: Schema.Struct({
-    reasoningText: Schema.optional(
-      Schema.Struct({
+  reasoningContent: Schema.Union([
+    Schema.Struct({
+      reasoningText: Schema.Struct({
         text: Schema.String,
         signature: Schema.optional(Schema.String),
       }),
-    ),
-  }),
+    }),
+    Schema.Struct({ redactedContent: Schema.String }),
+  ]),
 })
 
 const BedrockUserBlock = Schema.Union([
@@ -181,6 +182,8 @@ const BedrockEvent = Schema.Struct({
             Schema.Struct({
               text: Schema.optional(Schema.String),
               signature: Schema.optional(Schema.String),
+              // Blob fields in Bedrock's JSON event stream are base64 strings.
+              redactedContent: Schema.optional(Schema.String),
             }),
           ),
         }),
@@ -258,6 +261,13 @@ const reasoningSignature = (part: ReasoningPart) => {
     part.encrypted ??
     (ProviderShared.isRecord(bedrock) && typeof bedrock.signature === "string" ? bedrock.signature : undefined)
   )
+}
+
+const reasoningRedactedData = (part: ReasoningPart) => {
+  const bedrock = part.providerMetadata?.bedrock
+  return ProviderShared.isRecord(bedrock) && typeof bedrock.redactedData === "string"
+    ? bedrock.redactedData
+    : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
@@ -349,11 +359,13 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          content.push({
-            reasoningContent: {
-              reasoningText: { text: part.text, signature: reasoningSignature(part) },
-            },
-          })
+          const signature = reasoningSignature(part)
+          const redactedData = reasoningRedactedData(part)
+          if (signature === undefined && redactedData !== undefined) {
+            content.push({ reasoningContent: { redactedContent: redactedData } })
+            continue
+          }
+          content.push({ reasoningContent: { reasoningText: { text: part.text, signature } } })
           continue
         }
         if (part.type === "tool-call") {
@@ -519,12 +531,20 @@ const step = (state: ParserState, event: BedrockEvent) =>
       const index = event.contentBlockDelta.contentBlockIndex
       const reasoning = event.contentBlockDelta.delta.reasoningContent
       const events: LLMEvent[] = []
+      const lifecycle = reasoning.text
+        ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text)
+        : reasoning.redactedContent !== undefined
+          ? Lifecycle.reasoningStart(
+              state.lifecycle,
+              events,
+              `reasoning-${index}`,
+              bedrockMetadata({ redactedData: reasoning.redactedContent }),
+            )
+          : state.lifecycle
       return [
         {
           ...state,
-          lifecycle: reasoning.text
-            ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text)
-            : state.lifecycle,
+          lifecycle,
           reasoningSignatures: reasoning.signature
             ? { ...state.reasoningSignatures, [index]: reasoning.signature }
             : state.reasoningSignatures,

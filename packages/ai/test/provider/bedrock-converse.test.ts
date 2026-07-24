@@ -467,6 +467,72 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("round-trips streamed redacted reasoning with tool use into a continuation request", () =>
+    Effect.gen(function* () {
+      // Bedrock represents redactedContent blobs as base64 strings on its JSON
+      // wire. The provider owns the payload and requires byte-exact replay.
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(baseRequest, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: redactedData } } },
+              ],
+              ["contentBlockStop", { contentBlockIndex: 0 }],
+              [
+                "contentBlockStart",
+                {
+                  contentBlockIndex: 1,
+                  start: { toolUse: { toolUseId: "tool_1", name: "lookup" } },
+                },
+              ],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 1, delta: { toolUse: { input: '{"query":"weather"}' } } },
+              ],
+              ["contentBlockStop", { contentBlockIndex: 1 }],
+              ["messageStop", { stopReason: "tool_use" }],
+            ),
+          ),
+        ),
+      )
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Say hello."),
+            response.message,
+            Message.tool({ id: "tool_1", name: "lookup", result: "sunny", resultType: "text" }),
+          ],
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ text: "Say hello." }] },
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { redactedContent: redactedData } },
+            { toolUse: { toolUseId: "tool_1", name: "lookup", input: { query: "weather" } } },
+          ],
+        },
+        {
+          role: "user",
+          content: [{ toolResult: { toolUseId: "tool_1", content: [{ text: "sunny" }], status: "success" } }],
+        },
+      ])
+    }),
+  )
+
   it.effect("classifies throttlingException as a rate limit", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
