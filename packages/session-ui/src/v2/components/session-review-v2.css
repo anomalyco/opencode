@@ -244,7 +244,7 @@
 }
 
 [data-component="icon-button-v2"][data-variant="ghost"].session-review-v2-sidebar-toggle[aria-expanded="true"] {
-  background-color: var(--v2-overlay-simple-overlay-pressed);
+  background-color: var(--v2-background-bg-layer-02);
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-file-header"] {

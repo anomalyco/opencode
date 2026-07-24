@@ -331,6 +331,7 @@ export function SessionReviewV2SidebarToggle(props: { opened: boolean; disabled?
         class="session-review-v2-sidebar-toggle"
         aria-label={i18n.t("ui.sessionReviewV2.toggleSidebar")}
         aria-expanded={props.opened}
+        data-expanded={props.opened ? "" : undefined}
         disabled={props.disabled}
         onClick={props.onToggle}
         icon={<Icon name="filetree" />}
