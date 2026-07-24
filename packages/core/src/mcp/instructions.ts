@@ -11,21 +11,20 @@ import { Instructions } from "../instructions/index"
 const Summary = Schema.Struct({
   server: Schema.String,
   instructions: Schema.String,
-  topLevel: Schema.optionalKey(Schema.Literal(true)),
+  codemode: Schema.optionalKey(Schema.Literal(false)),
 })
 type Summary = typeof Summary.Type
 
 const entries = (servers: ReadonlyArray<Summary>) =>
-  servers.flatMap((server) => [
-    `  <server name="${server.server}">`,
-    ...(server.topLevel
-      ? []
-      : [
-          `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.namespace(server.server))}]\`.`,
-        ]),
-    ...server.instructions.split("\n").map((line) => `    ${line}`),
-    "  </server>",
-  ])
+  servers.flatMap((server) => {
+    const result = [`  <server name="${server.server}">`]
+    if (server.codemode !== false)
+      result.push(
+        `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.namespace(server.server))}]\`.`,
+      )
+    result.push(...server.instructions.split("\n").map((line) => `    ${line}`), "  </server>")
+    return result
+  })
 
 const render = (servers: ReadonlyArray<Summary>) =>
   ["<mcp_instructions>", ...entries(servers), "</mcp_instructions>"].join("\n")
@@ -35,7 +34,7 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     previous,
     current,
     (server) => server.server,
-    (before, after) => before.instructions !== after.instructions || before.topLevel !== after.topLevel,
+    (before, after) => before.instructions !== after.instructions || before.codemode !== after.codemode,
   )
   // Additions and removals render as small deltas; anything else restates the full list.
   if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
@@ -89,8 +88,8 @@ export const layer = Layer.effect(
         const visible = instructions
           .flatMap((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
-            const topLevel = owned[0]?.codemode === false
-            if (!topLevel && !canExecute) return []
+            const codemode = owned[0]?.codemode !== false
+            if (codemode && !canExecute) return []
             if (
               !owned.some(
                 (tool) =>
@@ -99,11 +98,9 @@ export const layer = Layer.effect(
             )
               return []
             return [
-              {
-                server: item.server,
-                instructions: item.instructions,
-                ...(topLevel ? { topLevel: true as const } : {}),
-              },
+              codemode
+                ? { server: item.server, instructions: item.instructions }
+                : { server: item.server, instructions: item.instructions, codemode: false as const },
             ]
           })
           .toSorted((a, b) => a.server.localeCompare(b.server))

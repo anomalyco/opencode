@@ -20,8 +20,6 @@ const instructions = (server: string, text: string) =>
   new MCP.ServerInstructions({ server: MCP.ServerName.make(server), instructions: text })
 
 const tool = (server: string, name = "search") => new MCP.Tool({ server: MCP.ServerName.make(server), name })
-const nativeTool = (server: string, name = "search") =>
-  new MCP.Tool({ server: MCP.ServerName.make(server), name, codemode: false })
 
 const layer = (catalog: () => MCP.ServerInstructions[], tools: () => MCP.Tool[]) =>
   AppNodeBuilder.build(McpInstructions.node, [
@@ -95,7 +93,7 @@ describe("McpInstructions", () => {
     ),
   )
 
-  it.effect("keeps top-level MCP instructions when execute is denied", () =>
+  it.effect("keeps MCP instructions when Code Mode is disabled and execute is denied", () =>
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const generation = yield* service
@@ -105,8 +103,8 @@ describe("McpInstructions", () => {
       expect(generation.text).toBe(
         [
           "<mcp_instructions>",
-          '  <server name="native">',
-          "    Native instructions",
+          '  <server name="alpha">',
+          "    Alpha instructions",
           "  </server>",
           "</mcp_instructions>",
         ].join("\n"),
@@ -114,20 +112,20 @@ describe("McpInstructions", () => {
     }).pipe(
       Effect.provide(
         layer(
-          () => [instructions("native", "Native instructions")],
-          () => [nativeTool("native")],
+          () => [instructions("alpha", "Alpha instructions")],
+          () => [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })],
         ),
       ),
     ),
   )
 
-  it.effect("restates guidance when a server moves to top-level tools", () => {
+  it.effect("restates guidance when Code Mode is disabled for a server", () => {
     let tools = [tool("alpha")]
     return Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const initialized = yield* service.load(selection()).pipe(Effect.flatMap(readInitial))
 
-      tools = [nativeTool("alpha")]
+      tools = [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })]
       const changed = yield* readUpdate(yield* service.load(selection()), initialized)
       expect(changed.text).toBe(
         [
