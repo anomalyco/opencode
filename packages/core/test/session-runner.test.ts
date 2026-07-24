@@ -43,6 +43,7 @@ import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionUsage } from "@opencode-ai/core/session/usage"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { CodeMode } from "@opencode-ai/core/codemode"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
@@ -368,6 +369,12 @@ const pluginSupervisor = Layer.succeed(
     flush: Effect.suspend(() => pluginFlushHook),
   }),
 )
+let codeModeMaterializations: ReadonlyArray<CodeMode.Materialization> = []
+let codeModeMaterializationCount = 0
+const codeMode = Layer.mock(CodeMode.Service, {
+  register: () => Effect.void,
+  materialize: () => Effect.sync(() => codeModeMaterializations[codeModeMaterializationCount++] ?? {}),
+})
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
     get: () => Effect.succeed(undefined),
@@ -405,6 +412,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [McpInstructions.node, mcpInstructions],
   [ToolOutputStore.node, toolOutputStore],
   [PluginSupervisor.node, pluginSupervisor],
+  [CodeMode.node, codeMode],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -464,6 +472,7 @@ const it = testEffect(
       [Config.node, config],
       [ToolOutputStore.node, toolOutputStore],
       [PluginSupervisor.node, pluginSupervisor],
+      [CodeMode.node, codeMode],
     ],
   ),
 )
@@ -512,6 +521,8 @@ const setup = Effect.gen(function* () {
   systemLoadHook = Effect.void
   modelResolveHook = Effect.void
   pluginFlushHook = Effect.void
+  codeModeMaterializations = []
+  codeModeMaterializationCount = 0
   currentModel = model
   skillBaselines.clear()
   responses = undefined
@@ -823,6 +834,45 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("uses one Code Mode materialization per request for instructions and execution", () =>
+    Effect.gen(function* () {
+      const executed: string[] = []
+      const execute = (name: string) =>
+        Tool.make({
+          description: `Execute ${name}`,
+          input: Schema.Struct({}),
+          output: Schema.String,
+          execute: () => Effect.sync(() => executed.push(name)).pipe(Effect.as({ output: name })),
+        })
+      const session = yield* setup
+      codeModeMaterializations = [
+        { instructions: "Code Mode catalog A", tool: execute("A") },
+        { instructions: "Code Mode catalog B", tool: execute("B") },
+        { instructions: "Code Mode catalog C", tool: execute("C") },
+        { instructions: "Code Mode catalog D", tool: execute("D") },
+      ]
+      yield* admit(session, "Use Code Mode")
+      responses = [reply.tool("call-execute", "execute", {}), reply.stop()]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(codeModeMaterializationCount).toBe(2)
+      expect(requests[0]?.system.some((part) => part.text.includes("Code Mode catalog A"))).toBe(true)
+      expect(requests[0]?.system.some((part) => part.text.includes("Code Mode catalog B"))).toBe(false)
+      expect(requests[0]?.tools.find((tool) => tool.name === "execute")?.description).toBe("Execute A")
+      expect(executed).toEqual(["A"])
+      expect(requests[1]?.tools.find((tool) => tool.name === "execute")?.description).toBe("Execute B")
+      expect(
+        requests[1]?.messages.some(
+          (message) =>
+            message.role === "system" &&
+            message.content.some((part) => part.type === "text" && part.text.includes("Code Mode catalog B")),
+        ),
+      ).toBe(true)
+    }),
+  )
+
   it.effect("applies session context hooks without exposing unavailable tools", () =>
     Effect.gen(function* () {
       const session = yield* setup

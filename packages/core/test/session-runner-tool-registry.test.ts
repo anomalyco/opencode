@@ -533,6 +533,7 @@ describe("ToolRegistry", () => {
         .pipe(Scope.provide(scope))
       const toolSet = yield* service.snapshot()
       const execute = toolSet.definitions.find((tool) => tool.name === "execute")
+      expect(toolSet.codeModeInstructions).toContain("tools.echo")
       expect(execute?.description).toContain("confined Code Mode runtime")
       expect(execute?.description).not.toContain("Echo text")
       yield* Scope.close(scope, Exit.void)

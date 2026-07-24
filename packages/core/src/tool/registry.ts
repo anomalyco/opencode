@@ -44,12 +44,13 @@ export interface Interface {
 }
 
 /**
- * One request-scoped snapshot pairing advertised definitions with captured
- * tools. A model request executes exactly the tool values it advertised
- * even if registration changes while the request is in flight.
+ * One request-scoped snapshot pairing Code Mode instructions and advertised
+ * definitions with captured tools. A model request executes exactly the tool
+ * values it advertised even if registration changes while it is in flight.
  */
 export interface ToolSet {
   readonly definitions: ReadonlyArray<ToolDefinition>
+  readonly codeModeInstructions?: string
   readonly execute: (input: ExecuteInput) => Effect.Effect<ToolOutcome, ToolOutputStore.Error>
 }
 
@@ -320,8 +321,12 @@ const registryLayer = Layer.effect(
               if (whollyDisabled(registration.permission, rules)) continue
               direct.set(name, registration)
             }
-            const codemodeTool = (yield* codeMode.materialize(permissions)).tool
+            const codeModeMaterialization = yield* codeMode.materialize(permissions)
+            const codemodeTool = codeModeMaterialization.tool
             return {
+              ...(codeModeMaterialization.instructions === undefined
+                ? {}
+                : { codeModeInstructions: codeModeMaterialization.instructions }),
               definitions: [
                 // Definitions are prompt-cache prefix bytes, so order only after effective registrations settle.
                 ...Array.from(direct)
