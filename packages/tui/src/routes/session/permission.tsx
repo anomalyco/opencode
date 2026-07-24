@@ -119,16 +119,28 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
-  const input = createMemo(() => {
+  const toolPart = createMemo(() => {
     const tool = props.request.tool
-    if (!tool) return {}
-    const parts = sync.data.part[tool.messageID] ?? []
-    for (const part of parts) {
-      if (part.type === "tool" && part.callID === tool.callID && part.state.status !== "pending") {
-        return part.state.input ?? {}
-      }
+    if (!tool) return undefined
+    return (sync.data.part[tool.messageID] ?? []).find(
+      (part) => part.type === "tool" && part.callID === tool.callID && part.state.status !== "pending",
+    )
+  })
+  const input = createMemo(() => {
+    const part = toolPart()
+    if (part?.type !== "tool") return {}
+    return part.state.input ?? {}
+  })
+  const source = createMemo(() => {
+    const current = session()
+    if (!current?.parentID) return undefined
+    const part = toolPart()
+    return {
+      title: current.title,
+      detail: [current.agent, part?.type === "tool" ? part.tool : undefined]
+        .filter((value): value is string => !!value)
+        .join(" · "),
     }
-    return {}
   })
 
   const { theme } = useTheme()
@@ -394,6 +406,12 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 </text>
                 <text fg={theme.text}>{current.title}</text>
               </box>
+              <Show when={source()}>
+                <box flexDirection="column" paddingLeft={2} flexShrink={0}>
+                  <text fg={theme.textMuted}>{"Subagent: " + source()?.title}</text>
+                  <text fg={theme.textMuted}>{source()?.detail}</text>
+                </box>
+              </Show>
             </box>
           )
 

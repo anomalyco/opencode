@@ -82,6 +82,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { sessionFamily } from "../../util/session"
 
 addDefaultParsers(parsers.parsers)
 
@@ -224,13 +225,15 @@ export function Session() {
         )
       : [],
   )
-  const permissions = createMemo(() => {
+  const requestSessions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return sessionFamily(sync.data.session, route.sessionID)
+  })
+  const permissions = createMemo(() => {
+    return requestSessions().flatMap((session) => sync.data.permission[session.id] ?? [])
   })
   const questions = createMemo(() => {
-    if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return requestSessions().flatMap((session) => sync.data.question[session.id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
