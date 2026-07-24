@@ -182,9 +182,9 @@ export async function spawnLocalServer(
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
-  let healthUrl: URL
+  let healthUrls: URL[]
   try {
-    healthUrl = new URL("/global/health", url)
+    healthUrls = [new URL("/api/health", url), new URL("/global/health", url)]
   } catch {
     return false
   }
@@ -195,16 +195,17 @@ export async function checkHealth(url: string, password?: string | null): Promis
     headers.set("authorization", `Basic ${auth}`)
   }
 
-  try {
-    const res = await fetch(healthUrl, {
-      method: "GET",
-      headers,
-      signal: AbortSignal.timeout(3000),
-    })
-    return res.ok
-  } catch {
-    return false
+  for (const healthUrl of healthUrls) {
+    try {
+      const res = await fetch(healthUrl, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(3000),
+      })
+      if (res.ok) return true
+    } catch {}
   }
+  return false
 }
 
 function createSidecarEnv(): Record<string, string> {
