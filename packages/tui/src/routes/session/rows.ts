@@ -294,6 +294,8 @@ export function reduceSessionRows(
   ].reduce<SessionRow[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "synthetic" && !message.description?.trim()) return rows
+      if (message.type === "compaction" && message.status === "completed" && usage)
+        usage.previousTurnCache = undefined
       if (!pending.has(message.id)) completePrevious(rows)
       rows.push({ type: "message", messageID: message.id })
       return rows

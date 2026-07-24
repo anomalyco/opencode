@@ -56,6 +56,38 @@ test("carries model identity with the cross-turn cache baseline", () => {
   ])
 })
 
+test("resets the cross-turn cache baseline after compaction", () => {
+  const first = assistant("assistant-1", [])
+  first.finish = "stop"
+  first.tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 370_176, write: 0 } }
+  const second = assistant("assistant-2", [])
+  second.finish = "stop"
+  second.tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 13_824, write: 0 } }
+
+  const rows = reduceSessionRows(
+    [
+      first,
+      {
+        type: "compaction",
+        id: "compaction-1",
+        status: "completed",
+        reason: "auto",
+        summary: "Compacted context",
+        recent: "",
+        time: { created: 2 },
+      },
+      second,
+    ],
+    new Set(),
+    true,
+  ).filter((row) => row.type === "turn-usage")
+
+  expect(rows).toEqual([
+    { type: "turn-usage", messageIDs: ["assistant-1"] },
+    { type: "turn-usage", messageIDs: ["assistant-2"] },
+  ])
+})
+
 test("assigns assistant boundaries to the first rendered row instead of the first text row", () => {
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Question", time: { created: 0 } },
