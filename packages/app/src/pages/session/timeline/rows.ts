@@ -40,21 +40,29 @@ export namespace Timeline {
     status: SessionStatus["type"],
     inlineComments: boolean,
   ) {
-    const turns = messages.reduce<{ user: UserMessage; assistants: AssistantMessage[] }[]>((result, message) => {
+    const turns = messages.flatMap<{ user: UserMessage; assistants: AssistantMessage[] }>((message) => {
       const projected = getMessage(message.id)
       if (message.type === "shell" && projected?.role === "user") {
         const assistant = getMessage(`${message.id}:assistant`)
-        result.push({ user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] })
-        return result
+        return [{ user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }]
       }
-      if (projected?.role === "user") {
-        result.push({ user: projected, assistants: [] })
-        return result
+      return projected?.role === "user" ? [{ user: projected, assistants: [] }] : []
+    })
+    const turnByUserID = new Map(turns.map((turn) => [turn.user.id, turn]))
+    messages.forEach((message) => {
+      const projected = getMessage(message.id)
+      if (projected?.role !== "assistant") return
+      const existing = turnByUserID.get(projected.parentID)
+      if (existing) {
+        existing.assistants.push(projected)
+        return
       }
-      if (projected?.role !== "assistant") return result
-      result.at(-1)?.assistants.push(projected)
-      return result
-    }, [])
+      const user = getMessage(projected.parentID)
+      if (user?.role !== "user") return
+      const turn = { user, assistants: [projected] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+    })
     const activeMessageID = turns.at(-1)?.user.id
     return {
       activeMessageID,
