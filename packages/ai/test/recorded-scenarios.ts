@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import {
   LLM,
   LLMEvent,
+  LLMRequest,
   LLMResponse,
   Message,
   ToolRuntime,
@@ -11,7 +12,6 @@ import {
   toDefinitions,
   type ContentPart,
   type FinishReason,
-  type LLMRequest,
   type Model,
 } from "../src"
 import { LLMClient } from "../src/route"
@@ -91,7 +91,7 @@ const restroomImage = () =>
 export const runWeatherToolLoop = (request: LLMRequest) =>
   Effect.gen(function* () {
     const tools = { [weatherToolName]: weatherRuntimeTool }
-    let next = LLM.updateRequest(request, { tools: toDefinitions(tools) })
+    let next = LLMRequest.update(request, { tools: toDefinitions(tools) })
     const events: LLMEvent[] = []
 
     for (let step = 0; step < 10; step++) {
@@ -108,7 +108,7 @@ export const runWeatherToolLoop = (request: LLMRequest) =>
         ToolRuntime.dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
       )
       events.push(...dispatched.flatMap(([, result]) => result.events))
-      next = LLM.updateRequest(next, {
+      next = LLMRequest.update(next, {
         messages: [
           ...next.messages,
           Message.assistant(assistantContent(response.events)),
@@ -123,10 +123,8 @@ export const runWeatherToolLoop = (request: LLMRequest) =>
 const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
   events.reduce(LLMResponse.reduce, LLMResponse.empty()).message.content
 
-export const expectFinish = (
-  events: ReadonlyArray<LLMEvent>,
-  reason: FinishReason,
-) => expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
+export const expectFinish = (events: ReadonlyArray<LLMEvent>, reason: FinishReason) =>
+  expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
 
 export const expectWeatherToolCall = (response: LLMResponse) =>
   expect(response.toolCalls).toMatchObject([

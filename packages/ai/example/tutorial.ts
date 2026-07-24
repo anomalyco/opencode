@@ -1,5 +1,5 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, Message, ProviderID, Tool, ToolRuntime } from "@opencode-ai/ai"
+import { LLM, LLMClient, LLMRequest, Message, ProviderID, Tool, ToolRuntime } from "@opencode-ai/ai"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor, WebSocketExecutor } from "@opencode-ai/ai/route"
 import { OpenAI } from "@opencode-ai/ai/providers"
 
@@ -116,7 +116,7 @@ const streamWithTools = Effect.gen(function* () {
 
     // A durable agent would persist these messages before starting another
     // raw model turn. This tutorial keeps the boundary visible instead.
-    const followUp = LLM.updateRequest(request, {
+    const followUp = LLMRequest.update(request, {
       messages: [
         ...request.messages,
         Message.assistant([event]),

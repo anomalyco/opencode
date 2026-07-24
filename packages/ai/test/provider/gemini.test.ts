@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { ProviderShared } from "../../src/protocols/shared"
@@ -39,12 +39,12 @@ describe("Gemini route", () => {
   it.effect("normalizes Gemini thinking options", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
-        LLM.updateRequest(request, {
+        LLMRequest.update(request, {
           providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } } },
         }),
       )
       const filtered = yield* LLMClient.prepare<Gemini.GeminiBody>(
-        LLM.updateRequest(request, {
+        LLMRequest.update(request, {
           providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } } },
         }),
       )
@@ -261,7 +261,7 @@ describe("Gemini route", () => {
           id: "req_tool_choice_none",
           model,
           prompt: "Say hello.",
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
           toolChoice: { type: "none" },
         }),
       )
@@ -431,8 +431,8 @@ describe("Gemini route", () => {
         ],
       })
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
       const reasoning = response.events.find((event) => event.type === "reasoning-start")
@@ -522,8 +522,8 @@ describe("Gemini route", () => {
         usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
       })
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
       const usage = new Usage({
@@ -589,8 +589,8 @@ describe("Gemini route", () => {
         ],
       })
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 

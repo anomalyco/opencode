@@ -1,7 +1,18 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, ToolResultPart, Usage } from "../../src"
+import {
+  LLM,
+  LLMError,
+  LLMEvent,
+  LLMRequest,
+  Message,
+  Model,
+  ToolCallPart,
+  ToolDefinition,
+  ToolResultPart,
+  Usage,
+} from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
@@ -96,7 +107,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers semantic service tier options", () =>
     Effect.gen(function* () {
-      const input = LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "priority" } } })
+      const input = LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "priority" } } })
       expect(input.providerOptions).toEqual({ openai: { serviceTier: "priority" } })
       const prepared = yield* LLMClient.prepare(input)
 
@@ -108,7 +119,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes through custom OpenAI reasoning effort strings", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.updateRequest(request, { providerOptions: { openai: { reasoningEffort: "experimental" } } }),
+        LLMRequest.update(request, { providerOptions: { openai: { reasoningEffort: "experimental" } } }),
       )
 
       expect(prepared.body.reasoning).toEqual({ effort: "experimental" })
@@ -118,7 +129,7 @@ describe("OpenAI Responses route", () => {
   it.effect("omits unsupported semantic service tiers", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
-        LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
+        LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
       )
 
       expect(prepared.body).not.toHaveProperty("service_tier")
@@ -128,9 +139,9 @@ describe("OpenAI Responses route", () => {
   it.effect("flattens top-level object unions in function schemas", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.updateRequest(request, {
+        LLMRequest.update(request, {
           tools: [
-            {
+            ToolDefinition.make({
               name: "read",
               description: "Read a path or resource.",
               inputSchema: {
@@ -152,7 +163,7 @@ describe("OpenAI Responses route", () => {
                   },
                 ],
               },
-            },
+            }),
           ],
         }),
       )
@@ -207,7 +218,7 @@ describe("OpenAI Responses route", () => {
   it.effect("prepares OpenAI Responses WebSocket target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
-        LLM.updateRequest(request, {
+        LLMRequest.update(request, {
           model: OpenAIResponses.webSocketRoute
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-4.1-mini" }),
@@ -291,7 +302,7 @@ describe("OpenAI Responses route", () => {
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
       yield* LLMClient.generate(
-        LLM.updateRequest(request, {
+        LLMRequest.update(request, {
           model: Model.update(model, { route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }) }),
         }),
       ).pipe(
@@ -313,7 +324,7 @@ describe("OpenAI Responses route", () => {
   it.effect("uses Azure api-key header for static OpenAI Responses keys", () =>
     Effect.gen(function* () {
       yield* LLMClient.generate(
-        LLM.updateRequest(request, {
+        LLMRequest.update(request, {
           model: Azure.configure({
             baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
             apiKey: "azure-key",
@@ -340,7 +351,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("loads OpenAI default auth from Effect Config", () =>
     LLMClient.generate(
-      LLM.updateRequest(request, {
+      LLMRequest.update(request, {
         model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/" }).responses("gpt-4.1-mini"),
       }),
     ).pipe(
@@ -361,7 +372,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lets explicit auth override OpenAI default API key auth", () =>
     LLMClient.generate(
-      LLM.updateRequest(request, {
+      LLMRequest.update(request, {
         model: OpenAI.configure({
           baseURL: "https://api.openai.test/v1/",
           auth: Auth.bearer("oauth-token"),
@@ -889,12 +900,7 @@ describe("OpenAI Responses route", () => {
       const unknown = yield* generate({})
       const custom = yield* generate({ reason: "provider_limit" })
 
-      expect([
-        length.finishReason,
-        contentFilter.finishReason,
-        unknown.finishReason,
-        custom.finishReason,
-      ]).toEqual([
+      expect([length.finishReason, contentFilter.finishReason, unknown.finishReason, custom.finishReason]).toEqual([
         { normalized: "length", raw: "max_output_tokens" },
         { normalized: "content-filter", raw: "content_filter" },
         { normalized: "unknown", raw: undefined },
@@ -999,7 +1005,7 @@ describe("OpenAI Responses route", () => {
   it.effect("streams each reasoning summary part as a separate block", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, { providerOptions: { openai: { store: false } } }),
+        LLMRequest.update(request, { providerOptions: { openai: { store: false } } }),
       ).pipe(
         Effect.provide(
           fixedResponse(
@@ -1054,7 +1060,7 @@ describe("OpenAI Responses route", () => {
   it.effect("closes reasoning summary parts when storage is not disabled", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, { providerOptions: { openai: { store: true } } }),
+        LLMRequest.update(request, { providerOptions: { openai: { store: true } } }),
       ).pipe(
         Effect.provide(
           fixedResponse(
@@ -1381,8 +1387,8 @@ describe("OpenAI Responses route", () => {
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
       const usage = new Usage({
@@ -1467,8 +1473,8 @@ describe("OpenAI Responses route", () => {
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 

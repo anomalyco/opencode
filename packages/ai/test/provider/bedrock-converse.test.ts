@@ -2,7 +2,16 @@ import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message, ToolCallPart, ToolChoice } from "../../src"
+import {
+  CacheHint,
+  GenerationOptions,
+  LLM,
+  LLMRequest,
+  Message,
+  ToolCallPart,
+  ToolChoice,
+  ToolDefinition,
+} from "../../src"
 import { LLMClient } from "../../src/route"
 import { AmazonBedrock } from "../../src/providers"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse"
@@ -86,7 +95,9 @@ describe("Bedrock Converse route", () => {
   it.effect("passes topK through additionalModelRequestFields as top_k", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
-        LLM.updateRequest(baseRequest, { generation: { maxTokens: 64, temperature: 0, topK: 40 } }),
+        LLMRequest.update(baseRequest, {
+          generation: GenerationOptions.make({ maxTokens: 64, temperature: 0, topK: 40 }),
+        }),
       )
 
       // Converse's inferenceConfig has no topK; Anthropic/Nova read it from
@@ -123,13 +134,13 @@ describe("Bedrock Converse route", () => {
   it.effect("prepares tool config with toolSpec and toolChoice", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
-        LLM.updateRequest(baseRequest, {
+        LLMRequest.update(baseRequest, {
           tools: [
-            {
+            ToolDefinition.make({
               name: "lookup",
               description: "Lookup data",
               inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
-            },
+            }),
           ],
           toolChoice: ToolChoice.make({ type: "required" }),
         }),
@@ -157,13 +168,13 @@ describe("Bedrock Converse route", () => {
   it.effect("keeps tools and omits the unsupported choice when tool choice is none", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
-        LLM.updateRequest(baseRequest, {
+        LLMRequest.update(baseRequest, {
           tools: [
-            {
+            ToolDefinition.make({
               name: "lookup",
               description: "Lookup data",
               inputSchema: { type: "object", properties: { query: { type: "string" } } },
-            },
+            }),
           ],
           toolChoice: ToolChoice.make({ type: "none" }),
         }),
@@ -369,8 +380,8 @@ describe("Bedrock Converse route", () => {
         ["messageStop", { stopReason: "tool_use" }],
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(baseRequest, {
-          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
+        LLMRequest.update(baseRequest, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedBytes(body)))
 
@@ -473,8 +484,8 @@ describe("Bedrock Converse route", () => {
       // wire. The provider owns the payload and requires byte-exact replay.
       const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(baseRequest, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(baseRequest, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(
         Effect.provide(
@@ -493,10 +504,7 @@ describe("Bedrock Converse route", () => {
                   start: { toolUse: { toolUseId: "tool_1", name: "lookup" } },
                 },
               ],
-              [
-                "contentBlockDelta",
-                { contentBlockIndex: 1, delta: { toolUse: { input: '{"query":"weather"}' } } },
-              ],
+              ["contentBlockDelta", { contentBlockIndex: 1, delta: { toolUse: { input: '{"query":"weather"}' } } }],
               ["contentBlockStop", { contentBlockIndex: 1 }],
               ["messageStop", { stopReason: "tool_use" }],
             ),
@@ -567,7 +575,7 @@ describe("Bedrock Converse route", () => {
       const unsignedModel = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
       }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
-      const error = yield* LLMClient.generate(LLM.updateRequest(baseRequest, { model: unsignedModel })).pipe(
+      const error = yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: unsignedModel })).pipe(
         Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))),
         Effect.flip,
       )
@@ -586,7 +594,7 @@ describe("Bedrock Converse route", () => {
           secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         },
       }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
-      const prepared = yield* LLMClient.prepare(LLM.updateRequest(baseRequest, { model: signed }))
+      const prepared = yield* LLMClient.prepare(LLMRequest.update(baseRequest, { model: signed }))
 
       expect(prepared.route).toBe("bedrock-converse")
       expect(prepared.model).toBe(signed)

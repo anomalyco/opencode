@@ -241,7 +241,7 @@ const get_weather = tool({
 
 const tools = { get_weather, get_time, ... }
 const events = yield* LLM.stream(
-  LLM.updateRequest(request, { tools: Tool.toDefinitions(tools) }),
+  LLMRequest.update(request, { tools: Tool.toDefinitions(tools) }),
 ).pipe(Stream.runCollect)
 
 const call = Array.from(events).find(LLMEvent.is.toolCall)

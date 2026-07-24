@@ -1,7 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, Usage } from "../../src"
+import {
+  HttpOptions,
+  LLM,
+  LLMError,
+  LLMEvent,
+  LLMRequest,
+  Message,
+  Model,
+  ToolCallPart,
+  ToolDefinition,
+  Usage,
+} from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
@@ -162,7 +173,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate(
-      LLM.updateRequest(request, {
+      LLMRequest.update(request, {
         model: Model.update(model, { route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }) }),
       }),
     ).pipe(
@@ -182,7 +193,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("uses Azure api-key header for static OpenAI Chat keys", () =>
     LLMClient.generate(
-      LLM.updateRequest(request, {
+      LLMRequest.update(request, {
         model: Azure.configure({
           baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
           apiKey: "azure-key",
@@ -208,15 +219,15 @@ describe("OpenAI Chat route", () => {
 
   it.effect("applies serializable HTTP overlays after payload lowering", () =>
     LLMClient.generate(
-      LLM.updateRequest(request, {
+      LLMRequest.update(request, {
         model: model.route
           .with({ auth: Auth.bearer("fresh-key"), headers: { authorization: "Bearer stale" } })
           .model({ id: model.id }),
-        http: {
+        http: HttpOptions.make({
           body: { metadata: { source: "test" } },
           headers: { authorization: "Bearer request", "x-custom": "yes" },
           query: { debug: "1" },
-        },
+        }),
       }),
     ).pipe(
       Effect.provide(
@@ -618,7 +629,7 @@ describe("OpenAI Chat route", () => {
   it.effect("parses and replays a configured custom reasoning field", () =>
     Effect.gen(function* () {
       const custom = Model.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })
-      const response = yield* LLMClient.generate(LLM.updateRequest(request, { model: custom })).pipe(
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: custom })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -638,9 +649,7 @@ describe("OpenAI Chat route", () => {
       const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({ model: custom, messages: [response.message] }),
       )
-      expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "Hello", vendor_reasoning: "thinking" },
-      ])
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", vendor_reasoning: "thinking" }])
     }),
   )
 
@@ -651,8 +660,8 @@ describe("OpenAI Chat route", () => {
         { type: "reasoning.encrypted", data: "opaque", format: "anthropic-claude-v1", index: 1 },
       ]
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(
         Effect.provide(
@@ -1024,8 +1033,8 @@ describe("OpenAI Chat route", () => {
         deltaChunk({}, "tool_calls"),
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
@@ -1067,8 +1076,8 @@ describe("OpenAI Chat route", () => {
         deltaChunk({}, "tool_calls"),
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
@@ -1089,8 +1098,8 @@ describe("OpenAI Chat route", () => {
         deltaChunk({}, "tool_calls"),
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
@@ -1107,8 +1116,8 @@ describe("OpenAI Chat route", () => {
         deltaChunk({}, "tool_calls"),
       )
       const error = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
@@ -1125,8 +1134,8 @@ describe("OpenAI Chat route", () => {
         }),
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
       )
-      const input = LLM.updateRequest(request, {
-        tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+      const input = LLMRequest.update(request, {
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
       })
       const events: LLMEvent[] = []
       const streamError = yield* LLMClient.stream(input).pipe(
