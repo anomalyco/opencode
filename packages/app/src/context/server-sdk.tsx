@@ -413,6 +413,7 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
 
   return {
     scope: serverSDK.scope,
+    protocol: serverSDK.protocol,
     directory,
     client,
     api: createCompatibleApi({
