@@ -30,7 +30,7 @@ import { SessionUsage } from "../usage"
 /** How one model call ended: settled, awaiting a scheduled retry, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean; readonly step: number }
-  Retry: { readonly step: number; readonly assistantMessageID: SessionMessage.ID }
+  Retry: { readonly step: number }
   Restart: { readonly step: number; readonly recoveredOverflow: boolean }
 }>
 const CallOutcome = Data.taggedEnum<CallOutcome>()
@@ -120,20 +120,26 @@ const layer = Layer.effect(
       promotable: SessionPending.Promotable,
       step: number,
     ) {
-      const retry = yield* Schedule.toStepWithSleep(SessionRunnerRetry.schedule(events, sessionID))
+      // Minting message identity before any attempt lets retries resume the same durable
+      // message. A compaction restart re-mints: the old message is stranded behind the new
+      // compaction boundary, so the rebuilt step needs identity inside the new epoch.
+      let assistantMessageID = SessionMessage.ID.create()
+      const retry = yield* Schedule.toStepWithSleep(
+        SessionRunnerRetry.schedule(events, sessionID, () => assistantMessageID),
+      )
       /**
-       * Consumes one retry allowance: sleeps the scheduled backoff and reports what the next
-       * attempt should reuse, or publishes Step.Failed and fails once attempts are exhausted.
-       * The step loop performs the retry itself on the next iteration.
+       * Consumes one retry allowance: sleeps the scheduled backoff, or publishes
+       * Step.Failed and fails once attempts are exhausted. The step loop performs
+       * the retry itself on the next iteration.
        */
       const waitForRetry = (failure: SessionRunnerRetry.RetryableFailure) =>
         retry(failure).pipe(
-          Effect.as(CallOutcome.Retry({ step: failure.step, assistantMessageID: failure.assistantMessageID })),
+          Effect.as(CallOutcome.Retry({ step: failure.step })),
           Pull.catchDone(() =>
             events
               .publish(SessionEvent.Step.Failed, {
                 sessionID,
-                assistantMessageID: failure.assistantMessageID,
+                assistantMessageID,
                 error: failure.error,
               })
               .pipe(Effect.andThen(Effect.fail(failure.cause))),
@@ -141,7 +147,6 @@ const layer = Layer.effect(
         )
       let currentPromotable: SessionPending.Promotable | undefined = promotable
       let currentStep = step
-      let assistantMessageID: SessionMessage.ID | undefined
       // Overflow recovery is one-shot: a call after recovery must not recover another overflow.
       let recoverOverflow = true
       while (true) {
@@ -153,8 +158,10 @@ const layer = Layer.effect(
           assistantMessageID,
         ).pipe(Effect.catchTag("SessionRunner.RetryableFailure", waitForRetry))
         if (outcome._tag === "Completed") return { needsContinuation: outcome.needsContinuation, step: outcome.step }
-        if (outcome._tag === "Retry") assistantMessageID = outcome.assistantMessageID
-        if (outcome._tag === "Restart" && outcome.recoveredOverflow) recoverOverflow = false
+        if (outcome._tag === "Restart") {
+          if (outcome.recoveredOverflow) recoverOverflow = false
+          assistantMessageID = SessionMessage.ID.create()
+        }
         // Neither a retry nor a compaction restart re-promotes input.
         currentPromotable = undefined
         currentStep = outcome.step
@@ -170,7 +177,7 @@ const layer = Layer.effect(
       promotable: SessionPending.Promotable | undefined,
       step: number,
       recoverOverflow: boolean,
-      assistantMessageID?: SessionMessage.ID,
+      assistantMessageID: SessionMessage.ID,
     ) {
       const selected = yield* context.select(sessionID)
       // Establish what the model knows before admitting what the user said, so
@@ -318,9 +325,11 @@ const layer = Layer.effect(
           if (llmFailure && !publisher.hasProviderError()) {
             const error = toSessionError(llmFailure)
             if (SessionRunnerRetry.isRetryable(llmFailure) && !publisher.hasRetryEvidence()) {
+              // RetryScheduled and Step.Failed fold onto an existing assistant message, so
+              // Step.Started must be durable before the failure escapes.
+              yield* serialized(publisher.startAssistant())
               return yield* new SessionRunnerRetry.RetryableFailure({
                 cause: llmFailure,
-                assistantMessageID: yield* publisher.startAssistant(),
                 error,
                 step: currentStep,
               })

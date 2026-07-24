@@ -45,6 +45,7 @@ const capture = (providerMetadataKey = "anthropic", options?: { readonly interru
         providerID: ProviderV2.ID.opencode,
       },
       providerMetadataKey,
+      assistantMessageID: SessionMessage.ID.create(),
     }),
   }
 }

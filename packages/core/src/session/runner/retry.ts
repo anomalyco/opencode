@@ -10,7 +10,6 @@ import { SessionSchema } from "../schema"
 
 export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableFailure")<{
   readonly cause: LLMError
-  readonly assistantMessageID: SessionMessage.ID
   readonly error: SessionError.Error
   readonly step: number
 }> {}
@@ -42,7 +41,7 @@ const retryAfter = (failure: RetryableFailure) => {
   return undefined
 }
 
-export const schedule = (events: EventV2.Interface, sessionID: SessionSchema.ID) =>
+export const schedule = (events: EventV2.Interface, sessionID: SessionSchema.ID, assistantMessageID: () => SessionMessage.ID) =>
   Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
     Schedule.setInputType<RetryableFailure>(),
     Schedule.modifyDelay(({ input: failure, duration: delay }) => {
@@ -52,7 +51,7 @@ export const schedule = (events: EventV2.Interface, sessionID: SessionSchema.ID)
     Schedule.tap((metadata) =>
       events.publish(SessionEvent.RetryScheduled, {
         sessionID,
-        assistantMessageID: metadata.input.assistantMessageID,
+        assistantMessageID: assistantMessageID(),
         attempt: metadata.attempt + 1,
         at: metadata.now + Duration.toMillis(metadata.duration),
         error: metadata.input.error,

@@ -20,7 +20,7 @@ type Input = {
   readonly model: ModelV2.Ref
   readonly providerMetadataKey: string
   readonly snapshot?: Snapshot.ID
-  readonly assistantMessageID?: SessionMessage.ID
+  readonly assistantMessageID: SessionMessage.ID
 }
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -50,7 +50,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   >()
   const failureSnapshot = (tool: { readonly progress?: ToolRegistry.Progress }) =>
     tool.progress === undefined ? {} : { metadata: tool.progress }
-  let assistantMessageID = input.assistantMessageID
+  const assistantMessageID = input.assistantMessageID
   let stepStarted = false
   let stepFailed = false
   let providerFailed = false
@@ -64,8 +64,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
-    if (stepStarted && assistantMessageID !== undefined) return assistantMessageID
-    assistantMessageID ??= SessionMessage.ID.create()
+    if (stepStarted) return assistantMessageID
     stepStarted = true
     yield* events.publish(SessionEvent.Step.Started, {
       sessionID: input.sessionID,
@@ -77,9 +76,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     return assistantMessageID
   })
   const currentAssistantMessageID = () =>
-    assistantMessageID === undefined
-      ? Effect.die(new Error("Tool event before assistant step start"))
-      : Effect.succeed(assistantMessageID)
+    stepStarted ? Effect.succeed(assistantMessageID) : Effect.die(new Error("Tool event before assistant step start"))
   const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
   const fragments = (
     name: string,
