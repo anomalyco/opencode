@@ -1,23 +1,22 @@
 import { Route, type RouteRoutedModelInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
-import { OpenAIResponses } from "./openai-responses"
+import { OpenResponses } from "./open-responses"
 
 const ADAPTER = "openai-compatible-responses"
 
 export type OpenAICompatibleResponsesModelInput = RouteRoutedModelInput
 
 /**
- * Route for providers that expose an OpenAI Responses-compatible `/responses`
- * endpoint. Provider helpers configure identity, endpoint, and auth before
- * model selection while this route reuses the OpenAI Responses protocol.
+ * Deployment adapter for providers that expose an Open Responses-compatible
+ * `/responses` endpoint. Provider helpers configure identity, endpoint, and
+ * auth while the semantic protocol remains provider-neutral.
  */
 export const route = Route.make({
   id: ADAPTER,
-  providerMetadataKey: "openai",
-  protocol: OpenAIResponses.protocol,
-  endpoint: Endpoint.path(OpenAIResponses.PATH),
-  transport: OpenAIResponses.httpTransport,
-  defaults: { providerOptions: { openai: { store: false } } },
+  providerMetadataKey: "openresponses",
+  protocol: OpenResponses.protocol,
+  endpoint: Endpoint.path(OpenResponses.PATH),
+  transport: OpenResponses.httpTransport,
 })
 
 export * as OpenAICompatibleResponses from "./openai-compatible-responses"

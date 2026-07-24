@@ -5,9 +5,11 @@ import { Endpoint } from "../route/endpoint"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
+  LLMError,
   LLMEvent,
   Usage,
   type FinishReason,
+  type FinishReasonDetails,
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
@@ -17,6 +19,7 @@ import {
   type ToolDefinition,
   type ToolContent,
 } from "../schema"
+import { classifyProviderFailure } from "../provider-error"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
@@ -164,11 +167,18 @@ const OpenAIChatDelta = Schema.StructWithRest(
 const OpenAIChatChoice = Schema.Struct({
   delta: optionalNull(OpenAIChatDelta),
   finish_reason: optionalNull(Schema.String),
+  native_finish_reason: optionalNull(Schema.String),
+})
+
+const OpenAIChatError = Schema.Struct({
+  code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
+  message: Schema.String,
 })
 
 export const OpenAIChatEvent = Schema.Struct({
-  choices: Schema.Array(OpenAIChatChoice),
+  choices: optionalNull(Schema.Array(OpenAIChatChoice)),
   usage: optionalNull(OpenAIChatUsage),
+  error: optionalNull(OpenAIChatError),
 })
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
@@ -184,7 +194,7 @@ export interface ParserState {
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
   readonly usage?: Usage
-  readonly finishReason?: FinishReason
+  readonly finishReason?: FinishReasonDetails
   readonly lifecycle: Lifecycle.State
   readonly reasoningField?: string
   readonly reasoningDetails: Array<unknown>
@@ -386,14 +396,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   return messages
 })
 
-const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
-  const store = OpenAIOptions.store(request)
-  const reasoningEffort = OpenAIOptions.reasoningEffort(request)
+const lowerOptions = (request: LLMRequest) => {
+  const options = OpenAIOptions.resolve(request)
   return {
-    ...(store !== undefined ? { store } : {}),
-    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
   }
-})
+}
 
 const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMRequest) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
@@ -424,7 +433,7 @@ const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMR
     presence_penalty: generation?.presencePenalty,
     seed: generation?.seed,
     stop: generation?.stop,
-    ...(yield* lowerOptions(request)),
+    ...lowerOptions(request),
   }
 })
 
@@ -439,6 +448,7 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "length") return "length"
   if (reason === "content_filter") return "content-filter"
   if (reason === "function_call" || reason === "tool_calls") return "tool-calls"
+  if (reason === "error") return "error"
   return "unknown"
 }
 
@@ -532,10 +542,22 @@ const reasoningMetadata = (field: ParserState["reasoningField"], details?: Reado
 
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
+    if (event.error)
+      return yield* new LLMError({
+        module: ADAPTER,
+        method: "stream",
+        reason: classifyProviderFailure({
+          message: event.error.message,
+          code: event.error.code === undefined || event.error.code === null ? undefined : String(event.error.code),
+          status: typeof event.error.code === "number" ? event.error.code : undefined,
+        }),
+      })
     const events: LLMEvent[] = []
     const usage = mapUsage(event.usage) ?? state.usage
-    const choice = event.choices[0]
-    const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
+    const choice = event.choices?.[0]
+    const finishReason = choice?.finish_reason
+      ? { normalized: mapFinishReason(choice.finish_reason), raw: choice.native_finish_reason ?? choice.finish_reason }
+      : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
@@ -627,7 +649,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const events: LLMEvent[] = []
   const hasToolCalls = state.toolCallEvents.length > 0
-  const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
+  const reason = state.finishReason
+    ? {
+        ...state.finishReason,
+        normalized:
+          state.finishReason.normalized === "stop" && hasToolCalls ? "tool-calls" : state.finishReason.normalized,
+      }
+    : undefined
   const metadata = reasoningMetadata(
     state.reasoningField,
     state.reasoningDetailsObserved ? state.reasoningDetails : undefined,

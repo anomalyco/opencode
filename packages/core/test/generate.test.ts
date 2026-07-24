@@ -73,7 +73,7 @@ const client = Layer.mock(LLMClient.Service)({
         LLMEvent.textStart({ id: "generate" }),
         LLMEvent.textDelta({ id: "generate", text: "OK" }),
         LLMEvent.textEnd({ id: "generate" }),
-        LLMEvent.finish({ reason: "stop" }),
+        LLMEvent.finish({ reason: { normalized: "stop" } }),
       ])
       if (!response) throw new Error("Incomplete generate response")
       return response

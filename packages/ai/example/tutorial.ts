@@ -1,5 +1,5 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, Message, ProviderID, Tool, ToolRuntime } from "@opencode-ai/ai"
+import { LLM, LLMClient, LLMRequest, Message, ProviderID, Tool, ToolRuntime } from "@opencode-ai/ai"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor, WebSocketExecutor } from "@opencode-ai/ai/route"
 import { OpenAI } from "@opencode-ai/ai/providers"
 
@@ -78,7 +78,10 @@ const streamText = LLM.stream(request).pipe(
   Stream.tap((event) =>
     Effect.sync(() => {
       if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
-      if (event.type === "finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
+      if (event.type === "finish")
+        process.stdout.write(
+          `\nfinish: ${event.reason.normalized}${event.reason.raw ? ` (${event.reason.raw})` : ""}\n`,
+        )
     }),
   ),
   Stream.runDrain,
@@ -113,7 +116,7 @@ const streamWithTools = Effect.gen(function* () {
 
     // A durable agent would persist these messages before starting another
     // raw model turn. This tutorial keeps the boundary visible instead.
-    const followUp = LLM.updateRequest(request, {
+    const followUp = LLMRequest.update(request, {
       messages: [
         ...request.messages,
         Message.assistant([event]),
@@ -194,7 +197,7 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
     event: Schema.String,
     initial: () => undefined,
     step: (_, frame) => Effect.succeed([undefined, [{ type: "text-delta", id: "text-0", text: frame }]] as const),
-    onHalt: () => [{ type: "finish", reason: "stop" }],
+    onHalt: () => [{ type: "finish", reason: { normalized: "stop" } }],
   },
 })
 

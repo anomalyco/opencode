@@ -63,6 +63,8 @@ const openAI = (schema: JsonSchema): JsonSchema => {
   return isRecord(normalized) ? normalized : { type: "object" }
 }
 
+const responses = openAI
+
 const gemini = (schema: JsonSchema): JsonSchema => GeminiToolSchema.convert(schema) ?? {}
 
 const modelCompatibility = (
@@ -83,4 +85,5 @@ export const ToolSchemaProjection = {
   modelCompatibility,
   moonshot,
   openAI,
+  responses,
 } as const

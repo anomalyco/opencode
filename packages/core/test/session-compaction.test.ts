@@ -49,7 +49,7 @@ const client = Layer.mock(LLMClient.Service)({
       LLMEvent.textDelta({ id: "summary", text: "manual summary" }),
       LLMEvent.stepFinish({
         index: 0,
-        reason: "stop",
+        reason: { normalized: "stop" },
         usage: {
           inputTokens: 15,
           outputTokens: 6,
@@ -60,7 +60,7 @@ const client = Layer.mock(LLMClient.Service)({
         },
       }),
       LLMEvent.finish({
-        reason: "stop",
+        reason: { normalized: "stop" },
       }),
     )
   },

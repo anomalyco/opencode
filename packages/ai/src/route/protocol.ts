@@ -12,7 +12,8 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
  * Examples:
  *
  * - `OpenAIChat.protocol` — chat completions style
- * - `OpenAIResponses.protocol` — responses API
+ * - `OpenResponses.protocol` — provider-neutral Responses API baseline
+ * - `OpenAIResponses.protocol` — OpenAI extensions to that baseline
  * - `AnthropicMessages.protocol` — messages API with content blocks
  * - `Gemini.protocol` — generateContent
  * - `BedrockConverse.protocol` — Converse with binary event-stream framing

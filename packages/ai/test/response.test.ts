@@ -14,11 +14,11 @@ describe("LLMResponse reducer", () => {
       LLMEvent.reasoningEnd({ id: "r1", providerMetadata: { anthropic: { signature: "sig" } } }),
       LLMEvent.textDelta({ id: "t1", text: "Answer" }),
       LLMEvent.textEnd({ id: "t1" }),
-      LLMEvent.finish({ reason: "stop", usage: { outputTokens: 5 } }),
+      LLMEvent.finish({ reason: { normalized: "stop" }, usage: { outputTokens: 5 } }),
     ]
     const response = LLMResponse.fromEvents(events)
 
-    expect(response?.finishReason).toBe("stop")
+    expect(response?.finishReason).toEqual({ normalized: "stop" })
     expect(response?.usage).toMatchObject({ outputTokens: 5 })
     expect(response?.events).toEqual(events)
     expect(response?.events.map((event) => event.type)).toEqual([
@@ -62,16 +62,24 @@ describe("LLMResponse reducer", () => {
 
   test("uses terminal usage when present and keeps prior usage when finish omits it", () => {
     const withFinishUsage = LLMResponse.fromEvents([
-      LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 3 } }),
-      LLMEvent.finish({ reason: "stop", usage: { outputTokens: 2 } }),
+      LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" }, usage: { inputTokens: 3 } }),
+      LLMEvent.finish({ reason: { normalized: "stop" }, usage: { outputTokens: 2 } }),
     ])
     const withoutFinishUsage = LLMResponse.fromEvents([
-      LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 3 } }),
-      LLMEvent.finish({ reason: "stop" }),
+      LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" }, usage: { inputTokens: 3 } }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
     ])
 
     expect(withFinishUsage?.usage).toMatchObject({ outputTokens: 2 })
     expect(withoutFinishUsage?.usage).toMatchObject({ inputTokens: 3 })
+  })
+
+  test("preserves the raw finish reason", () => {
+    const response = LLMResponse.fromEvents([
+      LLMEvent.finish({ reason: { normalized: "unknown", raw: "provider_limit" } }),
+    ])
+
+    expect(response?.finishReason).toEqual({ normalized: "unknown", raw: "provider_limit" })
   })
 
   test("assembles tool-call content only after the completed tool call event", () => {
@@ -88,7 +96,7 @@ describe("LLMResponse reducer", () => {
       LLMEvent.toolInputDelta({ id: "call_1", name: "lookup", text: ':"weather"}' }),
       LLMEvent.toolInputEnd({ id: "call_1", name: "lookup" }),
       LLMEvent.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } }),
-      LLMEvent.finish({ reason: "tool-calls" }),
+      LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
     ])
 
     expect(response?.message.content).toEqual([

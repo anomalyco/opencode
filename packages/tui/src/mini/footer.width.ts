@@ -1,31 +1,54 @@
-// Shared responsive width policy
-
-const FOOTER_WIDTH_BREAKPOINTS = {
-  commandHint: 24,
-  model: 32,
-  modelVariant: 40,
-  compact: 80,
-  context: 120,
-  spacious: 150,
-} as const
-
 export function footerWidthPolicy(width: number) {
-  const compact = width >= FOOTER_WIDTH_BREAKPOINTS.compact
-  const context = width >= FOOTER_WIDTH_BREAKPOINTS.context
-  const spacious = width >= FOOTER_WIDTH_BREAKPOINTS.spacious
-
   return {
     dialog: {
-      narrow: !compact,
+      narrow: width < 80,
     },
-    statusline: {
-      showActivityMeta: compact,
-      showAgent: compact,
-      showCommandHint: width >= FOOTER_WIDTH_BREAKPOINTS.commandHint,
-      showModel: width >= FOOTER_WIDTH_BREAKPOINTS.model,
-      showModelVariant: width >= FOOTER_WIDTH_BREAKPOINTS.modelVariant,
-      showContextHints: compact,
-      contextHintLimit: !compact ? 0 : spacious ? undefined : context ? 2 : 1,
-    },
+  }
+}
+
+const USAGE_HEADROOM = 8
+
+export function footerStatuslinePolicy(input: {
+  width: number
+  mainWidth: number
+  commandWidth?: number
+  agentWidth?: number
+  contextWidths: number[]
+  modelWidth?: number
+  variantWidth?: number
+  usageWidth?: number
+}) {
+  let remaining = input.width - input.mainWidth - (input.commandWidth ?? 0)
+  let hasSection = input.commandWidth !== undefined
+  const include = (width: number | undefined, headroom = 0) => {
+    if (width === undefined) return false
+    const required = width + (hasSection ? 3 : 1)
+    if (remaining < required + headroom) return false
+    remaining -= required
+    hasSection = true
+    return true
+  }
+
+  const showModel = include(input.modelWidth)
+  const showAgent = include(input.agentWidth)
+  const hiddenContext = input.contextWidths.findIndex((width) => !include(width))
+  const contextCount = hiddenContext === -1 ? input.contextWidths.length : hiddenContext
+  const contextComplete = contextCount === input.contextWidths.length
+  const variantWidth = input.variantWidth
+  const showVariant = showModel && contextComplete && variantWidth !== undefined && remaining >= variantWidth
+  if (showVariant) remaining -= variantWidth
+  const showUsage =
+    (showModel || input.modelWidth === undefined) &&
+    (showAgent || input.agentWidth === undefined) &&
+    contextComplete &&
+    (showVariant || input.variantWidth === undefined) &&
+    include(input.usageWidth, USAGE_HEADROOM)
+
+  return {
+    showAgent,
+    contextCount,
+    showModel,
+    showVariant,
+    showUsage,
   }
 }

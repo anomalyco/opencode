@@ -14,7 +14,7 @@ import {
   type ScrollbackSurface,
 } from "@opentui/core"
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
-import { monoMarkdown, monoMarkdownRenderNode, monoMarkdownTableOptions } from "./mono"
+import { monoMarkdownRenderable, monoMarkdownTableOptions } from "./mono"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { turnSummaryCommit } from "./turn-summary"
 import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
@@ -181,11 +181,11 @@ export class RunScrollbackStream {
               streaming: true,
               internalBlockMode: "top-level",
               tableOptions: this.mono ? monoMarkdownTableOptions : { widthMode: "content" },
-              renderNode: this.mono ? monoMarkdownRenderNode : undefined,
               fg: entryColor(commit, this.theme),
               treeSitterClient,
             })
 
+    if (this.mono && renderable instanceof MarkdownRenderable) monoMarkdownRenderable(renderable)
     surface.root.add(renderable)
 
     const rows = separatorRows(this.rendered, commit, body)
@@ -283,7 +283,7 @@ export class RunScrollbackStream {
     }
 
     const renderable = active.renderable
-    renderable.content = monoMarkdown(active.content, this.mono)
+    renderable.content = active.content
     renderable.streaming = !done
     await active.surface.settle()
     this.releasePendingThemes()
@@ -378,7 +378,7 @@ export class RunScrollbackStream {
     ) {
       await this.writeStreaming(commit, body)
       if (entryDone(commit)) {
-        this.markRendered(await this.finishActive(false))
+        this.markRendered(await this.finishActive(entryFlags(commit).trailingNewline))
       }
       this.tail = commit
       return

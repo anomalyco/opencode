@@ -11,7 +11,13 @@ import {
   XAI,
 } from "@opencode-ai/ai/providers"
 import * as GitHubCopilot from "@opencode-ai/ai/providers/github-copilot"
-import { OpenAIChat, OpenAICompatibleChat, OpenAICompatibleResponses, OpenAIResponses } from "@opencode-ai/ai/protocols"
+import {
+  OpenAIChat,
+  OpenAICompatibleChat,
+  OpenAICompatibleResponses,
+  OpenAIResponses,
+  OpenResponses,
+} from "@opencode-ai/ai/protocols"
 import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
 
 describe("public exports", () => {
@@ -74,7 +80,9 @@ describe("public exports", () => {
   test("protocol barrels expose supported low-level routes", () => {
     expect(OpenAIChat.route.id).toBe("openai-chat")
     expect(OpenAICompatibleChat.route.id).toBe("openai-compatible-chat")
+    expect(OpenResponses.protocol.id).toBe("open-responses")
     expect(OpenAICompatibleResponses.route.id).toBe("openai-compatible-responses")
+    expect(OpenAICompatibleResponses.route.protocol).toBe("open-responses")
     expect(OpenAIResponses.route.id).toBe("openai-responses")
     expect(OpenAIResponses.webSocketRoute.id).toBe("openai-responses-websocket")
     expect(AnthropicMessages.route.id).toBe("anthropic-messages")

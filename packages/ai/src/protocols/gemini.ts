@@ -11,6 +11,7 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
+  type ProviderOptions,
   type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
@@ -25,6 +26,18 @@ import { ToolSchemaProjection } from "./utils/tool-schema"
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+export interface OptionsInput {
+  readonly [key: string]: unknown
+  readonly thinkingConfig?: {
+    readonly thinkingBudget?: number
+    readonly includeThoughts?: boolean
+  }
+}
+
+export type ProviderOptionsInput = ProviderOptions & {
+  readonly gemini?: OptionsInput
+}
 
 // =============================================================================
 // Request Body Schema
@@ -203,7 +216,9 @@ const thoughtSignature = (providerMetadata: ProviderMetadata | undefined) => {
 
 const functionCallId = (providerMetadata: ProviderMetadata | undefined) => {
   const google = providerMetadata?.google
-  return ProviderShared.isRecord(google) && typeof google.functionCallId === "string" ? google.functionCallId : undefined
+  return ProviderShared.isRecord(google) && typeof google.functionCallId === "string"
+    ? google.functionCallId
+    : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart) => ({
@@ -300,21 +315,22 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   return contents
 })
 
-const geminiOptions = (request: LLMRequest) => request.providerOptions?.gemini
-
-const thinkingConfig = (request: LLMRequest) => {
-  const value = geminiOptions(request)?.thinkingConfig
-  if (!ProviderShared.isRecord(value)) return undefined
-  const result = {
+const resolveOptions = (request: LLMRequest) => {
+  const value = request.providerOptions?.gemini?.thinkingConfig
+  if (!ProviderShared.isRecord(value)) return {}
+  const thinkingConfig = {
     thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
     includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
   }
-  return Object.values(result).some((item) => item !== undefined) ? result : undefined
+  return {
+    thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,
+  }
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const hasTools = request.tools.length > 0
   const generation = request.generation
+  const options = resolveOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
@@ -322,7 +338,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     topP: generation?.topP,
     topK: generation?.topK,
     stopSequences: generation?.stop,
-    thinkingConfig: thinkingConfig(request),
+    thinkingConfig: options.thinkingConfig,
   }
 
   return {
@@ -382,10 +398,22 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
     finishReason === "SAFETY" ||
     finishReason === "BLOCKLIST" ||
     finishReason === "PROHIBITED_CONTENT" ||
-    finishReason === "SPII"
+    finishReason === "SPII" ||
+    finishReason === "MODEL_ARMOR" ||
+    finishReason === "IMAGE_PROHIBITED_CONTENT" ||
+    finishReason === "IMAGE_RECITATION" ||
+    finishReason === "LANGUAGE"
   )
     return "content-filter"
-  if (finishReason === "MALFORMED_FUNCTION_CALL") return "error"
+  if (
+    finishReason === "MALFORMED_FUNCTION_CALL" ||
+    finishReason === "UNEXPECTED_TOOL_CALL" ||
+    finishReason === "NO_IMAGE" ||
+    finishReason === "TOO_MANY_TOOL_CALLS" ||
+    finishReason === "MISSING_THOUGHT_SIGNATURE" ||
+    finishReason === "MALFORMED_RESPONSE"
+  )
+    return "error"
   return "unknown"
 }
 
@@ -402,7 +430,10 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
             )
           : state.lifecycle
         Lifecycle.finish(lifecycle, events, {
-          reason: mapFinishReason(state.finishReason, state.hasToolCalls),
+          reason: {
+            normalized: mapFinishReason(state.finishReason, state.hasToolCalls),
+            raw: state.finishReason,
+          },
           usage: state.usage,
         })
         return events

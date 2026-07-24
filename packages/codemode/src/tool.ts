@@ -29,7 +29,7 @@ export type JsonSchema = {
 /** Either a validating Effect Schema or a render-only JSON Schema document. */
 export type SchemaType = Schema.Decoder<unknown> | JsonSchema
 
-/** Executable tool tool exposed through CodeMode's `tools` object. */
+/** Executable tool exposed through CodeMode's `tools` object. */
 export type Tool<R = never> = {
   readonly _tag: "CodeModeTool"
   readonly description: string

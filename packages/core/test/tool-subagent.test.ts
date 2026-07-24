@@ -406,7 +406,7 @@ describe("SubagentTool", () => {
             },
           })
           const database = yield* Database.Service
-          yield* SessionPending.promoteSteers(database.db, events, parent.id)
+          yield* SessionPending.promote(database.db, events, parent.id, "steer")
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent id="${childID}" state="completed"`)

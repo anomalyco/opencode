@@ -8,6 +8,7 @@ import {
   Usage,
   type CacheHint,
   type FinishReason,
+  type FinishReasonDetails,
   type JsonSchema,
   type LLMRequest,
   type ModelToolSchemaCompatibility,
@@ -65,14 +66,15 @@ const BedrockToolResultBlock = Schema.Struct({
 type BedrockToolResultBlock = Schema.Schema.Type<typeof BedrockToolResultBlock>
 
 const BedrockReasoningBlock = Schema.Struct({
-  reasoningContent: Schema.Struct({
-    reasoningText: Schema.optional(
-      Schema.Struct({
+  reasoningContent: Schema.Union([
+    Schema.Struct({
+      reasoningText: Schema.Struct({
         text: Schema.String,
         signature: Schema.optional(Schema.String),
       }),
-    ),
-  }),
+    }),
+    Schema.Struct({ redactedContent: Schema.String }),
+  ]),
 })
 
 const BedrockUserBlock = Schema.Union([
@@ -180,6 +182,8 @@ const BedrockEvent = Schema.Struct({
             Schema.Struct({
               text: Schema.optional(Schema.String),
               signature: Schema.optional(Schema.String),
+              // Blob fields in Bedrock's JSON event stream are base64 strings.
+              redactedContent: Schema.optional(Schema.String),
             }),
           ),
         }),
@@ -257,6 +261,13 @@ const reasoningSignature = (part: ReasoningPart) => {
     part.encrypted ??
     (ProviderShared.isRecord(bedrock) && typeof bedrock.signature === "string" ? bedrock.signature : undefined)
   )
+}
+
+const reasoningRedactedData = (part: ReasoningPart) => {
+  const bedrock = part.providerMetadata?.bedrock
+  return ProviderShared.isRecord(bedrock) && typeof bedrock.redactedData === "string"
+    ? bedrock.redactedData
+    : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
@@ -348,11 +359,13 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          content.push({
-            reasoningContent: {
-              reasoningText: { text: part.text, signature: reasoningSignature(part) },
-            },
-          })
+          const signature = reasoningSignature(part)
+          const redactedData = reasoningRedactedData(part)
+          if (signature === undefined && redactedData !== undefined) {
+            content.push({ reasoningContent: { redactedContent: redactedData } })
+            continue
+          }
+          content.push({ reasoningContent: { reasoningText: { text: part.text, signature } } })
           continue
         }
         if (part.type === "tool-call") {
@@ -435,9 +448,10 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
 // =============================================================================
 const mapFinishReason = (reason: string): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence") return "stop"
-  if (reason === "max_tokens") return "length"
+  if (reason === "max_tokens" || reason === "model_context_window_exceeded") return "length"
   if (reason === "tool_use") return "tool-calls"
   if (reason === "content_filtered" || reason === "guardrail_intervened") return "content-filter"
+  if (reason === "malformed_model_output" || reason === "malformed_tool_use") return "error"
   return "unknown"
 }
 
@@ -466,7 +480,7 @@ interface ParserState {
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold the terminal event in state so `onHalt`
   // can emit exactly one finish after both chunks have had a chance to arrive.
-  readonly pendingFinish: { readonly reason: FinishReason; readonly usage?: Usage } | undefined
+  readonly pendingFinish: { readonly reason: FinishReasonDetails; readonly usage?: Usage } | undefined
   readonly hasToolCalls: boolean
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignatures: Readonly<Record<number, string>>
@@ -517,12 +531,20 @@ const step = (state: ParserState, event: BedrockEvent) =>
       const index = event.contentBlockDelta.contentBlockIndex
       const reasoning = event.contentBlockDelta.delta.reasoningContent
       const events: LLMEvent[] = []
+      const lifecycle = reasoning.text
+        ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text)
+        : reasoning.redactedContent !== undefined
+          ? Lifecycle.reasoningStart(
+              state.lifecycle,
+              events,
+              `reasoning-${index}`,
+              bedrockMetadata({ redactedData: reasoning.redactedContent }),
+            )
+          : state.lifecycle
       return [
         {
           ...state,
-          lifecycle: reasoning.text
-            ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text)
-            : state.lifecycle,
+          lifecycle,
           reasoningSignatures: reasoning.signature
             ? { ...state.reasoningSignatures, [index]: reasoning.signature }
             : state.reasoningSignatures,
@@ -583,7 +605,13 @@ const step = (state: ParserState, event: BedrockEvent) =>
       return [
         {
           ...state,
-          pendingFinish: { reason: mapFinishReason(event.messageStop.stopReason), usage: state.pendingFinish?.usage },
+          pendingFinish: {
+            reason: {
+              normalized: mapFinishReason(event.messageStop.stopReason),
+              raw: event.messageStop.stopReason,
+            },
+            usage: state.pendingFinish?.usage,
+          },
         },
         [],
       ] as const
@@ -591,7 +619,16 @@ const step = (state: ParserState, event: BedrockEvent) =>
 
     if (event.metadata) {
       const usage = mapUsage(event.metadata.usage)
-      return [{ ...state, pendingFinish: { reason: state.pendingFinish?.reason ?? "stop", usage } }, []] as const
+      return [
+        {
+          ...state,
+          pendingFinish: {
+            reason: state.pendingFinish?.reason ?? { normalized: "stop" },
+            usage,
+          },
+        },
+        [],
+      ] as const
     }
 
     const exception = (
@@ -624,8 +661,13 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
     ? (() => {
         const events: LLMEvent[] = []
         Lifecycle.finish(state.lifecycle, events, {
-          reason:
-            state.pendingFinish.reason === "stop" && state.hasToolCalls ? "tool-calls" : state.pendingFinish.reason,
+          reason: {
+            ...state.pendingFinish.reason,
+            normalized:
+              state.pendingFinish.reason.normalized === "stop" && state.hasToolCalls
+                ? "tool-calls"
+                : state.pendingFinish.reason.normalized,
+          },
           usage: state.pendingFinish.usage,
         })
         return events

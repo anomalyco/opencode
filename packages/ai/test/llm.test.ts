@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test"
 import { CacheHint, LLM, LLMResponse } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
-import { LLMRequest, Message, Model, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart } from "../src/schema"
+import {
+  GenerationOptions,
+  LLMRequest,
+  Message,
+  Model,
+  ToolCallPart,
+  ToolChoice,
+  ToolDefinition,
+  ToolResultPart,
+} from "../src/schema"
 
 const chatRoute = OpenAIChat.route
 const responsesRoute = OpenAIResponses.route
@@ -31,8 +40,8 @@ describe("llm constructors", () => {
       model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
-    const updated = LLM.updateRequest(base, {
-      generation: { maxTokens: 20 },
+    const updated = LLMRequest.update(base, {
+      generation: GenerationOptions.make({ maxTokens: 20 }),
       messages: [...base.messages, Message.assistant("Hi.")],
     })
 
@@ -191,7 +200,7 @@ describe("llm constructors", () => {
       LLMResponse.text({
         events: [
           { type: "text-delta", id: "text-0", text: "hi" },
-          { type: "finish", reason: "stop" },
+          { type: "finish", reason: { normalized: "stop" } },
         ],
       }),
     ).toBe("hi")

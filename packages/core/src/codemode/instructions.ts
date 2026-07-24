@@ -1,10 +1,7 @@
 export * as CodeModeInstructions from "./instructions"
 
 import { searchSignature, toolExpression } from "@opencode-ai/codemode"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Schema } from "effect"
-import { AgentV2 } from "../agent"
-import { CodeMode } from "../codemode"
+import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index"
 import { CodeModeCatalog } from "./catalog"
 
@@ -126,34 +123,19 @@ ${render(current)}`
   return full
 }
 
-export interface Interface {
-  readonly load: (agent: AgentV2.Selection) => Effect.Effect<Instructions.Instructions>
+const key = Instructions.Key.make("core/codemode")
+const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
+
+export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.Instructions => {
+  const catalog = CodeModeCatalog.summarize(entries ?? [])
+  return Instructions.make({
+    key,
+    codec,
+    read: Effect.succeed(catalog.total === 0 ? Instructions.removed : catalog),
+    render: {
+      initial: render,
+      changed: update,
+      removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
+    },
+  })
 }
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/CodeModeInstructions") {}
-
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const codeMode = yield* CodeMode.Service
-
-    return Service.of({
-      load: Effect.fn("CodeModeInstructions.load")(function* (selection) {
-        const entries = selection.info ? ((yield* codeMode.materialize(selection.info.permissions)).catalog ?? []) : []
-        const catalog = CodeModeCatalog.summarize(entries)
-        return Instructions.make<CodeModeCatalog.Summary>({
-          key: Instructions.Key.make("core/codemode"),
-          codec: Schema.toCodecJson(CodeModeCatalog.Summary),
-          read: Effect.succeed(catalog.total === 0 ? Instructions.removed : catalog),
-          render: {
-            initial: render,
-            changed: update,
-            removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
-          },
-        })
-      }),
-    })
-  }),
-)
-
-export const node = makeLocationNode({ service: Service, layer, deps: [CodeMode.node] })

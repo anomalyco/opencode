@@ -3,6 +3,7 @@ export * as ToolRegistry from "./registry"
 import { type ToolCall, type ToolContent, type ToolDefinition } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Schema, Scope, Semaphore } from "effect"
 import type { AgentV2 } from "../agent"
+import { CodeModeCatalog } from "../codemode/catalog"
 import { Image } from "../image"
 import { PermissionV2 } from "../permission"
 import { SessionMessage } from "../session/message"
@@ -44,12 +45,13 @@ export interface Interface {
 }
 
 /**
- * One request-scoped snapshot pairing advertised definitions with captured
- * tools. A model request executes exactly the tool values it advertised
- * even if registration changes while the request is in flight.
+ * One request-scoped snapshot pairing the Code Mode catalog and advertised
+ * definitions with captured tools. A model request executes exactly the tool
+ * values it advertised even if registration changes while it is in flight.
  */
 export interface ToolSet {
   readonly definitions: ReadonlyArray<ToolDefinition>
+  readonly codeModeCatalog?: ReadonlyArray<CodeModeCatalog.Entry>
   readonly execute: (input: ExecuteInput) => Effect.Effect<ToolOutcome, ToolOutputStore.Error>
 }
 
@@ -320,10 +322,17 @@ const registryLayer = Layer.effect(
               if (whollyDisabled(registration.permission, rules)) continue
               direct.set(name, registration)
             }
-            const codemodeTool = (yield* codeMode.materialize(permissions)).tool
+            const codeModeMaterialization = yield* codeMode.materialize(permissions)
+            const codemodeTool = codeModeMaterialization.tool
             return {
+              ...(codeModeMaterialization.catalog === undefined
+                ? {}
+                : { codeModeCatalog: codeModeMaterialization.catalog }),
               definitions: [
-                ...Array.from(direct, ([name, registration]) => toLLMDefinition(name, registration.tool)),
+                // Definitions are prompt-cache prefix bytes, so order only after effective registrations settle.
+                ...Array.from(direct)
+                  .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+                  .map(([name, registration]) => toLLMDefinition(name, registration.tool)),
                 ...(codemodeTool ? [toLLMDefinition("execute", codemodeTool)] : []),
               ],
               execute: (input: ExecuteInput) => {

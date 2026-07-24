@@ -20,6 +20,8 @@ import {
   CodeModeURLSearchParams,
 } from "./values.js"
 
+const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
+
 export type Services<T> = ServicesOf<T, []>
 
 type ServicesOf<T, Depth extends ReadonlyArray<unknown>> = Depth["length"] extends 8
@@ -323,12 +325,15 @@ const describeTool = <R>(path: string, tool: Tool<R>): ToolDescription => ({
   signature: `${toolExpression(path)}(input: ${inputTypeScript(tool, true)}): Promise<${outputTypeScript(tool, true)}>`,
 })
 
+// Discovery bytes are durable instructions, so order only after canonical-path collisions settle.
 const visibleTools = <R>(tools: Tools<R>) =>
-  flattenTools(toolTrie(tools)).map(({ path, tool }) => ({
-    path,
-    tool,
-    description: describeTool(path, tool),
-  }))
+  flattenTools(toolTrie(tools))
+    .sort((left, right) => compareText(left.path, right.path))
+    .map(({ path, tool }) => ({
+      path,
+      tool,
+      description: describeTool(path, tool),
+    }))
 
 export type DiscoveryPlan = {
   readonly catalog: ReadonlyArray<ToolDescription>
@@ -399,7 +404,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
               .filter(({ score }) => terms.length === 0 || score > 0)
               .sort(
                 (left, right) =>
-                  right.score - left.score || left.entry.description.path.localeCompare(right.entry.description.path),
+                  right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
               )
               .map(({ entry }) => entry)
       const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({

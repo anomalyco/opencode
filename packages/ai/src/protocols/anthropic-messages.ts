@@ -13,6 +13,7 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
+  type ProviderOptions,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -30,6 +31,29 @@ const ADAPTER = "anthropic-messages"
 const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
+
+export type ThinkingInput =
+  | {
+      readonly type: "adaptive"
+      readonly display?: "summarized" | "omitted"
+    }
+  | {
+      readonly type: "disabled"
+    }
+  | ({ readonly type: "enabled" } & (
+      | { readonly budgetTokens: number; readonly budget_tokens?: number }
+      | { readonly budgetTokens?: number; readonly budget_tokens: number }
+    ))
+
+export interface OptionsInput {
+  readonly [key: string]: unknown
+  readonly thinking?: ThinkingInput
+  readonly effort?: string
+}
+
+export type ProviderOptionsInput = ProviderOptions & {
+  readonly anthropic?: OptionsInput
+}
 
 // =============================================================================
 // Request Body Schema
@@ -72,6 +96,15 @@ const AnthropicThinkingBlock = Schema.Struct({
   type: Schema.tag("thinking"),
   thinking: Schema.String,
   signature: Schema.optional(Schema.String),
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+
+// Safety-filtered thinking arrives as an opaque encrypted `data` payload with
+// no visible text. It must round-trip verbatim so multi-turn thinking + tool
+// use conversations keep their reasoning continuity.
+const AnthropicRedactedThinkingBlock = Schema.Struct({
+  type: Schema.tag("redacted_thinking"),
+  data: Schema.String,
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
@@ -136,6 +169,7 @@ type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
 const AnthropicAssistantBlock = Schema.Union([
   AnthropicTextBlock,
   AnthropicThinkingBlock,
+  AnthropicRedactedThinkingBlock,
   AnthropicToolUseBlock,
   AnthropicServerToolUseBlock,
   AnthropicServerToolResultBlock,
@@ -214,6 +248,9 @@ const AnthropicStreamBlock = Schema.Struct({
   text: Schema.optional(Schema.String),
   thinking: Schema.optional(Schema.String),
   signature: Schema.optional(Schema.String),
+  // redacted_thinking blocks arrive whole in content_block_start with the
+  // encrypted payload in `data`; there is no streaming delta sequence.
+  data: Schema.optional(Schema.String),
   input: Schema.optional(Schema.Unknown),
   // *_tool_result blocks arrive whole as content_block_start (no streaming
   // delta) with the structured payload in `content` and the originating
@@ -285,6 +322,12 @@ const signatureFromMetadata = (metadata: ProviderMetadata | undefined): string |
   const anthropic = metadata?.anthropic
   if (!ProviderShared.isRecord(anthropic)) return undefined
   return typeof anthropic.signature === "string" ? anthropic.signature : undefined
+}
+
+const redactedDataFromMetadata = (metadata: ProviderMetadata | undefined): string | undefined => {
+  const anthropic = metadata?.anthropic
+  if (!ProviderShared.isRecord(anthropic)) return undefined
+  return typeof anthropic.redactedData === "string" ? anthropic.redactedData : undefined
 }
 
 const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSchema: JsonSchema): AnthropicTool => ({
@@ -472,11 +515,16 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          content.push({
-            type: "thinking",
-            thinking: part.text,
-            signature: part.encrypted ?? signatureFromMetadata(part.providerMetadata),
-          })
+          // Mirrors Vercel's @ai-sdk/anthropic: a signature marks visible
+          // thinking; only signature-less parts carrying redactedData
+          // round-trip as opaque redacted_thinking blocks.
+          const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata)
+          const redactedData = redactedDataFromMetadata(part.providerMetadata)
+          if (signature === undefined && redactedData !== undefined) {
+            content.push({ type: "redacted_thinking", data: redactedData })
+            continue
+          }
+          content.push({ type: "thinking", thinking: part.text, signature })
           continue
         }
         if (part.type === "tool-call") {
@@ -513,36 +561,37 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   return messages
 })
 
-const anthropicOptions = (request: LLMRequest) => request.providerOptions?.anthropic
+const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
+  const input = request.providerOptions?.anthropic
+  return {
+    thinking: yield* resolveThinking(input?.thinking),
+    effort: typeof input?.effort === "string" ? input.effort : undefined,
+  }
+})
 
-const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (request: LLMRequest) {
-  const thinking = anthropicOptions(request)?.thinking
-  if (!ProviderShared.isRecord(thinking)) return undefined
-  if (thinking.type === "adaptive") {
+const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function* (input: unknown) {
+  if (!ProviderShared.isRecord(input)) return undefined
+  if (input.type === "adaptive") {
     const display =
-      thinking.display === "summarized"
+      input.display === "summarized"
         ? ("summarized" as const)
-        : thinking.display === "omitted"
+        : input.display === "omitted"
           ? ("omitted" as const)
           : undefined
     return { type: "adaptive" as const, ...(display === undefined ? {} : { display }) }
   }
-  if (thinking.type === "disabled") return { type: "disabled" as const }
-  if (thinking.type !== "enabled") return undefined
+  if (input.type === "disabled") return { type: "disabled" as const }
+  if (input.type !== "enabled") return undefined
   const budget =
-    typeof thinking.budgetTokens === "number"
-      ? thinking.budgetTokens
-      : typeof thinking.budget_tokens === "number"
-        ? thinking.budget_tokens
+    typeof input.budgetTokens === "number"
+      ? input.budgetTokens
+      : typeof input.budget_tokens === "number"
+        ? input.budget_tokens
         : undefined
-  if (budget === undefined) return yield* invalid("Anthropic thinking provider option requires budgetTokens")
+  if (budget === undefined)
+    return yield* ProviderShared.invalidRequest("Anthropic thinking provider option requires budgetTokens")
   return { type: "enabled" as const, budget_tokens: budget }
 })
-
-const outputConfig = (request: LLMRequest) => {
-  const effort = anthropicOptions(request)?.effort
-  return typeof effort === "string" ? { effort } : undefined
-}
 
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
@@ -563,8 +612,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           ),
         )
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
-  const toolChoice =
-    tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const system =
     request.system.length === 0
       ? undefined
@@ -579,6 +627,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
       `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
     )
   }
+  const options = yield* resolveOptions(request)
   return {
     model: request.model.id,
     system,
@@ -591,8 +640,8 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     top_p: generation?.topP,
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
-    thinking: yield* lowerThinking(request),
-    output_config: outputConfig(request),
+    thinking: options.thinking,
+    output_config: options.effort === undefined ? undefined : { effort: options.effort },
   }
 })
 
@@ -601,7 +650,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
 // =============================================================================
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence" || reason === "pause_turn") return "stop"
-  if (reason === "max_tokens") return "length"
+  if (reason === "max_tokens" || reason === "model_context_window_exceeded") return "length"
   if (reason === "tool_use") return "tool-calls"
   if (reason === "refusal") return "content-filter"
   return "unknown"
@@ -747,6 +796,25 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
     ]
   }
 
+  // Redacted thinking surfaces as an empty reasoning part carrying the opaque
+  // payload as `redactedData` metadata (same model as Vercel's
+  // @ai-sdk/anthropic). The existing content_block_stop closes the part.
+  if (block.type === "redacted_thinking" && block.data) {
+    const events: LLMEvent[] = []
+    return [
+      {
+        ...state,
+        lifecycle: Lifecycle.reasoningStart(
+          state.lifecycle,
+          events,
+          `reasoning-${event.index ?? 0}`,
+          anthropicMetadata({ redactedData: block.data }),
+        ),
+      },
+      events,
+    ]
+  }
+
   const result = serverToolResultEvent(block)
   if (!result) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
@@ -836,7 +904,10 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   const usage = mergeUsage(state.usage, mapUsage(event.usage))
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
-    reason: mapFinishReason(event.delta?.stop_reason),
+    reason: {
+      normalized: mapFinishReason(event.delta?.stop_reason),
+      raw: event.delta?.stop_reason ?? undefined,
+    },
     usage,
     providerMetadata: event.delta?.stop_sequence
       ? anthropicMetadata({ stopSequence: event.delta.stop_sequence })

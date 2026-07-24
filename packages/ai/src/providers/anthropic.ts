@@ -6,11 +6,19 @@ import { ProviderID, type ModelID } from "../schema"
 import { AnthropicMessages } from "../protocols/anthropic-messages"
 import { AnthropicCompatible } from "./anthropic-compatible"
 
+export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
+export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
+export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
+
 export const id = ProviderID.make("anthropic")
 
 export const routes = [AnthropicMessages.route]
 
-export type Config = RouteDefaultsInput & ProviderAuthOption<"optional"> & { readonly baseURL?: string }
+export type Config = RouteDefaultsInput &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
+  }
 
 export type Settings = ProviderPackage.Settings &
   (
@@ -18,6 +26,7 @@ export type Settings = ProviderPackage.Settings &
     | { readonly apiKey?: never; readonly authToken?: string }
   ) & {
     readonly baseURL?: string
+    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
   }
 
 const auth = (options: ProviderAuthOption<"optional">) => {
@@ -52,5 +61,6 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
+    providerOptions: settings.providerOptions,
   }).model(modelID)
 }

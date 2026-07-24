@@ -49,6 +49,7 @@ test("down opens subagents from an empty prompt", async () => {
           providers={() => undefined}
           currentAgent={() => "Build"}
           currentAgentID={() => "build"}
+          currentAgentExplicit={() => false}
           currentModel={() => undefined}
           variants={() => []}
           currentVariant={() => undefined}

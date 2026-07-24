@@ -191,10 +191,16 @@ export const ToolError = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ToolError" })
 export type ToolError = Schema.Schema.Type<typeof ToolError>
 
+export const FinishReasonDetails = Schema.Struct({
+  normalized: FinishReason,
+  raw: Schema.optional(Schema.String),
+}).annotate({ identifier: "LLM.FinishReasonDetails" })
+export type FinishReasonDetails = Schema.Schema.Type<typeof FinishReasonDetails>
+
 export const StepFinish = Schema.Struct({
   type: Schema.tag("step-finish"),
   index: Schema.Number,
-  reason: FinishReason,
+  reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.StepFinish" })
@@ -202,7 +208,7 @@ export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
 export const Finish = Schema.Struct({
   type: Schema.tag("finish"),
-  reason: FinishReason,
+  reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
@@ -365,7 +371,7 @@ interface ResponseState {
   readonly events: ReadonlyArray<LLMEvent>
   readonly message: Message
   readonly usage?: Usage
-  readonly finishReason?: FinishReason
+  readonly finishReason?: FinishReasonDetails
   readonly textParts: Readonly<Record<string, ContentAssembly>>
   readonly reasoningParts: Readonly<Record<string, ContentAssembly>>
   readonly toolInputs: Readonly<Record<string, ToolInputAssembly>>
@@ -393,7 +399,7 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
     return {
       ...state,
       events,
-      finishReason: state.finishReason ?? "error",
+      finishReason: state.finishReason ?? { normalized: "error" },
     }
   }
   return {
@@ -580,7 +586,7 @@ export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   message: Message,
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
-  finishReason: FinishReason,
+  finishReason: FinishReasonDetails,
 }) {
   /** Concatenated assistant text assembled from streamed `text-delta` events. */
   get text() {

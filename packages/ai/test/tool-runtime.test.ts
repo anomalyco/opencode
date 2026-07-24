@@ -553,7 +553,7 @@ describe("LLMClient tools", () => {
       )
 
       yield* TestToolRuntime.runTools({
-        request: LLM.updateRequest(baseRequest, {
+        request: LLMRequest.update(baseRequest, {
           model: AnthropicMessages.route
             .with({ auth: Auth.header("x-api-key", "test") })
             .model({ id: "claude-sonnet-4-5" }),
@@ -808,7 +808,7 @@ describe("LLMClient tools", () => {
       )
       const events = Array.from(
         yield* TestToolRuntime.runTools({
-          request: LLM.updateRequest(baseRequest, {
+          request: LLMRequest.update(baseRequest, {
             model: AnthropicMessages.route
               .with({ auth: Auth.header("x-api-key", "test") })
               .model({ id: "claude-sonnet-4-5" }),

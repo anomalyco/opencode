@@ -5,6 +5,7 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
+import { PlatformError } from "effect/PlatformError"
 import path from "path"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
@@ -81,12 +82,11 @@ export const Plugin = {
               output: Output,
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []
-                const fail = (path: string, error?: unknown) => {
-                  const prefix =
-                    applied.length === 0
-                      ? `Unable to apply patch at ${path}`
-                      : `Patch partially applied before failing at ${path}. Applied: ${applied.map((item) => item.resource).join(", ")}`
-                  return new ToolFailure({ message: prefix, error })
+                const fail = (operation: string, error: unknown) => {
+                  const completed = applied.map((item) => item.resource).join(", ")
+                  return new ToolFailure({
+                    message: `${operation}: ${errorMessage(error)}${completed ? `. Completed before failure: ${completed}` : ""}`,
+                  })
                 }
                 return Effect.gen(function* () {
                   const source = {
@@ -101,11 +101,7 @@ export const Plugin = {
                     ),
                   )
                   if (hunks.length === 0) {
-                    const normalized = input.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
-                    if (normalized === "*** Begin Patch\n*** End Patch") {
-                      return yield* new ToolFailure({ message: "patch rejected: empty patch" })
-                    }
-                    return yield* new ToolFailure({ message: "patch verification failed: no hunks found" })
+                    return yield* new ToolFailure({ message: "patch rejected: empty patch" })
                   }
                   const prepared: Prepared[] = []
                   const targets: Target[] = []
@@ -145,7 +141,7 @@ export const Plugin = {
                           Effect.mapError(
                             (error) =>
                               new ToolFailure({
-                                message: `patch verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                                message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
                               }),
                           ),
                         )
@@ -161,7 +157,7 @@ export const Plugin = {
                             Effect.mapError(
                               (error) =>
                                 new ToolFailure({
-                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
                                 }),
                             ),
                           )
@@ -175,7 +171,7 @@ export const Plugin = {
                               Effect.mapError(
                                 (error) =>
                                   new ToolFailure({
-                                    message: `patch verification failed: Failed to read file to update ${target.canonical}: ${error instanceof Error ? error.message : String(error)}`,
+                                    message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
                                   }),
                               ),
                             ),
@@ -184,7 +180,8 @@ export const Plugin = {
                       const before = original.replace(/^\uFEFF/, "")
                       const update = yield* Effect.try({
                         try: () => Patch.derive(hunk.path, hunk.chunks, original),
-                        catch: (error) => new ToolFailure({ message: `patch verification failed: ${String(error)}` }),
+                        catch: (error) =>
+                          new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
                       })
                       const moveTarget = hunk.movePath ? resolveTarget(location, hunk.movePath) : undefined
                       if (moveTarget) targets.push(moveTarget)
@@ -211,7 +208,13 @@ export const Plugin = {
                         moveTarget,
                       })
                       if (!moveTarget) updates.set(target.canonical, Patch.joinBom(update.content, update.bom))
-                    }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : fail(hunk.path, error))))
+                    }).pipe(
+                      Effect.mapError((error) =>
+                        error instanceof ToolFailure
+                          ? error
+                          : new ToolFailure({ message: `Unable to prepare patch at ${hunk.path}`, error }),
+                      ),
+                    )
                   }
 
                   const patchFiles = prepared.map(patchFile)
@@ -234,12 +237,16 @@ export const Plugin = {
                     (change) =>
                       Effect.gen(function* () {
                         if (change.type === "add") {
-                          yield* fs.writeWithDirs(
-                            change.target.canonical,
-                            change.contents.endsWith("\n") || change.contents === ""
-                              ? change.contents
-                              : `${change.contents}\n`,
-                          )
+                          yield* fs
+                            .writeWithDirs(
+                              change.target.canonical,
+                              change.contents.endsWith("\n") || change.contents === ""
+                                ? change.contents
+                                : `${change.contents}\n`,
+                            )
+                            .pipe(
+                              Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)),
+                            )
                           applied.push({
                             type: change.type,
                             resource: change.target.resource,
@@ -248,7 +255,11 @@ export const Plugin = {
                           return
                         }
                         if (change.type === "delete") {
-                          yield* fs.remove(change.target.canonical)
+                          yield* fs
+                            .remove(change.target.canonical)
+                            .pipe(
+                              Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)),
+                            )
                           applied.push({
                             type: change.type,
                             resource: change.target.resource,
@@ -257,8 +268,15 @@ export const Plugin = {
                           return
                         }
                         if (change.moveTarget) {
-                          yield* fs.writeWithDirs(change.moveTarget.canonical, change.content)
-                          yield* fs.remove(change.target.canonical)
+                          const moveTarget = change.moveTarget
+                          yield* fs
+                            .writeWithDirs(moveTarget.canonical, change.content)
+                            .pipe(Effect.mapError((error) => fail(`Failed to write ${moveTarget.resource}`, error)))
+                          yield* fs.remove(change.target.canonical).pipe(
+                            Effect.mapError((error) =>
+                              fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
+                            ),
+                          )
                           applied.push({
                             type: change.type,
                             resource: change.moveTarget.resource,
@@ -266,13 +284,15 @@ export const Plugin = {
                           })
                           return
                         }
-                        yield* fs.writeWithDirs(change.target.canonical, change.content)
+                        yield* fs
+                          .writeWithDirs(change.target.canonical, change.content)
+                          .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
                         applied.push({
                           type: change.type,
                           resource: change.target.resource,
                           target: change.target.canonical,
                         })
-                      }).pipe(Effect.mapError((error) => fail(change.path, error))),
+                      }),
                     { discard: true },
                   )
                   return { applied, files: patchFiles }
@@ -282,7 +302,11 @@ export const Plugin = {
                     content: toModelOutput(output),
                     metadata: { files: output.files },
                   })),
-                  Effect.mapError((error) => (error instanceof ToolFailure ? error : fail("patch", error))),
+                  Effect.mapError((error) =>
+                    error instanceof ToolFailure
+                      ? error
+                      : new ToolFailure({ message: "Unable to apply patch", error }),
+                  ),
                 )
               },
             }),
@@ -304,6 +328,14 @@ export const Plugin = {
       }),
     )
   }),
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof PlatformError) {
+    if (error.reason._tag === "NotFound") return "file does not exist"
+    return error.reason.description ?? error.reason.message
+  }
+  return error instanceof Error ? error.message : String(error)
 }
 
 function patchFile(change: Prepared): typeof FileDiff.Info.Type {

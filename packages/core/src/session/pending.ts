@@ -1,6 +1,6 @@
 export * as SessionPending from "./pending"
 
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, or } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import {
   Compaction,
@@ -25,6 +25,13 @@ import { SessionMessageTable, SessionPendingTable } from "./sql"
 type DatabaseService = Database.Interface["db"]
 
 export { Compaction, Delivery, Info, Message, Synthetic, SyntheticData, User, UserData }
+
+/**
+ * Which pending input `promote` may consume: "steer" promotes steers only (a step
+ * boundary mid-work), while "input" also allows one queued input when no steers are
+ * waiting (the idle boundary, where the Session picks up fresh work).
+ */
+export type Promotable = "input" | "steer"
 
 const decodeUser = Schema.decodeUnknownSync(UserData)
 const encodeUser = Schema.encodeSync(UserData)
@@ -355,16 +362,32 @@ export const list = Effect.fn("SessionPending.list")(function* (db: DatabaseServ
   return rows.map(fromRow)
 })
 
+/**
+ * Which pending rows count: "any" counts every row including compaction, while
+ * delivery scopes are blocked behind a pending compaction barrier. "input" means
+ * any model-facing input, steered or queued.
+ */
+export type Scope = "any" | "input" | Delivery
+
 export const has = Effect.fn("SessionPending.has")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  delivery: Delivery,
+  scope: Scope,
 ) {
-  if (yield* compaction(db, sessionID)) return false
+  if (scope !== "any" && (yield* compaction(db, sessionID))) return false
   const row = yield* db
     .select({ id: SessionPendingTable.id })
     .from(SessionPendingTable)
-    .where(and(eq(SessionPendingTable.session_id, sessionID), eq(SessionPendingTable.delivery, delivery)))
+    .where(
+      and(
+        eq(SessionPendingTable.session_id, sessionID),
+        scope === "any"
+          ? undefined
+          : scope === "input"
+            ? or(eq(SessionPendingTable.delivery, "steer"), eq(SessionPendingTable.delivery, "queue"))
+            : eq(SessionPendingTable.delivery, scope),
+      ),
+    )
     .limit(1)
     .get()
     .pipe(Effect.orDie)
@@ -394,65 +417,73 @@ const publish = Effect.fn("SessionPending.publish")(function* (
   sessionID: SessionSchema.ID,
   rows: ReadonlyArray<typeof SessionPendingTable.$inferSelect>,
 ) {
+  if (yield* compaction(db, sessionID)) return 0
+  yield* Effect.forEach(
+    rows,
+    (row) => {
+      const entry = fromRow(row)
+      if (entry.type === "compaction") return Effect.die(new LifecycleConflict({ id: entry.id }))
+      return events
+        .publish(SessionEvent.InputPromoted, {
+          sessionID,
+          inputID: entry.id,
+        })
+        .pipe(
+          Effect.catchDefect((defect) =>
+            defect instanceof LifecycleConflict
+              ? promotedFromHistory(db, sessionID, entry.id).pipe(
+                  Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
+                )
+              : Effect.die(defect),
+          ),
+        )
+    },
+    { discard: true },
+  )
+  return rows.length
+})
+
+/**
+ * Promotes pending input into visible messages and returns the promoted count.
+ * Steers always go first; only the "input" scope may fall through to one queued
+ * input, and it then collects steers that arrived during promotion.
+ */
+export const promote = Effect.fn("SessionPending.promote")(function* (
+  db: DatabaseService,
+  events: EventV2.Interface,
+  sessionID: SessionSchema.ID,
+  scope: Promotable,
+) {
   return yield* inboxLocks.withLock(sessionID)(
     Effect.gen(function* () {
       if (yield* compaction(db, sessionID)) return 0
-      yield* Effect.forEach(
-        rows,
-        (row) => {
-          const entry = fromRow(row)
-          if (entry.type === "compaction") return Effect.die(new LifecycleConflict({ id: entry.id }))
-          return events
-            .publish(SessionEvent.InputPromoted, {
-              sessionID,
-              inputID: entry.id,
-            })
-            .pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof LifecycleConflict
-                  ? promotedFromHistory(db, sessionID, entry.id).pipe(
-                      Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
-                    )
-                  : Effect.die(defect),
-              ),
-            )
-        },
-        { discard: true },
-      )
-      return rows.length
+      const steers = yield* db
+        .select()
+        .from(SessionPendingTable)
+        .where(and(eq(SessionPendingTable.session_id, sessionID), eq(SessionPendingTable.delivery, "steer")))
+        .orderBy(asc(SessionPendingTable.admitted_seq))
+        .all()
+        .pipe(Effect.orDie)
+      if (steers.length > 0 || scope === "steer") return yield* publish(db, events, sessionID, steers)
+
+      const queued = yield* db
+        .select()
+        .from(SessionPendingTable)
+        .where(and(eq(SessionPendingTable.session_id, sessionID), eq(SessionPendingTable.delivery, "queue")))
+        .orderBy(asc(SessionPendingTable.admitted_seq))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      if (!queued) return 0
+      const promoted = yield* publish(db, events, sessionID, [queued])
+      const arrivedSteers = yield* db
+        .select()
+        .from(SessionPendingTable)
+        .where(and(eq(SessionPendingTable.session_id, sessionID), eq(SessionPendingTable.delivery, "steer")))
+        .orderBy(asc(SessionPendingTable.admitted_seq))
+        .all()
+        .pipe(Effect.orDie)
+      return promoted + (yield* publish(db, events, sessionID, arrivedSteers))
     }),
   )
-})
-
-export const promoteSteers = Effect.fn("SessionPending.promoteSteers")(function* (
-  db: DatabaseService,
-  events: EventV2.Interface,
-  sessionID: SessionSchema.ID,
-) {
-  if (yield* compaction(db, sessionID)) return 0
-  const rows = yield* db
-    .select()
-    .from(SessionPendingTable)
-    .where(and(eq(SessionPendingTable.session_id, sessionID), eq(SessionPendingTable.delivery, "steer")))
-    .orderBy(asc(SessionPendingTable.admitted_seq))
-    .all()
-    .pipe(Effect.orDie)
-  return yield* publish(db, events, sessionID, rows)
-})
-
-export const promoteNextQueued = Effect.fn("SessionPending.promoteNextQueued")(function* (
-  db: DatabaseService,
-  events: EventV2.Interface,
-  sessionID: SessionSchema.ID,
-) {
-  if (yield* compaction(db, sessionID)) return false
-  const row = yield* db
-    .select()
-    .from(SessionPendingTable)
-    .where(and(eq(SessionPendingTable.session_id, sessionID), eq(SessionPendingTable.delivery, "queue")))
-    .orderBy(asc(SessionPendingTable.admitted_seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
-  return row === undefined ? false : yield* publish(db, events, sessionID, [row]).pipe(Effect.as(true))
 })

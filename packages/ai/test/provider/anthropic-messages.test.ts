@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { CacheHint, LLM, LLMError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios"
@@ -60,7 +60,7 @@ describe("Anthropic Messages route", () => {
   it.effect("lowers adaptive thinking settings with effort", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
-        LLM.updateRequest(request, {
+        LLMRequest.update(request, {
           providerOptions: {
             anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
           },
@@ -71,6 +71,42 @@ describe("Anthropic Messages route", () => {
         thinking: { type: "adaptive", display: "summarized" },
         output_config: { effort: "low" },
       })
+    }),
+  )
+
+  it.effect("normalizes enabled and disabled thinking settings", () =>
+    Effect.gen(function* () {
+      const enabled = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLMRequest.update(request, {
+          providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 } } },
+        }),
+      )
+      const legacy = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLMRequest.update(request, {
+          providerOptions: { anthropic: { thinking: { type: "enabled", budget_tokens: 2_048 } } },
+        }),
+      )
+      const disabled = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLMRequest.update(request, {
+          providerOptions: { anthropic: { thinking: { type: "disabled" } } },
+        }),
+      )
+
+      expect(enabled.body.thinking).toEqual({ type: "enabled", budget_tokens: 1_024 })
+      expect(legacy.body.thinking).toEqual({ type: "enabled", budget_tokens: 2_048 })
+      expect(disabled.body.thinking).toEqual({ type: "disabled" })
+    }),
+  )
+
+  it.effect("rejects enabled thinking without a budget", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLMRequest.update(request, {
+          providerOptions: { anthropic: { thinking: { type: "enabled" } } },
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic thinking provider option requires budgetTokens")
     }),
   )
 
@@ -409,6 +445,34 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("round-trips redacted thinking as redacted_thinking blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "", providerMetadata: { anthropic: { redactedData: "opaque_1" } } },
+              { type: "reasoning", text: "visible", providerMetadata: { anthropic: { signature: "sig_1" } } },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "redacted_thinking", data: "opaque_1" },
+              { type: "thinking", thinking: "visible", signature: "sig_1" },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -448,9 +512,146 @@ describe("Anthropic Messages route", () => {
       ])
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
-        reason: "stop",
+        reason: { normalized: "stop", raw: "end_turn" },
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
+    }),
+  )
+
+  it.effect("parses redacted thinking into empty reasoning with redactedData metadata", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "redacted_thinking", data: "opaque_1" } },
+        { type: "content_block_stop", index: 0 },
+        { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+        { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Hello" } },
+        { type: "content_block_stop", index: 1 },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
+        { type: "message_stop" },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find((event) => event.type === "reasoning-start")).toMatchObject({
+        providerMetadata: { anthropic: { redactedData: "opaque_1" } },
+      })
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { anthropic: { redactedData: "opaque_1" } } },
+        { type: "text", text: "Hello" },
+      ])
+    }),
+  )
+
+  it.effect("round-trips streamed redacted thinking with tool use into a continuation request", () =>
+    Effect.gen(function* () {
+      // Anthropic types `redacted_thinking.data` as an opaque string. Its
+      // contents are provider-owned and must be replayed without inspection.
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "redacted_thinking", data: redactedData },
+              },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: { type: "tool_use", id: "call_1", name: "lookup" },
+              },
+              {
+                type: "content_block_delta",
+                index: 1,
+                delta: { type: "input_json_delta", partial_json: '{"query":"weather"}' },
+              },
+              { type: "content_block_stop", index: 1 },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Say hello."),
+            response.message,
+            Message.tool({ id: "call_1", name: "lookup", result: "sunny", resultType: "text" }),
+          ],
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Say hello." }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "redacted_thinking", data: redactedData },
+            { type: "tool_use", id: "call_1", name: "lookup", input: { query: "weather" } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: "sunny",
+              is_error: undefined,
+              cache_control: undefined,
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("maps context-window truncation to length", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "model_context_window_exceeded" },
+                usage: { output_tokens: 1 },
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "length", raw: "model_context_window_exceeded" })
+    }),
+  )
+
+  it.effect("preserves pause_turn while normalizing it to stop", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "message_delta", delta: { stop_reason: "pause_turn" }, usage: { output_tokens: 1 } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "pause_turn" })
     }),
   )
 
@@ -465,8 +666,8 @@ describe("Anthropic Messages route", () => {
         { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
       const usage = new Usage({
@@ -503,10 +704,16 @@ describe("Anthropic Messages route", () => {
           providerExecuted: undefined,
           providerMetadata: undefined,
         },
-        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "tool-calls", raw: "tool_use" },
+          usage,
+          providerMetadata: undefined,
+        },
         {
           type: "finish",
-          reason: "tool-calls",
+          reason: { normalized: "tool-calls", raw: "tool_use" },
           providerMetadata: undefined,
           usage,
         },
@@ -644,8 +851,10 @@ describe("Anthropic Messages route", () => {
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [
+            ToolDefinition.make({ name: "web_search", description: "Web search", inputSchema: { type: "object" } }),
+          ],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
@@ -674,7 +883,10 @@ describe("Anthropic Messages route", () => {
         },
       })
       expect(response.text).toBe("Found it.")
-      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "stop", raw: "end_turn" },
+      })
     }),
   )
 
@@ -702,8 +914,10 @@ describe("Anthropic Messages route", () => {
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
       )
       const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, {
-          tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
+        LLMRequest.update(request, {
+          tools: [
+            ToolDefinition.make({ name: "web_search", description: "Web search", inputSchema: { type: "object" } }),
+          ],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
@@ -819,7 +1033,10 @@ describe("Anthropic Messages route", () => {
                     content: [
                       { type: "text", text: "What is in this image?" },
                       { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
-                      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjQ=" } },
+                      {
+                        type: "document",
+                        source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjQ=" },
+                      },
                     ],
                   },
                 ],

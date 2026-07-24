@@ -81,8 +81,8 @@ function systemBody(raw: string, phase: StreamCommit["phase"]): RunEntryBody {
 }
 
 function monoBody(body: RunEntryBody): RunEntryBody {
-  if (body.type === "none" || body.type === "text") return body
-  if (body.type === "code" || body.type === "markdown") return textBody(body.content)
+  if (body.type === "none" || body.type === "text" || body.type === "markdown") return body
+  if (body.type === "code") return textBody(body.content)
   const snapshot = body.snapshot
   if (snapshot.kind === "code") return textBody(`${snapshot.title}\n${snapshot.content}`)
   if (snapshot.kind === "diff") {

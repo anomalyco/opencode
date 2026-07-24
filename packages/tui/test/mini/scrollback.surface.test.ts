@@ -69,6 +69,7 @@ async function setup(
     theme?: RunTheme
     onThemeRelease?: (theme: RunTheme) => void
     mono?: boolean
+    failHighlight?: boolean
   } = {},
 ) {
   const out = await createTestRenderer({
@@ -83,6 +84,11 @@ async function setup(
 
   const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
   treeSitterClient.setMockResult({ highlights: [] })
+  if (input.failHighlight) {
+    treeSitterClient.highlightOnce = async () => {
+      throw new Error("highlight failed")
+    }
+  }
 
   return {
     renderer: out.renderer,
@@ -217,7 +223,25 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
   try {
     await out.scrollback.append(assistant("# H"))
     expect(Reflect.get(out.scrollback, "active")?.renderable).toBeInstanceOf(MarkdownRenderable)
-    await out.scrollback.append(assistant("éading →\n\n> “quote”\n\n---\n\n| A | B |\n| - | - |\n| α | β |"))
+    await out.scrollback.append(
+      assistant(
+        "éading →\n\n> “quote”\n\n---\n\n| A | B |\n| - | - |\n| α | β |\n\n• literal\n\n———\n\n[café](https://example.com/café)",
+      ),
+    )
+    const active: unknown = Reflect.get(out.scrollback, "active")
+    const renderable =
+      active && typeof active === "object" && "renderable" in active && active.renderable instanceof MarkdownRenderable
+        ? active.renderable
+        : undefined
+    expect(renderable?._blockStates.slice(-3).map((state) => state.token.type)).toEqual([
+      "paragraph",
+      "paragraph",
+      "paragraph",
+    ])
+    const link = renderable?._blockStates.at(-1)?.token
+    const tokens = link && "tokens" in link && Array.isArray(link.tokens) ? link.tokens : []
+    const href = tokens.find((token) => "href" in token)
+    expect(href && "href" in href ? href.href : undefined).toBe("https://example.com/café")
     await out.scrollback.complete()
     out.renderer.writeToScrollback((ctx) => ({
       root: new TextRenderable(ctx.renderContext, {
@@ -235,11 +259,71 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
     expect(rendered).toContain('| "quote"')
     expect(rendered).toContain("------------------------------------------------------------")
     expect(rendered).toContain("?  ?")
+    expect(rendered).toContain("* literal")
+    expect(rendered).toContain("------")
     expect(rendered).toContain("plain ? emoji ?")
     expect(rendered).not.toMatch(/[^\x00-\x7f]/)
   } finally {
     out.scrollback.destroy()
     destroy(claim(out.renderer))
+  }
+})
+
+test("renders completed subagent markdown in monochrome mode", async () => {
+  const out = await setup({ mono: true, width: 60 })
+
+  try {
+    await out.scrollback.append(
+      toolCommit({
+        tool: "subagent",
+        phase: "final",
+        toolState: "completed",
+        state: {
+          status: "completed",
+          input: { description: "Inspect reducer", agent: "explore" },
+          content: [{ type: "text", text: "# Findings\n\n- Café → stable" }],
+          metadata: {
+            sessionID: "ses-child-1",
+            status: "completed",
+            output: "# Findings\n\n- Café → stable",
+          },
+        },
+      }),
+    )
+
+    const commits = claim(out.renderer)
+    try {
+      expect(commits).toHaveLength(1)
+      expect(commits[0]?.trailingNewline).toBe(true)
+      const output = render(commits)
+      expect(output).toContain("# Findings")
+      expect(output).toContain("- Caf? -> stable")
+      expect(output).not.toMatch(/[^\x00-\x7f]/)
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
+test("keeps fenced code monochrome when highlighting fails", async () => {
+  const out = await setup({ mono: true, failHighlight: true })
+
+  try {
+    await out.scrollback.append(assistant("```ts\nCafé → …\n```"))
+    await out.scrollback.complete()
+
+    const commits = claim(out.renderer)
+    try {
+      const output = render(commits)
+      expect(output).toContain("Caf? -> ...")
+      expect(output).not.toMatch(/[^\x00-\x7f]/)
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
   }
 })
 

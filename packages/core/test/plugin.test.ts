@@ -300,8 +300,8 @@ describe("PluginV2", () => {
       yield* plugins.activate([versioned(plugin)])
 
       expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toEqual([
-        "plain",
         "context7_look_up",
+        "plain",
         "execute",
       ])
     }),
@@ -365,7 +365,7 @@ describe("PluginV2", () => {
             yield* ctx.tool
               .hook("execute.after", (event) =>
                 Effect.sync(() => {
-                  if (event.status === "completed") event.content = [] as never
+                  if (event.status === "completed") (event.content as unknown as unknown[]).splice(0)
                 }),
               )
               .pipe(Effect.asVoid)

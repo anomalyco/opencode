@@ -394,19 +394,15 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           })
         }
         return toolHooks.hook.after((event) => {
-          // JS plugin boundary: marshal the canonical outcome out, copy mutations back.
-          const output: Record<string, unknown> = {
+          // Decode first so plugin mutations cannot alias the canonical outcome.
+          const output = {
             tool: event.tool,
             sessionID: event.sessionID,
             agent: event.agent,
             messageID: event.messageID,
             callID: event.callID,
             input: event.input,
-            status: event.status,
-            content: event.content,
-            metadata: event.metadata,
-            outputPaths: event.outputPaths,
-            ...(event.status === "error" ? { error: event.error } : {}),
+            ...Schema.decodeUnknownSync(Tool.ExecuteAfterOutcome)(event),
           }
           return Reflect.apply(callback, undefined, [output]).pipe(
             Effect.tap(() => {
@@ -417,16 +413,16 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                 return Effect.logWarning("ignoring execute.after tool status change", { tool: event.tool })
               return Effect.sync(() => {
                 if (event.status === "completed" && decoded.value.status === "completed") {
-                  if (output.content !== event.content) event.content = decoded.value.content
-                  if (output.metadata !== event.metadata) event.metadata = decoded.value.metadata
-                  if (output.outputPaths !== event.outputPaths) event.outputPaths = decoded.value.outputPaths
+                  event.content = decoded.value.content
+                  event.metadata = decoded.value.metadata
+                  event.outputPaths = decoded.value.outputPaths
                   return
                 }
                 if (event.status === "error" && decoded.value.status === "error") {
-                  if (output.error !== event.error) event.error = decoded.value.error
-                  if (output.content !== event.content) event.content = decoded.value.content
-                  if (output.metadata !== event.metadata) event.metadata = decoded.value.metadata
-                  if (output.outputPaths !== event.outputPaths) event.outputPaths = decoded.value.outputPaths
+                  event.error = decoded.value.error
+                  event.content = decoded.value.content
+                  event.metadata = decoded.value.metadata
+                  event.outputPaths = decoded.value.outputPaths
                 }
               })
             }),

@@ -54,7 +54,7 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 A route is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request body construction (`body.from`), the body schema (`body.schema`), the streaming-event schema (`stream.event`), and the event-to-`LLMEvent` state machine (`stream.step`). `Route.make(...)` validates and JSON-encodes the body from `body.schema` and decodes frames with `stream.event`. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request body construction (`body.from`), the body schema (`body.schema`), the streaming-event schema (`stream.event`), and the event-to-`LLMEvent` state machine (`stream.step`). `Route.make(...)` validates and JSON-encodes the body from `body.schema` and decodes frames with `stream.event`. Examples: `OpenAIChat.protocol`, `OpenResponses.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
 - **`Endpoint`** (`src/route/endpoint.ts`) — URL construction. The host, path, and route query live on the endpoint. `Endpoint.path("/chat/completions", { baseURL })` is the common case; pass a function for paths that embed the model id or a body field (e.g. `Endpoint.path(({ body }) => `/model/${body.modelId}/converse-stream`)`).
 - **`Auth`** (`src/route/auth.ts`) — per-request transport authentication. Provider facades configure credentials onto the route before model selection, usually via `Auth.bearer(apiKey)` or `Auth.header(name, apiKey)`. Routes that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
 - **`Framing`** (`src/route/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
@@ -158,13 +158,14 @@ packages/ai/src/
   protocols/
     shared.ts               ProviderShared toolkit used inside protocol impls
     openai-chat.ts          protocol + route (compose OpenAIChat.protocol)
-    openai-responses.ts
+    open-responses.ts         provider-neutral Responses protocol baseline
+    openai-responses.ts       OpenAI tools/events/transports composed over OpenResponses
     anthropic-messages.ts
     gemini.ts
     bedrock-converse.ts
     bedrock-event-stream.ts framing for AWS event-stream binary frames
     openai-compatible-chat.ts route that reuses OpenAIChat.protocol, no canonical URL
-    openai-compatible-responses.ts route that reuses OpenAIResponses.protocol, no canonical URL
+    openai-compatible-responses.ts deployment adapter that reuses OpenResponses.protocol, no canonical URL
     utils/                  per-protocol helpers (auth, cache, media, tool-stream, ...)
   providers/
     openai-compatible.ts    generic Chat helper + family model helpers
@@ -175,7 +176,7 @@ packages/ai/src/
   tool-runtime.ts           narrow one-call typed tool dispatcher
 ```
 
-The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata.
+The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata. `OpenAIResponses` composes the provider-neutral `OpenResponses` protocol; the baseline never imports the OpenAI extension.
 
 ### Shared protocol helpers
 
@@ -240,7 +241,7 @@ const get_weather = tool({
 
 const tools = { get_weather, get_time, ... }
 const events = yield* LLM.stream(
-  LLM.updateRequest(request, { tools: Tool.toDefinitions(tools) }),
+  LLMRequest.update(request, { tools: Tool.toDefinitions(tools) }),
 ).pipe(Stream.runCollect)
 
 const call = Array.from(events).find(LLMEvent.is.toolCall)

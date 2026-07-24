@@ -620,6 +620,26 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("renders equivalent catalogs identically regardless of tool insertion order", () => {
+    const alpha = Tool.make({
+      description: "Alpha tool",
+      input: Schema.Struct({}),
+      output: Schema.Void,
+      execute: () => Effect.void,
+    })
+    const zeta = Tool.make({
+      description: "Zeta tool",
+      input: Schema.Struct({}),
+      output: Schema.Void,
+      execute: () => Effect.void,
+    })
+    const first = CodeMode.make({ tools: { zeta: { zeta, alpha }, alpha: { zeta, alpha } } })
+    const second = CodeMode.make({ tools: { alpha: { alpha, zeta }, zeta: { alpha, zeta } } })
+
+    expect(first.catalog()).toStrictEqual(second.catalog())
+    expect(first.catalog().map((tool) => tool.path)).toEqual(["alpha.alpha", "alpha.zeta", "zeta.alpha", "zeta.zeta"])
+  })
+
   test("renders bracket notation for tool names that are not JavaScript identifiers", async () => {
     const resolveLibrary = Tool.make({
       description: "Resolve a library ID",

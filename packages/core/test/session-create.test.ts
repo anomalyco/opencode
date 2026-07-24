@@ -195,9 +195,9 @@ describe("SessionV2.create", () => {
         text: "First",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promote(db, events, parent.id, "steer")
       yield* session.synthetic({ sessionID: parent.id, text: "parent note", resume: false })
-      yield* SessionPending.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promote(db, events, parent.id, "steer")
 
       const forked = yield* session.fork({ sessionID: parent.id })
       const parentContext = yield* session.context(parent.id)
@@ -232,13 +232,13 @@ describe("SessionV2.create", () => {
         text: "Parent changed",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promote(db, events, parent.id, "steer")
       yield* session.prompt({
         sessionID: forked.id,
         text: "Child continues",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, forked.id)
+      yield* SessionPending.promote(db, events, forked.id, "steer")
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
@@ -263,13 +263,13 @@ describe("SessionV2.create", () => {
         text: "First",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promote(db, events, parent.id, "steer")
       const second = yield* session.prompt({
         sessionID: parent.id,
         text: "Second",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, parent.id)
+      yield* SessionPending.promote(db, events, parent.id, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
       yield* events.publish(SessionEvent.Step.Started, {
@@ -414,7 +414,7 @@ describe("SessionV2.create", () => {
         text: "Hello",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(db, events, created.id)
+      yield* SessionPending.promote(db, events, created.id, "steer")
 
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
@@ -440,7 +440,7 @@ describe("SessionV2.create", () => {
         text: "Replay lifecycle",
         resume: false,
       })
-      yield* SessionPending.promoteSteers(sourceDb, sourceEvents, created.id)
+      yield* SessionPending.promote(sourceDb, sourceEvents, created.id, "steer")
       const serialized = (yield* sourceDb
         .select()
         .from(EventTable)

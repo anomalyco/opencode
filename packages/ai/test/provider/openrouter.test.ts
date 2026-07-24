@@ -4,6 +4,8 @@ import { LLM, Message } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as OpenRouter from "../../src/providers/openrouter"
 import { it } from "../lib/effect"
+import { fixedResponse } from "../lib/http"
+import { sseEvents } from "../lib/sse"
 
 describe("OpenRouter", () => {
   it.effect("prepares OpenRouter models through the OpenAI-compatible Chat route", () =>
@@ -51,6 +53,42 @@ describe("OpenRouter", () => {
         reasoning: { effort: "high" },
         prompt_cache_key: "session_123",
       })
+    }),
+  )
+
+  it.effect("preserves the upstream provider finish reason", () =>
+    Effect.gen(function* () {
+      const model = OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              choices: [{ delta: { content: "Hello" }, finish_reason: "stop", native_finish_reason: "end_turn" }],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("fails on a mid-stream provider error", () =>
+    Effect.gen(function* () {
+      const model = OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini")
+      const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              error: { code: 502, message: "Provider disconnected" },
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+      expect(error.message).toContain("Provider disconnected")
     }),
   )
 
