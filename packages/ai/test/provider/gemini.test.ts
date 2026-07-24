@@ -36,6 +36,27 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("normalizes Gemini thinking options", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.updateRequest(request, {
+          providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } } },
+        }),
+      )
+      const filtered = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.updateRequest(request, {
+          providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } } },
+        }),
+      )
+
+      expect(prepared.body.generationConfig?.thinkingConfig).toEqual({
+        thinkingBudget: 0,
+        includeThoughts: false,
+      })
+      expect(filtered.body.generationConfig?.thinkingConfig).toEqual({ includeThoughts: false })
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(

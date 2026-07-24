@@ -22,6 +22,7 @@ import {
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { classifyProviderFailure } from "../provider-error"
 import * as Cache from "./utils/cache"
+import { AnthropicOptions } from "./utils/anthropic-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
@@ -173,20 +174,6 @@ const AnthropicToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("tool"), name: Schema.String }),
 ])
 
-const AnthropicThinking = Schema.Union([
-  Schema.Struct({
-    type: Schema.tag("enabled"),
-    budget_tokens: Schema.Number,
-  }),
-  Schema.Struct({
-    type: Schema.tag("adaptive"),
-    display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
-  }),
-  Schema.Struct({
-    type: Schema.tag("disabled"),
-  }),
-])
-
 const AnthropicOutputConfig = Schema.Struct({
   effort: Schema.optional(Schema.String),
 })
@@ -203,7 +190,7 @@ const AnthropicBodyFields = {
   top_p: Schema.optional(Schema.Number),
   top_k: Schema.optional(Schema.Number),
   stop_sequences: optionalArray(Schema.String),
-  thinking: Schema.optional(AnthropicThinking),
+  thinking: Schema.optional(AnthropicOptions.ThinkingSchema),
   output_config: Schema.optional(AnthropicOutputConfig),
 }
 export const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
@@ -537,37 +524,6 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   return messages
 })
 
-const anthropicOptions = (request: LLMRequest) => request.providerOptions?.anthropic
-
-const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (request: LLMRequest) {
-  const thinking = anthropicOptions(request)?.thinking
-  if (!ProviderShared.isRecord(thinking)) return undefined
-  if (thinking.type === "adaptive") {
-    const display =
-      thinking.display === "summarized"
-        ? ("summarized" as const)
-        : thinking.display === "omitted"
-          ? ("omitted" as const)
-          : undefined
-    return { type: "adaptive" as const, ...(display === undefined ? {} : { display }) }
-  }
-  if (thinking.type === "disabled") return { type: "disabled" as const }
-  if (thinking.type !== "enabled") return undefined
-  const budget =
-    typeof thinking.budgetTokens === "number"
-      ? thinking.budgetTokens
-      : typeof thinking.budget_tokens === "number"
-        ? thinking.budget_tokens
-        : undefined
-  if (budget === undefined) return yield* invalid("Anthropic thinking provider option requires budgetTokens")
-  return { type: "enabled" as const, budget_tokens: budget }
-})
-
-const outputConfig = (request: LLMRequest) => {
-  const effort = anthropicOptions(request)?.effort
-  return typeof effort === "string" ? { effort } : undefined
-}
-
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -587,8 +543,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           ),
         )
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
-  const toolChoice =
-    tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const system =
     request.system.length === 0
       ? undefined
@@ -603,6 +558,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
       `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
     )
   }
+  const options = yield* AnthropicOptions.resolve(request)
   return {
     model: request.model.id,
     system,
@@ -615,8 +571,8 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     top_p: generation?.topP,
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
-    thinking: yield* lowerThinking(request),
-    output_config: outputConfig(request),
+    thinking: options.thinking,
+    output_config: options.effort === undefined ? undefined : { effort: options.effort },
   }
 })
 

@@ -4,8 +4,11 @@ import { Auth } from "../route/auth"
 import { Route, type RouteDefaultsInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
+import { ProviderID, type ModelID } from "../schema"
+import type { GeminiProviderOptionsInput } from "./gemini-options"
 import { GoogleVertexShared } from "./google-vertex-shared"
+
+export type { GeminiOptionsInput, GeminiProviderOptionsInput } from "./gemini-options"
 
 export const id = ProviderID.make("google-vertex")
 
@@ -14,6 +17,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
+    readonly providerOptions?: GeminiProviderOptionsInput
   }
 
 export type Settings = ProviderPackage.Settings &
@@ -24,7 +28,7 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
-    readonly providerOptions?: ProviderOptions
+    readonly providerOptions?: GeminiProviderOptionsInput
   }
 
 const route = Route.make({

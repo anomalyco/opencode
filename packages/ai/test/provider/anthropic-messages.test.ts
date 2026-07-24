@@ -74,6 +74,42 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("normalizes enabled and disabled thinking settings", () =>
+    Effect.gen(function* () {
+      const enabled = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.updateRequest(request, {
+          providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 } } },
+        }),
+      )
+      const legacy = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.updateRequest(request, {
+          providerOptions: { anthropic: { thinking: { type: "enabled", budget_tokens: 2_048 } } },
+        }),
+      )
+      const disabled = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.updateRequest(request, {
+          providerOptions: { anthropic: { thinking: { type: "disabled" } } },
+        }),
+      )
+
+      expect(enabled.body.thinking).toEqual({ type: "enabled", budget_tokens: 1_024 })
+      expect(legacy.body.thinking).toEqual({ type: "enabled", budget_tokens: 2_048 })
+      expect(disabled.body.thinking).toEqual({ type: "disabled" })
+    }),
+  )
+
+  it.effect("rejects enabled thinking without a budget", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.updateRequest(request, {
+          providerOptions: { anthropic: { thinking: { type: "enabled" } } },
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic thinking provider option requires budgetTokens")
+    }),
+  )
+
   it.effect("lowers chronological system updates natively for Claude Opus 4.8 with cache hints", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
@@ -993,7 +1029,10 @@ describe("Anthropic Messages route", () => {
                     content: [
                       { type: "text", text: "What is in this image?" },
                       { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
-                      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjQ=" } },
+                      {
+                        type: "document",
+                        source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjQ=" },
+                      },
                     ],
                   },
                 ],

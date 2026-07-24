@@ -18,6 +18,7 @@ import {
   type ToolContent,
 } from "../schema"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
+import { GeminiOptions } from "./utils/gemini-options"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
@@ -95,18 +96,13 @@ const GeminiToolConfig = Schema.Struct({
   }),
 })
 
-const GeminiThinkingConfig = Schema.Struct({
-  thinkingBudget: Schema.optional(Schema.Number),
-  includeThoughts: Schema.optional(Schema.Boolean),
-})
-
 const GeminiGenerationConfig = Schema.Struct({
   maxOutputTokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
   topK: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
-  thinkingConfig: Schema.optional(GeminiThinkingConfig),
+  thinkingConfig: Schema.optional(GeminiOptions.ThinkingConfigSchema),
 })
 
 const GeminiBodyFields = {
@@ -203,7 +199,9 @@ const thoughtSignature = (providerMetadata: ProviderMetadata | undefined) => {
 
 const functionCallId = (providerMetadata: ProviderMetadata | undefined) => {
   const google = providerMetadata?.google
-  return ProviderShared.isRecord(google) && typeof google.functionCallId === "string" ? google.functionCallId : undefined
+  return ProviderShared.isRecord(google) && typeof google.functionCallId === "string"
+    ? google.functionCallId
+    : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart) => ({
@@ -300,21 +298,10 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   return contents
 })
 
-const geminiOptions = (request: LLMRequest) => request.providerOptions?.gemini
-
-const thinkingConfig = (request: LLMRequest) => {
-  const value = geminiOptions(request)?.thinkingConfig
-  if (!ProviderShared.isRecord(value)) return undefined
-  const result = {
-    thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
-    includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
-  }
-  return Object.values(result).some((item) => item !== undefined) ? result : undefined
-}
-
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const hasTools = request.tools.length > 0
   const generation = request.generation
+  const options = GeminiOptions.resolve(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
@@ -322,7 +309,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     topP: generation?.topP,
     topK: generation?.topK,
     stopSequences: generation?.stop,
-    thinkingConfig: thinkingConfig(request),
+    thinkingConfig: options.thinkingConfig,
   }
 
   return {
