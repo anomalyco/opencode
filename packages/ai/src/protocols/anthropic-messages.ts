@@ -234,12 +234,27 @@ const AnthropicBodyFields = {
 export const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
 export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
 
-const AnthropicUsage = Schema.Struct({
-  input_tokens: Schema.optional(Schema.Number),
-  output_tokens: Schema.optional(Schema.Number),
-  cache_creation_input_tokens: optionalNull(Schema.Number),
-  cache_read_input_tokens: optionalNull(Schema.Number),
-})
+const AnthropicUsage = Schema.StructWithRest(
+  Schema.Struct({
+    input_tokens: Schema.optional(Schema.Number),
+    output_tokens: Schema.optional(Schema.Number),
+    cache_creation_input_tokens: optionalNull(Schema.Number),
+    cache_read_input_tokens: optionalNull(Schema.Number),
+    server_tool_use: optionalNull(
+      Schema.StructWithRest(
+        Schema.Struct({ web_search_requests: Schema.optional(Schema.Number) }),
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
+    ),
+    output_tokens_details: optionalNull(
+      Schema.StructWithRest(
+        Schema.Struct({ thinking_tokens: Schema.optional(Schema.Number) }),
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
+    ),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 type AnthropicUsage = Schema.Schema.Type<typeof AnthropicUsage>
 
 const AnthropicStreamBlock = Schema.Struct({
@@ -666,9 +681,8 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // `input_tokens` is the *non-cached* count per the Messages API docs, with
 // cache reads and writes as separate fields. We sum them to derive the
 // inclusive `inputTokens` the rest of the contract expects. Extended
-// thinking tokens are *not* broken out by Anthropic — they're billed as
-// part of `output_tokens`, so `reasoningTokens` stays `undefined` and
-// `outputTokens` carries the combined total.
+// thinking tokens are included in `output_tokens`; newer responses also
+// expose that subset through `output_tokens_details.thinking_tokens`.
 const mapUsage = (usage: AnthropicUsage | undefined): Usage | undefined => {
   if (!usage) return undefined
   const nonCached = usage.input_tokens
@@ -681,6 +695,7 @@ const mapUsage = (usage: AnthropicUsage | undefined): Usage | undefined => {
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cacheRead,
     cacheWriteInputTokens: cacheWrite,
+    reasoningTokens: usage.output_tokens_details?.thinking_tokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, usage.output_tokens, undefined),
     providerMetadata: { anthropic: usage },
   })
@@ -699,12 +714,14 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
   const cacheWriteInputTokens = right.cacheWriteInputTokens ?? left.cacheWriteInputTokens
   const inputTokens = ProviderShared.sumTokens(nonCachedInputTokens, cacheReadInputTokens, cacheWriteInputTokens)
   const outputTokens = right.outputTokens ?? left.outputTokens
+  const reasoningTokens = right.reasoningTokens ?? left.reasoningTokens
   return new Usage({
     inputTokens,
     outputTokens,
     nonCachedInputTokens,
     cacheReadInputTokens,
     cacheWriteInputTokens,
+    reasoningTokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     providerMetadata: {
       anthropic: {

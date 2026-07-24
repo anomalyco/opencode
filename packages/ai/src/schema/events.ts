@@ -40,9 +40,9 @@ import { ProviderFailureClassification } from "./errors"
  * - Anthropic and Bedrock report the input breakdown natively: Anthropic's
  *   `input_tokens` and Bedrock's `inputTokens` are non-cached only. Their
  *   mappers sum the breakdown to derive the inclusive `inputTokens`.
- *   Anthropic does *not* break extended-thinking out of `output_tokens`, so
- *   `reasoningTokens` is `undefined` and `outputTokens` carries the
- *   combined total — a documented limitation of the Anthropic API.
+ *   Anthropic's `outputTokens` includes extended thinking. Newer responses
+ *   expose that subset as `output_tokens_details.thinking_tokens`, which maps
+ *   to `reasoningTokens`; older responses leave it undefined.
  *
  * `providerMetadata` always carries the provider's raw usage payload —
  * keyed by provider name (`{ openai: ... }`, `{ anthropic: ... }`, etc.)

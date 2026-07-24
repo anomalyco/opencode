@@ -543,6 +543,60 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("maps thinking tokens and preserves unknown Anthropic usage fields", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "message_start",
+                message: {
+                  usage: {
+                    input_tokens: 5,
+                    cache_read_input_tokens: 2,
+                    service_tier: "standard",
+                    cache_creation: { ephemeral_5m_input_tokens: 1 },
+                    server_tool_use: { web_search_requests: 1, future_counter: 2 },
+                  },
+                },
+              },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: {
+                  output_tokens: 8,
+                  output_tokens_details: { thinking_tokens: 3, future_detail: "kept" },
+                  future_terminal: { requests: 4 },
+                },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 7,
+        outputTokens: 8,
+        reasoningTokens: 3,
+        totalTokens: 15,
+        providerMetadata: {
+          anthropic: {
+            input_tokens: 5,
+            cache_read_input_tokens: 2,
+            service_tier: "standard",
+            cache_creation: { ephemeral_5m_input_tokens: 1 },
+            server_tool_use: { web_search_requests: 1, future_counter: 2 },
+            output_tokens: 8,
+            output_tokens_details: { thinking_tokens: 3, future_detail: "kept" },
+            future_terminal: { requests: 4 },
+          },
+        },
+      })
+    }),
+  )
+
   it.effect("round-trips omitted thinking carried only by a signature delta", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
