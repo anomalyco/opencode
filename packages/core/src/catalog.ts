@@ -1,7 +1,7 @@
 export * as Catalog from "./catalog"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Array, Context, Effect, Layer, Option, Order, pipe } from "effect"
+import { Array, Context, Effect, Layer, Order, pipe } from "effect"
 import { Catalog } from "@opencode-ai/schema/catalog"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
@@ -242,23 +242,22 @@ const layer = Layer.effect(
           )
 
           const pick = (items: typeof candidates) => {
+            if (!Array.isReadonlyArrayNonEmpty(items)) return
             const maxCost = Math.max(...items.map((item) => item.cost), 0.01)
             const maxAge = Math.max(...items.map((item) => item.age), 0.01)
-            return pipe(
+            const selected = Array.min(
               items,
-              Array.sortWith((item) => (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2, Order.Number),
-              Array.map((item) => projectModel(item.model, provider)),
-              Array.head,
+              Order.mapInput(
+                Order.Number,
+                (item: (typeof candidates)[number]) =>
+                  (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2,
+              ),
             )
+            return projectModel(selected.model, provider)
           }
 
-          return Option.getOrUndefined(
-            pipe(
-              candidates,
-              Array.filter((item) => item.small),
-              (items) => (items.length > 0 ? pick(items) : pick(candidates)),
-            ),
-          )
+          const small = candidates.filter((item) => item.small)
+          return pick(small.length > 0 ? small : candidates)
         }),
       },
     }
