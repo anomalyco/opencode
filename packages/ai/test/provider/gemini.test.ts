@@ -36,6 +36,20 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("prepares thinking level", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          prompt: "Say hello.",
+          providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "minimal" } } },
+        }),
+      )
+
+      expect(prepared.body.generationConfig).toEqual({ thinkingConfig: { thinkingLevel: "minimal" } })
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
