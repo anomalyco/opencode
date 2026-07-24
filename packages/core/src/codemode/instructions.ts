@@ -8,6 +8,8 @@ import { CodeModeCatalog } from "./catalog"
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `Run JavaScript to orchestrate tool calls and compose their results. Imports, direct filesystem access, and timers are unavailable. Do not use \`fetch\`; all external access goes through \`tools\`.
 
+Inside Code Mode, \`tools\` contains only the tools shown below${hasMoreTools ? " or returned by `search`" : ""}; surrounding top-level agent tools are not available and must not be called from the code.
+
 Prefer an explicit \`return\`; if omitted, the final top-level expression becomes the result. Await tool calls before returning; any calls still pending when execution ends are interrupted. Run independent calls concurrently with \`Promise.all\`.
 
 Do not infer or normalize tool names; use only the exact signatures shown below${hasMoreTools ? " or returned by `search`" : ""}, preserving bracket notation such as \`tools.<namespace>["tool-name"](input)\`.${hasMoreTools ? `

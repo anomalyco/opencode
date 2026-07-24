@@ -68,6 +68,9 @@ describe("CodeModeInstructions.render", () => {
     expect(instructions).not.toContain("## Search")
     expect(instructions).toContain("Do not infer or normalize tool names")
     expect(instructions).toContain('`tools.<namespace>["tool-name"](input)`')
+    expect(instructions).toContain(
+      "`tools` contains only the tools shown below; surrounding top-level agent tools are not available and must not be called from the code.",
+    )
   })
 
   test("describes the runtime and execution lifecycle concisely", () => {
@@ -88,6 +91,9 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain("- orders (1 tool, none shown)")
     expect(partial).toContain("## Search")
     expect(partial).toContain("Only some tool signatures are shown.")
+    expect(partial).toContain(
+      "`tools` contains only the tools shown below or returned by `search`; surrounding top-level agent tools are not available and must not be called from the code.",
+    )
     expect(partial).toContain("- search(input: {")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
     expect(partial).toContain("or returned by `search`")
@@ -169,7 +175,7 @@ describe("CodeModeInstructions.update", () => {
     expect(text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
     expect(text).toContain("## Available tools")
     expect(text).not.toContain("## Search")
-    expect(text).not.toContain("must not be called")
+    expect(text).not.toContain("The following tools are no longer available")
   })
 
   test("renders namespace-only deltas without persisting hidden tool entries", () => {
