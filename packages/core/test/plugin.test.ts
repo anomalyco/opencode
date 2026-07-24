@@ -300,8 +300,8 @@ describe("PluginV2", () => {
       yield* plugins.activate([versioned(plugin)])
 
       expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toEqual([
-        "plain",
         "context7_look_up",
+        "plain",
         "execute",
       ])
     }),
