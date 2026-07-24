@@ -1603,7 +1603,7 @@ test("direct footer keeps the command hint at its minimum width", async () => {
 
 test("direct footer keeps complete status text ahead of the spinner", async () => {
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { "session.interrupt": "none" } }),
     state: { phase: "running" },
     width: 22,
   })
