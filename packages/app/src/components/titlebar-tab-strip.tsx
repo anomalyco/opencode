@@ -40,6 +40,7 @@ function SessionTabSlot(props: {
   let ref!: HTMLDivElement
   const sdk = createMemo(() => props.serverCtx()?.sdk ?? null)
   const cachedSession = createMemo(() => props.serverCtx()?.sync.session.peek(props.tab.sessionId))
+  const persisted = createMemo(() => tabs.info[props.id])
   const [loadedSession] = createResource(
     () => {
       const ctx = props.serverCtx()
@@ -71,8 +72,10 @@ function SessionTabSlot(props: {
 
   createEffect(() => {
     const value = session()
+    if (!value) return
+    tabs.rememberSessionInfo(props.tab, value)
     const current = sdk()
-    if (!value || !current) return
+    if (!current) return
     createTabPromptState(tabs, props.tab, current.scope, {
       dir: base64Encode(value.directory),
       id: value.id,
@@ -86,7 +89,7 @@ function SessionTabSlot(props: {
       data-tab-key={props.id}
       data-active={props.active()}
       class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
-      classList={{ hidden: !session() && !missingSession() }}
+      classList={{ hidden: !session() && !missingSession() && !persisted()?.title }}
     >
       <TabNavItem
         ref={(el) => {
@@ -95,7 +98,7 @@ function SessionTabSlot(props: {
         href={tabHref(props.tab)}
         server={props.tab.server}
         session={session}
-        fallbackTitle={missingSession() ? language.t("session.tab.unknown") : undefined}
+        fallbackTitle={persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined)}
         onTitleChange={(title) => {
           const value = session()
           const ctx = props.serverCtx()

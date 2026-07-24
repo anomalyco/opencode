@@ -133,10 +133,10 @@ test("scopes file autocomplete to the current browser root", () => {
 test("resolves directory autocomplete from the current browser root", async () => {
   const directories: string[] = []
   const sdk = {
-    client: {
-      find: {
-        files: (input: { directory: string }) => {
-          directories.push(input.directory)
+    api: {
+      file: {
+        find: (input: { location?: { directory?: string } }) => {
+          directories.push(input.location?.directory ?? "")
           return Promise.resolve({ data: [] })
         },
       },
@@ -150,6 +150,29 @@ test("resolves directory autocomplete from the current browser root", async () =
   await search("components")
 
   expect(directories).toEqual(["/repo", "/repo/src"])
+})
+
+test("searches from an absolute root without a default base", async () => {
+  const directories: string[] = []
+  const sdk = {
+    api: {
+      file: {
+        list: (input: { location?: { directory?: string } }) => {
+          directories.push(input.location?.directory ?? "")
+          return Promise.resolve({
+            data: [
+              { path: "Users/", type: "directory" },
+              { path: "tmp/", type: "directory" },
+            ],
+          })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "", base: () => undefined })
+
+  expect(await search("/")).toEqual(["/Users", "/tmp"])
+  expect(directories).toEqual(["/"])
 })
 
 test("identifies the next directory level to preload", () => {

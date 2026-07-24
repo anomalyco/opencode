@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Stop sharing this session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
+  "palette.search.placeholder.home": "Search commands and sessions",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
@@ -101,6 +102,7 @@ export const dict = {
   "dialog.provider.empty": "No providers found",
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Other",
+  "dialog.provider.custom.label": "Custom OpenAI-compatible provider",
   "dialog.provider.tag.recommended": "Recommended",
   "dialog.provider.opencode.note": "Curated models including Claude, GPT, Gemini and more",
   "dialog.provider.opencode.tagline": "Reliable optimized models",
@@ -121,6 +123,7 @@ export const dict = {
 
   "dialog.model.unpaid.freeModels.title": "Free models provided by OpenCode",
   "dialog.model.unpaid.addMore.title": "Add more models from popular providers",
+  "dialog.model.unpaid.viewMoreProviders": "See 70+ more providers",
 
   "dialog.provider.viewAll": "Show more providers",
 
@@ -212,6 +215,11 @@ export const dict = {
   "model.input.video": "video",
   "model.input.pdf": "pdf",
   "model.tooltip.allows": "Allows: {{inputs}}",
+  "model.tooltip.context.label": "Context",
+  "model.tooltip.inputs": "Inputs",
+  "model.tooltip.model": "Model",
+  "model.tooltip.provider": "Provider",
+  "model.tooltip.reasoning": "Reasoning",
   "model.tooltip.reasoning.allowed": "Allows reasoning",
   "model.tooltip.reasoning.none": "No reasoning",
   "model.tooltip.context": "Context limit {{limit}}",
@@ -282,6 +290,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Remove active file from context",
   "prompt.context.removeFile": "Remove file from context",
   "prompt.action.attachFile": "Add files",
+  "prompt.menu.addImagesAndFiles": "Add files and more",
+  "prompt.menu.imagesAndFiles": "Images and files",
+  "prompt.menu.commands": "Commands",
+  "prompt.menu.context": "Context",
+  "prompt.menu.shellCommand": "Shell command",
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
@@ -617,6 +630,7 @@ export const dict = {
   "home.sessions.group.today": "Today",
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",
+  "home.providerTip": "Connect to 75+ providers to use other models, including Claude, GPT, Gemini, etc",
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",
@@ -627,7 +641,7 @@ export const dict = {
   "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
   "session.error.notFound.closeTab": "Close Tab",
   "session.error.serverConnection": "Can't connect to this server",
-  "session.review.filesChanged": "{{count}} Files Changed",
+  "session.review.filesChanged": "Files Changed {{count}}",
   "session.review.change.one": "Change",
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
@@ -686,6 +700,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existing": "Workspace…",
+  "session.new.git.none": "No Git",
   "session.new.lastModified": "Last modified",
 
   "session.header.search.placeholder": "Search {{project}}",
@@ -698,6 +713,9 @@ export const dict = {
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "File Explorer",
   "session.header.open.fileManager": "File Manager",
+  "session.header.reveal.finder": "Reveal in Finder",
+  "session.header.reveal.fileExplorer": "Reveal in File Explorer",
+  "session.header.reveal.containingFolder": "Open containing folder",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
@@ -841,9 +859,8 @@ export const dict = {
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
-  "settings.general.row.shell.title": "Terminal Shell",
-  "settings.general.row.shell.description":
-    "Choose the shell used for your terminal. Compatible shells are also used for agent tool calls.",
+  "settings.general.row.shell.title": "Terminal shell",
+  "settings.general.row.shell.description": "Shell used by the terminal and agent tools",
   "settings.general.row.shell.autoDefault": "Auto (Default)",
   "settings.general.row.shell.terminalOnly": "terminal only",
   "settings.general.row.appearance.title": "Appearance",
@@ -875,8 +892,9 @@ export const dict = {
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description":
     "Place the title bar and session tabs at the bottom of the screen on mobile",
-  "settings.general.row.showCustomAgents.title": "Custom agents",
-  "settings.general.row.showCustomAgents.description": "Show the agent picker in the composer",
+  "settings.general.row.showCustomAgents.title": "Show agent",
+  "settings.general.row.showCustomAgents.description":
+    "Switch between agents in the composer. When hidden, defaults to Build agent.",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
@@ -885,8 +903,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-  "settings.general.row.newLayoutDesigns.title": "New layout and designs",
-  "settings.general.row.newLayoutDesigns.description": "Enable the redesigned layout, home, composer, and session UI",
+  "settings.general.row.newInterface.title": "New layout",
+  "settings.general.row.newInterface.badge": "New",
+  "settings.general.row.newInterface.description":
+    "Use the new tabs and home layout. Switch between layouts for a limited time.",
+  "settings.general.row.newInterfaceNotice.title": "You're now using new layout",
+  "settings.general.row.newInterfaceNotice.description": "The previous layout is no longer available",
+  "settings.general.row.newInterfaceNotice.dismiss": "Dismiss",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
