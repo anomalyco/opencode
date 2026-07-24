@@ -295,7 +295,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         clear: async (value: Parameters<ServerApi["session"]["revert"]["clear"]>[0]) => {
           await legacy().session.unrevert(value)
         },
-        commit: input.current.session.revert.commit,
+        commit: input.current.session.revert?.commit,
       },
     },
     project: {
