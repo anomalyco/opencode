@@ -98,7 +98,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     .toEqual([
       {
         origin: serverA,
-        directory: undefined,
+        directory: directoryA,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
         body: { response: "once" },
@@ -126,14 +126,14 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     .toEqual([
       {
         origin: serverA,
-        directory: undefined,
+        directory: directoryA,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
         body: { response: "once" },
       },
       {
         origin: serverA,
-        directory: undefined,
+        directory: directoryA,
         sessionID: childSessionA.id,
         permissionID: "permission-background-a-child",
         body: { response: "once" },
