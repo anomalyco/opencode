@@ -199,6 +199,100 @@ mcpTest.instance("pending provider does not expose or overwrite existing credent
   }),
 )
 
+mcpTest.instance("issuer stamping preserves dynamic registration metadata", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const name = "test-dynamic-registration-stamp"
+    const url = "https://example.com/mcp"
+    const provider = new McpOAuthProvider(name, url, {}, { onRedirect: async () => {} }, auth)
+    yield* Effect.addFinalizer(() => auth.remove(name))
+    yield* auth.updateClientInfo(
+      name,
+      {
+        clientId: "dynamic-client",
+        clientSecret: "dynamic-secret",
+        clientIdIssuedAt: 100,
+        clientSecretExpiresAt: 4_000_000_000,
+      },
+      url,
+    )
+
+    const info = yield* Effect.promise(() => provider.clientInformation())
+    expect(info).toEqual({
+      client_id: "dynamic-client",
+      client_secret: "dynamic-secret",
+      client_id_issued_at: 100,
+      client_secret_expires_at: 4_000_000_000,
+      redirect_uris: [provider.redirectUrl],
+    })
+    yield* Effect.promise(() => provider.saveClientInformation({ ...info!, issuer: "https://issuer.example" }))
+    expect((yield* auth.get(name))?.clientInfo).toEqual({
+      clientId: "dynamic-client",
+      clientSecret: "dynamic-secret",
+      clientIdIssuedAt: 100,
+      clientSecretExpiresAt: 4_000_000_000,
+      redirectUris: [provider.redirectUrl],
+      issuer: "https://issuer.example",
+    })
+  }),
+)
+
+mcpTest.instance("issuer stamping does not persist a configured client secret", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const name = "test-configured-client-stamp"
+    const url = "https://example.com/mcp"
+    const configured = new McpOAuthProvider(
+      name,
+      url,
+      { clientId: "configured-client", clientSecret: "configured-secret" },
+      { onRedirect: async () => {} },
+      auth,
+    )
+    yield* Effect.addFinalizer(() => auth.remove(name))
+
+    yield* Effect.promise(() =>
+      configured.saveClientInformation({
+        client_id: "configured-client",
+        client_secret: "configured-secret",
+        issuer: "https://issuer.example",
+      }),
+    )
+
+    expect((yield* auth.get(name))?.clientInfo).toEqual({
+      clientId: "configured-client",
+      issuer: "https://issuer.example",
+      configPreRegistered: true,
+    })
+    expect(yield* Effect.promise(() => configured.clientInformation())).toEqual({
+      client_id: "configured-client",
+      client_secret: "configured-secret",
+      issuer: "https://issuer.example",
+    })
+    const unconfigured = new McpOAuthProvider(name, url, {}, { onRedirect: async () => {} }, auth)
+    expect(yield* Effect.promise(() => unconfigured.clientInformation())).toBeUndefined()
+  }),
+)
+
+mcpTest.instance("issuer stamping keeps an expired token expired", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const name = "test-expired-token-stamp"
+    const url = "https://example.com/mcp"
+    const provider = new McpOAuthProvider(name, url, {}, { onRedirect: async () => {} }, auth)
+    yield* Effect.addFinalizer(() => auth.remove(name))
+    yield* auth.updateTokens(name, { accessToken: "expired-token", expiresAt: 1 }, url)
+
+    const tokens = yield* Effect.promise(() => provider.tokens())
+    expect(tokens?.expires_in).toBe(0)
+    yield* Effect.promise(() => provider.saveTokens({ ...tokens!, issuer: "https://issuer.example" }))
+    const saved = (yield* auth.get(name))?.tokens
+    expect(saved?.expiresAt).toBeNumber()
+    expect(saved!.expiresAt!).toBeLessThanOrEqual(Date.now() / 1000)
+    expect(saved?.issuer).toBe("https://issuer.example")
+  }),
+)
+
 mcpTest.instance("failed reauthentication preserves existing credentials", () =>
   Effect.gen(function* () {
     yield* stopOAuthCallback

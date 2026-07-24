@@ -22,14 +22,13 @@ export interface McpOAuthCallbacks {
   onRedirect: (url: URL) => void | Promise<void>
 }
 
-/**
- * Registration metadata exists only on the "full" (DCR) member of the stored
- * client-information union; read it as optional fields instead of narrowing.
- */
-function registrationMetadata(
-  info: StoredOAuthClientInformation,
-): Partial<Record<"client_id_issued_at" | "client_secret_expires_at", number>> {
-  return info
+/** Registration metadata is present only on the full DCR union member. */
+function registrationMetadata(info: StoredOAuthClientInformation) {
+  return {
+    clientIdIssuedAt: "client_id_issued_at" in info ? info.client_id_issued_at : undefined,
+    clientSecretExpiresAt: "client_secret_expires_at" in info ? info.client_secret_expires_at : undefined,
+    redirectUris: "redirect_uris" in info ? info.redirect_uris : undefined,
+  }
 }
 
 export class McpOAuthProvider implements OAuthClientProvider {
@@ -62,17 +61,22 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<StoredOAuthClientInformation | undefined> {
+    const entry = await Effect.runPromise(this.auth.getForUrl(this.mcpName, this.serverUrl))
     if (this.config.clientId) {
+      const issuer = entry?.clientInfo?.clientId === this.config.clientId ? entry.clientInfo.issuer : undefined
       return {
         client_id: this.config.clientId,
         client_secret: this.config.clientSecret,
+        ...(issuer !== undefined ? { issuer } : {}),
       }
     }
 
     // Check stored client info (from dynamic registration)
     // Use getForUrl to validate credentials are for the current server URL
-    const entry = await Effect.runPromise(this.auth.getForUrl(this.mcpName, this.serverUrl))
     if (entry?.clientInfo) {
+      // An issuer stamp for a configured client is not usable without the
+      // matching config, which owns the secret and remains the source of truth.
+      if (entry.clientInfo.configPreRegistered) return undefined
       // Check if client secret has expired
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
         return undefined
@@ -80,7 +84,14 @@ export class McpOAuthProvider implements OAuthClientProvider {
       return {
         client_id: entry.clientInfo.clientId,
         client_secret: entry.clientInfo.clientSecret,
-        issuer: entry.clientInfo.issuer,
+        ...(entry.clientInfo.clientIdIssuedAt !== undefined
+          ? { client_id_issued_at: entry.clientInfo.clientIdIssuedAt }
+          : {}),
+        ...(entry.clientInfo.clientSecretExpiresAt !== undefined
+          ? { client_secret_expires_at: entry.clientInfo.clientSecretExpiresAt }
+          : {}),
+        redirect_uris: entry.clientInfo.redirectUris ? [...entry.clientInfo.redirectUris] : [this.redirectUrl],
+        ...(entry.clientInfo.issuer !== undefined ? { issuer: entry.clientInfo.issuer } : {}),
       }
     }
 
@@ -89,15 +100,31 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveClientInformation(info: StoredOAuthClientInformation): Promise<void> {
-    const full = registrationMetadata(info)
+    if (this.config.clientId && info.client_id === this.config.clientId) {
+      await Effect.runPromise(
+        this.auth.updateClientInfo(
+          this.mcpName,
+          {
+            clientId: info.client_id,
+            issuer: info.issuer,
+            configPreRegistered: true,
+          },
+          this.serverUrl,
+        ),
+      )
+      return
+    }
+
+    const metadata = registrationMetadata(info)
     await Effect.runPromise(
       this.auth.updateClientInfo(
         this.mcpName,
         {
           clientId: info.client_id,
           clientSecret: info.client_secret,
-          clientIdIssuedAt: full.client_id_issued_at,
-          clientSecretExpiresAt: full.client_secret_expires_at,
+          clientIdIssuedAt: metadata.clientIdIssuedAt,
+          clientSecretExpiresAt: metadata.clientSecretExpiresAt,
+          redirectUris: metadata.redirectUris ? [...metadata.redirectUris] : [this.redirectUrl],
           issuer: info.issuer,
         },
         this.serverUrl,
@@ -129,7 +156,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
         {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
-          expiresAt: tokens.expires_in ? Date.now() / 1000 + tokens.expires_in : undefined,
+          expiresAt: tokens.expires_in !== undefined ? Date.now() / 1000 + tokens.expires_in : undefined,
           scope: tokens.scope,
           issuer: tokens.issuer,
         },
@@ -225,7 +252,7 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
 
   async commit(): Promise<void> {
     if (!this.pendingTokens) return
-    const pendingFull = this.pendingClientInfo ? registrationMetadata(this.pendingClientInfo) : undefined
+    const pendingMetadata = this.pendingClientInfo ? registrationMetadata(this.pendingClientInfo) : undefined
     await Effect.runPromise(
       this.auth.set(
         this.mcpName,
@@ -233,7 +260,10 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
           tokens: {
             accessToken: this.pendingTokens.access_token,
             refreshToken: this.pendingTokens.refresh_token,
-            expiresAt: this.pendingTokens.expires_in ? Date.now() / 1000 + this.pendingTokens.expires_in : undefined,
+            expiresAt:
+              this.pendingTokens.expires_in !== undefined
+                ? Date.now() / 1000 + this.pendingTokens.expires_in
+                : undefined,
             scope: this.pendingTokens.scope,
             issuer: this.pendingTokens.issuer,
           },
@@ -242,8 +272,9 @@ export class McpOAuthPendingProvider extends McpOAuthProvider {
               ? {
                   clientId: this.pendingClientInfo.client_id,
                   clientSecret: this.pendingClientInfo.client_secret,
-                  clientIdIssuedAt: pendingFull?.client_id_issued_at,
-                  clientSecretExpiresAt: pendingFull?.client_secret_expires_at,
+                  clientIdIssuedAt: pendingMetadata?.clientIdIssuedAt,
+                  clientSecretExpiresAt: pendingMetadata?.clientSecretExpiresAt,
+                  redirectUris: pendingMetadata?.redirectUris ? [...pendingMetadata.redirectUris] : [this.redirectUrl],
                   issuer: this.pendingClientInfo.issuer,
                 }
               : undefined,

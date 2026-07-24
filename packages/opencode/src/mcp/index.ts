@@ -202,7 +202,11 @@ export interface Interface {
     mcpName: string,
     onAuthorization?: (authorizationUrl: string) => void,
   ) => Effect.Effect<Status, NotFoundError>
-  readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status, NotFoundError>
+  readonly finishAuth: (
+    mcpName: string,
+    authorizationCode: string,
+    iss?: string,
+  ) => Effect.Effect<Status, NotFoundError>
   readonly removeAuth: (mcpName: string) => Effect.Effect<void>
   readonly supportsOAuth: (mcpName: string) => Effect.Effect<boolean, NotFoundError>
   readonly hasStoredTokens: (mcpName: string) => Effect.Effect<boolean>
@@ -929,7 +933,7 @@ const layer = Layer.effect(
         }),
       )
 
-      const code = yield* Effect.promise(() => callbackPromise)
+      const callback = yield* Effect.promise(() => callbackPromise)
 
       const storedState = yield* auth.getOAuthState(mcpName)
       if (storedState !== result.oauthState) {
@@ -937,16 +941,20 @@ const layer = Layer.effect(
         throw new Error("OAuth state mismatch - potential CSRF attack")
       }
       yield* auth.clearOAuthState(mcpName)
-      return yield* finishAuth(mcpName, code)
+      return yield* finishAuth(mcpName, callback.code, callback.iss)
     })
 
-    const finishAuth = Effect.fn("MCP.finishAuth")(function* (mcpName: string, authorizationCode: string) {
+    const finishAuth = Effect.fn("MCP.finishAuth")(function* (
+      mcpName: string,
+      authorizationCode: string,
+      iss?: string,
+    ) {
       yield* requireMcpConfig(mcpName)
       const pending = pendingOAuthTransports.get(mcpName)
       if (!pending) throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
 
       const error = yield* Effect.tryPromise({
-        try: () => pending.transport.finishAuth(authorizationCode),
+        try: () => pending.transport.finishAuth(authorizationCode, iss),
         catch: (error) => error,
       }).pipe(
         Effect.match({

@@ -84,6 +84,7 @@ const serveOAuthMcp = Effect.acquireRelease(
             grant_types_supported: ["authorization_code"],
             token_endpoint_auth_methods_supported: ["none"],
             code_challenge_methods_supported: ["S256"],
+            authorization_response_iss_parameter_supported: true,
           })
         }
 
@@ -96,6 +97,7 @@ const serveOAuthMcp = Effect.acquireRelease(
         if (url.pathname === "/authorize") {
           const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
           redirect.searchParams.set("code", "test-code")
+          redirect.searchParams.set("iss", url.origin)
           const state = url.searchParams.get("state")
           if (state) redirect.searchParams.set("state", state)
           return Response.redirect(redirect, 302)

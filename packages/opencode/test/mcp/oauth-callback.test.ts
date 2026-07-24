@@ -71,11 +71,22 @@ describe("McpOAuthCallback.ensureRunning", () => {
     await McpOAuthCallback.ensureRunning(redirectUri)
     const callback = McpOAuthCallback.waitForCallback("success")
 
-    const response = await fetch(`${redirectUri}?code=code&state=success`)
+    const response = await fetch(`${redirectUri}?code=code&state=success&iss=https%3A%2F%2Fissuer.example`)
 
     expect(response.status).toBe(200)
-    expect(await callback).toBe("code")
+    expect(await callback).toEqual({ code: "code", iss: "https://issuer.example" })
     expect(McpOAuthCallback.isRunning()).toBe(false)
+  })
+
+  test("keeps callbacks without an issuer backward compatible", async () => {
+    const redirectUri = "http://127.0.0.1:18004/custom/callback"
+    await McpOAuthCallback.ensureRunning(redirectUri)
+    const callback = McpOAuthCallback.waitForCallback("without-issuer")
+
+    const response = await fetch(`${redirectUri}?code=code&state=without-issuer`)
+
+    expect(response.status).toBe(200)
+    expect(await callback).toEqual({ code: "code", iss: undefined })
   })
 
   test("escapes provider error markup in callback HTML", async () => {
