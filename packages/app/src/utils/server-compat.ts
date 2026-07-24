@@ -311,14 +311,18 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         }
       },
       revert: {
-        stage: async (value: Parameters<ServerApi["session"]["revert"]["stage"]>[0]) => {
+        stage: async (value: { sessionID: string; messageID: string; files?: string[] }) => {
           await legacy().session.revert(value)
           return { messageID: value.messageID }
         },
-        clear: async (value: Parameters<ServerApi["session"]["revert"]["clear"]>[0]) => {
+        clear: async (value: { sessionID: string }) => {
           await legacy().session.unrevert(value)
         },
-        commit: (input.current.session as any).revert?.commit ?? ((input.current.session as any).commit ? (value: any, opts?: any) => (input.current.session as any).commit(value, opts) : undefined),
+        commit: async (value: { sessionID: string }) => {
+          const currentSession = (input.current as any)?.sessions ?? input.current?.session
+          if (currentSession?.revert?.commit) return currentSession.revert.commit(value)
+          if (currentSession?.commit) return currentSession.commit(value)
+        },
       },
     },
     project: {
