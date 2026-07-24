@@ -12,6 +12,8 @@ const [data, setData] = createStore({
   session_working: () => false,
   agent: [{ name: "build", mode: "task", hidden: false }],
   command: [{ name: "fix", description: "Run fix command", source: "project" }],
+  reference: [],
+  mcp_resource: {},
 })
 
 const sync = {

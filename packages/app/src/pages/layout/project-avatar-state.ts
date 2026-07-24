@@ -1,30 +1,49 @@
 import { createMemo, type Accessor } from "solid-js"
-import { useServerSync } from "@/context/server-sync"
+import { useGlobal } from "@/context/global"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
+import { sessionPermissionRequest, sessionQuestionRequest } from "@/pages/session/composer/session-request-tree"
+import { ServerConnection } from "@/context/server"
 
 export function useSessionTabAvatarState(
+  server: Accessor<ServerConnection.Key>,
   directory: Accessor<string>,
   sessionId: Accessor<string>,
-  active: Accessor<boolean> = () => true,
 ) {
-  const globalSync = useServerSync()
+  const global = useGlobal()
   const notification = useNotification()
   const permission = usePermission()
+  const connection = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === server()))
+  const sync = createMemo(() => {
+    const conn = connection()
+    if (conn) return global.ensureServerCtx(conn).sync
+  })
   const hasPermissions = createMemo(() => {
-    if (!active()) return false
-    const [store] = globalSync().child(directory(), { bootstrap: false })
-    return !!sessionPermissionRequest(store.session, store.permission, sessionId(), (item) => {
-      return !permission.autoResponds(item, directory())
+    const serverSync = sync()
+    if (!serverSync) return false
+    const permissionState = permission.ensureServerState(server())
+    const [store] = serverSync.child(directory(), { bootstrap: false })
+    return !!sessionPermissionRequest(store.session, serverSync.session.data.permission, sessionId(), (item) => {
+      return !permissionState.autoResponds(item, directory())
     })
   })
-  const unread = createMemo(() => active() && (hasPermissions() || notification.session.unseenCount(sessionId()) > 0))
+  const hasQuestions = createMemo(() => {
+    const serverSync = sync()
+    if (!serverSync) return false
+    const [store] = serverSync.child(directory(), { bootstrap: false })
+    return !!sessionQuestionRequest(store.session, serverSync.session.data.question, sessionId())
+  })
+  const needsAttention = createMemo(() => hasPermissions() || hasQuestions())
+  const notificationState = createMemo(() => {
+    if (!connection()) return
+    return notification.ensureServerState(server())
+  })
+  const unread = createMemo(() => needsAttention() || (notificationState()?.session.unseenCount(sessionId()) ?? 0) > 0)
   const loading = createMemo(() => {
-    if (!active()) return false
-    if (hasPermissions()) return false
-    const [store] = globalSync().child(directory(), { bootstrap: false })
-    return store.session_working(sessionId())
+    const serverSync = sync()
+    if (!serverSync) return false
+    if (needsAttention()) return false
+    return serverSync.session.data.session_working(sessionId())
   })
   return { unread, loading }
 }

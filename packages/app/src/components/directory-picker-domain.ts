@@ -138,6 +138,79 @@ export function activeTreeNavigation(request: number, current: number) {
   return request === current
 }
 
+export function createPriorityTaskQueue<T>(concurrency: number) {
+  type Job = {
+    key: string
+    priority: "user" | "background"
+    promise: Promise<T>
+    run: () => void
+  }
+
+  const jobs = new Map<string, Job>()
+  const user: Job[] = []
+  const background: Job[] = []
+  let active = 0
+
+  const drain = () => {
+    while (active < concurrency) {
+      const job = user.pop() ?? background.shift()
+      if (!job) return
+      active++
+      job.run()
+    }
+  }
+
+  const schedule = (key: string, priority: Job["priority"], task: () => Promise<T>) => {
+    const existing = jobs.get(key)
+    if (existing) {
+      if (priority === "user") promote(key)
+      return existing.promise
+    }
+
+    const deferred = Promise.withResolvers<T>()
+    const job: Job = {
+      key,
+      priority,
+      promise: deferred.promise,
+      run: () => {
+        const complete = () => {
+          active--
+          jobs.delete(key)
+          drain()
+        }
+        Promise.resolve()
+          .then(task)
+          .then(
+            (value) => {
+              complete()
+              deferred.resolve(value)
+            },
+            (error) => {
+              complete()
+              deferred.reject(error)
+            },
+          )
+      },
+    }
+    jobs.set(key, job)
+    ;(priority === "user" ? user : background).push(job)
+    drain()
+    return job.promise
+  }
+
+  const promote = (key: string) => {
+    const job = jobs.get(key)
+    if (!job || job.priority === "user") return
+    const index = background.indexOf(job)
+    if (index === -1) return
+    background.splice(index, 1)
+    job.priority = "user"
+    user.push(job)
+  }
+
+  return { schedule, promote }
+}
+
 export function nextTreeScrollTop(current: number, delta: number, scrollHeight: number, clientHeight: number) {
   return Math.min(Math.max(0, scrollHeight - clientHeight), Math.max(0, current + delta))
 }

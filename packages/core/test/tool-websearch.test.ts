@@ -1,10 +1,14 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { WebSearchTool } from "@opencode-ai/core/tool/websearch"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -66,7 +70,13 @@ interface Request {
 const requests: Request[] = []
 const assertions: PermissionV2.AssertInput[] = []
 let responseBody = payload("search results")
+let makeResponse = () => new Response(responseBody, { status: 200 })
 let config: WebSearchTool.Config = { enableExa: false, enableParallel: false }
+
+beforeEach(() => {
+  responseBody = payload("search results")
+  makeResponse = () => new Response(responseBody, { status: 200 })
+})
 
 const http = Layer.succeed(
   HttpClient.HttpClient,
@@ -78,7 +88,7 @@ const http = Layer.succeed(
         headers: request.headers,
         body: JSON.parse(new TextDecoder().decode(request.body.body)),
       })
-      return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: 200 }))
+      return HttpClientResponse.fromWeb(request, makeResponse())
     }),
   ),
 )
@@ -93,7 +103,6 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
 const websearchConfig = Layer.succeed(
   WebSearchTool.ConfigService,
   WebSearchTool.ConfigService.of({
@@ -114,13 +123,17 @@ const websearchConfig = Layer.succeed(
     },
   }),
 )
-const websearch = WebSearchTool.layer.pipe(
-  Layer.provide(registry),
-  Layer.provide(permission),
-  Layer.provide(http),
-  Layer.provide(websearchConfig),
+const it = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, WebSearchTool.configNode, WebSearchTool.node]),
+    [
+      [PermissionV2.node, permission],
+      [LayerNodePlatform.httpClient, http],
+      [WebSearchTool.configNode, websearchConfig],
+      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    ],
+  ),
 )
-const it = testEffect(Layer.mergeAll(registry, permission, http, websearchConfig, websearch))
 
 describe("WebSearchTool registration", () => {
   it.effect("registers websearch, asserts query permission, and calls Exa", () =>
@@ -270,7 +283,22 @@ describe("WebSearchTool registration", () => {
     Effect.gen(function* () {
       requests.length = 0
       assertions.length = 0
-      responseBody = "x".repeat(WebSearchTool.MAX_RESPONSE_BYTES + 1)
+      let chunksRead = 0
+      let cancelled = false
+      makeResponse = () =>
+        new Response(
+          new ReadableStream({
+            pull(controller) {
+              chunksRead++
+              if (chunksRead === 10) throw new Error("response was not stopped at the byte limit")
+              controller.enqueue(new Uint8Array(64 * 1024))
+            },
+            cancel() {
+              cancelled = true
+            },
+          }),
+          { status: 200 },
+        )
       config = { provider: "exa", enableExa: false, enableParallel: false }
       const registry = yield* ToolRegistry.Service
 
@@ -281,6 +309,8 @@ describe("WebSearchTool registration", () => {
           call: { type: "tool-call", id: "call-large-response", name: "websearch", input: { query: "too much" } },
         }),
       ).toEqual({ type: "error", value: "Unable to search the web for too much" })
+      expect(chunksRead).toBeLessThan(10)
+      expect(cancelled).toBe(true)
     }),
   )
 })

@@ -16,6 +16,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettings } from "@/context/settings"
 import { useTerminal } from "@/context/terminal"
+import { useSDK } from "@/context/sdk"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
@@ -25,16 +26,19 @@ export function TerminalPanel() {
   const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
+  const sdk = useSDK()
   const language = useLanguage()
   const command = useCommand()
   const settings = useSettings()
-  const { params, workspaceKey, view } = useSessionLayout()
+  const { workspaceKey, view } = useSessionLayout()
 
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
+
+  onCleanup(() => terminal.cancelFocus())
 
   const [store, setStore] = createStore({
     autoCreated: false,
@@ -122,7 +126,7 @@ export function TerminalPanel() {
   })
 
   createEffect(() => {
-    const dir = params.dir
+    const dir = sdk().directory
     if (!dir) return
     if (!terminal.ready()) return
     language.locale()
@@ -140,7 +144,7 @@ export function TerminalPanel() {
   })
 
   const handoff = createMemo(() => {
-    const dir = params.dir
+    const dir = sdk().directory
     if (!dir) return []
     return getTerminalHandoff(workspaceKey()) ?? []
   })
@@ -283,7 +287,7 @@ export function TerminalPanel() {
                         icon="plus-small"
                         variant="ghost"
                         iconSize="large"
-                        onClick={terminal.new}
+                        onClick={() => terminal.new()}
                         aria-label={language.t("command.terminal.new")}
                       />
                     </TooltipKeybind>
@@ -291,7 +295,7 @@ export function TerminalPanel() {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <Show when={terminal.active()} keyed>
+                <Show when={opened() && terminal.active()} keyed>
                   {(id) => {
                     const ops = terminal.bind()
                     return (
@@ -301,6 +305,7 @@ export function TerminalPanel() {
                             <Terminal
                               pty={pty()}
                               autoFocus={opened()}
+                              onAutoFocus={() => terminal.consumeFocus(id)}
                               onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
                               onCleanup={ops.update}
                               onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}

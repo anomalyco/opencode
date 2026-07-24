@@ -15,30 +15,25 @@ const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
-## Goal
-- [single-sentence task summary]
+## Objective
+- [one or two brief sentences describing what the user is trying to accomplish]
 
-## Constraints & Preferences
-- [user constraints, preferences, specs, or "(none)"]
+## Important Details
+- [constraints/preferences, decisions and why, important facts/assumptions, exact context needed to continue, or "(none)"]
 
-## Progress
-### Done
-- [completed work or "(none)"]
+## Work State
+### Completed
+- [finished work, verified facts, or changes made; otherwise "(none)"]
 
-### In Progress
-- [current work or "(none)"]
+### Active
+- [current work, partial changes, or investigation state; otherwise "(none)"]
 
 ### Blocked
-- [blockers or "(none)"]
+- [blockers, failing commands, or unknowns; otherwise "(none)"]
 
-## Key Decisions
-- [decision and why, or "(none)"]
-
-## Next Steps
-- [ordered next actions or "(none)"]
-
-## Critical Context
-- [important technical facts, errors, open questions, or "(none)"]
+## Next Move
+1. [immediate concrete action, or "(none)"]
+2. [next action if known, or "(none)"]
 
 ## Relevant Files
 - [file or directory path: why it matters, or "(none)"]
@@ -47,7 +42,7 @@ const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <te
 Rules:
 - Keep every section, even when empty.
 - Use terse bullets, not prose paragraphs.
-- Preserve exact file paths, commands, error strings, and identifiers when known.
+- Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
 - Do not mention the summary process or that context was compacted.`
 
 type Entry = {

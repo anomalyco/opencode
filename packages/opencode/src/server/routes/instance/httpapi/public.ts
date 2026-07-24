@@ -152,7 +152,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
         normalizeLegacyErrorResponses(operation)
       }
       normalizeLegacyOperation(operation, path, method)
-      if ((path === "/event" || path === "/global/event") && method === "get") {
+      if ((path === "/event" || path === "/global/event" || path === "/api/event") && method === "get") {
         // HttpApi has no first-class SSE response schema, and these handlers are
         // raw/streaming routes. Document the actual wire protocol explicitly.
         operation.responses!["200"] = {
@@ -162,7 +162,9 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
               schema:
                 path === "/event"
                   ? { $ref: "#/components/schemas/Event" }
-                  : { $ref: "#/components/schemas/GlobalEvent" },
+                  : path === "/global/event"
+                    ? { $ref: "#/components/schemas/GlobalEvent" }
+                    : { $ref: "#/components/schemas/V2Event" },
             },
           },
         }

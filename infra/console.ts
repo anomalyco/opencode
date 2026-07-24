@@ -256,6 +256,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     SECRET.UpstashRedisRestToken,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
+    SECRET.SupportApiKey,
     DISCORD_INCIDENT_WEBHOOK_URL,
     SECRET.HoneycombWebhookSecret,
     STRIPE_SECRET_KEY,

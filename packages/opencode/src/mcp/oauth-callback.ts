@@ -1,52 +1,13 @@
 import { createConnection } from "net"
 import { createServer } from "http"
-import { escapeHtml } from "@/util/html"
+import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
+
+const OAUTH_CALLBACK_HOST = "127.0.0.1"
 
 // Current callback server configuration (may differ from defaults if custom redirectUri is used)
 let currentPort = OAUTH_CALLBACK_PORT
 let currentPath = OAUTH_CALLBACK_PATH
-
-const HTML_SUCCESS = `<!DOCTYPE html>
-<html>
-<head>
-  <title>OpenCode - Authorization Successful</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
-    .container { text-align: center; padding: 2rem; }
-    h1 { color: #4ade80; margin-bottom: 1rem; }
-    p { color: #aaa; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Authorization Successful</h1>
-    <p>You can close this window and return to OpenCode.</p>
-  </div>
-  <script>setTimeout(() => window.close(), 2000);</script>
-</body>
-</html>`
-
-const HTML_ERROR = (error: string) => `<!DOCTYPE html>
-<html>
-<head>
-  <title>OpenCode - Authorization Failed</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
-    .container { text-align: center; padding: 2rem; }
-    h1 { color: #f87171; margin-bottom: 1rem; }
-    p { color: #aaa; }
-    .error { color: #fca5a5; font-family: monospace; margin-top: 1rem; padding: 1rem; background: rgba(248,113,113,0.1); border-radius: 0.5rem; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Authorization Failed</h1>
-    <p>An error occurred during authorization.</p>
-    <div class="error">${escapeHtml(error)}</div>
-  </div>
-</body>
-</html>`
 
 interface PendingAuth {
   resolve: (code: string) => void
@@ -96,7 +57,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   if (!state) {
     const errorMsg = "Missing required state parameter - potential CSRF attack"
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(HTML_ERROR(errorMsg))
+    res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
     return
   }
 
@@ -110,14 +71,14 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
       pending.reject(new Error(errorMsg))
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(HTML_ERROR(errorMsg))
+    res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
     stopIfIdle()
     return
   }
 
   if (!code) {
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(HTML_ERROR("No authorization code provided"))
+    res.end(OauthCallbackPage.error("No authorization code provided", { provider: "MCP" }))
     return
   }
 
@@ -125,7 +86,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   if (!pendingAuths.has(state)) {
     const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(HTML_ERROR(errorMsg))
+    res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
     return
   }
 
@@ -137,7 +98,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   pending.resolve(code)
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-  res.end(HTML_SUCCESS)
+  res.end(OauthCallbackPage.success({ provider: "MCP" }))
   stopIfIdle()
 }
 
@@ -162,7 +123,7 @@ export async function ensureRunning(redirectUri?: string): Promise<void> {
 
   server = createServer(handleRequest)
   await new Promise<void>((resolve, reject) => {
-    server!.listen(currentPort, () => {
+    server!.listen(currentPort, OAUTH_CALLBACK_HOST, () => {
       resolve()
     })
     server!.on("error", reject)

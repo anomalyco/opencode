@@ -10,7 +10,7 @@ import type {
   SessionConfigSelectOption,
   SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Effect } from "effect"
@@ -144,7 +144,10 @@ const provider: Provider.Info = {
 describe("ACP service sessions", () => {
   const makeService = (
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
-    options?: { abort?: (input: { sessionID: string }) => Promise<{ data: boolean }> },
+    options?: {
+      abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
+      prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+    },
   ) => {
     const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
@@ -193,19 +196,21 @@ describe("ACP service sessions", () => {
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
           }),
         messages: () => Promise.resolve({ data: messages }),
-        prompt: (input: unknown) => {
-          prompts.push(input)
-          return Promise.resolve({
-            data: {
-              info: assistantInfo({
-                input: 100,
-                output: 40,
-                reasoning: 7,
-                cache: { read: 11, write: 13 },
-              }),
-            },
-          })
-        },
+        prompt:
+          options?.prompt ??
+          ((input: unknown) => {
+            prompts.push(input)
+            return Promise.resolve({
+              data: {
+                info: assistantInfo({
+                  input: 100,
+                  output: 40,
+                  reasoning: 7,
+                  cache: { read: 11, write: 13 },
+                }),
+              },
+            })
+          }),
         command: (input: unknown) => {
           commands.push(input)
           return Promise.resolve({
@@ -389,15 +394,29 @@ describe("ACP service sessions", () => {
     expect(second.sessions.map((session) => session.sessionId)).toEqual(["ses_2", "ses_1"])
   })
 
-  it("resumes a session and stores restored state", async () => {
-    const { service } = makeService([
+  it("resumes a session and stores restored state without replaying transcript chunks", async () => {
+    const { service, updates } = makeService([
       {
         info: {
+          id: "msg_user",
+          sessionID: "ses_resume",
           role: "user",
           model: { providerID: "test", modelID: "test-model", variant: "high" },
           agent: "plan",
         },
-        parts: [],
+        parts: [{ id: "part_user", sessionID: "ses_resume", messageID: "msg_user", type: "text", text: "hello" }],
+      },
+      {
+        info: { id: "msg_assistant", sessionID: "ses_resume", role: "assistant" },
+        parts: [
+          {
+            id: "part_assistant",
+            sessionID: "ses_resume",
+            messageID: "msg_assistant",
+            type: "text",
+            text: "hi there",
+          },
+        ],
       },
     ])
     const resumed = await Effect.runPromise(
@@ -409,6 +428,11 @@ describe("ACP service sessions", () => {
 
     expect(select(resumed, "effort")?.currentValue).toBe("high")
     expect(select(updated, "effort")?.currentValue).toBe("default")
+    expect(
+      updates
+        .map((item) => item.update)
+        .filter((item) => item.sessionUpdate === "user_message_chunk" || item.sessionUpdate === "agent_message_chunk"),
+    ).toEqual([])
   })
 
   it("closes local ACP state and aborts the backing session best-effort", async () => {
@@ -994,6 +1018,52 @@ describe("ACP service sessions", () => {
     expect(usageUpdates).toEqual([session.sessionId])
   })
 
+  it("maps assistant prompt errors to request errors instead of end turn", async () => {
+    const { service } = makeService([], {
+      prompt: () =>
+        Promise.resolve({
+          data: {
+            info: assistantInfo(
+              { input: 8, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              { name: "APIError", data: { message: "Provider request failed", isRetryable: false } },
+            ),
+          },
+        }),
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    const error = await Effect.runPromise(
+      service
+        .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
+    )
+
+    expect(error.code).toBe(-32603)
+    expect(error.message).toBe("Internal error: Provider request failed")
+    expect(error.data).toEqual({ service: "session", errorName: "APIError" })
+  })
+
+  it("maps aborted assistant prompt errors to cancelled", async () => {
+    const { service } = makeService([], {
+      prompt: () =>
+        Promise.resolve({
+          data: {
+            info: assistantInfo(
+              { input: 8, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+              { name: "MessageAbortedError", data: { message: "Aborted" } },
+            ),
+          },
+        }),
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    const result = await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+
+    expect(result.stopReason).toBe("cancelled")
+  })
+
   it("prompt maps assistant and user audience annotations", async () => {
     const { service, prompts } = makeService()
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
@@ -1145,13 +1215,17 @@ describe("ACP service sessions", () => {
   })
 })
 
-function assistantInfo(tokens: UsageService.AssistantTokenCost["tokens"]): UsageService.AssistantMessage {
+function assistantInfo(
+  tokens: UsageService.AssistantTokenCost["tokens"],
+  error?: AssistantMessage["error"],
+): UsageService.AssistantMessage & Pick<AssistantMessage, "error"> {
   return {
     role: "assistant",
     providerID: "test",
     modelID: "test-model",
     cost: 0,
     tokens,
+    ...(error ? { error } : {}),
   }
 }
 

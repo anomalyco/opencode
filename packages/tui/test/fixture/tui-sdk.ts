@@ -17,6 +17,8 @@ export function eventSource(): EventSource {
 
 export function createEventSource() {
   let fn: ((event: GlobalEvent) => void) | undefined
+  let stream: ReadableStreamDefaultController<Uint8Array> | undefined
+  const pending: Uint8Array[] = []
   return {
     source: {
       subscribe: async (handler: (event: GlobalEvent) => void) => {
@@ -29,19 +31,44 @@ export function createEventSource() {
     emit(event: GlobalEvent) {
       if (!fn) throw new Error("event source not ready")
       fn(event)
+      if (!("properties" in event.payload)) return
+      const chunk = new TextEncoder().encode(
+        `data: ${JSON.stringify({
+          ...event.payload,
+          location: { directory: event.directory, workspaceID: event.workspace },
+          data: event.payload.properties,
+        })}\n\n`,
+      )
+      if (stream) return stream.enqueue(chunk)
+      pending.push(chunk)
+    },
+    response() {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            stream = controller
+            for (const chunk of pending.splice(0)) controller.enqueue(chunk)
+          },
+          cancel() {
+            stream = undefined
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
     },
   }
 }
 
 export type FetchHandler = (url: URL) => Response | Promise<Response> | undefined
 
-export function createFetch(override?: FetchHandler) {
+export function createFetch(override?: FetchHandler, events?: ReturnType<typeof createEventSource>) {
   const session = [] as URL[]
   const fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.pathname === "/session") session.push(url)
     const overridden = await override?.(url)
     if (overridden) return overridden
+    if (url.pathname === "/api/event" && events) return events.response()
 
     if (
       [

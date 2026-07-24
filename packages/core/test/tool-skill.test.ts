@@ -1,16 +1,16 @@
 import fs from "fs/promises"
 import path from "path"
-import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV2 } from "@opencode-ai/core/permission"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SkillTool } from "@opencode-ai/core/tool/skill"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
@@ -42,22 +42,12 @@ describe("SkillTool", () => {
           let current = [info]
           const assertions: PermissionV2.AssertInput[] = []
           let deny = false
-          let bootWaited = false
-          const boot = Layer.succeed(
-            PluginBoot.Service,
-            PluginBoot.Service.of({
-              wait: () =>
-                Effect.sync(() => {
-                  bootWaited = true
-                }),
-            }),
-          )
           const permission = Layer.succeed(
             PermissionV2.Service,
             PermissionV2.Service.of({
               assert: (input) =>
                 Effect.sync(() => assertions.push(input)).pipe(
-                  Effect.andThen(deny ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+                  Effect.andThen(deny ? Effect.fail(new PermissionV2.BlockedError({ rules: [] })) : Effect.void),
                 ),
               ask: () => Effect.die("unused"),
               reply: () => Effect.die("unused"),
@@ -69,24 +59,23 @@ describe("SkillTool", () => {
           const skills = Layer.succeed(
             SkillV2.Service,
             SkillV2.Service.of({
-              transform: () => Effect.die("unused"),
+              transform: (_transform) => Effect.die("unused"),
+              reload: () => Effect.die("unused"),
               sources: () => Effect.die("unused"),
               list: () => Effect.succeed(current),
             }),
           )
-          const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-          const tool = SkillTool.layer.pipe(
-            Layer.provide(registry),
-            Layer.provide(permission),
-            Layer.provide(FSUtil.defaultLayer),
-            Layer.provide(boot),
-            Layer.provide(skills),
+          const skillToolLayer = AppNodeBuilder.build(
+            LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, SkillTool.node]),
+            [
+              [PermissionV2.node, permission],
+              [SkillV2.node, skills],
+              [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+            ],
           )
-          const layer = Layer.mergeAll(permission, skills, registry, boot, tool)
 
           return yield* Effect.gen(function* () {
             const registry = yield* ToolRegistry.Service
-            expect(bootWaited).toBe(true)
             expect((yield* toolDefinitions(registry))[0]).toMatchObject({
               name: "skill",
               description: SkillTool.description,
@@ -101,9 +90,7 @@ describe("SkillTool", () => {
               type: "text",
               value: SkillTool.toModelOutput(info, [reference]),
             })
-            expect(SkillTool.toModelOutput(info, [reference])).toContain(
-              `Base directory for this skill: ${pathToFileURL(directory).href}`,
-            )
+            expect(SkillTool.toModelOutput(info, [reference])).toContain(`Base directory for this skill: ${directory}`)
             expect(
               yield* settleTool(registry, {
                 sessionID,
@@ -134,7 +121,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({ type: "error", value: "Unable to load skill effect" })
             deny = false
-            const flat = new SkillV2.Info({
+            const flat = SkillV2.Info.make({
               name: "public",
               description: "Public guidance",
               location: AbsolutePath.make(path.join(tmp.path, "public.md")),
@@ -154,7 +141,7 @@ describe("SkillTool", () => {
                 call: { type: "tool-call", id: "call-flat-skill", name: "skill", input: { name: "public" } },
               }),
             ).toEqual({ type: "text", value: SkillTool.toModelOutput(flat, []) })
-          }).pipe(Effect.provide(layer))
+          }).pipe(Effect.provide(skillToolLayer))
         }),
       ),
     ),

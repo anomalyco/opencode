@@ -41,14 +41,31 @@ export const AttachCommand = cmd({
         alias: ["u"],
         type: "string",
         describe: "basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')",
+      })
+      .option("mini", {
+        type: "boolean",
+        describe: "start the minimal interactive interface",
+        default: false,
+      })
+      .option("replay", {
+        type: "boolean",
+        hidden: true,
+      })
+      .option("no-replay", {
+        type: "boolean",
+        describe: "disable mini session history replay on resume and after resize",
+      })
+      .option("replay-limit", {
+        type: "number",
+        describe: "cap visible mini replay to the newest N messages",
       }),
   handler: async (args) => {
-    const { TuiConfig } = await import("@/config/tui")
-    if (args.fork && !args.continue && !args.session) {
-      UI.error("--fork requires --continue or --session")
+    if (args.replay === true) {
+      UI.error("--replay is not supported; replay is enabled by default")
       process.exitCode = 1
       return
     }
+    const noReplay = args.replay === false || args.noReplay === true
 
     const directory = (() => {
       if (!args.dir) return undefined
@@ -60,6 +77,40 @@ export const AttachCommand = cmd({
         return args.dir
       }
     })()
+
+    if (args.mini) {
+      const { runMini } = await import("./run")
+      await runMini({
+        attach: args.url,
+        directory,
+        password: args.password,
+        username: args.username,
+        continue: args.continue,
+        session: args.session,
+        fork: args.fork,
+        replay: noReplay ? false : undefined,
+        replayLimit: args.replayLimit,
+      })
+      return
+    }
+
+    const unsupported = [
+      ["--no-replay", noReplay],
+      ["--replay-limit", args.replayLimit !== undefined],
+    ].find((entry) => entry[1])?.[0]
+    if (unsupported) {
+      UI.error(`${unsupported} requires --mini`)
+      process.exitCode = 1
+      return
+    }
+
+    const { TuiConfig } = await import("@/config/tui")
+    if (args.fork && !args.continue && !args.session) {
+      UI.error("--fork requires --continue or --session")
+      process.exitCode = 1
+      return
+    }
+
     const headers = ServerAuth.headers({ password: args.password, username: args.username })
     const config = await TuiConfig.get()
 
