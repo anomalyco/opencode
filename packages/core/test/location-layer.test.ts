@@ -578,13 +578,8 @@ describe("LocationServiceMap", () => {
           const blockedState = yield* update(blocked.path, blockedID)
           expect(blockedState.providers.some((provider) => provider.id === blockedID)).toBe(true)
           expect(blockedState.providers.some((provider) => provider.id === allowedID)).toBe(false)
-          // The aggregate execute definition is present only when this environment contributes Code Mode registrations.
-          expect(
-            blockedState.tools
-              .filter((tool) => tool.name !== "execute")
-              .map((tool) => tool.name)
-              .sort(),
-          ).toEqual([
+          const blockedTools = blockedState.tools.map((tool) => tool.name)
+          expect(blockedTools.filter((name) => name !== "execute").sort()).toEqual([
             "edit",
             "glob",
             "grep",
@@ -601,12 +596,9 @@ describe("LocationServiceMap", () => {
           const allowedState = yield* update(allowed.path, allowedID)
           expect(allowedState.providers.some((provider) => provider.id === allowedID)).toBe(true)
           expect(allowedState.providers.some((provider) => provider.id === blockedID)).toBe(false)
-          expect(
-            allowedState.tools
-              .filter((tool) => tool.name !== "execute")
-              .map((tool) => tool.name)
-              .sort(),
-          ).toEqual([
+          const allowedTools = allowedState.tools.map((tool) => tool.name)
+          expect(blockedTools.includes("execute")).toBe(allowedTools.includes("execute"))
+          expect(allowedTools.filter((name) => name !== "execute").sort()).toEqual([
             "edit",
             "glob",
             "grep",

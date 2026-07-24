@@ -59,7 +59,6 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const agents = yield* AgentV2.Service
     const builtins = yield* InstructionBuiltIns.Service
-    const codeModeInstructions = yield* CodeModeInstructions.Service
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
@@ -81,20 +80,32 @@ const layer = Layer.effect(
       yield* plugins.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
-      const toolSet = yield* registry.snapshot(agent.info.permissions)
-      const instructions = yield* Effect.all(
-        [
-          builtins.load(sessionID),
-          codeModeInstructions.load(toolSet.codeModeInstructions),
-          discovery.load(),
-          skillInstructions.load(agent),
-          referenceInstructions.load(),
-          mcpInstructions.load(agent),
-          entries.load(sessionID),
-        ],
+      const loaded = yield* Effect.all(
+        {
+          toolSet: registry.snapshot(agent.info.permissions),
+          builtins: builtins.load(sessionID),
+          discovery: discovery.load(),
+          skills: skillInstructions.load(agent),
+          references: referenceInstructions.load(),
+          mcp: mcpInstructions.load(agent),
+          entries: entries.load(sessionID),
+        },
         { concurrency: "unbounded" },
-      ).pipe(Effect.map(Instructions.combine))
-      return { session, agent: { ...agent, info: agent.info }, instructions, toolSet }
+      )
+      return {
+        session,
+        agent: { ...agent, info: agent.info },
+        instructions: Instructions.combine([
+          loaded.builtins,
+          CodeModeInstructions.make(loaded.toolSet.codeModeInstructions),
+          loaded.discovery,
+          loaded.skills,
+          loaded.references,
+          loaded.mcp,
+          loaded.entries,
+        ]),
+        toolSet: loaded.toolSet,
+      }
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
@@ -119,7 +130,6 @@ export const node = makeLocationNode({
   layer,
   deps: [
     AgentV2.node,
-    CodeModeInstructions.node,
     Database.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
