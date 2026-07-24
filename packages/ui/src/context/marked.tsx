@@ -396,8 +396,8 @@ function renderMathInText(text: string): string {
   })
 
   // Inline math: \(...\)
-  const parenInlineRegex = /\\\(((?:\\.|[^\\\n])*?)\\\)/g
-  result = result.replace(parenInlineRegex, (_, math) => {
+  const inlineMathRegex = /\\\(((?:\\.|[^\\\n])*?)\\\)/g
+  result = result.replace(inlineMathRegex, (_, math) => {
     try {
       return katex.renderToString(math, {
         displayMode: false,
@@ -408,64 +408,15 @@ function renderMathInText(text: string): string {
     }
   })
 
-  // Inline math: $...$
-  const dollarInlineRegex = /(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g
-  result = result.replace(dollarInlineRegex, (_, math) => {
-    try {
-      return katex.renderToString(math, {
-        displayMode: false,
-        throwOnError: false,
-      })
-    } catch {
-      return `$${math}$`
-    }
-  })
-
-  // Display math: \[...\]
-  const bracketDisplayRegex = /\\\[([\s\S]*?)\\\]/g
-  result = result.replace(bracketDisplayRegex, (_, math) => {
-    try {
-      return katex.renderToString(math, {
-        displayMode: true,
-        throwOnError: false,
-      })
-    } catch {
-      return `\\[${math}\\]`
-    }
-  })
-
   return result
 }
 
-const parenInlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
-// Single-line $$...$$ (group 2) or multi-line $$\n...\n$$ (group 1)
-const blockMathRegex = /^\$\$(?:\n([\s\S]+?)\n\$\$|([^\n]+?)\$\$)(?:\n|$)/
-// Single-line \[...\] (group 2) or multi-line \[\n...\n\] (group 1)
-const bracketBlockMathRegex = /^\\\[(?:\n([\s\S]+?)\n\\\]|([^\n]+?)\\\])(?:\n|$)/
-// Standard inline dollar math: requires space or line-start before $, punctuation/whitespace/end after closing $
-const dollarInlineMathRegex = /^\$(?!\$)((?:\\.|[^\\\n])*?(?:\\.|[^\\\n\$]))\$(?=[\s?!\.,:？！。，：]|$)/
-
-const dollarInlineKatex = {
-  name: "dollarInlineKatex",
-  level: "inline" as const,
-  start(src: string) {
-    const index = src.indexOf("$")
-    if (index === -1) return
-    if (index !== 0 && src.charAt(index - 1) !== " ") return
-    return index
-  },
-  tokenizer(src: string) {
-    const match = src.match(dollarInlineMathRegex)
-    if (!match) return
-    return {
-      type: "dollarInlineKatex",
-      raw: match[0],
-      text: match[1].trim(),
-      displayMode: false,
-    }
-  },
-  renderer: renderKatexToken,
-}
+const parenInlineRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
+const dollarInlineRegex = /^\$(?!\$)((?:\\.|[^\\\n])*?(?:\\.|[^\\\n\$]))\$(?=[\s?!\.,:？！。，：]|$)/
+const blockDollarMultiRegex = /^\$\$\n([\s\S]+?)\n\$\$(?:\n|$)/
+const blockDollarSingleRegex = /^\$\$([^\n]+?)\$\$(?:\n|$)/
+const blockBracketMultiRegex = /^\\\[\n([\s\S]+?)\n\\\](?:\n|$)/
+const blockBracketSingleRegex = /^\\\[([^\n]+?)\\\](?:\n|$)/
 
 const katexExtension: MarkedExtension = {
   extensions: [
@@ -473,12 +424,20 @@ const katexExtension: MarkedExtension = {
       name: "inlineKatex",
       level: "inline",
       start(src) {
-        const index = src.indexOf("\\(")
-        if (index === -1) return
-        return index
+        const parenIdx = src.indexOf("\\(")
+        const dollarIdx = src.indexOf("$")
+        if (parenIdx === -1 && dollarIdx === -1) return
+        if (parenIdx === -1) {
+          if (dollarIdx !== 0 && src.charAt(dollarIdx - 1) !== " ") return
+          return dollarIdx
+        }
+        if (dollarIdx === -1) return parenIdx
+        const validDollar = dollarIdx === 0 || src.charAt(dollarIdx - 1) === " " ? dollarIdx : -1
+        if (validDollar === -1) return parenIdx
+        return Math.min(parenIdx, validDollar)
       },
       tokenizer(src) {
-        const match = src.match(parenInlineMathRegex)
+        const match = src.match(parenInlineRegex) ?? src.match(dollarInlineRegex)
         if (!match) return
         return {
           type: "inlineKatex",
@@ -489,32 +448,20 @@ const katexExtension: MarkedExtension = {
       },
       renderer: renderKatexToken,
     },
-    dollarInlineKatex,
     {
       name: "blockKatex",
       level: "block",
       tokenizer(src) {
-        const match = src.match(blockMathRegex)
+        const match =
+          src.match(blockDollarMultiRegex) ??
+          src.match(blockDollarSingleRegex) ??
+          src.match(blockBracketMultiRegex) ??
+          src.match(blockBracketSingleRegex)
         if (!match) return
         return {
           type: "blockKatex",
           raw: match[0],
-          text: (match[1] ?? match[2]).trim(),
-          displayMode: true,
-        }
-      },
-      renderer: renderKatexToken,
-    },
-    {
-      name: "bracketBlockKatex",
-      level: "block",
-      tokenizer(src) {
-        const match = src.match(bracketBlockMathRegex)
-        if (!match) return
-        return {
-          type: "bracketBlockKatex",
-          raw: match[0],
-          text: (match[1] ?? match[2]).trim(),
+          text: match[1].trim(),
           displayMode: true,
         }
       },
