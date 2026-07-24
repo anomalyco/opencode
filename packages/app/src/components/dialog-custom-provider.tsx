@@ -4,6 +4,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
+import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@/utils/toast"
 import { batch, For } from "solid-js"
@@ -100,10 +101,12 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
     setForm("err", key, undefined)
   }
 
-  const setModel = (index: number, key: "id" | "name", value: string) => {
+  const setModel = (index: number, key: "id" | "name" | "context" | "output", value: string) => {
     batch(() => {
       setForm("models", index, key, value)
       setForm("models", index, "err", key, undefined)
+      if (key === "context") setForm("models", index, "err", "output", undefined)
+      if (key === "output") setForm("models", index, "err", "context", undefined)
     })
   }
 
@@ -230,38 +233,77 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
           <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
           <For each={form.models}>
             {(m, i) => (
-              <div class="flex gap-2 items-start" data-row={m.row}>
-                <div class="flex-1">
-                  <TextField
-                    label={language.t("provider.custom.models.id.label")}
-                    hideLabel
-                    placeholder={language.t("provider.custom.models.id.placeholder")}
-                    value={m.id}
-                    onChange={(v) => setModel(i(), "id", v)}
-                    validationState={m.err.id ? "invalid" : undefined}
-                    error={m.err.id}
+              <div class="flex flex-col gap-2" data-row={m.row}>
+                <div class="flex gap-2 items-start">
+                  <div class="flex-1">
+                    <TextField
+                      label={language.t("provider.custom.models.id.label")}
+                      hideLabel
+                      placeholder={language.t("provider.custom.models.id.placeholder")}
+                      value={m.id}
+                      onChange={(v) => setModel(i(), "id", v)}
+                      validationState={m.err.id ? "invalid" : undefined}
+                      error={m.err.id}
+                    />
+                  </div>
+                  <div class="flex-1">
+                    <TextField
+                      label={language.t("provider.custom.models.name.label")}
+                      hideLabel
+                      placeholder={language.t("provider.custom.models.name.placeholder")}
+                      value={m.name}
+                      onChange={(v) => setModel(i(), "name", v)}
+                      validationState={m.err.name ? "invalid" : undefined}
+                      error={m.err.name}
+                    />
+                  </div>
+                  <IconButton
+                    type="button"
+                    icon="trash"
+                    variant="ghost"
+                    class="mt-1.5"
+                    onClick={() => removeModel(i())}
+                    disabled={form.models.length <= 1}
+                    aria-label={language.t("provider.custom.models.remove")}
                   />
                 </div>
-                <div class="flex-1">
-                  <TextField
-                    label={language.t("provider.custom.models.name.label")}
-                    hideLabel
-                    placeholder={language.t("provider.custom.models.name.placeholder")}
-                    value={m.name}
-                    onChange={(v) => setModel(i(), "name", v)}
-                    validationState={m.err.name ? "invalid" : undefined}
-                    error={m.err.name}
-                  />
+                <div class="flex gap-2 items-start pr-10">
+                  <div class="flex-1">
+                    <TextField
+                      type="number"
+                      min="1"
+                      step="1"
+                      label={language.t("provider.custom.models.context.label")}
+                      hideLabel
+                      placeholder={language.t("provider.custom.models.context.placeholder")}
+                      value={m.context}
+                      onChange={(v) => setModel(i(), "context", v)}
+                      validationState={m.err.context ? "invalid" : undefined}
+                      error={m.err.context}
+                    />
+                  </div>
+                  <div class="flex-1">
+                    <TextField
+                      type="number"
+                      min="1"
+                      step="1"
+                      label={language.t("provider.custom.models.output.label")}
+                      hideLabel
+                      placeholder={language.t("provider.custom.models.output.placeholder")}
+                      value={m.output}
+                      onChange={(v) => setModel(i(), "output", v)}
+                      validationState={m.err.output ? "invalid" : undefined}
+                      error={m.err.output}
+                    />
+                  </div>
+                  <Switch
+                    class="mt-1.5 shrink-0"
+                    checked={m.reasoning}
+                    onChange={(checked) => setForm("models", i(), "reasoning", checked)}
+                  >
+                    {language.t("provider.custom.models.reasoning.label")}
+                  </Switch>
                 </div>
-                <IconButton
-                  type="button"
-                  icon="trash"
-                  variant="ghost"
-                  class="mt-1.5"
-                  onClick={() => removeModel(i())}
-                  disabled={form.models.length <= 1}
-                  aria-label={language.t("provider.custom.models.remove")}
-                />
               </div>
             )}
           </For>

@@ -6,6 +6,8 @@ type Translator = (key: string, vars?: Record<string, string | number | boolean>
 export type ModelErr = {
   id?: string
   name?: string
+  context?: string
+  output?: string
 }
 
 export type HeaderErr = {
@@ -17,6 +19,9 @@ export type ModelRow = {
   row: string
   id: string
   name: string
+  reasoning: boolean
+  context: string
+  output: string
   err: ModelErr
 }
 
@@ -80,6 +85,9 @@ export function validateCustomProvider(input: ValidateArgs) {
   const seenModels = new Set<string>()
   const models = input.form.models.map((m) => {
     const id = m.id.trim()
+    const context = m.context.trim()
+    const output = m.output.trim()
+    const hasLimit = !!context || !!output
     const idError = !id
       ? input.t("provider.custom.error.required")
       : seenModels.has(id)
@@ -89,10 +97,35 @@ export function validateCustomProvider(input: ValidateArgs) {
             return undefined
           })()
     const nameError = !m.name.trim() ? input.t("provider.custom.error.required") : undefined
-    return { id: idError, name: nameError }
+    const contextError = !hasLimit
+      ? undefined
+      : !context
+        ? input.t("provider.custom.error.required")
+        : !Number.isSafeInteger(Number(context)) || Number(context) <= 0
+          ? input.t("provider.custom.error.positiveInteger")
+          : undefined
+    const outputError = !hasLimit
+      ? undefined
+      : !output
+        ? input.t("provider.custom.error.required")
+        : !Number.isSafeInteger(Number(output)) || Number(output) <= 0
+          ? input.t("provider.custom.error.positiveInteger")
+          : undefined
+    return { id: idError, name: nameError, context: contextError, output: outputError }
   })
-  const modelsValid = models.every((m) => !m.id && !m.name)
-  const modelConfig = Object.fromEntries(input.form.models.map((m) => [m.id.trim(), { name: m.name.trim() }]))
+  const modelsValid = models.every((m) => !m.id && !m.name && !m.context && !m.output)
+  const modelConfig = Object.fromEntries(
+    input.form.models.map((m) => [
+      m.id.trim(),
+      {
+        name: m.name.trim(),
+        reasoning: m.reasoning,
+        ...(m.context.trim() && m.output.trim()
+          ? { limit: { context: Number(m.context), output: Number(m.output) } }
+          : {}),
+      },
+    ]),
+  )
 
   const seenHeaders = new Set<string>()
   const headers = input.form.headers.map((h) => {
@@ -154,5 +187,13 @@ let row = 0
 
 const nextRow = () => `row-${row++}`
 
-export const modelRow = (): ModelRow => ({ row: nextRow(), id: "", name: "", err: {} })
+export const modelRow = (): ModelRow => ({
+  row: nextRow(),
+  id: "",
+  name: "",
+  reasoning: false,
+  context: "",
+  output: "",
+  err: {},
+})
 export const headerRow = (): HeaderRow => ({ row: nextRow(), key: "", value: "", err: {} })
