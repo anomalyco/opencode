@@ -542,10 +542,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   let lastCompositionEnd = 0
   // Safari fires compositionend BEFORE the confirming Enter keydown, so that
-  // event reports isComposing=false and keyCode=13. Treat any key event within
-  // 100ms of compositionend as part of the IME confirmation.
+  // keydown reports isComposing=false (keyCode 229 on Safari 26, 13 in older
+  // reports). Treat any key event within 100ms of compositionend as part of
+  // the IME confirmation. Compare with performance.now() rather than
+  // event.timeStamp so the guard never depends on the event clock source.
   const isImeComposing = (event: KeyboardEvent) =>
-    event.isComposing || composing() || event.keyCode === 229 || event.timeStamp - lastCompositionEnd < 100
+    event.isComposing || composing() || event.keyCode === 229 || performance.now() - lastCompositionEnd < 100
 
   const handleBlur = () => {
     const cursor = currentCursor()
@@ -559,9 +561,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setComposing(true)
   }
 
-  const handleCompositionEnd = (event: CompositionEvent) => {
+  const handleCompositionEnd = () => {
     setComposing(false)
-    lastCompositionEnd = event.timeStamp
+    lastCompositionEnd = performance.now()
     // Input events are ignored while composing, so sync DOM -> state once now.
     handleInput()
     requestAnimationFrame(() => {
