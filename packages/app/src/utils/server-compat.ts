@@ -207,7 +207,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
             { type: "text", text: value.text },
             ...(value.files ?? []).map((file) => ({
               type: "file" as const,
-              mime: mime(file.uri),
+              mime: file.mention ? "text/plain" : mime(file.uri),
               url: file.uri,
               filename: file.name,
               source: file.mention

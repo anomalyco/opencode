@@ -88,6 +88,7 @@ describe("createCompatibleApi", () => {
         { type: "text", text: "hello @src/index.ts" },
         {
           type: "file",
+          mime: "text/plain",
           url: "file:///repo/src/index.ts",
           filename: "index.ts",
           source: {
@@ -98,6 +99,7 @@ describe("createCompatibleApi", () => {
         },
         {
           type: "file",
+          mime: "text/plain",
           url: "data:text/plain;base64,aGVsbG8=",
           filename: "notes.txt",
         },

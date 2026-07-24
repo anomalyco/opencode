@@ -206,6 +206,13 @@ function userParts(sessionID: string, message: SessionMessageUser): Part[] {
         mime: file.mime,
         filename: file.name,
         url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
+        source: file.mention
+          ? {
+              type: "file",
+              text: { value: file.mention.text, start: file.mention.start, end: file.mention.end },
+              path: file.mention.text.startsWith("@") ? file.mention.text.slice(1) : (file.name ?? file.mention.text),
+            }
+          : undefined,
       }),
     ),
     ...(message.agents ?? []).map(
