@@ -868,21 +868,13 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   }
 
   if (delta?.type === "signature_delta" && delta.signature) {
-    const events: LLMEvent[] = []
     const index = event.index ?? 0
     return [
       {
         ...state,
-        lifecycle: Lifecycle.reasoningDelta(
-          state.lifecycle,
-          events,
-          `reasoning-${index}`,
-          "",
-          anthropicMetadata({ signature: delta.signature }),
-        ),
         reasoningSignatures: { ...state.reasoningSignatures, [index]: delta.signature },
       },
-      events,
+      NO_EVENTS,
     ] satisfies StepResult
   }
 
