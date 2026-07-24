@@ -95,7 +95,7 @@ describe("McpInstructions", () => {
     ),
   )
 
-  it.effect("renders native guidance when Code Mode is disabled for the server", () =>
+  it.effect("keeps top-level MCP instructions when execute is denied", () =>
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const generation = yield* service
@@ -106,7 +106,6 @@ describe("McpInstructions", () => {
         [
           "<mcp_instructions>",
           '  <server name="native">',
-          "    Use tools from this server directly as top-level tools.",
           "    Native instructions",
           "  </server>",
           "</mcp_instructions>",
@@ -135,7 +134,6 @@ describe("McpInstructions", () => {
           "The available MCP server instructions have changed. This list supersedes the previous one.",
           "<mcp_instructions>",
           '  <server name="alpha">',
-          "    Use tools from this server directly as top-level tools.",
           "    Alpha instructions",
           "  </server>",
           "</mcp_instructions>",

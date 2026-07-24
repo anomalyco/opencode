@@ -11,16 +11,18 @@ import { Instructions } from "../instructions/index"
 const Summary = Schema.Struct({
   server: Schema.String,
   instructions: Schema.String,
-  codemode: Schema.optionalKey(Schema.Boolean),
+  topLevel: Schema.optionalKey(Schema.Literal(true)),
 })
 type Summary = typeof Summary.Type
 
 const entries = (servers: ReadonlyArray<Summary>) =>
   servers.flatMap((server) => [
     `  <server name="${server.server}">`,
-    server.codemode !== false
-      ? `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.namespace(server.server))}]\`.`
-      : "    Use tools from this server directly as top-level tools.",
+    ...(server.topLevel
+      ? []
+      : [
+          `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.namespace(server.server))}]\`.`,
+        ]),
     ...server.instructions.split("\n").map((line) => `    ${line}`),
     "  </server>",
   ])
@@ -33,8 +35,7 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     previous,
     current,
     (server) => server.server,
-    (before, after) =>
-      before.instructions !== after.instructions || (before.codemode !== false) !== (after.codemode !== false),
+    (before, after) => before.instructions !== after.instructions || before.topLevel !== after.topLevel,
   )
   // Additions and removals render as small deltas; anything else restates the full list.
   if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
@@ -83,12 +84,13 @@ export const layer = Layer.effect(
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
+        const canExecute = PermissionV2.evaluate("execute", "*", agent.permissions).effect !== "deny"
         // Instructions are useful only when this agent can reach at least one server tool.
         const visible = instructions
           .flatMap((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
-            const codemode = owned[0]?.codemode !== false
-            if (codemode && PermissionV2.evaluate("execute", "*", agent.permissions).effect === "deny") return []
+            const topLevel = owned[0]?.codemode === false
+            if (!topLevel && !canExecute) return []
             if (
               !owned.some(
                 (tool) =>
@@ -100,7 +102,7 @@ export const layer = Layer.effect(
               {
                 server: item.server,
                 instructions: item.instructions,
-                ...(codemode ? {} : { codemode: false }),
+                ...(topLevel ? { topLevel: true as const } : {}),
               },
             ]
           })
