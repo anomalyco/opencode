@@ -310,7 +310,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   )
   const resources = createMemo(() =>
     Object.values(sync().data.mcp_resource).map((resource) => ({
-      id: `resource:${resource.client}:${resource.uri}`,
+      id: `resource:${resource.server}:${resource.uri}`,
       kind: "resource" as const,
       label: `@${resource.name}`,
       path: resource.uri,
@@ -327,7 +327,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         source: {
           type: "resource" as const,
           text: { value: `@${resource.name}`, start: 0, end: resource.name.length + 1 },
-          clientName: resource.client,
+          clientName: resource.server,
           uri: resource.uri,
         },
       },

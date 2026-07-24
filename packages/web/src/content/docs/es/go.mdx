@@ -74,6 +74,7 @@ La lista actual de modelos incluye:
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **Hy3**
 
 La lista de modelos puede cambiar a medida que probamos y agregamos otros nuevos.
 
@@ -108,6 +109,7 @@ La siguiente tabla proporciona una cantidad estimada de peticiones basada en los
 | Qwen3.6 Plus      | 3,300                  | 8,200                 | 16,300             |
 | DeepSeek V4 Pro   | 3,450                  | 8,550                 | 17,150             |
 | DeepSeek V4 Flash | 31,650                 | 79,050                | 158,150            |
+| Hy3               | 4,300                  | 10,750                | 21,500             |
 
 Las estimaciones se basan en los patrones de peticiones observados:
 
@@ -122,6 +124,7 @@ Las estimaciones se basan en los patrones de peticiones observados:
 - Qwen3.7 Max — 420 tokens de entrada, 66,000 en caché, 200 tokens de salida por petición
 - Qwen3.7 Plus — 500 tokens de entrada, 57,000 en caché, 190 tokens de salida por petición
 - Qwen3.6 Plus — 500 tokens de entrada, 57,000 en caché, 190 tokens de salida por petición
+- Hy3 — 830 tokens de entrada, 71,500 en caché, 295 tokens de salida por petición
 - MiMo-V2.5 — 830 tokens de entrada, 71,500 en caché, 295 tokens de salida por petición
 - MiMo-V2.5-Pro — 790 tokens de entrada, 86,000 en caché, 305 tokens de salida por petición
 
@@ -147,6 +150,7 @@ Las estimaciones también se basan en los siguientes precios por 1M tokens y en 
 | Qwen3.6 Plus (> 256K tokens) | $2.00   | $6.00  | $0.20            | $2.50              | $60 |
 | DeepSeek V4 Pro              | $0.435  | $0.87  | $0.003625        | -                  | $15 |
 | DeepSeek V4 Flash            | $0.14   | $0.28  | $0.0028          | -                  | $60 |
+| Hy3                          | $0.14   | $0.58  | $0.035           | -                  | $60 |
 
 Puedes realizar un seguimiento de tu uso actual en la **<a href={console}>consola</a>**.
 
@@ -200,6 +204,7 @@ También puedes acceder a los modelos de Go a través de los siguientes endpoint
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy3               | hy3               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 El [ID del modelo](/docs/config/#models) en tu configuración de OpenCode
 usa el formato `opencode-go/<model-id>`. Por ejemplo, para Kimi K3, usarías

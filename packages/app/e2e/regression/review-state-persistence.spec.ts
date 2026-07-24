@@ -46,7 +46,7 @@ test("restores review mode and selected file per session", async ({ page }) => {
 
 async function selectMode(page: Page, current: string, next: string) {
   await page.getByRole("button", { name: current }).click()
-  await page.getByRole("option", { name: next }).click()
+  await page.getByRole("option", { name: next }).dispatchEvent("click")
 }
 
 async function selectFile(page: Page, file: string) {

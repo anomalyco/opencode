@@ -64,6 +64,7 @@ OpenCode Go 的運作方式與 OpenCode 中的任何其他供應商相同。
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **Hy3**
 
 隨著我們測試並加入新模型，模型清單可能會有所變動。
 
@@ -98,6 +99,7 @@ OpenCode Go 包含以下限制：
 | Qwen3.6 Plus      | 3,300           | 8,200      | 16,300     |
 | DeepSeek V4 Pro   | 3,450           | 8,550      | 17,150     |
 | DeepSeek V4 Flash | 31,650          | 79,050     | 158,150    |
+| Hy3               | 4,300           | 10,750     | 21,500     |
 
 這些預估值是基於觀察到的請求模式：
 
@@ -112,6 +114,7 @@ OpenCode Go 包含以下限制：
 - Qwen3.7 Max — 每次請求 420 個輸入 token、66,000 個快取 token、200 個輸出 token
 - Qwen3.7 Plus — 每次請求 500 個輸入 token、57,000 個快取 token、190 個輸出 token
 - Qwen3.6 Plus — 每次請求 500 個輸入 token、57,000 個快取 token、190 個輸出 token
+- Hy3 — 每次請求 830 個輸入 token、71,500 個快取 token、295 個輸出 token
 - MiMo-V2.5 — 每次請求 830 個輸入 token、71,500 個快取 token、295 個輸出 token
 - MiMo-V2.5-Pro — 每次請求 790 個輸入 token、86,000 個快取 token、305 個輸出 token
 
@@ -137,6 +140,7 @@ OpenCode Go 包含以下限制：
 | Qwen3.6 Plus (> 256K tokens) | $2.00  | $6.00  | $0.20     | $2.50    | $60    |
 | DeepSeek V4 Pro              | $0.435 | $0.87  | $0.003625 | -        | $15    |
 | DeepSeek V4 Flash            | $0.14  | $0.28  | $0.0028   | -        | $60    |
+| Hy3                          | $0.14  | $0.58  | $0.035    | -        | $60    |
 
 您可以在 **<a href={console}>console</a>** 中追蹤您目前的使用量。
 
@@ -188,6 +192,7 @@ OpenCode Go 包含以下限制：
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy3               | hy3               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 您的 OpenCode 設定中的 [model id](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，Kimi K3 在設定中應使用 `opencode-go/kimi-k3`。
 
