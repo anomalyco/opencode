@@ -243,7 +243,10 @@ async function renderDiffViewer(
   }
 
   const app = await testRender(() => <Harness />, { width: 80, height: options.height ?? 20 })
-  await waitForCommand(app, commands, "diff.close")
+  await app.waitFor(async () => {
+    await Bun.sleep(25)
+    return commands.has("diff.close")
+  })
   await app.waitFor(() => vcsDiffInput !== undefined)
   return {
     app,
@@ -344,15 +347,3 @@ test("branch diff source requests branch VCS diff", async () => {
     viewer.app.renderer.destroy()
   }
 })
-
-async function waitForCommand(
-  app: Awaited<ReturnType<typeof testRender>>,
-  commands: Map<string, unknown>,
-  command: string,
-) {
-  for (let attempt = 0; attempt < 10; attempt++) {
-    await app.renderOnce()
-    if (commands.has(command)) return
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-}

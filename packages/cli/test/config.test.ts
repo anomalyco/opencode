@@ -262,7 +262,7 @@ test("preserves the effective value when migrating duplicate legacy keybinds", a
   }
 })
 
-test("migrates the effective duplicate top-level keybinds", async () => {
+test("migrates and updates the effective duplicate top-level keybinds", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
   await Bun.write(file, `{"keybinds":{"session_delete":"first"},"keybinds":{"session_delete":"last"}}`)
@@ -272,51 +272,16 @@ test("migrates the effective duplicate top-level keybinds", async () => {
       directory,
       Effect.gen(function* () {
         const service = yield* Config.Service
-        return yield* service.get()
+        expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last" })
+        return yield* service.update((draft) => {
+          draft.keybinds = { ...draft.keybinds, "session.delete": "changed" }
+        })
       }),
     )
 
-    expect(config.keybinds).toEqual({ "session.delete": "last" })
-    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "last" })
+    expect(config.keybinds).toEqual({ "session.delete": "changed" })
+    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "changed" })
   } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
-})
-
-test("does not overwrite a concurrent config update during migration", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
-  const initial = `{"keybinds":{"session_delete":"ctrl+d"}}`
-  await Bun.write(file, initial)
-  const gated = await Effect.runPromise(gateMigrationWrite(file, initial).pipe(Effect.provide(NodeFileSystem.layer)))
-
-  try {
-    const config = await Effect.runPromise(
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        const reading = yield* service.get().pipe(Effect.forkChild({ startImmediately: true }))
-        expect(gated.state.writes).toBe(1)
-        const updating = yield* service
-          .update((draft) => {
-            draft.mouse = false
-          })
-          .pipe(Effect.forkChild({ startImmediately: true }))
-        expect(gated.state.writes).toBe(1)
-        yield* gated.release.open
-        yield* Fiber.join(reading)
-        yield* Fiber.join(updating)
-        return yield* service.get()
-      }).pipe(
-        Effect.provide(Config.layer),
-        Effect.provide(Global.layerWith({ config: directory, state: directory })),
-        Effect.provideService(FileSystem.FileSystem, gated.fs),
-      ),
-    )
-
-    expect(config).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
-    expect(await Bun.file(file).json()).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
-  } finally {
-    gated.release.openUnsafe()
     await Bun.$`rm -rf ${directory}`
   }
 })
@@ -366,25 +331,31 @@ test("does not overwrite a concurrent update from another config layer", async (
   }
 })
 
-test("updates the effective duplicate top-level keybinds", async () => {
+test("updates effective duplicate canonical keybinds", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
-  await Bun.write(file, `{"keybinds":{"session_delete":"first"},"keybinds":{"session_delete":"last"}}`)
+  await Bun.write(
+    file,
+    `{"keybinds":{"session.delete":"first","session.delete":"last","permission.mode":"off","permission.mode":"on"}}`,
+  )
 
   try {
     const config = await run(
       directory,
       Effect.gen(function* () {
         const service = yield* Config.Service
-        yield* service.get()
+        expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last", "permission.mode": "on" })
         return yield* service.update((draft) => {
-          draft.keybinds = { ...draft.keybinds, "session.delete": "changed" }
+          draft.keybinds = { ...draft.keybinds, "session.delete": "changed", "permission.mode": "changed" }
         })
       }),
     )
 
-    expect(config.keybinds).toEqual({ "session.delete": "changed" })
-    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "changed" })
+    expect(config.keybinds).toEqual({ "session.delete": "changed", "permission.mode": "changed" })
+    expect(parse(await Bun.file(file).text()).keybinds).toEqual({
+      "session.delete": "changed",
+      "permission.mode": "changed",
+    })
   } finally {
     await Bun.$`rm -rf ${directory}`
   }

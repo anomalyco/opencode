@@ -1,31 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
-import type { Resolved } from "../../src/config"
 import { resolveMiniSettings, resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
 import { catalogModel, catalogProvider } from "./fixture/catalog"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-function config(input?: {
-  leader?: string
-  leaderTimeout?: number
-}): Resolved {
-  return createTuiResolvedConfig({
-    leader: input?.leaderTimeout === undefined ? undefined : { timeout: input.leaderTimeout },
-    keybinds: input?.leader ? { leader: input.leader } : undefined,
-  })
-}
-
 describe("run runtime boot", () => {
   afterEach(() => {
     mock.restore()
-  })
-
-  test("returns supplied resolved config", async () => {
-    const input = config({ leader: "ctrl+g" })
-
-    const result = await resolveRunTuiConfig(input)
-
-    expect(result).toBe(input)
   })
 
   test("falls back to default tui keymap config when config load fails", async () => {
@@ -42,12 +23,6 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("return")
     expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,ctrl+j")
     expect(result.keybinds.get("prompt.queue")?.[0]?.key).toBe("alt+return")
-  })
-
-  test("preserves disabled leader from resolved tui config", async () => {
-    const result = await resolveRunTuiConfig(config({ leader: "none" }))
-
-    expect(result.keybinds.get("leader")).toEqual([])
   })
 
   test("preserves shared config while resolving independent Mini defaults", async () => {

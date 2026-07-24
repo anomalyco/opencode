@@ -42,9 +42,8 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
     const updated = Object.keys(keybinds).reduce((text, name) => {
       const target =
         TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ??
-        (LegacyKeybindTargets.has(name) ? name : undefined)
+        (name in Definitions || LegacyKeybindTargets.has(name) ? name : undefined)
       if (target === undefined) return text
-      if (target === name && target in Definitions) return text
       const properties = findKeybindProperties(text, name)
       if (!properties.length) return text
       const remove = !(target in Definitions) || (target !== name && target in keybinds)
@@ -54,6 +53,7 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
         return property === undefined ? text : removeProperty(text, property)
       }, text)
       if (remove) return updated
+      if (target === name) return updated
       const key = findKeybindProperties(updated, name)[0]?.children?.[0]
       if (key === undefined) return text
       return updated.slice(0, key.offset) + JSON.stringify(target) + updated.slice(key.offset + key.length)
