@@ -12,6 +12,16 @@
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
   cursor: default;
 
+  &[data-wide] {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  &[data-surface="base"] {
+    background: var(--v2-background-bg-base);
+  }
+
   &[data-active] {
     box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
   }
@@ -32,6 +42,8 @@
   }
 
   [data-slot="attachment-card-v2-title"] {
+    width: 100%;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

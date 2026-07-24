@@ -97,6 +97,7 @@ export async function setupTimeline(
     locale?: string
     deviceScaleFactor?: number
     seedHistory?: boolean
+    protocol?: "v1" | "v2"
   } = {},
 ) {
   const sessions = input.sessions ?? [session()]
@@ -114,6 +115,7 @@ export async function setupTimeline(
     retry: input.eventRetry ?? 20,
   })
   await mockOpenCodeServer(page, {
+    protocol: input.protocol,
     directory,
     project: project(),
     provider: provider(),
@@ -136,6 +138,9 @@ export async function setupTimeline(
         },
       }),
     )
+    if (settings.newLayoutDesigns === false) {
+      localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
+    }
   }, input.settings ?? {})
   if (input.locale) {
     await page.addInitScript((locale) => {

@@ -200,6 +200,7 @@ function ReviewPanelV2Sidebar(props: {
   return (
     <SessionReviewV2Sidebar
       open={props.state.sidebarOpened()}
+      transition={props.state.sidebarTransition()}
       title={props.title}
       stats={<DiffChanges changes={props.diffs()} />}
       filter={props.state.filter()}

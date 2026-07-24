@@ -1,8 +1,8 @@
 [data-component="divider-v2"] {
   box-sizing: border-box;
   width: 100%;
-  height: 0.5px;
-  margin-block: 0.25px;
+  height: 1px;
+  transform: scaleY(0.5);
   border: none;
   background: var(--v2-border-border-strong);
   flex: none;

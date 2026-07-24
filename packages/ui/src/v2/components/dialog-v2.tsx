@@ -101,7 +101,7 @@ export function Dialog(props: DialogProps) {
             const autofocusEl = target?.querySelector("[autofocus]") as HTMLElement | null
             if (autofocusEl) {
               e.preventDefault()
-              autofocusEl.focus()
+              autofocusEl.focus({ preventScroll: true })
             }
           }}
         >
