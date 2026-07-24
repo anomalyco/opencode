@@ -120,8 +120,7 @@ export function TabNavItem(props: {
     const ctx = serverCtx()
     const session = props.session()
     if (!ctx || !session) return
-    const client = ctx.sdk.createClient({ directory: session.directory, throwOnError: true })
-    await client.session.update({ sessionID: session.id, title })
+    await ctx.sdk.api.session.rename({ sessionID: session.id, title })
   }
 
   const closeRename = async (save: boolean) => {
