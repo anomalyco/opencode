@@ -128,8 +128,8 @@ const api = {
       sessionDirectories[session.id] = input.location.directory
       return session
     },
-    async shell(input: { sessionID: string }) {
-      sentShell.push(sessionDirectories[input.sessionID] ?? "/repo/main")
+    async shell(input: { sessionID: string; id?: string; command: string }) {
+      sentShell.push(input)
     },
     async prompt() {},
     async command() {},
@@ -221,7 +221,6 @@ beforeAll(async () => {
         directory: "/repo/main",
         api,
         client: rootClient,
-        api: rootClient.api,
         url: "http://localhost:4096",
         createClient(opts: any) {
           return clientFor(opts.directory)
