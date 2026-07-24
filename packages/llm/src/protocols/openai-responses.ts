@@ -416,6 +416,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     }
 
     if (message.role === "assistant") {
+      const inputStart = input.length
       const content: TextPart[] = []
       let phase: OpenAIResponsesMessagePhase | null | undefined
       let itemID: string | undefined
@@ -508,6 +509,20 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
         ])
       }
       flushText()
+      if (store === false && Object.values(reasoningItems).some((item) => typeof item.encrypted_content !== "string"))
+        input.splice(
+          inputStart,
+          input.length - inputStart,
+          ...input.slice(inputStart).map((item) =>
+            "type" in item && item.type === "message"
+              ? {
+                  role: "assistant" as const,
+                  content: ProviderShared.joinText(item.content),
+                  ...(item.phase !== undefined ? { phase: item.phase } : {}),
+                }
+              : item,
+          ),
+        )
       continue
     }
 
@@ -762,11 +777,18 @@ const updateMessageContent = (
   },
 })
 
+const closeOtherMessageContent = (state: ParserState, events: LLMEvent[], item: MessageStreamItem, index: number) =>
+  Object.entries(item.content).reduce(
+    (lifecycle, entry) =>
+      Number(entry[0]) === index ? lifecycle : Lifecycle.textEnd(lifecycle, events, entry[1].id, item.providerMetadata),
+    state.lifecycle,
+  )
+
 const appendOutputText = (state: ParserState, event: OpenAIResponsesEvent, text: string): StepResult => {
   const ensured = ensureMessageContent(state, event)
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.textStart(
-    ensured.state.lifecycle,
+    closeOtherMessageContent(ensured.state, events, ensured.item, ensured.index),
     events,
     ensured.content.id,
     ensured.item.providerMetadata,
@@ -798,7 +820,7 @@ const onOutputTextDone = (state: ParserState, event: OpenAIResponsesEvent): Step
       {
         ...ensured.state,
         lifecycle: Lifecycle.textStart(
-          ensured.state.lifecycle,
+          closeOtherMessageContent(ensured.state, events, ensured.item, ensured.index),
           events,
           ensured.content.id,
           ensured.item.providerMetadata,

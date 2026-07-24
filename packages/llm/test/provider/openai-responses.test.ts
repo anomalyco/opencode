@@ -995,6 +995,90 @@ describe("OpenAI Responses route", () => {
         },
       ])
 
+      expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
+        {
+          type: "text-start",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "msg_commentary", text: "First." },
+        {
+          type: "text-end",
+          id: "msg_commentary",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "openai-text-0",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "openai-text-0", text: "Second." },
+        {
+          type: "text-end",
+          id: "openai-text-0",
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "msg_commentary_2",
+          providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+        },
+        { type: "text-delta", id: "msg_commentary_2", text: "Thi" },
+        { type: "text-delta", id: "msg_commentary_2", text: "rd." },
+        {
+          type: "text-end",
+          id: "msg_commentary_2",
+          providerMetadata: { openai: { itemId: "msg_commentary_2", phase: "commentary" } },
+        },
+        {
+          type: "text-start",
+          id: "openai-text-1",
+          providerMetadata: { openai: { itemId: "openai-text-0" } },
+        },
+        { type: "text-delta", id: "openai-text-1", text: "Final." },
+        {
+          type: "text-end",
+          id: "openai-text-1",
+          providerMetadata: {
+            openai: {
+              itemId: "openai-text-0",
+              phase: "final_answer",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://example.com",
+                  title: "Example",
+                  start_index: 0,
+                  end_index: 6,
+                },
+              ],
+            },
+          },
+        },
+        {
+          type: "text-start",
+          id: "msg_null",
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
+        },
+        { type: "text-delta", id: "msg_null", text: "Nullable." },
+        {
+          type: "text-end",
+          id: "msg_null",
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
+        },
+        {
+          type: "text-start",
+          id: "msg_unphased",
+          providerMetadata: { openai: { itemId: "msg_unphased" } },
+        },
+        { type: "text-delta", id: "msg_unphased", text: "Unphased." },
+        {
+          type: "text-end",
+          id: "msg_unphased",
+          providerMetadata: { openai: { itemId: "msg_unphased" } },
+        },
+      ])
+
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({ model, messages: [response.message] }),
       )
@@ -1481,7 +1565,13 @@ describe("OpenAI Responses route", () => {
                   },
                 },
               },
-              { type: "text", text: "The parser changed." },
+              {
+                type: "text",
+                text: "The parser changed.",
+                providerMetadata: {
+                  openai: { itemId: "msg_1", phase: "final_answer", status: "completed" },
+                },
+              },
             ]),
             Message.user("Summarize it."),
           ],
@@ -1492,7 +1582,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body).toMatchObject({
         input: [
           { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
-          { role: "assistant", content: "The parser changed." },
+          { role: "assistant", content: "The parser changed.", phase: "final_answer" },
           { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
         ],
         store: false,
