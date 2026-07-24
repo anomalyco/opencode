@@ -188,10 +188,12 @@ export function createPromptInputV2Controller(input: {
   let composing = false
   let lastCompositionEnd = 0
   // Safari fires compositionend BEFORE the confirming Enter keydown, so that
-  // event reports isComposing=false and keyCode=13. Treat any key event within
-  // 100ms of compositionend as part of the IME confirmation.
+  // keydown reports isComposing=false (keyCode 229 on Safari 26, 13 in older
+  // reports). Treat any key event within 100ms of compositionend as part of
+  // the IME confirmation. Compare with performance.now() rather than
+  // event.timeStamp so the guard never depends on the event clock source.
   const imeComposing = (event: KeyboardEvent) =>
-    event.isComposing || composing || event.keyCode === 229 || event.timeStamp - lastCompositionEnd < 100
+    event.isComposing || composing || event.keyCode === 229 || performance.now() - lastCompositionEnd < 100
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (
@@ -307,9 +309,9 @@ export function createPromptInputV2Controller(input: {
     onCompositionStart() {
       composing = true
     },
-    onCompositionEnd(event: CompositionEvent) {
+    onCompositionEnd() {
       composing = false
-      lastCompositionEnd = event.timeStamp
+      lastCompositionEnd = performance.now()
     },
     value() {
       return draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
