@@ -14,6 +14,18 @@ const context = {
   progress: () => Effect.void,
 }
 
+test("execute describes invariant Code Mode behavior", () => {
+  expect(ExecuteTool.create(new Map()).description).toBe(
+    [
+      "Run JavaScript to orchestrate tool calls and compose their results through `{ code }` in a confined Code Mode runtime.",
+      "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
+      'Call Code Mode tools through `tools` using only exact paths and signatures from the current catalog or `search`. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
+      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
+      "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.all`.",
+    ].join("\n"),
+  )
+})
+
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
   const declared = Tool.make({
     description: "Declared",

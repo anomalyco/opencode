@@ -66,23 +66,10 @@ describe("CodeModeInstructions.render", () => {
     expect(instructions).toContain("- orders (1 tool)")
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
     expect(instructions).not.toContain("## Search")
-    expect(instructions).toContain("Do not infer or normalize tool names")
-    expect(instructions).toContain('`tools.<namespace>["tool-name"](input)`')
+    expect(instructions).toContain("The Code Mode tool catalog below is complete.")
     expect(instructions).toContain(
       "`tools` contains only the tools shown below; surrounding top-level agent tools are not available and must not be called from the code.",
     )
-  })
-
-  test("describes the runtime and execution lifecycle concisely", () => {
-    const instructions = render([lookup])
-    expect(instructions).toContain("Run JavaScript to orchestrate tool calls and compose their results.")
-    expect(instructions).toContain("Imports, direct filesystem access, and timers are unavailable.")
-    expect(instructions).toContain("Do not use `fetch`; all external access goes through `tools`.")
-    expect(instructions).toContain(
-      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-    )
-    expect(instructions).toContain("any calls still pending when execution ends are interrupted")
-    expect(instructions).toContain("Run independent calls concurrently with `Promise.all`.")
   })
 
   test("adds search guidance when the catalog exceeds the budget", () => {
@@ -90,13 +77,12 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain("## Available tools")
     expect(partial).toContain("- orders (1 tool, none shown)")
     expect(partial).toContain("## Search")
-    expect(partial).toContain("Only some tool signatures are shown.")
+    expect(partial).toContain("The Code Mode tool catalog below is partial.")
     expect(partial).toContain(
       "`tools` contains only the tools shown below or returned by `search`; surrounding top-level agent tools are not available and must not be called from the code.",
     )
     expect(partial).toContain("- search(input: {")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
-    expect(partial).toContain("or returned by `search`")
     expect(partial).not.toContain("tools.orders.lookup(input:")
   })
 

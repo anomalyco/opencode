@@ -34,10 +34,11 @@ type CollectedFiles = {
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
-  "Run JavaScript in a confined Code Mode runtime through { code }.",
-  "Call Code Mode tools through `tools` using the exact paths and signatures from the instructions.",
-  "Use `search({ query })` to discover exact signatures when needed.",
-  "Await important calls and use `Promise.all` for independent calls.",
+  "Run JavaScript to orchestrate tool calls and compose their results through `{ code }` in a confined Code Mode runtime.",
+  "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
+  'Call Code Mode tools through `tools` using only exact paths and signatures from the current catalog or `search`. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
+  "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
+  "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.all`.",
 ].join("\n")
 
 export const create = (registrations: ReadonlyMap<string, Registration>) => {
