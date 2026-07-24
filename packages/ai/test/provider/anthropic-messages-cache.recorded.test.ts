@@ -89,7 +89,10 @@ describe("Anthropic Messages cache recorded", () => {
       const first = yield* LLMClient.generate(longToolTurnRequest)
       const firstRead = first.usage?.cacheReadInputTokens ?? 0
       const firstWrite = first.usage?.cacheWriteInputTokens ?? 0
-      expect(firstWrite).toBeGreaterThan(0)
+      const firstCached = firstRead + firstWrite
+      // The prefix may already be warm when recording, so either a read or a
+      // write establishes that Anthropic recognized the cache boundary.
+      expect(firstCached).toBeGreaterThan(0)
 
       const second = yield* LLMClient.generate(
         LLMRequest.update(longToolTurnRequest, {
@@ -100,8 +103,8 @@ describe("Anthropic Messages cache recorded", () => {
           ],
         }),
       )
-      expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThan(firstRead)
-      expect(second.usage?.cacheWriteInputTokens ?? 0).toBeLessThan(firstWrite)
+      expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThanOrEqual(firstCached)
+      expect(second.usage?.cacheWriteInputTokens ?? 0).toBeLessThan(firstCached)
     }),
   )
 })

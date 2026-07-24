@@ -939,6 +939,7 @@ describe("Bedrock Converse route", () => {
       const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
         LLM.request({
           model,
+          cache: "none",
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { path: "report.pdf" } })]),
             Message.tool({
