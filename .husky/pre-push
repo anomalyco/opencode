@@ -17,4 +17,10 @@ if (process.versions.bun !== expectedBunVersion) {
   console.warn(`Warning: Bun version ${process.versions.bun} differs from expected ${expectedBunVersion}`);
 }
 '
-bun typecheck
+# Cap tsgo parallelism for the pre-push typecheck based on the machine's RAM, so
+# low-memory machines don't swap/crash. Turbo defaults to ~10 parallel tsgo, which
+# exhausts RAM on 8GB machines; higher-RAM machines keep full parallelism.
+# Tiers: <=8GB -> 2, <=16GB -> 4, else 10 (Turbo's default). CI / manual `bun
+# typecheck` runs are unaffected. (opencode-fork only)
+CONCURRENCY=$(bun -e 'const gb = require("os").totalmem()/1024**3; console.log(gb <= 8 ? 2 : gb <= 16 ? 4 : 10)')
+bun typecheck --concurrency="$CONCURRENCY"
