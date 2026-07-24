@@ -7,6 +7,7 @@ import { Protocol } from "../route/protocol"
 import {
   LLMError,
   LLMEvent,
+  mergeJsonRecords,
   Usage,
   type CacheHint,
   type FinishReasonDetails,
@@ -724,10 +725,8 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
     reasoningTokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     providerMetadata: {
-      anthropic: {
-        ...left.providerMetadata?.["anthropic"],
-        ...right.providerMetadata?.["anthropic"],
-      },
+      anthropic:
+        mergeJsonRecords(left.providerMetadata?.["anthropic"], right.providerMetadata?.["anthropic"]) ?? {},
     },
   })
 }
