@@ -1,0 +1,53 @@
+{
+    "id": "69c5425f-59f6-412a-bbf7-e7708157430f",
+    "appId": "cb06d541-ed31-4195-b7ff-d2b50084da6f",
+    "displayName": "OpenCode CLI",
+    "publisherDomain": "oneinfoconsulting.com",
+    "signInAudience": "AzureADMyOrg",
+    "groupMembershipClaims": null,
+    "optionalClaims": null,
+    "appRoles": [
+        {
+            "allowedMemberTypes": ["User"],
+            "description": "Administrador total de opencode",
+            "displayName": "Admin",
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "isEnabled": true,
+            "value": "opencode-admins"
+        },
+        {
+            "allowedMemberTypes": ["User"],
+            "description": "Desarrollador con acceso a modelos pagos",
+            "displayName": "Dev",
+            "id": "b2c3d4e5-f6a7-8901-bcde-f1234567891",
+            "isEnabled": true,
+            "value": "opencode-devs"
+        },
+        {
+            "allowedMemberTypes": ["User"],
+            "description": "Usuario solo Zen gratuito",
+            "displayName": "User",
+            "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+            "isEnabled": true,
+            "value": "opencode-users"
+        }
+    ],
+    "publicClient": {
+        "redirectUris": [
+            "https://login.microsoftonline.com/common/oauth2/nativeclient",
+            "http://127.0.0.1:53800/callback"
+        ]
+    },
+    "requiredResourceAccess": [
+        {
+            "resourceAppId": "00000003-0000-0000-c000-000000000000",
+            "resourceAccess": [
+                { "id": "64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0", "type": "Scope" },
+                { "id": "7427e0e9-2fba-42fe-b0c0-848c9e6a8182", "type": "Scope" },
+                { "id": "37f7f235-527c-4136-accd-4a02d197296e", "type": "Scope" },
+                { "id": "14dad69e-099b-42c9-810b-d002981feec1", "type": "Scope" },
+                { "id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d", "type": "Scope" }
+            ]
+        }
+    ]
+}
