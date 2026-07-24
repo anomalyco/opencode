@@ -614,3 +614,13 @@ Diese Umgebungsvariablen ermöglichen experimentelle Funktionen, die sich änder
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolescher Wert | Parallele Websuche aktivieren                             |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolescher Wert | Scout-Subagent aktivieren                                 |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolescher Wert | Workspace-Unterstützung aktivieren                        |
+
+#### Ausgabetoken-Limit
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` begrenzt den vom OpenCode-Kern berechneten Ausgaberahmen. Wenn die Variable nicht gesetzt ist, behalten Modelle ohne Reasoning den Standardwert von 32,000 Tokens bei, während Reasoning-Modelle ein positives, für das Modell deklariertes Ausgabelimit verwenden. Modelle ohne nutzbares deklariertes Limit fallen ebenfalls auf 32,000 Tokens zurück. Wenn die Variable gesetzt ist, begrenzt ihr Wert die Kernberechnung, und jedes positive deklarierte Modelllimit bleibt eine Obergrenze.
+
+Bei Reasoning-Modellen umfasst der Rahmen die sichtbare Ausgabe und jedes numerische Thinking-Budget. Eine anbieterspezifische numerische `max`-Variante strebt für die sichtbare Ausgabe eine Reserve in Höhe des größeren Werts aus 4,096 Tokens oder 10% des Rahmens an und berücksichtigt dabei die bekannten Thinking-Budget-Grenzen des Anbieters. Steht ein Anbieter-Minimum im Konflikt mit diesem Ziel, kann OpenCode eine kleinere Reserve verwenden. Passt kein gültiges Budget, schlägt die Anfrage lokal fehl, bevor sie gesendet wird. Diese Reserve ist eine Einschränkung der Anfragekonfiguration und keine Garantie, dass das Modell so viele sichtbare Tokens erzeugt.
+
+Ein größerer Rahmen reserviert einen größeren Teil des Kontextfensters für die Ausgabe, sodass die automatische Komprimierung früher erfolgen kann. Er kann außerdem die Antwortlatenz sowie den Token- oder Quota-Verbrauch erhöhen, obwohl Anbieter vorzeitig stoppen oder ein niedrigeres Limit anwenden können.
+
+Diese Variable steuert die Standardberechnung des Kerns; sie ist kein bedingungsloses festes Limit auf Wire-Ebene. Anbieter-SDKs können das Limit senken, und Plugins können die berechneten `maxOutputTokens` und Reasoning-Optionen im `chat.params`-Hook ersetzen oder entfernen.

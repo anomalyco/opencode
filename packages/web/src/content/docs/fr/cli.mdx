@@ -615,3 +615,13 @@ Ces variables d'environnement activent des fonctionnalités expérimentales qui 
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | booléen | Activer l'exécution parallèle de la recherche web               |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | booléen | Activer le sous-agent Scout                                     |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | booléen | Activer la prise en charge des espaces de travail               |
+
+#### Limite de jetons de sortie
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` limite l'enveloppe de sortie calculée par le cœur d'OpenCode. Lorsqu'elle n'est pas définie, les modèles sans raisonnement conservent la valeur par défaut de 32,000 jetons, tandis que les modèles de raisonnement utilisent une limite de sortie positive déclarée pour le modèle. Les modèles sans limite déclarée exploitable reviennent également à 32,000 jetons. Lorsque la variable est définie, sa valeur limite le calcul du cœur et toute limite positive déclarée du modèle reste une limite supérieure.
+
+Pour les modèles de raisonnement, l'enveloppe comprend la sortie visible et tout budget numérique de réflexion. Une variante numérique `max` propre au fournisseur vise à réserver pour la sortie visible la plus grande valeur entre 4,096 jetons et 10% de l'enveloppe, tout en respectant les limites connues du budget de réflexion du fournisseur. Si un minimum du fournisseur entre en conflit avec cet objectif, OpenCode peut utiliser une réserve plus faible ; si aucun budget valide ne tient dans l'enveloppe, la requête échoue localement avant son envoi. Cette réserve est une contrainte de configuration de la requête, et non la garantie que le modèle produira autant de jetons visibles.
+
+Une enveloppe plus grande réserve davantage de la fenêtre de contexte pour la sortie ; le compactage automatique peut donc se produire plus tôt. Elle peut aussi augmenter la latence de réponse et l'utilisation des jetons ou du quota, même si les fournisseurs peuvent s'arrêter plus tôt ou appliquer une limite inférieure.
+
+Cette variable contrôle le calcul par défaut du cœur ; il ne s'agit pas d'une limite stricte et inconditionnelle au niveau des données transmises. Les SDK des fournisseurs peuvent réduire la limite, et les plugins peuvent remplacer ou supprimer le `maxOutputTokens` calculé et les options de raisonnement dans le hook `chat.params`.

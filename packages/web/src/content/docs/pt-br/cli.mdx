@@ -614,3 +614,13 @@ Essas variáveis de ambiente habilitam recursos experimentais que podem mudar ou
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Habilitar execução paralela de busca web                  |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Habilitar subagente Scout                                 |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Habilitar suporte a espaços de trabalho                   |
+
+#### Limite de tokens de saída
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` limita o envelope de saída calculado pelo núcleo do OpenCode. Quando não está definida, os modelos sem raciocínio mantêm o padrão de 32,000 tokens, enquanto os modelos com raciocínio usam um limite de saída positivo declarado para o modelo. Os modelos sem um limite declarado utilizável também voltam para 32,000 tokens. Quando a variável está definida, seu valor limita o cálculo do núcleo, e qualquer limite positivo declarado do modelo continua sendo um limite superior.
+
+Para modelos com raciocínio, o envelope inclui a saída visível e qualquer orçamento numérico de raciocínio. Uma variante numérica `max` específica do provedor procura reservar para a saída visível o maior valor entre 4,096 tokens e 10% do envelope, respeitando os limites conhecidos do orçamento de raciocínio do provedor. Se o mínimo do provedor entrar em conflito com essa meta, o OpenCode poderá usar uma reserva menor; se nenhum orçamento válido couber, a solicitação falhará localmente antes de ser enviada. Essa reserva é uma restrição de configuração da solicitação, não uma garantia de que o modelo produzirá essa quantidade de tokens visíveis.
+
+Um envelope maior reserva mais da janela de contexto para a saída, portanto a compactação automática pode acontecer mais cedo. Ele também pode aumentar a latência da resposta e o uso de tokens ou cota, embora os provedores possam parar antes ou aplicar um limite menor.
+
+Essa variável controla o cálculo padrão do núcleo; ela não é um limite rígido e incondicional no nível da transmissão. Os SDKs dos provedores podem reduzir o limite, e os plugins podem substituir ou remover o `maxOutputTokens` calculado e as opções de raciocínio no hook `chat.params`.

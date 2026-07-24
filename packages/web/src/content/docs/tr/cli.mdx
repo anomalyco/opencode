@@ -615,3 +615,13 @@ Bu ortam değişkenleri değişebilecek veya kaldırılabilecek deneysel özelli
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Paralel web araması yürütmesini etkinleştir             |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Scout alt ajanını etkinleştir                           |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Çalışma alanı desteğini etkinleştir                     |
+
+#### Çıktı token sınırı
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`, OpenCode çekirdeğinin hesapladığı çıktı bütçesini sınırlar. Ayarlanmadığında akıl yürütmeyen modeller varsayılan 32,000 token değerini korurken akıl yürütme modelleri, model için bildirilen pozitif çıktı sınırını kullanır. Kullanılabilir bir sınır bildirilmemiş modeller de 32,000 token değerine geri döner. Değişken ayarlandığında değeri çekirdek hesaplamasını sınırlar ve bildirilen her pozitif model sınırı üst sınır olmaya devam eder.
+
+Akıl yürütme modellerinde bu bütçe, görünür çıktıyı ve tüm sayısal düşünme bütçelerini kapsar. Provider'a özgü sayısal bir `max` varyantı, provider'ın bilinen düşünme bütçesi sınırlarına uyarak görünür çıktı için 4,096 token ile toplam bütçenin 10% değerinden büyük olanını ayırmayı hedefler. Provider minimum değeri bu hedefle çakışırsa OpenCode daha küçük bir pay kullanabilir; geçerli bir bütçe sığmıyorsa istek gönderilmeden önce yerel olarak başarısız olur. Bu pay, istek yapılandırmasına ait bir kısıtlamadır; modelin bu kadar görünür token üreteceğinin garantisi değildir.
+
+Daha büyük bir bütçe, bağlam penceresinin daha büyük bölümünü çıktıya ayırdığı için otomatik bağlam sıkıştırması daha erken gerçekleşebilir. Provider'lar erken durabilse veya daha düşük bir sınır uygulayabilse de yanıt gecikmesini ve token ya da kota kullanımını artırabilir.
+
+Bu değişken çekirdeğin varsayılan hesaplamasını kontrol eder; wire düzeyinde koşulsuz bir hard limit değildir. Provider SDK'ları sınırı düşürebilir ve plugin'ler `chat.params` hook'unda hesaplanan `maxOutputTokens` ile akıl yürütme seçeneklerini değiştirebilir veya kaldırabilir.

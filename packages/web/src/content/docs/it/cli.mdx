@@ -615,3 +615,13 @@ Queste variabili d'ambiente abilitano funzionalità sperimentali che potrebbero 
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Abilita esecuzione parallela della ricerca web          |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Abilita subagent Scout                                  |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Abilita supporto workspace                              |
+
+#### Limite dei token di output
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` limita il budget complessivo di output calcolato dal core di OpenCode. Quando non è impostata, i modelli senza ragionamento mantengono il valore predefinito di 32,000 token, mentre i modelli di ragionamento usano un limite di output positivo dichiarato per il modello. Anche i modelli senza un limite dichiarato utilizzabile tornano a 32,000 token. Quando la variabile è impostata, il suo valore limita il calcolo del core e qualsiasi limite positivo dichiarato del modello rimane un limite superiore.
+
+Per i modelli di ragionamento, il budget complessivo include l'output visibile e qualsiasi budget numerico di ragionamento. Una variante numerica `max` specifica del provider mira a riservare per l'output visibile il valore maggiore tra 4,096 token e il 10% del budget complessivo, rispettando i limiti noti del budget di ragionamento del provider. Se il minimo del provider è in conflitto con questo obiettivo, OpenCode può usare una riserva inferiore; se non è possibile inserire alcun budget valido, la richiesta fallisce localmente prima dell'invio. Questa riserva è un vincolo di configurazione della richiesta, non una garanzia che il modello produca altrettanti token visibili.
+
+Un budget complessivo maggiore riserva più spazio della finestra di contesto all'output, quindi la compattazione automatica può avvenire prima. Può inoltre aumentare la latenza della risposta e l'utilizzo di token o quota, anche se i provider possono fermarsi prima o applicare un limite inferiore.
+
+Questa variabile controlla il calcolo predefinito del core; non è un limite rigido e incondizionato a livello di trasmissione. Gli SDK dei provider possono ridurre il limite, mentre i plugin possono sostituire o rimuovere il `maxOutputTokens` calcolato e le opzioni di ragionamento nell'hook `chat.params`.

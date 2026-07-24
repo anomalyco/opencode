@@ -614,3 +614,13 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | 병렬 웹 검색 실행 활성화                    |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Scout subagent 활성화                       |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | workspace 지원 활성화                       |
+
+#### 출력 토큰 제한
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`는 OpenCode 코어가 계산하는 출력 엔벌로프에 상한을 설정합니다. 설정하지 않으면 추론하지 않는 모델은 기본값인 32,000 토큰을 유지하고, 추론 모델은 모델에 선언된 양수 출력 제한을 사용합니다. 사용할 수 있는 선언된 제한이 없는 모델도 32,000 토큰으로 대체됩니다. 변수를 설정하면 그 값이 코어 계산을 제한하며, 모델에 선언된 양수 제한도 계속 상한으로 적용됩니다.
+
+추론 모델에서는 엔벌로프에 표시되는 출력과 숫자형 thinking budget이 포함됩니다. provider별 숫자형 `max` 변형은 provider의 알려진 thinking budget 제한을 지키면서 4,096토큰과 엔벌로프의 10% 중 더 큰 값을 표시되는 출력용으로 확보하려고 합니다. provider의 최솟값이 이 목표와 충돌하면 OpenCode가 더 작은 여유분을 사용할 수 있으며, 유효한 budget이 들어갈 수 없으면 요청을 보내기 전에 로컬에서 실패합니다. 이 여유분은 요청 구성의 제약일 뿐, 모델이 그만큼의 표시 토큰을 생성한다는 보장은 아닙니다.
+
+엔벌로프가 클수록 컨텍스트 창에서 출력용으로 더 많은 공간을 예약하므로 자동 압축이 더 일찍 발생할 수 있습니다. provider가 일찍 중단하거나 더 낮은 제한을 적용할 수 있지만, 응답 지연과 토큰 또는 quota 사용량도 늘어날 수 있습니다.
+
+이 변수는 코어의 기본 계산을 제어하며, wire 수준의 무조건적인 하드 제한은 아닙니다. provider SDK가 제한을 낮출 수 있고, plugin은 `chat.params` hook에서 계산된 `maxOutputTokens`와 추론 옵션을 교체하거나 제거할 수 있습니다.

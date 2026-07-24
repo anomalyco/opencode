@@ -615,3 +615,13 @@ Disse miljøvariablene muliggjør eksperimentelle funksjoner som kan endres elle
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolsk | Aktiver parallell kjøring av websøk                   |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolsk | Aktiver Scout-subagent                                |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolsk | Aktiver arbeidsområde-støtte                          |
+
+#### Grense for output-tokens
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` begrenser outputrammen som OpenCode-kjernen beregner. Når variabelen ikke er satt, beholder modeller uten resonnering standardverdien på 32,000 tokens, mens resonneringsmodeller bruker en positiv outputgrense som er oppgitt for modellen. Modeller uten en brukbar oppgitt grense faller også tilbake til 32,000 tokens. Når variabelen er satt, begrenser verdien kjerneberegningen, og enhver positiv oppgitt modellgrense forblir en øvre grense.
+
+For resonneringsmodeller omfatter rammen synlig output og ethvert numerisk thinking-budsjett. En providerspesifikk numerisk `max`-variant sikter mot å reservere det største av 4,096 tokens eller 10% av rammen til synlig output, samtidig som providerens kjente grenser for thinking-budsjettet overholdes. Hvis en minimumsverdi fra provideren er i konflikt med målet, kan OpenCode bruke en mindre reserve. Hvis intet gyldig budsjett passer, feiler forespørselen lokalt før den sendes. Reserven er en begrensning i forespørselskonfigurasjonen, ikke en garanti for at modellen produserer så mange synlige tokens.
+
+En større ramme reserverer mer av kontekstvinduet til output, så automatisk komprimering kan skje tidligere. Den kan også øke svartiden og bruken av tokens eller kvote, selv om provideren kan stoppe tidligere eller bruke en lavere grense.
+
+Variabelen styrer kjernens standardberegning; den er ikke en ubetinget hard grense på wire-nivå. Provider-SDK-er kan senke grensen, og plugins kan erstatte eller fjerne den beregnede `maxOutputTokens` og resonneringsalternativene i `chat.params`-hooken.

@@ -612,3 +612,13 @@ Ove varijable okruženja omogućavaju eksperimentalne karakteristike koje se mog
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Omogući paralelno izvršavanje web pretrage              |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Omogući Scout subagenta                                 |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Omogući podršku za radne prostore                       |
+
+#### Ograničenje izlaznih tokena
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` ograničava izlaznu omotnicu koju izračunava jezgra OpenCode. Kada nije postavljena, modeli bez rezonovanja zadržavaju zadanu vrijednost od 32,000 tokena, dok modeli sa rezonovanjem koriste pozitivno izlazno ograničenje navedeno za model. Modeli bez upotrebljivog navedenog ograničenja također se vraćaju na 32,000 tokena. Kada je varijabla postavljena, njena vrijednost ograničava izračun jezgre, a svako pozitivno navedeno ograničenje modela ostaje gornja granica.
+
+Za modele sa rezonovanjem omotnica uključuje vidljivi izlaz i svaki numerički budžet razmišljanja. Numerička varijanta `max` specifična za pružaoca cilja rezervu vidljivog izlaza koja je veća od 4,096 tokena ili 10% omotnice, uz poštivanje poznatih ograničenja budžeta razmišljanja pružaoca. Ako je minimalna vrijednost pružaoca u sukobu s tim ciljem, OpenCode može koristiti manju rezervu; ako nijedan dozvoljeni budžet ne stane, zahtjev lokalno ne uspijeva prije slanja. Ova rezerva je ograničenje konfiguracije zahtjeva, a ne garancija da će model proizvesti toliko vidljivih tokena.
+
+Veća omotnica rezervira veći dio kontekstnog prozora za izlaz, pa se automatska kompakcija može dogoditi ranije. Također može povećati kašnjenje odgovora i potrošnju tokena ili kvote, iako se pružaoci mogu zaustaviti ranije ili primijeniti niže ograničenje.
+
+Ova varijabla upravlja zadanim izračunom jezgre; nije bezuvjetno strogo ograničenje na nivou poslanog zahtjeva. SDK-ovi pružaoca mogu smanjiti ograničenje, a dodaci mogu zamijeniti ili ukloniti izračunati `maxOutputTokens` i opcije rezonovanja u `chat.params` hooku.

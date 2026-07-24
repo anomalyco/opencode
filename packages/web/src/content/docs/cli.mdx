@@ -731,3 +731,30 @@ These environment variables enable experimental features that may change or be r
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Enable parallel web search execution    |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Enable Scout subagent                   |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Enable workspace support                |
+
+#### Output token limit
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` caps the output envelope calculated by
+OpenCode core. When it is unset, non-reasoning models keep the 32,000-token
+default, while reasoning models use a positive output limit declared for the
+model. Models without a usable declared limit also fall back to 32,000 tokens.
+When the variable is set, its value caps the core calculation, and any positive
+declared model limit remains an upper bound.
+
+For reasoning models, the envelope includes visible output and any numeric
+thinking budget. A provider-specific numeric `max` variant targets a visible
+output reserve of the greater of 4,096 tokens or 10% of the envelope, while
+respecting the provider's known thinking-budget limits. If a provider minimum
+conflicts with that target, OpenCode may use a smaller reserve; if no legal
+budget fits, the request fails locally before it is sent. This reserve is a
+request-configuration constraint, not a guarantee that the model will produce
+that many visible tokens.
+
+A larger envelope reserves more of the context window for output, so automatic
+compaction may happen earlier. It can also increase response latency and token
+or quota usage, although providers may stop early or apply a lower limit.
+
+This variable controls the core default calculation; it is not an
+unconditional wire-level hard cap. Provider SDKs may lower the limit, and
+plugins can replace or remove the calculated `maxOutputTokens` and reasoning
+options in the `chat.params` hook.

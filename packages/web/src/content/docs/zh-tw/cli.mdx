@@ -615,3 +615,13 @@ OpenCode 可以透過環境變數進行設定。
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | 啟用平行 Web 搜尋執行           |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | 啟用 Scout 子代理               |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | 啟用工作區支援                  |
+
+#### 輸出 Token 上限
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` 限制 OpenCode 核心計算出的輸出額度（envelope）。未設定時，非推理模型繼續使用預設的 32,000 Token，推理模型則使用模型宣告的正數輸出上限；沒有可用宣告上限的模型也會回退到 32,000 Token。設定該變數後，其值會限制核心計算，模型宣告的正數上限也仍然是上界。
+
+對於推理模型，輸出額度包含可見輸出和所有數值型 thinking budget。供應商專用的數值型 `max` 變體會在遵守已知 thinking budget 限制的前提下，嘗試為可見輸出預留 4,096 Token 和輸出額度 10% 中的較大值。如果供應商最小值與該目標衝突，OpenCode 可能使用較小的預留；如果沒有合法 budget 能夠容納，請求會在傳送前於本機失敗。該預留只是請求設定限制，不保證模型一定產生相同數量的可見 Token。
+
+較大的輸出額度會為輸出預留更多上下文視窗，因此可能更早觸發自動壓縮。它也可能增加回應延遲以及 Token 或 quota 用量，不過供應商可能提前停止或套用較低的限制。
+
+該變數控制核心的預設計算，並非無條件的 wire 層硬上限。供應商 SDK 可以降低限制，外掛也可以在 `chat.params` hook 中取代或刪除計算出的 `maxOutputTokens` 和推理選項。

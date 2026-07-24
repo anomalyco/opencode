@@ -615,3 +615,13 @@ Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres elle
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Aktiver parallel udførelse af websøgning             |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Aktiver Scout-subagent                               |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Aktiver workspace-understøttelse                     |
+
+#### Grænse for output-tokens
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` begrænser den outputramme, som OpenCode-kernen beregner. Når variablen ikke er angivet, beholder modeller uden ræsonnement standarden på 32,000 tokens, mens ræsonnerende modeller bruger en positiv outputgrænse, der er deklareret for modellen. Modeller uden en brugbar deklareret grænse falder også tilbage til 32,000 tokens. Når variablen er angivet, begrænser dens værdi kernens beregning, og enhver positiv deklareret modelgrænse forbliver en øvre grænse.
+
+For ræsonnerende modeller omfatter rammen synligt output og ethvert numerisk thinking-budget. En providerspecifik numerisk `max`-variant sigter mod at reservere det største af 4,096 tokens eller 10% af rammen til synligt output, samtidig med at providerens kendte grænser for thinking-budgettet overholdes. Hvis en providerminimumsværdi er i konflikt med målet, kan OpenCode bruge en mindre reserve. Hvis intet gyldigt budget passer, fejler anmodningen lokalt, før den sendes. Reserven er en begrænsning i anmodningskonfigurationen, ikke en garanti for, at modellen producerer så mange synlige tokens.
+
+En større ramme reserverer mere af kontekstvinduet til output, så automatisk komprimering kan ske tidligere. Den kan også øge svartiden og forbruget af tokens eller kvote, selvom provideren kan stoppe tidligere eller anvende en lavere grænse.
+
+Variablen styrer kernens standardberegning; den er ikke en ubetinget fast grænse på wire-niveau. Provider-SDK'er kan sænke grænsen, og plugins kan erstatte eller fjerne den beregnede `maxOutputTokens` og ræsonneringsindstillingerne i `chat.params`-hooken.

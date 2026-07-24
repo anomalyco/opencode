@@ -614,3 +614,13 @@ Estas variables de entorno habilitan funciones experimentales que pueden cambiar
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | booleano | Habilitar ejecución paralela de búsqueda web               |
 | `OPENCODE_EXPERIMENTAL_SCOUT`                   | booleano | Habilitar subagente Scout                                  |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | booleano | Habilitar soporte de espacios de trabajo                   |
+
+#### Límite de tokens de salida
+
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` limita el margen total de salida calculado por el núcleo de OpenCode. Cuando no está definido, los modelos sin razonamiento conservan el valor predeterminado de 32,000 tokens, mientras que los modelos con razonamiento usan un límite de salida positivo declarado para el modelo. Los modelos sin un límite declarado utilizable también vuelven a 32,000 tokens. Cuando la variable está definida, su valor limita el cálculo del núcleo y cualquier límite positivo declarado del modelo sigue siendo un límite superior.
+
+En los modelos con razonamiento, el margen incluye la salida visible y cualquier presupuesto numérico de razonamiento. Una variante numérica `max` específica del proveedor intenta reservar para la salida visible el mayor valor entre 4,096 tokens y el 10% del margen, respetando los límites conocidos del presupuesto de razonamiento del proveedor. Si el mínimo del proveedor entra en conflicto con ese objetivo, OpenCode puede usar una reserva menor; si no cabe ningún presupuesto válido, la solicitud falla localmente antes de enviarse. Esta reserva es una restricción de configuración de la solicitud, no una garantía de que el modelo produzca esa cantidad de tokens visibles.
+
+Un margen mayor reserva más espacio de la ventana de contexto para la salida, por lo que la compactación automática puede ocurrir antes. También puede aumentar la latencia de respuesta y el uso de tokens o cuota, aunque los proveedores pueden detenerse antes o aplicar un límite inferior.
+
+Esta variable controla el cálculo predeterminado del núcleo; no es un límite estricto e incondicional en el nivel de transmisión. Los SDK de los proveedores pueden reducir el límite, y los plugins pueden sustituir o eliminar el `maxOutputTokens` calculado y las opciones de razonamiento en el hook `chat.params`.
