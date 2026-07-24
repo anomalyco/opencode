@@ -1,8 +1,5 @@
 export const dict = {
-  "desktop.menu.checkForUpdates": "Sprawdź aktualizacje...",
   "desktop.menu.installCli": "Zainstaluj CLI...",
-  "desktop.menu.reloadWebview": "Przeładuj Webview",
-  "desktop.menu.restart": "Restartuj",
 
   "desktop.dialog.chooseFolder": "Wybierz folder",
   "desktop.dialog.chooseFile": "Wybierz plik",

@@ -65,6 +65,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { createSessionLineage } from "@/pages/session/session-lineage"
+import { translateDesktopMenu } from "@/desktop-menu"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
@@ -237,6 +238,18 @@ function UiI18nBridge(props: ParentProps) {
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
 }
 
+function DesktopMenuSync() {
+  const language = useLanguage()
+  const platform = usePlatform()
+
+  createEffect(() => {
+    if (!platform.setDesktopMenuLabels) return
+    void platform.setDesktopMenuLabels(translateDesktopMenu(language.t))
+  })
+
+  return null
+}
+
 declare global {
   interface Window {
     __OPENCODE__?: {
@@ -371,6 +384,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
         }}
       >
         <LanguageProvider locale={props.locale}>
+          <DesktopMenuSync />
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {

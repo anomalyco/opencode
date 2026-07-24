@@ -300,6 +300,8 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
     runDesktopMenuAction,
 
+    setDesktopMenuLabels: os === "macos" ? (labels) => window.api.setDesktopMenuLabels(labels) : undefined,
+
     checkAppExists: async (appName: string) => {
       return window.api.checkAppExists(appName)
     },

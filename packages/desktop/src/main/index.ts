@@ -270,6 +270,16 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
+  const menu = createMenu({
+    trigger: (id) => {
+      const win = getLastFocusedWindow()
+      if (win) sendMenuCommand(win, id)
+    },
+    checkForUpdates: () => {
+      void showUpdaterDialog(updater, true)
+    },
+    relaunch,
+  })
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
     relaunch,
@@ -296,6 +306,7 @@ const main = Effect.gen(function* () {
     updater,
     showUpdater: () => showUpdaterDialog(updater, true),
     setBackgroundColor: (color) => setBackgroundColor(color),
+    setDesktopMenuLabels: (labels) => menu.setLabels(labels),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
   })
@@ -379,21 +390,8 @@ const main = Effect.gen(function* () {
 
   yield* Fiber.await(loadingTask)
 
-  const windows = restoreMainWindows()
-  if (windows.length) {
-    createMenu({
-      trigger: (id) => {
-        const win = getLastFocusedWindow()
-        if (win) sendMenuCommand(win, id)
-      },
-      checkForUpdates: () => {
-        void showUpdaterDialog(updater, true)
-      },
-      relaunch: () => {
-        relaunch()
-      },
-    })
-  }
+  restoreMainWindows()
+  menu.show()
 })
 
 Effect.runFork(main)
