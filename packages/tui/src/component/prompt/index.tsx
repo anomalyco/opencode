@@ -109,7 +109,7 @@ function randomIndex(count: number) {
 }
 
 export function resolvePromptMetadata(input: {
-  agentStatus: "loading" | "complete"
+  agentStatus: "loading" | "complete" | "error"
   hasAgent: boolean
   hasModel: boolean
 }): {
@@ -127,12 +127,23 @@ export function resolvePromptMetadata(input: {
 
 export function resolvePromptAgentGate(input: {
   hasInput: boolean
-  agentStatus: "loading" | "complete"
+  agentStatus: "loading" | "complete" | "error"
   hasAgent: boolean
 }): "empty" | "loading" | "unavailable" | "ready" {
   if (!input.hasInput) return "empty"
+  if (input.agentStatus === "error") return "unavailable"
   if (input.hasAgent) return "ready"
   return input.agentStatus === "loading" ? "loading" : "unavailable"
+}
+
+export function resolveSlashCommandGate(input: {
+  mode: "normal" | "shell"
+  text: string
+  commandStatus: "loading" | "complete" | "error"
+}) {
+  if (input.mode !== "normal" || !input.text.startsWith("/")) return "normal" as const
+  if (input.commandStatus === "complete") return "ready" as const
+  return input.commandStatus
 }
 
 function fadeColor(color: RGBA, alpha: number) {
@@ -982,7 +993,7 @@ export function Prompt(props: PromptProps) {
     }
     const agent = local.agent.current()
     if (props.disabled) return false
-    if (workspace.creating() || move.creating()) return false
+    if (workspace.busy() || move.progress()) return false
     if (auto()?.visible) return false
     const agentGate = resolvePromptAgentGate({
       hasInput: !!store.prompt.input,
@@ -992,6 +1003,22 @@ export function Prompt(props: PromptProps) {
     if (agentGate === "empty") return false
     if (agentGate === "loading") return false
     if (!agent) return false
+    const commandGate = resolveSlashCommandGate({
+      mode: store.mode,
+      text: store.prompt.input,
+      commandStatus: sync.data.command_status,
+    })
+    if (commandGate === "loading" || commandGate === "error") {
+      toast.show({
+        title: commandGate === "loading" ? "Commands are still loading" : "Commands are unavailable",
+        message:
+          commandGate === "loading"
+            ? "Wait for the server command catalog before submitting a slash command."
+            : "The server command catalog could not be loaded. Try again after reconnecting.",
+        variant: commandGate === "loading" ? "info" : "error",
+      })
+      return false
+    }
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
@@ -1646,6 +1673,11 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.accent}>{notice()}</text>
                 </box>
               )}
+            </Match>
+            <Match when={workspace.busy()}>
+              <box paddingLeft={3}>
+                <Spinner color={theme.accent}>Updating workspace</Spinner>
+              </box>
             </Match>
             <Match when={workspace.label()}>
               {(label) => (

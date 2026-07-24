@@ -28,19 +28,24 @@ describe("dialog session list", () => {
 
     expect(await Promise.race([pending, Promise.resolve("pending")])).toBe("pending")
     resolve({ data: ["root"] })
-    expect(await pending).toEqual(["root"])
+    expect(await pending).toEqual({ status: "success", data: ["root"] })
   })
 
-  test("falls back when the root request returns an error response", async () => {
-    expect(await loadDialogSessionList({ filter: {}, list: async () => ({}) })).toBeUndefined()
+  test("reports when the root request returns an error response", async () => {
+    const error = new Error("unavailable")
+    expect(await loadDialogSessionList({ filter: {}, list: async () => ({ error }) })).toEqual({
+      status: "error",
+      error,
+    })
   })
 
-  test("falls back when the root request rejects", async () => {
+  test("reports when the root request rejects", async () => {
+    const error = new Error("offline")
     expect(
       await loadDialogSessionList({
         filter: {},
-        list: () => Promise.reject(new Error("offline")),
+        list: () => Promise.reject(error),
       }),
-    ).toBeUndefined()
+    ).toEqual({ status: "error", error })
   })
 })

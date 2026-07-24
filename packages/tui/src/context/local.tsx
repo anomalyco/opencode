@@ -59,20 +59,22 @@ export function recentModels(
 }
 
 export function resolveAgentSelection(
-  status: "loading" | "complete",
+  status: "loading" | "complete" | "error",
   agents: readonly { name: string }[],
   name: string,
 ) {
   if (status === "loading") return "pending" as const
+  if (status === "error") return "unavailable" as const
   return agents.some((agent) => agent.name === name) ? ("available" as const) : ("missing" as const)
 }
 
 export function settlePendingAgentSelection(
-  status: "loading" | "complete",
+  status: "loading" | "complete" | "error",
   agents: readonly { name: string }[],
   state: { current: string | undefined; pending: boolean },
 ): { current: string | undefined; pending: false; missing: string | undefined } | undefined {
   if (!state.pending || status === "loading") return
+  if (status === "error") return { current: undefined, pending: false, missing: undefined }
   const name = state.current
   if (!name || resolveAgentSelection(status, agents, name) === "available") {
     return { current: name, pending: false, missing: undefined }
@@ -173,6 +175,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             })
             return
           }
+          if (state === "unavailable") return
           if (state === "missing") return warnMissing(name)
           batch(() => {
             setAgentStore("current", name)

@@ -352,7 +352,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function submit() {
-    if (props.locked) return
+    if (props.locked) {
+      props.onEmptySubmit?.()
+      return
+    }
     setStore("input", "keyboard")
     const index = focusedAction()
     if (index !== undefined) {

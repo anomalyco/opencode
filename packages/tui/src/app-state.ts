@@ -3,6 +3,20 @@ export function resolveSkipInitialLoading(noFastBoot: string | undefined) {
   return !noFastBoot
 }
 
+type MetadataStatus = "loading" | "complete" | "error"
+
+export function startupPromptReady(input: {
+  prompt: string
+  provider: MetadataStatus
+  agent: MetadataStatus
+  command: MetadataStatus
+  hasModel: boolean
+}) {
+  if (input.provider !== "complete" || input.agent !== "complete") return false
+  if (!input.hasModel) return false
+  return !input.prompt.startsWith("/") || input.command === "complete"
+}
+
 /** Resolves paste-summary state, with a stored user choice taking precedence. */
 export function resolvePasteSummaryEnabled(stored: boolean | undefined, disabledByConfig: boolean | undefined) {
   return stored ?? !disabledByConfig

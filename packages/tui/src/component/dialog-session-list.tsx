@@ -34,11 +34,14 @@ export function createDialogSessionListQuery(input: { search?: string; filter: S
 export function loadDialogSessionList<T>(input: {
   search?: string
   filter: SessionListFilter
-  list: (query: ReturnType<typeof createDialogSessionListQuery>) => Promise<{ data?: T[] }>
+  list: (query: ReturnType<typeof createDialogSessionListQuery>) => Promise<{ data?: T[]; error?: unknown }>
 }) {
   return input.list(createDialogSessionListQuery(input)).then(
-    (result) => result.data,
-    () => undefined,
+    (result) =>
+      result.data !== undefined
+        ? { status: "success" as const, data: result.data }
+        : { status: "error" as const, error: result.error ?? new Error("Session list returned no data") },
+    (error) => ({ status: "error" as const, error }),
   )
 }
 
@@ -54,6 +57,7 @@ export function DialogSessionList() {
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
   const [deleted, setDeleted] = createSignal(new Set<string>())
+  const [attention, setAttention] = createSignal(0)
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
@@ -76,8 +80,19 @@ export function DialogSessionList() {
   )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
+  const loading = () => browseResults.loading || searchResults.loading
+  const loadError = () => {
+    const result = search().trim() ? searchResults() : browseResults()
+    return result?.status === "error" ? result.error : undefined
+  }
+  const failed = () => loadError() !== undefined
   const sessions = createMemo(() => {
-    const result = searchResults() ?? browseResults() ?? sync.data.session
+    const searchResult = searchResults()
+    const browseResult = browseResults()
+    const result =
+      (searchResult?.status === "success" ? searchResult.data : undefined) ??
+      (browseResult?.status === "success" ? browseResult.data : undefined) ??
+      sync.data.session
     const synced = new Map(sync.data.session.map((session) => [session.id, session]))
     const ids = new Set(result.map((session) => session.id))
     const extra = [currentSessionID(), ...local.session.pinned()].flatMap((id) => {
@@ -192,7 +207,10 @@ export function DialogSessionList() {
       .map((x) => x.id)
   }
 
-  const browseOrder = createMemo(() => orderByRecency(browseResults() ?? sync.data.session))
+  const browseOrder = createMemo(() => {
+    const result = browseResults()
+    return orderByRecency(result?.status === "success" ? result.data : sync.data.session)
+  })
 
   const quickSwitchHint = createMemo(() => {
     const first = quickSwitch1()
@@ -272,7 +290,21 @@ export function DialogSessionList() {
   return (
     <DialogSelect
       title="Sessions"
-      options={options()}
+      options={loading() || failed() ? [] : options()}
+      locked={loading() || failed()}
+      onEmptySubmit={loading() ? () => setAttention((value) => value + 1) : undefined}
+      emptyView={
+        loading() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <Spinner attention={attention()}>Loading sessions</Spinner>
+          </box>
+        ) : failed() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.error}>Could not load sessions</text>
+            <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+          </box>
+        ) : undefined
+      }
       skipFilter={true}
       preserveSelection={true}
       current={currentSessionID()}

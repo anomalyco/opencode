@@ -75,7 +75,12 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA; attention
   const color = () => (visual().emphasized ? theme.text : (props.color ?? theme.textMuted))
   const content = () => (
     <Show when={animationsEnabled()} fallback={<text fg={color()}>⋯ {props.children}</text>}>
-      <box flexDirection="row" gap={1}>
+      <box
+        flexDirection="row"
+        gap={1}
+        position={props.attention === undefined ? undefined : "relative"}
+        left={props.attention === undefined ? undefined : visual().left}
+      >
         <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
         <Show when={props.children}>
           <text fg={color()}>{props.children}</text>
@@ -84,11 +89,5 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA; attention
     </Show>
   )
 
-  return (
-    <Show when={props.attention !== undefined} fallback={content()}>
-      <box position="relative" left={visual().left}>
-        {content()}
-      </box>
-    </Show>
-  )
+  return content()
 }

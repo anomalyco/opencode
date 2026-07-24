@@ -47,6 +47,11 @@ describe("isModelCatalogLoading", () => {
   test("complete has a settled model catalog", () => {
     expect(isModelCatalogLoading("complete")).toBe(false)
   })
+
+  test("deferred agents keep the model catalog unavailable", () => {
+    expect(isModelCatalogLoading("partial", "loading")).toBe(true)
+    expect(isModelCatalogLoading("complete", "loading")).toBe(true)
+  })
 })
 
 describe("modelCatalogAttentionHandler", () => {
@@ -59,5 +64,10 @@ describe("modelCatalogAttentionHandler", () => {
     const trigger = () => {}
     expect(modelCatalogAttentionHandler("partial", trigger)).toBeUndefined()
     expect(modelCatalogAttentionHandler("complete", trigger)).toBeUndefined()
+  })
+
+  test("returns the trigger while agents are loading", () => {
+    const trigger = () => {}
+    expect(modelCatalogAttentionHandler("partial", trigger, "loading")).toBe(trigger)
   })
 })

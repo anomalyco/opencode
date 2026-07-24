@@ -3,6 +3,7 @@ import {
   createPasteSummaryEnabled,
   resolvePasteSummaryEnabled,
   resolveSkipInitialLoading,
+  startupPromptReady,
 } from "../src/app-state"
 
 test("fast boot is default and OPENCODE_NO_FAST_BOOT restores the initial gate", () => {
@@ -42,4 +43,43 @@ test("paste summary accessor keeps an explicit stored override authoritative", (
   expect(enabled()).toBe(true)
   stored = false
   expect(enabled()).toBe(false)
+})
+
+test("startup prompt waits for actionable metadata before its only submit attempt", () => {
+  expect(
+    startupPromptReady({
+      prompt: "hello",
+      provider: "loading",
+      agent: "complete",
+      command: "complete",
+      hasModel: true,
+    }),
+  ).toBe(false)
+  expect(
+    startupPromptReady({
+      prompt: "hello",
+      provider: "complete",
+      agent: "complete",
+      command: "complete",
+      hasModel: false,
+    }),
+  ).toBe(false)
+  expect(
+    startupPromptReady({
+      prompt: "/review",
+      provider: "complete",
+      agent: "complete",
+      command: "loading",
+      hasModel: true,
+    }),
+  ).toBe(false)
+  expect(
+    startupPromptReady({
+      prompt: "hello",
+      provider: "complete",
+      agent: "complete",
+      command: "loading",
+      hasModel: true,
+    }),
+  ).toBe(true)
 })

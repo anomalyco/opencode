@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { recentConnectedWorkspaces } from "../../../../src/component/dialog-workspace-create"
+import { loadDialogWorkspaceList } from "../../../../src/component/dialog-workspace-list"
+import { createWorkspaceSelectionGate } from "../../../../src/component/prompt/workspace"
 
 describe("recentConnectedWorkspaces", () => {
   test("returns connected workspaces sorted by time used", () => {
@@ -24,5 +26,43 @@ describe("recentConnectedWorkspaces", () => {
     })
 
     expect(recent.map((workspace) => workspace.id)).toEqual(["wrk_a", "wrk_d", "wrk_e"])
+  })
+})
+
+describe("workspace loading", () => {
+  test("reports workspace synchronization failures", async () => {
+    const error = new Error("offline")
+    expect(
+      await loadDialogWorkspaceList({
+        syncList: async () => ({ error }),
+        sync: async () => true,
+      }),
+    ).toBe(error)
+    expect(
+      await loadDialogWorkspaceList({
+        syncList: async () => ({}),
+        sync: async () => false,
+      }),
+    ).toBeInstanceOf(Error)
+  })
+})
+
+describe("workspace selection", () => {
+  test("accepts only one selection while the workflow is pending", async () => {
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => (release = resolve))
+    const calls: string[] = []
+    const gate = createWorkspaceSelectionGate(async (value: string) => {
+      calls.push(value)
+      await pending
+    })
+
+    const first = gate.select("first")
+    await gate.select("second")
+    expect(calls).toEqual(["first"])
+    expect(gate.selected()).toBe(true)
+
+    release()
+    await first
   })
 })

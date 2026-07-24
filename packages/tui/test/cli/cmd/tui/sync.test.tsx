@@ -87,7 +87,9 @@ describe("tui sync", () => {
       await wait(() => mounted.sync.status === "partial")
       expect(mounted.sync.data.agent_status).toBe("loading")
 
-      releaseAgents(json([{ name: "build", mode: "primary", permission: {}, options: {} }]))
+      releaseAgents(
+        json([{ name: "build", mode: "primary", permission: {}, options: {} }]),
+      )
       await wait(() => mounted.sync.data.agent_status === "complete")
 
       expect(mounted.sync.data.agent.map((agent) => agent.name)).toEqual(["build"])
@@ -169,7 +171,7 @@ describe("tui sync", () => {
     }
   })
 
-  test("failed agent response settles loading without failing bootstrap", async () => {
+  test("failed agent response remains unavailable without failing bootstrap", async () => {
     await using tmp = await tmpdir()
     await Bun.write(`${tmp.path}/kv.json`, "{}")
     const mounted = await mount(
@@ -179,10 +181,50 @@ describe("tui sync", () => {
     )
 
     try {
-      await wait(() => mounted.sync.data.agent_status === "complete")
+      await wait(() => mounted.sync.data.agent_status === "error")
       await wait(() => mounted.sync.status === "complete")
       expect(mounted.sync.data.agent).toEqual([])
     } finally {
+      mounted.app.renderer.destroy()
+    }
+  })
+
+  test("a new bootstrap clears stale command and agent catalogs", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    let agentRequests = 0
+    let commandRequests = 0
+    let releaseCommand!: (response: Response) => void
+    const pendingCommand = new Promise<Response>((resolve) => (releaseCommand = resolve))
+    const mounted = await mount((url) => {
+      if (url.pathname === "/agent") {
+        agentRequests++
+        if (agentRequests === 1)
+          return json([{ name: "stale", mode: "primary", permission: {}, options: {} }])
+        return json({ error: "unavailable" }, { status: 500 })
+      }
+      if (url.pathname === "/command") {
+        commandRequests++
+        if (commandRequests === 1)
+          return json([{ name: "stale", description: "stale", template: "", source: "command" }])
+        return pendingCommand
+      }
+    }, tmp.path)
+
+    try {
+      expect(mounted.sync.data.agent.map((agent) => agent.name)).toEqual(["stale"])
+      expect(mounted.sync.data.command.map((command) => command.name)).toEqual(["stale"])
+
+      void mounted.sync.bootstrap()
+      expect(mounted.sync.data.agent).toEqual([])
+      expect(mounted.sync.data.command).toEqual([])
+      await wait(() => mounted.sync.data.agent_status === "error")
+      expect(mounted.sync.data.command_status).toBe("loading")
+
+      releaseCommand(json([]))
+      await wait(() => mounted.sync.data.command_status === "complete")
+    } finally {
+      releaseCommand(json([]))
       mounted.app.renderer.destroy()
     }
   })

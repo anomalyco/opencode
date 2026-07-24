@@ -23,6 +23,7 @@ import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
+import { Spinner } from "../spinner"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -70,6 +71,10 @@ export type AutocompleteOption = {
   isDirectory?: boolean
   onSelect?: () => void
   path?: string
+}
+
+export function settledServerCommands<T>(status: "loading" | "complete" | "error", commands: readonly T[]) {
+  return status === "complete" ? commands : []
 }
 
 export function Autocomplete(props: {
@@ -447,7 +452,7 @@ export function Autocomplete(props: {
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
 
-    for (const serverCommand of sync.data.command) {
+    for (const serverCommand of settledServerCommands(sync.data.command_status, sync.data.command)) {
       if (serverCommand.source === "skill") continue
       const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
@@ -710,7 +715,8 @@ export function Autocomplete(props: {
   })
 
   const height = createMemo(() => {
-    const count = options().length || 1
+    const statusRows = store.visible === "/" && sync.data.command_status !== "complete" ? 1 : 0
+    const count = options().length + statusRows || 1
     if (!store.visible) return Math.min(10, count)
     positionTick()
     return Math.min(10, count, Math.max(1, props.anchor().y))
@@ -737,12 +743,24 @@ export function Autocomplete(props: {
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
       >
+        <Show when={store.visible === "/" && sync.data.command_status !== "complete"}>
+          <box paddingLeft={1} paddingRight={1}>
+            <Show
+              when={sync.data.command_status === "loading"}
+              fallback={<text fg={theme.error}>Could not load server commands</text>}
+            >
+              <Spinner>Loading commands</Spinner>
+            </Show>
+          </box>
+        </Show>
         <Index
           each={options()}
           fallback={
-            <box paddingLeft={1} paddingRight={1}>
-              <text fg={theme.textMuted}>No matching items</text>
-            </box>
+            <Show when={store.visible !== "/" || sync.data.command_status === "complete"}>
+              <box paddingLeft={1} paddingRight={1}>
+                <text fg={theme.textMuted}>No matching items</text>
+              </box>
+            </Show>
           }
         >
           {(option, index) => (

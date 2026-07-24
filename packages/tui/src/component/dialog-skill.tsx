@@ -5,6 +5,7 @@ import { useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
+import { Spinner } from "./spinner"
 
 export type DialogSkillProps = {
   onSelect: (skill: string) => void
@@ -17,6 +18,7 @@ export function DialogSkill(props: DialogSkillProps) {
   dialog.setSize("large")
 
   const [loadError, setLoadError] = createSignal<unknown>()
+  const [attention, setAttention] = createSignal(0)
 
   const [skills] = createResource(() =>
     sdk.client.app
@@ -31,6 +33,7 @@ export function DialogSkill(props: DialogSkillProps) {
   )
 
   const showError = createMemo(() => Boolean(loadError()))
+  const loading = () => skills.loading
 
   const options = createMemo<DialogSelectOption<string>[]>(() => {
     if (showError()) return []
@@ -52,11 +55,16 @@ export function DialogSkill(props: DialogSkillProps) {
     <DialogSelect
       title="Skills"
       placeholder="Search skills..."
-      options={options()}
-      renderFilter={!showError()}
-      locked={showError()}
+      options={loading() ? [] : options()}
+      renderFilter={!showError() && !loading()}
+      locked={showError() || loading()}
+      onEmptySubmit={loading() ? () => setAttention((value) => value + 1) : undefined}
       emptyView={
-        showError() ? (
+        loading() ? (
+          <box paddingLeft={4} paddingRight={4}>
+            <Spinner attention={attention()}>Loading skills</Spinner>
+          </box>
+        ) : showError() ? (
           <box paddingLeft={4} paddingRight={4}>
             <text fg={theme.error} attributes={TextAttributes.BOLD}>
               Could not load skills

@@ -54,8 +54,9 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
 
     async function syncWorkspace() {
       const listed = await sdk.client.experimental.workspace.list().catch(() => undefined)
-      if (!listed?.data) return
+      if (!listed?.data) return false
       const status = await sdk.client.experimental.workspace.status().catch(() => undefined)
+      if (!status?.data) return false
       const next = Object.fromEntries((status?.data ?? []).map((item) => [item.workspaceID, item.status]))
 
       batch(() => {
@@ -65,6 +66,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
           setStore("workspace", "current", undefined)
         }
       })
+      return true
     }
 
     sdk.event.on("event", (event) => {
