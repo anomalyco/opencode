@@ -3,12 +3,9 @@
 // body builder, so the existing inline-hint lowering path handles the rest.
 //
 // The default `"auto"` shape places one breakpoint at the last tool definition,
-// one at the last system part, and one at the latest user message. This
-// matches what production agent harnesses (LangChain's caching middleware,
-// kern-ai's 10x cost-reduction playbook) converge on for tool-use loops: the
-// latest user message stays put while a single turn explodes into many
-// assistant/tool round-trips, so caching at that boundary lets every
-// intra-turn API call hit the prefix.
+// one at the last system part, and one at the conversation tail. Advancing
+// the tail after each tool result keeps the previous cache entry within
+// Anthropic's 20-block lookback during long agent turns.
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved —
 // this function only fills gaps the caller left empty.
@@ -18,7 +15,7 @@ import { LLMRequest, Message, ToolDefinition, type ContentPart } from "./schema/
 const AUTO: CachePolicyObject = {
   tools: true,
   system: true,
-  messages: "latest-user-message",
+  messages: { tail: 1 },
 }
 
 const NONE: CachePolicyObject = {}
@@ -27,7 +24,7 @@ const NONE: CachePolicyObject = {}
 //   - undefined   → "auto" — caching is on by default. The math favors it:
 //                   Anthropic 5m-cache write is 1.25x base, read is 0.1x,
 //                   so a single reuse within 5 minutes already wins.
-//   - "auto"      → tools + system + latest user msg.
+//   - "auto"      → tools + system + final message boundary.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
 //   - object form → exactly what the caller asked for.
 const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {

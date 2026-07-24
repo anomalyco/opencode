@@ -48,7 +48,7 @@ describe("applyCachePolicy", () => {
     }),
   )
 
-  it.effect("'auto' marks the last tool, last system part, and latest user message on Anthropic", () =>
+  it.effect("'auto' marks the last tool, last system part, and final message boundary on Anthropic", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
