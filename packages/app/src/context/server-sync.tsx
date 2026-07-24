@@ -157,7 +157,7 @@ export const loadActiveSessionsQuery = (
   queryOptions<SessionActiveOutput, Error, SessionActiveOutput, readonly [ServerScope, "activeSessions"]>({
     queryKey: [scope, "activeSessions"] as const,
     queryFn: () => api.active(),
-    enabled: false,
+    enabled: true,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
     refetchOnMount: false,
@@ -242,8 +242,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       active: async () => {
         if ((await serverSDK.protocol) === "v1") {
           const statuses = (await serverSDK.client.session.status()).data ?? {}
-          for (const [sessionID, status] of Object.entries(statuses)) {
-            session.set("session_status", sessionID, reconcile(status))
+          seedActiveSessionStatuses(session, statuses)
+          for (const sessionID of Object.keys(statuses)) {
             void session.resolve(sessionID).catch(() => undefined)
           }
           return Object.fromEntries(

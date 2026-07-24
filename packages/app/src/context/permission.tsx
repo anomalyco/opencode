@@ -13,6 +13,7 @@ import { type DraftTab, useTabs } from "./tabs"
 import { useSettings } from "./settings"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
+import { normalizePermissionRequest } from "./global-sync/utils"
 import {
   acceptKey,
   directoryAcceptKey,
@@ -243,9 +244,20 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
 
   const respond: PermissionRespondFn = (request) => {
     if (meta.disposed) return
-    input.sdk.client.permission.respond(request).catch(() => {
-      responded.delete(request.permissionID)
-    })
+    input.sdk.api.permission
+      .reply({ sessionID: request.sessionID, requestID: request.permissionID, reply: request.response })
+      .catch(() => {
+        responded.delete(request.permissionID)
+      })
+  }
+
+  const list = async (directory: string) => {
+    if ((await input.sdk.protocol) === "v1") {
+      return (await input.sdk.client.permission.list({ directory })).data ?? []
+    }
+    return input.sdk.api.permission.request
+      .list({ location: { directory } })
+      .then((result) => result.data.map(normalizePermissionRequest))
   }
 
   function respondOnce(permission: PermissionRequest, directory?: string) {
@@ -343,14 +355,12 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
       }),
     )
 
-    input.sdk.client.permission
-      .list({ directory })
-      .then((x) => {
+    list(directory)
+      .then((permissions) => {
         if (meta.disposed) return
         if (!isAutoAcceptingDirectory(directory)) return
-        for (const perm of x.data ?? []) {
-          if (!perm?.id) continue
-          void respondPending(perm, directory, () => isAutoAcceptingDirectory(directory))
+        for (const permission of permissions) {
+          void respondPending(permission, directory, () => isAutoAcceptingDirectory(directory))
         }
       })
       .catch(() => undefined)
@@ -377,16 +387,14 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
       }),
     )
 
-    input.sdk.client.permission
-      .list({ directory })
-      .then((x) => {
+    list(directory)
+      .then((permissions) => {
         if (meta.disposed) return
         if (enableVersion.get(key) !== version) return
         if (!isAutoAccepting(sessionID, directory)) return
-        for (const perm of x.data ?? []) {
-          if (!perm?.id) continue
+        for (const permission of permissions) {
           void respondPending(
-            perm,
+            permission,
             directory,
             () => enableVersion.get(key) === version && isAutoAccepting(sessionID, directory),
           )
