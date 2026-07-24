@@ -1,6 +1,7 @@
 # Subagent 输出截断误报成功修正方案
 
-- 状态：实施中；模块一（Session 截断终态）已改并通过回归测试，提交 `0d75454b2`；其余模块待实施
+- 状态：实施中；模块一（Session 截断终态）已提交（`0d75454b2`）；模块二（Task
+  前后台失败传播）已提交（`4dada962e`）；Provider 模块待实施
 - 初稿日期：2026-07-23
 - 最近审查：2026-07-24
 - 对应问题：仓库外层 `Issue#1.md`
@@ -1678,11 +1679,11 @@ I18: Task XML-like serialization
 
 | 类型 | 文件 / 用例 | 验证内容 | 状态 |
 |---|---|---|---|
-| 回归 | `test/cli/run/run-process.test.ts`：subagent length without text | 真实 CLI/SSE/DB 全链路；wire max token 正确；child 持久化 length error；父 Task 非 completed；不自动重放 child 请求 | 待加 |
+| 回归 | `test/cli/run/run-process.test.ts`：subagent length without text | 真实 CLI/SSE/DB 全链路；wire max token 正确；child 持久化 length error；父 Task 非 completed；不自动重放 child 请求 | 已加并通过，提交 `4dada962e` |
 | 回归 | `test/session/prompt.test.ts`：length without text | processor 同步持久化 finish/error；error event 恰好一次；只发一个 LLM 请求 | 已加并通过，提交 `0d75454b2` |
-| 回归 | `test/tool/task.test.ts`：foreground length without text | 不产生空 `completed`；Task/BackgroundJob 失败 | 待加 |
-| 回归 | `test/tool/task.test.ts`：foreground length with partial text | 失败；完整内容可由子 Session 定位；错误带有界 incomplete excerpt | 待加 |
-| 回归 | `test/tool/task.test.ts`：background length | 后台通知使用 `state="error"`，不使用 completed | 待加 |
+| 回归 | `test/tool/task.test.ts`：foreground length without text | 不产生空 `completed`；Task/BackgroundJob 失败 | 已加并通过，提交 `4dada962e` |
+| 回归 | `test/tool/task.test.ts`：foreground length with partial text | 失败；完整内容可由子 Session 定位；错误带有界 incomplete excerpt | 已加并通过，提交 `4dada962e` |
+| 回归 | `test/tool/task.test.ts`：background length | 后台通知使用 `state="error"`，不使用 completed | 已加并通过，提交 `4dada962e` |
 | 新增 | `test/session/processor-effect.test.ts`：length terminal normalization | 直接输入共享 LLM `step-finish(reason="length")`；返回 stop；正常路径事件恰好一次；既有 terminal error 不覆盖/不重复发布 | 已加并通过，提交 `0d75454b2` |
 | 新增 | `test/session/processor-effect.test.ts`：length then secondary processor failure | length error 落库后模拟 snapshot/part/cleanup 失败；`halt()` 保留原终态、只记录 secondary failure、不重复发事件 | 已加并通过（snapshot failure 同时覆盖 cleanup；part failure 走同一 halt seam），提交 `0d75454b2` |
 | 新增 | `test/cli/run/run-process.test.ts`：top-level length | 顶层 Session 产生 error event；partial 仍输出/落库；CLI 非零退出且不自动续写 | 已加并通过（CLI 可观察项；落库由同组 processor/prompt 用例断言），提交 `0d75454b2` |
@@ -1690,15 +1691,16 @@ I18: Task XML-like serialization
 | 新增 | `test/session/prompt.test.ts`：length after a tool completed in the previous provider round | round 1 文件追加一次并持久化 tool result；round 2 报告被截断；文件仍只有一行；不发 child round 3 | 已加并通过，提交 `0d75454b2` |
 | 新增 | `test/session/prompt.test.ts`：length after StructuredOutput success | 通过可控 processor/tool seam 同时建立 structured value 与 length；structured 快捷路径不能绕过 length error | 已加并通过，提交 `0d75454b2` |
 | 新增 | `test/session/compaction.test.ts`：length summary | summary 带 OutputLengthError，不进入 completed compaction，不发布成功 compact event | 已加并通过，提交 `0d75454b2` |
-| 新增 | `test/tool/task.test.ts`：content-filter/API assistant error | 非 length assistant error 同样不会成为 completed；只取安全 message，不复制 responseBody/headers/metadata | 待加 |
-| 新增 | `test/tool/task.test.ts`：existing error plus finish length | aborted 优先为 cancelled；其他已有错误保留原分类；defensive length 仅在无 error 时生效 | 待加 |
-| 新增 | `test/tool/task.test.ts`：aborted assistant foreground/background | runTask interrupt-only；BackgroundJob cancelled；前台 `Task cancelled`；后台不注入 completed/error 通知 | 待加 |
-| 新增 | `test/tool/task.test.ts`：multiple text parts | 按顺序形成 visible excerpt，不只取最后 part | 待加 |
-| 新增 | `test/tool/task.test.ts`：large/unicode partial output | excerpt 按完整 code point 满足 line/UTF-8 byte 上限并包含 Session ID；全文只存在于已持久化子 Session | 待加 |
-| 新增 | `test/tool/task.test.ts`：reasoning privacy | 错误包含 reasoning token count，但不包含 reasoning part 文本 | 待加 |
-| 新增 | `test/tool/task.test.ts`：task markup injection | text/error/summary 含闭合标签和 `state="completed"` 时全部转义；转义后 excerpt 仍满足 UTF-8 byte/line 上限 | 待加 |
-| 新增 | `test/tool/task.test.ts`：promotion then length | foreground 被提升为 background 后仍注入 `state="error"` | 待加 |
-| 既有回归 | `test/tool/task.test.ts`：normal stop/resume/background completion | 正常 completed 行为不变 | 待跑（已有覆盖） |
+| 新增 | `test/tool/task.test.ts`：content-filter/API assistant error | 非 length assistant error 同样不会成为 completed；只取安全 message，不复制 responseBody/headers/metadata | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：existing error plus finish length | aborted 优先为 cancelled；其他已有错误保留原分类；defensive length 仅在无 error 时生效 | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：non-assistant result | `TaskPromptOps.prompt()` 违反 assistant 结果契约时 Task/BackgroundJob 失败 | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：aborted assistant foreground/background | runTask interrupt-only；BackgroundJob cancelled；前台 `Task cancelled`；后台不注入 completed/error 通知 | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：multiple text parts | 按顺序形成 visible excerpt，不只取最后 part | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：large/unicode partial output | excerpt 按完整 code point 满足 line/UTF-8 byte 上限并包含 Session ID；全文只存在于已持久化子 Session | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：reasoning privacy | 错误包含 reasoning token count，但不包含 reasoning part 文本 | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：task markup injection | text/error/summary 含闭合标签和 `state="completed"` 时全部转义；转义后 excerpt 仍满足 UTF-8 byte/line 上限 | 已加并通过，提交 `4dada962e` |
+| 新增 | `test/tool/task.test.ts`：promotion then length | foreground 被提升为 background 后仍注入 `state="error"` | 已加并通过，提交 `4dada962e` |
+| 既有回归 | `test/tool/task.test.ts`：normal stop/resume/background completion | 正常 completed 行为不变 | 已全量通过（Task 文件 29 个用例），提交 `4dada962e` |
 | 新增 | `test/provider/transform.test.ts`：reasoning 131072, no override | 返回 131072 | 待加 |
 | 新增 | `test/provider/transform.test.ts`：non-reasoning 131072 | 返回 32000 | 待加 |
 | 新增 | `test/provider/transform.test.ts`：reasoning + explicit 64000 | 返回 64000 | 待加 |
@@ -1774,13 +1776,33 @@ processor cause/halt 管线。CLI fixture 只断言可观察的 partial stdout�
 持久化 assistant message/parts，或者使用真实 Session/CLI fixture；不能仅检查内存返回值
 后声称 durable transcript 已保留。
 
+模块二实际验证记录：
+
+- 按测试先行执行：在修改 `task.ts` 前，8 个 Task 定向回归均按预期失败，表现为
+  foreground/background/promotion 的 length 与 aborted 结果仍被登记为 `completed`，markup
+  注入产生额外 `<task>`；真实 subagent CLI 用例也观察到父 Task `status=completed`；
+- 实现后 Task 定向用例（含复核阶段补充的 defensive length、non-assistant result 和
+  ContentFilter 边界）为 `11 pass, 0 fail, 79 assertions`；
+- `test/tool/task.test.ts` 全量为 `29 pass, 0 fail, 142 assertions`，既有 resume、正常
+  completed、后台运行、promotion 与递归取消测试全部保持通过；
+- `test/cli/run/run-process.test.ts` 全量为 `15 pass, 0 fail, 60 assertions`；其中真实
+  subagent/DB 链路定向重跑为 `1 pass, 0 fail, 11 assertions`；
+- `packages/opencode` 的 `bun run typecheck` 通过；四个 TypeScript 改动文件的 Prettier
+  检查通过；定向 oxlint 为 0 error，报告的 8 个 warning 均位于本模块修改前已存在的代码；
+  新增 CLI 用例使用 Effect Schema 解码数据库 JSON，避免以不安全类型断言掩盖持久化结构
+  错误。
+
+CLI fixture 为每个测试 home 显式设置隔离的 `OPENCODE_DB`，使同一 fixture 中先后启动的
+`opencode run` 与 `opencode db` 子进程稳定读取同一个临时数据库。该改动只影响测试环境，
+不改变生产数据库路径解析。
+
 ## 第七部分：代码更新清单
 
 | 文件 | 函数 / 位置 | 改动概述 | 状态 |
 |---|---|---|---|
 | `packages/opencode/src/session/processor.ts` | `step-finish` / `halt` | 在同一次 message 更新中生产 OutputLengthError；后续 processor failure 不覆盖已有终态或重复发事件 | 已改并通过，提交 `0d75454b2` |
 | `packages/opencode/src/session/prompt.ts` | process 后终态优先级 | length error 早于 structured success；只消费错误，不重复发布 | 已改并通过，提交 `0d75454b2` |
-| `packages/opencode/src/tool/task.ts` | `runTask` / failure formatter / `renderOutput` | 固定终态优先级；length 诊断与有界 visible excerpt；不泄漏 reasoning；统一转义 XML-like 动态内容 | 待改 |
+| `packages/opencode/src/tool/task.ts` | `runTask` / failure formatter / `renderOutput` | 固定终态优先级；length 诊断与有界 visible excerpt；不泄漏 reasoning；统一转义 XML-like 动态内容 | 已改并通过，提交 `4dada962e` |
 | `packages/opencode/src/provider/transform.ts` | `variants` / `maxOutputTokens` / `normalizeReasoningBudget` | `output=0` catalog fallback；reasoning 默认模型上限；numeric max 按 headroom 目标、provider bounds 和本地失败规则归一化 | 待改 |
 | `packages/opencode/src/provider/provider.ts` | Copilot config variant merge | 合并前保留动态远端 max；合并后恢复 max contract，并 clamp custom numeric variant 到远端 cap | 待改 |
 | `packages/opencode/src/plugin/github-copilot/models.ts` | remote numeric variants | 使用远端 min/max 生成合法 high/max；bounds 矛盾时不暴露 numeric variant；max cap 供后续 merge/request 使用 | 待改 |
@@ -1789,11 +1811,12 @@ processor cause/halt 管线。CLI fixture 只断言可观察的 partial stdout�
 | `packages/opencode/test/session/processor-effect.test.ts` | processor regression | 覆盖共享 length normalization、事件投递和后续 secondary failure 不覆盖 | 已改并通过，提交 `0d75454b2` |
 | `packages/opencode/test/session/prompt.test.ts` | session regression tests | 覆盖无 text、partial、上一轮已完成 tool、StructuredOutput 优先级和不重放 | 已改并通过，提交 `0d75454b2` |
 | `packages/opencode/test/session/compaction.test.ts` | compaction/overflow tests | 覆盖 length summary 和两种 context reservation 公式 | length summary 已改并通过，提交 `0d75454b2`；overflow 公式待后续模块 |
-| `packages/opencode/test/tool/task.test.ts` | Task regression tests | 覆盖错误优先级、取消、前后台、promotion、durable partial bounds/privacy、markup 注入和正常完成 | 待改 |
+| `packages/opencode/test/tool/task.test.ts` | Task regression tests | 覆盖错误优先级、取消、前后台、promotion、durable partial bounds/privacy、markup 注入和正常完成 | 已改并通过，提交 `4dada962e` |
 | `packages/opencode/test/provider/transform.test.ts` | max output/budget tests | 覆盖 fallback、numeric shapes、min/max/小 E/Copilot/high-custom/identity/immutability/determinism | 待改 |
 | `packages/opencode/test/provider/provider.test.ts` | Copilot variant merge test | 验证动态远端 max 不被用户覆盖，high/custom 不越 cap，其他 provider merge 不变 | 待改 |
 | `packages/opencode/test/session/llm.test.ts` | request body tests | 验证 wire max 与 numeric budget 共用 `E`、配置失败不发请求、effort identity 和 plugin 输入/override | 待改 |
-| `packages/opencode/test/cli/run/run-process.test.ts` | CLI subprocess regression | 固化真实 provider/child Session/Task/parent/DB 全链路和顶层 length 行为 | 顶层 length 已改并通过，提交 `0d75454b2`；subagent 全链路待后续模块 |
+| `packages/opencode/test/cli/run/run-process.test.ts` | CLI subprocess regression | 固化真实 provider/child Session/Task/parent/DB 全链路和顶层 length 行为 | 顶层 length 已提交（`0d75454b2`）；subagent 全链路已提交（`4dada962e`） |
+| `packages/opencode/test/lib/cli-process.ts` | isolated CLI fixture environment | 为同一 fixture 的 run/db 子进程固定共享的临时 `OPENCODE_DB`，保持测试间隔离 | 已改并通过，提交 `4dada962e` |
 | `packages/opencode/test/acp/service-session.test.ts` | ACP stop reason regression | 验证 OutputLengthError 激活既有 `max_tokens` 映射 | 已改并通过，提交 `0d75454b2` |
 | `packages/opencode/test/plugin/cloudflare.test.ts` | existing override tests | 运行既有 maxOutputTokens 删除/保留断言 | 待跑 |
 | `packages/opencode/test/plugin/codex.test.ts` | Codex override test | 补 `chat.params` 删除 maxOutputTokens 的直接断言 | 待改 |
@@ -1819,7 +1842,7 @@ effort/adaptive 协议。
 
 | 文档路径 | 要改什么 | 状态 |
 |---|---|---|
-| `docs/fixes/subagent-fix-output-length.md` | 修复后回填测试、代码、文档状态及偏差决策 | 实施中；模块一实际状态及实现提交 `0d75454b2` 已回填 |
+| `docs/fixes/subagent-fix-output-length.md` | 修复后回填测试、代码、文档状态及偏差决策 | 实施中；模块一、模块二实际状态与实现提交均已回填 |
 | `packages/web/src/content/docs/cli.mdx` | 澄清环境变量覆盖 core default；reasoning 默认模型上限；numeric `max` 的配置级 headroom/最小值降级；compaction、延迟、quota 风险；plugin 最终覆盖 | 待改 |
 | 现有本地化 `cli.mdx` | 按 `.opencode/command/translate.md` 同步英文改动，保留变量名和技术术语 | 待同步 |
 
