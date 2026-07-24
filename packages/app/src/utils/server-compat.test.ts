@@ -108,6 +108,25 @@ describe("createCompatibleApi", () => {
     expect(body.parts[2]).not.toHaveProperty("source")
   })
 
+  test("preserves original parts for V1 optimistic reconciliation", async () => {
+    const { api, requests } = setup("v1")
+    await api.session.prompt({
+      sessionID: "ses_1",
+      id: "msg_1",
+      text: "look",
+      files: [{ uri: "data:image/png;base64,AAAA", name: "image.png" }],
+      legacyParts: [
+        { id: "prt_text", type: "text", text: "look" },
+        { id: "prt_image", type: "file", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "image.png" },
+      ],
+    })
+
+    expect((await requests[0]!.json()).parts).toEqual([
+      { id: "prt_text", type: "text", text: "look" },
+      { id: "prt_image", type: "file", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "image.png" },
+    ])
+  })
+
   test("keeps V2 session actions on the current API", async () => {
     const { api, requests } = setup("v2")
     await api.session.archive({ sessionID: "ses_1" })
