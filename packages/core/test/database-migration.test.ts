@@ -8,6 +8,7 @@ import { Effect, Layer } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
+import sessionListIndexesMigration from "@opencode-ai/core/database/migration/20260724103001_session_list_indexes"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
@@ -59,6 +60,114 @@ describe("DatabaseMigration", () => {
       expect(result.stdout.toString()).toContain("No schema changes, nothing to migrate")
     }, 30_000)
   }
+
+  // Mirrors the pre-migration shape of `session` well enough to exercise the
+  // index migration: every column the old and new indexes reference.
+  const legacySessionTable = (db: EffectDrizzleSqlite.EffectSQLiteDatabase) =>
+    Effect.gen(function* () {
+      yield* db.run(
+        sql`CREATE TABLE session (id text PRIMARY KEY, project_id text NOT NULL, workspace_id text, parent_id text, time_updated integer NOT NULL, time_archived integer)`,
+      )
+      yield* db.run(sql`CREATE INDEX session_project_idx ON session (project_id)`)
+      yield* db.run(sql`CREATE INDEX session_workspace_idx ON session (workspace_id)`)
+      yield* db.run(sql`CREATE INDEX session_parent_idx ON session (parent_id)`)
+    })
+
+  const sessionIndexes = (db: EffectDrizzleSqlite.EffectSQLiteDatabase) =>
+    Effect.gen(function* () {
+      const names = (yield* db.all<{ name: string }>(
+        sql`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'session' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+      )).map((index) => index.name)
+      return yield* Effect.forEach(names, (name) =>
+        Effect.gen(function* () {
+          const columns = yield* db.all<{ name: string }>(sql`PRAGMA index_info(${sql.raw(name)})`)
+          return { name, columns: columns.map((column) => column.name) }
+        }),
+      )
+    })
+
+  test("widens session list indexes on an existing database", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* legacySessionTable(db)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionListIndexesMigration])
+
+        expect(yield* sessionIndexes(db)).toEqual([
+          { name: "session_parent_idx", columns: ["parent_id", "time_updated", "id"] },
+          { name: "session_project_idx", columns: ["project_id", "time_updated"] },
+          { name: "session_time_updated_idx", columns: ["time_updated", "id"] },
+          // Untouched by this migration; asserted so a future widening of the
+          // three above cannot silently drop it.
+          { name: "session_workspace_idx", columns: ["workspace_id"] },
+        ])
+      }),
+    )
+  })
+
+  test("replaces a narrow session_time_updated_idx instead of skipping it", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* legacySessionTable(db)
+        yield* db.run(sql`CREATE INDEX session_time_updated_idx ON session (time_updated)`)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionListIndexesMigration])
+
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA index_info(session_time_updated_idx)`)).map(
+            (column) => column.name,
+          ),
+        ).toEqual(["time_updated", "id"])
+      }),
+    )
+  })
+
+  test("migrated and freshly created databases agree on session indexes", async () => {
+    // drizzle-kit does not diff index column lists, so the migration's SQL is
+    // hand-written and `bun script/migration.ts --check` cannot catch drift
+    // between it and schema.gen.ts. Compare the two paths directly.
+    const migrated = await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* legacySessionTable(db)
+        yield* DatabaseMigration.applyOnly(db, [sessionListIndexesMigration])
+        return yield* sessionIndexes(db)
+      }),
+    )
+    const fresh = await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        return yield* sessionIndexes(db)
+      }),
+    )
+
+    expect(migrated).toEqual(fresh)
+  })
+
+  test("serves the global session list from session_time_updated_idx without sorting", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+
+        // Matches Session.listGlobal's default query shape.
+        const plan = (yield* db.all<{ detail: string }>(
+          sql`EXPLAIN QUERY PLAN SELECT * FROM session WHERE time_archived IS NULL ORDER BY time_updated DESC, id DESC LIMIT 100`,
+        ))
+          .map((row) => row.detail)
+          .join("\n")
+
+        expect(plan).toContain("session_time_updated_idx")
+        // The composite (time_updated, id) index only removes the sort because
+        // the ORDER BY reverses both columns uniformly. A temp B-tree here means
+        // the index no longer matches the query and the scan is back.
+        expect(plan).not.toContain("TEMP B-TREE")
+      }),
+    )
+  })
 
   test("applies tracked migrations to an empty database", async () => {
     await run(
