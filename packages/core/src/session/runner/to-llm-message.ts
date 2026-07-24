@@ -79,7 +79,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
+              providerMetadata: item.providerMetadata,
             },
           ]
         : item.text.length > 0
