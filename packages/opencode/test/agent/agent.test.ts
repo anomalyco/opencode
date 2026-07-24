@@ -52,10 +52,47 @@ it.instance("returns default native agents when no config", () =>
     expect(names).toContain("plan")
     expect(names).toContain("general")
     expect(names).toContain("explore")
+    expect(names).toContain("heavy")
+    expect(names).toContain("council")
     expect(names).toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
   }),
+)
+
+it.instance("workflow agents expose only their matching orchestration tool", () =>
+  Effect.gen(function* () {
+    const heavy = yield* load((svc) => svc.get("heavy"))
+    const council = yield* load((svc) => svc.get("council"))
+    expect(heavy?.mode).toBe("primary")
+    expect(heavy?.steps).toBe(2)
+    expect(evalPerm(heavy, "heavy_run")).toBe("allow")
+    expect(evalPerm(heavy, "council_run")).toBe("deny")
+    expect(evalPerm(heavy, "edit")).toBe("deny")
+    expect(council?.mode).toBe("primary")
+    expect(council?.steps).toBe(2)
+    expect(evalPerm(council, "council_run")).toBe("allow")
+    expect(evalPerm(council, "heavy_run")).toBe("deny")
+    expect(evalPerm(council, "read")).toBe("deny")
+  }),
+)
+
+it.instance(
+  "workflow configuration hides disabled entry agents",
+  () =>
+    Effect.gen(function* () {
+      const agents = yield* load((svc) => svc.list())
+      expect(agents.map((agent) => agent.name)).not.toContain("heavy")
+      expect(agents.map((agent) => agent.name)).not.toContain("council")
+    }),
+  {
+    config: {
+      workflows: {
+        heavy: false,
+        council: { enabled: false },
+      },
+    },
+  },
 )
 
 it.instance("build agent has correct default properties", () =>
@@ -749,6 +786,10 @@ it.instance(
       agent: {
         build: { disable: true },
         plan: { disable: true },
+      },
+      workflows: {
+        heavy: false,
+        council: false,
       },
     },
   },

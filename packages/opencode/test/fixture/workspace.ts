@@ -12,6 +12,8 @@ import { Vcs } from "../../src/project/vcs"
 import { Session } from "../../src/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "./workflow"
 
 export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.Info>) =>
   AppNodeBuilder.build(
@@ -30,5 +32,6 @@ export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.I
     [
       [InstanceStore.bootstrapNode, InstanceBootstrap.node],
       [RuntimeFlags.node, RuntimeFlags.layer(overrides)],
+      [Workflow.node, TestWorkflow.layer()],
     ],
   )

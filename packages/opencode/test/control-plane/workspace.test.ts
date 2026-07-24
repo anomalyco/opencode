@@ -31,6 +31,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
 
 const originalEnv = {
   OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
@@ -56,6 +58,7 @@ const workspaceLayer = (experimentalWorkspaces: boolean) =>
         InstanceStore.bootstrapNode,
         Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
       ],
+      [Workflow.node, TestWorkflow.layer()],
     ],
   )
 

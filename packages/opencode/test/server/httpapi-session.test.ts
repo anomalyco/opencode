@@ -37,6 +37,8 @@ import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped 
 import { TestLLMServer } from "../lib/llm-server"
 import { testProviderConfig } from "../lib/test-provider"
 import { pollWithTimeout, testEffect } from "../lib/effect"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const noopBootstrapLayer = Layer.succeed(
@@ -45,7 +47,10 @@ const noopBootstrapLayer = Layer.succeed(
 )
 const appLayer = AppNodeBuilder.build(
   LayerNode.group([InstanceStore.node, Project.node, Session.node, Workspace.node, Database.node, Ripgrep.node]),
-  [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
+  [
+    [InstanceStore.bootstrapNode, noopBootstrapLayer],
+    [Workflow.node, TestWorkflow.layer()],
+  ],
 )
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
   HttpApiApp.routes,

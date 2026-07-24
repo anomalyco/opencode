@@ -223,6 +223,46 @@ describe("ConfigAgentPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("removes disabled workflow entrypoints and internal roles", () =>
+    Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
+      const workflowAgents = [
+        "heavy",
+        "heavy-planner",
+        "heavy-reader",
+        "heavy-writer",
+        "heavy-synthesizer",
+        "council",
+        "council-planner",
+        "council-perspective",
+        "council-debater",
+        "council-synthesizer",
+      ]
+      yield* agents.transform((editor) => {
+        for (const id of workflowAgents) editor.update(AgentV2.ID.make(id), () => {})
+      })
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({ workflows: { heavy: false } }),
+            }),
+            new Config.Document({
+              type: "document",
+              info: decode({ workflows: { council: { enabled: false } } }),
+            }),
+          ]),
+      })
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provideService(Config.Service, config),
+      )
+
+      expect((yield* agents.all()).map((agent) => agent.id)).toEqual([])
+    }),
+  )
+
   it.live("loads legacy file-based agents from config directories", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

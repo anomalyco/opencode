@@ -12,6 +12,8 @@ import { ToolRegistry } from "@/tool/registry"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: SessionID.make("ses_test"),
@@ -27,7 +29,11 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(LayerNode.compile(LayerNode.group([ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node])))
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node]), [
+    [Workflow.node, TestWorkflow.layer()],
+  ]),
+)
 
 describe("tool.skill", () => {
   it.instance("execute returns skill content block with files", () =>

@@ -8,6 +8,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { SessionTools } from "@opencode-ai/core/tool/session-tools"
 import { executeTool, settleTool, toolDefinitions } from "./lib/tool"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { testEffect } from "./lib/effect"
@@ -31,6 +32,9 @@ const outputStore = Layer.mock(ToolOutputStore.Service, {
 })
 const registryLayer = AppNodeBuilder.build(ToolRegistry.node, [[ToolOutputStore.node, outputStore]])
 const it = testEffect(registryLayer)
+const sessionIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([SessionTools.node, ToolRegistry.node]), [[ToolOutputStore.node, outputStore]]),
+)
 const integrated = testEffect(
   AppNodeBuilder.build(LayerNode.group([ApplicationTools.node, ToolRegistry.node]), [
     [ToolOutputStore.node, outputStore],
@@ -129,6 +133,25 @@ describe("ToolRegistry", () => {
       expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
       yield* Scope.close(scope, Exit.void)
       expect(yield* toolDefinitions(service)).toEqual([])
+    }),
+  )
+
+  sessionIt.effect("isolates scoped terminal tools to one Session", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const sessions = yield* SessionTools.Service
+      const otherSessionID = SessionV2.ID.make("ses_other")
+      const scope = yield* Scope.make()
+      yield* sessions.register(sessionID, { workflow_result: Tool.asTerminal(make()) }).pipe(Scope.provide(scope))
+
+      const materialized = yield* registry.materialize([], sessionID)
+      expect(materialized.definitions.map((tool) => tool.name)).toEqual(["workflow_result"])
+      expect(materialized.terminalDefinitions.map((tool) => tool.name)).toEqual(["workflow_result"])
+      expect((yield* registry.materialize([], otherSessionID)).definitions).toEqual([])
+      expect(yield* materialized.settle(call("workflow_result"))).toMatchObject({ terminal: true })
+
+      yield* Scope.close(scope, Exit.void)
+      expect((yield* registry.materialize([], sessionID)).definitions).toEqual([])
     }),
   )
 

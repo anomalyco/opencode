@@ -21,6 +21,10 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
+import { WorkflowSchema } from "@opencode-ai/core/workflow/schema"
+import { SessionSchema } from "@opencode-ai/core/session/schema"
 
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
@@ -54,13 +58,97 @@ const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
   [Config.node, configLayer],
   [RuntimeFlags.node, RuntimeFlags.layer()],
+  [Workflow.node, TestWorkflow.layer()],
 ] as const
 
 const it = testEffect(LayerNode.compile(root, replacements))
+const withWorkflow = testEffect(
+  LayerNode.compile(root, [
+    [Config.node, configLayer],
+    [RuntimeFlags.node, RuntimeFlags.layer()],
+    [
+      Workflow.node,
+      TestWorkflow.layer({
+        heavy: () =>
+          Effect.succeed(
+            WorkflowSchema.HeavyOutput.make({
+              workflow: "heavy",
+              status: "completed",
+              summary: "Recursive work completed",
+              root_session_id: SessionSchema.ID.make("ses_heavy_root"),
+              nodes: [
+                {
+                  id: "heavy-root",
+                  session_id: SessionSchema.ID.make("ses_heavy_root"),
+                  depth: 0,
+                  title: "Heavy root",
+                  objective: "Trace the implementation",
+                  capability: "write",
+                  status: "completed",
+                  summary: "Recursive work completed",
+                  decisions: ["Keep the V2 workflow canonical"],
+                  findings: [{ claim: "Nested evidence survives", evidence: ["src/workflow.ts"] }],
+                  changed_files: ["src/workflow.ts"],
+                  validation: ["bun test"],
+                  risks: [],
+                  follow_up: [],
+                },
+              ],
+            }),
+          ),
+        council: () =>
+          Effect.succeed(
+            WorkflowSchema.CouncilOutput.make({
+              workflow: "council",
+              status: "completed",
+              summary: "Debate completed",
+              root_session_id: SessionSchema.ID.make("ses_council_root"),
+              perspectives: [
+                {
+                  perspective_id: "safety",
+                  summary: "Proceed conditionally",
+                  issues: [
+                    {
+                      id: "issue-1",
+                      question: "Should this ship?",
+                      stance: "conditional",
+                      rationale: "Validation is required",
+                      evidence: ["test output"],
+                    },
+                  ],
+                  recommendations: ["Run validation"],
+                  risks: ["Regression risk"],
+                  session_id: SessionSchema.ID.make("ses_council_perspective"),
+                },
+              ],
+              debate: [
+                {
+                  issue_id: "issue-1",
+                  perspective_id: "safety",
+                  round: 1,
+                  stance: "conditional",
+                  argument: "Ship after validation",
+                  concessions: [],
+                  rebuttals: ["Speed alone is insufficient"],
+                  evidence: ["test output"],
+                  session_id: SessionSchema.ID.make("ses_council_debate"),
+                },
+              ],
+              consensus: ["Validation is required"],
+              disagreements: [],
+              recommendations: ["Run validation"],
+              risks: ["Regression risk"],
+            }),
+          ),
+      }),
+    ],
+  ]),
+)
 const withCodeMode = testEffect(
   LayerNode.compile(root, [
     [Config.node, configLayer],
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: true })],
+    [Workflow.node, TestWorkflow.layer()],
     [
       MCP.node,
       Layer.mock(MCP.Service, {
@@ -84,6 +172,7 @@ const withEmptyCodeMode = testEffect(
   LayerNode.compile(root, [
     [Config.node, configLayer],
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: true })],
+    [Workflow.node, TestWorkflow.layer()],
     [
       MCP.node,
       Layer.mock(MCP.Service, {
@@ -106,6 +195,81 @@ describe("tool.registry", () => {
       const ids = yield* registry.ids()
 
       expect(ids).not.toContain("task_status")
+    }),
+  )
+
+  it.instance("registers Heavy and Council compatibility tools", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      expect(yield* registry.ids()).toEqual(expect.arrayContaining(["heavy_run", "council_run"]))
+    }),
+  )
+
+  withWorkflow.instance("Heavy bridge preserves the complete recursive result and child session metadata", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const heavy = yield* agents.get("heavy")
+      if (!heavy) throw new Error("Heavy agent not found")
+      const tool = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: heavy,
+      })).find((item) => item.id === "heavy_run")
+      if (!tool) throw new Error("Heavy tool not found")
+
+      const result = yield* tool.execute(
+        { task: "Trace the implementation" },
+        {
+          sessionID: SessionID.make("ses_parent"),
+          messageID: MessageID.make("msg_parent"),
+          callID: "call_heavy",
+          agent: "heavy",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.rootSessionID).toBe("ses_heavy_root")
+      expect(result.metadata.childSessionIDs).toEqual(["ses_heavy_root"])
+      expect(result.output).toContain("Nested evidence survives")
+      expect(result.output).toContain("src/workflow.ts")
+    }),
+  )
+
+  withWorkflow.instance("Council bridge preserves debate and participant session metadata", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const council = yield* agents.get("council")
+      if (!council) throw new Error("Council agent not found")
+      const tool = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: council,
+      })).find((item) => item.id === "council_run")
+      if (!tool) throw new Error("Council tool not found")
+
+      const result = yield* tool.execute(
+        { question: "Should this ship?" },
+        {
+          sessionID: SessionID.make("ses_parent"),
+          messageID: MessageID.make("msg_parent"),
+          callID: "call_council",
+          agent: "council",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.rootSessionID).toBe("ses_council_root")
+      expect(result.metadata.childSessionIDs).toEqual(["ses_council_perspective", "ses_council_debate"])
+      expect(result.output).toContain("Speed alone is insufficient")
+      expect(result.output).toContain("Validation is required")
     }),
   )
 

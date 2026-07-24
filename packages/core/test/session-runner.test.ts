@@ -2999,6 +2999,116 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("forces only terminal tools on the configured final step and stops after settlement", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agents = yield* AgentV2.Service
+      const registry = yield* ToolRegistry.Service
+      yield* agents.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.steps = 2
+        }),
+      )
+      yield* registry.register({
+        workflow_result: Tool.asTerminal(
+          Tool.make({
+            description: "Submit result",
+            input: Schema.Struct({ summary: Schema.String }),
+            output: Schema.Struct({ summary: Schema.String }),
+            execute: (input) => Effect.sync(() => executions.push(input.summary)).pipe(Effect.as(input)),
+          }),
+        ),
+      })
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Return a typed result" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-work", name: "echo", input: { text: "inspected" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({
+            id: "call-result",
+            name: "workflow_result",
+            input: { summary: "complete" },
+          }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.toolChoice).toMatchObject({ type: "required" })
+      expect(requests[1]?.tools.map((tool) => tool.name)).toEqual(["workflow_result"])
+      expect(executions).toEqual(["inspected", "complete"])
+    }),
+  )
+
+  it.effect("rejects a non-terminal tool hallucinated on a terminal-only final step", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agents = yield* AgentV2.Service
+      const registry = yield* ToolRegistry.Service
+      yield* agents.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.steps = 2
+        }),
+      )
+      yield* registry.register({
+        workflow_result: Tool.asTerminal(
+          Tool.make({
+            description: "Submit result",
+            input: Schema.Struct({ summary: Schema.String }),
+            output: Schema.Struct({ summary: Schema.String }),
+            execute: (input) => Effect.sync(() => executions.push(input.summary)).pipe(Effect.as(input)),
+          }),
+        ),
+      })
+      const session = yield* SessionV2.Service
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Respect the terminal-only boundary" }),
+        resume: false,
+      })
+
+      requests.length = 0
+      executions.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-work", name: "echo", input: { text: "inspected" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-forbidden", name: "echo", input: { text: "forbidden" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.tools.map((tool) => tool.name)).toEqual(["workflow_result"])
+      expect(executions).toEqual(["inspected"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Respect the terminal-only boundary" },
+        { type: "assistant", content: [{ type: "tool", id: "call-work", state: { status: "completed" } }] },
+        { type: "assistant", content: [{ type: "tool", id: "call-forbidden", state: { status: "error" } }] },
+      ])
+    }),
+  )
+
   it.effect("resets the configured step allowance when steering input promotes", () =>
     Effect.gen(function* () {
       yield* setup

@@ -23,6 +23,7 @@ import { ConfigProvider } from "./config/provider"
 import { ConfigReference } from "./config/reference"
 import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
+import { ConfigWorkflows } from "./config/workflows"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
 
@@ -62,6 +63,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(Schema.optional).annotate({
     description: "Named built-in agent overrides and custom agent definitions",
+  }),
+  workflows: ConfigWorkflows.Info.pipe(Schema.optional).annotate({
+    description: "Recursive Heavy execution and Council deliberation settings",
   }),
   snapshots: Schema.Boolean.pipe(Schema.optional).annotate({
     description: "Enable snapshots used for undo and revert behavior",

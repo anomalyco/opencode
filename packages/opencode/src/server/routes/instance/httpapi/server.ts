@@ -66,6 +66,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { Workflow } from "@opencode-ai/core/workflow"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -272,6 +273,10 @@ export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
   const locationServiceMapV2 = buildLocationServiceMap()
+  const application = AppNodeBuilderV1.build(LayerNode.group([app, SessionV2.node, Workflow.node]), [
+    [LocationServiceMap.node, locationServiceMapV2],
+    [SessionExecution.node, SessionExecutionLocal.node],
+  ])
 
   return Layer.mergeAll(
     rootApiRoutes,
@@ -295,15 +300,8 @@ export function createRoutes(
     Layer.provide(sessionLocationLayer),
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),
-    Layer.provide(
-      AppNodeBuilderV1.build(SessionV2.node, [
-        [LocationServiceMap.node, locationServiceMapV2],
-        [SessionExecution.node, SessionExecutionLocal.node],
-      ]),
-    ),
+    Layer.provide(application),
     Layer.provide(locationServiceMapV2),
-
-    Layer.provide(AppNodeBuilderV1.build(app)),
     // Must stay last: layers provided later in this pipe build beneath earlier ones,
     // so Observability must come after every service graph. Otherwise eagerly forked
     // fibers (e.g. the ModelsDev background refresh) capture Effect's default stdout

@@ -9,9 +9,10 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
-import { definition, permission, settle, validateName, type AnyTool, type RegistrationError } from "./tool"
+import { definition, permission, settle, terminal, validateName, type AnyTool, type RegistrationError } from "./tool"
 import { Tools } from "./tools"
 import { makeLocationNode } from "../effect/app-node"
+import { SessionTools } from "./session-tools"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
@@ -21,13 +22,17 @@ export type ExecuteInput = {
 }
 
 export interface Interface {
-  readonly materialize: (permissions?: PermissionV2.Ruleset) => Effect.Effect<Materialization>
+  readonly materialize: (
+    permissions?: PermissionV2.Ruleset,
+    sessionID?: SessionSchema.ID,
+  ) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
 }
 
 export interface Materialization {
   readonly definitions: ReadonlyArray<ToolDefinition>
+  readonly terminalDefinitions: ReadonlyArray<ToolDefinition>
   readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement, ToolOutputStore.Error>
 }
 
@@ -35,6 +40,7 @@ export interface Settlement {
   readonly result: ToolResultValue
   readonly output?: ToolOutput
   readonly outputPaths?: ReadonlyArray<string>
+  readonly terminal?: boolean
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
@@ -43,13 +49,16 @@ const registryLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const applications = yield* ApplicationTools.Service
+    const sessions = yield* SessionTools.Service
     const resources = yield* ToolOutputStore.Service
     type Registration = { readonly identity: object; readonly tool: AnyTool }
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
 
     const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised?: object) {
       const registration =
-        local.get(input.call.name)?.at(-1)?.registration ?? applications.entries().get(input.call.name)
+        sessions.entries(input.sessionID).get(input.call.name) ??
+        local.get(input.call.name)?.at(-1)?.registration ??
+        applications.entries().get(input.call.name)
       if (!registration)
         return {
           result: {
@@ -76,9 +85,10 @@ const registryLayer = Layer.effect(
       const result = ToolOutput.toResultValue(bounded.output)
       if (result.type === "error")
         return bounded.outputPaths.length > 0 ? { result, outputPaths: bounded.outputPaths } : { result }
+      const completed = terminal(registration.tool) ? { terminal: true as const } : {}
       return bounded.outputPaths.length > 0
-        ? { result, output: bounded.output, outputPaths: bounded.outputPaths }
-        : { result, output: bounded.output }
+        ? { result, output: bounded.output, outputPaths: bounded.outputPaths, ...completed }
+        : { result, output: bounded.output, ...completed }
     })
 
     return Service.of({
@@ -103,16 +113,22 @@ const registryLayer = Layer.effect(
           }),
         )
       }),
-      materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions = []) {
+      materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions = [], sessionID) {
         const registrations = new Map(applications.entries())
         for (const [name, entries] of local) {
           const registration = entries.at(-1)?.registration
           if (registration) registrations.set(name, registration)
         }
+        if (sessionID) {
+          for (const [name, registration] of sessions.entries(sessionID)) registrations.set(name, registration)
+        }
         for (const [name, registration] of registrations)
           if (whollyDisabled(permission(registration.tool, name), permissions)) registrations.delete(name)
         return {
           definitions: Array.from(registrations, ([name, registration]) => definition(name, registration.tool)),
+          terminalDefinitions: Array.from(registrations)
+            .filter(([, registration]) => terminal(registration.tool))
+            .map(([name, registration]) => definition(name, registration.tool)),
           settle: (input) => {
             const registration = registrations.get(input.call.name)
             if (registration) return settleWith(input, registration.identity)
@@ -137,11 +153,11 @@ function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ApplicationTools.node, ToolOutputStore.node],
+  deps: [ApplicationTools.node, SessionTools.node, ToolOutputStore.node],
 })
 
 export const toolsNode = makeLocationNode({
   service: Tools.Service,
   layer,
-  deps: [ApplicationTools.node, ToolOutputStore.node],
+  deps: [ApplicationTools.node, SessionTools.node, ToolOutputStore.node],
 })

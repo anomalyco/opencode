@@ -23,11 +23,16 @@ import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const appLayer = AppNodeBuilder.build(
   LayerNode.group([Project.node, Session.node, Workspace.node, InstanceStore.node, Database.node, Ripgrep.node]),
-  [[InstanceStore.bootstrapNode, InstanceBootstrap.node]],
+  [
+    [InstanceStore.bootstrapNode, InstanceBootstrap.node],
+    [Workflow.node, TestWorkflow.layer()],
+  ],
 )
 const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 

@@ -7,6 +7,7 @@ import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { ConfigAgent } from "../agent"
 import { ConfigMarkdown } from "../markdown"
+import { ConfigWorkflows } from "../workflows"
 import { FSUtil } from "../../fs-util"
 import { ModelV2 } from "../../model"
 import { ConfigAgentV1 } from "../../v1/config/agent"
@@ -73,6 +74,24 @@ export const Plugin = define({
         )
         const configuredDefault = Config.latest(documents, "default_agent")
         if (configuredDefault !== undefined) draft.default(AgentV2.ID.make(configuredDefault))
+        const workflows = ConfigWorkflows.merge(documents.map((document) => document.info.workflows))
+        if (workflows?.heavy === false || (typeof workflows?.heavy === "object" && workflows.heavy.enabled === false)) {
+          for (const id of ["heavy", "heavy-planner", "heavy-reader", "heavy-writer", "heavy-synthesizer"])
+            draft.remove(AgentV2.ID.make(id))
+        }
+        if (
+          workflows?.council === false ||
+          (typeof workflows?.council === "object" && workflows.council.enabled === false)
+        ) {
+          for (const id of [
+            "council",
+            "council-planner",
+            "council-perspective",
+            "council-debater",
+            "council-synthesizer",
+          ])
+            draft.remove(AgentV2.ID.make(id))
+        }
         for (const current of draft.list()) {
           draft.update(current.id, (agent) => agent.permissions.push(...permissions))
         }

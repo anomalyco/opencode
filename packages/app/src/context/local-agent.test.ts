@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { hasCustomAgent, resolveAgent } from "./local-agent"
+import { hasCustomAgent, resolveAgent, shouldShowAgentSelector } from "./local-agent"
 
 describe("hasCustomAgent", () => {
   test("detects explicitly custom agents", () => {
@@ -8,6 +8,30 @@ describe("hasCustomAgent", () => {
 
   test("ignores built-in and unclassified agents", () => {
     expect(hasCustomAgent([{ native: true }, {}])).toBe(false)
+  })
+})
+
+describe("shouldShowAgentSelector", () => {
+  test("keeps the default Build and Plan selector hidden", () => {
+    expect(
+      shouldShowAgentSelector(
+        [
+          { name: "build", native: true },
+          { name: "plan", native: true },
+        ],
+        false,
+      ),
+    ).toBe(false)
+  })
+
+  test("shows built-in workflow and custom agents without a settings override", () => {
+    expect(shouldShowAgentSelector([{ name: "heavy", native: true }], false)).toBe(true)
+    expect(shouldShowAgentSelector([{ name: "council", native: true }], false)).toBe(true)
+    expect(shouldShowAgentSelector([{ name: "review", native: false }], false)).toBe(true)
+  })
+
+  test("respects the explicit selector setting", () => {
+    expect(shouldShowAgentSelector([{ name: "build", native: true }], true)).toBe(true)
   })
 })
 

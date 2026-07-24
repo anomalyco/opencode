@@ -31,6 +31,8 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
 
 const mcp = Layer.succeed(
   MCP.Service,
@@ -91,6 +93,7 @@ const it = testEffect(
     [MCP.node, mcp],
     [LSP.node, lsp],
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })],
+    [Workflow.node, TestWorkflow.layer()],
   ]),
 )
 

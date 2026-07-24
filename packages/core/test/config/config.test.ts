@@ -5,6 +5,7 @@ import { Effect, Layer, Schema } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
+import { ConfigWorkflows } from "@opencode-ai/core/config/workflows"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
@@ -63,6 +64,34 @@ describe("Config", () => {
 
       expect(Config.latest(entries, "model")).toBe("openrouter/openai/gpt-5.5")
       expect(Config.latest(entries, "default_agent")).toBeUndefined()
+    }),
+  )
+
+  it.effect("merges workflow settings across configuration priorities", () =>
+    Effect.sync(() => {
+      const workflows = ConfigWorkflows.merge([
+        Schema.decodeUnknownSync(ConfigWorkflows.Info)({
+          heavy: { max_depth: 3, models: { planner: "openai/planner", worker: "openai/worker" } },
+          council: { perspectives: 4, debate: { rounds: 2 } },
+        }),
+        Schema.decodeUnknownSync(ConfigWorkflows.Info)({
+          heavy: { concurrency: 2, models: { writer: "openai/writer" } },
+          council: { debate: { topics: 2 }, models: { debater: "openai/debater" } },
+        }),
+      ])
+
+      expect(workflows).toMatchObject({
+        heavy: {
+          max_depth: 3,
+          concurrency: 2,
+          models: { planner: "openai/planner", worker: "openai/worker", writer: "openai/writer" },
+        },
+        council: {
+          perspectives: 4,
+          debate: { rounds: 2, topics: 2 },
+          models: { debater: "openai/debater" },
+        },
+      })
     }),
   )
 
@@ -139,6 +168,23 @@ describe("Config", () => {
           variant: "high",
           subtask: true,
         },
+      })
+    }),
+  )
+
+  it.effect("preserves workflow settings while migrating v1 configuration", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({
+          agent: {},
+          workflows: {
+            heavy: { max_depth: 4, concurrency: 2 },
+            council: { perspectives: 5, debate: { mode: "always", rounds: 3 } },
+          },
+        }).workflows,
+      ).toMatchObject({
+        heavy: { max_depth: 4, concurrency: 2 },
+        council: { perspectives: 5, debate: { mode: "always", rounds: 3 } },
       })
     }),
   )
@@ -304,6 +350,22 @@ describe("Config", () => {
                     permissions: [{ action: "edit", resource: "*", effect: "deny" }],
                   },
                 },
+                workflows: {
+                  heavy: {
+                    max_depth: 3,
+                    tasks_per_node: 5,
+                    max_nodes: 32,
+                    concurrency: 4,
+                    mutation: "serial",
+                    on_failure: "keep",
+                    models: { writer: "anthropic/claude-sonnet" },
+                  },
+                  council: {
+                    perspectives: 4,
+                    debate: { mode: "always", topics: 2, participants: 3, rounds: 2 },
+                    models: { debater: "openai/gpt-5" },
+                  },
+                },
                 snapshots: false,
                 watcher: { ignore: ["node_modules/**", "dist/**", ".git"] },
                 formatter: {
@@ -387,6 +449,22 @@ describe("Config", () => {
             expect(reviewer?.steps).toBe(12)
             expect(reviewer?.disabled).toBe(false)
             expect(reviewer?.permissions).toEqual([{ action: "edit", resource: "*", effect: "deny" }])
+            expect(documents[0]?.info.workflows).toEqual({
+              heavy: {
+                max_depth: 3,
+                tasks_per_node: 5,
+                max_nodes: 32,
+                concurrency: 4,
+                mutation: "serial",
+                on_failure: "keep",
+                models: { writer: "anthropic/claude-sonnet" },
+              },
+              council: {
+                perspectives: 4,
+                debate: { mode: "always", topics: 2, participants: 3, rounds: 2 },
+                models: { debater: "openai/gpt-5" },
+              },
+            })
             expect(documents[0]?.info.snapshots).toBe(false)
             expect(documents[0]?.info.watcher).toEqual({ ignore: ["node_modules/**", "dist/**", ".git"] })
             expect(documents[0]?.info.formatter).toEqual({

@@ -182,7 +182,6 @@ const layer = Layer.effect(
       const agent = yield* agents.select(session.agent)
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
-      let needsContinuation = false
       let currentStep = step
       if (promotion) {
         const cutoff = yield* EventV2.latestSequence(db, session.id)
@@ -200,7 +199,11 @@ const layer = Layer.effect(
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
-      const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
+      const materializedTools = yield* tools.materialize(agent.info?.permissions, session.id)
+      const toolMaterialization =
+        !isLastStep || materializedTools.terminalDefinitions.length > 0 ? materializedTools : undefined
+      const definitions = isLastStep ? materializedTools.terminalDefinitions : materializedTools.definitions
+      const callableToolNames = new Set(definitions.map((definition) => definition.name))
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
@@ -208,9 +211,12 @@ const layer = Layer.effect(
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
-        messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
-        tools: toolMaterialization?.definitions ?? [],
-        toolChoice: isLastStep ? "none" : undefined,
+        messages: [
+          ...toLLMMessages(context, model),
+          ...(isLastStep && definitions.length === 0 ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
+        ],
+        tools: definitions,
+        toolChoice: isLastStep ? (definitions.length > 0 ? "required" : "none") : undefined,
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
@@ -229,6 +235,8 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let localToolCalls = 0
+      let terminalToolSettlements = 0
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -241,11 +249,11 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
-            if (!toolMaterialization) {
+            if (!toolMaterialization || (isLastStep && !callableToolNames.has(event.name))) {
               yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
               return
             }
-            needsContinuation = true
+            localToolCalls++
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
             yield* Effect.uninterruptibleMask((restore) =>
               restore(
@@ -256,8 +264,9 @@ const layer = Layer.effect(
                   call: event,
                 }),
               ).pipe(
-                Effect.flatMap((settlement) =>
-                  publish(
+                Effect.flatMap((settlement) => {
+                  if (settlement.terminal) terminalToolSettlements++
+                  return publish(
                     LLMEvent.toolResult({
                       id: event.id,
                       name: event.name,
@@ -265,8 +274,8 @@ const layer = Layer.effect(
                       output: settlement.output,
                     }),
                     settlement.outputPaths ?? [],
-                  ),
-                ),
+                  )
+                }),
               ),
             ).pipe(FiberSet.run(toolFibers))
           }),
@@ -342,7 +351,11 @@ const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
-          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
+          return {
+            needsContinuation:
+              !publisher.hasProviderError() && !isLastStep && localToolCalls !== terminalToolSettlements,
+            step: currentStep,
+          }
         }),
       )
     }, Effect.scoped)

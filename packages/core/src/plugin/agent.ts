@@ -97,6 +97,12 @@ Rules:
 - If the conversation ends with an unanswered question to the user, preserve that exact question
 - If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary`
 
+const PROMPT_HEAVY = `You are the Heavy workflow entrypoint. For every user request, call heavy_run exactly once with the complete objective. Heavy recursively plans and executes through durable child sessions, including workspace writes and validation when needed. After the tool returns, explain the result, important changes, validation, risks, and child-session trail to the user.`
+
+const PROMPT_COUNCIL = `You are the Council workflow entrypoint. For every user request, call council_run exactly once with the complete question. Council gathers independent structured perspectives, debates disagreements, and preserves minority positions. After the tool returns, present the synthesis, consensus, disagreements, recommendations, risks, and root child session to the user.`
+
+const PROMPT_WORKFLOW_RESULT = `You are an internal workflow stage. Perform the assigned role thoroughly, preserve concrete evidence and caveats, and finish by calling workflow_result with the complete structured result. Do not substitute a prose-only final answer for workflow_result.`
+
 export const Plugin = define({
   id: "agent",
   effect: Effect.fn(function* (ctx) {
@@ -119,6 +125,17 @@ export const Plugin = define({
       { action: "read", resource: "*.env", effect: "ask" },
       { action: "read", resource: "*.env.*", effect: "ask" },
       { action: "read", resource: "*.env.example", effect: "allow" },
+      { action: "heavy_run", resource: "*", effect: "deny" },
+      { action: "council_run", resource: "*", effect: "deny" },
+    ]
+    const workflowReader: PermissionV2.Ruleset = [
+      { action: "*", resource: "*", effect: "deny" },
+      { action: "grep", resource: "*", effect: "allow" },
+      { action: "glob", resource: "*", effect: "allow" },
+      { action: "webfetch", resource: "*", effect: "allow" },
+      { action: "websearch", resource: "*", effect: "allow" },
+      { action: "read", resource: "*", effect: "allow" },
+      { action: "workflow_result", resource: "*", effect: "allow" },
     ]
 
     yield* ctx.agent.transform((draft) => {
@@ -178,6 +195,63 @@ export const Plugin = define({
             ],
             readonlyExternalDirectory,
           ),
+        )
+      })
+
+      draft.update(AgentV2.ID.make("heavy"), (item) => {
+        item.description = "Recursive, write-capable execution with durable child sessions."
+        item.system = PROMPT_HEAVY
+        item.mode = "primary"
+        item.color = "warning"
+        item.steps = 2
+        item.permissions.push(
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "heavy_run", resource: "*", effect: "allow" },
+        )
+      })
+
+      draft.update(AgentV2.ID.make("council"), (item) => {
+        item.description = "Independent perspectives with structured multi-round debate."
+        item.system = PROMPT_COUNCIL
+        item.mode = "primary"
+        item.color = "info"
+        item.steps = 2
+        item.permissions.push(
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "council_run", resource: "*", effect: "allow" },
+        )
+      })
+
+      for (const id of [
+        "heavy-planner",
+        "heavy-reader",
+        "heavy-synthesizer",
+        "council-planner",
+        "council-perspective",
+        "council-debater",
+        "council-synthesizer",
+      ]) {
+        draft.update(AgentV2.ID.make(id), (item) => {
+          item.mode = "subagent"
+          item.hidden = true
+          item.system = PROMPT_WORKFLOW_RESULT
+          item.steps = 8
+          item.permissions.push(...PermissionV2.merge(defaults, workflowReader))
+        })
+      }
+
+      draft.update(AgentV2.ID.make("heavy-writer"), (item) => {
+        item.mode = "subagent"
+        item.hidden = true
+        item.system = PROMPT_WORKFLOW_RESULT
+        item.steps = 12
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "question", resource: "*", effect: "deny" },
+            { action: "heavy_run", resource: "*", effect: "deny" },
+            { action: "council_run", resource: "*", effect: "deny" },
+            { action: "workflow_result", resource: "*", effect: "allow" },
+          ]),
         )
       })
 

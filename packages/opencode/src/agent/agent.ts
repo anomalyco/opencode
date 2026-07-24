@@ -11,7 +11,9 @@ import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_COUNCIL from "./prompt/council.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_HEAVY from "./prompt/heavy.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -133,6 +135,8 @@ const layer = Layer.effect(
             "*.env.*": "ask",
             "*.env.example": "allow",
           },
+          heavy_run: "deny",
+          council_run: "deny",
         })
 
         const user = Permission.fromConfig(cfg.permission ?? {})
@@ -216,6 +220,42 @@ const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
+          heavy: {
+            name: "heavy",
+            description: "Recursive, write-capable execution with durable child sessions.",
+            prompt: PROMPT_HEAVY,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                heavy_run: "allow",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "primary",
+            native: true,
+            color: "warning",
+            steps: 2,
+          },
+          council: {
+            name: "council",
+            description: "Independent perspectives with structured multi-round debate.",
+            prompt: PROMPT_COUNCIL,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                council_run: "allow",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "primary",
+            native: true,
+            color: "info",
+            steps: 2,
+          },
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -292,6 +332,17 @@ const layer = Layer.effect(
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
+
+        if (
+          cfg.workflows?.heavy === false ||
+          (typeof cfg.workflows?.heavy === "object" && cfg.workflows.heavy.enabled === false)
+        )
+          delete agents.heavy
+        if (
+          cfg.workflows?.council === false ||
+          (typeof cfg.workflows?.council === "object" && cfg.workflows.council.enabled === false)
+        )
+          delete agents.council
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
         for (const name in agents) {

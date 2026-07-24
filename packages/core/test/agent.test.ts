@@ -99,7 +99,7 @@ describe("AgentV2", () => {
     }),
   )
 
-  it.effect("does not ambiently opt built-in agents into bash", () =>
+  it.effect("registers workflow entrypoints and keeps orchestration roles hidden", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
       yield* AgentPlugin.Plugin.effect(
@@ -117,15 +117,31 @@ describe("AgentV2", () => {
       expect(agents.map((item) => String(item.id)).sort()).toEqual([
         "build",
         "compaction",
+        "council",
+        "council-debater",
+        "council-perspective",
+        "council-planner",
+        "council-synthesizer",
         "explore",
         "general",
+        "heavy",
+        "heavy-planner",
+        "heavy-reader",
+        "heavy-synthesizer",
+        "heavy-writer",
         "plan",
         "summary",
         "title",
       ])
-      for (const item of agents) {
-        expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
-      }
+      expect((yield* agent.get(AgentV2.ID.make("heavy")))?.permissions).toEqual([
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "heavy_run", resource: "*", effect: "allow" },
+      ])
+      expect((yield* agent.get(AgentV2.ID.make("council")))?.permissions).toEqual([
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "council_run", resource: "*", effect: "allow" },
+      ])
+      expect((yield* agent.get(AgentV2.ID.make("heavy-writer")))?.hidden).toBe(true)
     }),
   )
 })

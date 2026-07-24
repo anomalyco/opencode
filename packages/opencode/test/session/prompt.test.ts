@@ -57,6 +57,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -214,6 +216,7 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
+    [Workflow.node, TestWorkflow.layer()],
   ] as const
   if (input?.processor === "blocking") {
     return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
@@ -228,6 +231,7 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
+    [Workflow.node, TestWorkflow.layer()],
   ] as const
   if (input?.processor === "blocking") {
     return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])

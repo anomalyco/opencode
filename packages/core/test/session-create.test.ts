@@ -93,6 +93,23 @@ describe("SessionV2.create", () => {
     }),
   )
 
+  it.effect("stores child Session identity and title", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const parent = yield* session.create({ location })
+      const child = yield* session.create({
+        location,
+        parentID: parent.id,
+        title: "Heavy: inspect storage",
+      })
+
+      expect(child).toMatchObject({
+        parentID: parent.id,
+        title: "Heavy: inspect storage",
+      })
+    }),
+  )
+
   it.effect("returns the existing Session when one ID is reused with different create arguments", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service

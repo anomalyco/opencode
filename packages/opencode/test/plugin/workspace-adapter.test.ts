@@ -19,6 +19,8 @@ import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Workflow } from "@opencode-ai/core/workflow"
+import { TestWorkflow } from "../fixture/workflow"
 
 const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
@@ -26,6 +28,7 @@ const it = testEffect(
     [Auth.node, AuthTest.empty],
     [Account.node, AccountTest.empty],
     [Npm.node, NpmTest.noop],
+    [Workflow.node, TestWorkflow.layer()],
     [InstanceStore.bootstrapNode, noopBootstrapLayer],
     [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true, experimentalWorkspaces: true })],
   ]),
