@@ -17,9 +17,8 @@ export const name = "glob"
 
 export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
-  path: Schema.String.pipe(Schema.optional).annotate({
-    description:
-      "Directory to search. Relative paths resolve from the active Location. Absolute paths inside it are accepted; external absolute paths require external_directory approval.",
+  path: RelativePath.pipe(Schema.optional).annotate({
+    description: "Relative directory to search. Defaults to the active Location.",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
     description: `Maximum results to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
@@ -56,7 +55,7 @@ export const Plugin = {
           name,
           Tool.make({
             description:
-              "Find files by glob pattern. Relative paths resolve from the active Location; explicit external paths require external_directory approval. Returns concise file resources. Use path to narrow the search and limit to bound the result count.",
+              "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
             input: Input,
             output: Output,
             execute: (input, context) =>
@@ -84,16 +83,12 @@ export const Plugin = {
                   agent: context.agent,
                   source,
                 })
-                const info = yield* fs
+                yield* fs
                   .stat(target.canonical)
                   .pipe(
                     Effect.catchReason("PlatformError", "NotFound", () =>
                       Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
                     ),
-                  )
-                if (info.type !== "Directory")
-                  return yield* Effect.fail(
-                    new ToolFailure({ message: `Search path is not a directory: ${input.path ?? "."}` }),
                   )
                 const root = path.resolve(location.directory, input.path ?? ".")
                 const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
