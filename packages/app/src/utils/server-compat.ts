@@ -326,7 +326,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     project: {
-      ...input.current.project,
+      ...currentProject,
       async list() {
         return ((await legacy().project.list()).data ?? []) as Project[]
       },
@@ -350,7 +350,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     path: {
-      ...input.current.path,
+      ...currentPath,
       async get(value?: Parameters<ServerApi["path"]["get"]>[0]) {
         const result = await legacy(value?.location).path.get()
         if (!result.data) throw new Error("Path unavailable")
@@ -358,7 +358,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     vcs: {
-      ...input.current.vcs,
+      ...currentVcs,
       async get(value?: Parameters<ServerApi["vcs"]["get"]>[0]) {
         const result = await legacy(value?.location).vcs.get()
         return located({ branch: result.data?.branch, defaultBranch: result.data?.default_branch }, value?.location)
@@ -385,7 +385,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     file: {
-      ...input.current.file,
+      ...currentFile,
       async list(value?: Parameters<ServerApi["file"]["list"]>[0]) {
         const result = await legacy(value?.location).file.list({ path: value?.path ?? "" })
         return located(result.data ?? [], value?.location)
@@ -403,7 +403,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     integration: {
-      ...input.current.integration,
+      ...currentIntegration,
       async get(value: Parameters<ServerApi["integration"]["get"]>[0]) {
         const methods = ((await legacy(value.location).provider.auth()).data?.[value.integrationID] ?? []).map(
           (method, index) =>
@@ -422,7 +422,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         )
       },
       connect: {
-        ...input.current.integration.connect,
+        ...(currentIntegration.connect ?? {}),
         key: async (value: Parameters<ServerApi["integration"]["connect"]["key"]>[0]) => {
           await legacy(value.location).auth.set({
             providerID: value.integrationID,
@@ -431,7 +431,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         },
       },
       oauth: {
-        ...input.current.integration.oauth,
+        ...(currentIntegration.oauth ?? {}),
         connect: async (value: Parameters<ServerApi["integration"]["oauth"]["connect"]>[0]) => {
           const method = Number(value.methodID)
           const result = await legacy(value.location).provider.oauth.authorize(
@@ -471,7 +471,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     pty: {
-      ...input.current.pty,
+      ...currentPty,
       async shells(value?: Parameters<ServerApi["pty"]["shells"]>[0]) {
         return located((await legacy(value?.location).pty.shells()).data ?? [], value?.location)
       },
@@ -513,7 +513,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     permission: {
-      ...input.current.permission,
+      ...currentPermission,
       async reply(value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } }) {
         await legacy(value.location).permission.respond({
           sessionID: value.sessionID,
@@ -524,7 +524,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
     },
     question: {
-      ...input.current.question,
+      ...currentQuestion,
       async reply(value: Parameters<ServerApi["question"]["reply"]>[0]) {
         await legacy().question.reply({
           requestID: value.requestID,
