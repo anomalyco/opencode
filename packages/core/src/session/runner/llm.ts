@@ -35,6 +35,33 @@ type CallOutcome = Data.TaggedEnum<{
 }>
 const CallOutcome = Data.taggedEnum<CallOutcome>()
 
+// Declining an interactive prompt halts the drain instead of becoming model-facing tool output.
+const isUserDeclined = (cause: Cause.Cause<unknown>) =>
+  cause.reasons.some(
+    (reason) =>
+      Cause.isDieReason(reason) &&
+      (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionTool.CancelledError),
+  )
+
+/**
+ * Classifies how the owned tool fibers ended. Interrupts and interactive declines abort
+ * the step; a defect from a tool implementation becomes a failed tool call the model can
+ * read; a typed infrastructure failure must fail the assistant and then the drain.
+ */
+const classifyToolExits = (settled: Exit.Exit<Array<Exit.Exit<void, ToolOutputStore.Error>>, never>) => {
+  const causes =
+    settled._tag === "Failure"
+      ? [settled.cause]
+      : settled.value.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
+  const failure = causes.find((cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause))
+  return {
+    interrupted: causes.some(Cause.hasInterrupts),
+    declined: causes.some(isUserDeclined),
+    failure,
+    infraError: failure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(failure)),
+  }
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -82,14 +109,6 @@ const layer = Layer.effect(
       }
     })
 
-    // Declining an interactive prompt halts the drain instead of becoming model-facing tool output.
-    const isUserDeclined = (cause: Cause.Cause<unknown>) =>
-      cause.reasons.some(
-        (reason) =>
-          Cause.isDieReason(reason) &&
-          (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionTool.CancelledError),
-      )
-
     /**
      * Prepares and runs at most one model call, executes its local tools, and durably
      * settles the step. Compaction may instead request that the logical step restart.
@@ -105,11 +124,9 @@ const layer = Layer.effect(
       // Establish what the model knows before admitting what the user said, so
       // a blocked first step leaves pending inputs untouched.
       yield* InstructionState.prepare(db, events, selected.instructions, selected.session.id)
-      let currentStep = step
-      if (promotable) {
-        const promoted = yield* SessionPending.promote(db, events, selected.session.id, promotable)
-        if (promoted > 0) currentStep = 1
-      }
+      const promoted = promotable ? yield* SessionPending.promote(db, events, selected.session.id, promotable) : 0
+      // Promoted input opens a fresh step allowance.
+      const currentStep = promoted > 0 ? 1 : step
       const loaded = yield* context.load(selected)
       const { session, agent } = loaded
       const resolved = loaded.model
@@ -236,8 +253,7 @@ const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasRetryEvidence() &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
-            (yield* restore(compaction.compact({ session, messages: loaded.messages, model, cost: resolved.cost })))
-              .status === "completed"
+            (yield* restore(compaction.compact(compactionInput))).status === "completed"
           )
             return CallOutcome.Restart({ step: currentStep, recoveredOverflow: true })
 
@@ -267,30 +283,17 @@ const layer = Layer.effect(
           const settled = yield* restore(
             Effect.forEach(ownedToolFibers, Fiber.await, { concurrency: "unbounded" }),
           ).pipe(Effect.exit)
-          const settledCauses =
-            settled._tag === "Failure"
-              ? [settled.cause]
-              : settled.value.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
-          const toolsInterrupted = settledCauses.some(Cause.hasInterrupts)
-          const userDeclined = settledCauses.some(isUserDeclined)
-
           if (settled._tag === "Failure") yield* FiberSet.clear(toolFibers)
-          if (userDeclined || streamInterrupted || toolsInterrupted) {
+          const tools = classifyToolExits(settled)
+
+          if (tools.declined || streamInterrupted || tools.interrupted) {
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
             yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
           }
-          // A settled tool fiber failure is one of two things. A defect from a tool
-          // implementation becomes a failed tool call the model can read, and the step still
-          // settles so the model may recover. A typed infrastructure failure (tool output
-          // could not be persisted) also fails the assistant and then fails the drain.
-          const settledFailure = settledCauses.find((cause) => !Cause.hasInterrupts(cause) && !isUserDeclined(cause))
-          const infraError =
-            settledFailure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(settledFailure))
-          if (settledFailure !== undefined) {
-            const failure = infraError ?? Cause.squash(settledFailure)
-            const error = toSessionError(failure)
+          if (tools.failure !== undefined) {
+            const error = toSessionError(tools.infraError ?? Cause.squash(tools.failure))
             yield* serialized(publisher.failUnsettledTools(error))
-            if (infraError !== undefined) yield* serialized(publisher.failAssistant(error))
+            if (tools.infraError !== undefined) yield* serialized(publisher.failAssistant(error))
           }
 
           // Fail unresolved calls before the terminal step event. Local calls have joined, so
@@ -338,10 +341,10 @@ const layer = Layer.effect(
           }
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
-          if (userDeclined) return yield* Effect.interrupt
-          if ((toolsInterrupted || infraError !== undefined) && settledFailure)
-            return yield* Effect.failCause(settledFailure)
-          if (toolsInterrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
+          if (tools.declined) return yield* Effect.interrupt
+          if ((tools.interrupted || tools.infraError !== undefined) && tools.failure)
+            return yield* Effect.failCause(tools.failure)
+          if (tools.interrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
           if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
           return CallOutcome.Completed({ needsContinuation, step: currentStep })
         }),
