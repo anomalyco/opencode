@@ -107,71 +107,80 @@ export function SubagentFooter() {
         flexShrink={0}
         backgroundColor={theme.backgroundPanel}
       >
-        <box flexDirection="row" justifyContent="space-between" gap={1}>
-          <box flexDirection="row" gap={1} minWidth={0} flexShrink={1} overflow="hidden">
-            <text fg={theme.text} flexShrink={0} wrapMode="none">
-              <b>{subagentInfo().label}</b>
-            </text>
-            <Show when={modelInfo()}>
-              {(item) => (
-                <text flexShrink={1} wrapMode="none" truncate>
-                  <span style={{ fg: theme.textMuted }}>· </span>
-                  <span style={{ fg: theme.text }}>{item().model} </span>
-                  <span style={{ fg: theme.textMuted }}>{item().provider}</span>
-                  <Show when={item().variant}>
-                    {(variant) => (
-                      <>
-                        <span style={{ fg: theme.textMuted }}> · </span>
-                        <span style={{ fg: theme.warning, bold: true }}>{variant()}</span>
-                      </>
-                    )}
-                  </Show>
+        <box flexDirection="column" gap={0}>
+          <Show when={modelInfo()}>
+            {(item) => (
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.text} wrapMode="none">
+                  {item().model}
                 </text>
-              )}
-            </Show>
-            <Show when={subagentInfo().total > 0}>
-              <text style={{ fg: theme.textMuted }} flexShrink={0} wrapMode="none">
-                ({subagentInfo().index} of {subagentInfo().total})
-              </text>
-            </Show>
-            <Show when={usage()}>
-              {(item) => (
                 <text fg={theme.textMuted} wrapMode="none">
-                  {[item().context, item().cost].filter(Boolean).join(" · ")}
+                  {item().provider}
                 </text>
-              )}
-            </Show>
-          </box>
-          <box flexDirection="row" gap={2} flexShrink={0}>
-            <box
-              onMouseOver={() => setHover("parent")}
-              onMouseOut={() => setHover(null)}
-              onMouseUp={() => keymap.dispatchCommand("session.parent")}
-              backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
-            >
+                <Show when={item().variant}>
+                  {(variant) => (
+                    <>
+                      <text fg={theme.textMuted} wrapMode="none">
+                        ·
+                      </text>
+                      <text fg={theme.warning} wrapMode="none">
+                        <b>{variant()}</b>
+                      </text>
+                    </>
+                  )}
+                </Show>
+              </box>
+            )}
+          </Show>
+          <box flexDirection="row" justifyContent="space-between" gap={1}>
+            <box flexDirection="row" gap={1}>
               <text fg={theme.text}>
-                Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
+                <b>{subagentInfo().label}</b>
               </text>
+              <Show when={subagentInfo().total > 0}>
+                <text style={{ fg: theme.textMuted }}>
+                  ({subagentInfo().index} of {subagentInfo().total})
+                </text>
+              </Show>
+              <Show when={usage()}>
+                {(item) => (
+                  <text fg={theme.textMuted} wrapMode="none">
+                    {[item().context, item().cost].filter(Boolean).join(" · ")}
+                  </text>
+                )}
+              </Show>
             </box>
-            <box
-              onMouseOver={() => setHover("prev")}
-              onMouseOut={() => setHover(null)}
-              onMouseUp={() => keymap.dispatchCommand("session.child.previous")}
-              backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
-            >
-              <text fg={theme.text}>
-                Prev <span style={{ fg: theme.textMuted }}>{previousShortcut()}</span>
-              </text>
-            </box>
-            <box
-              onMouseOver={() => setHover("next")}
-              onMouseOut={() => setHover(null)}
-              onMouseUp={() => keymap.dispatchCommand("session.child.next")}
-              backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
-            >
-              <text fg={theme.text}>
-                Next <span style={{ fg: theme.textMuted }}>{nextShortcut()}</span>
-              </text>
+            <box flexDirection="row" gap={2}>
+              <box
+                onMouseOver={() => setHover("parent")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => keymap.dispatchCommand("session.parent")}
+                backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("prev")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => keymap.dispatchCommand("session.child.previous")}
+                backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Prev <span style={{ fg: theme.textMuted }}>{previousShortcut()}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("next")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => keymap.dispatchCommand("session.child.next")}
+                backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Next <span style={{ fg: theme.textMuted }}>{nextShortcut()}</span>
+                </text>
+              </box>
             </box>
           </box>
         </box>
