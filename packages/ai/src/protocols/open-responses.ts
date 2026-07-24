@@ -49,7 +49,6 @@ const OpenResponsesInputFile = Schema.Struct({
 const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
 const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
-type OpenResponsesInputContent = Schema.Schema.Type<typeof OpenResponsesInputContent>
 
 const OpenResponsesOutputText = Schema.Struct({
   type: Schema.tag("output_text"),
@@ -263,12 +262,12 @@ interface ReasoningStreamItem {
 // Request Lowering
 // =============================================================================
 export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
-  name: string,
+  protocolName: string,
   tool: ToolDefinition,
   inputSchema: JsonSchema,
 ) {
   if (tool.native !== undefined)
-    return yield* ProviderShared.invalidRequest(`${name} does not support provider-native tool ${tool.name}`)
+    return yield* ProviderShared.invalidRequest(`${protocolName} does not support provider-native tool ${tool.name}`)
   return {
     type: "function" as const,
     name: tool.name,
@@ -279,8 +278,8 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
   }
 })
 
-export const lowerToolChoice = (name: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
-  ProviderShared.matchToolChoice(name, toolChoice, {
+export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
+  ProviderShared.matchToolChoice(protocolName, toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
@@ -299,11 +298,9 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
   if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string" || metadata.itemId.length === 0)
     return undefined
   const encryptedContent =
-    typeof metadata.reasoningEncryptedContent === "string"
+    typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
-      : metadata.reasoningEncryptedContent === null
-        ? null
-        : undefined
+      : undefined
   return {
     type: "reasoning",
     id: metadata.itemId,
@@ -496,7 +493,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
     : input
 })
 
-const lowerOptions = Effect.fn("OpenResponses.lowerOptions")(function* (request: LLMRequest) {
+const lowerOptions = (request: LLMRequest) => {
   const store = OpenResponsesOptions.store(request)
   const promptCacheKey = OpenResponsesOptions.promptCacheKey(request)
   const effort = OpenResponsesOptions.reasoningEffort(request)
@@ -514,14 +511,13 @@ const lowerOptions = Effect.fn("OpenResponses.lowerOptions")(function* (request:
     ...(verbosity ? { text: { verbosity } } : {}),
     ...(serviceTier ? { service_tier: serviceTier } : {}),
   }
-})
+}
 
 export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (
   request: LLMRequest,
   extension: Extension = BASE,
 ) {
   const generation = request.generation
-  const options = yield* lowerOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     model: request.model.id,
@@ -541,7 +537,7 @@ export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (
     max_output_tokens: generation?.maxTokens,
     temperature: generation?.temperature,
     top_p: generation?.topP,
-    ...options,
+    ...lowerOptions(request),
   }
 })
 
@@ -570,8 +566,11 @@ const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadata
 
 const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason => {
   const reason = event.response?.incomplete_details?.reason
-  if (reason === undefined || reason === null)
-    return hasFunctionCall ? "tool-calls" : event.type === "response.incomplete" ? "unknown" : "stop"
+  if (reason === undefined || reason === null) {
+    if (hasFunctionCall) return "tool-calls"
+    if (event.type === "response.incomplete") return "unknown"
+    return "stop"
+  }
   if (reason === "max_output_tokens") return "length"
   if (reason === "content_filter") return "content-filter"
   return hasFunctionCall ? "tool-calls" : "unknown"
@@ -664,7 +663,6 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
     {
       ...state,
       lifecycle,
-      hasFunctionCall: state.hasFunctionCall,
       tools: ToolStream.start(state.tools, item.id, {
         id: item.call_id ?? item.id,
         name: item.name ?? "",

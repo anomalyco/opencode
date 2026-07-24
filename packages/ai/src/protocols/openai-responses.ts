@@ -119,18 +119,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   } satisfies OpenAIResponsesBody
 })
 
-type HostedToolType =
-  | "web_search_call"
-  | "web_search_preview_call"
-  | "file_search_call"
-  | "code_interpreter_call"
-  | "computer_use_call"
-  | "image_generation_call"
-  | "mcp_call"
-  | "local_shell_call"
-
-type HostedToolItem = OpenResponses.StreamItem & {
-  readonly type: HostedToolType
+type HostedToolData = OpenResponses.StreamItem & {
   readonly id: string
   readonly status?: string
   readonly action?: unknown
@@ -161,10 +150,10 @@ const HOSTED_TOOLS = {
     input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
   },
   local_shell_call: { name: "local_shell", input: (item) => item.action ?? {} },
-} as const satisfies Record<
-  HostedToolType,
-  { readonly name: string; readonly input: (item: HostedToolItem) => unknown }
->
+} as const satisfies Record<string, { readonly name: string; readonly input: (item: HostedToolData) => unknown }>
+
+type HostedToolType = keyof typeof HOSTED_TOOLS
+type HostedToolItem = HostedToolData & { readonly type: HostedToolType }
 
 const isHostedToolItem = (item: OpenResponses.StreamItem): item is HostedToolItem =>
   item.type in HOSTED_TOOLS && typeof item.id === "string" && item.id.length > 0
