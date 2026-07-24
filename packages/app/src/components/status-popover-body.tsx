@@ -276,7 +276,12 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     dialogDead = true
     dialogRun += 1
   })
-  const sortedServers = createMemo(() => listServersByHealth(global.servers.list(), server.key, global.servers.health))
+  const sortedServers = createMemo(() => {
+    const list = settings.general.newLayoutDesigns()
+      ? global.servers.list()
+      : global.servers.list().filter((x) => global.ensureServerCtx(x).sdk.protocolKind() !== "v2")
+    return listServersByHealth(list, server.key, global.servers.health)
+  })
   const toggleMcp = useMcpToggle()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync().data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
@@ -303,7 +308,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
           {!settings.general.newLayoutDesigns() && (
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-              {global.servers.list().length > 0 ? `${global.servers.list().length} ` : ""}
+              {sortedServers().length > 0 ? `${sortedServers().length} ` : ""}
               {language.t("status.popover.tab.servers")}
             </Tabs.Trigger>
           )}
