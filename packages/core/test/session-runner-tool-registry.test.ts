@@ -515,7 +515,7 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("executes codemode tools advertised in a model request", () =>
+  it.effect("executes and reports progress for codemode tools advertised in a model request", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       const executed: string[] = []
@@ -526,8 +526,11 @@ describe("ToolRegistry", () => {
             description: "Echo text",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }) =>
-              Effect.sync(() => executed.push(`old:${text}`)).pipe(Effect.as({ output: { text } })),
+            execute: ({ text }, context) =>
+              Effect.sync(() => executed.push(`old:${text}`)).pipe(
+                Effect.andThen(context.progress({ stage: "old" })),
+                Effect.as({ output: { text } }),
+              ),
           }),
         })
         .pipe(Scope.provide(scope))
@@ -546,6 +549,7 @@ describe("ToolRegistry", () => {
         }),
       })
 
+      const progress: ToolRegistry.Progress[] = []
       const execution = yield* toolSet.execute({
         ...call("execute"),
         call: {
@@ -554,10 +558,16 @@ describe("ToolRegistry", () => {
           name: "execute",
           input: { code: 'return await tools.echo({ text: "request" })' },
         },
+        progress: (update) => Effect.sync(() => progress.push(update)),
       })
 
       expect(execution).toMatchObject({ status: "completed", content: [{ type: "text" }] })
       expect(executed).toEqual(["old:request"])
+      expect(progress).toEqual([
+        { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
+        { stage: "old", toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
+        { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
+      ])
     }),
   )
 })

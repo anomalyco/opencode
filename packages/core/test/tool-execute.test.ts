@@ -4,7 +4,7 @@ import { Tool } from "@opencode-ai/core/tool/tool"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Effect, Schema } from "effect"
+import { Deferred, Effect, Fiber, Schema } from "effect"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -130,4 +130,40 @@ test("execute supports callable namespace tools", async () => {
     ],
   })
   expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
+})
+
+test("execute marks running child calls failed when interrupted", async () => {
+  const child = Tool.make({
+    description: "Wait forever",
+    input: Schema.Struct({}),
+    output: Schema.String,
+    execute: () => Effect.never,
+  })
+  const execute = ExecuteTool.create(new Map([["wait", { tool: child, name: "wait", permission: "wait" }]]))
+  const updates: Tool.Metadata[] = []
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const fiber = yield* Tool.execute(
+        execute,
+        { code: "return await tools.wait({})" },
+        {
+          ...context,
+          progress: (update) =>
+            Effect.gen(function* () {
+              updates.push(update)
+              yield* Deferred.succeed(started, undefined)
+            }),
+        },
+      ).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(fiber)
+    }),
+  )
+
+  expect(updates).toEqual([
+    { toolCalls: [{ tool: "wait", status: "running" }] },
+    { error: true, toolCalls: [{ tool: "wait", status: "error" }] },
+  ])
 })
