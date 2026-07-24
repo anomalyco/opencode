@@ -3265,13 +3265,18 @@ describe("ProviderTransform.reasoningVariants", () => {
     )
   })
 
-  test("uses bare effort for Claude Opus 4.5", () => {
+  test("combines effort with extended thinking for Claude Opus 4.5", () => {
     expect(
       ProviderTransform.reasoningVariants(
         model([{ type: "effort", values: ["high"] }]),
         target("@ai-sdk/anthropic", "claude-opus-4-5"),
       ),
-    ).toEqual({ high: { effort: "high" } })
+    ).toEqual({
+      high: {
+        thinking: { type: "enabled", budgetTokens: 16_000 },
+        effort: "high",
+      },
+    })
   })
 
   test("uses explicit effort metadata for Anthropic-compatible models", () => {
@@ -4628,7 +4633,7 @@ describe("ProviderTransform.variants", () => {
         name: "opus 4.5",
         apiIds: ["claude-opus-4-5-20251101", "claude-opus-4.5-20251101"],
         efforts: ["low", "medium", "high"],
-        expectedHigh: { effort: "high" },
+        expectedHigh: { thinking: { type: "enabled", budgetTokens: 16000 }, effort: "high" },
       },
       {
         name: "sonnet 4.6",
