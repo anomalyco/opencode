@@ -9,7 +9,7 @@ import { Instructions } from "../instructions/index"
 import { CodeModeCatalog } from "./catalog"
 
 // prettier-ignore
-const prompt = (hasMoreTools: boolean) => `Run JavaScript to orchestrate tool calls and compose their results. Imports, filesystem access, and timers are unavailable. Do not use \`fetch\`; all API calls go through \`tools\`.
+const prompt = (hasMoreTools: boolean) => `Run JavaScript to orchestrate tool calls and compose their results. Imports, direct filesystem access, and timers are unavailable. Do not use \`fetch\`; all external access goes through \`tools\`.
 
 Prefer an explicit \`return\`; if omitted, the final top-level expression becomes the result. Await tool calls before returning; any calls still pending when execution ends are interrupted. Run independent calls concurrently with \`Promise.all\`.
 

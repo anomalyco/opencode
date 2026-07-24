@@ -73,8 +73,8 @@ describe("CodeModeInstructions.render", () => {
   test("describes the runtime and execution lifecycle concisely", () => {
     const instructions = render([lookup])
     expect(instructions).toContain("Run JavaScript to orchestrate tool calls and compose their results.")
-    expect(instructions).toContain("Imports, filesystem access, and timers are unavailable.")
-    expect(instructions).toContain("Do not use `fetch`; all API calls go through `tools`.")
+    expect(instructions).toContain("Imports, direct filesystem access, and timers are unavailable.")
+    expect(instructions).toContain("Do not use `fetch`; all external access goes through `tools`.")
     expect(instructions).toContain(
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
     )
