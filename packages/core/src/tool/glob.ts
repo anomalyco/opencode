@@ -25,11 +25,16 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Array(FileSystem.Entry)
-type ModelOutput = typeof Output.Encoded
+type EncodedOutput = typeof Output.Encoded
 
 /** Format raw search results into the concise line-oriented output models expect. */
-export const toModelOutput = (output: ModelOutput) => {
-  const lines = output.length === 0 ? ["No files found"] : output.map((item) => item.path)
+export const toModelContent = (entries: EncodedOutput, truncated = false) => {
+  const lines = entries.length === 0 ? ["No files found"] : entries.map((item) => item.path)
+  if (truncated)
+    lines.push(
+      "",
+      `(Results are truncated: showing first ${entries.length} results. Consider using a more specific path or pattern.)`,
+    )
   return lines.join("\n")
 }
 
@@ -74,11 +79,12 @@ export const Plugin = {
                       Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
                     ),
                   )
-                return yield* ripgrep
+                const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
+                const entries = yield* ripgrep
                   .glob({
                     cwd,
                     pattern: input.pattern,
-                    limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
+                    limit: limit + 1,
                   })
                   .pipe(
                     Effect.map((result) =>
@@ -90,13 +96,15 @@ export const Plugin = {
                       ),
                     ),
                   )
+                return { entries: entries.slice(0, limit), truncated: entries.length > limit }
               }).pipe(
-                Effect.map((output) => ({
-                  output,
-                  content: toModelOutput(
-                    output.map((entry) => ({ ...entry, path: path.resolve(location.directory, entry.path) })),
+                Effect.map((result) => ({
+                  output: result.entries,
+                  content: toModelContent(
+                    result.entries.map((entry) => ({ ...entry, path: path.resolve(location.directory, entry.path) })),
+                    result.truncated,
                   ),
-                  metadata: { count: output.length },
+                  metadata: { count: result.entries.length, truncated: result.truncated },
                 })),
                 Effect.mapError((error) =>
                   error instanceof ToolFailure

@@ -86,13 +86,16 @@ describe("search tools", () => {
               const glob = yield* executeTool(registry, call("glob", { pattern: "*" }))
               const grep = yield* executeTool(registry, call("grep", { pattern: "needle" }))
 
-              expect(glob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT })
+              expect(glob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
               expect(grep.metadata).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT })
               expect(glob.content).toHaveLength(1)
               expect(grep.content).toHaveLength(1)
               const globText = glob.content?.[0]?.type === "text" ? glob.content[0].text : ""
               const grepText = grep.content?.[0]?.type === "text" ? grep.content[0].text : ""
-              expect(globText.split("\n")).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT)
+              expect(globText.split("\n")).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT + 2)
+              expect(globText).toEndWith(
+                `(Results are truncated: showing first ${FileSystem.DEFAULT_SEARCH_LIMIT} results. Consider using a more specific path or pattern.)`,
+              )
               expect(grepText).toStartWith(`Found ${FileSystem.DEFAULT_SEARCH_LIMIT} matches\n`)
             }),
           )
