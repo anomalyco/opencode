@@ -33,7 +33,7 @@ const getModelLab = (modelId: string) => {
   if (modelId.startsWith("glm")) return "Z.ai"
   if (modelId.startsWith("qwen")) return "Alibaba"
   if (modelId.startsWith("minimax")) return "MiniMax"
-  if (modelId.startsWith("grok")) return "xAI"
+  if (modelId.startsWith("grok")) return "SpaceXAI"
   if (modelId.startsWith("mimo")) return "Xiaomi"
   if (modelId.startsWith("nemotron")) return "NVIDIA"
   if (modelId.startsWith("trinity")) return "Arcee"
@@ -158,7 +158,7 @@ export function ModelSection() {
                                   return <IconZai width={16} height={16} />
                                 case "Alibaba":
                                   return <IconAlibaba width={16} height={16} />
-                                case "xAI":
+                                case "SpaceXAI":
                                   return <IconXai width={16} height={16} />
                                 case "MiniMax":
                                   return <IconMiniMax width={16} height={16} />

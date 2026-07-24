@@ -206,7 +206,7 @@ export const dict = {
   "model.provider.anthropic": "Anthropic",
   "model.provider.openai": "OpenAI",
   "model.provider.google": "Google",
-  "model.provider.xai": "xAI",
+  "model.provider.xai": "SpaceXAI",
   "model.provider.meta": "Meta",
   "model.input.text": "текст",
   "model.input.image": "зображення",
