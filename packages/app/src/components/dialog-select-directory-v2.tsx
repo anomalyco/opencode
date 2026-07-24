@@ -68,10 +68,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
     () => (missingBase() ? true : undefined),
-    () =>
-      sdk.api.path
-        .get()
-        .catch(() => undefined),
+    () => sdk.api.path.get().catch(() => undefined),
     { initialValue: undefined },
   )
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")

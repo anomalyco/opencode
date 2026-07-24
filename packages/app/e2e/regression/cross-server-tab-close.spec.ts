@@ -85,8 +85,10 @@ async function mockServers(page: Page, requests: string[]) {
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event") return sse(route)
-    if (url.pathname === "/global/health") return json(route, { healthy: true })
+    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event")
+      return sse(route)
+    if (url.pathname === "/global/health") return json(route, {}, 404)
+    if (url.pathname === "/api/health") return json(route, { pid: 1 })
     if (url.pathname === "/api/session") return json(route, { data: [currentSession(current)], cursor: {} })
     if (url.pathname === "/api/session/active") return json(route, { data: {} })
     if (url.pathname === `/api/session/${current.id}`) return json(route, { data: currentSession(current) })
@@ -97,8 +99,7 @@ async function mockServers(page: Page, requests: string[]) {
     if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
     if (["/skill", "/command", "/lsp", "/formatter", "/permission", "/question", "/vcs/diff"].includes(url.pathname))
       return json(route, [])
-    if (["/global/config", "/config", "/provider/auth", "/mcp"].includes(url.pathname))
-      return json(route, {})
+    if (["/global/config", "/config", "/provider/auth", "/mcp"].includes(url.pathname)) return json(route, {})
     if (url.pathname === "/provider")
       return json(route, { all: [], connected: [], default: { providerID: "", modelID: "" } })
     if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
@@ -130,7 +131,10 @@ async function mockServers(page: Page, requests: string[]) {
       })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
     if (url.pathname === "/api/vcs")
-      return json(route, { location: { directory: current.directory }, data: { branch: "main", defaultBranch: "main" } })
+      return json(route, {
+        location: { directory: current.directory },
+        data: { branch: "main", defaultBranch: "main" },
+      })
     return json(route, {})
   })
 }

@@ -60,7 +60,8 @@ async function mockServers(page: Page) {
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
     if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event")
       return sse(route, url.pathname === "/api/event")
-    if (url.pathname === "/global/health") return json(route, { healthy: true })
+    if (url.pathname === "/global/health") return json(route, {}, 404)
+    if (url.pathname === "/api/health") return json(route, { pid: 1 })
     if (url.pathname === "/api/session/active")
       return json(route, { data: url.origin === serverB ? { [sessionB.id]: { type: "running" } } : {} })
     if (url.pathname === "/api/session") return json(route, { data: [currentSession(current)], cursor: {} })
@@ -104,7 +105,10 @@ async function mockServers(page: Page) {
       })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
     if (url.pathname === "/api/vcs")
-      return json(route, { location: { directory: current.directory }, data: { branch: "main", defaultBranch: "main" } })
+      return json(route, {
+        location: { directory: current.directory },
+        data: { branch: "main", defaultBranch: "main" },
+      })
     return json(route, {})
   })
 }

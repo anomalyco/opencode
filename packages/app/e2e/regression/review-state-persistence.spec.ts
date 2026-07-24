@@ -92,20 +92,18 @@ async function setup(page: Page) {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ location: { directory }, data: { branch: "feature", defaultBranch: "dev" } }),
+      body: JSON.stringify({ branch: "feature", default_branch: "dev" }),
     }),
   )
   await page.route("**/vcs/diff**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        location: { directory },
-        data:
-          new URL(route.request().url()).searchParams.get("mode") === "branch"
-            ? [diff("src/alpha.ts"), diff("src/beta.ts")]
-            : [diff("src/alpha.ts"), diff("src/gamma.ts")],
-      }),
+      body: JSON.stringify(
+        new URL(route.request().url()).searchParams.get("mode") === "branch"
+          ? [diff("src/alpha.ts"), diff("src/beta.ts")]
+          : [diff("src/alpha.ts"), diff("src/gamma.ts")],
+      ),
     }),
   )
   await page.addInitScript(
