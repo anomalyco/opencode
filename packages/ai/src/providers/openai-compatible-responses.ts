@@ -3,7 +3,9 @@ import { OpenAICompatibleResponses } from "../protocols/openai-compatible-respon
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import type { RouteDefaultsInput } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
-import type { OpenAIProviderOptionsInput } from "./openai-options"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options"
+
+export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } from "./open-responses-options"
 
 export const id = ProviderID.make("openai-compatible")
 
@@ -11,13 +13,14 @@ export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string
+    readonly providerOptions?: OpenResponsesProviderOptionsInput
   }
 
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL: string
   readonly provider?: string
-  readonly providerOptions?: OpenAIProviderOptionsInput
+  readonly providerOptions?: OpenResponsesProviderOptionsInput
 }
 
 export const routes = [OpenAICompatibleResponses.route]

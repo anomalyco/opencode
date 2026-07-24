@@ -59,7 +59,7 @@ describe("provider package entrypoints", () => {
       headers: { "x-application": "opencode" },
       body: { service_tier: "priority" },
       limits: { context: 200_000, output: 64_000 },
-      providerOptions: { openai: { reasoningEffort: "low", store: true } },
+      providerOptions: { openresponses: { reasoningEffort: "low", store: true } },
     })
 
     expect(String(selected.provider)).toBe("example")
@@ -72,7 +72,7 @@ describe("provider package entrypoints", () => {
     expect(selected.route.defaults.http?.body).toEqual({ service_tier: "priority" })
     expect(selected.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
     expect(selected.route.defaults.providerOptions).toEqual({
-      openai: { reasoningEffort: "low", store: true },
+      openresponses: { reasoningEffort: "low", store: true },
     })
   })
 
@@ -235,12 +235,12 @@ describe("provider package entrypoints", () => {
       path: "/chat/completions",
     })
     expect(responses.route.id).toBe("google-vertex-responses")
-    expect(responses.route.protocol).toBe("openai-responses")
+    expect(responses.route.protocol).toBe("open-responses")
     expect(responses.route.endpoint).toMatchObject({
       baseURL: "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/endpoints/openapi",
       path: "/responses",
     })
-    expect(responses.route.defaults.providerOptions).toEqual({ openai: { store: false } })
+    expect(responses.route.defaults.providerOptions).toEqual({ openresponses: { store: false } })
   })
 
   test("rejects conflicting Vertex auth settings at runtime", async () => {
