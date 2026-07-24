@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, or, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -229,12 +229,14 @@ const layer = Layer.effect(
             sandboxes: [] as string[],
             time: { created: Date.now(), updated: Date.now() },
           }
+      const replaceWorktree =
+        projectID !== ProjectV2.ID.global && row !== undefined && !(yield* fs.isDir(existing.worktree))
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
       const result: Info = {
         ...existing,
-        worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
+        worktree: projectID === ProjectV2.ID.global || replaceWorktree ? worktree : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
@@ -249,7 +251,7 @@ const layer = Layer.effect(
         (s) =>
           fs.exists(s).pipe(
             Effect.orDie,
-            Effect.map((exists) => (exists ? s : undefined)),
+            Effect.map((exists) => (exists && s !== result.worktree ? s : undefined)),
           ),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
@@ -287,6 +289,30 @@ const layer = Layer.effect(
         })
         .run()
         .pipe(Effect.orDie)
+
+      if (replaceWorktree) {
+        yield* db
+          .update(SessionTable)
+          .set({
+            project_id: projectID,
+            directory: data.directory,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(
+            and(
+              or(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.project_id, projectID)),
+              eq(SessionTable.directory, existing.worktree),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(WorkspaceTable)
+          .set({ directory: data.directory })
+          .where(and(eq(WorkspaceTable.project_id, projectID), eq(WorkspaceTable.directory, existing.worktree)))
+          .run()
+          .pipe(Effect.orDie)
+      }
 
       if (projectID !== ProjectV2.ID.global) {
         yield* db
