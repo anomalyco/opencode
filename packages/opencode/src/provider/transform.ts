@@ -646,6 +646,10 @@ function anthropicUsesModernAdaptiveThinking(apiId: string) {
   return major > 4 || (major === 4 && minor >= 7)
 }
 
+function anthropicOpus45(apiId: string) {
+  return ["opus-4-5", "opus-4.5"].some((value) => apiId.includes(value))
+}
+
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   if (anthropicUsesModernAdaptiveThinking(apiId)) {
     return ["low", "medium", "high", "xhigh", "max"]
@@ -985,7 +989,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         )
       }
 
-      if (["opus-4-5", "opus-4.5"].some((v) => model.api.id.includes(v))) {
+      if (anthropicOpus45(model.api.id)) {
         return Object.fromEntries(
           WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, anthropicOpus45Effort(model, effort)]),
         )
@@ -1708,6 +1712,14 @@ function reasoningEffort(model: Provider.Model, effort: string) {
             ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}),
           },
         }
+      if (anthropicOpus45(model.api.id))
+        return {
+          reasoningConfig: {
+            type: "enabled",
+            budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
+            maxReasoningEffort: effort,
+          },
+        }
       if (model.api.id.includes("anthropic")) return
       return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
     case "@ai-sdk/gateway":
@@ -1748,8 +1760,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
 }
 
 function anthropicEffort(model: Provider.Model, effort: string) {
-  if (["opus-4-5", "opus-4.5"].some((value) => model.api.id.includes(value)))
-    return anthropicOpus45Effort(model, effort)
+  if (anthropicOpus45(model.api.id)) return anthropicOpus45Effort(model, effort)
   // Kimi defaults to omitting adaptive thinking text unless summarized display is requested.
   if (isKimiFamily(model)) return { thinking: { type: "adaptive", display: "summarized" }, effort }
   if (!anthropicAdaptiveEfforts(model.api.id)) return
