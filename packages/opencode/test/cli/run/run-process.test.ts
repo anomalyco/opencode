@@ -120,9 +120,20 @@ describe("opencode run (non-interactive subprocess)", () => {
           expect(typeof evt.type).toBe("string")
           expect(typeof evt.sessionID).toBe("string")
         }
-        expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+        expect(events.map((event) => event.type)).toEqual([
+          "step_start",
+          "text_delta",
+          "text",
+          "step_finish",
+        ])
         expect(events.map(({ timestamp: _, sessionID: __, ...event }) => event)).toEqual([
           { type: "step_start", part: expect.objectContaining({ type: "step-start" }) },
+          {
+            type: "text_delta",
+            messageID: expect.any(String),
+            partID: expect.any(String),
+            delta: "structured output",
+          },
           {
             type: "text",
             part: expect.objectContaining({ type: "text", text: "structured output" }),
@@ -136,6 +147,40 @@ describe("opencode run (non-interactive subprocess)", () => {
             .slice(0, -1)
             .every((line) => line.length > 0),
         ).toBe(true)
+      }),
+    60_000,
+  )
+
+  // Regression for #38638: message.part.delta was dropped, so --format json
+  // only ever emitted the complete text after generation finished. Now each
+  // streaming chunk surfaces as a text_delta ahead of the final text event.
+  cliIt.concurrent(
+    "--format json emits text_delta events that stream text as it arrives (regression for #38638)",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        // Two text chunks on one reply become two message.part.delta events;
+        // their deltas must concatenate to the full text, ahead of the final
+        // complete text event which is retained for backward compatibility.
+        yield* llm.push(reply().text("Hello ").text("world").stop().item())
+        const result = yield* opencode.run("stream me", { format: "json" })
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        const types = events.map((event) => event.type)
+        const deltas = events.filter((event) => event.type === "text_delta")
+
+        expect(deltas.length).toBe(2)
+        expect(deltas.map((event) => event.delta).join("")).toBe("Hello world")
+        for (const event of deltas) {
+          expect(typeof event.messageID).toBe("string")
+          expect(typeof event.partID).toBe("string")
+        }
+        // text_delta events precede the final complete text event.
+        expect(types.lastIndexOf("text_delta")).toBeLessThan(types.indexOf("text"))
+        // The complete text event is retained for backward compatibility.
+        expect(events.find((event) => event.type === "text")?.part).toEqual(
+          expect.objectContaining({ type: "text", text: "Hello world" }),
+        )
       }),
     60_000,
   )
@@ -185,10 +230,12 @@ describe("opencode run (non-interactive subprocess)", () => {
         expect(events.map((event) => event.type)).toEqual([
           "step_start",
           "reasoning",
+          "text_delta",
           "text",
           "tool_use",
           "step_finish",
           "step_start",
+          "text_delta",
           "text",
           "step_finish",
         ])
@@ -229,6 +276,7 @@ describe("opencode run (non-interactive subprocess)", () => {
         expect(result.exitCode).toBe(0)
         expect(events.map((event) => event.type)).toEqual([
           "step_start",
+          "text_delta",
           "text",
           "tool_use",
           "step_finish",

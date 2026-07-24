@@ -696,6 +696,10 @@ export const RunCommand = effectCmd({
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          // Track each part's type so message.part.delta (which carries field
+          // but not part type) can be limited to text parts. Reasoning parts
+          // update the same "text" field but must not surface as text_delta.
+          const partTypes = new Map<string, string>()
           let error: string | undefined
 
           for await (const event of events.stream) {
@@ -715,6 +719,7 @@ export const RunCommand = effectCmd({
             if (event.type === "message.part.updated") {
               const part = event.properties.part
               if (part.sessionID !== sessionID) continue
+              partTypes.set(part.id, part.type)
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
@@ -771,6 +776,29 @@ export const RunCommand = effectCmd({
                 }
                 process.stdout.write(line + EOL)
               }
+            }
+
+            // message.part.delta carries each streaming text chunk as it is
+            // produced. Under --format json, mirror it as a text_delta event so
+            // consumers can render incremental progress instead of waiting for the
+            // final complete text event (still emitted above for backward
+            // compatibility). Non-json mode ignores deltas; its text rendering is
+            // driven by the complete part in message.part.updated.
+            if (event.type === "message.part.delta") {
+              const props = event.properties
+              if (
+                props.sessionID === sessionID &&
+                props.field === "text" &&
+                typeof props.delta === "string" &&
+                partTypes.get(props.partID) === "text"
+              ) {
+                emit("text_delta", {
+                  messageID: props.messageID,
+                  partID: props.partID,
+                  delta: props.delta,
+                })
+              }
+              continue
             }
 
             if (event.type === "session.error") {
