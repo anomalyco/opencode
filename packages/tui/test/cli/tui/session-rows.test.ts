@@ -3,12 +3,57 @@ import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/c
 import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows } from "../../../src/routes/session/rows"
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {
-  expect(cacheReuseDrop(undefined, 10_000, "openai")).toBeUndefined()
-  expect(cacheReuseDrop(10_000, 11_000, "openai")).toBeUndefined()
-  expect(cacheReuseDrop(10_000, 8_976, "openai")).toBeUndefined()
-  expect(cacheReuseDrop(10_000, 7_952, "openai")).toBeUndefined()
-  expect(cacheReuseDrop(10_000, 7_951, "openai")).toBe(2_049)
-  expect(cacheReuseDrop(10_000, 8_976, "anthropic")).toBe(1_024)
+  const openai = { id: "gpt", providerID: "openai" }
+  expect(cacheReuseDrop(undefined, { read: 10_000, model: openai })).toBeUndefined()
+  expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 11_000, model: openai })).toBeUndefined()
+  expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 8_977, model: openai })).toBe(1_023)
+  expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 8_976, model: openai })).toBeUndefined()
+  expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 8_500, model: openai })).toBeUndefined()
+  expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 7_952, model: openai })).toBeUndefined()
+  expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 7_951, model: openai })).toBe(2_049)
+})
+
+test("compares cache reuse only for the same model", () => {
+  const previous = { read: 10_000, model: { id: "claude", providerID: "anthropic" } }
+  expect(cacheReuseDrop(previous, { read: 8_976, model: { id: "gpt", providerID: "openai" } })).toBeUndefined()
+  expect(cacheReuseDrop(previous, { read: 8_976, model: { id: "claude", providerID: "anthropic" } })).toBe(1_024)
+  expect(
+    cacheReuseDrop(
+      { read: 10_000, model: { id: "gpt", providerID: "openai", variant: "low" } },
+      { read: 8_976, model: { id: "gpt", providerID: "openai", variant: "high" } },
+    ),
+  ).toBeUndefined()
+})
+
+test("carries model identity with the cross-turn cache baseline", () => {
+  const first = assistant("assistant-1", [])
+  first.model = { id: "claude", providerID: "anthropic" }
+  first.finish = "stop"
+  first.tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 10_000, write: 0 } }
+  const second = assistant("assistant-2", [])
+  second.model = { id: "gpt", providerID: "openai" }
+  second.finish = "stop"
+  second.tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 8_976, write: 0 } }
+
+  const rows = reduceSessionRows(
+    [
+      { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+      first,
+      { type: "user", id: "user-2", text: "Second", time: { created: 2 } },
+      second,
+    ],
+    new Set(),
+    true,
+  ).filter((row) => row.type === "turn-usage")
+
+  expect(rows).toEqual([
+    { type: "turn-usage", messageIDs: ["assistant-1"] },
+    {
+      type: "turn-usage",
+      messageIDs: ["assistant-2"],
+      previousCache: { read: 10_000, model: { id: "claude", providerID: "anthropic" } },
+    },
+  ])
 })
 
 test("assigns assistant boundaries to the first rendered row instead of the first text row", () => {
