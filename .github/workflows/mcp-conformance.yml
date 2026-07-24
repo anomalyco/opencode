@@ -1,0 +1,53 @@
+name: mcp-conformance
+
+# Runs the official @modelcontextprotocol/conformance client suite against
+# opencode's MCP client stack whenever MCP-related code changes. Expected
+# failures are tracked in packages/opencode/test/mcp/conformance-baseline.yml;
+# the job fails on any unexpected failure or any baselined scenario that
+# starts passing.
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "packages/opencode/src/mcp/**"
+      - "packages/opencode/src/tool/code-mode.ts"
+      - "packages/opencode/test/mcp/**"
+      - "packages/opencode/package.json"
+      - ".github/workflows/mcp-conformance.yml"
+  pull_request:
+    paths:
+      - "packages/opencode/src/mcp/**"
+      - "packages/opencode/src/tool/code-mode.ts"
+      - "packages/opencode/test/mcp/**"
+      - "packages/opencode/package.json"
+      - ".github/workflows/mcp-conformance.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  conformance:
+    name: conformance (linux)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run MCP client conformance suite
+        timeout-minutes: 15
+        working-directory: packages/opencode
+        run: bun run test:conformance
