@@ -30,7 +30,15 @@ type CompatibleSessionApi = Omit<
   archive: (input: Parameters<SessionApi["archive"]>[0] & LegacyLocation) => ReturnType<SessionApi["archive"]>
   remove: (input: Parameters<SessionApi["remove"]>[0] & LegacyLocation) => ReturnType<SessionApi["remove"]>
 }
-export type CompatibleApi = Omit<ServerApi, "session"> & { readonly session: CompatibleSessionApi }
+type CompatiblePermissionApi = Omit<ServerApi["permission"], "reply"> & {
+  reply: (
+    input: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
+  ) => ReturnType<ServerApi["permission"]["reply"]>
+}
+export type CompatibleApi = Omit<ServerApi, "session" | "permission"> & {
+  readonly session: CompatibleSessionApi
+  readonly permission: CompatiblePermissionApi
+}
 type LegacyPrompt = {
   agent?: string
   model?: { providerID: string; modelID: string }
@@ -350,7 +358,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       async find(value: Parameters<ServerApi["file"]["find"]>[0]) {
         const result = await legacy(value.location).find.files({
           query: value.query,
-          type: value.type,
+          dirs: value.type === undefined ? undefined : value.type === "directory" ? "true" : "false",
           limit: value.limit,
         })
         return located(
@@ -471,11 +479,14 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     },
     permission: {
       ...input.current.permission,
-      async reply(value: Parameters<ServerApi["permission"]["reply"]>[0]) {
-        await legacy().permission.respond({
+      async reply(
+        value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
+      ) {
+        await legacy(value.location).permission.respond({
           sessionID: value.sessionID,
           permissionID: value.requestID,
           response: value.reply,
+          directory: directory(value.location),
         })
       },
     },

@@ -123,4 +123,27 @@ describe("createCompatibleApi", () => {
       data: { branch: "feature", defaultBranch: "dev" },
     })
   })
+
+  test("translates current file searches to the V1 dirs parameter", async () => {
+    const { api, requests } = setup("v1")
+    await api.file.find({ location: { directory: "/repo" }, query: "src", type: "file", limit: 20 })
+
+    const url = new URL(requests[0]!.url)
+    expect(url.pathname).toBe("/find/file")
+    expect(url.searchParams.get("dirs")).toBe("false")
+    expect(url.searchParams.get("limit")).toBe("20")
+  })
+
+  test("routes V1 permission replies through the requested directory", async () => {
+    const { api, requests } = setup("v1")
+    await api.permission.reply({
+      sessionID: "ses_1",
+      requestID: "permission_1",
+      reply: "once",
+      location: { directory: "/other" },
+    })
+
+    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/permissions/permission_1")
+    expect(new URL(requests[0]!.url).searchParams.get("directory")).toBe("/other")
+  })
 })
