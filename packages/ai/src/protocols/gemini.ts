@@ -11,6 +11,7 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
+  type ProviderOptions,
   type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
@@ -18,7 +19,6 @@ import {
   type ToolContent,
 } from "../schema"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
-import { GeminiOptions } from "./utils/gemini-options"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
@@ -26,6 +26,18 @@ import { ToolSchemaProjection } from "./utils/tool-schema"
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+export interface OptionsInput {
+  readonly [key: string]: unknown
+  readonly thinkingConfig?: {
+    readonly thinkingBudget?: number
+    readonly includeThoughts?: boolean
+  }
+}
+
+export type ProviderOptionsInput = ProviderOptions & {
+  readonly gemini?: OptionsInput
+}
 
 // =============================================================================
 // Request Body Schema
@@ -96,13 +108,18 @@ const GeminiToolConfig = Schema.Struct({
   }),
 })
 
+const GeminiThinkingConfig = Schema.Struct({
+  thinkingBudget: Schema.optional(Schema.Number),
+  includeThoughts: Schema.optional(Schema.Boolean),
+})
+
 const GeminiGenerationConfig = Schema.Struct({
   maxOutputTokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
   topK: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
-  thinkingConfig: Schema.optional(GeminiOptions.ThinkingConfigSchema),
+  thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
 
 const GeminiBodyFields = {
@@ -298,10 +315,22 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   return contents
 })
 
+const resolveOptions = (request: LLMRequest) => {
+  const value = request.providerOptions?.gemini?.thinkingConfig
+  if (!ProviderShared.isRecord(value)) return {}
+  const thinkingConfig = {
+    thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
+    includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
+  }
+  return {
+    thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,
+  }
+}
+
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const hasTools = request.tools.length > 0
   const generation = request.generation
-  const options = GeminiOptions.resolve(request)
+  const options = resolveOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,

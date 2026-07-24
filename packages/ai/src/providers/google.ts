@@ -5,10 +5,10 @@ import type { ProviderPackage } from "../provider-package"
 import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID } from "../schema"
 import { Gemini } from "../protocols/gemini"
 import { GoogleImages } from "../protocols/google-images"
-import type { GeminiProviderOptionsInput } from "./gemini-options"
 
 export type { GoogleImageOptions } from "../protocols/google-images"
-export type { GeminiOptionsInput, GeminiProviderOptionsInput } from "./gemini-options"
+export type GeminiOptionsInput = Gemini.OptionsInput
+export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
 
 export const id = ProviderID.make("google")
 
@@ -17,13 +17,13 @@ export const routes = [Gemini.route]
 export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: GeminiProviderOptionsInput
+    readonly providerOptions?: Gemini.ProviderOptionsInput
   }
 
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL?: string
-  readonly providerOptions?: GeminiProviderOptionsInput
+  readonly providerOptions?: Gemini.ProviderOptionsInput
 }
 
 const auth = (options: ProviderAuthOption<"optional">) => {

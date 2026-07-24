@@ -7,10 +7,11 @@ import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { Protocol } from "../route/protocol"
 import { ProviderID, type ModelID } from "../schema"
-import type { AnthropicProviderOptionsInput } from "./anthropic-options"
 import { GoogleVertexShared } from "./google-vertex-shared"
 
-export type { AnthropicOptionsInput, AnthropicProviderOptionsInput, AnthropicThinkingInput } from "./anthropic-options"
+export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
+export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
+export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
 const VERSION = "vertex-2023-10-16" as const
 
@@ -22,7 +23,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
-    readonly providerOptions?: AnthropicProviderOptionsInput
+    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
   }
 
 export interface Settings extends ProviderPackage.Settings {
@@ -31,7 +32,7 @@ export interface Settings extends ProviderPackage.Settings {
   readonly baseURL?: string
   readonly location?: string
   readonly project?: string
-  readonly providerOptions?: AnthropicProviderOptionsInput
+  readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
 }
 
 const route = Route.make({

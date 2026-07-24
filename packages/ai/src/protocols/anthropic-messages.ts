@@ -13,6 +13,7 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
+  type ProviderOptions,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -22,7 +23,6 @@ import {
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { classifyProviderFailure } from "../provider-error"
 import * as Cache from "./utils/cache"
-import { AnthropicOptions } from "./utils/anthropic-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
@@ -31,6 +31,29 @@ const ADAPTER = "anthropic-messages"
 const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
+
+export type ThinkingInput =
+  | {
+      readonly type: "adaptive"
+      readonly display?: "summarized" | "omitted"
+    }
+  | {
+      readonly type: "disabled"
+    }
+  | ({ readonly type: "enabled" } & (
+      | { readonly budgetTokens: number; readonly budget_tokens?: number }
+      | { readonly budgetTokens?: number; readonly budget_tokens: number }
+    ))
+
+export interface OptionsInput {
+  readonly [key: string]: unknown
+  readonly thinking?: ThinkingInput
+  readonly effort?: string
+}
+
+export type ProviderOptionsInput = ProviderOptions & {
+  readonly anthropic?: OptionsInput
+}
 
 // =============================================================================
 // Request Body Schema
@@ -174,6 +197,20 @@ const AnthropicToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("tool"), name: Schema.String }),
 ])
 
+const AnthropicThinking = Schema.Union([
+  Schema.Struct({
+    type: Schema.tag("enabled"),
+    budget_tokens: Schema.Number,
+  }),
+  Schema.Struct({
+    type: Schema.tag("adaptive"),
+    display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
+  }),
+  Schema.Struct({
+    type: Schema.tag("disabled"),
+  }),
+])
+
 const AnthropicOutputConfig = Schema.Struct({
   effort: Schema.optional(Schema.String),
 })
@@ -190,7 +227,7 @@ const AnthropicBodyFields = {
   top_p: Schema.optional(Schema.Number),
   top_k: Schema.optional(Schema.Number),
   stop_sequences: optionalArray(Schema.String),
-  thinking: Schema.optional(AnthropicOptions.ThinkingSchema),
+  thinking: Schema.optional(AnthropicThinking),
   output_config: Schema.optional(AnthropicOutputConfig),
 }
 export const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
@@ -524,6 +561,38 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   return messages
 })
 
+const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
+  const input = request.providerOptions?.anthropic
+  return {
+    thinking: yield* resolveThinking(input?.thinking),
+    effort: typeof input?.effort === "string" ? input.effort : undefined,
+  }
+})
+
+const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function* (input: unknown) {
+  if (!ProviderShared.isRecord(input)) return undefined
+  if (input.type === "adaptive") {
+    const display =
+      input.display === "summarized"
+        ? ("summarized" as const)
+        : input.display === "omitted"
+          ? ("omitted" as const)
+          : undefined
+    return { type: "adaptive" as const, ...(display === undefined ? {} : { display }) }
+  }
+  if (input.type === "disabled") return { type: "disabled" as const }
+  if (input.type !== "enabled") return undefined
+  const budget =
+    typeof input.budgetTokens === "number"
+      ? input.budgetTokens
+      : typeof input.budget_tokens === "number"
+        ? input.budget_tokens
+        : undefined
+  if (budget === undefined)
+    return yield* ProviderShared.invalidRequest("Anthropic thinking provider option requires budgetTokens")
+  return { type: "enabled" as const, budget_tokens: budget }
+})
+
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -558,7 +627,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
       `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
     )
   }
-  const options = yield* AnthropicOptions.resolve(request)
+  const options = yield* resolveOptions(request)
   return {
     model: request.model.id,
     system,
