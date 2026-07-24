@@ -1524,6 +1524,27 @@ export function Prompt(props: PromptProps) {
                   </box>
                   <box flexDirection="row" gap={1} flexShrink={0}>
                     {(() => {
+                      const started = createMemo(() => {
+                        const messages = sync.data.message[props.sessionID ?? ""]
+                        if (!messages) return
+                        return messages.findLast((x) => x.role === "user")?.time.created
+                      })
+                      const [now, setNow] = createSignal(Date.now())
+                      onMount(() => {
+                        const timer = setInterval(() => setNow(Date.now()), 500)
+                        onCleanup(() => clearInterval(timer))
+                      })
+                      return (
+                        <Show when={started()}>
+                          {(start) => (
+                            <text flexShrink={0} fg={theme.textMuted}>
+                              {Locale.duration(Math.max(0, now() - start()))}
+                            </text>
+                          )}
+                        </Show>
+                      )
+                    })()}
+                    {(() => {
                       const retry = createMemo(() => {
                         const s = status()
                         if (s.type !== "retry") return

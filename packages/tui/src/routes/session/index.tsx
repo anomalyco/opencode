@@ -1873,6 +1873,19 @@ function InlineTool(props: {
     return theme.text
   })
 
+  const [now, setNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (props.part.state.status !== "running") return
+    const timer = setInterval(() => setNow(Date.now()), 500)
+    onCleanup(() => clearInterval(timer))
+  })
+  const duration = createMemo(() => {
+    const state = props.part.state
+    if (state.status === "completed" || state.status === "error") return state.time.end - state.time.start
+    if (state.status === "running") return now() - state.time.start
+    return 0
+  })
+
   return (
     <InlineToolRow
       icon={props.icon}
@@ -1888,6 +1901,7 @@ function InlineTool(props: {
       failure={props.failure}
       spinner={props.spinner}
       separate={props.separate}
+      duration={duration() ? Locale.duration(duration()) : undefined}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1918,11 +1932,13 @@ export function InlineToolRow(props: {
   failure?: string
   spinner?: boolean
   separate?: boolean
+  duration?: string
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
   onMouseUp?: () => void
 }) {
+  const { theme } = useTheme()
   return (
     <box
       paddingLeft={3}
@@ -1941,7 +1957,12 @@ export function InlineToolRow(props: {
     >
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={props.color} children={props.children} />
+          <Spinner color={props.color}>
+            {props.children}
+            <Show when={props.duration}>
+              <span style={{ fg: theme.textMuted }}> · {props.duration}</span>
+            </Show>
+          </Spinner>
         </Match>
         <Match when={true}>
           <Show
@@ -1970,6 +1991,9 @@ export function InlineToolRow(props: {
                 attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
               >
                 {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+                <Show when={props.duration}>
+                  <span style={{ fg: theme.textMuted }}> · {props.duration}</span>
+                </Show>
               </text>
             </box>
           </Show>
