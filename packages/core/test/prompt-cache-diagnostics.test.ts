@@ -16,6 +16,8 @@ const request = LLM.request({
   prompt: "First",
   tools: [tool],
 })
+const compare = (current: LLMRequest) =>
+  PromptCacheDiagnostics.compare(PromptCacheDiagnostics.snapshot(request), PromptCacheDiagnostics.snapshot(current))
 
 describe("PromptCacheDiagnostics", () => {
   test("distinguishes initial and stable requests", () => {
@@ -26,33 +28,18 @@ describe("PromptCacheDiagnostics", () => {
 
   test("recognizes append-only history", () => {
     const current = LLMRequest.update(request, { messages: [...request.messages, Message.assistant("Second")] })
-    expect(
-      PromptCacheDiagnostics.compare(
-        PromptCacheDiagnostics.snapshot(request),
-        PromptCacheDiagnostics.snapshot(current),
-      ),
-    ).toEqual({ status: "append-only", previousMessages: 1, currentMessages: 2 })
+    expect(compare(current)).toEqual({ status: "append-only", previousMessages: 1, currentMessages: 2 })
   })
 
   test("detects cache-sensitive setting changes", () => {
     const current = LLMRequest.update(request, { generation: GenerationOptions.make({ temperature: 0.5 }) })
-    expect(
-      PromptCacheDiagnostics.compare(
-        PromptCacheDiagnostics.snapshot(request),
-        PromptCacheDiagnostics.snapshot(current),
-      ),
-    ).toEqual({ status: "changed", component: "settings", index: 0, label: "model settings" })
+    expect(compare(current)).toEqual({ status: "changed", component: "settings", index: 0, label: "model settings" })
   })
 
   test("finds the first changed prefix component", () => {
     const changedTool = ToolDefinition.make({ ...tool, description: "Read one file" })
     const current = LLMRequest.update(request, { tools: [changedTool] })
-    expect(
-      PromptCacheDiagnostics.compare(
-        PromptCacheDiagnostics.snapshot(request),
-        PromptCacheDiagnostics.snapshot(current),
-      ),
-    ).toMatchObject({ status: "changed", component: "tools", index: 0, label: "read" })
+    expect(compare(current)).toEqual({ status: "changed", component: "tools", index: 0, label: "read" })
   })
 
   test("treats appended tools as a prefix change", () => {
@@ -62,11 +49,6 @@ describe("PromptCacheDiagnostics", () => {
       inputSchema: { type: "object", properties: {} },
     })
     const current = LLMRequest.update(request, { tools: [...request.tools, write] })
-    expect(
-      PromptCacheDiagnostics.compare(
-        PromptCacheDiagnostics.snapshot(request),
-        PromptCacheDiagnostics.snapshot(current),
-      ),
-    ).toMatchObject({ status: "changed", component: "tools", index: 1, label: "write" })
+    expect(compare(current)).toEqual({ status: "changed", component: "tools", index: 1, label: "write" })
   })
 })

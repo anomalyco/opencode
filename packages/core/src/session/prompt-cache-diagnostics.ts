@@ -1,7 +1,7 @@
 export * as PromptCacheDiagnostics from "./prompt-cache-diagnostics"
 
-import { createHash } from "node:crypto"
 import type { LLMRequest } from "@opencode-ai/ai"
+import { Hash } from "@opencode-ai/util/hash"
 
 interface Entry {
   readonly label: string
@@ -26,7 +26,7 @@ export type Comparison =
       readonly label: string
     }
 
-const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16)
+const hash = (value: unknown) => Hash.sha256(JSON.stringify(value)).slice(0, 16)
 
 export function snapshot(request: LLMRequest): Snapshot {
   return {
