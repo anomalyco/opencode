@@ -121,6 +121,33 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("canonicalizes effective definitions and keeps Code Mode last", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const tool = make()
+      const capture = (registrations: Parameters<typeof service.registerBatch>[0]) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* service.registerBatch(registrations)
+            return (yield* service.snapshot()).definitions
+          }),
+        )
+      const first = yield* capture([
+        { tools: { zeta: tool, alpha: tool }, options: { codemode: false } },
+        { tools: { beta: tool }, options: { namespace: "alpha", codemode: false } },
+        { tools: { echo: tool } },
+      ])
+      const second = yield* capture([
+        { tools: { echo: tool } },
+        { tools: { beta: tool }, options: { namespace: "alpha", codemode: false } },
+        { tools: { alpha: tool, zeta: tool }, options: { codemode: false } },
+      ])
+
+      expect(first).toEqual(second)
+      expect(first.map((definition) => definition.name)).toEqual(["alpha", "alpha_beta", "zeta", "execute"])
+    }),
+  )
+
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
@@ -142,7 +169,7 @@ describe("ToolRegistry", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
-      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["question", "bash"])
+      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question"])
     }),
   )
 

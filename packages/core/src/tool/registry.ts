@@ -323,7 +323,10 @@ const registryLayer = Layer.effect(
             const codemodeTool = (yield* codeMode.materialize(permissions)).tool
             return {
               definitions: [
-                ...Array.from(direct, ([name, registration]) => toLLMDefinition(name, registration.tool)),
+                // Definitions are prompt-cache prefix bytes, so order only after effective registrations settle.
+                ...Array.from(direct)
+                  .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+                  .map(([name, registration]) => toLLMDefinition(name, registration.tool)),
                 ...(codemodeTool ? [toLLMDefinition("execute", codemodeTool)] : []),
               ],
               execute: (input: ExecuteInput) => {
