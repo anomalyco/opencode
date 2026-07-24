@@ -6,6 +6,8 @@ export function footerWidthPolicy(width: number) {
   }
 }
 
+const USAGE_HEADROOM = 8
+
 export function footerStatuslinePolicy(input: {
   width: number
   mainWidth: number
@@ -18,10 +20,10 @@ export function footerStatuslinePolicy(input: {
 }) {
   let remaining = input.width - input.mainWidth - (input.commandWidth ?? 0)
   let hasSection = input.commandWidth !== undefined
-  const include = (width: number | undefined) => {
+  const include = (width: number | undefined, headroom = 0) => {
     if (width === undefined) return false
     const required = width + (hasSection ? 3 : 1)
-    if (remaining < required) return false
+    if (remaining < required + headroom) return false
     remaining -= required
     hasSection = true
     return true
@@ -40,7 +42,7 @@ export function footerStatuslinePolicy(input: {
     (showAgent || input.agentWidth === undefined) &&
     contextComplete &&
     (showVariant || input.variantWidth === undefined) &&
-    include(input.usageWidth)
+    include(input.usageWidth, USAGE_HEADROOM)
 
   return {
     showAgent,

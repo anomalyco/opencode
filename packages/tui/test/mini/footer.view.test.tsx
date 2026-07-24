@@ -1522,6 +1522,27 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
+test("direct footer omits usage when it would fill the statusline", async () => {
+  const app = await renderFooter({
+    state: { phase: "running", model: "GPT-5.6 SoL", usage: "8.4K (1%) · $0.01" },
+    currentVariant: "high",
+    mono: true,
+    width: 66,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("esc interrupt")
+    expect(frame).toContain("GPT-5.6 SoL high")
+    expect(frame).toContain("ctrl+p cmd")
+    expect(frame).not.toContain("8.4K")
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct footer hides routine activity and shows explicit notices", async () => {
   let status = ""
   const app = await renderFooter({
