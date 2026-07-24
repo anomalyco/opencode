@@ -90,23 +90,32 @@ describe("current session timeline rows", () => {
     ])
   })
 
-  test("associates assistants with a projected parent missing from the source page", () => {
+  test("keeps a projected parent missing from the source page before newer turns", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "question", time: { created: 1 } },
+      { id: "msg_user_1", type: "user", text: "first question", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: "msg_assistant_1",
         type: "assistant",
         agent: "build",
         model: { id: "model", providerID: "provider" },
-        content: [{ type: "text", text: "answer" }],
+        content: [{ type: "text", text: "first answer" }],
         time: { created: 2, completed: 3 },
+      },
+      { id: "msg_user_2", type: "user", text: "second question", time: { created: 4 } },
+      {
+        id: "msg_assistant_2",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "second answer" }],
+        time: { created: 5, completed: 6 },
       },
     ] satisfies SessionMessageInfo[]
     const normalized = normalizeSessionMessages("ses_1", source)
     const messages = new Map(normalized.messages.map((message) => [message.id, message]))
 
     const result = Timeline.constructSessionMessageRows(
-      [source[1]!],
+      source.slice(1),
       (messageID) => messages.get(messageID),
       (messageID) => normalized.parts.get(messageID) ?? [],
       true,
@@ -115,8 +124,11 @@ describe("current session timeline rows", () => {
     )
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
-      "user-message:msg_user",
-      "assistant-part:msg_user:msg_assistant:text:0",
+      "user-message:msg_user_1",
+      "assistant-part:msg_user_1:msg_assistant_1:text:0",
+      "turn-gap:msg_user_2",
+      "user-message:msg_user_2",
+      "assistant-part:msg_user_2:msg_assistant_2:text:0",
     ])
   })
 })

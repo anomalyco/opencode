@@ -30,6 +30,17 @@ const historyMessagePageSize = 200
 const sessionInfoLimit = 2_048
 const emptyIDs: ReadonlySet<string> = new Set()
 
+function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
+  const boundary = source.find(
+    (message) =>
+      message.type === "user" ||
+      message.type === "shell" ||
+      message.type === "assistant" ||
+      (message.type === "synthetic" && message.description?.trim()),
+  )
+  return boundary?.type === "assistant"
+}
+
 type OptimisticItem = {
   message: Message
   parts: Part[]
@@ -525,11 +536,20 @@ export function createServerSession(
 
   const fetchMessages = async (sessionID: string, limit: number, before?: string, onAttempt?: () => void) => {
     if (messageApi && (await options?.protocol) !== "v1") {
-      const response = await (options?.retry ?? retry)(() => {
-        onAttempt?.()
-        return messageApi.list(before ? { sessionID, limit, cursor: before } : { sessionID, limit, order: "desc" })
-      })
-      const source = [...response.data].reverse()
+      const request = (cursor?: string) =>
+        (options?.retry ?? retry)(() => {
+          onAttempt?.()
+          return messageApi.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
+        })
+      const first = await request(before)
+      const pages = [first]
+      while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
+        const response = await request(pages.at(-1)!.cursor.next ?? undefined)
+        pages.push(response)
+        if (!response.data.length) break
+      }
+      const response = pages.at(-1)!
+      const source = pages.flatMap((page) => page.data).toReversed()
       const normalized = normalizeSessionMessages(sessionID, source)
       return {
         session: normalized.messages.sort((a, b) => cmp(a.id, b.id)),
