@@ -364,32 +364,17 @@ const layer = Layer.effect(
           // these sweeps only close calls that could not produce a truthful settlement.
           if (providerFailed)
             yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-          if (llmFailure && !providerFailed)
-            yield* serialized(
-              publisher.failUnsettledTools(
-                {
-                  type: "tool.result-missing",
-                  message: "Provider did not return a tool result",
-                },
-                true,
-              ),
-            )
-          const hostedResultMissing =
-            stream._tag === "Success" && !providerFailed
-              ? yield* serialized(
-                  publisher.failUnsettledTools(
-                    { type: "tool.result-missing", message: "Provider did not return a tool result" },
-                    true,
-                  ),
-                )
-              : false
-          if (hostedResultMissing && !publisher.stepSettlement())
-            yield* serialized(
-              publisher.failAssistant({
-                type: "tool.result-missing",
-                message: "Provider did not return a tool result",
-              }),
-            )
+          const resultMissing = {
+            type: "tool.result-missing",
+            message: "Provider did not return a tool result",
+          } as const
+          if (llmFailure && !providerFailed) yield* serialized(publisher.failUnsettledTools(resultMissing, "hosted"))
+          // A clean stream that still left hosted calls unresolved fails the step itself.
+          if (stream._tag === "Success" && !providerFailed) {
+            const hostedResultMissing = yield* serialized(publisher.failUnsettledTools(resultMissing, "hosted"))
+            if (hostedResultMissing && !publisher.stepSettlement())
+              yield* serialized(publisher.failAssistant(resultMissing))
+          }
 
           const stepFailure = publisher.stepFailure()
           const stepSettlement = publisher.stepSettlement()

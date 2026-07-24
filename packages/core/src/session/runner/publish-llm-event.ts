@@ -277,9 +277,9 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
 
   const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (
     error: SessionError.Error,
-    hostedOnly = false,
+    scope: "hosted" | "all" = "all",
   ) {
-    return yield* failTools(error, hostedOnly ? "hosted" : "all")
+    return yield* failTools(error, scope)
   })
 
   const assistantMessageIDForTool = (callID: string) => {
