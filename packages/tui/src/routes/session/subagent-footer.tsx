@@ -3,10 +3,28 @@ import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import type { Agent, AssistantMessage, Provider, Session } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
+
+type AgentVariantConfig = Pick<Agent, "model" | "variant" | "options">
+type ProviderModelVariants = Pick<Provider["models"][string], "variants">
+
+export function resolveSubagentVariant(
+  sessionModel: Session["model"],
+  agent: AgentVariantConfig | undefined,
+  model: ProviderModelVariants | undefined,
+) {
+  const persisted = sessionModel?.variant
+  if (persisted && persisted !== "default") return persisted
+  if (!sessionModel || !agent?.model || !model?.variants) return undefined
+  if (agent.model.providerID !== sessionModel.providerID || agent.model.modelID !== sessionModel.id) return undefined
+  if (agent.variant && agent.variant in model.variants) return agent.variant
+  const effort = agent.options.reasoningEffort
+  if (typeof effort === "string" && effort in model.variants) return effort
+  return undefined
+}
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -28,6 +46,20 @@ export function SubagentFooter() {
     const index = siblings.findIndex((x) => x.id === s.id)
 
     return { label, index: index + 1, total: siblings.length }
+  })
+
+  const modelInfo = createMemo(() => {
+    const current = session()
+    if (!current?.model) return undefined
+    const sessionModel = current.model
+    const provider = sync.data.provider.find((item) => item.id === sessionModel.providerID)
+    const model = provider?.models[sessionModel.id]
+    const agent = sync.data.agent.find((item) => item.name === current.agent)
+    return {
+      model: model?.name ?? sessionModel.id,
+      provider: provider?.name ?? sessionModel.providerID,
+      variant: resolveSubagentVariant(sessionModel, agent, model),
+    }
   })
 
   const usage = createMemo(() => {
@@ -76,12 +108,29 @@ export function SubagentFooter() {
         backgroundColor={theme.backgroundPanel}
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
-          <box flexDirection="row" gap={1}>
-            <text fg={theme.text}>
+          <box flexDirection="row" gap={1} minWidth={0} flexShrink={1} overflow="hidden">
+            <text fg={theme.text} flexShrink={0} wrapMode="none">
               <b>{subagentInfo().label}</b>
             </text>
+            <Show when={modelInfo()}>
+              {(item) => (
+                <text flexShrink={1} wrapMode="none" truncate>
+                  <span style={{ fg: theme.textMuted }}>· </span>
+                  <span style={{ fg: theme.text }}>{item().model} </span>
+                  <span style={{ fg: theme.textMuted }}>{item().provider}</span>
+                  <Show when={item().variant}>
+                    {(variant) => (
+                      <>
+                        <span style={{ fg: theme.textMuted }}> · </span>
+                        <span style={{ fg: theme.warning, bold: true }}>{variant()}</span>
+                      </>
+                    )}
+                  </Show>
+                </text>
+              )}
+            </Show>
             <Show when={subagentInfo().total > 0}>
-              <text style={{ fg: theme.textMuted }}>
+              <text style={{ fg: theme.textMuted }} flexShrink={0} wrapMode="none">
                 ({subagentInfo().index} of {subagentInfo().total})
               </text>
             </Show>
@@ -93,7 +142,7 @@ export function SubagentFooter() {
               )}
             </Show>
           </box>
-          <box flexDirection="row" gap={2}>
+          <box flexDirection="row" gap={2} flexShrink={0}>
             <box
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
