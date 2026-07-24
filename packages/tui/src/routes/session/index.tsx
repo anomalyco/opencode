@@ -1172,8 +1172,8 @@ function TurnTokenUsage(props: {
                 {item.total.toLocaleString().padStart(columns().total)}
               </text>
               <Show when={item.reuseDrop !== undefined}>
-                <text fg={themeV2.text.subdued}>
-                  Cache reuse dropped by {item.reuseDrop?.toLocaleString()} tokens from the previous step
+                <text fg={themeV2.text.feedback.warning.default}>
+                  ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
                 </text>
               </Show>
             </box>
