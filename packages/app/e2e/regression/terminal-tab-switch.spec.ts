@@ -29,6 +29,10 @@ test("keeps the terminal session alive when switching session tabs in a workspac
   const terminal = page.locator('[data-component="terminal"]')
   await expect(terminal).toBeVisible()
   await expect.poll(() => connections.length).toBe(1)
+  const connection = new URL(connections[0]!)
+  expect(connection.pathname).toBe(`/api/pty/${ptyID}/connect`)
+  expect(connection.searchParams.get("location[directory]")).toBe(directory)
+  expect(connection.searchParams.get("ticket")).toBe("e2e-ticket")
   await writeProbe(page)
 
   await switchTab(page, titleB)
@@ -62,6 +66,7 @@ async function readProbe(page: Page) {
 
 async function setup(page: Page) {
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -85,26 +90,33 @@ async function setup(page: Page) {
     sessions: [session(sessionA, titleA, 1700000000000), session(sessionB, titleB, 1700000001000)],
     pageMessages: () => ({ items: [] }),
   })
-  await page.route("**/pty", (route) =>
+  await page.route("**/api/pty*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ id: ptyID, title: "Terminal 1" }),
+      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo() }),
     }),
   )
-  await page.route(`**/pty/${ptyID}`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
-  )
-  await page.route(`**/pty/${ptyID}/connect-token*`, (route) =>
+  await page.route(`**/api/pty/${ptyID}*`, (route) =>
     route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo() }),
+    }),
+  )
+  await page.route(`**/api/pty/${ptyID}/connect-token*`, (route) => {
+    expect(route.request().headers()["x-opencode-ticket"]).toBe("1")
+    const url = new URL(route.request().url())
+    expect(url.searchParams.get("location[directory]")).toBe(directory)
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify({ ticket: "e2e-ticket" }),
-    }),
-  )
+      body: JSON.stringify({ location: ptyLocation(), data: { ticket: "e2e-ticket", expires_in: 60 } }),
+    })
+  })
   const connections: string[] = []
-  await page.routeWebSocket(new RegExp(`/pty/${ptyID}/connect`), (ws) => {
+  await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), (ws) => {
     connections.push(ws.url())
   })
 
@@ -142,4 +154,12 @@ function session(id: string, title: string, created: number) {
 
 function sessionHref(sessionID: string) {
   return `/server/${base64Encode(server)}/session/${sessionID}`
+}
+
+function ptyLocation() {
+  return { directory, project: { id: projectID, directory } }
+}
+
+function ptyInfo() {
+  return { id: ptyID, title: "Terminal 1", command: "cmd.exe", args: [], cwd: directory, status: "running", pid: 1 }
 }
