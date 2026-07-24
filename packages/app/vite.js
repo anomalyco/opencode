@@ -23,6 +23,9 @@ export default [
         resolve: {
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
+            "@opencode-ai/client/promise": fileURLToPath(new URL("../client/src/index.ts", import.meta.url)),
+            "@opencode-ai/client/effect": fileURLToPath(new URL("../client/src/effect.ts", import.meta.url)),
+            "@opencode-ai/client": fileURLToPath(new URL("../client/src/index.ts", import.meta.url)),
           },
         },
         define: {
