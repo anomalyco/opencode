@@ -539,6 +539,7 @@ describe("LLMClient tools", () => {
                   },
                   { type: "content_block_stop", index: 1 },
                   { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 5 } },
+                  { type: "message_stop" },
                 )
               : sseEvents(
                   { type: "message_start", message: { usage: { input_tokens: 5 } } },
@@ -546,6 +547,7 @@ describe("LLMClient tools", () => {
                   { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Done." } },
                   { type: "content_block_stop", index: 0 },
                   { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+                  { type: "message_stop" },
                 ),
             { headers: { "content-type": "text/event-stream" } },
           )
@@ -801,6 +803,7 @@ describe("LLMClient tools", () => {
               { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "Done." } },
               { type: "content_block_stop", index: 2 },
               { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
+              { type: "message_stop" },
             ),
             { headers: { "content-type": "text/event-stream" } },
           )

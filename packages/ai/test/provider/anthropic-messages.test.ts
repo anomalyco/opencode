@@ -506,6 +506,12 @@ describe("Anthropic Messages route", () => {
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
+      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toEqual({
+        type: "reasoning-delta",
+        id: "reasoning-1",
+        text: "",
+        providerMetadata: { anthropic: { signature: "sig_1" } },
+      })
       expect(response.message.content).toEqual([
         { type: "text", text: "Hello!" },
         { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
@@ -515,6 +521,139 @@ describe("Anthropic Messages route", () => {
         reason: { normalized: "stop", raw: "end_turn" },
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
+    }),
+  )
+
+  it.effect("requires message_stop before completing a streamed message", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hello" } },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Provider stream ended without a terminal finish event",
+      })
+    }),
+  )
+
+  it.effect("round-trips omitted thinking carried only by a signature delta", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "thinking", thinking: "", signature: "" },
+              },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_1" } },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+      ])
+
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({ model, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "thinking", thinking: "", signature: "sig_1" }] },
+      ])
+    }),
+  )
+
+  it.effect("retains a thinking signature supplied in content_block_start", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "thinking", thinking: "", signature: "sig_1" },
+              },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+      ])
+      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
+        providerMetadata: { anthropic: { signature: "sig_1" } },
+      })
+    }),
+  )
+
+  it.effect("retains complete tool input from content_block_start", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "tool_use", id: "call_1", name: "lookup", input: { query: "weather" } },
+              },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([
+        { id: "call_1", name: "lookup", input: { query: "weather" } },
+      ])
+    }),
+  )
+
+  it.effect("retains empty text blocks", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([{ type: "text", text: "" }])
     }),
   )
 
@@ -629,6 +768,7 @@ describe("Anthropic Messages route", () => {
                 delta: { stop_reason: "model_context_window_exceeded" },
                 usage: { output_tokens: 1 },
               },
+              { type: "message_stop" },
             ),
           ),
         ),
@@ -646,6 +786,7 @@ describe("Anthropic Messages route", () => {
             sseEvents(
               { type: "message_start", message: { usage: { input_tokens: 5 } } },
               { type: "message_delta", delta: { stop_reason: "pause_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
             ),
           ),
         ),
@@ -664,6 +805,7 @@ describe("Anthropic Messages route", () => {
         { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: ':"weather"}' } },
         { type: "content_block_stop", index: 0 },
         { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+        { type: "message_stop" },
       )
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, {
@@ -849,6 +991,7 @@ describe("Anthropic Messages route", () => {
         { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "Found it." } },
         { type: "content_block_stop", index: 2 },
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
+        { type: "message_stop" },
       )
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, {
@@ -912,6 +1055,7 @@ describe("Anthropic Messages route", () => {
         },
         { type: "content_block_stop", index: 1 },
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+        { type: "message_stop" },
       )
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, {
