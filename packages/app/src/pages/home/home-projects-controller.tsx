@@ -47,60 +47,8 @@ export function createHomeProjectsController(home: HomeController) {
     if (!valid) setContextMenu("open", undefined)
   })
 
-  function editProject(conn: ServerConnection.Any, project: LocalProject) {
-    void import("@/components/dialog-edit-project-v2").then(({ DialogEditProjectV2 }) => {
-      void dialog.show(() => <DialogEditProjectV2 server={conn} project={project} />)
-    })
-  }
-
   function directories(project: LocalProject) {
     return [project.worktree, ...(project.sandboxes ?? [])]
-  }
-
-  function unseenCount(conn: ServerConnection.Any, project: LocalProject) {
-    const state = notification.ensureServerState(ServerConnection.key(conn))
-    return directories(project).reduce((total, directory) => total + state.project.unseenCount(directory), 0)
-  }
-
-  function clearNotifications(conn: ServerConnection.Any, project: LocalProject) {
-    const state = notification.ensureServerState(ServerConnection.key(conn))
-    directories(project)
-      .filter((directory) => state.project.unseenCount(directory) > 0)
-      .forEach((directory) => state.project.markViewed(directory))
-  }
-
-  function chooseProject(conn: ServerConnection.Any) {
-    if (home.server.health(conn)?.healthy === false) return
-    pickDirectory({
-      server: conn,
-      title: language.t("command.project.open"),
-      multiple: true,
-      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
-    })
-  }
-
-  function closeProject(conn: ServerConnection.Any, directory: string) {
-    const next = closeHomeProject(
-      home.selection.value(),
-      ServerConnection.key(conn),
-      home.server.context(conn).projects,
-      directory,
-    )
-    if (next) home.selection.set(next)
-  }
-
-  function moveProject(conn: ServerConnection.Any, worktree: string, index: number) {
-    home.server.context(conn).projects.move(worktree, index)
-  }
-
-  function revealProject(conn: ServerConnection.Any, project: LocalProject) {
-    if (!platform.openPath || !canRevealProject(conn)) return
-    platform.openPath(project.worktree).catch((cause: unknown) =>
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: errorMessage(cause, language.t("common.requestFailed")),
-      }),
-    )
   }
 
   function canRevealProject(conn: ServerConnection.Any) {
@@ -154,14 +102,52 @@ export function createHomeProjectsController(home: HomeController) {
       select: home.project.select,
       add: home.project.add,
       openNewSession: home.project.openProjectNewSession,
-      edit: editProject,
-      unseenCount,
-      clearNotifications,
-      choose: chooseProject,
-      close: closeProject,
-      move: moveProject,
+      edit: (conn: ServerConnection.Any, project: LocalProject) => {
+        void import("@/components/dialog-edit-project-v2").then(({ DialogEditProjectV2 }) => {
+          void dialog.show(() => <DialogEditProjectV2 server={conn} project={project} />)
+        })
+      },
+      unseenCount: (conn: ServerConnection.Any, project: LocalProject) => {
+        const state = notification.ensureServerState(ServerConnection.key(conn))
+        return directories(project).reduce((total, directory) => total + state.project.unseenCount(directory), 0)
+      },
+      clearNotifications: (conn: ServerConnection.Any, project: LocalProject) => {
+        const state = notification.ensureServerState(ServerConnection.key(conn))
+        directories(project)
+          .filter((directory) => state.project.unseenCount(directory) > 0)
+          .forEach((directory) => state.project.markViewed(directory))
+      },
+      choose: (conn: ServerConnection.Any) => {
+        if (home.server.health(conn)?.healthy === false) return
+        pickDirectory({
+          server: conn,
+          title: language.t("command.project.open"),
+          multiple: true,
+          onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
+        })
+      },
+      close: (conn: ServerConnection.Any, directory: string) => {
+        const next = closeHomeProject(
+          home.selection.value(),
+          ServerConnection.key(conn),
+          home.server.context(conn).projects,
+          directory,
+        )
+        if (next) home.selection.set(next)
+      },
+      move: (conn: ServerConnection.Any, worktree: string, index: number) => {
+        home.server.context(conn).projects.move(worktree, index)
+      },
       canReveal: canRevealProject,
-      reveal: revealProject,
+      reveal: (conn: ServerConnection.Any, project: LocalProject) => {
+        if (!platform.openPath || !canRevealProject(conn)) return
+        platform.openPath(project.worktree).catch((cause: unknown) =>
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: errorMessage(cause, language.t("common.requestFailed")),
+          }),
+        )
+      },
     },
     contextMenu: {
       open: (id: string) => contextMenu.open === id,

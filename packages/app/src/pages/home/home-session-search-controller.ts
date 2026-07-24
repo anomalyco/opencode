@@ -75,15 +75,6 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     setState({ value: "", focused: false })
   }
 
-  function move(delta: number) {
-    const records = results()
-    if (records.length === 0) return
-    const index = records.findIndex((record) => homeSessionSearchKey(record) === state.active)
-    const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
-    setState("active", homeSessionSearchKey(records[next]))
-    list?.querySelector<HTMLElement>(`[data-key="${state.active}"]`)?.scrollIntoView({ block: "nearest" })
-  }
-
   function select(record: HomeSessionRecord, options?: { background?: boolean }) {
     sessions.session.open(record.session, options)
     if (!options?.background) close()
@@ -104,7 +95,14 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       active: () => state.active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),
       highlight: (record: HomeSessionRecord) => setState("active", homeSessionSearchKey(record)),
-      move,
+      move: (delta: number) => {
+        const records = results()
+        if (records.length === 0) return
+        const index = records.findIndex((record) => homeSessionSearchKey(record) === state.active)
+        const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
+        setState("active", homeSessionSearchKey(records[next]))
+        list?.querySelector<HTMLElement>(`[data-key="${state.active}"]`)?.scrollIntoView({ block: "nearest" })
+      },
       select,
       selectActive: () => {
         const record = results().find((item) => homeSessionSearchKey(item) === state.active)

@@ -41,23 +41,6 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
     resizeObserver?.disconnect()
   })
 
-  function setViewport(element: HTMLDivElement) {
-    viewport = element
-    bindResizeObserver()
-    queuePositionUpdate()
-  }
-
-  function setContent(element: HTMLDivElement) {
-    content = element
-    bindResizeObserver()
-    queuePositionUpdate()
-  }
-
-  function setHeader(id: HomeSessionGroup["id"], element: HTMLDivElement) {
-    headerRefs.set(id, element)
-    queuePositionUpdate()
-  }
-
   function queuePositionUpdate() {
     if (typeof requestAnimationFrame === "undefined") {
       updatePositionCache()
@@ -131,7 +114,11 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       hoverTarget,
       setThumbTrack,
       setHoverTarget,
-      setViewport,
+      setViewport: (element: HTMLDivElement) => {
+        viewport = element
+        bindResizeObserver()
+        queuePositionUpdate()
+      },
       update,
       containWheel,
       containOuterWheel: (event: WheelEvent) => {
@@ -141,8 +128,15 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       },
     },
     header: {
-      setContent,
-      setHeader,
+      setContent: (element: HTMLDivElement) => {
+        content = element
+        bindResizeObserver()
+        queuePositionUpdate()
+      },
+      setHeader: (id: HomeSessionGroup["id"], element: HTMLDivElement) => {
+        headerRefs.set(id, element)
+        queuePositionUpdate()
+      },
       titleOpacity: (id: HomeSessionGroup["id"]) => state.titleOpacity[id] ?? 1,
     },
   }

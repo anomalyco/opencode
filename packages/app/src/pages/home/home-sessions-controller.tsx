@@ -165,57 +165,6 @@ export function createHomeSessionsController(home: HomeController) {
     },
   ])
 
-  function openSession(session: Session, options?: OpenSessionOptions) {
-    const directoryKey = pathKey(session.directory)
-    const project =
-      home.project
-        .list()
-        .find(
-          (item) =>
-            pathKey(item.worktree) === directoryKey ||
-            item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
-        ) ?? projectForSession(session, home.project.list(), projectByID())
-    const conn = home.server.focused()
-    if (!conn) return
-    const directory = project?.worktree ?? session.directory
-    const ctx = home.server.focusedContext()
-    if (!ctx) return
-    ctx.projects.open(directory)
-    if (options?.background) {
-      tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
-      return
-    }
-    ctx.projects.touch(directory)
-    void startTransition(() => {
-      const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
-      tabs.select(tab)
-    })
-  }
-
-  async function archiveSession(session: Session) {
-    const conn = home.server.focused()
-    const ctx = home.server.focusedContext()
-    if (!conn || !ctx) return
-    const [, setStore] = ctx.sync.child(session.directory)
-    await archiveHomeSession({
-      server: ServerConnection.key(conn),
-      session,
-      update: (value) => ctx.sdk.client.session.update(value),
-      remove: () =>
-        setStore(
-          produce((draft) => {
-            const match = Binary.search(draft.session, session.id, (item) => item.id)
-            if (match.found) draft.session.splice(match.index, 1)
-          }),
-        ),
-      onError: (cause) =>
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(cause, language.t("common.requestFailed")),
-        }),
-    })
-  }
-
   return {
     copy: {
       language,
@@ -231,8 +180,55 @@ export function createHomeSessionsController(home: HomeController) {
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
       create: home.project.openNewSession,
-      open: openSession,
-      archive: archiveSession,
+      open: (session: Session, options?: OpenSessionOptions) => {
+        const directoryKey = pathKey(session.directory)
+        const project =
+          home.project
+            .list()
+            .find(
+              (item) =>
+                pathKey(item.worktree) === directoryKey ||
+                item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
+            ) ?? projectForSession(session, home.project.list(), projectByID())
+        const conn = home.server.focused()
+        if (!conn) return
+        const directory = project?.worktree ?? session.directory
+        const ctx = home.server.focusedContext()
+        if (!ctx) return
+        ctx.projects.open(directory)
+        if (options?.background) {
+          tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+          return
+        }
+        ctx.projects.touch(directory)
+        void startTransition(() => {
+          const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+          tabs.select(tab)
+        })
+      },
+      archive: async (session: Session) => {
+        const conn = home.server.focused()
+        const ctx = home.server.focusedContext()
+        if (!conn || !ctx) return
+        const [, setStore] = ctx.sync.child(session.directory)
+        await archiveHomeSession({
+          server: ServerConnection.key(conn),
+          session,
+          update: (value) => ctx.sdk.client.session.update(value),
+          remove: () =>
+            setStore(
+              produce((draft) => {
+                const match = Binary.search(draft.session, session.id, (item) => item.id)
+                if (match.found) draft.session.splice(match.index, 1)
+              }),
+            ),
+          onError: (cause) =>
+            showToast({
+              title: language.t("common.requestFailed"),
+              description: errorMessage(cause, language.t("common.requestFailed")),
+            }),
+        })
+      },
     },
     tab: {
       isOpen: (record: HomeSessionRecord) =>

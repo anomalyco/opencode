@@ -46,40 +46,11 @@ export function createHomeController() {
     layout.home.setSelection(next)
   }
 
-  function selectProject(conn: ServerConnection.Any, directory: string) {
-    const key = ServerConnection.key(conn)
-    if (global.servers.health[key]?.healthy === false) return
-    if (
-      !global
-        .ensureServerCtx(conn)
-        .projects.list()
-        .some((project) => project.worktree === directory)
-    )
-      return
-    setSelection(toggleHomeProjectSelection(selection(), key, directory))
-  }
-
-  function addProjects(conn: ServerConnection.Any, directories: string[]) {
-    const directory = directories[0]
-    if (!directory) return
-    const ctx = global.ensureServerCtx(conn)
-    directories.forEach((item) => ctx.projects.open(item))
-    ctx.projects.touch(directory)
-    setSelection({ server: ServerConnection.key(conn), directory })
-  }
-
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
     const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
     void tabs.newDraft({ server: ServerConnection.key(conn), directory })
-  }
-
-  function openNewSession() {
-    const conn = focusedServer()
-    const project = newSessionProject()
-    if (!conn || !project) return
-    openProjectNewSession(conn, project.worktree)
   }
 
   return {
@@ -103,9 +74,32 @@ export function createHomeController() {
       selected: selectedProject,
       newSession: newSessionProject,
       forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.list(),
-      select: selectProject,
-      add: addProjects,
-      openNewSession,
+      select: (conn: ServerConnection.Any, directory: string) => {
+        const key = ServerConnection.key(conn)
+        if (global.servers.health[key]?.healthy === false) return
+        if (
+          !global
+            .ensureServerCtx(conn)
+            .projects.list()
+            .some((project) => project.worktree === directory)
+        )
+          return
+        setSelection(toggleHomeProjectSelection(selection(), key, directory))
+      },
+      add: (conn: ServerConnection.Any, directories: string[]) => {
+        const directory = directories[0]
+        if (!directory) return
+        const ctx = global.ensureServerCtx(conn)
+        directories.forEach((item) => ctx.projects.open(item))
+        ctx.projects.touch(directory)
+        setSelection({ server: ServerConnection.key(conn), directory })
+      },
+      openNewSession: () => {
+        const conn = focusedServer()
+        const project = newSessionProject()
+        if (!conn || !project) return
+        openProjectNewSession(conn, project.worktree)
+      },
       openProjectNewSession,
     },
   }
