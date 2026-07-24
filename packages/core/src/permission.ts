@@ -124,6 +124,19 @@ const layer = Layer.effect(
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const pending = new Map<ID, Pending>()
+    // Tracks coalesced request IDs → the primary request ID they share an equivalent permission with.
+    // Only the primary request triggers a UI dialog; coalesced requests piggyback on its decision.
+    // Coalescing key: sessionID + action + sorted resources + sorted save — only truly identical
+    // requests coalesce. Two fs_write calls to DIFFERENT files must each show their own dialog,
+    // because the permission system evaluates per (action, resource) pair.
+    const coalesced = new Map<ID, ID>()
+
+    /** Build a normalized coalescing key from a pending request. */
+    function coalescingKey(req: Request): string {
+      const resources = [...req.resources].sort().join("\0")
+      const save = req.save ? [...req.save].sort().join("\0") : ""
+      return `${req.sessionID}\x00${req.action}\x00${resources}\x00${save}`
+    }
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
@@ -132,6 +145,7 @@ const layer = Layer.effect(
         Effect.ensuring(
           Effect.sync(() => {
             pending.clear()
+            coalesced.clear()
           }),
         ),
       ),
@@ -187,6 +201,20 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
           const item = { request, agent, deferred }
+
+          // Check for a coalescing candidate: an equivalent permission already pending in this session.
+          // The coalescing key includes sessionID + action + normalized resources + normalized save,
+          // because the permission system evaluates per (action, resource) pair.
+          // Two fs_write calls to different files must NOT coalesce — they need separate user approval.
+          const key = coalescingKey(request)
+          for (const [existingId, existing] of pending) {
+            if (coalescingKey(existing.request) !== key) continue
+            // Found an equivalent request — coalesce: don't publish a new event, just map to the primary.
+            pending.set(request.id, item)
+            coalesced.set(request.id, existingId)
+            return item
+          }
+
           if (pending.has(request.id))
             return yield* Effect.die(new Error(`Duplicate pending permission ID: ${request.id}`))
           pending.set(request.id, item)
@@ -246,6 +274,23 @@ const layer = Layer.effect(
               input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
             )
             pending.delete(input.requestID)
+
+            // Reject all requests coalesced to this primary.
+            for (const [id, primaryId] of coalesced) {
+              if (primaryId !== input.requestID) continue
+              const item = pending.get(id)
+              if (!item) continue
+              yield* events.publish(Event.Replied, {
+                sessionID: item.request.sessionID,
+                requestID: item.request.id,
+                reply: "reject",
+              })
+              yield* Deferred.fail(item.deferred, input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError())
+              pending.delete(id)
+            }
+            // Clean up coalesced mappings for the primary.
+            coalesced.delete(input.requestID)
+
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
               yield* events.publish(Event.Replied, {
@@ -268,6 +313,30 @@ const layer = Layer.effect(
           }
           yield* Deferred.succeed(existing.deferred, undefined)
           pending.delete(input.requestID)
+
+          // Approve all requests coalesced to this primary.
+          for (const [id, primaryId] of coalesced) {
+            if (primaryId !== input.requestID) continue
+            const item = pending.get(id)
+            if (!item) continue
+            yield* events.publish(Event.Replied, {
+              sessionID: item.request.sessionID,
+              requestID: item.request.id,
+              reply: input.reply,
+            })
+            if (input.reply === "always" && item.request.save?.length) {
+              yield* saved.add({
+                projectID: location.project.id,
+                action: item.request.action,
+                resources: item.request.save,
+              })
+            }
+            yield* Deferred.succeed(item.deferred, undefined)
+            pending.delete(id)
+          }
+          // Clean up coalesced mappings for the primary.
+          coalesced.delete(input.requestID)
+
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           const rememberedRules = yield* savedRules()

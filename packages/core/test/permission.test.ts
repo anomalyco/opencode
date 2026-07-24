@@ -284,6 +284,132 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("coalesces identical pending requests (same action + same resources)", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      const events = yield* EventV2.Service
+
+      // Track how many Asked events fire — should be exactly 1 for two identical requests.
+      let askedCount = 0
+      let primaryId: PermissionV2.ID | undefined
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Asked.type
+          ? Effect.sync(() => {
+              askedCount++
+              if (!primaryId) primaryId = (event.data as PermissionV2.Request).id
+            })
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      // Two identical asks — same session, same action, same resources.
+      const r1 = yield* service.ask(assertion())
+      const r2 = yield* service.ask({ ...assertion(), id: PermissionV2.ID.create("per_coalesced") })
+
+      expect(r1.effect).toBe("ask")
+      expect(r2.effect).toBe("ask")
+
+      // Only one Asked event should have fired.
+      expect(askedCount).toBe(1)
+
+      // Reply once to the primary — both should be removed from pending.
+      yield* service.reply({ requestID: primaryId!, reply: "once" })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("does NOT coalesce requests with different resources", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      const events = yield* EventV2.Service
+
+      // Track Asked events — should fire twice for different resources.
+      let askedCount = 0
+      const askedIds: PermissionV2.ID[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Asked.type
+          ? Effect.sync(() => {
+              askedCount++
+              askedIds.push((event.data as PermissionV2.Request).id)
+            })
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      // Two fs_write requests to DIFFERENT files.
+      yield* service.ask(assertion({ action: "fs_write", resources: ["config.json"] }))
+      yield* service.ask(
+        assertion({
+          id: PermissionV2.ID.create("per_other"),
+          action: "fs_write",
+          resources: [".ssh/authorized_keys"],
+        }),
+      )
+
+      // Both should have triggered separate dialogs.
+      expect(askedCount).toBe(2)
+
+      // Approving one should NOT resolve the other.
+      yield* service.reply({ requestID: askedIds[0]!, reply: "once" })
+      expect((yield* service.list()).length).toBe(1)
+
+      // Resolve the second.
+      yield* service.reply({ requestID: askedIds[1]!, reply: "once" })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("does NOT coalesce requests with different save patterns", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      const events = yield* EventV2.Service
+
+      // Track Asked events.
+      let askedCount = 0
+      const askedIds: PermissionV2.ID[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Asked.type
+          ? Effect.sync(() => {
+              askedCount++
+              askedIds.push((event.data as PermissionV2.Request).id)
+            })
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      // Two requests with same action + resources but different save patterns.
+      yield* service.ask(assertion({ action: "fs_write", resources: ["a.ts"], save: ["a.ts"] }))
+      yield* service.ask(
+        assertion({
+          id: PermissionV2.ID.create("per_save2"),
+          action: "fs_write",
+          resources: ["a.ts"],
+          save: ["a.ts", "b.ts"],
+        }),
+      )
+
+      // Different save → different coalescing keys → two dialogs.
+      expect(askedCount).toBe(2)
+
+      // Reply "always" to the first — saves fs_write/a.ts rule.
+      // The existing propagation logic then auto-approves the second request
+      // since its resource ("a.ts") is now covered by the saved rule.
+      yield* service.reply({ requestID: askedIds[0]!, reply: "always" })
+
+      // Both should be resolved (second auto-approved by propagation).
+      expect(yield* service.list()).toEqual([])
+
+      // Only the first request's save set is persisted — the auto-approved
+      // request's save is NOT persisted (propagation doesn't call saved.add).
+      const saved = yield* PermissionSaved.Service
+      const rules = yield* saved.list()
+      expect(rules.map((r) => r.resource)).toEqual(["a.ts"])
+    }),
+  )
+
   it.effect("stores and removes saved resources for a project", () =>
     Effect.gen(function* () {
       yield* setup()
