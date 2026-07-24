@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:alibaba-images",
+      "provider:alibaba",
+      "protocol:alibaba-images"
+    ],
+    "name": "alibaba-images/edits-with-wan-2-7",
+    "recordedAt": "2026-07-22T05:30:36.133Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"wan2.7-image\",\"input\":{\"messages\":[{\"role\":\"user\",\"content\":[{\"image\":\"data:image/jpeg;base64,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\"},{\"text\":\"Turn the black source shape into a bright orange sun icon on a pale blue background.\"}]}]},\"parameters\":{\"size\":\"1K\",\"thinking_mode\":false,\"watermark\":false}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"output\":{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":[{\"image\":\"https://dashscope-463f.oss-accelerate.aliyuncs.com/1d/d0/20260722/10739b93/1784698235_08b3b146.png?Expires=1784784635&OSSAccessKeyId=%5BREDACTED%5D&Signature=%5BREDACTED%5D\",\"type\":\"image\"}],\"role\":\"assistant\"}}],\"finished\":true},\"usage\":{\"image_count\":1,\"input_tokens\":9430,\"output_tokens\":2,\"size\":\"1024*1024\",\"total_tokens\":9432},\"request_id\":\"e55e017f-f02a-92f3-8405-354906e1159a\"}"
+      }
+    }
+  ]
+}

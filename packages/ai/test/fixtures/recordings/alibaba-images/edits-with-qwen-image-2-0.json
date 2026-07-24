@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:alibaba-images",
+      "provider:alibaba",
+      "protocol:alibaba-images"
+    ],
+    "name": "alibaba-images/edits-with-qwen-image-2-0",
+    "recordedAt": "2026-07-22T05:30:23.625Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"qwen-image-2.0\",\"input\":{\"messages\":[{\"role\":\"user\",\"content\":[{\"image\":\"data:image/jpeg;base64,/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYwLjMxLjEwMgD/2wBDAAgQEBMQExYWFhYWFhoYGhsbGxoaGhobGxsdHR0iIiIdHR0bGx0dICAiIiUmJSMjIiMmJigoKDAwLi44ODpFRVP/xABrAAEBAQEBAQAAAAAAAAAAAAAABwgGBAUBAQAAAAAAAAAAAAAAAAAAAAAQAAICAQEFBwMEAwEAAAAAAAABAwIEEQYFEiFhwXGBUUExE6GRU0LwciLh8bEjEQEAAAAAAAAAAAAAAAAAAAAA/8AAEQgAgACAAwEiAAIRAAMRAP/aAAwDAQACEQMRAD8Av4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB458iLFjtLNesdK+9rPRf76e4yMiPFivNLbhpHV2s+i7X6LzMhb33xPvabitrWKrfxxa8qrzfnZ+r8EBTc/bPm64USa/LLrz61omvq/AnMu0W9ZXq8q9elFSi+ldTigB2se0W9Ynqsq9ul1S6+tSiYG2b1Vc2Jafli15dXRt/R+BBgBuvHyIcqOssN6yUt7Wq9V/h9HzPYY03RvefdM3HTW0dn/AOkWvKy815WXo/ua+x8iPKhpNFbipJVWq/36r2a8wPaAAAAAAAAAAIDtnnvWLCq+WnyydfSlX9X9iDHZ7QyuXeuW3+m6ou6lUjjAAAAAAAXbYzeDVpcKz5NfLH0ftdLv5P7kJOw2flcW9cRr1k4H3XTr2gbHAAAAAAAAAAGO9oYnFvXLT/VdXXdeqZxhdts8Bq0WZVcmvik6NaujffzX2ISAAAAAADr9wRuXeuGl6ScfhRO3YcgXHYzAdpZcyy/rRfFH1s+dmu5aLxA0MAAAAAAAAAAPDk40WXDJDLXipJXha7V1Xuupj7eu6p91TuORO1Hr8cmnK67LL1Rs8+fk4sOZFaKeOslLe6f/AFP3T8muYGGAXHP2Nkq3bDlV6/jl5WXRXXJ+KROpdxb0ielsOZ/wXGvvRsDkwdXHuLekr0WHMv5V4F97tFDwNjZrtWzJVHX8cb4rvo7acK8NQJtuvdc+9Z1FGtKrT5JNP60r2vyXqbBxMWLCgjgiXDSNaLzfm31b5sYuJBhRKKCOsdF6L1fm37t9WfRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9k=\"},{\"text\":\"Turn the black source shape into a bright orange sun icon on a pale blue background.\"}]}]},\"parameters\":{\"prompt_extend\":false,\"watermark\":false}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"output\":{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":[{\"image\":\"https://dashscope-463f.oss-accelerate.aliyuncs.com/7d/89/20260722/74716928/0e082b32-9ff8-4e81-aa78-bde6b41d33ae.png?Expires=1785304023&OSSAccessKeyId=%5BREDACTED%5D&Signature=%5BREDACTED%5D\"}],\"role\":\"assistant\"}}]},\"usage\":{\"height\":1024,\"image_count\":1,\"width\":1024},\"request_id\":\"13d119d7-dbf1-98a7-9fae-d4ad6441f8a7\"}"
+      }
+    }
+  ]
+}

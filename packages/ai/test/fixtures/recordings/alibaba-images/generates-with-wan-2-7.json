@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": ["prefix:alibaba-images", "provider:alibaba", "protocol:alibaba-images"],
+    "name": "alibaba-images/generates-with-wan-2-7",
+    "recordedAt": "2026-07-19T16:15:40.689Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"wan2.7-image\",\"input\":{\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"A simple flat black square centered on a plain white background.\"}]}]},\"parameters\":{\"size\":\"1K\",\"thinking_mode\":false,\"watermark\":false}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"output\":{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":[{\"image\":\"https://dashscope-463f.oss-accelerate.aliyuncs.com/1d/0b/20260720/10739b93/1784477739_553aee1e.png?Expires=1784564140&OSSAccessKeyId=%5BREDACTED%5D&Signature=%5BREDACTED%5D\",\"type\":\"image\"}],\"role\":\"assistant\"}}],\"finished\":true},\"usage\":{\"image_count\":1,\"input_tokens\":31,\"output_tokens\":2,\"size\":\"1024*1024\",\"total_tokens\":33},\"request_id\":\"3eb93323-2d8f-9aa5-b010-82dd8fab80ea\"}"
+      }
+    }
+  ]
+}

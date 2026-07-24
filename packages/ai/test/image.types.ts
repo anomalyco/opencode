@@ -7,7 +7,7 @@ import {
   type ImageRequestFor,
   type ImageRoute,
 } from "../src"
-import { Google, OpenAI, XAI, ZAI } from "../src/providers"
+import { Alibaba, Google, OpenAI, XAI, ZAI } from "../src/providers"
 
 type GoogleLikeOptions = {
   readonly aspectRatio?: "1:1" | "16:9"
@@ -57,6 +57,26 @@ Image.generate({ model: googleProvider, prompt: "A lighthouse", options: { image
 Image.generate({ model: googleProvider, prompt: "A lighthouse", options: { seed: "42" } })
 // @ts-expect-error Known Google boolean options retain their value kind.
 Image.generate({ model: googleProvider, prompt: "A lighthouse", options: { includeThoughts: "yes" } })
+
+const alibaba = Alibaba.configure({ apiKey: "test" }).image("any-model-id")
+Image.generate({
+  model: alibaba,
+  prompt: "A lighthouse",
+  images: [ImageInput.url("https://example.com/source.png")],
+  options: {
+    resolution: "2K",
+    negativePrompt: "fog",
+    promptExtend: true,
+    thinkingMode: false,
+    colorPalette: [{ hex: "#112233", ratio: "100.00%" }],
+    watermark: false,
+    future_parameter: true,
+  },
+})
+// @ts-expect-error Known Alibaba boolean options retain their value kind.
+Image.generate({ model: alibaba, prompt: "A lighthouse", options: { promptExtend: "yes" } })
+// @ts-expect-error Known Alibaba numeric options retain their value kind.
+Image.generate({ model: alibaba, prompt: "A lighthouse", options: { seed: "42" } })
 
 const openai = OpenAI.image("gpt-image-2")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.

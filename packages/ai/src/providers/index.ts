@@ -1,6 +1,7 @@
 export * as Anthropic from "./anthropic"
 export * as AnthropicCompatible from "./anthropic-compatible"
 export * as AmazonBedrock from "./amazon-bedrock"
+export * as Alibaba from "./alibaba"
 export * as Azure from "./azure"
 export * as Cloudflare from "./cloudflare"
 export { CloudflareAIGateway, CloudflareWorkersAI } from "./cloudflare"

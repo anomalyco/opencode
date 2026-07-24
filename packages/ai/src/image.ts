@@ -118,6 +118,7 @@ export type ImageRequestInput<Model extends object = ImageModel> = Omit<
 export class GeneratedImage extends Schema.Class<GeneratedImage>("Image.Generated")({
   mediaType: Schema.String,
   data: Schema.Union([Schema.String, Schema.Uint8Array]),
+  expiresAt: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 

@@ -152,6 +152,30 @@ future string values and arbitrary native Gemini `generationConfig` fields remai
 their mapped aliases, and `http.body` is the final deep overlay. The selected model ID is sent to Gemini
 `generateContent` without a local allowlist.
 
+Alibaba's international synchronous API uses the same request shape for Qwen and Wan image models:
+
+```ts
+import { Alibaba } from "@opencode-ai/ai/providers"
+
+const response =
+  yield *
+  Image.generate({
+    model: Alibaba.configure({ apiKey }).image("any-model-id"),
+    prompt: "Turn this source into a bright orange sun icon",
+    images: [ImageInput.bytes(sourceBytes, "image/jpeg")],
+    options: {
+      resolution: "2K",
+      promptExtend: false,
+      future_parameter: true,
+    },
+    http,
+  })
+```
+
+Known Qwen and Wan aliases autocomplete in one open request option object. Unknown native parameter keys pass
+through, native keys override aliases, and `http.body.parameters` is the final deep overlay. Model IDs are not
+locally allowlisted. Alibaba returns temporary signed URLs; persist each image before its optional `expiresAt`.
+
 Z.ai image models infer open Z.ai-native options from the selected model:
 
 ```ts
