@@ -276,6 +276,7 @@ export const {
           }
           break
         }
+        case "session.created":
         case "session.updated": {
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {

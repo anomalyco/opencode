@@ -5,7 +5,7 @@ import { render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
 import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { LLMError, mergeJsonRecords, TransportReason, type LLMRequest } from "../../schema"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -115,6 +115,16 @@ export interface HttpJsonTransport<Body, Frame> extends Transport<Body, HttpPrep
   readonly with: (patch: HttpJsonPatch<Body, Frame>) => HttpJsonTransport<Body, Frame>
 }
 
+const timeoutError = (route: string, phase: string, timeout: number) =>
+  new LLMError({
+    module: "HttpTransport",
+    method: "frames",
+    reason: new TransportReason({
+      message: `${route} ${phase} timed out after ${timeout}ms`,
+      kind: "Timeout",
+    }),
+  })
+
 export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => ({
   id: "http-json",
   with: (patch) => httpJson({ ...input, ...patch }),
@@ -127,26 +137,48 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         framing: input.framing,
       })),
     ),
-  frames: (prepared, request, runtime) =>
-    Stream.unwrap(
-      runtime.http
-        .execute(prepared.request)
-        .pipe(
-          Effect.map((response) =>
-            prepared.framing.frame(
-              response.stream.pipe(
-                Stream.mapError((error) =>
-                  ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route.id}`,
-                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
-                    ProviderShared.errorText(error),
-                  ),
-                ),
-              ),
+  frames: (prepared, request, runtime) => {
+    const route = `${request.model.provider}/${request.model.route.id}`
+    const headerTimeout = request.http?.headerTimeout
+    const chunkTimeout = request.http?.chunkTimeout
+    const requestTimeout = request.http?.timeout
+    const response =
+      typeof headerTimeout === "number"
+        ? runtime.http.execute(prepared.request).pipe(
+            Effect.timeoutOrElse({
+              duration: headerTimeout,
+              orElse: () => Effect.fail(timeoutError(route, "response headers", headerTimeout)),
+            }),
+          )
+        : runtime.http.execute(prepared.request)
+    const stream = Stream.unwrap(
+      response.pipe(
+        Effect.map((response) => {
+          const source = response.stream.pipe(
+            Stream.mapError((error) =>
+              ProviderShared.eventError(route, `Failed to read ${route} stream`, ProviderShared.errorText(error)),
             ),
-          ),
-        ),
-    ),
+          )
+          return prepared.framing.frame(
+            typeof chunkTimeout === "number"
+              ? source.pipe(
+                  Stream.timeoutOrElse({
+                    duration: chunkTimeout,
+                    orElse: () => Stream.fail(timeoutError(route, "stream chunk", chunkTimeout)),
+                  }),
+                )
+              : source,
+          )
+        }),
+      ),
+    )
+    if (typeof requestTimeout !== "number") return stream
+    return stream.pipe(
+      Stream.interruptWhen(
+        Effect.sleep(requestTimeout).pipe(Effect.andThen(Effect.fail(timeoutError(route, "request", requestTimeout)))),
+      ),
+    )
+  },
 })
 
 export const sseJson = {

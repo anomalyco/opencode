@@ -155,6 +155,28 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  sessionIt.effect("keeps an advertised Session tool stable while other Sessions register tools", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const sessions = yield* SessionTools.Service
+      const firstScope = yield* Scope.make()
+      const secondScope = yield* Scope.make()
+      yield* sessions.register(sessionID, { workflow_result: Tool.asTerminal(make()) }).pipe(Scope.provide(firstScope))
+      const materialized = yield* registry.materialize([], sessionID)
+
+      yield* sessions
+        .register(SessionV2.ID.make("ses_concurrent"), { workflow_result: Tool.asTerminal(make()) })
+        .pipe(Scope.provide(secondScope))
+
+      expect(yield* materialized.settle(call("workflow_result"))).toMatchObject({
+        result: { type: "text", value: "workflow_result" },
+        terminal: true,
+      })
+      yield* Scope.close(secondScope, Exit.void)
+      yield* Scope.close(firstScope, Exit.void)
+    }),
+  )
+
   it.effect("preserves an interrupted registration until its scope closes", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service

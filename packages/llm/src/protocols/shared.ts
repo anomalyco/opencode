@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer"
 import { Effect, Schema, Stream } from "effect"
+import { jsonrepair } from "jsonrepair"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
@@ -153,7 +154,14 @@ export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate
  * routes: `Invalid JSON input for <route> tool call <name>`.
  */
 export const parseToolInput = (route: string, name: string, raw: string) =>
-  parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
+  parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`).pipe(
+    Effect.catch(() =>
+      Effect.try({
+        try: () => decodeJson(jsonrepair(raw || "{}")),
+        catch: () => eventError(route, `Invalid JSON input for ${route} tool call ${name}`, raw),
+      }),
+    ),
+  )
 
 export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
 export const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"] as const

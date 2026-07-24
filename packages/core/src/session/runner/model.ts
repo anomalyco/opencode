@@ -10,6 +10,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { produce } from "immer"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
+import { InstallationVersion } from "../../installation/version"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
@@ -35,6 +36,18 @@ export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavaila
 ) {
   override get message() {
     return `Model unavailable: ${this.providerID}/${this.modelID}`
+  }
+}
+
+export class ProviderUnavailableError extends Schema.TaggedErrorClass<ProviderUnavailableError>()(
+  "SessionRunnerModel.ProviderUnavailableError",
+  {
+    providerID: ProviderV2.ID,
+    modelID: ModelV2.ID,
+  },
+) {
+  override get message() {
+    return `Provider unavailable for ${this.providerID}/${this.modelID}; connect or configure ${this.providerID}`
   }
 }
 
@@ -67,6 +80,7 @@ export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiE
 export type Error =
   | ModelNotSelectedError
   | ModelUnavailableError
+  | ProviderUnavailableError
   | VariantUnavailableError
   | UnsupportedApiError
   | Integration.AuthorizationError
@@ -87,16 +101,29 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (typeof value === "string") return Auth.value(value)
 }
 
+function requestTimeout(value: unknown, allowDisabled: true): number | false | undefined
+function requestTimeout(value: unknown, allowDisabled: false): number | undefined
+function requestTimeout(value: unknown, allowDisabled: boolean) {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value
+  if (allowDisabled && value === false) return false
+  return undefined
+}
+
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
   const body = model.request.body
-  const httpBody = Object.hasOwn(body, "apiKey")
-    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
-    : body
+  const setting = (key: string) => body[key] ?? model.api.settings?.[key]
   return route.with({
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
-    http: { body: httpBody },
+    http: {
+      body: Object.fromEntries(
+        Object.entries(body).filter(([key]) => !["apiKey", "timeout", "headerTimeout", "chunkTimeout"].includes(key)),
+      ),
+      timeout: requestTimeout(setting("timeout"), true),
+      headerTimeout: requestTimeout(setting("headerTimeout"), true),
+      chunkTimeout: requestTimeout(setting("chunkTimeout"), false),
+    },
     limits: { context: model.limit.context, output: model.limit.output },
   })
 }
@@ -170,7 +197,25 @@ export const fromCatalogModel = (
 }
 
 export const resolve = (session: SessionSchema.Info, model: ModelV2.Info, credential?: Credential.Value) =>
-  withVariant(model, session.model?.variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential)))
+  withVariant(model, session.model?.variant).pipe(
+    Effect.flatMap((model) => fromCatalogModel(withCredential(session, model, credential), credential)),
+  )
+
+const withCredential = (
+  session: SessionSchema.Info,
+  model: ModelV2.Info,
+  credential: Credential.Value | undefined,
+) => {
+  if (credential?.type !== "oauth" || model.providerID !== ProviderV2.ID.openai) return model
+  const accountID = credential.metadata?.accountID ?? credential.metadata?.accountId
+  return produce(model, (draft) => {
+    draft.api.url = "https://chatgpt.com/backend-api/codex"
+    draft.request.headers.originator = "opencode"
+    draft.request.headers["User-Agent"] = `opencode/${InstallationVersion}`
+    draft.request.headers["session-id"] = session.id
+    if (typeof accountID === "string" && accountID) draft.request.headers["ChatGPT-Account-Id"] = accountID
+  })
+}
 
 export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
@@ -188,18 +233,29 @@ export const locationLayer = Layer.effect(
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         const defaultModel = session.model ? undefined : yield* catalog.model.default()
+        const available = yield* catalog.model.available()
         const selected = session.model
-          ? (yield* catalog.model.available()).find(
+          ? available.find(
               (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
             )
           : defaultModel && supported(defaultModel)
             ? defaultModel
-            : (yield* catalog.model.available()).find(supported)
-        if (!selected && session.model)
+            : available.find(supported)
+        if (!selected && session.model) {
+          const configured = yield* catalog.model.get(session.model.providerID, session.model.id)
+          if (
+            configured?.enabled &&
+            !(yield* catalog.provider.available()).some((provider) => provider.id === session.model?.providerID)
+          )
+            return yield* new ProviderUnavailableError({
+              providerID: session.model.providerID,
+              modelID: session.model.id,
+            })
           return yield* new ModelUnavailableError({
             providerID: session.model.providerID,
             modelID: session.model.id,
           })
+        }
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         const provider = yield* catalog.provider.get(selected.providerID)
         const connection = yield* integrations.connection.active(

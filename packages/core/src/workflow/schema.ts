@@ -48,6 +48,7 @@ export const HeavyNode = Schema.Struct({
   id: Schema.String,
   parent_id: Schema.String.pipe(Schema.optional),
   session_id: SessionSchema.ID,
+  planning_session_id: SessionSchema.ID.pipe(Schema.optional),
   depth: NonNegativeInt,
   title: Schema.String,
   objective: Schema.String,
@@ -62,15 +63,6 @@ export const HeavyNode = Schema.Struct({
   follow_up: Schema.Array(Schema.String),
 })
 export type HeavyNode = typeof HeavyNode.Type
-
-export const HeavyOutput = Schema.Struct({
-  workflow: Schema.Literal("heavy"),
-  status: Status,
-  summary: Schema.String,
-  root_session_id: SessionSchema.ID,
-  nodes: Schema.Array(HeavyNode),
-})
-export type HeavyOutput = typeof HeavyOutput.Type
 
 export const Stance = Schema.Literals(["support", "oppose", "conditional", "uncertain"])
 export type Stance = typeof Stance.Type
@@ -162,6 +154,7 @@ export const CouncilOutput = Schema.Struct({
   status: Status,
   summary: Schema.String,
   root_session_id: SessionSchema.ID,
+  synthesis_session_id: SessionSchema.ID,
   perspectives: Schema.Array(CouncilPerspective),
   debate: Schema.Array(DebateContribution),
   consensus: Schema.Array(Schema.String),
@@ -176,3 +169,13 @@ export const CouncilOutput = Schema.Struct({
   risks: Schema.Array(Schema.String),
 })
 export type CouncilOutput = typeof CouncilOutput.Type
+
+export const HeavyOutput = Schema.Struct({
+  workflow: Schema.Literal("heavy"),
+  status: Status,
+  summary: Schema.String,
+  root_session_id: SessionSchema.ID,
+  nodes: Schema.Array(HeavyNode),
+  council: CouncilOutput.pipe(Schema.optional),
+})
+export type HeavyOutput = typeof HeavyOutput.Type

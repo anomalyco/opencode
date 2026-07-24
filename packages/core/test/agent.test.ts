@@ -137,10 +137,12 @@ describe("AgentV2", () => {
         { action: "*", resource: "*", effect: "deny" },
         { action: "heavy_run", resource: "*", effect: "allow" },
       ])
+      expect((yield* agent.get(AgentV2.ID.make("heavy")))?.steps).toBe(3)
       expect((yield* agent.get(AgentV2.ID.make("council")))?.permissions).toEqual([
         { action: "*", resource: "*", effect: "deny" },
         { action: "council_run", resource: "*", effect: "allow" },
       ])
+      expect((yield* agent.get(AgentV2.ID.make("council")))?.steps).toBe(3)
       expect((yield* agent.get(AgentV2.ID.make("heavy-writer")))?.hidden).toBe(true)
     }),
   )

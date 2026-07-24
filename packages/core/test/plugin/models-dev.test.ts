@@ -27,6 +27,74 @@ const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.no
 const it = testEffect(layer)
 
 describe("ModelsDevPlugin", () => {
+  it.effect("projects OpenAI reasoning efforts into native Responses variants", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const models = ModelsDev.Service.of({
+        get: () =>
+          Effect.succeed({
+            openai: {
+              id: "openai",
+              name: "OpenAI",
+              env: [],
+              npm: "@ai-sdk/openai",
+              models: {
+                "gpt-5.6-luna": {
+                  id: "gpt-5.6-luna",
+                  name: "GPT-5.6 Luna",
+                  release_date: "2026-07-09",
+                  attachment: true,
+                  reasoning: true,
+                  reasoning_options: [{ type: "effort", values: ["low", "medium", "high"] }],
+                  temperature: false,
+                  tool_call: true,
+                  limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+                },
+              },
+            },
+          } satisfies Record<string, ModelsDev.Provider>),
+        refresh: () => Effect.void,
+      })
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(Effect.provideService(ModelsDev.Service, models))
+
+      expect(
+        (yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-luna")))?.variants,
+      ).toEqual([
+        {
+          id: ModelV2.VariantID.make("low"),
+          headers: {},
+          body: {
+            reasoning: { effort: "low", summary: "auto" },
+            include: ["reasoning.encrypted_content"],
+          },
+        },
+        {
+          id: ModelV2.VariantID.make("medium"),
+          headers: {},
+          body: {
+            reasoning: { effort: "medium", summary: "auto" },
+            include: ["reasoning.encrypted_content"],
+          },
+        },
+        {
+          id: ModelV2.VariantID.make("high"),
+          headers: {},
+          body: {
+            reasoning: { effort: "high", summary: "auto" },
+            include: ["reasoning.encrypted_content"],
+          },
+        },
+      ])
+    }),
+  )
+
   it.effect("projects models.dev modes as separate models instead of variants", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
@@ -48,6 +116,7 @@ describe("ModelsDevPlugin", () => {
                   release_date: "2026-01-01",
                   attachment: false,
                   reasoning: true,
+                  reasoning_options: [{ type: "effort", values: ["low", "medium", "high"] }],
                   temperature: true,
                   tool_call: true,
                   cost: {
@@ -93,7 +162,11 @@ describe("ModelsDevPlugin", () => {
       const base = yield* catalog.model.get(providerID, ModelV2.ID.make("gpt-5.4"))
       const fast = yield* catalog.model.get(providerID, ModelV2.ID.make("gpt-5.4-fast"))
 
-      expect(base?.variants).toEqual([])
+      expect(base?.variants).toEqual([
+        { id: ModelV2.VariantID.make("low"), headers: {}, body: { reasoning_effort: "low" } },
+        { id: ModelV2.VariantID.make("medium"), headers: {}, body: { reasoning_effort: "medium" } },
+        { id: ModelV2.VariantID.make("high"), headers: {}, body: { reasoning_effort: "high" } },
+      ])
       expect(base?.request.body).toEqual({})
       expect(fast).toMatchObject({
         id: "gpt-5.4-fast",
@@ -104,7 +177,11 @@ describe("ModelsDevPlugin", () => {
           headers: { "x-mode": "fast" },
           body: { service_tier: "priority" },
         },
-        variants: [],
+        variants: [
+          { id: ModelV2.VariantID.make("low"), headers: {}, body: { reasoning_effort: "low" } },
+          { id: ModelV2.VariantID.make("medium"), headers: {}, body: { reasoning_effort: "medium" } },
+          { id: ModelV2.VariantID.make("high"), headers: {}, body: { reasoning_effort: "high" } },
+        ],
       })
       expect(fast?.cost).toEqual([
         { input: 5, output: 30, cache: { read: 0.5, write: 0 } },

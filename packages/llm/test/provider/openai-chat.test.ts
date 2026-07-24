@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Fiber, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
@@ -633,6 +634,63 @@ describe("OpenAI Chat route", () => {
       const error = yield* LLMClient.generate(request).pipe(Effect.provide(layer), Effect.flip)
 
       expect(error.message).toContain("Failed to read openai/openai-chat stream")
+    }),
+  )
+
+  it.effect("times out while waiting for response headers", () =>
+    Effect.gen(function* () {
+      const fiber = yield* LLMClient.stream(LLM.updateRequest(request, { http: { headerTimeout: 1_000 } })).pipe(
+        Stream.runCollect,
+        Effect.provide(dynamicResponse(() => Effect.never)),
+        Effect.flip,
+        Effect.forkChild,
+      )
+      yield* Effect.yieldNow
+      yield* TestClock.adjust(1_000)
+      const error = yield* Fiber.join(fiber)
+
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "Transport", kind: "Timeout" })
+      expect(error.message).toContain("response headers timed out after 1000ms")
+    }),
+  )
+
+  it.effect("times out when a response stream stops producing chunks", () =>
+    Effect.gen(function* () {
+      const body = new ReadableStream({
+        pull: () => new Promise<void>(() => {}),
+      })
+      const fiber = yield* LLMClient.stream(LLM.updateRequest(request, { http: { chunkTimeout: 1_000 } })).pipe(
+        Stream.runCollect,
+        Effect.provide(fixedResponse(body)),
+        Effect.flip,
+        Effect.forkChild,
+      )
+      yield* Effect.yieldNow
+      yield* TestClock.adjust(1_000)
+      const error = yield* Fiber.join(fiber)
+
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "Transport", kind: "Timeout" })
+      expect(error.message).toContain("stream chunk timed out after 1000ms")
+    }),
+  )
+
+  it.effect("enforces a full request deadline", () =>
+    Effect.gen(function* () {
+      const fiber = yield* LLMClient.stream(LLM.updateRequest(request, { http: { timeout: 1_000 } })).pipe(
+        Stream.runCollect,
+        Effect.provide(dynamicResponse(() => Effect.never)),
+        Effect.flip,
+        Effect.forkChild,
+      )
+      yield* Effect.yieldNow
+      yield* TestClock.adjust(1_000)
+      const error = yield* Fiber.join(fiber)
+
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "Transport", kind: "Timeout" })
+      expect(error.message).toContain("request timed out after 1000ms")
     }),
   )
 

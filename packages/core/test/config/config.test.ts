@@ -71,23 +71,35 @@ describe("Config", () => {
     Effect.sync(() => {
       const workflows = ConfigWorkflows.merge([
         Schema.decodeUnknownSync(ConfigWorkflows.Info)({
-          heavy: { max_depth: 3, models: { planner: "openai/planner", worker: "openai/worker" } },
-          council: { perspectives: 4, debate: { rounds: 2 } },
+          heavy: {
+            council: false,
+            max_depth: 3,
+            child_timeout: 120_000,
+            models: { planner: "openai/planner", worker: "openai/worker" },
+          },
+          council: { perspectives: 4, child_timeout: 90_000, debate: { rounds: 2 } },
         }),
         Schema.decodeUnknownSync(ConfigWorkflows.Info)({
-          heavy: { concurrency: 2, models: { writer: "openai/writer" } },
-          council: { debate: { topics: 2 }, models: { debater: "openai/debater" } },
+          heavy: { council: true, concurrency: 2, child_timeout: 30_000, models: { writer: "openai/writer" } },
+          council: {
+            child_timeout: 45_000,
+            debate: { topics: 2 },
+            models: { debater: "openai/debater" },
+          },
         }),
       ])
 
       expect(workflows).toMatchObject({
         heavy: {
+          council: true,
           max_depth: 3,
           concurrency: 2,
+          child_timeout: 30_000,
           models: { planner: "openai/planner", worker: "openai/worker", writer: "openai/writer" },
         },
         council: {
           perspectives: 4,
+          child_timeout: 45_000,
           debate: { rounds: 2, topics: 2 },
           models: { debater: "openai/debater" },
         },

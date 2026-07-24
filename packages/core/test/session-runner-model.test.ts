@@ -73,6 +73,38 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("maps provider timeouts into HTTP transport controls", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({
+            type: "aisdk",
+            package: "@ai-sdk/openai",
+            url: "https://openai.example/v1",
+            settings: { timeout: 60_000, headerTimeout: 10_000, chunkTimeout: 20_000 },
+          }),
+          request: {
+            headers: { "x-test": "header" },
+            body: {
+              apiKey: "secret",
+              custom_extension: { enabled: true },
+              timeout: 30_000,
+              headerTimeout: false,
+              chunkTimeout: 5_000,
+            },
+          },
+        }),
+      )
+
+      expect(resolved.route.defaults.http).toMatchObject({
+        body: { custom_extension: { enabled: true } },
+        timeout: 30_000,
+        headerTimeout: false,
+        chunkTimeout: 5_000,
+      })
+    }),
+  )
+
   it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
@@ -310,6 +342,69 @@ describe("SessionRunnerModel", () => {
       )
 
       expect(resolved.route.defaults.http?.body).toEqual({})
+    }),
+  )
+
+  it.effect("routes OpenAI OAuth sessions through the ChatGPT Codex endpoint", () =>
+    Effect.gen(function* () {
+      const catalog = ModelV2.Info.make({
+        ...model({ type: "aisdk", package: "@ai-sdk/openai" }, [
+          {
+            id: ModelV2.VariantID.make("medium"),
+            headers: {},
+            body: {
+              reasoning: { effort: "medium", summary: "auto" },
+              include: ["reasoning.encrypted_content"],
+            },
+          },
+        ]),
+        providerID: ProviderV2.ID.openai,
+      })
+      const session = SessionV2.Info.make({
+        id: SessionV2.ID.make("ses_openai_oauth"),
+        projectID: ProjectV2.ID.global,
+        title: "test",
+        model: {
+          id: catalog.id,
+          providerID: catalog.providerID,
+          variant: ModelV2.VariantID.make("medium"),
+        },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        location: { directory: AbsolutePath.make("/project") },
+      })
+      const resolved = yield* SessionRunnerModel.resolve(
+        session,
+        catalog,
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "secret",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountID: "account-123" },
+        }),
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://chatgpt.com/backend-api/codex/responses",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(resolved.route.endpoint.baseURL).toBe("https://chatgpt.com/backend-api/codex")
+      expect(resolved.route.defaults.headers).toMatchObject({
+        originator: "opencode",
+        "session-id": session.id,
+        "ChatGPT-Account-Id": "account-123",
+      })
+      expect(resolved.route.defaults.http?.body).toMatchObject({
+        reasoning: { effort: "medium", summary: "auto" },
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(headers.authorization).toBe("Bearer secret")
     }),
   )
 

@@ -47,6 +47,7 @@
     "@smithy/util-utf8": "4.2.2",
     "@opencode-ai/schema": "workspace:*",
     "aws4fetch": "1.0.20",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "jsonrepair": "3.15.0"
   }
 }

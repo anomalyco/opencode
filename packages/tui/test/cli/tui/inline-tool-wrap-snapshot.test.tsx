@@ -7,6 +7,7 @@ import {
   formatSubagentRetry,
   formatSubagentTitle,
   formatSubagentToolcalls,
+  formatWorkflowSummary,
   InlineToolRow,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -15,6 +16,8 @@ import {
   parseTodos,
   alwaysSeparate,
   toolDisplay,
+  workflowPromptPreview,
+  workflowSessionTarget,
 } from "../../../src/routes/session"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
@@ -225,7 +228,71 @@ async function renderFrame(component: () => JSX.Element, options: { width: numbe
 describe("TUI inline tool wrapping", () => {
   test("falls back for unknown tool names", () => {
     expect(toolDisplay("bash")).toBe("bash")
+    expect(toolDisplay("heavy_run")).toBe("workflow")
+    expect(toolDisplay("council_run")).toBe("workflow")
     expect(toolDisplay("plugin_tool")).toBe("generic")
+  })
+
+  test("shows live workflow progress and child session count", () => {
+    expect(
+      formatWorkflowSummary("Heavy", "Fix the implementation", "Heavy is executing the worker", "running", 3, true),
+    ).toBe("Heavy — Fix the implementation\n↳ Heavy is executing the worker\n↳ 3 subagent sessions")
+    expect(formatWorkflowSummary("Council", "Should this ship?", undefined, "partial", 2, false)).toBe(
+      "Council — Should this ship?\n↳ Partial · 2 subagent sessions",
+    )
+    expect(formatWorkflowSummary("Council", "Should this ship?", undefined, "partial", 3, false, "1 timed out")).toBe(
+      "Council — Should this ship?\n↳ Partial · 3 subagent sessions · 1 timed out",
+    )
+    expect(
+      formatWorkflowSummary("Heavy", "Assess the architecture", undefined, "completed", 26, false, undefined, 21, true),
+    ).toBe("Heavy — Assess the architecture\n↳ Completed · 21 reports · 26 subagent sessions · Council reviewed")
+  })
+
+  test("keeps workflow child prompts focused on the assigned task", () => {
+    expect(
+      workflowPromptPreview(
+        [
+          "Execute one Heavy workflow task completely.",
+          "",
+          "Root objective:",
+          "Build the complete system.",
+          "",
+          "Task:",
+          "Inspect the session navigation path.",
+          "",
+          "Capability: read",
+          "",
+          "Ancestor context:",
+          "large internal context",
+        ].join("\n"),
+      ),
+    ).toBe("Inspect the session navigation path.")
+  })
+
+  test("navigates to a running workflow child before a stale active child", () => {
+    expect(
+      workflowSessionTarget({
+        activeSessionID: "ses_completed",
+        rootSessionID: "ses_root",
+        childSessions: [
+          { sessionID: "ses_completed", status: "completed" },
+          { sessionID: "ses_running", status: "running" },
+        ],
+      }),
+    ).toBe("ses_running")
+  })
+
+  test("navigates a completed workflow to its final report session", () => {
+    expect(
+      workflowSessionTarget({
+        activeSessionID: "ses_stale_planner",
+        rootSessionID: "ses_root_planner",
+        reports: [
+          { sessionID: "ses_final_report", status: "completed", stage: "final" },
+          { sessionID: "ses_worker_report", status: "completed", stage: "execution" },
+        ],
+      }),
+    ).toBe("ses_final_report")
   })
 
   test("replaces pending copy when a tool fails before completion", async () => {

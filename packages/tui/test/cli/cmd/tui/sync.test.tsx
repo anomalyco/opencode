@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "../../../fixture/fixture"
-import { mount, wait } from "./sync-fixture"
+import { directory, mount, wait } from "./sync-fixture"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 
 function branchEvent(branch: string, workspace?: string): GlobalEvent {
@@ -13,6 +13,32 @@ function branchEvent(branch: string, workspace?: string): GlobalEvent {
       id: `evt_vcs_${branch}`,
       type: "vcs.branch.updated",
       properties: { branch },
+    },
+  }
+}
+
+function sessionCreated(id: string, parentID: string): GlobalEvent {
+  const now = Date.now()
+  return {
+    directory,
+    project: "proj_test",
+    payload: {
+      id: `evt_${id}`,
+      type: "session.created",
+      properties: {
+        sessionID: id,
+        info: {
+          id,
+          parentID,
+          slug: "workflow-child",
+          projectID: "proj_test",
+          directory,
+          title: "Heavy: inspect navigation",
+          version: "test",
+          agent: "heavy-reader",
+          time: { created: now, updated: now },
+        },
+      },
     },
   }
 }
@@ -58,6 +84,25 @@ describe("tui sync", () => {
       await wait(() => sync.data.vcs?.branch === "feature")
 
       expect(sync.data.vcs?.branch).toBe("feature")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("adds newly created V2 workflow sessions to the navigation tree", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const { app, emit, sync } = await mount(undefined, tmp.path)
+
+    try {
+      emit(sessionCreated("ses_workflow_child", "ses_parent"))
+      await wait(() => sync.session.get("ses_workflow_child")?.parentID === "ses_parent")
+
+      expect(sync.session.get("ses_workflow_child")).toMatchObject({
+        id: "ses_workflow_child",
+        parentID: "ses_parent",
+        agent: "heavy-reader",
+      })
     } finally {
       app.renderer.destroy()
     }

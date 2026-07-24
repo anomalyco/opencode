@@ -236,7 +236,7 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
             color: "warning",
-            steps: 2,
+            steps: 3,
           },
           council: {
             name: "council",
@@ -254,7 +254,7 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
             color: "info",
-            steps: 2,
+            steps: 3,
           },
           compaction: {
             name: "compaction",

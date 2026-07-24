@@ -1,6 +1,6 @@
 import { afterEach, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import path from "path"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -65,12 +65,12 @@ it.instance("workflow agents expose only their matching orchestration tool", () 
     const heavy = yield* load((svc) => svc.get("heavy"))
     const council = yield* load((svc) => svc.get("council"))
     expect(heavy?.mode).toBe("primary")
-    expect(heavy?.steps).toBe(2)
+    expect(heavy?.steps).toBe(3)
     expect(evalPerm(heavy, "heavy_run")).toBe("allow")
     expect(evalPerm(heavy, "council_run")).toBe("deny")
     expect(evalPerm(heavy, "edit")).toBe("deny")
     expect(council?.mode).toBe("primary")
-    expect(council?.steps).toBe(2)
+    expect(council?.steps).toBe(3)
     expect(evalPerm(council, "council_run")).toBe("allow")
     expect(evalPerm(council, "heavy_run")).toBe("deny")
     expect(evalPerm(council, "read")).toBe("deny")

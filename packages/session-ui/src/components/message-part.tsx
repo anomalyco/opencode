@@ -2100,6 +2100,177 @@ ToolRegistry.register({
   },
 })
 
+const WorkflowTool: ToolComponent = (props) => {
+  const data = useData()
+  const location = useLocation()
+  const running = createMemo(
+    () => props.status === "pending" || props.status === "running" || props.metadata.status === "running",
+  )
+  const title = createMemo(() => (props.tool === "heavy_run" ? "Heavy" : "Council"))
+  const objective = createMemo(() => {
+    const value = props.tool === "heavy_run" ? props.input.task : props.input.question
+    return typeof value === "string" ? value : ""
+  })
+  const sessionCount = createMemo(() => {
+    const value = props.metadata.childSessionIDs
+    if (!Array.isArray(value)) return 0
+    return new Set(value.filter((sessionID): sessionID is string => typeof sessionID === "string")).size
+  })
+  const reportCount = createMemo(() => {
+    const value = props.metadata.reports
+    if (!Array.isArray(value)) return 0
+    return new Set(
+      value.flatMap((report) => {
+        if (!report || typeof report !== "object" || !("sessionID" in report)) return []
+        return typeof report.sessionID === "string" ? [report.sessionID] : []
+      }),
+    ).size
+  })
+  const failedChildren = createMemo(() => {
+    const value = props.metadata.childSessions
+    if (!Array.isArray(value)) return { failed: 0, timedOut: 0 }
+    return value.reduce(
+      (counts, child) => {
+        const status = child && typeof child === "object" && "status" in child ? child.status : undefined
+        if (status === "failed") counts.failed++
+        if (status === "timed_out") counts.timedOut++
+        return counts
+      },
+      { failed: 0, timedOut: 0 },
+    )
+  })
+  const childSessionID = createMemo(() => {
+    const children = props.metadata.childSessions
+    if (Array.isArray(children)) {
+      const running = children.find(
+        (child) => child && typeof child === "object" && "status" in child && child.status === "running",
+      )
+      if (running && typeof running === "object" && "sessionID" in running && typeof running.sessionID === "string")
+        return running.sessionID
+    }
+    const reports = props.metadata.reports
+    if (Array.isArray(reports)) {
+      const final = reports.find(
+        (report) =>
+          report &&
+          typeof report === "object" &&
+          "stage" in report &&
+          (report.stage === "final" || report.stage === "synthesis"),
+      )
+      if (final && typeof final === "object" && "sessionID" in final && typeof final.sessionID === "string")
+        return final.sessionID
+    }
+    if (typeof props.metadata.activeSessionID === "string" && props.metadata.activeSessionID)
+      return props.metadata.activeSessionID
+    if (typeof props.metadata.rootSessionID === "string" && props.metadata.rootSessionID)
+      return props.metadata.rootSessionID
+    const sessions = props.metadata.childSessionIDs
+    if (!Array.isArray(sessions)) return undefined
+    return sessions.find((sessionID): sessionID is string => typeof sessionID === "string" && !!sessionID)
+  })
+  const subtitle = createMemo(() => {
+    const progress = typeof props.metadata.progress === "string" ? props.metadata.progress : undefined
+    const status = typeof props.metadata.status === "string" ? props.metadata.status : undefined
+    const sessions =
+      sessionCount() > 0 ? `${sessionCount()} subagent session${sessionCount() === 1 ? "" : "s"}` : undefined
+    const reports = reportCount() > 0 ? `${reportCount()} report${reportCount() === 1 ? "" : "s"}` : undefined
+    const council = props.metadata.councilUsed === true ? "Council reviewed" : undefined
+    const failures = [
+      failedChildren().timedOut > 0 ? `${failedChildren().timedOut} timed out` : undefined,
+      failedChildren().failed > 0 ? `${failedChildren().failed} failed` : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ")
+    if (running()) return [progress ?? objective(), reports, sessions, council].filter(Boolean).join(" · ")
+    const result = [
+      status ? status[0]?.toUpperCase() + status.slice(1) : undefined,
+      reports,
+      sessions,
+      council,
+      failures || undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ")
+    return objective() && result ? `${result} — ${objective()}` : result || objective()
+  })
+  const href = createMemo(() => sessionLink(childSessionID(), location.pathname, data.sessionHref))
+  const clickable = createMemo(() => !!(childSessionID() && (data.navigateToSession || href())))
+  const open = () => {
+    const id = childSessionID()
+    if (!id) return
+    if (data.navigateToSession) {
+      data.navigateToSession(id)
+      return
+    }
+    const value = href()
+    if (value) window.location.assign(value)
+  }
+  const navigate = (event: MouseEvent) => {
+    if (!data.navigateToSession) return
+    if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    event.preventDefault()
+    open()
+  }
+  const navigateKey = (event: KeyboardEvent) => {
+    if (!clickable() || href()) return
+    if (event.key !== "Enter" && event.key !== " ") return
+    event.preventDefault()
+    open()
+  }
+  const trigger = () => (
+    <div data-component="task-tool-card">
+      <div data-component="task-tool-surface">
+        <div data-slot="basic-tool-tool-info-structured">
+          <div data-slot="basic-tool-tool-info-main">
+            <Show
+              when={running()}
+              fallback={
+                <Show when={newLayout()}>
+                  <span data-component="task-tool-icon">
+                    <Icon name="subagent" size="small" />
+                  </span>
+                </Show>
+              }
+            >
+              <span data-component="task-tool-spinner">
+                <Show when={newLayout()} fallback={<Spinner />}>
+                  <SessionProgressIndicatorV2 />
+                </Show>
+              </span>
+            </Show>
+            <span data-component="task-tool-title">{title()}</span>
+            <Show when={subtitle()}>
+              <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+            </Show>
+          </div>
+        </div>
+      </div>
+      <Show when={clickable()}>
+        <div data-component="task-tool-action">
+          <Icon name="square-arrow-top-right" size="small" />
+        </div>
+      </Show>
+    </div>
+  )
+
+  return (
+    <BasicTool
+      icon="task"
+      status={props.status}
+      trigger={trigger()}
+      hideDetails
+      triggerAsLink
+      triggerHref={href()}
+      clickable={clickable()}
+      onTriggerClick={navigate}
+      onTriggerKeyDown={navigateKey}
+    />
+  )
+}
+
+ToolRegistry.register({ name: "heavy_run", render: WorkflowTool })
+ToolRegistry.register({ name: "council_run", render: WorkflowTool })
+
 ToolRegistry.register({
   name: "bash",
   render(props) {

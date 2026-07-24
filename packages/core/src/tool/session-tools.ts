@@ -45,11 +45,11 @@ const layer = Layer.effect(
 
     return Service.of({
       register: Effect.fn("SessionTools.register")(function* (sessionID, tools) {
-        const entries = Object.entries(tools)
-        if (entries.length === 0) return
-        yield* Effect.forEach(entries, ([name]) => Tool.validateName(name), { discard: true })
+        const registrations = Object.entries(tools).map(([name, tool]) => [name, { identity: {}, tool }] as const)
+        if (registrations.length === 0) return
+        yield* Effect.forEach(registrations, ([name]) => Tool.validateName(name), { discard: true })
         yield* state.transform((draft) => {
-          for (const [name, tool] of entries) draft.set(sessionID, name, { identity: {}, tool })
+          for (const [name, entry] of registrations) draft.set(sessionID, name, entry)
         })
       }),
       entries: (sessionID) => state.get().sessions.get(sessionID) ?? new Map(),

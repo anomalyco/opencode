@@ -20,6 +20,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -36,6 +37,7 @@ import type {
   TextPart,
   ReasoningPart,
   SessionStatus,
+  SessionMessage,
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -187,6 +189,7 @@ export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
+  const data = useData()
   const event = useEvent()
   const project = useProject()
   const paths = useTuiPaths()
@@ -212,6 +215,35 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const workflowMessages = createMemo(() => data.session.message.list(route.sessionID) ?? [])
+  const workflowSession = createMemo(() => route.sessionID.startsWith("ses_workflow_"))
+  const workflowChildren = createMemo(() =>
+    messages().flatMap((message) =>
+      (sync.data.part[message.id] ?? []).flatMap((part) => {
+        if (part.type !== "tool" || (part.tool !== "heavy_run" && part.tool !== "council_run")) return []
+        if (part.state.status === "pending") return []
+        const metadata = part.state.metadata ?? {}
+        const active = stringValue(metadata.activeSessionID)
+        const root = stringValue(metadata.rootSessionID)
+        const children = Array.isArray(metadata.childSessionIDs)
+          ? metadata.childSessionIDs.filter((value): value is string => typeof value === "string" && !!value)
+          : []
+        return [...new Set([root, active, ...children].filter((value): value is string => !!value))]
+      }),
+    ),
+  )
+  const workflowTarget = createMemo(() =>
+    messages()
+      .flatMap((message) =>
+        (sync.data.part[message.id] ?? []).flatMap((part) => {
+          if (part.type !== "tool" || (part.tool !== "heavy_run" && part.tool !== "council_run")) return []
+          if (part.state.status === "pending") return []
+          const target = workflowSessionTarget(part.state.metadata ?? {})
+          return target ? [target] : []
+        }),
+      )
+      .at(-1),
+  )
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
@@ -278,6 +310,26 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
   const editor = useEditorContext()
+
+  createEffect(
+    on(
+      () => route.sessionID,
+      (sessionID) => {
+        if (!sessionID.startsWith("ses_workflow_")) return
+        void Promise.all([
+          data.session.refresh(sessionID),
+          data.session.message.refresh(sessionID),
+          sync.session.refresh(),
+        ]).catch((error) =>
+          toast.show({
+            message: `Unable to load subagent transcript: ${errorMessage(error)}`,
+            variant: "error",
+            duration: 5000,
+          }),
+        )
+      },
+    ),
+  )
 
   createEffect(() => {
     const sessionID = route.sessionID
@@ -435,9 +487,18 @@ export function Session() {
   }
 
   function moveFirstChild() {
-    if (children().length === 1) return
+    const workflow = workflowTarget()
+    if (workflow) {
+      enterChild(workflow)
+      return
+    }
     const next = children().find((x) => !!x.parentID)
-    if (next) enterChild(next.id)
+    if (next) {
+      enterChild(next.id)
+      return
+    }
+    const first = workflowChildren()[0]
+    if (first) enterChild(first)
   }
 
   function moveChild(direction: number) {
@@ -1187,7 +1248,10 @@ export function Session() {
                 scrollAcceleration={scrollAcceleration()}
               >
                 <box height={1} />
-                <For each={messages()}>
+                <Show when={workflowSession()}>
+                  <WorkflowSessionTranscript messages={workflowMessages()} />
+                </Show>
+                <For each={workflowSession() ? [] : messages()}>
                   {(message, index) => (
                     <Switch>
                       <Match when={message.id === revert()?.messageID}>
@@ -1564,6 +1628,267 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   )
 }
 
+type WorkflowUserMessage = Extract<SessionMessage, { type: "user" }>
+type WorkflowAssistantMessage = Extract<SessionMessage, { type: "assistant" }>
+type WorkflowAssistantContent = WorkflowAssistantMessage["content"][number]
+type WorkflowShellMessage = Extract<SessionMessage, { type: "shell" }>
+
+function WorkflowSessionTranscript(props: { messages: readonly SessionMessage[] }) {
+  const { theme } = useTheme()
+  return (
+    <Show
+      when={props.messages.length > 0}
+      fallback={
+        <box paddingLeft={3} marginTop={1}>
+          <Spinner color={theme.textMuted}>Loading subagent transcript...</Spinner>
+        </box>
+      }
+    >
+      <For each={props.messages}>{(message) => <WorkflowMessageTranscript message={message} />}</For>
+    </Show>
+  )
+}
+
+function WorkflowMessageTranscript(props: { message: SessionMessage }) {
+  const { theme } = useTheme()
+  if (props.message.type === "user") return <WorkflowUserTranscript message={props.message} />
+  if (props.message.type === "assistant") return <WorkflowAssistantTranscript message={props.message} />
+  if (props.message.type === "shell") return <WorkflowShellTranscript message={props.message} />
+  if (props.message.type !== "synthetic" && props.message.type !== "system") return null
+  return (
+    <box paddingLeft={3} marginTop={1}>
+      <text fg={theme.textMuted}>
+        {"text" in props.message && typeof props.message.text === "string" ? props.message.text : ""}
+      </text>
+    </box>
+  )
+}
+
+function WorkflowUserTranscript(props: { message: WorkflowUserMessage }) {
+  const { theme, syntax } = useTheme()
+  const ctx = use()
+  const [expanded, setExpanded] = createSignal(false)
+  const preview = createMemo(() => workflowPromptPreview(props.message.text))
+  const collapsible = createMemo(() => preview() !== props.message.text.trim())
+  return (
+    <box
+      ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+      border={["left"]}
+      customBorderChars={SplitBorder.customBorderChars}
+      borderColor={theme.primary}
+      backgroundColor={theme.backgroundPanel}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      marginTop={1}
+      flexShrink={0}
+    >
+      <text fg={theme.textMuted}>Assigned task</text>
+      <box marginTop={1}>
+        <markdown
+          syntaxStyle={syntax()}
+          streaming={true}
+          internalBlockMode="top-level"
+          content={expanded() ? props.message.text.trim() : preview()}
+          tableOptions={{ style: "grid" }}
+          conceal={ctx.conceal()}
+          fg={theme.markdownText}
+          bg={theme.backgroundPanel}
+        />
+      </box>
+      <Show when={collapsible()}>
+        <text marginTop={1} fg={theme.textMuted} onMouseUp={() => setExpanded((value) => !value)}>
+          {expanded() ? "Click to hide workflow context" : "Click to show full workflow context"}
+        </text>
+      </Show>
+    </box>
+  )
+}
+
+function WorkflowAssistantTranscript(props: { message: WorkflowAssistantMessage }) {
+  const { theme } = useTheme()
+  const local = useLocal()
+  const duration = createMemo(() => {
+    const completed = props.message.time.completed
+    return completed === undefined ? undefined : Locale.duration(completed - props.message.time.created)
+  })
+  return (
+    <>
+      <For each={props.message.content}>{(part) => <WorkflowAssistantPart part={part} />}</For>
+      <Show when={props.message.error}>
+        {(error) => (
+          <box
+            ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+            border={["left"]}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.error}
+            backgroundColor={theme.backgroundPanel}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+            marginTop={1}
+          >
+            <text fg={theme.error}>{error().message}</text>
+          </box>
+        )}
+      </Show>
+      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
+        <text marginTop={1}>
+          <span style={{ fg: local.agent.color(props.message.agent) }}>▣ </span>
+          <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.agent)}</span>
+          <span style={{ fg: theme.textMuted }}>
+            {" "}
+            · {props.message.model.providerID}/{props.message.model.id}
+            {duration() ? ` · ${duration()}` : " · running"}
+          </span>
+        </text>
+      </box>
+    </>
+  )
+}
+
+function WorkflowAssistantPart(props: { part: WorkflowAssistantContent }) {
+  if (props.part.type === "text") return <WorkflowTextTranscript part={props.part} />
+  if (props.part.type === "reasoning") return <WorkflowReasoningTranscript part={props.part} />
+  if (props.part.type === "tool") return <WorkflowToolTranscript part={props.part} />
+  return null
+}
+
+function WorkflowTextTranscript(props: { part: Extract<WorkflowAssistantContent, { type: "text" }> }) {
+  const { theme, syntax } = useTheme()
+  const ctx = use()
+  return (
+    <Show when={props.part.text.trim()}>
+      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
+        <markdown
+          syntaxStyle={syntax()}
+          streaming={true}
+          internalBlockMode="top-level"
+          content={props.part.text.trim()}
+          tableOptions={{ style: "grid" }}
+          conceal={ctx.conceal()}
+          fg={theme.markdownText}
+          bg={theme.background}
+        />
+      </box>
+    </Show>
+  )
+}
+
+function WorkflowReasoningTranscript(props: { part: Extract<WorkflowAssistantContent, { type: "reasoning" }> }) {
+  const { theme } = useTheme()
+  const ctx = use()
+  const [expanded, setExpanded] = createSignal(false)
+  const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
+  const summary = createMemo(() => reasoningSummary(content()))
+  const done = createMemo(() => props.part.time?.completed !== undefined)
+  const minimal = createMemo(() => ctx.thinkingMode() === "hide")
+  const duration = createMemo(() => {
+    const time = props.part.time
+    return time?.completed === undefined ? undefined : Locale.duration(time.completed - time.created)
+  })
+  const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
+  return (
+    <Show when={content()}>
+      <box
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexDirection="column"
+        flexShrink={0}
+      >
+        <box onMouseUp={() => minimal() && setExpanded((value) => !value)}>
+          <ReasoningHeader
+            toggleable={minimal()}
+            open={!minimal() || expanded()}
+            done={done()}
+            title={summary().title}
+            duration={duration()}
+          />
+        </box>
+        <Show when={(!minimal() || expanded()) && summary().body}>
+          <box paddingLeft={minimal() ? 2 : 0} marginTop={1}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={syntax()}
+              content={summary().body}
+              conceal={ctx.conceal()}
+              fg={theme.textMuted}
+            />
+          </box>
+        </Show>
+      </box>
+    </Show>
+  )
+}
+
+function WorkflowToolTranscript(props: { part: Extract<WorkflowAssistantContent, { type: "tool" }> }) {
+  const { theme } = useTheme()
+  const status = createMemo(() => props.part.state.status)
+  const label = createMemo(() => Locale.titlecase(props.part.name.replaceAll("_", " ")))
+  const detail = createMemo(() => workflowToolDetail(props.part))
+  const content = createMemo(() => [label(), detail()].filter(Boolean).join(" · "))
+  return (
+    <box paddingLeft={3} marginTop={1} flexShrink={0}>
+      <Switch>
+        <Match when={status() === "pending" || status() === "running"}>
+          <Spinner color={theme.text}>{content()}</Spinner>
+        </Match>
+        <Match when={status() === "error"}>
+          <text fg={theme.error}>× {content()}</text>
+        </Match>
+        <Match when={true}>
+          <text fg={theme.textMuted}>✓ {content()}</text>
+        </Match>
+      </Switch>
+      <Show when={props.part.state.status === "error"}>
+        <text fg={theme.error}>{props.part.state.status === "error" ? props.part.state.error.message : ""}</text>
+      </Show>
+    </box>
+  )
+}
+
+function WorkflowShellTranscript(props: { message: WorkflowShellMessage }) {
+  const { theme, syntax } = useTheme()
+  return (
+    <box
+      ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+      paddingLeft={3}
+      paddingTop={1}
+      paddingBottom={1}
+      marginTop={1}
+      backgroundColor={theme.backgroundPanel}
+      flexShrink={0}
+    >
+      <text fg={theme.text}>$ {props.message.command}</text>
+      <Show when={props.message.output.trim()}>
+        <code filetype="text" content={props.message.output.trim()} syntaxStyle={syntax()} fg={theme.textMuted} />
+      </Show>
+    </box>
+  )
+}
+
+export function workflowPromptPreview(text: string) {
+  const task = /\n\nTask:\n([\s\S]*?)(?:\n\nCapability:|\n\nDependency results:)/.exec(text)?.[1]?.trim()
+  if (task) return task
+  const objective = /\n\nRoot objective:\n([\s\S]*?)(?:\n\nTask:|\n\nCapability:|\n\nDependency results:)/
+    .exec(text)?.[1]
+    ?.trim()
+  const value = objective ?? text.trim()
+  return value.length > 1_200 ? `${value.slice(0, 1_200).trimEnd()}…` : value
+}
+
+function workflowToolDetail(part: Extract<WorkflowAssistantContent, { type: "tool" }>) {
+  if (part.state.status === "pending") return part.state.input.trim()
+  const input = part.state.input
+  const value = ["summary", "description", "command", "path", "filePath", "query", "pattern"]
+    .map((key) => input[key])
+    .find((item): item is string => typeof item === "string" && !!item)
+  return value ? Locale.truncate(value, 160) : part.state.status
+}
+
 const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
@@ -1760,6 +2085,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         </Match>
         <Match when={display() === "task"}>
           <Task {...toolprops} />
+        </Match>
+        <Match when={display() === "workflow"}>
+          <Workflow {...toolprops} />
         </Match>
         <Match when={display() === "execute"}>
           <Execute {...toolprops} />
@@ -2311,6 +2639,137 @@ function Task(props: ToolProps) {
   )
 }
 
+function Workflow(props: ToolProps) {
+  const { theme } = useTheme()
+  const route = useRoute()
+  const childShortcut = useCommandShortcut("session.child.first")
+  const name = createMemo(() => (props.tool === "heavy_run" ? "Heavy" : "Council"))
+  const objective = createMemo(() => stringValue(props.input.task) ?? stringValue(props.input.question) ?? "Workflow")
+  const status = createMemo(() => stringValue(props.metadata.status))
+  const running = createMemo(
+    () => props.part.state.status === "pending" || props.part.state.status === "running" || status() === "running",
+  )
+  const sessionCount = createMemo(() => {
+    if (!Array.isArray(props.metadata.childSessionIDs)) return 0
+    return new Set(props.metadata.childSessionIDs.filter((value): value is string => typeof value === "string")).size
+  })
+  const reportCount = createMemo(() => {
+    if (!Array.isArray(props.metadata.reports)) return 0
+    return new Set(
+      props.metadata.reports.flatMap((report) => {
+        const id = stringValue(recordValue(report)?.sessionID)
+        return id ? [id] : []
+      }),
+    ).size
+  })
+  const sessionID = createMemo(() => workflowSessionTarget(props.metadata))
+  const failures = createMemo(() => {
+    if (!Array.isArray(props.metadata.childSessions)) return undefined
+    const counts = props.metadata.childSessions.reduce(
+      (result, child) => {
+        const status = stringValue(recordValue(child)?.status)
+        if (status === "timed_out") result.timedOut++
+        if (status === "failed") result.failed++
+        return result
+      },
+      { timedOut: 0, failed: 0 },
+    )
+    return [
+      counts.timedOut > 0 ? `${counts.timedOut} timed out` : undefined,
+      counts.failed > 0 ? `${counts.failed} failed` : undefined,
+    ]
+      .filter((value): value is string => !!value)
+      .join(" · ")
+  })
+  const color = createMemo(() => {
+    if (status() === "failed") return theme.error
+    if (status() === "partial") return theme.warning
+    return undefined
+  })
+  const icon = createMemo(() => {
+    if (running()) return "│"
+    if (status() === "failed") return "×"
+    if (status() === "partial") return "!"
+    return "✓"
+  })
+
+  return (
+    <InlineTool
+      icon={icon()}
+      color={color()}
+      separate={true}
+      spinner={running()}
+      complete={!running()}
+      pending={`Starting ${name()}...`}
+      part={props.part}
+      onClick={sessionID() ? () => route.navigate({ type: "session", sessionID: sessionID()! }) : undefined}
+    >
+      {[
+        formatWorkflowSummary(
+          name(),
+          objective(),
+          stringValue(props.metadata.progress),
+          status(),
+          sessionCount(),
+          running(),
+          failures(),
+          reportCount(),
+          props.metadata.councilUsed === true,
+        ),
+        sessionID() ? `↳ Click or ${childShortcut()} to inspect subagents` : undefined,
+      ]
+        .filter((value): value is string => !!value)
+        .join("\n")}
+    </InlineTool>
+  )
+}
+
+export function formatWorkflowSummary(
+  name: string,
+  objective: string,
+  progress: string | undefined,
+  status: string | undefined,
+  sessionCount: number,
+  running: boolean,
+  failures?: string,
+  reportCount = 0,
+  councilUsed = false,
+) {
+  const lines = [objective ? `${name} — ${objective}` : name]
+  if (running && progress) lines.push(`↳ ${progress}`)
+  const reports = reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : undefined
+  const sessions = sessionCount > 0 ? `${sessionCount} subagent session${sessionCount === 1 ? "" : "s"}` : undefined
+  const detail = [reports, sessions, councilUsed ? "Council reviewed" : undefined, failures]
+    .filter((value): value is string => !!value)
+    .join(" · ")
+  if (running && detail) lines.push(`↳ ${detail}`)
+  if (!running && status) lines.push(`↳ ${Locale.titlecase(status)}${detail ? ` · ${detail}` : ""}`)
+  if (!running && !status && detail) lines.push(`↳ ${detail}`)
+  return lines.join("\n")
+}
+
+export function workflowSessionTarget(metadata: Record<string, unknown>) {
+  if (Array.isArray(metadata.childSessions)) {
+    const running = metadata.childSessions.find((child) => stringValue(recordValue(child)?.status) === "running")
+    const id = stringValue(recordValue(running)?.sessionID)
+    if (id) return id
+  }
+  if (Array.isArray(metadata.reports)) {
+    const final = metadata.reports.find((report) => {
+      const stage = stringValue(recordValue(report)?.stage)
+      return stage === "final" || stage === "synthesis"
+    })
+    const id = stringValue(recordValue(final)?.sessionID)
+    if (id) return id
+  }
+  const active = stringValue(metadata.activeSessionID)
+  if (active) return active
+  const root = stringValue(metadata.rootSessionID)
+  if (root) return root
+  if (!Array.isArray(metadata.childSessionIDs)) return undefined
+  return metadata.childSessionIDs.find((value): value is string => typeof value === "string" && !!value)
+}
+
 export function formatSubagentToolcalls(count: number) {
   return `${count} toolcall${count === 1 ? "" : "s"}`
 }
@@ -2648,6 +3107,7 @@ const toolDisplays = new Set([
 ])
 
 export function toolDisplay(tool: string) {
+  if (tool === "heavy_run" || tool === "council_run") return "workflow"
   return toolDisplays.has(tool) ? tool : "generic"
 }
 

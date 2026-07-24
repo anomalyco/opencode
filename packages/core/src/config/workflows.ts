@@ -12,10 +12,16 @@ const Models = Schema.Struct({
 
 export class Heavy extends Schema.Class<Heavy>("ConfigV2.Workflows.Heavy")({
   enabled: Schema.Boolean.pipe(Schema.optional),
+  council: Schema.Boolean.pipe(Schema.optional).annotate({
+    description: "Run one Council review before the root Heavy synthesis",
+  }),
   max_depth: PositiveInt.pipe(Schema.optional),
   tasks_per_node: PositiveInt.pipe(Schema.optional),
   max_nodes: PositiveInt.pipe(Schema.optional),
   concurrency: PositiveInt.pipe(Schema.optional),
+  child_timeout: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Maximum runtime in milliseconds for one Heavy child session",
+  }),
   mutation: Schema.Literal("serial").pipe(Schema.optional),
   on_failure: Schema.Literals(["keep", "stop"]).pipe(Schema.optional),
   models: Models.pipe(Schema.optional),
@@ -32,6 +38,9 @@ export class Council extends Schema.Class<Council>("ConfigV2.Workflows.Council")
   enabled: Schema.Boolean.pipe(Schema.optional),
   perspectives: PositiveInt.pipe(Schema.optional),
   concurrency: PositiveInt.pipe(Schema.optional),
+  child_timeout: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Maximum runtime in milliseconds for one Council child session",
+  }),
   debate: Debate.pipe(Schema.optional),
   models: Schema.Struct({
     planner: Schema.String.pipe(Schema.optional),
@@ -66,10 +75,12 @@ function mergeHeavy(previous: boolean | Heavy | undefined, next: boolean | Heavy
   if (typeof next === "boolean" || typeof previous !== "object") return next
   return Heavy.make({
     enabled: next.enabled ?? previous.enabled,
+    council: next.council ?? previous.council,
     max_depth: next.max_depth ?? previous.max_depth,
     tasks_per_node: next.tasks_per_node ?? previous.tasks_per_node,
     max_nodes: next.max_nodes ?? previous.max_nodes,
     concurrency: next.concurrency ?? previous.concurrency,
+    child_timeout: next.child_timeout ?? previous.child_timeout,
     mutation: next.mutation ?? previous.mutation,
     on_failure: next.on_failure ?? previous.on_failure,
     models: next.models ? { ...previous.models, ...next.models } : previous.models,
@@ -83,6 +94,7 @@ function mergeCouncil(previous: boolean | Council | undefined, next: boolean | C
     enabled: next.enabled ?? previous.enabled,
     perspectives: next.perspectives ?? previous.perspectives,
     concurrency: next.concurrency ?? previous.concurrency,
+    child_timeout: next.child_timeout ?? previous.child_timeout,
     debate: next.debate
       ? Debate.make({
           mode: next.debate.mode ?? previous.debate?.mode,

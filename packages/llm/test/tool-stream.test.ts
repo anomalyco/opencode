@@ -36,6 +36,36 @@ describe("ToolStream", () => {
     }),
   )
 
+  it.effect("repairs a syntactically truncated tool input", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<number>(), 0, {
+        id: "call_1",
+        name: "workflow_result",
+        input: '{"result":"completed"',
+      })
+      const finished = yield* ToolStream.finish(ADAPTER, tools, 0)
+
+      expect(finished.events).toEqual([
+        { type: "tool-input-end", id: "call_1", name: "workflow_result" },
+        { type: "tool-call", id: "call_1", name: "workflow_result", input: { result: "completed" } },
+      ])
+    }),
+  )
+
+  it.effect("still rejects tool input that cannot be repaired", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<number>(), 0, {
+        id: "call_1",
+        name: "workflow_result",
+        input: '{"result": \\uZZZZ}',
+      })
+      const error = yield* Effect.flip(ToolStream.finish(ADAPTER, tools, 0))
+
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason.message).toBe("Invalid JSON input for test-route tool call workflow_result")
+    }),
+  )
+
   it.effect("fails appendExisting when the provider skipped the tool start", () =>
     Effect.gen(function* () {
       const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")

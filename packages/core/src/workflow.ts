@@ -5,22 +5,28 @@ import { Config } from "./config"
 import { ConfigWorkflows } from "./config/workflows"
 import { makeGlobalNode } from "./effect/app-node"
 import { LocationServiceMap } from "./location-service-map"
+import { PluginV2 } from "./plugin"
 import { SessionV2 } from "./session"
+import { SessionRunnerModel } from "./session/runner/model"
 import { ApplicationTools } from "./tool/application-tools"
 import { Tool } from "./tool/tool"
 import { CouncilWorkflow } from "./workflow/council"
+import { WorkflowHandoff } from "./workflow/handoff"
 import { HeavyWorkflow } from "./workflow/heavy"
 import { WorkflowRuntime } from "./workflow/runtime"
 import { WorkflowSchema } from "./workflow/schema"
 
+const DEFAULT_CHILD_TIMEOUT_MS = 10 * 60_000
+const MAX_CHILD_TIMEOUT_MS = 60 * 60_000
+
 export interface Interface {
   readonly heavy: (
     input: { readonly task: string },
-    context: Tool.Context,
+    context: WorkflowRuntime.RunContext,
   ) => Effect.Effect<WorkflowSchema.HeavyOutput, Tool.Failure>
   readonly council: (
     input: { readonly question: string },
-    context: Tool.Context,
+    context: WorkflowRuntime.RunContext,
   ) => Effect.Effect<WorkflowSchema.CouncilOutput, Tool.Failure>
 }
 
@@ -45,9 +51,17 @@ const layer = Layer.effect(
 
     const configuration = Effect.fn("Workflow.configuration")(function* (sessionID) {
       const session = yield* sessions.get(sessionID)
+      const location = locations.get(session.location)
+      yield* PluginV2.Service.use((plugins) => plugins.wait(PluginV2.ID.make("config-provider"))).pipe(
+        Effect.provide(location),
+      )
+      yield* SessionRunnerModel.Service.use((models) => models.resolve(session)).pipe(
+        Effect.asVoid,
+        Effect.provide(location),
+      )
       const documents = yield* Config.Service.pipe(
         Effect.flatMap((config) => config.entries()),
-        Effect.provide(locations.get(session.location)),
+        Effect.provide(location),
       )
       return {
         session,
@@ -59,20 +73,20 @@ const layer = Layer.effect(
 
     const heavy = Effect.fn("Workflow.heavy")(function* (
       input: { readonly task: string },
-      context: Tool.Context,
+      context: WorkflowRuntime.RunContext,
     ) {
       const configured = yield* configuration(context.sessionID).pipe(Effect.mapError(workflowFailure))
-      const settings = heavySettings(configured.workflows?.heavy)
+      const settings = heavySettings(configured.workflows?.heavy, configured.workflows?.council)
       if (!settings)
         return yield* Effect.fail(new Tool.Failure({ message: "Heavy is disabled by workflows.heavy configuration" }))
-      return yield* workflowLease(configured.session).withPermit(
-        HeavyWorkflow.run(input.task, configured.session, context, settings, runtime),
-      ).pipe(Effect.mapError(workflowFailure))
+      return yield* workflowLease(configured.session)
+        .withPermit(HeavyWorkflow.run(input.task, configured.session, context, settings, runtime))
+        .pipe(Effect.mapError(workflowFailure))
     })
 
     const council = Effect.fn("Workflow.council")(function* (
       input: { readonly question: string },
-      context: Tool.Context,
+      context: WorkflowRuntime.RunContext,
     ) {
       const configured = yield* configuration(context.sessionID).pipe(Effect.mapError(workflowFailure))
       const settings = councilSettings(configured.workflows?.council)
@@ -80,9 +94,9 @@ const layer = Layer.effect(
         return yield* Effect.fail(
           new Tool.Failure({ message: "Council is disabled by workflows.council configuration" }),
         )
-      return yield* workflowLease(configured.session).withPermit(
-        CouncilWorkflow.run(input.question, configured.session, context, settings, runtime),
-      ).pipe(Effect.mapError(workflowFailure))
+      return yield* workflowLease(configured.session)
+        .withPermit(CouncilWorkflow.run(input.question, configured.session, context, settings, runtime))
+        .pipe(Effect.mapError(workflowFailure))
     })
 
     yield* applications.register({
@@ -92,6 +106,7 @@ const layer = Layer.effect(
         input: Schema.Struct({ task: Schema.String }),
         output: WorkflowSchema.HeavyOutput,
         execute: heavy,
+        toModelOutput: ({ output }) => [{ type: "text", text: WorkflowHandoff.heavy(output) }],
       }),
       council_run: Tool.make({
         description:
@@ -99,6 +114,7 @@ const layer = Layer.effect(
         input: Schema.Struct({ question: Schema.String }),
         output: WorkflowSchema.CouncilOutput,
         execute: council,
+        toModelOutput: ({ output }) => [{ type: "text", text: WorkflowHandoff.council(output) }],
       }),
     })
 
@@ -110,7 +126,10 @@ function workflowFailure(error: unknown) {
   return error instanceof Tool.Failure ? error : new Tool.Failure({ message: String(error) })
 }
 
-function heavySettings(input: boolean | ConfigWorkflows.Heavy | undefined): HeavyWorkflow.Settings | undefined {
+function heavySettings(
+  input: boolean | ConfigWorkflows.Heavy | undefined,
+  council: boolean | ConfigWorkflows.Council | undefined,
+): HeavyWorkflow.Settings | undefined {
   if (input === false || (typeof input === "object" && input.enabled === false)) return undefined
   const config = typeof input === "object" ? input : undefined
   const maxDepth = Math.min(config?.max_depth ?? 2, 5)
@@ -119,8 +138,10 @@ function heavySettings(input: boolean | ConfigWorkflows.Heavy | undefined): Heav
     tasksPerNode: Math.min(config?.tasks_per_node ?? 4, 8),
     maxNodes: Math.max(maxDepth + 1, Math.min(config?.max_nodes ?? 24, 64)),
     concurrency: Math.min(config?.concurrency ?? 4, 8),
+    childTimeoutMs: Math.min(config?.child_timeout ?? DEFAULT_CHILD_TIMEOUT_MS, MAX_CHILD_TIMEOUT_MS),
     onFailure: config?.on_failure ?? "keep",
     models: config?.models ?? {},
+    council: config?.council === false ? undefined : councilSettings(council),
   }
 }
 
@@ -130,6 +151,7 @@ function councilSettings(input: boolean | ConfigWorkflows.Council | undefined): 
   return {
     perspectives: Math.max(2, Math.min(config?.perspectives ?? 3, 8)),
     concurrency: Math.min(config?.concurrency ?? 4, 8),
+    childTimeoutMs: Math.min(config?.child_timeout ?? DEFAULT_CHILD_TIMEOUT_MS, MAX_CHILD_TIMEOUT_MS),
     debate: {
       mode: config?.debate?.mode ?? "auto",
       topics: Math.min(config?.debate?.topics ?? 1, 4),

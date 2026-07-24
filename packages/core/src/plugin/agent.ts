@@ -97,9 +97,17 @@ Rules:
 - If the conversation ends with an unanswered question to the user, preserve that exact question
 - If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary`
 
-const PROMPT_HEAVY = `You are the Heavy workflow entrypoint. For every user request, call heavy_run exactly once with the complete objective. Heavy recursively plans and executes through durable child sessions, including workspace writes and validation when needed. After the tool returns, explain the result, important changes, validation, risks, and child-session trail to the user.`
+const PROMPT_HEAVY = `You are the Heavy workflow entrypoint. For every user request, call heavy_run exactly once with the complete objective. Heavy recursively plans and executes through durable child sessions, including workspace writes and validation when needed.
 
-const PROMPT_COUNCIL = `You are the Council workflow entrypoint. For every user request, call council_run exactly once with the complete question. Council gathers independent structured perspectives, debates disagreements, and preserves minority positions. After the tool returns, present the synthesis, consensus, disagreements, recommendations, risks, and root child session to the user.`
+After heavy_run returns, do not call it again. Its first JSON line is a complete, bounded handoff: final_report contains the aggregate synthesis, report_manifest indexes the durable node reports, council_review and council_report_manifest preserve the independent review when enabled, source_manifest preserves cited URLs, and session_manifest records every child stage and failure. Any full structured output after that handoff may be archived or truncated without making the workflow incomplete.
+
+Write a standalone, detailed final report rather than a short workflow recap. Preserve the aggregate report's material decisions, evidence, changes, validation, risks, follow-up, and Council consensus and minority positions. Cite source URLs near the claims they support. End with a Subagent reports section that lists every Heavy and Council report manifest entry with its status and report-producing session ID, then disclose every failed or timed-out child from the session manifest. A partial workflow status describes child coverage; never claim that the Heavy entrypoint reached its step limit unless the tool itself explicitly reports that failure.`
+
+const PROMPT_COUNCIL = `You are the Council workflow entrypoint. For every user request, call council_run exactly once with the complete question. Council gathers independent structured perspectives, debates disagreements, and preserves minority positions.
+
+After council_run returns, do not call it again. Its first JSON line is a complete, bounded handoff: final_report contains the aggregate synthesis, perspective_reports and debate_reports preserve the deliberation trail, source_manifest preserves cited URLs, and session_manifest records every child stage and failure. Any full structured output after that handoff may be archived or truncated without making the workflow incomplete.
+
+Write a standalone, detailed final report rather than a short workflow recap. Present the synthesis, consensus, disagreements, minority positions, recommendations, risks, and evidence. Cite source URLs near the claims they support. End with a Council reports section covering the synthesis, every perspective, and every debate report with its report-producing session ID, then disclose every failed or timed-out child from the session manifest. A partial workflow status describes child coverage; never claim that the Council entrypoint reached its step limit unless the tool itself explicitly reports that failure.`
 
 const PROMPT_WORKFLOW_RESULT = `You are an internal workflow stage. Perform the assigned role thoroughly, preserve concrete evidence and caveats, and finish by calling workflow_result with the complete structured result. Do not substitute a prose-only final answer for workflow_result.`
 
@@ -203,7 +211,7 @@ export const Plugin = define({
         item.system = PROMPT_HEAVY
         item.mode = "primary"
         item.color = "warning"
-        item.steps = 2
+        item.steps = 3
         item.permissions.push(
           { action: "*", resource: "*", effect: "deny" },
           { action: "heavy_run", resource: "*", effect: "allow" },
@@ -215,7 +223,7 @@ export const Plugin = define({
         item.system = PROMPT_COUNCIL
         item.mode = "primary"
         item.color = "info"
-        item.steps = 2
+        item.steps = 3
         item.permissions.push(
           { action: "*", resource: "*", effect: "deny" },
           { action: "council_run", resource: "*", effect: "allow" },

@@ -55,6 +55,7 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 import { Workflow } from "@opencode-ai/core/workflow"
+import { AuthCredentialBridge } from "@/auth/credential-bridge"
 import { CouncilRunTool, HeavyRunTool } from "./workflow-run"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
@@ -453,6 +454,7 @@ export const node = LayerNode.make({
     Database.node,
     Ripgrep.node,
     Workflow.node,
+    AuthCredentialBridge.node,
   ],
 })
 

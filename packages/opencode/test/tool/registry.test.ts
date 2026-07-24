@@ -69,77 +69,233 @@ const withWorkflow = testEffect(
     [
       Workflow.node,
       TestWorkflow.layer({
-        heavy: () =>
-          Effect.succeed(
-            WorkflowSchema.HeavyOutput.make({
-              workflow: "heavy",
-              status: "completed",
-              summary: "Recursive work completed",
-              root_session_id: SessionSchema.ID.make("ses_heavy_root"),
-              nodes: [
-                {
-                  id: "heavy-root",
-                  session_id: SessionSchema.ID.make("ses_heavy_root"),
-                  depth: 0,
-                  title: "Heavy root",
-                  objective: "Trace the implementation",
-                  capability: "write",
-                  status: "completed",
-                  summary: "Recursive work completed",
-                  decisions: ["Keep the V2 workflow canonical"],
-                  findings: [{ claim: "Nested evidence survives", evidence: ["src/workflow.ts"] }],
-                  changed_files: ["src/workflow.ts"],
-                  validation: ["bun test"],
-                  risks: [],
-                  follow_up: [],
+        heavy: (_input, context) => {
+          const progress = context.onProgress
+          return Effect.all(
+            [
+              progress?.({
+                structured: {
+                  workflow: "heavy",
+                  phase: "executing",
+                  stage: "execution",
+                  root_session_id: "ses_heavy_root",
+                  session_id: "ses_heavy_worker",
+                  child_status: "running",
+                  child_agent: "heavy-writer",
+                  child_title: "Heavy worker",
+                  started_at: 100,
+                  updated_at: 100,
+                  elapsed_ms: 0,
                 },
-              ],
-            }),
-          ),
-        council: () =>
-          Effect.succeed(
-            WorkflowSchema.CouncilOutput.make({
-              workflow: "council",
-              status: "completed",
-              summary: "Debate completed",
-              root_session_id: SessionSchema.ID.make("ses_council_root"),
-              perspectives: [
-                {
-                  perspective_id: "safety",
-                  summary: "Proceed conditionally",
-                  issues: [
+                text: "Heavy is executing a worker",
+              }) ?? Effect.void,
+              progress?.({
+                structured: {
+                  workflow: "heavy",
+                  phase: "executing",
+                  stage: "execution",
+                  root_session_id: "ses_heavy_root",
+                  session_id: "ses_heavy_worker",
+                  child_status: "completed",
+                  child_agent: "heavy-writer",
+                  child_title: "Heavy worker",
+                  started_at: 100,
+                  updated_at: 500,
+                  elapsed_ms: 400,
+                },
+                text: "Heavy worker completed",
+              }) ?? Effect.void,
+              progress?.({
+                structured: {
+                  workflow: "council",
+                  phase: "perspectives",
+                  stage: "perspective",
+                  root_session_id: "ses_heavy_council_root",
+                  session_id: "ses_heavy_council_risk",
+                  child_status: "completed",
+                  child_agent: "council-perspective",
+                  child_title: "Council: risk",
+                  started_at: 600,
+                  updated_at: 900,
+                  elapsed_ms: 300,
+                },
+                text: "Council risk perspective completed",
+              }) ?? Effect.void,
+            ],
+            { concurrency: 1, discard: true },
+          ).pipe(
+            Effect.as(
+              WorkflowSchema.HeavyOutput.make({
+                workflow: "heavy",
+                status: "completed",
+                summary: "Recursive work completed",
+                root_session_id: SessionSchema.ID.make("ses_heavy_root"),
+                nodes: [
+                  {
+                    id: "heavy-root",
+                    session_id: SessionSchema.ID.make("ses_heavy_synthesis"),
+                    planning_session_id: SessionSchema.ID.make("ses_heavy_root"),
+                    depth: 0,
+                    title: "Heavy root",
+                    objective: "Trace the implementation",
+                    capability: "write",
+                    status: "completed",
+                    summary: "Recursive work completed",
+                    decisions: ["Keep the V2 workflow canonical"],
+                    findings: [
+                      {
+                        claim: "Nested evidence survives",
+                        evidence: [
+                          "src/workflow.ts",
+                          "https://example.com/workflow",
+                          "large report evidence ".repeat(4_000),
+                        ],
+                      },
+                    ],
+                    changed_files: ["src/workflow.ts"],
+                    validation: ["bun test"],
+                    risks: [],
+                    follow_up: [],
+                  },
+                  {
+                    id: "heavy-child",
+                    parent_id: "heavy-root",
+                    session_id: SessionSchema.ID.make("ses_heavy_worker"),
+                    depth: 1,
+                    title: "Inspect the recursive implementation",
+                    objective: "Trace the implementation",
+                    capability: "write",
+                    status: "completed",
+                    summary: "The worker submitted its durable report",
+                    decisions: ["Preserve the child report trail"],
+                    findings: [{ claim: "The child report is available", evidence: ["src/workflow.ts"] }],
+                    changed_files: ["src/workflow.ts"],
+                    validation: ["bun test"],
+                    risks: [],
+                    follow_up: [],
+                  },
+                ],
+                council: {
+                  workflow: "council",
+                  status: "completed",
+                  summary: "Independent review supports the result",
+                  root_session_id: SessionSchema.ID.make("ses_heavy_council_root"),
+                  synthesis_session_id: SessionSchema.ID.make("ses_heavy_council_synthesis"),
+                  perspectives: [
                     {
-                      id: "issue-1",
-                      question: "Should this ship?",
-                      stance: "conditional",
-                      rationale: "Validation is required",
-                      evidence: ["test output"],
+                      perspective_id: "risk",
+                      summary: "The result is adequately bounded",
+                      issues: [
+                        {
+                          id: "issue-1",
+                          question: "Is the result justified?",
+                          stance: "support",
+                          rationale: "Evidence is preserved",
+                          evidence: ["https://example.com/workflow"],
+                        },
+                      ],
+                      recommendations: ["Keep the report trail"],
+                      risks: [],
+                      session_id: SessionSchema.ID.make("ses_heavy_council_risk"),
                     },
                   ],
-                  recommendations: ["Run validation"],
-                  risks: ["Regression risk"],
-                  session_id: SessionSchema.ID.make("ses_council_perspective"),
+                  debate: [],
+                  consensus: ["Preserve the report trail"],
+                  disagreements: [],
+                  recommendations: ["Keep the report trail"],
+                  risks: [],
                 },
-              ],
-              debate: [
-                {
-                  issue_id: "issue-1",
-                  perspective_id: "safety",
-                  round: 1,
-                  stance: "conditional",
-                  argument: "Ship after validation",
-                  concessions: [],
-                  rebuttals: ["Speed alone is insufficient"],
-                  evidence: ["test output"],
-                  session_id: SessionSchema.ID.make("ses_council_debate"),
+              }),
+            ),
+          )
+        },
+        council: (_input, context) => {
+          const progress = context.onProgress
+          return Effect.all(
+            [
+              progress?.({
+                structured: {
+                  workflow: "council",
+                  phase: "perspectives",
+                  stage: "perspective",
+                  root_session_id: "ses_council_root",
+                  session_id: "ses_council_perspective",
+                  child_status: "timed_out",
+                  child_agent: "council-perspective",
+                  child_title: "Council safety perspective",
+                  started_at: 100,
+                  updated_at: 1_100,
+                  elapsed_ms: 1_000,
+                  error: "Perspective timed out",
                 },
-              ],
-              consensus: ["Validation is required"],
-              disagreements: [],
-              recommendations: ["Run validation"],
-              risks: ["Regression risk"],
-            }),
-          ),
+                text: "Council safety perspective timed out",
+              }) ?? Effect.void,
+              progress?.({
+                structured: {
+                  workflow: "council",
+                  phase: "synthesizing",
+                  stage: "synthesis",
+                  root_session_id: "ses_council_root",
+                  session_id: "ses_council_synthesis",
+                  session_ids: ["ses_council_perspective"],
+                  child_status: "completed",
+                  child_agent: "council-synthesizer",
+                  child_title: "Council synthesis",
+                  started_at: 1_200,
+                  updated_at: 1_500,
+                  elapsed_ms: 300,
+                },
+                text: "Council synthesized the deliberation",
+              }) ?? Effect.void,
+            ],
+            { concurrency: 1, discard: true },
+          ).pipe(
+            Effect.as(
+              WorkflowSchema.CouncilOutput.make({
+                workflow: "council",
+                status: "partial",
+                summary: "Debate completed",
+                root_session_id: SessionSchema.ID.make("ses_council_root"),
+                synthesis_session_id: SessionSchema.ID.make("ses_council_synthesis"),
+                perspectives: [
+                  {
+                    perspective_id: "safety",
+                    summary: "Proceed conditionally",
+                    issues: [
+                      {
+                        id: "issue-1",
+                        question: "Should this ship?",
+                        stance: "conditional",
+                        rationale: "Validation is required",
+                        evidence: ["test output"],
+                      },
+                    ],
+                    recommendations: ["Run validation"],
+                    risks: ["Regression risk"],
+                    session_id: SessionSchema.ID.make("ses_council_perspective"),
+                  },
+                ],
+                debate: [
+                  {
+                    issue_id: "issue-1",
+                    perspective_id: "safety",
+                    round: 1,
+                    stance: "conditional",
+                    argument: "Ship after validation",
+                    concessions: [],
+                    rebuttals: ["Speed alone is insufficient"],
+                    evidence: ["test output"],
+                    session_id: SessionSchema.ID.make("ses_council_debate"),
+                  },
+                ],
+                consensus: ["Validation is required"],
+                disagreements: [],
+                recommendations: ["Run validation"],
+                risks: ["Regression risk"],
+              }),
+            ),
+          )
+        },
       }),
     ],
   ]),
@@ -218,6 +374,7 @@ describe("tool.registry", () => {
       })).find((item) => item.id === "heavy_run")
       if (!tool) throw new Error("Heavy tool not found")
 
+      const updates: Array<{ title?: string; metadata?: Record<string, unknown> }> = []
       const result = yield* tool.execute(
         { task: "Trace the implementation" },
         {
@@ -227,15 +384,139 @@ describe("tool.registry", () => {
           agent: "heavy",
           abort: AbortSignal.any([]),
           messages: [],
-          metadata: () => Effect.void,
+          metadata: (input) =>
+            Effect.sync(() => {
+              updates.push(input)
+            }),
           ask: () => Effect.void,
         },
       )
 
       expect(result.metadata.rootSessionID).toBe("ses_heavy_root")
-      expect(result.metadata.childSessionIDs).toEqual(["ses_heavy_root"])
+      expect(result.metadata.childSessionIDs).toEqual([
+        "ses_heavy_root",
+        "ses_heavy_worker",
+        "ses_heavy_council_risk",
+        "ses_heavy_synthesis",
+        "ses_heavy_council_root",
+        "ses_heavy_council_synthesis",
+      ])
+      expect(updates[0]?.title).toBe("Heavy is executing a worker")
+      expect(updates[0]?.metadata).toMatchObject({
+        workflow: "heavy",
+        status: "running",
+        phase: "executing",
+        progress: "Heavy is executing a worker",
+        activeSessionID: "ses_heavy_worker",
+        rootSessionID: "ses_heavy_root",
+        childSessionIDs: ["ses_heavy_root", "ses_heavy_worker"],
+        childSessions: [
+          {
+            sessionID: "ses_heavy_worker",
+            status: "running",
+            agent: "heavy-writer",
+            title: "Heavy worker",
+            stage: "execution",
+            elapsedMs: 0,
+          },
+        ],
+      })
+      expect(updates[2]?.metadata).toMatchObject({
+        workflow: "heavy",
+        status: "running",
+        rootSessionID: "ses_heavy_root",
+        activeSessionID: "ses_heavy_council_risk",
+        councilUsed: true,
+      })
+      expect(result.metadata.childSessions).toEqual([
+        {
+          sessionID: "ses_heavy_worker",
+          status: "completed",
+          agent: "heavy-writer",
+          title: "Heavy worker",
+          stage: "execution",
+          startedAt: 100,
+          updatedAt: 500,
+          elapsedMs: 400,
+          error: undefined,
+        },
+        {
+          sessionID: "ses_heavy_council_risk",
+          status: "completed",
+          agent: "council-perspective",
+          title: "Council: risk",
+          stage: "perspective",
+          startedAt: 600,
+          updatedAt: 900,
+          elapsedMs: 300,
+          error: undefined,
+        },
+      ])
+      expect(result.metadata).toMatchObject({
+        status: "completed",
+        phase: "completed",
+        activeSessionID: undefined,
+        councilUsed: true,
+        reports: [
+          {
+            sessionID: "ses_heavy_synthesis",
+            status: "completed",
+            title: "Heavy root",
+            stage: "final",
+          },
+          {
+            sessionID: "ses_heavy_worker",
+            status: "completed",
+            title: "Inspect the recursive implementation",
+            stage: "execution",
+          },
+          {
+            sessionID: "ses_heavy_council_synthesis",
+            status: "completed",
+            title: "Council synthesis",
+            stage: "council-final",
+          },
+          {
+            sessionID: "ses_heavy_council_risk",
+            status: "completed",
+            title: "Council: risk",
+            stage: "council-perspective",
+          },
+        ],
+      })
       expect(result.output).toContain("Nested evidence survives")
       expect(result.output).toContain("src/workflow.ts")
+      expect(result.metadata.truncated).toBe(true)
+      const handoff = JSON.parse(result.output.split("\n", 1)[0] ?? "{}")
+      expect(handoff.handoff_compacted).toBe(true)
+      expect(handoff.final_report.summary).toBe("Recursive work completed")
+      expect(handoff.final_report.session_id).toBe("ses_heavy_synthesis")
+      expect(handoff.source_manifest).toEqual(["https://example.com/workflow"])
+      expect(handoff.council_review.summary).toBe("Independent review supports the result")
+      expect(handoff.council_report_manifest[0]).toMatchObject({
+        kind: "synthesis",
+        session_id: "ses_heavy_council_synthesis",
+      })
+      expect(handoff.report_manifest).toEqual([
+        expect.objectContaining({
+          title: "Inspect the recursive implementation",
+          status: "completed",
+          session_id: "ses_heavy_worker",
+          summary: "The worker submitted its durable report",
+        }),
+      ])
+      expect(handoff.session_manifest).toEqual([
+        expect.objectContaining({
+          session_id: "ses_heavy_worker",
+          status: "completed",
+          agent: "heavy-writer",
+        }),
+        expect.objectContaining({
+          session_id: "ses_heavy_council_risk",
+          status: "completed",
+          agent: "council-perspective",
+        }),
+      ])
     }),
   )
 
@@ -252,6 +533,7 @@ describe("tool.registry", () => {
       })).find((item) => item.id === "council_run")
       if (!tool) throw new Error("Council tool not found")
 
+      const updates: Array<{ title?: string; metadata?: Record<string, unknown> }> = []
       const result = yield* tool.execute(
         { question: "Should this ship?" },
         {
@@ -261,15 +543,74 @@ describe("tool.registry", () => {
           agent: "council",
           abort: AbortSignal.any([]),
           messages: [],
-          metadata: () => Effect.void,
+          metadata: (input) =>
+            Effect.sync(() => {
+              updates.push(input)
+            }),
           ask: () => Effect.void,
         },
       )
 
       expect(result.metadata.rootSessionID).toBe("ses_council_root")
-      expect(result.metadata.childSessionIDs).toEqual(["ses_council_perspective", "ses_council_debate"])
+      expect(result.metadata.childSessionIDs).toEqual([
+        "ses_council_root",
+        "ses_council_perspective",
+        "ses_council_synthesis",
+        "ses_council_debate",
+      ])
+      expect(updates[0]?.metadata).toMatchObject({
+        workflow: "council",
+        status: "running",
+        phase: "perspectives",
+        activeSessionID: "ses_council_perspective",
+        childSessions: [
+          {
+            sessionID: "ses_council_perspective",
+            status: "timed_out",
+            error: "Perspective timed out",
+          },
+        ],
+      })
+      expect(updates[1]?.metadata).toMatchObject({
+        workflow: "council",
+        status: "running",
+        phase: "synthesizing",
+        progress: "Council synthesized the deliberation",
+        activeSessionID: "ses_council_synthesis",
+        rootSessionID: "ses_council_root",
+        childSessionIDs: ["ses_council_root", "ses_council_perspective", "ses_council_synthesis"],
+      })
+      expect(result.metadata.status).toBe("partial")
+      expect(result.metadata.phase).toBe("partial")
+      expect(result.metadata.activeSessionID).toBeUndefined()
+      expect(result.metadata.reports[0]).toEqual({
+        sessionID: "ses_council_synthesis",
+        status: "partial",
+        title: "Council synthesis",
+        stage: "final",
+      })
+      expect(result.metadata.childSessions).toMatchObject([
+        { sessionID: "ses_council_perspective", status: "timed_out" },
+        { sessionID: "ses_council_synthesis", status: "completed" },
+      ])
       expect(result.output).toContain("Speed alone is insufficient")
       expect(result.output).toContain("Validation is required")
+      const handoff = JSON.parse(result.output.split("\n", 1)[0] ?? "{}")
+      expect(handoff.final_report.consensus).toEqual(["Validation is required"])
+      expect(handoff.final_report.session_id).toBe("ses_council_synthesis")
+      expect(handoff.perspective_reports).toEqual([
+        expect.objectContaining({
+          perspective_id: "safety",
+          session_id: "ses_council_perspective",
+        }),
+      ])
+      expect(handoff.debate_reports).toEqual([
+        expect.objectContaining({
+          issue_id: "issue-1",
+          perspective_id: "safety",
+          session_id: "ses_council_debate",
+        }),
+      ])
     }),
   )
 

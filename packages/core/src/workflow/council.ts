@@ -3,7 +3,6 @@ export * as CouncilWorkflow from "./council"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
 import { SessionSchema } from "../session/schema"
-import { Tool } from "../tool/tool"
 import { Hash } from "../util/hash"
 import { WorkflowRuntime } from "./runtime"
 import { WorkflowSchema } from "./schema"
@@ -11,6 +10,7 @@ import { WorkflowSchema } from "./schema"
 export interface Settings {
   readonly perspectives: number
   readonly concurrency: number
+  readonly childTimeoutMs: number
   readonly debate: {
     readonly mode: "auto" | "always" | "off"
     readonly topics: number
@@ -28,7 +28,7 @@ export interface Settings {
 export function run(
   question: string,
   parent: SessionSchema.Info,
-  context: Tool.Context,
+  context: WorkflowRuntime.RunContext,
   settings: Settings,
   runtime: WorkflowRuntime.Interface,
 ) {
@@ -38,40 +38,72 @@ export function run(
     const rootSessionID = runtime.childID(parent.id, planID)
     yield* runtime.progress(
       context,
-      { workflow: "council", phase: "planning", session_id: rootSessionID },
+      {
+        workflow: "council",
+        phase: "planning",
+        session_id: rootSessionID,
+        root_session_id: rootSessionID,
+      },
       "Council is selecting perspectives and stable issues",
     )
-    let planningFailure: string | undefined
-    const plan = yield* runtime
+    const planned = yield* runtime
       .runChild({
         id: planID,
         parentID: parent.id,
         location: parent.location,
         title: "Council plan",
         agent: AgentV2.ID.make("council-planner"),
-        model: settings.models.planner,
+        model: WorkflowRuntime.resolveModel(parent.model, settings.models.planner),
+        timeoutMs: settings.childTimeoutMs,
         result: WorkflowSchema.CouncilPlan,
         prompt: planPrompt(question, settings),
+        progress: {
+          context,
+          workflow: "council",
+          phase: "planning",
+          stage: "planning",
+        },
       })
       .pipe(
-        Effect.catch((error) => {
-          planningFailure = error.message
-          return Effect.succeed(
-            WorkflowSchema.CouncilPlan.make({
-              rationale: `Council planner failed; using default independent perspectives: ${error.message}`,
-              issues: [{ id: "decision", question }],
-              perspectives: [],
-            }),
-          )
-        }),
+        Effect.map((plan) => ({ plan, failure: undefined as string | undefined })),
+        Effect.catch((error) =>
+          runtime
+            .progress(
+              context,
+              {
+                workflow: "council",
+                phase: "recovering",
+                stage: "planning",
+                session_id: rootSessionID,
+                root_session_id: rootSessionID,
+                error: error.message,
+              },
+              `Council planner failed; using default perspectives: ${error.message}`,
+            )
+            .pipe(
+              Effect.as({
+                plan: WorkflowSchema.CouncilPlan.make({
+                  rationale: `Council planner failed; using default independent perspectives: ${error.message}`,
+                  issues: [{ id: "decision", question }],
+                  perspectives: [],
+                }),
+                failure: error.message,
+              }),
+            ),
+        ),
       )
-    const normalized = normalizePlan(plan, question, settings)
+    const normalized = normalizePlan(planned.plan, question, settings)
+    const perspectiveSessionIDs = normalized.perspectives.map((perspective) =>
+      runtime.childID(rootSessionID, `${runID}:perspective:${perspective.id}`),
+    )
     yield* runtime.progress(
       context,
       {
         workflow: "council",
         phase: "perspectives",
         session_id: rootSessionID,
+        session_ids: perspectiveSessionIDs,
+        root_session_id: rootSessionID,
         total: normalized.perspectives.length,
       },
       `Council is gathering ${normalized.perspectives.length} perspectives`,
@@ -80,6 +112,7 @@ export function run(
       normalized.perspectives,
       (perspective) => {
         const id = `${runID}:perspective:${perspective.id}`
+        const sessionID = runtime.childID(rootSessionID, id)
         return runtime
           .runChild({
             id,
@@ -87,21 +120,40 @@ export function run(
             location: parent.location,
             title: `Council: ${perspective.title}`,
             agent: AgentV2.ID.make("council-perspective"),
-            model: settings.models.perspective,
+            model: WorkflowRuntime.resolveModel(parent.model, settings.models.perspective),
+            timeoutMs: settings.childTimeoutMs,
             result: WorkflowSchema.CouncilPerspectiveResult,
             prompt: perspectivePrompt(question, normalized.issues, perspective),
+            progress: {
+              context,
+              workflow: "council",
+              phase: "perspectives",
+              stage: "perspective",
+            },
           })
           .pipe(
             Effect.map((result) => ({
               perspective,
-              result: normalizePerspective(result, perspective, normalized.issues, runtime.childID(rootSessionID, id)),
+              result: normalizePerspective(result, perspective, normalized.issues, sessionID),
             })),
-            Effect.catch((error) =>
-              Effect.succeed({
-                perspective,
-                error: error instanceof Error ? error.message : String(error),
-              }),
-            ),
+            Effect.catch((error) => {
+              const message = error instanceof Error ? error.message : String(error)
+              return runtime
+                .progress(
+                  context,
+                  {
+                    workflow: "council",
+                    phase: "failed",
+                    stage: "perspective",
+                    session_id: sessionID,
+                    root_session_id: rootSessionID,
+                    perspective: perspective.id,
+                    error: message,
+                  },
+                  `Council perspective ${perspective.title} failed: ${message}`,
+                )
+                .pipe(Effect.as({ perspective, error: message }))
+            }),
           )
       },
       { concurrency: settings.concurrency },
@@ -115,52 +167,84 @@ export function run(
         workflow: "council",
         phase: "debate",
         session_id: rootSessionID,
+        root_session_id: rootSessionID,
         topics: topics.length,
         rounds: topics.length > 0 ? settings.debate.rounds : 0,
       },
       topics.length > 0 ? `Council is debating ${topics.length} issue(s)` : "Council found no debate topic",
     )
     const debate = yield* Effect.forEach(topics, (topic) =>
-      debateTopic(question, topic, perspectives, runID, rootSessionID, parent, settings, runtime),
+      debateTopic(question, topic, perspectives, runID, rootSessionID, parent, context, settings, runtime),
     ).pipe(Effect.map((rounds) => rounds.flat()))
+    const synthesisID = runtime.childID(rootSessionID, `${runID}:synthesis`)
     yield* runtime.progress(
       context,
-      { workflow: "council", phase: "synthesizing", session_id: rootSessionID },
+      {
+        workflow: "council",
+        phase: "synthesizing",
+        session_id: synthesisID,
+        root_session_id: rootSessionID,
+      },
       "Council is synthesizing the deliberation",
     )
-    let synthesisFailure: string | undefined
-    const synthesis = yield* runtime
+    const synthesized = yield* runtime
       .runChild({
         id: `${runID}:synthesis`,
         parentID: rootSessionID,
         location: parent.location,
         title: "Council synthesis",
         agent: AgentV2.ID.make("council-synthesizer"),
-        model: settings.models.synthesizer,
+        model: WorkflowRuntime.resolveModel(parent.model, settings.models.synthesizer),
+        timeoutMs: settings.childTimeoutMs,
         result: WorkflowSchema.CouncilSynthesis,
-        prompt: synthesisPrompt(question, plan.rationale, perspectives, perspectiveFailures, debate),
+        prompt: synthesisPrompt(question, planned.plan.rationale, perspectives, perspectiveFailures, debate),
+        progress: {
+          context,
+          workflow: "council",
+          phase: "synthesizing",
+          stage: "synthesis",
+        },
       })
       .pipe(
-        Effect.catch((error) => {
-          synthesisFailure = error.message
-          return Effect.succeed(fallbackSynthesis(normalized.issues, perspectives, perspectiveFailures, error.message))
-        }),
+        Effect.map((result) => ({ result, failure: undefined as string | undefined })),
+        Effect.catch((error) =>
+          runtime
+            .progress(
+              context,
+              {
+                workflow: "council",
+                phase: "recovering",
+                stage: "synthesis",
+                session_id: synthesisID,
+                root_session_id: rootSessionID,
+                error: error.message,
+              },
+              `Council synthesis failed; preserving deliberation: ${error.message}`,
+            )
+            .pipe(
+              Effect.as({
+                result: fallbackSynthesis(normalized.issues, perspectives, perspectiveFailures, error.message),
+                failure: error.message,
+              }),
+            ),
+        ),
       )
     const debateFailures = debate.filter((item) => item.argument.startsWith("Debate stage failed:")).length
-    const normalizedSynthesis = normalizeSynthesis(synthesis, normalized.issues)
+    const normalizedSynthesis = normalizeSynthesis(synthesized.result, normalized.issues)
     const status =
       perspectives.length === 0
         ? "failed"
-        : planningFailure || synthesisFailure || perspectiveFailures.length > 0 || debateFailures > 0
-          ? synthesis.status === "failed"
+        : planned.failure || synthesized.failure || perspectiveFailures.length > 0 || debateFailures > 0
+          ? synthesized.result.status === "failed"
             ? "failed"
             : "partial"
-          : synthesis.status
+          : synthesized.result.status
     return WorkflowSchema.CouncilOutput.make({
       workflow: "council",
       status,
       summary: normalizedSynthesis.summary,
       root_session_id: rootSessionID,
+      synthesis_session_id: synthesisID,
       perspectives,
       debate,
       consensus: normalizedSynthesis.consensus,
@@ -182,6 +266,7 @@ const debateTopic = Effect.fn("CouncilWorkflow.debateTopic")(function* (
   runID: string,
   parentID: SessionSchema.ID,
   parent: SessionSchema.Info,
+  context: WorkflowRuntime.RunContext,
   settings: Settings,
   runtime: WorkflowRuntime.Interface,
 ) {
@@ -198,17 +283,39 @@ const debateTopic = Effect.fn("CouncilWorkflow.debateTopic")(function* (
         const id = `${runID}:debate:${topic.id}:${round}:${perspective.perspective_id}`
         const sessionID = runtime.childID(parentID, id)
         return runtime
-          .runChild({
-            id,
-            parentID,
-            location: parent.location,
-            title: `Council debate: ${topic.question}`,
-            agent: AgentV2.ID.make("council-debater"),
-            model: settings.models.debater,
-            result: WorkflowSchema.DebateResult,
-            prompt: debatePrompt(question, topic, perspective, perspectives, round, snapshot),
-          })
+          .progress(
+            context,
+            {
+              workflow: "council",
+              phase: "debating",
+              session_id: sessionID,
+              root_session_id: parentID,
+              issue: topic.id,
+              perspective: perspective.perspective_id,
+              round,
+            },
+            `Council is debating ${topic.question} in round ${round}`,
+          )
           .pipe(
+            Effect.andThen(
+              runtime.runChild({
+                id,
+                parentID,
+                location: parent.location,
+                title: `Council debate: ${topic.question}`,
+                agent: AgentV2.ID.make("council-debater"),
+                model: WorkflowRuntime.resolveModel(parent.model, settings.models.debater),
+                timeoutMs: settings.childTimeoutMs,
+                result: WorkflowSchema.DebateResult,
+                prompt: debatePrompt(question, topic, perspective, perspectives, round, snapshot),
+                progress: {
+                  context,
+                  workflow: "council",
+                  phase: "debating",
+                  stage: "debate",
+                },
+              }),
+            ),
             Effect.map((result) =>
               WorkflowSchema.DebateContribution.make({
                 ...result,
@@ -218,21 +325,40 @@ const debateTopic = Effect.fn("CouncilWorkflow.debateTopic")(function* (
                 session_id: sessionID,
               }),
             ),
-            Effect.catch((error) =>
-              Effect.succeed(
-                WorkflowSchema.DebateContribution.make({
-                  issue_id: topic.id,
-                  perspective_id: perspective.perspective_id,
-                  round,
-                  session_id: sessionID,
-                  stance: issueFor(perspective, topic.id)?.stance ?? "uncertain",
-                  argument: `Debate stage failed: ${error instanceof Error ? error.message : String(error)}`,
-                  concessions: [],
-                  rebuttals: [],
-                  evidence: [],
-                }),
-              ),
-            ),
+            Effect.catch((error) => {
+              const message = error instanceof Error ? error.message : String(error)
+              return runtime
+                .progress(
+                  context,
+                  {
+                    workflow: "council",
+                    phase: "failed",
+                    stage: "debate",
+                    session_id: sessionID,
+                    root_session_id: parentID,
+                    issue: topic.id,
+                    perspective: perspective.perspective_id,
+                    round,
+                    error: message,
+                  },
+                  `Council debate failed in round ${round}: ${message}`,
+                )
+                .pipe(
+                  Effect.as(
+                    WorkflowSchema.DebateContribution.make({
+                      issue_id: topic.id,
+                      perspective_id: perspective.perspective_id,
+                      round,
+                      session_id: sessionID,
+                      stance: issueFor(perspective, topic.id)?.stance ?? "uncertain",
+                      argument: `Debate stage failed: ${message}`,
+                      concessions: [],
+                      rebuttals: [],
+                      evidence: [],
+                    }),
+                  ),
+                )
+            }),
           )
       },
       { concurrency: settings.concurrency },
@@ -416,7 +542,7 @@ ${perspective.title}: ${perspective.instructions}
 Stable issues:
 ${JSON.stringify(issues, undefined, 2)}
 
-Inspect the workspace when useful. Address every stable issue using its exact ID and choose one structured stance: support, oppose, conditional, or uncertain. Ground claims in evidence, preserve caveats, and provide recommendations and risks. Submit the complete structured result through workflow_result.`
+Inspect the workspace when useful. Address every stable issue using its exact ID and choose one structured stance: support, oppose, conditional, or uncertain. Ground claims in evidence, preserve source URLs in the evidence that depends on them, preserve caveats, and provide recommendations and risks. Submit the complete structured result through workflow_result.`
 }
 
 function debatePrompt(
@@ -477,5 +603,5 @@ ${JSON.stringify(failures, undefined, 2)}
 Debate:
 ${JSON.stringify(debate, undefined, 2)}
 
-Do not erase minority positions or unresolved uncertainty. Separate consensus from disagreement, cite stable issue IDs, recommend a course of action with conditions, and preserve risks. Mark the synthesis partial when failures materially limit it. Submit the complete structured synthesis through workflow_result.`
+Do not erase minority positions, source URLs, or unresolved uncertainty. Separate consensus from disagreement, cite stable issue IDs, recommend a course of action with conditions, and preserve risks. Mark the synthesis partial when failures materially limit it. Submit the complete structured synthesis through workflow_result.`
 }
