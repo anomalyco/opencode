@@ -3,7 +3,7 @@ import { useLanguage } from "@/context/language"
 import { serverName } from "@/context/server"
 import { displayName } from "@/pages/layout/helpers"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createEffect, createMemo, onCleanup } from "solid-js"
+import { createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "./home-controller"
 import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./home-sessions-controller"
@@ -13,7 +13,7 @@ type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
   const command = useCommand()
   const language = useLanguage()
-  const [state, setState] = createStore({ value: "", focused: false, active: "" })
+  const [state, setState] = createStore({ value: "", focused: false, highlighted: "" })
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let list: HTMLDivElement | undefined
@@ -24,6 +24,11 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     return sessions.data
       .searchRecords()
       .filter((record) => `${record.session.title} ${record.projectName}`.toLowerCase().includes(value))
+  })
+  const active = createMemo(() => {
+    const records = results()
+    if (records.some((record) => homeSessionSearchKey(record) === state.highlighted)) return state.highlighted
+    return records[0] ? homeSessionSearchKey(records[0]) : ""
   })
   const open = createMemo(() => state.focused && query().length > 0)
   const placeholder = createMemo(() => {
@@ -36,7 +41,6 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     return language.t("home.sessions.search.placeholder")
   })
 
-  createEffect(() => syncActive(results()))
   onCleanup(
     makeEventListener(document, "pointerdown", (event) => {
       if (!open()) return
@@ -55,16 +59,6 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       onSelect: focus,
     },
   ])
-
-  function syncActive(records: HomeSessionRecord[]) {
-    if (records.length === 0) {
-      setState("active", "")
-      return
-    }
-    if (!records.some((record) => homeSessionSearchKey(record) === state.active)) {
-      setState("active", homeSessionSearchKey(records[0]))
-    }
-  }
 
   function focus() {
     input?.focus()
@@ -86,26 +80,26 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       placeholder,
       open,
       focus,
-      input: (value: string) => setState("value", value),
+      input: (value: string) => setState({ value, highlighted: "" }),
       close,
     },
     result: {
       loading: sessions.data.loading,
       list: results,
-      active: () => state.active,
+      active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),
-      highlight: (record: HomeSessionRecord) => setState("active", homeSessionSearchKey(record)),
+      highlight: (record: HomeSessionRecord) => setState("highlighted", homeSessionSearchKey(record)),
       move: (delta: number) => {
         const records = results()
         if (records.length === 0) return
-        const index = records.findIndex((record) => homeSessionSearchKey(record) === state.active)
+        const index = records.findIndex((record) => homeSessionSearchKey(record) === active())
         const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
-        setState("active", homeSessionSearchKey(records[next]))
-        list?.querySelector<HTMLElement>(`[data-key="${state.active}"]`)?.scrollIntoView({ block: "nearest" })
+        setState("highlighted", homeSessionSearchKey(records[next]))
+        list?.querySelector<HTMLElement>(`[data-key="${state.highlighted}"]`)?.scrollIntoView({ block: "nearest" })
       },
       select,
       selectActive: () => {
-        const record = results().find((item) => homeSessionSearchKey(item) === state.active)
+        const record = results().find((item) => homeSessionSearchKey(item) === active())
         if (record) select(record)
       },
     },
