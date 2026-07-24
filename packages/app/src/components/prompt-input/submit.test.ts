@@ -24,7 +24,6 @@ const optimistic: Array<{
 }> = []
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
-const sessionDirectories: Record<string, string> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: Array<{ sessionID: string; id?: string; command: string }> = []
 const syncedDirectories: string[] = []
@@ -116,27 +115,6 @@ const clientFor = (directory: string) => {
   }
 }
 
-const api = {
-  session: {
-    async create(input: { location: { directory: string } }) {
-      await createSessionGate
-      createdSessions.push(input.location.directory)
-      const session = {
-        id: `session-${createdSessions.length}`,
-        title: `New session ${createdSessions.length}`,
-      }
-      sessionDirectories[session.id] = input.location.directory
-      return session
-    },
-    async shell(input: { sessionID: string; id?: string; command: string }) {
-      sentShell.push(input)
-    },
-    async prompt() {},
-    async command() {},
-    async interrupt() {},
-  },
-}
-
 beforeAll(async () => {
   const rootClient = clientFor("/repo/main")
 
@@ -219,8 +197,8 @@ beforeAll(async () => {
       const sdk = {
         scope: "local",
         directory: "/repo/main",
-        api,
         client: rootClient,
+        api: rootClient.api,
         url: "http://localhost:4096",
         createClient(opts: any) {
           return clientFor(opts.directory)
@@ -324,7 +302,6 @@ beforeEach(() => {
   createSessionGate = undefined
   serverSessionSyncs = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
-  for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
 })
 
 describe("prompt submit worktree selection", () => {
