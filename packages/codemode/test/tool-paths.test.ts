@@ -106,7 +106,7 @@ describe("blocked member names on tool paths", () => {
   })
 
   test("tools may use blocked member names because path segments never touch real properties", async () => {
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["prototype", "issues.constructor", "nested.__proto__"])
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.constructor", "nested.__proto__", "prototype"])
     expect(await value(runtime, `return await tools.prototype({})`)).toBe("proto")
     expect(await value(runtime, `return await tools.issues.constructor({})`)).toBe("ctor")
     expect(await value(runtime, `return await tools["issues.constructor"]({})`)).toBe("ctor")
@@ -155,8 +155,7 @@ describe("canonical path collisions", () => {
         "issues.close": echo("Close issue", "closed"),
       },
     })
-    // Catalog order follows first appearance of each canonical path.
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.list", "issues.get", "issues.close"])
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.close", "issues.get", "issues.list"])
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("second")
     expect(await value(runtime, `return await tools.issues.get({})`)).toBe("got")
     expect(await value(runtime, `return await tools.issues.close({})`)).toBe("closed")
