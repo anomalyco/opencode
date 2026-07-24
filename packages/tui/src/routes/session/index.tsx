@@ -81,7 +81,14 @@ import { PluginSlot } from "../../plugin/context"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
-import { createSessionRows, messageBoundaryIDs, resolvePart, type PartRef, type SessionRow } from "./rows"
+import {
+  cacheReuseDrop,
+  createSessionRows,
+  messageBoundaryIDs,
+  resolvePart,
+  type PartRef,
+  type SessionRow,
+} from "./rows"
 import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
@@ -1109,10 +1116,7 @@ function TurnTokenUsage(props: {
         message.tokens.cache.write
       if (total === 0) return []
       const newTokens = total - message.tokens.cache.read
-      const cacheBust =
-        previousCacheRead !== undefined && message.tokens.cache.read < previousCacheRead
-          ? previousCacheRead - message.tokens.cache.read
-          : undefined
+      const reuseDrop = cacheReuseDrop(previousCacheRead, message.tokens.cache.read, message.model.providerID)
       previousCacheRead = message.tokens.cache.read
       return [
         {
@@ -1120,7 +1124,7 @@ function TurnTokenUsage(props: {
           newTokens,
           cached: message.tokens.cache.read,
           total,
-          cacheBust,
+          reuseDrop,
         },
       ]
     })
@@ -1165,9 +1169,9 @@ function TurnTokenUsage(props: {
                 {"  "}
                 {item.total.toLocaleString().padStart(columns().total)}
               </text>
-              <Show when={item.cacheBust !== undefined}>
-                <text fg={themeV2.text.feedback.error.default}>
-                  ! Cache bust: {item.cacheBust?.toLocaleString()} fewer cached tokens than the previous step
+              <Show when={item.reuseDrop !== undefined}>
+                <text fg={themeV2.text.subdued}>
+                  Cache reuse dropped by {item.reuseDrop?.toLocaleString()} tokens from the previous step
                 </text>
               </Show>
             </box>

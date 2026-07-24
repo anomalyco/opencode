@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
-import { messageBoundaryIDs, reduceSessionRows } from "../../../src/routes/session/rows"
+import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows } from "../../../src/routes/session/rows"
+
+test("filters OpenAI cache quantization from cache reuse drops", () => {
+  expect(cacheReuseDrop(undefined, 10_000, "openai")).toBeUndefined()
+  expect(cacheReuseDrop(10_000, 11_000, "openai")).toBeUndefined()
+  expect(cacheReuseDrop(10_000, 8_976, "openai")).toBeUndefined()
+  expect(cacheReuseDrop(10_000, 7_952, "openai")).toBeUndefined()
+  expect(cacheReuseDrop(10_000, 7_951, "openai")).toBe(2_049)
+  expect(cacheReuseDrop(10_000, 8_976, "anthropic")).toBe(1_024)
+})
 
 test("assigns assistant boundaries to the first rendered row instead of the first text row", () => {
   const messages: SessionMessageInfo[] = [

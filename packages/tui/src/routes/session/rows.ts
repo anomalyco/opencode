@@ -324,6 +324,14 @@ export function reduceSessionRows(
   }, [])
 }
 
+export function cacheReuseDrop(previous: number | undefined, current: number, providerID: string) {
+  if (previous === undefined) return
+  const drop = previous - current
+  // OpenAI cache reads can move by one or two 1,024-token buckets without a material loss of reuse.
+  if (providerID === "openai" && drop <= 2_048) return
+  return drop > 0 ? drop : undefined
+}
+
 function hasTokenUsage(
   message: SessionMessageAssistant,
 ): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } {
