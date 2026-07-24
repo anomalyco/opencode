@@ -69,18 +69,41 @@ describe("createCompatibleApi", () => {
     await api.session.prompt({
       sessionID: "ses_1",
       id: "msg_1",
-      text: "hello",
+      text: "hello @src/index.ts",
       agent: "build",
       model: { providerID: "provider", modelID: "model" },
+      files: [
+        { uri: "file:///repo/src/index.ts", name: "index.ts", mention: { text: "@src/index.ts", start: 6, end: 19 } },
+        { uri: "data:text/plain;base64,aGVsbG8=", name: "notes.txt" },
+      ],
     })
 
     expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/prompt_async")
-    expect(await requests[0]!.json()).toMatchObject({
+    const body = await requests[0]!.json()
+    expect(body).toMatchObject({
       messageID: "msg_1",
       agent: "build",
       model: { providerID: "provider", modelID: "model" },
-      parts: [{ type: "text", text: "hello" }],
+      parts: [
+        { type: "text", text: "hello @src/index.ts" },
+        {
+          type: "file",
+          url: "file:///repo/src/index.ts",
+          filename: "index.ts",
+          source: {
+            type: "file",
+            text: { value: "@src/index.ts", start: 6, end: 19 },
+            path: "file:///repo/src/index.ts",
+          },
+        },
+        {
+          type: "file",
+          url: "data:text/plain;base64,aGVsbG8=",
+          filename: "notes.txt",
+        },
+      ],
     })
+    expect(body.parts[2]).not.toHaveProperty("source")
   })
 
   test("keeps V2 session actions on the current API", async () => {

@@ -210,6 +210,13 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
               mime: mime(file.uri),
               url: file.uri,
               filename: file.name,
+              source: file.mention
+                ? {
+                    type: "file" as const,
+                    text: { value: file.mention.text, start: file.mention.start, end: file.mention.end },
+                    path: file.uri,
+                  }
+                : undefined,
             })),
             ...(value.agents ?? []).map((agent) => ({
               type: "agent" as const,
