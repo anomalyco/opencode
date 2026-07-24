@@ -45,22 +45,41 @@ describe("ReviewOverlay", () => {
     ])
   })
 
-  it("enqueueUnflushed does not resend content already drained this turn", () => {
+  it("enqueueUnflushed does not resend content already flushed this turn", () => {
     // Reproduces the double fs/write_text_file bug: flushPendingWrites runs
     // once on tool completion and again at end-of-turn, both calling
-    // enqueueUnflushed. The second call must not resend unchanged content.
+    // enqueueUnflushed. Once a write is confirmed via markFlushed, the second
+    // call must not resend unchanged content.
     ReviewOverlay.reset()
     ReviewOverlay.setEnabled(true)
     ReviewOverlay.setActiveSession("sess-3")
     ReviewOverlay.stage("/tmp/once.ts", "v1")
-    expect(ReviewOverlay.drainPendingWrites()).toEqual([
-      { sessionID: "sess-3", path: expect.stringContaining("once.ts"), content: "v1" },
-    ])
+    const drained = ReviewOverlay.drainPendingWrites()
+    expect(drained).toEqual([{ sessionID: "sess-3", path: expect.stringContaining("once.ts"), content: "v1" }])
+    for (const item of drained) ReviewOverlay.markFlushed(item.path, item.content)
 
     // End-of-turn flush also calls enqueueUnflushed; entries still holds the
     // staged content since only clear()/reset() remove it.
     ReviewOverlay.enqueueUnflushed("sess-3")
     expect(ReviewOverlay.drainPendingWrites()).toEqual([])
+  })
+
+  it("enqueueUnflushed retries content that was drained but never flushed", () => {
+    // A drained write whose client RPC was rejected must not be treated as
+    // delivered. Without markFlushed, the end-of-turn enqueueUnflushed has to
+    // re-queue it so the edit is not silently lost.
+    ReviewOverlay.reset()
+    ReviewOverlay.setEnabled(true)
+    ReviewOverlay.setActiveSession("sess-5")
+    ReviewOverlay.stage("/tmp/rejected.ts", "v1")
+    expect(ReviewOverlay.drainPendingWrites()).toEqual([
+      { sessionID: "sess-5", path: expect.stringContaining("rejected.ts"), content: "v1" },
+    ])
+
+    ReviewOverlay.enqueueUnflushed("sess-5")
+    expect(ReviewOverlay.drainPendingWrites()).toEqual([
+      { sessionID: "sess-5", path: expect.stringContaining("rejected.ts"), content: "v1" },
+    ])
   })
 
   it("enqueueUnflushed still resends a path after it changes again", () => {

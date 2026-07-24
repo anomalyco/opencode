@@ -540,7 +540,7 @@ export function make(input: {
             "session",
           )
           yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-          yield* Effect.promise(() => flushPendingWrites(input.connection, current.id))
+          yield* flushStagedEdits(input.connection, current.id)
           return yield* promptResponse(response.info, params.messageId)
         }
 
@@ -563,7 +563,7 @@ export function make(input: {
             "session",
           )
           yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-          yield* Effect.promise(() => flushPendingWrites(input.connection, current.id))
+          yield* flushStagedEdits(input.connection, current.id)
           return yield* promptResponse(response.info, params.messageId)
         }
 
@@ -584,7 +584,7 @@ export function make(input: {
         }
 
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        yield* Effect.promise(() => flushPendingWrites(input.connection, current.id))
+        yield* flushStagedEdits(input.connection, current.id)
         return yield* promptResponse(undefined, params.messageId)
       }).pipe(Effect.ensuring(Effect.sync(() => ReviewOverlay.clear())))
     }),
@@ -721,6 +721,22 @@ type MessageInfo = {
 
 type AssistantError = NonNullable<AssistantMessage["error"]>
 type AssistantInfo = (UsageService.AssistantTokenCost & Pick<AssistantMessage, "error">) | undefined
+
+// End-of-turn delivery of staged review edits. A rejected write must fail the
+// turn rather than silently drop the edit, since review mode never writes to
+// disk itself and the change would otherwise be lost while the client believes
+// the tool succeeded.
+function flushStagedEdits(connection: ServiceConnection | undefined, sessionID: string) {
+  return Effect.tryPromise({
+    try: () => flushPendingWrites(connection, sessionID),
+    catch: (error) =>
+      new ACPError.ServiceFailureError({
+        safeMessage: "failed to deliver staged edits to the review client",
+        service: "review",
+        errorName: error instanceof Error ? error.name : undefined,
+      }),
+  })
+}
 
 function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
   return Effect.tryPromise({

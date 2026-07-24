@@ -262,9 +262,14 @@ export class Subscription {
           },
         })
         // These tools may have staged edits in the overlay. Send them to the
-        // client now so they show up in the native review UI as the tool finishes.
+        // client now so they show up in the native review UI as the tool
+        // finishes. This is best-effort: a rejected write is left unflushed so
+        // the end-of-turn flush retries it, and that flush is the one that fails
+        // the turn if the client still rejects.
         if (part.tool === "edit" || part.tool === "write" || part.tool === "apply_patch") {
-          await flushPendingWrites(this.input.connection, sessionId)
+          await flushPendingWrites(this.input.connection, sessionId).catch((error: unknown) =>
+            Effect.runPromise(Effect.logError("failed to flush staged edits on tool completion", { error })),
+          )
         }
         return
 

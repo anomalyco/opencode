@@ -49,7 +49,7 @@ function makeSessionService() {
 // Records every outbound ACP call in the exact order it happened so we can
 // assert the client-facing protocol sequence, not just the end state.
 type TimelineEntry =
-  | { readonly kind: "notify"; readonly status: string; readonly toolCallId: string }
+  | { readonly kind: "notify"; readonly status: string | null | undefined; readonly toolCallId: string | null | undefined }
   | { readonly kind: "write"; readonly sessionId: string; readonly path: string; readonly content: string }
 
 function makeRecordingConnection() {
