@@ -582,18 +582,31 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
 // assistant doesn't get mistaken for the most recent turn. tasks are
 // compaction/subtask parts attached to user messages newer than the latest
 // finished assistant — i.e. unprocessed work.
+// Order by wall-clock first, id second. Ids minted by Identifier.ascending()
+// embed a timestamp and so sort chronologically on their own, but sessions can
+// also arrive via `opencode import` from third-party writers whose ids carry no
+// ordering. A single such id sorting above the live conversation used to make
+// the newest message unreachable here, so the run loop's exit test could never
+// pass and opencode re-requested until the provider rejected the
+// assistant-terminated conversation. `time.created` is authoritative; the id
+// stays as the tiebreaker for messages minted within the same millisecond.
+function isNewer(a: { id: string; time: { created: number } }, b: { id: string; time: { created: number } }) {
+  if (a.time.created !== b.time.created) return a.time.created > b.time.created
+  return a.id > b.id
+}
+
 export function latest(msgs: WithParts[]) {
   let user: User | undefined
   let assistant: Assistant | undefined
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || info.id > user.id)) user = info
-    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
-    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
+    if (info.role === "user" && (!user || isNewer(info, user))) user = info
+    if (info.role === "assistant" && (!assistant || isNewer(info, assistant))) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || isNewer(info, finished))) finished = info
   }
   const tasks = msgs.flatMap((m) =>
-    finished && m.info.id <= finished.id
+    finished && !isNewer(m.info, finished)
       ? []
       : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
   )
