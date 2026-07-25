@@ -402,7 +402,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
             auth: { type: "api", key: value.key },
           })
           await legacy(value.location).instance.dispose()
-          await legacy().instance.dispose()
+          await input.legacy().instance.dispose()
         },
       },
       oauth: {
@@ -432,7 +432,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
             { throwOnError: true },
           )
           await legacy(value.location).instance.dispose()
-          await legacy().instance.dispose()
+          await input.legacy().instance.dispose()
         },
         status: async (value: Parameters<ServerApi["integration"]["oauth"]["status"]>[0]) => {
           const method = Number(value.attemptID.split(":").at(-1))
@@ -441,7 +441,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
             { throwOnError: true },
           )
           await legacy(value.location).instance.dispose()
-          await legacy().instance.dispose()
+          await input.legacy().instance.dispose()
           return located(
             { status: "complete" as const, time: { created: Date.now(), expires: Date.now() } },
             value.location,

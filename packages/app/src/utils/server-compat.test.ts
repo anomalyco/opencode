@@ -203,7 +203,10 @@ describe("createCompatibleApi", () => {
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/auth/openrouter",
       "/instance/dispose",
+      "/instance/dispose",
     ])
+    expect(requests[1]!.headers.get("x-opencode-directory")).toBe("%2Frepo")
+    expect(requests[2]!.headers.get("x-opencode-directory")).toBeNull()
   })
 
   test("disposes the V1 instance after completing provider OAuth", async () => {
@@ -219,6 +222,9 @@ describe("createCompatibleApi", () => {
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/provider/openrouter/oauth/callback",
       "/instance/dispose",
+      "/instance/dispose",
     ])
+    expect(requests[1]!.headers.get("x-opencode-directory")).toBe("%2Frepo")
+    expect(requests[2]!.headers.get("x-opencode-directory")).toBeNull()
   })
 })
