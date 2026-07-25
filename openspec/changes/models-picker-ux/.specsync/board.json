@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "bindings": {
+    "androidand:3:github:androidand/opencode-skein": {
+      "provider": "github:androidand/opencode-skein",
+      "project_id": "PVT_kwHOAGSmH84Becpz",
+      "item_id": "",
+      "local_stage_base": "active",
+      "remote_option_id_base": "47fc9ee4",
+      "synced_at": "2026-07-25T22:32:52.909935+02:00"
+    }
+  }
+}

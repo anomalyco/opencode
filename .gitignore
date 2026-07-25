@@ -35,7 +35,6 @@ tsconfig.tsbuildinfo
 
 # Local Skein orchestration/runtime state
 .skein/
-openspec/
 .opencode/agents
 .opencode/agent/analyst.md
 .opencode/agent/architect.md
