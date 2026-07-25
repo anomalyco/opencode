@@ -18,7 +18,7 @@ Use \`search\` to discover exact paths and signatures for additional tools:
 
 export function render(catalog: CodeModeCatalog.Summary) {
   if (catalog.total === 0)
-    return "No Code Mode tools are currently available. Do not call `execute` until a later system update announces available tools."
+    return "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
 
   const tools = catalog.namespaces.flatMap((namespace) => {
     const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`

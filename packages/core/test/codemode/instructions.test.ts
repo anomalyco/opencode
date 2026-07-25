@@ -25,7 +25,7 @@ describe("CodeModeInstructions", () => {
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make([]))
       expect(initialized.text).toBe(
-        "No Code Mode tools are currently available. Do not call `execute` until a later system update announces available tools.",
+        "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
       )
 
       const added = yield* readUpdate(CodeModeInstructions.make([echo]), initialized)
@@ -35,7 +35,7 @@ describe("CodeModeInstructions", () => {
       expect(yield* readUpdate(CodeModeInstructions.make([]), { values: added.values })).toMatchObject({
         text:
           "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.\n\n" +
-          "No Code Mode tools are currently available. Do not call `execute` until a later system update announces available tools.",
+          "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
       })
     }),
   )
