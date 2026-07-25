@@ -51,12 +51,9 @@ function statusWithFetch(
   input: Pick<StreamInput, "model" | "provider" | "auth">,
   fetch: typeof globalThis.fetch | undefined,
 ): RuntimeStatus {
-  const providerID = input.model.providerID
-  if (providerID !== "openai" && providerID !== "anthropic" && !providerID.startsWith("opencode"))
-    return { type: "unsupported", reason: "provider is not openai, opencode, or anthropic" }
   const npm = input.model.api.npm
-  if (npm !== "@ai-sdk/openai" && npm !== "@ai-sdk/openai-compatible" && npm !== "@ai-sdk/anthropic")
-    return { type: "unsupported", reason: "provider package is not OpenAI, OpenAI-compatible, or Anthropic" }
+  if (!LLMNative.SUPPORTED_NPM_PACKAGES.has(npm))
+    return { type: "unsupported", reason: `provider package ${npm} is not supported by native runtime` }
   if (input.auth?.type === "oauth" && !(input.provider.id === "openai" && fetch)) {
     return { type: "unsupported", reason: "OAuth auth requires a provider fetch override" }
   }
