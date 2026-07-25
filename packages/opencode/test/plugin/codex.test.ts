@@ -293,10 +293,7 @@ describe("plugin.codex", () => {
   describe("resolveCodexApiEndpoint", () => {
     test("returns provider.options.codexApiEndpoint when set", () => {
       expect(
-        resolveCodexApiEndpoint(
-          { options: { codexApiEndpoint: "https://gw.example/codex/responses" } },
-          undefined,
-        ),
+        resolveCodexApiEndpoint({ options: { codexApiEndpoint: "https://gw.example/codex/responses" } }, undefined),
       ).toBe("https://gw.example/codex/responses")
     })
 
@@ -337,9 +334,7 @@ describe("plugin.codex", () => {
       expect(resolveCodexApiEndpoint({ options: {} }, undefined)).toBe(
         "https://chatgpt.com/backend-api/codex/responses",
       )
-      expect(resolveCodexApiEndpoint(undefined, undefined)).toBe(
-        "https://chatgpt.com/backend-api/codex/responses",
-      )
+      expect(resolveCodexApiEndpoint(undefined, undefined)).toBe("https://chatgpt.com/backend-api/codex/responses")
     })
   })
 
@@ -372,10 +367,9 @@ describe("plugin.codex", () => {
 
       const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
       const hooks = await CodexAuthPlugin(createPluginInput())
-      const loaded = await hooks.auth!.loader!(
-        async () => nonExpiringAuth as never,
-        { options: { codexApiEndpoint } } as never,
-      )
+      const loaded = await hooks.auth!.loader!(async () => nonExpiringAuth as never, {
+        options: { codexApiEndpoint },
+      } as never)
 
       await loaded.fetch!("https://api.openai.com/v1/responses")
 
@@ -403,10 +397,9 @@ describe("plugin.codex", () => {
       })
 
       const hooks = await CodexAuthPlugin(createPluginInput())
-      const loaded = await hooks.auth!.loader!(
-        async () => nonExpiringAuth as never,
-        { options: { baseURL: new URL("/codex", server.url).toString() } } as never,
-      )
+      const loaded = await hooks.auth!.loader!(async () => nonExpiringAuth as never, {
+        options: { baseURL: new URL("/codex", server.url).toString() },
+      } as never)
 
       await loaded.fetch!("https://api.openai.com/v1/responses")
 
@@ -424,7 +417,7 @@ describe("plugin.codex", () => {
           if (url.pathname === "/backend-api/codex/responses") {
             upgradePath = url.pathname
             upgradeHost = request.headers.get("host") ?? undefined
-            if (ctx.upgrade(request)) return
+            if (ctx.upgrade(request)) return undefined
             return new Response("upgrade failed", { status: 500 })
           }
           return new Response("unexpected request", { status: 500 })
@@ -443,10 +436,9 @@ describe("plugin.codex", () => {
       const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
       const serverHostPort = new URL(server.url).host
       const hooks = await CodexAuthPlugin(createPluginInput(), { experimentalWebSockets: true })
-      const loaded = await hooks.auth!.loader!(
-        async () => ({ ...nonExpiringAuth } as never),
-        { options: { codexApiEndpoint } } as never,
-      )
+      const loaded = await hooks.auth!.loader!(async () => ({ ...nonExpiringAuth }) as never, {
+        options: { codexApiEndpoint },
+      } as never)
 
       await loaded.fetch!("https://api.openai.com/v1/responses", {
         method: "POST",
