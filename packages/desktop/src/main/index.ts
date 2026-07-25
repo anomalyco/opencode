@@ -115,7 +115,7 @@ const main = Effect.gen(function* () {
 
   // on macOS apps run in `/` which can cause issues with ripgrep
   try {
-    process.chdir(homedir())
+    process.chdir(process.env.OPENCODE_PROJECT_DIR || homedir())
   } catch {}
 
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
