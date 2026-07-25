@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  hasExistingWebState,
   isAppUpgrade,
   layoutTransitionState,
   maximumSunsetTimeout,
@@ -21,6 +22,12 @@ describe("layout transition", () => {
 
   test("existing profiles can switch before sunset", () => {
     expect(layoutTransitionState(true, true, false, false)).toEqual({ available: true, notice: false })
+  })
+
+  test("classifies web profiles from existing settings or a recorded version", () => {
+    expect(hasExistingWebState("{}", undefined)).toBe(true)
+    expect(hasExistingWebState(null, "1.17.19")).toBe(true)
+    expect(hasExistingWebState(null, undefined)).toBe(false)
   })
 
   test("preserves explicit and default layout preferences", () => {

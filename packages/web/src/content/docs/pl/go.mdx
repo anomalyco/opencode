@@ -68,6 +68,7 @@ Obecna lista modeli obejmuje:
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **Hy3**
 
 Lista modeli może ulec zmianie w miarę testowania i dodawania nowych.
 
@@ -91,7 +92,7 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | GLM-5.2           | 880                 | 2,150              | 4,300              |
 | GLM-5.1           | 880                 | 2,150              | 4,300              |
 | Kimi K3           | 110                 | 250                | 490                |
-| Kimi K2.7 Code    | 1,350               | 4,630              | 9,250              |
+| Kimi K2.7 Code    | 1,350               | 3,380              | 6,750              |
 | Kimi K2.6         | 1,150               | 2,880              | 5,750              |
 | MiMo-V2.5         | 30,100              | 75,200             | 150,400            |
 | MiMo-V2.5-Pro     | 3,250               | 8,150              | 16,300             |
@@ -102,6 +103,7 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | Qwen3.6 Plus      | 3,300               | 8,200              | 16,300             |
 | DeepSeek V4 Pro   | 3,450               | 8,550              | 17,150             |
 | DeepSeek V4 Flash | 31,650              | 79,050             | 158,150            |
+| Hy3               | 4,300               | 10,750             | 21,500             |
 
 Szacunki te opierają się na zaobserwowanych wzorcach żądań:
 
@@ -116,6 +118,7 @@ Szacunki te opierają się na zaobserwowanych wzorcach żądań:
 - Qwen3.7 Max — 420 tokenów wejściowych, 66 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - Qwen3.7 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
 - Qwen3.6 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
+- Hy3 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - MiMo-V2.5 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - MiMo-V2.5-Pro — 790 tokenów wejściowych, 86 000 w pamięci podręcznej, 305 tokenów wyjściowych na żądanie
 
@@ -141,6 +144,7 @@ Szacunki opierają się również na następujących cenach za 1M tokenów oraz 
 | Qwen3.6 Plus (> 256K tokens) | $2.00   | $6.00   | $0.20          | $2.50          | $60    |
 | DeepSeek V4 Pro              | $0.435  | $0.87   | $0.003625      | -              | $15    |
 | DeepSeek V4 Flash            | $0.14   | $0.28   | $0.0028        | -              | $60    |
+| Hy3                          | $0.14   | $0.58   | $0.035         | -              | $60    |
 
 Możesz śledzić swoje bieżące zużycie w **<a href={console}>konsoli</a>**.
 
@@ -192,6 +196,7 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy3               | hy3               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID modelu](/docs/config/#models) w Twojej konfiguracji OpenCode
 używa formatu `opencode-go/<model-id>`. Na przykład dla Kimi K3 należy użyć
