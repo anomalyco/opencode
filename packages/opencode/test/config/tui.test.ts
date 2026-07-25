@@ -131,12 +131,13 @@ it.instance("loads tui config with the same precedence order as server config pa
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { theme: "project" })
       yield* fs.writeWithDirs(
         path.join(test.directory, ".opencode", "tui.json"),
-        JSON.stringify({ theme: "local", diff_style: "stacked" }, null, 2),
+        JSON.stringify({ theme: "local", diff_style: "stacked", tool_details: false }, null, 2),
       )
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("local")
       expect(config.diff_style).toBe("stacked")
+      expect(config.tool_details).toBe(false)
     }),
   ),
 )
