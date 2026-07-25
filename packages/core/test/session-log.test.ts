@@ -22,6 +22,7 @@ const projects = Layer.succeed(
     list: () => Effect.succeed([]),
     resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
     directories: () => Effect.succeed([]),
+    update: () => Effect.die("unused"),
     commit: () => Effect.void,
   }),
 )

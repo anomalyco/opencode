@@ -66,6 +66,31 @@ describe("ProjectV2.list", () => {
   )
 })
 
+describe("ProjectV2.update", () => {
+  it.effect("updates project metadata", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* ProjectV2.Service
+      const id = ProjectV2.ID.make("updated")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id, worktree: abs("/updated"), sandboxes: [], time_created: 1, time_updated: 1 })
+        .run()
+
+      const result = yield* project.update(id, {
+        name: "Updated",
+        icon: { color: "#ffffff" },
+        commands: { start: "bun dev" },
+      })
+
+      expect(result.name).toBe("Updated")
+      expect(result.icon).toEqual({ color: "#ffffff" })
+      expect(result.commands).toEqual({ start: "bun dev" })
+      expect(result.time.updated).toBeGreaterThan(1)
+    }),
+  )
+})
+
 function remoteID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
 }

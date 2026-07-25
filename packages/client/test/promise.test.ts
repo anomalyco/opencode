@@ -46,7 +46,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["shells", "list", "create", "get", "update", "remove", "connectToken"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
+  expect(Object.keys(client.project)).toEqual(["list", "update", "current", "directories"])
 })
 
 test("PTY connect token sends the required browser header", async () => {

@@ -3,7 +3,7 @@ export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { asc, desc } from "drizzle-orm"
+import { asc, desc, eq } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema"
 import { Database } from "./database/database"
@@ -37,6 +37,13 @@ export type DirectoriesInput = typeof DirectoriesInput.Type
 export const Directories = ProjectSchema.Directories
 export type Directories = typeof Directories.Type
 
+export const UpdateInput = ProjectSchema.UpdateInput
+export type UpdateInput = typeof UpdateInput.Type
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Project.NotFoundError", {
+  projectID: ID,
+}) {}
+
 export interface Resolved {
   readonly previous?: ID
   readonly id: ID
@@ -58,6 +65,7 @@ export const root = Effect.fn("Project.root")(function* (
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
+  readonly update: (projectID: ID, input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
   /**
    * Temporary bridge method for writing the resolved project ID to the repo-local cache.
@@ -119,6 +127,25 @@ const layer = Layer.effect(
 
     const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
       return yield* projectDirectories.list(input.projectID)
+    })
+
+    const update = Effect.fn("Project.update")(function* (projectID: ID, input: UpdateInput) {
+      const row = yield* db
+        .update(ProjectTable)
+        .set({
+          name: input.name,
+          icon_url: input.icon?.url,
+          icon_url_override: input.icon?.override,
+          icon_color: input.icon?.color,
+          commands: input.commands,
+          time_updated: Date.now(),
+        })
+        .where(eq(ProjectTable.id, projectID))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* new NotFoundError({ projectID })
+      return fromRow(row)
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -229,7 +256,7 @@ const layer = Layer.effect(
       yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
     })
 
-    return Service.of({ list, directories, resolve, commit })
+    return Service.of({ list, directories, update, resolve, commit })
   }),
 )
 
