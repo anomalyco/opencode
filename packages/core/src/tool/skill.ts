@@ -22,7 +22,7 @@ export const Output = Schema.Struct({
   output: Schema.String,
 })
 export const description = [
-  "Load a specialized skill's instructions and resources into the current conversation.",
+  "Load a specialized skill's instructions and resources into the current conversation when the task at hand matches its description.",
   "",
   "The skill ID must match one of the available skills in the instructions.",
 ].join("\n")
