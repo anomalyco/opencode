@@ -165,7 +165,13 @@ function info(file: string): Item {
 
 export function args(file: string, command: string, cwd: string) {
   const n = name(file)
-  if (n === "nu" || n === "fish") return ["-c", command]
+  if (n === "nu") return ["-c", command]
+  if (n === "fish") {
+    return [
+      "-c",
+      `set -q CONDA_PREFIX; and test "$PATH[1]" != "$CONDA_PREFIX/bin"; and set -gx PATH $CONDA_PREFIX/bin $PATH; set -q VIRTUAL_ENV; and test "$PATH[1]" != "$VIRTUAL_ENV/bin"; and set -gx PATH $VIRTUAL_ENV/bin $PATH; ${command}`,
+    ]
+  }
   if (n === "zsh") {
     return [
       "-l",
@@ -173,6 +179,10 @@ export function args(file: string, command: string, cwd: string) {
       `
         [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
         [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+        # Restore env bin dirs only if rc files cost them first position; a
+        # containment check would wrongly skip the restore when merely demoted.
+        [[ -n "\${CONDA_PREFIX:-}" && ":$PATH:" != ":$CONDA_PREFIX/bin:"* ]] && export PATH="$CONDA_PREFIX/bin:$PATH"
+        [[ -n "\${VIRTUAL_ENV:-}" && ":$PATH:" != ":$VIRTUAL_ENV/bin:"* ]] && export PATH="$VIRTUAL_ENV/bin:$PATH"
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
@@ -187,6 +197,10 @@ export function args(file: string, command: string, cwd: string) {
       `
         shopt -s expand_aliases
         [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+        # Restore env bin dirs only if rc files cost them first position; a
+        # containment check would wrongly skip the restore when merely demoted.
+        [[ -n "\${CONDA_PREFIX:-}" && ":$PATH:" != ":$CONDA_PREFIX/bin:"* ]] && export PATH="$CONDA_PREFIX/bin:$PATH"
+        [[ -n "\${VIRTUAL_ENV:-}" && ":$PATH:" != ":$VIRTUAL_ENV/bin:"* ]] && export PATH="$VIRTUAL_ENV/bin:$PATH"
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
