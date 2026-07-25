@@ -382,41 +382,41 @@ registerCustomTheme("OpenCode", () => Promise.resolve(OpenCodeTheme))
 function renderMathInText(text: string): string {
   let result = text
 
-  // Display math: $$...$$
-  const displayMathRegex = /\$\$([\s\S]*?)\$\$/g
-  result = result.replace(displayMathRegex, (_, math) => {
+  // Display math: $$...$$ or \[...\]
+  const displayMathRegex = /(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\])/g
+  result = result.replace(displayMathRegex, (match, dollarMath, bracketMath) => {
+    const math = (dollarMath ?? bracketMath).trim()
     try {
       return katex.renderToString(math, {
         displayMode: true,
         throwOnError: false,
       })
     } catch {
-      return `$$${math}$$`
+      return match
     }
   })
 
-  // Inline math: \(...\)
-  const inlineMathRegex = /\\\(((?:\\.|[^\\\n])*?)\\\)/g
-  result = result.replace(inlineMathRegex, (_, math) => {
+  // Inline math: \(...\) or $...$
+  const inlineMathRegex =
+    /(?:\\\(((?:\\.|[^\\\n])+?)\\\)|\$(?!\$)((?:\\.|[^\\$\n])+?)\$(?=[\s\p{P}]|$))/gu
+  result = result.replace(inlineMathRegex, (match, parenMath, dollarMath) => {
+    const math = (parenMath ?? dollarMath).trim()
     try {
       return katex.renderToString(math, {
         displayMode: false,
         throwOnError: false,
       })
     } catch {
-      return `\\(${math}\\)`
+      return match
     }
   })
 
   return result
 }
 
-const parenInlineRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
-const dollarInlineRegex = /^\$(?!\$)((?:\\.|[^\\\n])*?(?:\\.|[^\\\n\$]))\$(?=[\s?!\.,:？！。，：]|$)/
-const blockDollarMultiRegex = /^\$\$\n([\s\S]+?)\n\$\$(?:\n|$)/
-const blockDollarSingleRegex = /^\$\$([^\n]+?)\$\$(?:\n|$)/
-const blockBracketMultiRegex = /^\\\[\n([\s\S]+?)\n\\\](?:\n|$)/
-const blockBracketSingleRegex = /^\\\[([^\n]+?)\\\](?:\n|$)/
+const blockMathRegex = /^(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\])(?:\n|$)/
+const inlineMathRegex =
+  /^(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\]|\\\(((?:\\.|[^\\\n])+?)\\\)|\$(?!\$)((?:\\.|[^\\$\n])+?)\$(?=[\s\p{P}]|$))/u
 
 const katexExtension: MarkedExtension = {
   extensions: [
@@ -427,23 +427,21 @@ const katexExtension: MarkedExtension = {
         const parenIdx = src.indexOf("\\(")
         const dollarIdx = src.indexOf("$")
         if (parenIdx === -1 && dollarIdx === -1) return
-        if (parenIdx === -1) {
-          if (dollarIdx !== 0 && src.charAt(dollarIdx - 1) !== " ") return
-          return dollarIdx
-        }
+        if (parenIdx === -1) return dollarIdx
         if (dollarIdx === -1) return parenIdx
-        const validDollar = dollarIdx === 0 || src.charAt(dollarIdx - 1) === " " ? dollarIdx : -1
-        if (validDollar === -1) return parenIdx
-        return Math.min(parenIdx, validDollar)
+        return Math.min(parenIdx, dollarIdx)
       },
       tokenizer(src) {
-        const match = src.match(parenInlineRegex) ?? src.match(dollarInlineRegex)
+        const match = src.match(inlineMathRegex)
         if (!match) return
+        const raw = match[0]
+        const displayMode = raw.startsWith("$$") || raw.startsWith("\\[")
+        const text = (match[1] ?? match[2] ?? match[3] ?? match[4] ?? raw.slice(2, -2)).trim()
         return {
           type: "inlineKatex",
-          raw: match[0],
-          text: match[1].trim(),
-          displayMode: false,
+          raw,
+          text,
+          displayMode,
         }
       },
       renderer: renderKatexToken,
@@ -452,16 +450,14 @@ const katexExtension: MarkedExtension = {
       name: "blockKatex",
       level: "block",
       tokenizer(src) {
-        const match =
-          src.match(blockDollarMultiRegex) ??
-          src.match(blockDollarSingleRegex) ??
-          src.match(blockBracketMultiRegex) ??
-          src.match(blockBracketSingleRegex)
+        const match = src.match(blockMathRegex)
         if (!match) return
+        const raw = match[0]
+        const text = (match[1] ?? match[2] ?? raw.slice(2, -2)).trim()
         return {
           type: "blockKatex",
-          raw: match[0],
-          text: match[1].trim(),
+          raw,
+          text,
           displayMode: true,
         }
       },
