@@ -54,6 +54,27 @@ describe("dotted tool names", () => {
     expect(flat.catalog()[0]?.path).toBe("issues.list")
     expect(await value(flat, `return await tools.issues.list({})`)).toBe("flat")
   })
+
+  test("search scopes to a nested namespace subtree", async () => {
+    const nested = CodeMode.make({
+      tools: {
+        slack: {
+          admin: echo("Admin", "admin"),
+          "admin.invite": echo("Invite", "invite"),
+          "admin.users.list": echo("List users", "users"),
+          "administrator.list": echo("List administrators", "administrators"),
+          read: echo("Read Slack", "read"),
+        },
+      },
+    })
+
+    const result = await value(nested, `return search({ query: "", namespace: "slack.admin" })`)
+    expect((result as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual([
+      "tools.slack.admin",
+      "tools.slack.admin.invite",
+      "tools.slack.admin.users.list",
+    ])
+  })
 })
 
 describe("callable namespaces", () => {

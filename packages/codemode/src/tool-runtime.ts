@@ -342,7 +342,6 @@ export type DiscoveryPlan = {
 
 export type SearchEntry = {
   readonly description: ToolDescription
-  readonly namespace: string
   readonly searchText: string
 }
 
@@ -373,7 +372,11 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
       const scoped =
         request.namespace === undefined
           ? searchIndex
-          : searchIndex.filter((entry) => entry.namespace === request.namespace)
+          : searchIndex.filter(
+              (entry) =>
+                entry.description.path === request.namespace ||
+                entry.description.path.startsWith(`${request.namespace}.`),
+            )
       const trimmed = query.trim()
       const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
       const exact =
@@ -428,7 +431,6 @@ export const searchSignature = (() => {
 
 const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescription): SearchEntry => ({
   description,
-  namespace: path.split(".", 1)[0]!,
   searchText: [
     path,
     tool.description,
