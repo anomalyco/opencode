@@ -60,6 +60,7 @@ const applicationServices = LayerNode.group([
   WellKnown.node,
   PtyEnvironment.node,
   LocationServiceMap.node,
+  Global.node,
   SessionRestart.node,
 ])
 
@@ -134,7 +135,9 @@ function makeRoutes<AuthError, AuthServices>(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
       const requestServices = Layer.merge(
-        Layer.succeedContext(Context.pick(PermissionSaved.Service, Project.Service, WellKnown.Service)(context)),
+        Layer.succeedContext(
+          Context.pick(Global.Service, PermissionSaved.Service, Project.Service, WellKnown.Service)(context),
+        ),
         ServerInfo.layer(serviceURLs, options.app),
       )
       return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(

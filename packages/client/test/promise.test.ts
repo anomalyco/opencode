@@ -31,6 +31,7 @@ test("exposes every standard HTTP API group", () => {
     "reference",
     "projectCopy",
     "vcs",
+    "path",
     "debug",
   ])
   expect(Object.keys(client.debug)).toEqual(["location"])

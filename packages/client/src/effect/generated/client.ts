@@ -1232,16 +1232,23 @@ const Endpoint25_1 = (raw: RawClient["server.vcs"]) => (input: Endpoint25_1Input
 
 const adaptGroup25 = (raw: RawClient["server.vcs"]) => ({ status: Endpoint25_0(raw), diff: Endpoint25_1(raw) })
 
-const Endpoint26_0 = (raw: RawClient["server.debug"]) => () =>
+type Endpoint26_0Request = Parameters<RawClient["server.path"]["path.get"]>[0]
+type Endpoint26_0Input = { readonly location?: Endpoint26_0Request["query"]["location"] }
+const Endpoint26_0 = (raw: RawClient["server.path"]) => (input?: Endpoint26_0Input) =>
+  raw["path.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+const adaptGroup26 = (raw: RawClient["server.path"]) => ({ get: Endpoint26_0(raw) })
+
+const Endpoint27_0 = (raw: RawClient["server.debug"]) => () =>
   raw["debug.location"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint26_1Request = Parameters<RawClient["server.debug"]["debug.location.evict"]>[0]
-type Endpoint26_1Input = { readonly location?: Endpoint26_1Request["query"]["location"] }
-const Endpoint26_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint26_1Input) =>
+type Endpoint27_1Request = Parameters<RawClient["server.debug"]["debug.location.evict"]>[0]
+type Endpoint27_1Input = { readonly location?: Endpoint27_1Request["query"]["location"] }
+const Endpoint27_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint27_1Input) =>
   raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-const adaptGroup26 = (raw: RawClient["server.debug"]) => ({
-  location: { list: Endpoint26_0(raw), evict: Endpoint26_1(raw) },
+const adaptGroup27 = (raw: RawClient["server.debug"]) => ({
+  location: { list: Endpoint27_0(raw), evict: Endpoint27_1(raw) },
 })
 
 const adaptClient = (raw: RawClient) => ({
@@ -1271,7 +1278,8 @@ const adaptClient = (raw: RawClient) => ({
   reference: adaptGroup23(raw["server.reference"]),
   projectCopy: adaptGroup24(raw["server.projectCopy"]),
   vcs: adaptGroup25(raw["server.vcs"]),
-  debug: adaptGroup26(raw["server.debug"]),
+  path: adaptGroup26(raw["server.path"]),
+  debug: adaptGroup27(raw["server.debug"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

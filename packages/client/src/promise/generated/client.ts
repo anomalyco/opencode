@@ -204,6 +204,8 @@ import type {
   VcsStatusOutput,
   VcsDiffInput,
   VcsDiffOutput,
+  PathGetInput,
+  PathGetOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -1701,6 +1703,20 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/vcs/diff`,
             query: { location: input["location"], mode: input["mode"], context: input["context"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    path: {
+      get: (input?: PathGetInput, requestOptions?: RequestOptions) =>
+        request<PathGetOutput>(
+          {
+            method: "GET",
+            path: `/api/path`,
+            query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,

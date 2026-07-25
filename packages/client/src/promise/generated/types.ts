@@ -539,6 +539,8 @@ export type VcsFileStatus = {
   status: "added" | "deleted" | "modified"
 }
 
+export type PathInfo = { home: string; state: string; config: string; worktree: string; directory: string }
+
 export type SessionMessageModelSelected = {
   id: string
   metadata?: { [x: string]: JsonValue }
@@ -4948,6 +4950,14 @@ export type VcsDiffOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: Array<FileDiffInfo>
 }
+
+export type PathGetInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PathGetOutput = PathInfo
 
 export type DebugLocationListOutput = Array<LocationRef>
 
