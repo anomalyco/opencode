@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent } from "../../src"
+import { LLM, LLMEvent, Message } from "../../src"
 import { configure } from "../../src/providers/openai-compatible-responses"
 import { OpenAI } from "../../src/providers"
 import { OpenResponses } from "../../src/protocols/open-responses"
@@ -67,6 +67,31 @@ describe("Open Responses-compatible route", () => {
 
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("Open Responses does not support provider-native tool image_generation")
+    }),
+  )
+
+  it.effect("omits OpenAI-only nullable phases from the Open Responses baseline", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({
+              type: "text",
+              text: "Unclassified.",
+              providerMetadata: { openresponses: { phase: null } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        input: [{ role: "assistant", content: [{ type: "output_text", text: "Unclassified." }] }],
+      })
     }),
   )
 

@@ -55,7 +55,7 @@ const OpenResponsesOutputText = Schema.Struct({
   text: Schema.String,
 })
 
-const MessagePhase = Schema.Literals(["commentary", "final_answer"])
+export const MessagePhase = Schema.Literals(["commentary", "final_answer"])
 type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
 
 const OpenResponsesReasoningSummaryText = Schema.Struct({
@@ -89,13 +89,13 @@ const OpenResponsesFunctionCallOutput = Schema.Union([
   Schema.Array(OpenResponsesFunctionCallOutputContent),
 ])
 
-const OpenResponsesInputItem = Schema.Union([
+export const InputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
   Schema.Struct({
     role: Schema.tag("assistant"),
     content: Schema.Array(OpenResponsesOutputText),
-    phase: Schema.optionalKey(Schema.NullOr(MessagePhase)),
+    phase: Schema.optionalKey(MessagePhase),
   }),
   OpenResponsesReasoningItem,
   OpenResponsesItemReference,
@@ -111,7 +111,14 @@ const OpenResponsesInputItem = Schema.Union([
     output: OpenResponsesFunctionCallOutput,
   }),
 ])
-type OpenResponsesInputItem = Schema.Schema.Type<typeof OpenResponsesInputItem>
+type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
+type LoweredInputItem =
+  | OpenResponsesInputItem
+  | {
+      readonly role: "assistant"
+      readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
+      readonly phase?: MessagePhase | null
+    }
 
 // Mutable counterpart of the schema reasoning item so `lowerMessages` can fold
 // multiple streamed summary parts into the same item before flushing.
@@ -142,7 +149,7 @@ export const ToolChoice = Schema.Union([
 // transports in sync without a destructure-and-strip dance.
 export const coreFields = {
   model: Schema.String,
-  input: Schema.Array(OpenResponsesInputItem),
+  input: Schema.Array(InputItem),
   instructions: Schema.optional(Schema.String),
   tools: optionalArray(Tool),
   tool_choice: Schema.optional(ToolChoice),
@@ -246,6 +253,7 @@ export interface Extension {
     readonly media: ProviderShared.ValidatedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
+  readonly messagePhase?: (value: unknown) => MessagePhase | null | undefined
 }
 
 const BASE: Extension = { id: ADAPTER, name: NAME }
@@ -258,6 +266,7 @@ export interface ParserState {
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly messageItems: ReadonlySet<string>
+  readonly messagePhase: (value: unknown) => MessagePhase | null | undefined
   readonly messagePhases: Readonly<Record<string, MessagePhase | null>>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
   readonly store: boolean | undefined
@@ -388,9 +397,9 @@ const lowerToolResultOutput = Effect.fn("OpenResponses.lowerToolResultOutput")(f
 })
 
 const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (request: LLMRequest, extension: Extension) {
-  const system: OpenResponsesInputItem[] =
+  const system: LoweredInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  const input: OpenResponsesInputItem[] = [...system]
+  const input: LoweredInputItem[] = [...system]
   const store = OpenResponsesOptions.resolve(request).store
   const providerMetadataKey = request.model.route.providerMetadataKey ?? "openresponses"
 
@@ -426,9 +435,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
           (groups, part) => {
             const metadata = part.providerMetadata?.[providerMetadataKey]
             const phase =
-              ProviderShared.isRecord(metadata) &&
-              (metadata.phase === "commentary" || metadata.phase === "final_answer" || metadata.phase === null)
-                ? metadata.phase
+              ProviderShared.isRecord(metadata)
+                ? messagePhase(metadata.phase, extension)
                 : undefined
             const group = groups.at(-1)
             if (group && group.phase === phase) group.parts.push(part)
@@ -544,9 +552,9 @@ const lowerOptions = (request: LLMRequest) => {
   }
 }
 
-export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (
+export const fromRequestWithExtension = Effect.fn("OpenResponses.fromRequestWithExtension")(function* (
   request: LLMRequest,
-  extension: Extension = BASE,
+  extension: Extension,
 ) {
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -570,6 +578,12 @@ export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (
     top_p: generation?.topP,
     ...lowerOptions(request),
   }
+})
+
+const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesBody))
+
+export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (request: LLMRequest) {
+  return yield* decodeBody(yield* fromRequestWithExtension(request, BASE))
 })
 
 // =============================================================================
@@ -626,10 +640,9 @@ const NO_EVENTS: StepResult["1"] = []
 const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
 export const terminal = (event: Event) => TERMINAL_TYPES.has(event.type)
 
-const onOutputTextDelta = (state: ParserState, event: Event): StepResult => {
+const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
-  const id = event.item_id ?? "text-0"
   const phase = state.messagePhases[id]
   const metadata = phase === undefined ? undefined : providerMetadata(state, { phase })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
@@ -639,20 +652,18 @@ const onOutputTextDelta = (state: ParserState, event: Event): StepResult => {
   ]
 }
 
-const onOutputTextDone = (state: ParserState, event: Event): StepResult => {
-  const id = event.item_id ?? "text-0"
+const onOutputTextDone = (state: ParserState, event: Event, id: string): StepResult => {
   if (state.messageItems.has(id)) {
     if (state.lifecycle.text.has(id) || event.text === undefined) return [state, NO_EVENTS]
-    return onOutputTextDelta(state, { ...event, delta: event.text })
+    return onOutputTextDelta(state, { ...event, delta: event.text }, id)
   }
   const events: LLMEvent[] = []
   return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
 }
 
-export const onReasoningDelta = (state: ParserState, event: Event): StepResult => {
+export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
-  const itemID = event.item_id ?? "reasoning-0"
   const id =
     event.summary_index !== undefined || state.reasoningItems[itemID] ? `${itemID}:${event.summary_index ?? 0}` : itemID
   return [
@@ -688,10 +699,10 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
       {
         ...state,
         messageItems: new Set([...state.messageItems, item.id]),
-        messagePhases:
-          item.phase === "commentary" || item.phase === "final_answer" || item.phase === null
-            ? { ...state.messagePhases, [item.id]: item.phase }
-            : state.messagePhases,
+        messagePhases: (() => {
+          const phase = state.messagePhase(item.phase)
+          return phase === undefined ? state.messagePhases : { ...state.messagePhases, [item.id]: phase }
+        })(),
       },
       NO_EVENTS,
     ]
@@ -852,10 +863,8 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "message" && item.id) {
-    const phase =
-      item.phase === "commentary" || item.phase === "final_answer" || item.phase === null
-        ? item.phase
-        : state.messagePhases[item.id]
+    const itemPhase = state.messagePhase(item.phase)
+    const phase = itemPhase === undefined ? state.messagePhases[item.id] : itemPhase
     const events: LLMEvent[] = []
     const messageItems = new Set(state.messageItems)
     messageItems.delete(item.id)
@@ -974,19 +983,41 @@ const providerError = (state: ParserState, event: Event, fallback: string) => {
 }
 
 export const step = (state: ParserState, event: Event) => {
-  if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
-  if (event.type === "response.output_text.done") return Effect.succeed(onOutputTextDone(state, event))
-  if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta")
-    return Effect.succeed(onReasoningDelta(state, event))
-  if (event.type === "response.reasoning.done" || event.type === "response.reasoning_summary_text.done")
+  if (event.type === "response.output_text.delta" || event.type === "response.output_text.done") {
+    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    return Effect.succeed(
+      event.type === "response.output_text.delta"
+        ? onOutputTextDelta(state, event, event.item_id)
+        : onOutputTextDone(state, event, event.item_id),
+    )
+  }
+  if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {
+    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    return Effect.succeed(onReasoningDelta(state, event, event.item_id))
+  }
+  if (event.type === "response.reasoning.done" || event.type === "response.reasoning_summary_text.done") {
+    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDone(state, event))
+  }
   if (event.type === "response.reasoning_summary_part.added")
-    return Effect.succeed(onReasoningSummaryPartAdded(state, event))
+    return event.item_id
+      ? Effect.succeed(onReasoningSummaryPartAdded(state, event))
+      : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.reasoning_summary_part.done")
-    return Effect.succeed(onReasoningSummaryPartDone(state, event))
-  if (event.type === "response.output_item.added") return Effect.succeed(onOutputItemAdded(state, event))
+    return event.item_id
+      ? Effect.succeed(onReasoningSummaryPartDone(state, event))
+      : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+  if (event.type === "response.output_item.added") {
+    if (event.item?.type === "message" && !event.item.id)
+      return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
+    return Effect.succeed(onOutputItemAdded(state, event))
+  }
   if (event.type === "response.function_call_arguments.delta") return onFunctionCallArgumentsDelta(state, event)
-  if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
+  if (event.type === "response.output_item.done") {
+    if (event.item?.type === "message" && !event.item.id)
+      return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
+    return onOutputItemDone(state, event)
+  }
   if (event.type === "response.completed" || event.type === "response.incomplete")
     return Effect.succeed(onResponseFinish(state, event))
   if (event.type === "response.failed") return providerError(state, event, `${state.name} response failed`)
@@ -1009,10 +1040,16 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
   messageItems: new Set<string>(),
+  messagePhase: (value) => messagePhase(value, extension),
   messagePhases: {},
   reasoningItems: {},
   store: OpenResponsesOptions.resolve(request).store,
 })
+
+const messagePhase = (value: unknown, extension: Extension): MessagePhase | null | undefined => {
+  if (value === "commentary" || value === "final_answer") return value
+  return extension.messagePhase?.(value)
+}
 
 export const protocol = Protocol.make({
   id: ADAPTER,

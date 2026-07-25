@@ -35,8 +35,18 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
+const OpenAIResponsesInputItem = Schema.Union([
+  Schema.Struct({
+    role: Schema.tag("assistant"),
+    content: Schema.Array(Schema.Struct({ type: Schema.tag("output_text"), text: Schema.String })),
+    phase: Schema.optionalKey(Schema.NullOr(OpenResponses.MessagePhase)),
+  }),
+  OpenResponses.InputItem,
+])
+
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
+  input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
 }
@@ -60,6 +70,7 @@ const encodeWebSocketMessage = Schema.encodeSync(Schema.fromJsonString(OpenAIRes
 const extension = {
   id: ADAPTER,
   name: NAME,
+  messagePhase: (value: unknown) => (value === null ? null : undefined),
   lowerMedia: ({ part, media, request }) => {
     if (request.model.provider !== "xai" || media.mime !== "application/pdf") return undefined
     return {
@@ -102,7 +113,7 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
   })
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
-  const body = yield* OpenResponses.fromRequest(
+  const body = yield* OpenResponses.fromRequestWithExtension(
     LLMRequest.update(request, { tools: [], toolChoice: undefined }),
     extension,
   )
@@ -208,9 +219,13 @@ const onHostedToolDone = Effect.fn("OpenAIResponses.onHostedToolDone")(function*
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta" || event.type === "response.reasoning_summary.delta")
-    return Effect.succeed(OpenResponses.onReasoningDelta(state, event))
+    return event.item_id
+      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
+      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   if (event.type === "response.reasoning_text.done" || event.type === "response.reasoning_summary.done")
-    return Effect.succeed(OpenResponses.onReasoningDone(state, event))
+    return event.item_id
+      ? Effect.succeed(OpenResponses.onReasoningDone(state, event))
+      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done" && event.item && isHostedToolItem(event.item))
     return onHostedToolDone(state, event.item)
   return OpenResponses.step(state, event)

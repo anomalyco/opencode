@@ -957,6 +957,46 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("rejects output text events without the spec-required item id", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_text.delta", delta: "orphaned" },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("response.output_text.delta is missing item_id")
+    }),
+  )
+
+  it.effect("rejects reasoning events without the spec-required item id", () =>
+    Effect.gen(function* () {
+      const events = [
+        { type: "response.reasoning_summary_part.added", summary_index: 0 },
+        { type: "response.reasoning_summary_part.done", summary_index: 0 },
+        { type: "response.reasoning_text.done" },
+      ]
+
+      for (const event of events) {
+        const error = yield* LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(sseEvents(event, { type: "response.completed", response: { id: "resp_1" } })),
+          ),
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("InvalidProviderOutput")
+        expect(error.message).toContain(`${event.type} is missing item_id`)
+      }
+    }),
+  )
+
   it.effect("maps incomplete response reasons", () =>
     Effect.gen(function* () {
       const generate = (incompleteDetails: object) =>
