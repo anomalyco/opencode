@@ -302,7 +302,7 @@ test("hydrates pending prompts without overwriting live prompt changes", async (
       global({
         id: "evt_question_pending",
         type: "question.asked",
-        properties: { id: "question_pending", sessionID, questions: [{ question: "pending", options: [] }] },
+        properties: { id: "question_pending", sessionID, questions: [{ header: "Pending", question: "pending", options: [] }] },
       }),
     )
     const hydrate = sync.session.sync(sessionID)
@@ -332,7 +332,7 @@ test("hydrates pending prompts without overwriting live prompt changes", async (
       global({
         id: "evt_question",
         type: "question.asked",
-        properties: { id: "question_live", sessionID, questions: [{ question: "live", options: [] }] },
+        properties: { id: "question_live", sessionID, questions: [{ header: "Live", question: "live", options: [] }] },
       }),
     )
     await wait(
@@ -352,9 +352,9 @@ test("hydrates pending prompts without overwriting live prompt changes", async (
     )
     resolveQuestions(
       json([
-        { id: "question_server", sessionID, questions: [{ question: "server", options: [] }] },
-        { id: "question_live", sessionID, questions: [{ question: "stale", options: [] }] },
-        { id: "question_pending", sessionID, questions: [{ question: "pending", options: [] }] },
+        { id: "question_server", sessionID, questions: [{ header: "Server", question: "server", options: [] }] },
+        { id: "question_live", sessionID, questions: [{ header: "Stale", question: "stale", options: [] }] },
+        { id: "question_pending", sessionID, questions: [{ header: "Pending", question: "pending", options: [] }] },
         { id: "question_other", sessionID: "ses_other", questions: [] },
       ]),
     )
@@ -395,7 +395,7 @@ test("undefined prompt lists do not clear pending prompts", async () => {
       global({
         id: "evt_question",
         type: "question.asked",
-        properties: { id: "question_live", sessionID, questions: [{ question: "live", options: [] }] },
+        properties: { id: "question_live", sessionID, questions: [{ header: "Live", question: "live", options: [] }] },
       }),
     )
     await wait(() => sync.data.permission[sessionID]?.length === 1 && sync.data.question[sessionID]?.length === 1)
