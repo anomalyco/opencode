@@ -82,6 +82,8 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { marked } from "marked"
+
 
 addDefaultParsers(parsers.parsers)
 
@@ -1676,22 +1678,85 @@ function ReasoningHeader(props: {
   )
 }
 
+function markdownToAnsi(md: string): string {
+  const tokens = marked.lexer(md)
+  let result = ""
+
+  for (const token of tokens) {
+    switch (token.type) {
+      case "heading": {
+        const level = token.depth
+        const prefix = level <= 2 ? "\x1b[1;36m" : "\x1b[1m"  // bold+cyan for h1/h2, bold for rest
+        const suffix = "\x1b[22m\x1b[39m"
+        result += prefix + "# ".repeat(level) + inlineAnsi(token.text) + suffix + "\n\n"
+        break
+      }
+      case "paragraph":
+        result += inlineAnsi(token.text) + "\n\n"
+        break
+      case "code":
+        result += "\x1b[48;5;236m\x1b[38;5;252m"  // dark bg + light fg
+          + token.text.split("\n").map(l => "  " + l).join("\n")
+          + "\x1b[0m\n\n"
+        break
+      case "hr":
+        result += "\x1b[38;5;240m" + "─".repeat(60) + "\x1b[0m\n\n"
+        break
+      case "list":
+        for (const item of token.items) {
+          result += "  \x1b[38;5;243m•\x1b[0m " + inlineAnsi(item.text) + "\n"
+        }
+        result += "\n"
+        break
+      case "blockquote":
+        result += token.tokens.map(l => "  \x1b[38;5;240m│\x1b[0m " + inlineAnsi(l.raw || l.text || "")).join("\n") + "\n\n"
+        break
+      case "table":
+        result += renderTable(token) + "\n\n"
+        break
+      case "html":
+        result += token.text + "\n"
+        break
+      default:
+        result += ("raw" in token ? token.raw : "text" in token ? token.text : "") + "\n"
+    }
+  }
+
+  return result.trimEnd()
+}
+
+function inlineAnsi(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "\x1b[1m$1\x1b[22m")         // **bold**
+    .replace(/\*(.+?)\*/g, "\x1b[3m$1\x1b[23m")               // *italic*
+    .replace(/`(.+?)`/g, "\x1b[48;5;236m\x1b[38;5;252m$1\x1b[0m") // `code`
+    .replace(/~~(.+?)~~/g, "\x1b[9m$1\x1b[29m")               // ~~strikethrough~~
+    .replace(/\[(.+?)\]\((.+?)\)/g, "\x1b[4;38;5;117m$1\x1b[0m") // [link](url)
+}
+
+function renderTable(token: any): string {
+  if (!token.header?.length) return ""
+  const header = token.header.map((h: any) => h.text || h.raw).join(" │ ")
+  const sep = token.header.map(() => "─".repeat(10)).join("─┼─")
+  const rows = token.rows.map((row: any) =>
+    row.map((cell: any) => (cell.text || cell.raw).padEnd(10)).join(" │ ")
+  )
+  return [
+    "\x1b[1m" + header + "\x1b[22m",
+    sep,
+    ...rows
+  ].join("\n")
+}
+
+// REPLACE the TextPart function with:
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme } = useTheme()
+  const rendered = createMemo(() => markdownToAnsi(props.part.text.trim()))
   return (
     <Show when={props.part.text.trim()}>
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <markdown
-          syntaxStyle={syntax()}
-          streaming={true}
-          internalBlockMode="top-level"
-          content={props.part.text.trim()}
-          tableOptions={{ style: "grid" }}
-          conceal={ctx.conceal()}
-          fg={theme.markdownText}
-          bg={theme.background}
-        />
+        <text fg={theme.markdownText}>{rendered()}</text>
       </box>
     </Show>
   )
