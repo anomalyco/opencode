@@ -127,7 +127,7 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
-const currentRoute = (pathname: string, search: string): LayoutRoute => {
+export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
 
@@ -570,16 +570,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           continue
         }
 
-        void serverSdk()
-          .api.project.update({ projectID: project.id, icon: { color } })
-          .then((result) =>
-            serverSync().set("project", (items) =>
-              items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
-            ),
-          )
-          .catch(() => {
-            if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
-          })
+        const projectID = project.id
+        void (async () => {
+          const sdk = serverSdk()
+          if ((await sdk.protocol) !== "v1") return
+          return sdk.client.project
+            .update({ projectID, directory: worktree, icon: { color } })
+            .then((response) => response.data)
+            .then((result) => {
+              if (!result) return
+              serverSync().set("project", (items) =>
+                items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
+              )
+            })
+        })().catch(() => {
+          if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
+        })
       }
     })
 

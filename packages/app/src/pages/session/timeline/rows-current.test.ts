@@ -46,6 +46,7 @@ describe("current session timeline rows", () => {
       true,
       "busy",
       true,
+      normalized.messages.filter((message) => message.role === "user"),
     )
 
     expect(result.activeMessageID).toBe("msg_3")
@@ -81,6 +82,7 @@ describe("current session timeline rows", () => {
       true,
       "idle",
       true,
+      normalized.messages.filter((message) => message.role === "user"),
     )
 
     expect(result.activeMessageID).toBe("msg_shell")
@@ -121,6 +123,7 @@ describe("current session timeline rows", () => {
       true,
       "idle",
       true,
+      normalized.messages.filter((message) => message.role === "user"),
     )
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -129,6 +132,39 @@ describe("current session timeline rows", () => {
       "turn-gap:msg_user_2",
       "user-message:msg_user_2",
       "assistant-part:msg_user_2:msg_assistant_2:text:0",
+    ])
+  })
+
+  test("renders an optimistic user turn and thinking before the protocol message arrives", () => {
+    const source = [
+      { id: "msg_1", type: "user", text: "existing", time: { created: 1 } },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const optimistic = {
+      id: "msg_2",
+      sessionID: "ses_1",
+      role: "user" as const,
+      time: { created: 2 },
+      agent: "build",
+      model: { modelID: "model", providerID: "provider" },
+    }
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) =>
+        messageID === optimistic.id ? optimistic : normalized.messages.find((message) => message.id === messageID),
+      () => [],
+      true,
+      "busy",
+      true,
+      [...normalized.messages.filter((message) => message.role === "user"), optimistic],
+    )
+
+    expect(result.activeMessageID).toBe(optimistic.id)
+    expect(result.rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_1",
+      "turn-gap:msg_2",
+      "user-message:msg_2",
+      "thinking:msg_2",
     ])
   })
 })

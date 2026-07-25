@@ -25,6 +25,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
+    protocol: "v1",
     directory,
     project: {
       id: projectID,
@@ -65,7 +66,10 @@ test("keeps the review tree and terminal sized when both panels are open", async
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ branch: "review-pane-performance", default_branch: "dev" }),
+      body: JSON.stringify({
+        branch: "review-pane-performance",
+        default_branch: "dev",
+      }),
     }),
   )
   await page.route("**/vcs/diff**", (route) => {
@@ -87,15 +91,51 @@ test("keeps the review tree and terminal sized when both panels are open", async
       ),
     })
   })
-  await page.route("**/pty", (route) =>
+  await page.route("**/pty*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ id: "pty_review_terminal", title: "Terminal 1" }),
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_review_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
     }),
   )
-  await page.route("**/pty/pty_review_terminal", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  await page.route("**/pty/pty_review_terminal*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_review_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
+    }),
+  )
+  await page.route("**/pty/pty_review_terminal/connect-token*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: { ticket: "e2e-ticket", expires_in: 60 },
+      }),
+    }),
   )
   await page.routeWebSocket("**/pty/pty_review_terminal/connect", () => undefined)
   await page.addInitScript(() => {

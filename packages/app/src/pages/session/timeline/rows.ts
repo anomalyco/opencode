@@ -39,6 +39,7 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus["type"],
     inlineComments: boolean,
+    projectedUserMessages: UserMessage[],
   ) {
     const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
@@ -67,6 +68,14 @@ export namespace Timeline {
       const user = getMessage(projected.parentID)
       if (user?.role !== "user") return
       const turn = { user, assistants: [projected] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+    })
+    const latestUserMessageID = turns.at(-1)?.user.id
+    projectedUserMessages.forEach((user) => {
+      if (turnByUserID.has(user.id)) return
+      if (latestUserMessageID && user.id < latestUserMessageID) return
+      const turn = { user, assistants: [] }
       turns.push(turn)
       turnByUserID.set(user.id, turn)
     })

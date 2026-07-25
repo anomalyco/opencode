@@ -332,6 +332,7 @@ export function MessageTimeline(props: {
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const projection = createTimelineProjection({
     messages: sessionMessages,
+    userMessages: () => props.userMessages,
     sessionMessages: projectedMessages,
     parts: getMsgParts,
     status: sessionStatus,
@@ -811,13 +812,14 @@ export function MessageTimeline(props: {
   const archiveSession = async (sessionID: string) => {
     const session = sync().session.get(sessionID)
     if (!session) return
+    if ((await sdk().protocol) !== "v1") return
 
     const sessions = sync().data.session ?? []
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
     await sdk()
-      .api.session.archive({ sessionID })
+      .client.session.update({ sessionID, directory: sdk().directory, time: { archived: Date.now() } })
       .then(() => {
         sync().set(
           produce((draft) => {
