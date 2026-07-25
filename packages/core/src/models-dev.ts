@@ -136,6 +136,97 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
+const FreeProviders = {
+  sambanova: {
+    id: "sambanova",
+    env: ["SAMBANOVA_API_KEY"],
+    npm: "@ai-sdk/openai-compatible",
+    api: "https://api.sambanova.ai/v1",
+    name: "SambaNova",
+    models: {
+      "DeepSeek-V3.1": {
+        id: "DeepSeek-V3.1",
+        name: "DeepSeek-V3.1",
+        family: "deepseek",
+        attachment: false,
+        reasoning: true,
+        reasoning_options: [{ type: "effort" as const, values: [null, "low", "medium", "high"] }],
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-06-01",
+        modalities: { input: ["text"] as const, output: ["text"] as const },
+        limit: { context: 128000, output: 8000 },
+        cost: { input: 0, output: 0 },
+      },
+      "DeepSeek-V3.2": {
+        id: "DeepSeek-V3.2",
+        name: "DeepSeek-V3.2 (Preview)",
+        family: "deepseek",
+        attachment: false,
+        reasoning: true,
+        reasoning_options: [{ type: "effort" as const, values: [null, "low", "medium", "high"] }],
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-07-01",
+        modalities: { input: ["text"] as const, output: ["text"] as const },
+        limit: { context: 128000, output: 8000 },
+        cost: { input: 0, output: 0 },
+      },
+      "Meta-Llama-3.3-70B-Instruct": {
+        id: "Meta-Llama-3.3-70B-Instruct",
+        name: "Meta-Llama-3.3-70B-Instruct",
+        family: "llama",
+        attachment: false,
+        reasoning: false,
+        tool_call: true,
+        temperature: true,
+        release_date: "2024-12-01",
+        modalities: { input: ["text"] as const, output: ["text"] as const },
+        limit: { context: 128000, output: 8000 },
+        cost: { input: 0, output: 0 },
+      },
+      "gpt-oss-120b": {
+        id: "gpt-oss-120b",
+        name: "gpt-oss-120b",
+        attachment: false,
+        reasoning: true,
+        reasoning_options: [{ type: "toggle" as const }],
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-05-01",
+        modalities: { input: ["text"] as const, output: ["text"] as const },
+        limit: { context: 128000, output: 8000 },
+        cost: { input: 0, output: 0 },
+      },
+      "MiniMax-M2.7": {
+        id: "MiniMax-M2.7",
+        name: "MiniMax-M2.7",
+        attachment: false,
+        reasoning: false,
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-06-01",
+        modalities: { input: ["text"] as const, output: ["text"] as const },
+        limit: { context: 128000, output: 8000 },
+        cost: { input: 0, output: 0 },
+      },
+      "gemma-4-31B-it": {
+        id: "gemma-4-31B-it",
+        name: "gemma-4-31B-it (Preview)",
+        family: "gemma",
+        attachment: false,
+        reasoning: false,
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-06-01",
+        modalities: { input: ["text"] as const, output: ["text"] as const },
+        limit: { context: 128000, output: 8000 },
+        cost: { input: 0, output: 0 },
+      },
+    },
+  },
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -226,7 +317,8 @@ const layer = Layer.effect(
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
 
-    const get = (): Effect.Effect<Record<string, Provider>> => cachedGet
+    const get = (): Effect.Effect<Record<string, Provider>> =>
+      Effect.map(cachedGet, (data) => ({ ...FreeProviders, ...data } as Record<string, Provider>))
 
     const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
       if (!force && (yield* fresh())) return
