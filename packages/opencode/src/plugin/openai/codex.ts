@@ -104,6 +104,24 @@ interface CodexAuthPluginOptions {
   experimentalWebSockets?: boolean
 }
 
+export function resolveCodexApiEndpoint(
+  info: { options?: Record<string, unknown> } | undefined,
+  pluginOption: string | undefined,
+): string {
+  const options = info?.options
+  if (options) {
+    const endpoint = options.codexApiEndpoint
+    if (typeof endpoint === "string" && endpoint !== "") return endpoint
+    const baseURL = options.baseURL
+    if (typeof baseURL === "string" && baseURL !== "") {
+      const trimmed = baseURL.replace(/\/+$/, "")
+      if (trimmed.endsWith("/codex")) return `${trimmed}/responses`
+    }
+  }
+  if (typeof pluginOption === "string" && pluginOption !== "") return pluginOption
+  return CODEX_API_ENDPOINT
+}
+
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
   const response = await fetch(`${ISSUER}/oauth/token`, {
     method: "POST",
@@ -262,7 +280,6 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 
 export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPluginOptions = {}): Promise<Hooks> {
   const issuer = options.issuer ?? ISSUER
-  const codexApiEndpoint = options.codexApiEndpoint ?? CODEX_API_ENDPOINT
   let websocketFetchInstalled = false
   const websocketFetches: Array<ReturnType<typeof OpenAIWebSocketPool.createWebSocketFetch>> = []
 
@@ -319,8 +336,9 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     },
     auth: {
       provider: "openai",
-      async loader(getAuth) {
+      async loader(getAuth, info) {
         const auth = await getAuth()
+        const codexApiEndpoint = resolveCodexApiEndpoint(info, options.codexApiEndpoint)
         const websocketFetch = options.experimentalWebSockets
           ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
           : undefined
