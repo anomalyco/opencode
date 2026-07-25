@@ -13,9 +13,14 @@ export type TuiTerminalEnvironment = Readonly<{
   displayServer?: "wayland" | "x11"
 }>
 
+// Progress counts completed readiness gates, not elapsed startup time.
+export const TUI_STARTUP_STAGES = ["terminal", "settings", "workspace", "theme", "plugins", "ready"] as const
+export type TuiStartupStage = (typeof TUI_STARTUP_STAGES)[number]
+
 export type TuiStartup = Readonly<{
   initialRoute?: unknown
   skipInitialLoading: boolean
+  progress?(stage: TuiStartupStage): void
 }>
 
 const PathsContext = createContext<TuiPaths>()

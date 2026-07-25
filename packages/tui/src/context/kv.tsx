@@ -4,13 +4,14 @@ import { createSimpleContext } from "./helper"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Global } from "@opencode-ai/core/global"
 import { readJson, writeJsonAtomic } from "../util/persistence"
-import { useTuiPaths } from "./runtime"
+import { useTuiPaths, useTuiStartup } from "./runtime"
 import path from "path"
 
 export const { use: useKV, provider: KVProvider } = createSimpleContext({
   name: "KV",
   init: () => {
     const paths = useTuiPaths()
+    const startup = useTuiStartup()
     void Global.Path.state
     const file = path.join(paths.state, "kv.json")
     const lock = `tui-kv:${file}`
@@ -27,6 +28,8 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         console.error("Failed to read KV state", { error })
       })
       .finally(() => {
+        // KV gates every downstream provider, so workspace loading starts when this gate opens.
+        startup.progress?.("workspace")
         setReady(true)
       })
 

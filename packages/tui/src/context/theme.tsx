@@ -28,6 +28,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
+import { useTuiStartup } from "./runtime"
 
 export type ThemeSource = Readonly<{
   discover(): Promise<Record<string, unknown>>
@@ -105,6 +106,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const renderer = useRenderer()
     const config = useTuiConfig()
     const kv = useKV()
+    const startup = useTuiStartup()
     const themes = props.source ?? themeSource
     const pick = (value: unknown) => {
       if (value === "dark" || value === "light") return value
@@ -145,6 +147,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     onMount(() => {
       void Promise.allSettled([resolveSystemTheme(store.mode), syncCustomThemes()]).finally(() => {
+        // Opening the theme gate mounts App, where plugins are the final blocking phase.
+        startup.progress?.("plugins")
         setStore("ready", true)
       })
     })
