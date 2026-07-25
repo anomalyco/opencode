@@ -1027,21 +1027,27 @@ export interface ProjectCopyApi<E = never> {
   readonly refresh: ProjectCopyRefreshOperation<E>
 }
 
-type Endpoint25_0Request = Parameters<RawClient["server.vcs"]["vcs.status"]>[0]
+type Endpoint25_0Request = Parameters<RawClient["server.vcs"]["vcs.get"]>[0]
 export type Endpoint25_0Input = { readonly location?: Endpoint25_0Request["query"]["location"] }
-export type Endpoint25_0Output = EffectValue<ReturnType<RawClient["server.vcs"]["vcs.status"]>>
-export type VcsStatusOperation<E = never> = (input?: Endpoint25_0Input) => Effect.Effect<Endpoint25_0Output, E>
+export type Endpoint25_0Output = EffectValue<ReturnType<RawClient["server.vcs"]["vcs.get"]>>
+export type VcsGetOperation<E = never> = (input?: Endpoint25_0Input) => Effect.Effect<Endpoint25_0Output, E>
 
-type Endpoint25_1Request = Parameters<RawClient["server.vcs"]["vcs.diff"]>[0]
-export type Endpoint25_1Input = {
-  readonly location?: Endpoint25_1Request["query"]["location"]
-  readonly mode: Endpoint25_1Request["query"]["mode"]
-  readonly context?: Endpoint25_1Request["query"]["context"]
+type Endpoint25_1Request = Parameters<RawClient["server.vcs"]["vcs.status"]>[0]
+export type Endpoint25_1Input = { readonly location?: Endpoint25_1Request["query"]["location"] }
+export type Endpoint25_1Output = EffectValue<ReturnType<RawClient["server.vcs"]["vcs.status"]>>
+export type VcsStatusOperation<E = never> = (input?: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
+
+type Endpoint25_2Request = Parameters<RawClient["server.vcs"]["vcs.diff"]>[0]
+export type Endpoint25_2Input = {
+  readonly location?: Endpoint25_2Request["query"]["location"]
+  readonly mode: Endpoint25_2Request["query"]["mode"]
+  readonly context?: Endpoint25_2Request["query"]["context"]
 }
-export type Endpoint25_1Output = EffectValue<ReturnType<RawClient["server.vcs"]["vcs.diff"]>>
-export type VcsDiffOperation<E = never> = (input: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
+export type Endpoint25_2Output = EffectValue<ReturnType<RawClient["server.vcs"]["vcs.diff"]>>
+export type VcsDiffOperation<E = never> = (input: Endpoint25_2Input) => Effect.Effect<Endpoint25_2Output, E>
 
 export interface VcsApi<E = never> {
+  readonly get: VcsGetOperation<E>
   readonly status: VcsStatusOperation<E>
   readonly diff: VcsDiffOperation<E>
 }

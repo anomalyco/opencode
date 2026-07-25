@@ -14,6 +14,20 @@ const DiffQuery = Schema.Struct({
 
 export const VcsGroup = HttpApiGroup.make("server.vcs")
   .add(
+    HttpApiEndpoint.get("vcs.get", "/api/vcs", {
+      query: LocationQuery,
+      success: Location.response(Vcs.Info),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.vcs.get",
+          summary: "VCS information",
+          description: "Get the current and default branches for the requested location.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.get("vcs.status", "/api/vcs/status", {
       query: LocationQuery,
       success: Location.response(Schema.Array(Vcs.FileStatus)),

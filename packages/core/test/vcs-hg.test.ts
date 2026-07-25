@@ -152,6 +152,7 @@ describeHg("Vcs mercurial", () => {
           await commitAll(directory, "initial")
         })
         const vcs = yield* Vcs.Service
+        expect(yield* vcs.info()).toEqual({ branch: "default", defaultBranch: "default" })
         expect(yield* vcs.diff("branch")).toEqual([])
 
         yield* Effect.promise(async () => {

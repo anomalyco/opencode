@@ -1234,23 +1234,32 @@ const adaptGroup24 = (raw: RawClient["server.projectCopy"]) => ({
   refresh: Endpoint24_2(raw),
 })
 
-type Endpoint25_0Request = Parameters<RawClient["server.vcs"]["vcs.status"]>[0]
+type Endpoint25_0Request = Parameters<RawClient["server.vcs"]["vcs.get"]>[0]
 type Endpoint25_0Input = { readonly location?: Endpoint25_0Request["query"]["location"] }
 const Endpoint25_0 = (raw: RawClient["server.vcs"]) => (input?: Endpoint25_0Input) =>
+  raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint25_1Request = Parameters<RawClient["server.vcs"]["vcs.status"]>[0]
+type Endpoint25_1Input = { readonly location?: Endpoint25_1Request["query"]["location"] }
+const Endpoint25_1 = (raw: RawClient["server.vcs"]) => (input?: Endpoint25_1Input) =>
   raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint25_1Request = Parameters<RawClient["server.vcs"]["vcs.diff"]>[0]
-type Endpoint25_1Input = {
-  readonly location?: Endpoint25_1Request["query"]["location"]
-  readonly mode: Endpoint25_1Request["query"]["mode"]
-  readonly context?: Endpoint25_1Request["query"]["context"]
+type Endpoint25_2Request = Parameters<RawClient["server.vcs"]["vcs.diff"]>[0]
+type Endpoint25_2Input = {
+  readonly location?: Endpoint25_2Request["query"]["location"]
+  readonly mode: Endpoint25_2Request["query"]["mode"]
+  readonly context?: Endpoint25_2Request["query"]["context"]
 }
-const Endpoint25_1 = (raw: RawClient["server.vcs"]) => (input: Endpoint25_1Input) =>
+const Endpoint25_2 = (raw: RawClient["server.vcs"]) => (input: Endpoint25_2Input) =>
   raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-const adaptGroup25 = (raw: RawClient["server.vcs"]) => ({ status: Endpoint25_0(raw), diff: Endpoint25_1(raw) })
+const adaptGroup25 = (raw: RawClient["server.vcs"]) => ({
+  get: Endpoint25_0(raw),
+  status: Endpoint25_1(raw),
+  diff: Endpoint25_2(raw),
+})
 
 type Endpoint26_0Request = Parameters<RawClient["server.path"]["path.get"]>[0]
 type Endpoint26_0Input = { readonly location?: Endpoint26_0Request["query"]["location"] }

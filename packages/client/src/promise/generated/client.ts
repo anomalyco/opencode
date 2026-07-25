@@ -204,6 +204,8 @@ import type {
   ProjectCopyRemoveOutput,
   ProjectCopyRefreshInput,
   ProjectCopyRefreshOutput,
+  VcsGetInput,
+  VcsGetOutput,
   VcsStatusInput,
   VcsStatusOutput,
   VcsDiffInput,
@@ -1714,6 +1716,18 @@ export function make(options: ClientOptions) {
         ),
     },
     vcs: {
+      get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
+        request<VcsGetOutput>(
+          {
+            method: "GET",
+            path: `/api/vcs`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
       status: (input?: VcsStatusInput, requestOptions?: RequestOptions) =>
         request<VcsStatusOutput>(
           {

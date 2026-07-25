@@ -536,6 +536,8 @@ export type ReferenceGitSource = {
 
 export type ProjectCopyCopy = { directory: string }
 
+export type VcsInfo = { branch?: string; defaultBranch?: string }
+
 export type VcsFileStatus = {
   file: string
   additions: number
@@ -4949,6 +4951,17 @@ export type ProjectCopyRefreshInput = {
 }
 
 export type ProjectCopyRefreshOutput = void
+
+export type VcsGetInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type VcsGetOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: VcsInfo
+}
 
 export type VcsStatusInput = {
   readonly location?: {
