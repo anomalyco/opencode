@@ -162,6 +162,8 @@ import type {
   SkillListInput,
   SkillListOutput,
   EventSubscribeOutput,
+  PtyShellsInput,
+  PtyShellsOutput,
   PtyListInput,
   PtyListOutput,
   PtyCreateInput,
@@ -172,6 +174,8 @@ import type {
   PtyUpdateOutput,
   PtyRemoveInput,
   PtyRemoveOutput,
+  PtyConnectTokenInput,
+  PtyConnectTokenOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1430,6 +1434,18 @@ export function make(options: ClientOptions) {
         ),
     },
     pty: {
+      shells: (input?: PtyShellsInput, requestOptions?: RequestOptions) =>
+        request<PtyShellsOutput>(
+          {
+            method: "GET",
+            path: `/api/pty/shells`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
       list: (input?: PtyListInput, requestOptions?: RequestOptions) =>
         request<PtyListOutput>(
           {
@@ -1495,6 +1511,19 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
             empty: true,
+          },
+          requestOptions,
+        ),
+      connectToken: (input: PtyConnectTokenInput, requestOptions?: RequestOptions) =>
+        request<PtyConnectTokenOutput>(
+          {
+            method: "POST",
+            path: `/api/pty/${encodeURIComponent(input.ptyID)}/connect-token`,
+            query: { location: input["location"] },
+            headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+            successStatus: 200,
+            declaredStatuses: [403, 404, 401, 400],
+            empty: false,
           },
           requestOptions,
         ),

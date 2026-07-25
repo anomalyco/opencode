@@ -56,3 +56,10 @@ export const UpdateInput = Schema.Struct({
   ),
 })
 export interface UpdateInput extends Schema.Schema.Type<typeof UpdateInput> {}
+
+export const Shell = Schema.Struct({
+  path: Schema.String,
+  name: Schema.String,
+  acceptable: Schema.Boolean,
+}).annotate({ identifier: "Pty.Shell" })
+export interface Shell extends Schema.Schema.Type<typeof Shell> {}

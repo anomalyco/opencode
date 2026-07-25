@@ -44,9 +44,36 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.vcs)).toEqual(["status", "diff"])
-  expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
+  expect(Object.keys(client.pty)).toEqual(["shells", "list", "create", "get", "update", "remove", "connectToken"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
+})
+
+test("PTY connect token sends the required browser header", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json({
+        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
+        data: { ticket: "ticket", expires_in: 60 },
+      })
+    },
+  })
+
+  const result = await client.pty.connectToken({
+    ptyID: "pty_test",
+    location: { directory: "/tmp/project" },
+    "x-opencode-ticket": "1",
+  })
+
+  expect(result.data.ticket).toBe("ticket")
+  expect(request?.method).toBe("POST")
+  expect(request?.headers.get("x-opencode-ticket")).toBe("1")
+  expect(request?.url).toBe(
+    "http://localhost:3000/api/pty/pty_test/connect-token?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  )
 })
 
 test("server.get uses the public HTTP contract", async () => {

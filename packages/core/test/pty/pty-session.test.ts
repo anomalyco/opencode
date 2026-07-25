@@ -90,6 +90,18 @@ const waitForOutput = (output: Queue.Queue<string>, text: string) =>
     }),
   )
 
+describe("Pty.shells", () => {
+  it.live("lists available shells", () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+      const shells = yield* pty.shells()
+
+      expect(shells.length).toBeGreaterThan(0)
+      expect(shells.every((shell) => shell.path && shell.name && typeof shell.acceptable === "boolean")).toBe(true)
+    }),
+  )
+})
+
 describe("pty", () => {
   it.live("returns typed not found errors for missing sessions", () =>
     Effect.gen(function* () {

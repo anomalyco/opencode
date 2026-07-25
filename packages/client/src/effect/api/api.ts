@@ -820,55 +820,71 @@ export interface EventApi<E = never> {
   readonly subscribe: EventSubscribeOperation<E>
 }
 
-type Endpoint20_0Request = Parameters<RawClient["server.pty"]["pty.list"]>[0]
+type Endpoint20_0Request = Parameters<RawClient["server.pty"]["pty.shells"]>[0]
 export type Endpoint20_0Input = { readonly location?: Endpoint20_0Request["query"]["location"] }
-export type Endpoint20_0Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.list"]>>
-export type PtyListOperation<E = never> = (input?: Endpoint20_0Input) => Effect.Effect<Endpoint20_0Output, E>
+export type Endpoint20_0Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.shells"]>>
+export type PtyShellsOperation<E = never> = (input?: Endpoint20_0Input) => Effect.Effect<Endpoint20_0Output, E>
 
-type Endpoint20_1Request = Parameters<RawClient["server.pty"]["pty.create"]>[0]
-export type Endpoint20_1Input = {
-  readonly location?: Endpoint20_1Request["query"]["location"]
-  readonly command?: Endpoint20_1Request["payload"]["command"]
-  readonly args?: Endpoint20_1Request["payload"]["args"]
-  readonly cwd?: Endpoint20_1Request["payload"]["cwd"]
-  readonly title?: Endpoint20_1Request["payload"]["title"]
-  readonly env?: Endpoint20_1Request["payload"]["env"]
-}
-export type Endpoint20_1Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.create"]>>
-export type PtyCreateOperation<E = never> = (input?: Endpoint20_1Input) => Effect.Effect<Endpoint20_1Output, E>
+type Endpoint20_1Request = Parameters<RawClient["server.pty"]["pty.list"]>[0]
+export type Endpoint20_1Input = { readonly location?: Endpoint20_1Request["query"]["location"] }
+export type Endpoint20_1Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.list"]>>
+export type PtyListOperation<E = never> = (input?: Endpoint20_1Input) => Effect.Effect<Endpoint20_1Output, E>
 
-type Endpoint20_2Request = Parameters<RawClient["server.pty"]["pty.get"]>[0]
+type Endpoint20_2Request = Parameters<RawClient["server.pty"]["pty.create"]>[0]
 export type Endpoint20_2Input = {
-  readonly ptyID: Endpoint20_2Request["params"]["ptyID"]
   readonly location?: Endpoint20_2Request["query"]["location"]
+  readonly command?: Endpoint20_2Request["payload"]["command"]
+  readonly args?: Endpoint20_2Request["payload"]["args"]
+  readonly cwd?: Endpoint20_2Request["payload"]["cwd"]
+  readonly title?: Endpoint20_2Request["payload"]["title"]
+  readonly env?: Endpoint20_2Request["payload"]["env"]
 }
-export type Endpoint20_2Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.get"]>>
-export type PtyGetOperation<E = never> = (input: Endpoint20_2Input) => Effect.Effect<Endpoint20_2Output, E>
+export type Endpoint20_2Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.create"]>>
+export type PtyCreateOperation<E = never> = (input?: Endpoint20_2Input) => Effect.Effect<Endpoint20_2Output, E>
 
-type Endpoint20_3Request = Parameters<RawClient["server.pty"]["pty.update"]>[0]
+type Endpoint20_3Request = Parameters<RawClient["server.pty"]["pty.get"]>[0]
 export type Endpoint20_3Input = {
   readonly ptyID: Endpoint20_3Request["params"]["ptyID"]
   readonly location?: Endpoint20_3Request["query"]["location"]
-  readonly title?: Endpoint20_3Request["payload"]["title"]
-  readonly size?: Endpoint20_3Request["payload"]["size"]
 }
-export type Endpoint20_3Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.update"]>>
-export type PtyUpdateOperation<E = never> = (input: Endpoint20_3Input) => Effect.Effect<Endpoint20_3Output, E>
+export type Endpoint20_3Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.get"]>>
+export type PtyGetOperation<E = never> = (input: Endpoint20_3Input) => Effect.Effect<Endpoint20_3Output, E>
 
-type Endpoint20_4Request = Parameters<RawClient["server.pty"]["pty.remove"]>[0]
+type Endpoint20_4Request = Parameters<RawClient["server.pty"]["pty.update"]>[0]
 export type Endpoint20_4Input = {
   readonly ptyID: Endpoint20_4Request["params"]["ptyID"]
   readonly location?: Endpoint20_4Request["query"]["location"]
+  readonly title?: Endpoint20_4Request["payload"]["title"]
+  readonly size?: Endpoint20_4Request["payload"]["size"]
 }
-export type Endpoint20_4Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.remove"]>>
-export type PtyRemoveOperation<E = never> = (input: Endpoint20_4Input) => Effect.Effect<Endpoint20_4Output, E>
+export type Endpoint20_4Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.update"]>>
+export type PtyUpdateOperation<E = never> = (input: Endpoint20_4Input) => Effect.Effect<Endpoint20_4Output, E>
+
+type Endpoint20_5Request = Parameters<RawClient["server.pty"]["pty.remove"]>[0]
+export type Endpoint20_5Input = {
+  readonly ptyID: Endpoint20_5Request["params"]["ptyID"]
+  readonly location?: Endpoint20_5Request["query"]["location"]
+}
+export type Endpoint20_5Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.remove"]>>
+export type PtyRemoveOperation<E = never> = (input: Endpoint20_5Input) => Effect.Effect<Endpoint20_5Output, E>
+
+type Endpoint20_6Request = Parameters<RawClient["server.pty"]["pty.connectToken"]>[0]
+export type Endpoint20_6Input = {
+  readonly ptyID: Endpoint20_6Request["params"]["ptyID"]
+  readonly location?: Endpoint20_6Request["query"]["location"]
+  readonly "x-opencode-ticket"?: Endpoint20_6Request["headers"]["x-opencode-ticket"]
+}
+export type Endpoint20_6Output = EffectValue<ReturnType<RawClient["server.pty"]["pty.connectToken"]>>
+export type PtyConnectTokenOperation<E = never> = (input: Endpoint20_6Input) => Effect.Effect<Endpoint20_6Output, E>
 
 export interface PtyApi<E = never> {
+  readonly shells: PtyShellsOperation<E>
   readonly list: PtyListOperation<E>
   readonly create: PtyCreateOperation<E>
   readonly get: PtyGetOperation<E>
   readonly update: PtyUpdateOperation<E>
   readonly remove: PtyRemoveOperation<E>
+  readonly connectToken: PtyConnectTokenOperation<E>
 }
 
 type Endpoint21_0Request = Parameters<RawClient["server.shell"]["shell.list"]>[0]

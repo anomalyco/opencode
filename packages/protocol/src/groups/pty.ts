@@ -20,6 +20,20 @@ export function hasPtyConnectTicketURL(url: URL) {
 
 export const PtyGroup = HttpApiGroup.make("server.pty")
   .add(
+    HttpApiEndpoint.get("pty.shells", "/api/pty/shells", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(Pty.Shell)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.pty.shells",
+          summary: "List available shells",
+          description: "List shells available for interactive terminal sessions.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.get("pty.list", "/api/pty", {
       query: LocationQuery,
       success: Location.response(Schema.Array(Pty.Info)),
@@ -101,13 +115,14 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
     HttpApiEndpoint.post("pty.connectToken", "/api/pty/:ptyID/connect-token", {
       params: { ptyID: Pty.ID },
       query: LocationQuery,
+      headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
       success: Location.response(PtyTicket.ConnectToken),
       error: [ForbiddenError, PtyNotFoundError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.pty.connect.token",
+          identifier: "v2.pty.connectToken",
           summary: "Create PTY WebSocket token",
           description: "Create a short-lived single-use ticket for opening a PTY WebSocket connection.",
         }),
