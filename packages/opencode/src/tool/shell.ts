@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Stream, Option } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -21,6 +21,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { SecureInput } from "@/secure-input"
 
 export { Parameters } from "./shell/prompt"
 
@@ -627,6 +628,30 @@ export const ShellTool = Tool.define(
                   yield* ask(ctx, scan, params)
                 }),
               )
+
+              const wantsInteractive = params.interactive ?? SecureInput.isInteractiveCommand(params.command)
+              if (wantsInteractive) {
+                const secInputOpt = yield* Effect.serviceOption(SecureInput.Service)
+                if (Option.isSome(secInputOpt)) {
+                  const secInput = secInputOpt.value
+                  const ptyResult = yield* secInput.execute({
+                    command: params.command,
+                    cwd,
+                    env: yield* shellEnv(ctx, cwd),
+                    sessionID: ctx.sessionID,
+                    timeout,
+                  })
+                  return {
+                    title: params.command,
+                    metadata: {
+                      output: ptyResult.output || "(no output)",
+                      exit: ptyResult.exitCode,
+                      truncated: false,
+                    },
+                    output: ptyResult.output || "(no output)",
+                  }
+                }
+              }
 
               return yield* run(
                 {
