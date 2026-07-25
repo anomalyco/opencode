@@ -371,7 +371,7 @@ it.live("session.processor effect tests preserve text start time", () =>
   ),
 )
 
-it.live("session.processor effect tests stop after token overflow requests compaction", () =>
+it.live("session.processor effect tests defer proactive compaction after token overflow", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
@@ -410,7 +410,7 @@ it.live("session.processor effect tests stop after token overflow requests compa
 
         const parts = yield* MessageV2.parts(msg.id)
 
-        expect(value).toBe("compact")
+        expect(value).toBe("continue")
         expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
         expect(parts.some((part) => part.type === "step-finish")).toBe(true)
       }),
