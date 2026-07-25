@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
 import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
-import type { AgentApi, CatalogApi, CommandApi, ProjectApi, ReferenceApi } from "@opencode-ai/client/promise"
+import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import {
   bootstrapDirectory,
@@ -16,6 +16,8 @@ import {
 import type { State, VcsCache } from "./types"
 import { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
+
+type ProjectApi = ServerApi["project"]
 
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
 const api = {
@@ -200,7 +202,7 @@ describe("query keys", () => {
         calls.push(input)
         return {
           location: {},
-          data: [{ name: "review", template: "Review files", source: "command" as const }],
+          data: [{ name: "review", template: "Review files" /* source: "command" as const */ }],
         }
       },
     } as unknown as CommandApi
@@ -208,7 +210,7 @@ describe("query keys", () => {
     const result = await loadCommands("/repo", api)
 
     expect(calls).toEqual([{ location: { directory: "/repo" } }])
-    expect(result).toEqual([{ name: "review", template: "Review files", source: "command" }])
+    expect(result).toEqual([{ name: "review", template: "Review files" /* source: "command" */ }])
   })
 
   test("loads projects from the current endpoint", async () => {
