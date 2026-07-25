@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, type Accessor, type JSX } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -59,6 +59,12 @@ export function PromptInputV2(props: PromptInputV2Props) {
     localInput = true
     props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
   }
+  // The prompt state stays empty while an IME composition is in flight (input
+  // events are ignored until compositionend), so the placeholder has to watch
+  // the composing text in the editor itself or it renders under it.
+  const [composingText, setComposingText] = createSignal(false)
+  const syncComposingText = (target: HTMLDivElement) =>
+    setComposingText(!!target.textContent?.replace(/[\n\u200B]/g, ""))
   const mode = createMemo(() => state.mode)
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
@@ -173,7 +179,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
               // and on every composition keystroke; reacting here re-renders
               // mid-composition and splits it into per-letter micro compositions.
               // State is reconciled once by the compositionend write-back.
-              if (event.isComposing || props.controller.imeActive()) return
+              if (event.isComposing || props.controller.imeActive()) {
+                syncComposingText(event.currentTarget)
+                return
+              }
               syncEditor(event.currentTarget)
             }}
             onKeyDown={(event) => {
@@ -188,9 +197,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 props.controller.submit()
               }
             }}
-            onCompositionStart={props.controller.onCompositionStart}
+            onCompositionStart={(event) => {
+              props.controller.onCompositionStart()
+              syncComposingText(event.currentTarget)
+            }}
+            onCompositionUpdate={(event) => syncComposingText(event.currentTarget)}
             onCompositionEnd={(event) => {
               props.controller.onCompositionEnd()
+              setComposingText(false)
               syncEditor(event.currentTarget)
             }}
             onKeyUp={() => {
@@ -202,7 +216,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             onPaste={props.controller.onPaste}
             onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
           />
-          <Show when={!props.controller.value()}>
+          <Show when={!props.controller.value() && !composingText()}>
             <div
               class="pointer-events-none absolute inset-x-0 top-0 px-4 pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
               classList={{ "font-mono!": state.mode === "shell" }}
