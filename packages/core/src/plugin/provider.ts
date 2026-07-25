@@ -10,28 +10,35 @@ import { CoherePlugin } from "./provider/cohere"
 import { DeepInfraPlugin } from "./provider/deepinfra"
 import { DynamicProviderPlugin } from "./provider/dynamic"
 import { GatewayPlugin } from "./provider/gateway"
+import { GitHubModelsPlugin } from "./provider/github-models"
 import { GithubCopilotPlugin } from "./provider/github-copilot"
 import { GitLabPlugin } from "./provider/gitlab"
 import { GooglePlugin } from "./provider/google"
 import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "./provider/google-vertex"
 import { GroqPlugin } from "./provider/groq"
+import { HuggingFacePlugin } from "./provider/huggingface"
 import { KiloPlugin } from "./provider/kilo"
 import { LLM7Plugin } from "./provider/llm7"
 import { LLMGatewayPlugin } from "./provider/llmgateway"
 import { MistralPlugin } from "./provider/mistral"
+import { ModelScopePlugin } from "./provider/modelscope"
 import { NvidiaPlugin } from "./provider/nvidia"
 import { OpenAIPlugin } from "./provider/openai"
 import { SnowflakeCortexPlugin } from "./provider/snowflake-cortex"
 import { OpenAICompatiblePlugin } from "./provider/openai-compatible"
 import { OpencodePlugin } from "./provider/opencode"
 import { OpenRouterPlugin } from "./provider/openrouter"
+import { OVHcloudPlugin } from "./provider/ovhcloud"
 import { PerplexityPlugin } from "./provider/perplexity"
+import { SambaNovaPlugin } from "./provider/sambanova"
 import { SapAICorePlugin } from "./provider/sap-ai-core"
+import { SiliconFlowPlugin } from "./provider/siliconflow"
 import { TogetherAIPlugin } from "./provider/togetherai"
 import { VercelPlugin } from "./provider/vercel"
 import { VenicePlugin } from "./provider/venice"
 import { XAIPlugin } from "./provider/xai"
 import { ZenmuxPlugin } from "./provider/zenmux"
+import { ZhipuAIPlugin } from "./provider/zhipuai"
 import type { PluginInternal } from "./internal"
 import type { Scope } from "effect"
 
@@ -48,28 +55,35 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   CoherePlugin,
   DeepInfraPlugin,
   GatewayPlugin,
+  GitHubModelsPlugin,
   GithubCopilotPlugin,
   GitLabPlugin,
   GooglePlugin,
   GoogleVertexAnthropicPlugin,
   GoogleVertexPlugin,
   GroqPlugin,
+  HuggingFacePlugin,
   KiloPlugin,
   LLM7Plugin,
   LLMGatewayPlugin,
   MistralPlugin,
+  ModelScopePlugin,
   NvidiaPlugin,
   OpencodePlugin,
   SnowflakeCortexPlugin,
   OpenAICompatiblePlugin,
   OpenAIPlugin,
   OpenRouterPlugin,
+  OVHcloudPlugin,
   PerplexityPlugin,
+  SambaNovaPlugin,
   SapAICorePlugin,
+  SiliconFlowPlugin,
   TogetherAIPlugin,
   VercelPlugin,
   VenicePlugin,
   XAIPlugin,
   ZenmuxPlugin,
+  ZhipuAIPlugin,
   DynamicProviderPlugin,
 ]
