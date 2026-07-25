@@ -65,6 +65,7 @@ async function switchSession(page: Page, title: string) {
 
 async function setup(page: Page) {
   await mockOpenCodeServer(page, {
+    protocol: "v1",
     directory,
     project: {
       id: projectID,

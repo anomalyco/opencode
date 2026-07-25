@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
-import type { MessageApi, OpenCodeEvent, SessionApi } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionApi } from "@opencode-ai/client/promise"
 import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
+import type { ServerApi } from "@/utils/server"
+
+type MessageApi = ServerApi["message"]
 
 const session = (id: string, parentID?: string): Session => ({
   id,

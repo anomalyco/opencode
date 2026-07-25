@@ -178,7 +178,6 @@ export const Terminal = (props: TerminalProps) => {
   // Terminal captures its connection for the PTY lifetime, so callers must key it per server/session.
   const connection = useServerSDK()().server
   const directory = sdk().directory
-  const client = sdk().client
   const url = sdk().url
   const auth = connection.http
   const username = auth?.username ?? "opencode"
@@ -241,10 +240,21 @@ export const Terminal = (props: TerminalProps) => {
     }
   }
 
-  const pushSize = (cols: number, rows: number) => {
-    return client.pty
-      .update({
+  const pushSize = async (cols: number, rows: number) => {
+    if ((await sdk().protocol) === "v1") {
+      return sdk()
+        .client.pty.update({
+          ptyID: id,
+          size: { cols, rows },
+        })
+        .catch((err) => {
+          debugTerminal("failed to sync terminal size", err)
+        })
+    }
+    return sdk()
+      .api.pty.update({
         ptyID: id,
+        location: { directory },
         size: { cols, rows },
       })
       .catch((err) => {
@@ -522,34 +532,54 @@ export const Terminal = (props: TerminalProps) => {
         local.onConnectError?.(err)
       }
 
-      const gone = () =>
-        client.pty
-          .get({ ptyID: id }, { throwOnError: false })
-          .then((result) => result.response.status === 404)
+      const gone = async () => {
+        if ((await sdk().protocol) === "v1") {
+          return sdk()
+            .client.pty.get({ ptyID: id }, { throwOnError: false })
+            .then((result) => result.response.status === 404)
+            .catch((err) => {
+              debugTerminal("failed to inspect terminal session", err)
+              return false
+            })
+        }
+        return sdk()
+          .api.pty.get({ ptyID: id, location: { directory } })
+          .then((result) => result.data.status === "exited")
           .catch((err) => {
+            if (err && typeof err === "object" && "_tag" in err && err._tag === "PtyNotFoundError") return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
+      }
 
       const connectToken = async () => {
-        const result = await client.pty
-          .connectToken(
-            { ptyID: id, directory },
-            {
-              throwOnError: false,
-              headers: { "x-opencode-ticket": "1" },
-            },
-          )
-          .catch((err: unknown) => {
-            if (err instanceof Error && err.message.includes("Request is not supported")) return
-            throw err
-          })
-        if (!result) return
-        if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
-        if (result.response.status === 404 || result.response.status === 405) return
-        if (result.response.status === 403)
-          throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
-        throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+        if ((await sdk().protocol) === "v1") {
+          const result = await sdk()
+            .client.pty.connectToken(
+              { ptyID: id, directory },
+              {
+                throwOnError: false,
+                headers: { "x-opencode-ticket": "1" },
+              },
+            )
+            .catch((err: unknown) => {
+              if (err instanceof Error && err.message.includes("Request is not supported")) return
+              throw err
+            })
+          if (!result) return
+          if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
+          if (result.response.status === 404 || result.response.status === 405) return
+          if (result.response.status === 403)
+            throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
+          throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+        }
+        // return sdk()
+        //   .api.pty.connectToken({
+        //     ptyID: id,
+        //     location: { directory },
+        //     "x-opencode-ticket": "1",
+        //   })
+        //   .then((result) => result.data.ticket)
       }
 
       const retry = (err: unknown) => {
@@ -579,11 +609,14 @@ export const Terminal = (props: TerminalProps) => {
           fail(err)
           return undefined
         })
+        const protocol = await sdk().protocol
+        // if (protocol === "v2" && !ticket) return
         if (once.value) return
         if (disposed) return
 
         const socket = new WebSocket(
           terminalWebSocketURL({
+            protocol,
             url,
             id,
             directory,

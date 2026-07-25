@@ -188,7 +188,8 @@ function makeQueryOptionsApi(
     projects: () => loadProjectsQuery(scope, serverAPI.project),
     providers: (directory: PathKey | null) =>
       loadProvidersQuery(scope, directory, serverAPI, directory ? sdkFor(directory) : serverSDK(), protocol),
-    path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.path),
+    path: (directory: PathKey | null) =>
+      loadPathQuery(scope, directory, directory ? sdkFor(directory) : serverSDK(), protocol),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI.agent, sdkFor(directory), protocol),
     references: (directory: PathKey) =>
       loadReferencesQuery(scope, directory, serverAPI.reference, sdkFor(directory), protocol),
@@ -581,7 +582,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     children.mark(key)
     if (
       event.current?.type === "session.moved" ||
-      event.current?.type === "session.archived" ||
+      // event.current?.type === "session.archived" ||
       event.current?.type === "session.forked" ||
       eventType === "command.updated" ||
       eventType === "config.updated" ||

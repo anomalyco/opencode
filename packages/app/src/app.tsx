@@ -237,6 +237,30 @@ function UiI18nBridge(props: ParentProps) {
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
 }
 
+function LayoutCompatibility(props: ParentProps) {
+  const global = useGlobal()
+  const navigate = useNavigate()
+  const server = useServer()
+  const settings = useSettings()
+
+  createEffect(() => {
+    if (settings.general.newLayoutDesigns()) return
+    const current = server.current
+    if (!current) return
+    const protocol = global.ensureServerCtx(current).sdk.protocolKind()
+    if (protocol !== "v2") return
+    const next = global.servers.list().find((s) => {
+      if (ServerConnection.key(s) === ServerConnection.key(current)) return false
+      return global.ensureServerCtx(s).sdk.protocolKind() !== "v2"
+    })
+    if (!next) return
+    navigate("/")
+    queueMicrotask(() => server.setActive(ServerConnection.key(next)))
+  })
+
+  return <>{props.children}</>
+}
+
 declare global {
   interface Window {
     __OPENCODE__?: {

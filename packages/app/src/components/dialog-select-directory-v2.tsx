@@ -8,6 +8,7 @@ import { createEffect, createMemo, createResource, createSignal, For, onCleanup,
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
+import type { Path } from "@opencode-ai/sdk/v2/client"
 import {
   absoluteTreePath,
   activeTreeNavigation,
@@ -68,7 +69,13 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
     () => (missingBase() ? true : undefined),
-    () => sdk.api.path.get().catch(() => undefined),
+    async (): Promise<Path | undefined> => {
+      if ((await sdk.protocol) !== "v1") return
+      return sdk.client.path
+        .get()
+        .then((result) => result.data)
+        .catch(() => undefined)
+    },
     { initialValue: undefined },
   )
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
