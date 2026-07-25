@@ -138,7 +138,7 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.task": "Task",
-  "ui.tool.webfetch": "Webfetch",
+  "ui.tool.webfetch": "Prendi dal web",
   "ui.tool.websearch": "Ricerca web",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
