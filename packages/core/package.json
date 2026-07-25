@@ -117,6 +117,7 @@
     "jsonc-parser": "3.3.1",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
+    "unbash": "4.0.3",
     "venice-ai-sdk-provider": "2.1.1",
     "which": "6.0.1",
     "zod": "catalog:"

@@ -11,6 +11,7 @@ import { PluginRuntime } from "../plugin/runtime"
 import { NonNegativeInt } from "../schema"
 import { SessionSchema } from "../session/schema"
 import { Shell } from "../shell"
+import { Bash } from "../util/bash"
 import { Tool, type Content } from "./tool"
 
 export const name = "shell"
@@ -69,7 +70,6 @@ const modelOutput = (output: Output): string | undefined => {
  */
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
 // TODO: Port BashArity reusable command-prefix approvals.
-// TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Persist job status and define restart recovery before exposing remote observation.
@@ -78,16 +78,13 @@ const modelOutput = (output: Output): string | undefined => {
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
 // TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
 
-const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
-const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
 const externalCommandDirectories = Effect.fn("ShellTool.externalCommandDirectories")(function* (
   fs: FSUtil.Interface,
   command: string,
   cwd: string,
 ) {
   const directories = new Set<string>()
-  for (const token of shellTokens(command)) {
-    const value = unquote(token).replace(/[;,|&]+$/, "")
+  for (const value of Bash.pathWords(command)) {
     if (!path.isAbsolute(value)) continue
     const resolved = yield* fs.resolve(value)
     if (FSUtil.contains(cwd, resolved)) continue
