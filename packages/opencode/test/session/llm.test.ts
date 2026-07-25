@@ -832,6 +832,113 @@ describe("session.llm.stream", () => {
     },
   )
 
+  const deepseekFixture = { providerID: "deepseek", modelID: "deepseek-v4-pro" }
+  it.instance(
+    "sends non-empty content for DeepSeek assistant messages left empty by reasoning extraction",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(deepseekFixture.providerID, deepseekFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Done"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(deepseekFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-deepseek-content")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-deepseek-content"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(deepseekFixture.providerID), modelID: resolved.id },
+          },
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [
+            { role: "user", content: "Run date" },
+            // DeepSeek returns reasoning_content with empty content, so this
+            // turn has nothing left once reasoning moves to reasoning_content.
+            { role: "assistant", content: [{ type: "reasoning", text: "Just thinking." }] },
+            { role: "user", content: "Continue" },
+            {
+              role: "assistant",
+              content: [
+                { type: "reasoning", text: "I should call the date tool." },
+                { type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "date" } },
+              ],
+            },
+            {
+              role: "tool",
+              content: [
+                {
+                  type: "tool-result",
+                  toolCallId: "call-1",
+                  toolName: "bash",
+                  output: { type: "text", value: "12:00" },
+                },
+              ],
+            },
+            { role: "user", content: "Continue" },
+          ] satisfies ModelMessage[],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const messages = capture.body.messages as Array<Record<string, unknown>>
+        const assistants = messages.filter((message) => message.role === "assistant")
+
+        expect(assistants[0]).toMatchObject({
+          role: "assistant",
+          content: " ",
+          reasoning_content: "Just thinking.",
+        })
+        // A tool call is already non-empty content; no filler text is added,
+        // because on the Anthropic wire format a tool_use block must come last.
+        expect(assistants[1]).toMatchObject({
+          role: "assistant",
+          content: "",
+          reasoning_content: "I should call the date tool.",
+          tool_calls: [
+            {
+              id: "call-1",
+              type: "function",
+              function: {
+                name: "bash",
+                arguments: '{"command":"date"}',
+              },
+            },
+          ],
+        })
+      }),
+    {
+      config: () => ({
+        enabled_providers: [deepseekFixture.providerID],
+        provider: {
+          [deepseekFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
   const cerebrasFixture = { providerID: "cerebras", modelID: "gpt-oss-120b" }
   it.instance(
     "replays Cerebras assistant reasoning using the provider-supported field",
