@@ -3,11 +3,10 @@
  * branch. Each checkout permanently tracks a single ref: the requested branch
  * when the cache key has one, otherwise the remote default branch. Content
  * follows "newest wins": refresh fetches and hard-resets, so readers may
- * observe the checkout move underneath them. Checkouts unused for
- * {@link PRUNE_AFTER_MS} are removed at service startup.
+ * observe the checkout move underneath them.
  */
 import path from "path"
-import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "./fs-util"
 import { Git } from "./git"
 import { Global } from "./global"
@@ -98,11 +97,6 @@ export type Error =
 
 export interface Interface {
   readonly ensure: (input: EnsureInput) => Effect.Effect<Result, Error>
-  /**
-   * Removes checkouts unused for {@link PRUNE_AFTER_MS}. Best-effort: runs
-   * forked once at service startup and never fails. Exposed for tests.
-   */
-  readonly prune: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/RepositoryCache") {}
@@ -142,41 +136,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
       const git = yield* Git.Service
       const flock = yield* EffectFlock.Service
       const global = yield* Global.Service
-      const scope = yield* Scope.Scope
-
-      // Checkout roots are the directories containing `.git`; the walk stops
-      // there so it never descends into checkout contents.
-      const checkouts: (dir: string) => Effect.Effect<string[], FSUtil.Error> = Effect.fnUntraced(function* (
-        dir: string,
-      ) {
-        const entries = yield* fs.readDirectoryEntries(dir)
-        if (entries.some((entry) => entry.name === ".git")) return [dir]
-        const nested = yield* Effect.forEach(
-          entries.filter((entry) => entry.type === "directory"),
-          (entry) => checkouts(path.join(dir, entry.name)),
-        )
-        return nested.flat()
-      })
-
-      const prune = Effect.gen(function* () {
-        const now = Date.now()
-        const dirs = yield* checkouts(global.repos).pipe(Effect.catch(() => Effect.succeed([] as string[])))
-        yield* Effect.forEach(
-          dirs,
-          (dir) =>
-            Effect.gen(function* () {
-              const info = yield* fs.stat(dir)
-              if (now - Option.getOrElse(info.mtime, () => new Date(0)).getTime() < PRUNE_AFTER_MS) return
-              yield* flock.withLock(fs.remove(dir, { recursive: true }), `repository-cache:${dir}`)
-            }).pipe(Effect.ignore),
-          { discard: true },
-        )
-      }).pipe(Effect.withSpan("RepositoryCache.prune"))
-
-      yield* prune.pipe(Effect.forkIn(scope))
 
       return Service.of({
-        prune,
         ensure: Effect.fn("RepositoryCache.ensure")(function* (input) {
           if (input.branch) yield* validateBranch(input.branch)
 
@@ -251,10 +212,6 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                     .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
                 }
 
-                // Record use so prune never removes a live checkout; the
-                // cached fast path would otherwise never bump the mtime.
-                yield* fs.utimes(localPath, new Date(), new Date()).pipe(Effect.ignore)
-
                 const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))
 
                 return {
@@ -284,15 +241,6 @@ export const node = makeGlobalNode({
   layer,
   deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node],
 })
-
-/**
- * Thirty days of disuse. `ensure` bumps the checkout mtime on every use, so
- * any checkout referenced by a live location is re-touched at each process
- * start and config reload. A process running longer than this without either
- * can, in principle, lose a checkout to another process's prune; the next
- * reload re-clones it.
- */
-const PRUNE_AFTER_MS = 30 * 24 * 60 * 60 * 1000
 
 function errorMessage(error: unknown) {
   return error instanceof globalThis.Error ? error.message : String(error)

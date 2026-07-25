@@ -101,25 +101,6 @@ describe("RepositoryCache", () => {
     ),
   )
 
-  it.live("prunes checkouts that have not been used recently", () =>
-    withRemote((fixture) =>
-      Effect.gen(function* () {
-        const cache = yield* RepositoryCache.Service
-        const fresh = yield* cache.ensure({ reference: fixture.reference })
-        const stale = yield* cache.ensure({
-          reference: { ...Repository.parseRemote("owner/stale"), remote: fixture.remote },
-        })
-        const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
-        yield* Effect.promise(() => fs.utimes(stale.localPath, old, old))
-
-        yield* cache.prune
-
-        expect(yield* exists(stale.localPath)).toBe(false)
-        expect(yield* exists(fresh.localPath)).toBe(true)
-      }).pipe(Effect.provide(cacheLayer(fixture.root))),
-    ),
-  )
-
   it.live("returns typed validation and clone failures", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {
