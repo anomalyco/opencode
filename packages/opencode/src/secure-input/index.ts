@@ -15,6 +15,7 @@ const PASSWORD_PATTERNS = [
   /passphrase for .+:/i,
   /password for .+:/i,
   /Sorry, try again\./i,
+  /\(yes\/no.*\)\?/i,
 ] as const
 
 const INTERACTIVE_COMMANDS = [
