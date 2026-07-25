@@ -143,6 +143,29 @@ describe("search tools", () => {
     )
   }
 
+  it.live("reports a file used as the glob search path", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "content\n")).pipe(
+          Effect.andThen(
+            withTools(tmp.path, (registry) =>
+              executeTool(registry, call("glob", { path: "file.txt", pattern: "*" })),
+            ),
+          ),
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              expect(result).toEqual({
+                status: "error",
+                error: { type: "tool.execution", message: "Search path is not a directory: file.txt" },
+              })
+            }),
+          ),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("requires external_directory approval for an explicit external glob path", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),

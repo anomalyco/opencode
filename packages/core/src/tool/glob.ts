@@ -83,12 +83,16 @@ export const Plugin = {
                   agent: context.agent,
                   source,
                 })
-                yield* fs
+                const info = yield* fs
                   .stat(target.canonical)
                   .pipe(
                     Effect.catchReason("PlatformError", "NotFound", () =>
                       Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
                     ),
+                  )
+                if (info.type !== "Directory")
+                  return yield* Effect.fail(
+                    new ToolFailure({ message: `Search path is not a directory: ${input.path ?? "."}` }),
                   )
                 const root = path.resolve(location.directory, input.path ?? ".")
                 const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
