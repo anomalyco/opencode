@@ -471,7 +471,12 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       },
     },
   })
-  Object.defineProperty(controller, "model", { get: () => props.controls.model })
+  Object.defineProperty(controller, "model", {
+    get: () => {
+      console.log("model paid", props.controls.model.paid)
+      return props.controls.model
+    },
+  })
   return controller as PromptInputV2ComposerController
 }
 
