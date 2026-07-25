@@ -85,6 +85,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
           name: mcpCommandName(prompt.server, prompt.name),
           template: "",
           description: prompt.description,
+          source: "mcp",
         }),
       )
     })
@@ -98,7 +99,10 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
         return (yield* mcpCommands()).find((command) => command.name === name)
       }),
       list: Effect.fn("CommandV2.list")(function* () {
-        const commands = Array.from(state.get().commands.values()) as Info[]
+        const commands = Array.from(state.get().commands.values()).map((command) => ({
+          ...command,
+          source: command.source ?? "command" as const,
+        }))
         const names = new Set(commands.map((command) => command.name))
         return [
           ...commands,

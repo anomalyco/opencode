@@ -59,6 +59,7 @@ describe("CommandV2", () => {
             providerID: ProviderV2.ID.make("anthropic"),
             variant: ModelV2.VariantID.make("high"),
           },
+          source: "command",
         }),
       ])
     }),

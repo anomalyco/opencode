@@ -557,6 +557,7 @@ export type CommandInfo = {
   agent?: string
   model?: ModelRef
   subtask?: boolean
+  source?: "command" | "mcp"
 }
 
 export type ProviderRequest = {
