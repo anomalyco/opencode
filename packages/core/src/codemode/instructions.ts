@@ -39,13 +39,13 @@ ${tools.join("\n")}`
 }
 
 export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatalog.Summary) {
-  const full = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
+  const replacement = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
 
 ${render(current)}`
-  if (current.total === 0) return full
+  if (current.total === 0) return replacement
   const previousComplete = previous.shown === previous.total
   const currentComplete = current.shown === current.total
-  if (previousComplete !== currentComplete) return full
+  if (previousComplete !== currentComplete) return replacement
 
   const diff = Instructions.diffByKey(
     previous.namespaces.flatMap((namespace) => namespace.entries),
@@ -56,7 +56,7 @@ ${render(current)}`
   const entriesChanged = diff.added.length > 0 || diff.removed.length > 0 || diff.changed.length > 0
 
   if (!currentComplete) {
-    if (entriesChanged) return full
+    if (entriesChanged) return replacement
     const namespaces = Instructions.diffByKey(
       previous.namespaces,
       current.namespaces,
@@ -64,7 +64,7 @@ ${render(current)}`
       (before, after) => before.count !== after.count,
     )
     const changed = namespaces.added.length > 0 || namespaces.removed.length > 0 || namespaces.changed.length > 0
-    if (!changed) return full
+    if (!changed) return replacement
 
     const parts = ["The Code Mode tool catalog has changed."]
     if (namespaces.added.length > 0) {
@@ -89,11 +89,11 @@ ${render(current)}`
       )
     }
     const delta = parts.join("\n\n")
-    if (delta.length < full.length) return delta
-    return full
+    if (delta.length < replacement.length) return delta
+    return replacement
   }
 
-  if (!entriesChanged) return full
+  if (!entriesChanged) return replacement
   const parts = ["The Code Mode tool catalog has changed."]
   if (diff.added.length > 0) {
     parts.push(
@@ -119,8 +119,8 @@ ${render(current)}`
     )
   }
   const delta = parts.join("\n\n")
-  if (delta.length < full.length) return delta
-  return full
+  if (delta.length < replacement.length) return delta
+  return replacement
 }
 
 const key = Instructions.Key.make("core/codemode")
