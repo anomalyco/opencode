@@ -123,13 +123,14 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
 
   const text = fragments(
     "text",
-    (_textID, value, ordinal) =>
+    (_textID, value, ordinal, state) =>
       Effect.gen(function* () {
         yield* events.publish(SessionEvent.Text.Ended, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
           ordinal,
           text: value,
+          state,
         })
       }),
     true,
@@ -300,7 +301,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         return
       case "text-start":
         retryEvidence = true
-        const startedTextOrdinal = yield* text.start(event.id)
+        const startedTextOrdinal = yield* text.start(event.id, providerState(event.providerMetadata))
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
@@ -308,7 +309,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         })
         return
       case "text-delta":
-        const deltaTextOrdinal = yield* text.append(event.id, event.text)
+        const deltaTextOrdinal = yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
@@ -317,7 +318,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
         })
         return
       case "text-end":
-        yield* text.end(event.id)
+        yield* text.end(event.id, providerState(event.providerMetadata))
         return
       case "reasoning-start":
         retryEvidence = true

@@ -314,6 +314,7 @@ export namespace Text {
       assistantMessageID: SessionMessage.ID,
       ordinal: NonNegativeInt,
       text: Schema.String,
+      state: SessionMessage.ProviderState.pipe(optional),
     },
   })
   export type Ended = typeof Ended.Type

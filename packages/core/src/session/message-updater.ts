@@ -319,7 +319,10 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.text.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestText(draft)
-          if (match) match.text = event.data.text
+          if (match) {
+            match.text = event.data.text
+            match.state = castDraft(event.data.state)
+          }
         })
       },
       "session.tool.input.started": (event) => {

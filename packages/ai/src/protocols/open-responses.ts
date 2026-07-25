@@ -55,6 +55,9 @@ const OpenResponsesOutputText = Schema.Struct({
   text: Schema.String,
 })
 
+const MessagePhase = Schema.Literals(["commentary", "final_answer"])
+type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
+
 const OpenResponsesReasoningSummaryText = Schema.Struct({
   type: Schema.tag("summary_text"),
   text: Schema.String,
@@ -89,7 +92,11 @@ const OpenResponsesFunctionCallOutput = Schema.Union([
 const OpenResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
-  Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenResponsesOutputText) }),
+  Schema.Struct({
+    role: Schema.tag("assistant"),
+    content: Schema.Array(OpenResponsesOutputText),
+    phase: Schema.optionalKey(Schema.NullOr(MessagePhase)),
+  }),
   OpenResponsesReasoningItem,
   OpenResponsesItemReference,
   Schema.Struct({
@@ -206,6 +213,7 @@ export const Event = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
     delta: Schema.optional(Schema.String),
+    text: Schema.optional(Schema.String),
     item_id: Schema.optional(Schema.String),
     summary_index: Schema.optional(Schema.Number),
     item: Schema.optional(StreamItem),
@@ -249,6 +257,8 @@ export interface ParserState {
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
+  readonly messageItems: ReadonlySet<string>
+  readonly messagePhases: Readonly<Record<string, MessagePhase | null>>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
   readonly store: boolean | undefined
 }
@@ -412,7 +422,28 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
-        input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
+        const groups = content.reduce<Array<{ phase: MessagePhase | null | undefined; parts: TextPart[] }>>(
+          (groups, part) => {
+            const metadata = part.providerMetadata?.[providerMetadataKey]
+            const phase =
+              ProviderShared.isRecord(metadata) &&
+              (metadata.phase === "commentary" || metadata.phase === "final_answer" || metadata.phase === null)
+                ? metadata.phase
+                : undefined
+            const group = groups.at(-1)
+            if (group && group.phase === phase) group.parts.push(part)
+            else groups.push({ phase, parts: [part] })
+            return groups
+          },
+          [],
+        )
+        input.push(
+          ...groups.map((group) => ({
+            role: "assistant" as const,
+            content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
+            ...(group.phase === undefined ? {} : { phase: group.phase }),
+          })),
+        )
         content.splice(0, content.length)
       }
       for (const part of message.content) {
@@ -598,15 +629,24 @@ export const terminal = (event: Event) => TERMINAL_TYPES.has(event.type)
 const onOutputTextDelta = (state: ParserState, event: Event): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
+  const id = event.item_id ?? "text-0"
+  const phase = state.messagePhases[id]
+  const metadata = phase === undefined ? undefined : providerMetadata(state, { phase })
+  const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
   return [
-    { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, event.item_id ?? "text-0", event.delta) },
+    { ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) },
     events,
   ]
 }
 
 const onOutputTextDone = (state: ParserState, event: Event): StepResult => {
+  const id = event.item_id ?? "text-0"
+  if (state.messageItems.has(id)) {
+    if (state.lifecycle.text.has(id) || event.text === undefined) return [state, NO_EVENTS]
+    return onOutputTextDelta(state, { ...event, delta: event.text })
+  }
   const events: LLMEvent[] = []
-  return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, event.item_id ?? "text-0") }, events]
+  return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
 }
 
 export const onReasoningDelta = (state: ParserState, event: Event): StepResult => {
@@ -643,6 +683,18 @@ const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }
 // best-effort, not guaranteed.
 const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   const item = event.item
+  if (item?.type === "message" && item.id)
+    return [
+      {
+        ...state,
+        messageItems: new Set([...state.messageItems, item.id]),
+        messagePhases:
+          item.phase === "commentary" || item.phase === "final_answer" || item.phase === null
+            ? { ...state.messagePhases, [item.id]: item.phase }
+            : state.messagePhases,
+      },
+      NO_EVENTS,
+    ]
   if (item && isReasoningItem(item)) {
     const events: LLMEvent[] = []
     return [
@@ -799,7 +851,30 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   const item = event.item
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
-  if (item.type === "message" && item.id) return onOutputTextDone(state, { ...event, item_id: item.id })
+  if (item.type === "message" && item.id) {
+    const phase =
+      item.phase === "commentary" || item.phase === "final_answer" || item.phase === null
+        ? item.phase
+        : state.messagePhases[item.id]
+    const events: LLMEvent[] = []
+    const messageItems = new Set(state.messageItems)
+    messageItems.delete(item.id)
+    const { [item.id]: _phase, ...messagePhases } = state.messagePhases
+    return [
+      {
+        ...state,
+        lifecycle: Lifecycle.textEnd(
+          state.lifecycle,
+          events,
+          item.id,
+          phase === undefined ? undefined : providerMetadata(state, { phase }),
+        ),
+        messageItems,
+        messagePhases,
+      },
+      events,
+    ] satisfies StepResult
+  }
 
   if (item.type === "function_call") {
     if (!item.id || !item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
@@ -933,6 +1008,8 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
+  messageItems: new Set<string>(),
+  messagePhases: {},
   reasoningItems: {},
   store: OpenResponsesOptions.resolve(request).store,
 })

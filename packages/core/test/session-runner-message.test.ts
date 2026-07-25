@@ -767,4 +767,35 @@ Recent work
       },
     ])
   })
+
+  test("preserves assistant text provider state across same-provider model changes and failures", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-phase"),
+          type: "assistant",
+          agent: build,
+          model: { id: ModelV2.ID.make("old"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Checking.",
+              state: { phase: "commentary" },
+            }),
+          ],
+          error: { type: "provider.unknown", message: "Interrupted after commentary" },
+          time: { created, completed: created },
+        }),
+      ],
+      ModelV2.Ref.make({ id: ModelV2.ID.make("new"), providerID: ProviderV2.ID.make("provider") }),
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Checking.",
+        providerMetadata: { provider: { phase: "commentary" } },
+      },
+    ])
+  })
 })

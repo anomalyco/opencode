@@ -2632,6 +2632,47 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("restores durable text provider metadata in the next request", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Check first")
+
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "commentary", providerMetadata: { openai: { phase: "commentary" } } }),
+        LLMEvent.textDelta({ id: "commentary", text: "Checking." }),
+        LLMEvent.textEnd({
+          id: "commentary",
+          providerMetadata: { openai: { phase: "commentary" }, anthropic: { ignored: true } },
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
+        LLMEvent.finish({ reason: { normalized: "stop" } }),
+      ]
+      yield* session.resume(sessionID)
+      yield* replaySessionProjection(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Check first" },
+        {
+          type: "assistant",
+          content: [{ type: "text", text: "Checking.", state: { phase: "commentary" } }],
+        },
+      ])
+
+      yield* admit(session, "Continue")
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests[1]?.messages[1]?.content).toEqual([
+        {
+          type: "text",
+          text: "Checking.",
+          providerMetadata: { openai: { phase: "commentary" } },
+        },
+      ])
+    }),
+  )
+
   it.effect("replays durable provider-executed tool results inline in the next request", () =>
     Effect.gen(function* () {
       const session = yield* setup

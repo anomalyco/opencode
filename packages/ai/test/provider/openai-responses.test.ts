@@ -882,6 +882,81 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves and replays assistant message phases", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_commentary" },
+              },
+              { type: "response.output_text.delta", item_id: "msg_commentary", delta: "Checking." },
+              { type: "response.output_text.done", item_id: "msg_commentary" },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_commentary", phase: "commentary" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "message", id: "msg_final", phase: "final_answer" },
+              },
+              { type: "response.output_text.done", item_id: "msg_final", text: "Finished." },
+              {
+                type: "response.output_item.done",
+                item: { type: "message", id: "msg_final", phase: "final_answer" },
+              },
+              { type: "response.output_item.added", item: { type: "message", id: "msg_null", phase: null } },
+              { type: "response.output_text.delta", item_id: "msg_null", delta: "Unclassified." },
+              { type: "response.output_item.done", item: { type: "message", id: "msg_null", phase: null } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "Checking.",
+          providerMetadata: { openai: { phase: "commentary" } },
+        },
+        {
+          type: "text",
+          text: "Finished.",
+          providerMetadata: { openai: { phase: "final_answer" } },
+        },
+        {
+          type: "text",
+          text: "Unclassified.",
+          providerMetadata: { openai: { phase: null } },
+        },
+      ])
+
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({ model, messages: [response.message] }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "output_text", text: "Checking." }],
+          phase: "commentary",
+        },
+        {
+          role: "assistant",
+          content: [{ type: "output_text", text: "Finished." }],
+          phase: "final_answer",
+        },
+        {
+          role: "assistant",
+          content: [{ type: "output_text", text: "Unclassified." }],
+          phase: null,
+        },
+      ])
+    }),
+  )
+
   it.effect("maps incomplete response reasons", () =>
     Effect.gen(function* () {
       const generate = (incompleteDetails: object) =>
