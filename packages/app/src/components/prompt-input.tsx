@@ -540,6 +540,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const [composing, setComposing] = createSignal(false)
+  // The prompt state stays empty while a composition is in flight (input events
+  // are ignored until compositionend), so the placeholder has to watch the
+  // composing text in the editor itself or it renders under it.
+  const [composingText, setComposingText] = createSignal(false)
+  const syncComposingText = () => setComposingText(!!editorRef?.textContent?.replace(/[\n\u200B]/g, ""))
+
   let lastCompositionEnd = 0
   // Safari fires compositionend BEFORE the confirming Enter keydown, so that
   // keydown reports isComposing=false (keyCode 229 on Safari 26, 13 in older
@@ -555,14 +561,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (cursor !== null && cursor !== prompt.cursor()) prompt.set(prompt.current(), cursor)
     closePopover()
     setComposing(false)
+    syncComposingText()
   }
 
   const handleCompositionStart = () => {
     setComposing(true)
+    syncComposingText()
+  }
+
+  const handleCompositionUpdate = () => {
+    syncComposingText()
   }
 
   const handleCompositionEnd = () => {
     setComposing(false)
+    setComposingText(false)
     lastCompositionEnd = performance.now()
     // Input events are ignored while composing, so sync DOM -> state once now.
     handleInput()
@@ -988,7 +1001,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // DOM/selection mutation makes Safari abort the composition mid-way. Check
     // the event too because Safari fires the first input event BEFORE
     // compositionstart, when composing() is still false.
-    if (composing() || event?.isComposing || event?.inputType === "insertCompositionText") return
+    if (composing() || event?.isComposing || event?.inputType === "insertCompositionText") {
+      syncComposingText()
+      return
+    }
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
@@ -1545,6 +1561,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onInput={handleInput}
               onPaste={handlePaste}
               onCompositionStart={handleCompositionStart}
+              onCompositionUpdate={handleCompositionUpdate}
               onCompositionEnd={handleCompositionEnd}
               onFocus={handleFocus}
               onBlur={handleBlur}
@@ -1561,7 +1578,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div
               class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
               classList={{ "font-mono!": store.mode === "shell" }}
-              style={{ "padding-bottom": space, display: prompt.dirty() ? "none" : undefined }}
+              style={{ "padding-bottom": space, display: prompt.dirty() || composingText() ? "none" : undefined }}
             >
               {placeholder()}
             </div>
