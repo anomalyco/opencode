@@ -119,6 +119,18 @@ export const layer = Layer.effect(
         }
         remove.push(msg)
       }
+      const lastUserBeforeRevert = msgs.findLast((m) => m.info.role === "user" && m.info.id < messageID)
+      for (const msg of msgs) {
+        if (msg.info.role !== "assistant") continue
+        if (remove.some((r) => r.info.id === msg.info.id)) continue
+        const parentID = msg.info.parentID
+        if (!remove.some((r) => r.info.id === parentID)) continue
+        if (!lastUserBeforeRevert) continue
+        yield* sessions.updateMessage({
+          ...msg.info,
+          parentID: lastUserBeforeRevert.info.id,
+        })
+      }
       for (const msg of remove) {
         yield* sync.run(MessageV2.Event.Removed, {
           sessionID,
