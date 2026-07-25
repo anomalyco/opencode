@@ -30,6 +30,30 @@ function runtimeRequirePlugin(): Plugin {
   }
 }
 
+function fffNodePlugin(): Plugin {
+  return {
+    name: "opencode:fff-node",
+    enforce: "pre",
+    transform(code, id) {
+      const normalized = id.replaceAll("\\", "/")
+      if (normalized.endsWith("/ffi-rs/index.js")) {
+        const start = code.indexOf("if (!nativeBinding) {")
+        if (start === -1) this.error("Failed to rewrite ffi-rs native binding loader")
+        return `const nativeBinding = globalThis.__OPENCODE_FFF_FFI
+const loadError = undefined
+${code.slice(start)}`
+      }
+      if (!normalized.endsWith("/fff-node/dist/src/binary.js")) return
+      const transformed = code.replace(
+        "export function findBinary() {",
+        "export function findBinary() { if (process.env.FFF_BINARY_PATH) return process.env.FFF_BINARY_PATH;",
+      )
+      if (transformed === code) this.error("Failed to rewrite FFF binary loader")
+      return transformed
+    },
+  }
+}
+
 const resolve = {
   alias: [
     { find: /^solid-js\/store$/, replacement: "solid-js/store/dist/store.js" },
@@ -165,6 +189,9 @@ process.env.OTUI_ASSET_ROOT = __ocAssetRoot
 process.env.OPENCODE_NODE_PTY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.nodePtyEntryAsset)})
 process.env.OPENCODE_PARCEL_WATCHER_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.parcelWatcherAsset)})
 process.env.OPENCODE_PHOTON_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(photonWasmAsset)})
+process.env.FFF_BINARY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffAsset)})
+process.env.OPENCODE_FFF_FFI_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffFfiAsset)})
+globalThis.__OPENCODE_FFF_FFI = require(process.env.OPENCODE_FFF_FFI_PATH)
 globalThis.__OPENCODE_PHOTON_WASM_PATH = process.env.OPENCODE_PHOTON_WASM_PATH
 if (process.platform === "linux") process.env.OPENTUI_LIBC = "glibc"`
 }
@@ -183,6 +210,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     plugins: [
       rawTextPlugin(),
       runtimeRequirePlugin(),
+      fffNodePlugin(),
       solid({
         solid: {
           generate: "universal",

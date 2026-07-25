@@ -37,6 +37,8 @@ export async function collectNodeAssets(target: NodeTarget) {
       ...(target.platform === "linux" ? { libc: "glibc" as const } : {}),
     }),
     { key: target.parcelWatcherAsset, source: fileURLToPath(import.meta.resolve(target.parcelWatcherPackage)) },
+    { key: target.fffAsset, source: fileURLToPath(import.meta.resolve(target.fffPackage)) },
+    { key: target.fffFfiAsset, source: fileURLToPath(import.meta.resolve(target.fffFfiPackage)) },
     {
       key: photonWasmAsset,
       source: fileURLToPath(import.meta.resolve(photonWasmAsset)),
