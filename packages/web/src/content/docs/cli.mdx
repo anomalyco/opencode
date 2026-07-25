@@ -33,6 +33,7 @@ opencode [project]
 | ------------------------------------------- | ----- | ----------------------------------------------------------------------- |
 | <nobr><code>{"--continue"}</code></nobr>    | `-c`  | Continue the last session                                               |
 | <nobr><code>{"--session"}</code></nobr>     | `-s`  | Session ID to continue                                                  |
+| <nobr><code>{"--resume"}</code></nobr>      |       | Pick a session to resume from the sessions in this directory            |
 | <nobr><code>{"--fork"}</code></nobr>        |       | Fork the session when continuing (use with `--continue` or `--session`) |
 | <nobr><code>{"--prompt"}</code></nobr>      |       | Prompt to use                                                           |
 | <nobr><code>{"--model"}</code></nobr>       | `-m`  | Model to use in the form of provider/model                              |
@@ -121,6 +122,7 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--dir"}</code></nobr>      |       | Working directory to start TUI in                                          |
 | <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue the last session                                                  |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`  | Session ID to continue                                                     |
+| <nobr><code>{"--resume"}</code></nobr>   |       | Pick a session to resume from the sessions in this directory               |
 | <nobr><code>{"--fork"}</code></nobr>     |       | Fork the session when continuing (use with `--continue` or `--session`)    |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |

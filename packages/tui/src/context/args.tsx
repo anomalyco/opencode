@@ -5,6 +5,7 @@ export interface Args {
   agent?: string
   prompt?: string
   continue?: boolean
+  resume?: boolean
   sessionID?: string
   fork?: boolean
   auto?: boolean

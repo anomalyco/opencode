@@ -98,4 +98,50 @@ describe("tui thread", () => {
       expect(result.stderr).toContain("--port cannot be used with --mini")
     }),
   )
+
+  cliIt.live("rejects --resume with --continue", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["--resume", "--continue"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("--resume cannot be used with --continue or --session")
+    }),
+  )
+
+  cliIt.live("rejects --resume with --mini", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["--resume", "--mini"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("--resume is not supported with --mini; use --continue or --session")
+    }),
+  )
+
+  cliIt.live("rejects --resume with --fork", ({ opencode, home }) =>
+    Effect.gen(function* () {
+      // The fork check runs after `await import("@/config/tui")`, which loads
+      // packages/tui .tsx files. Bun resolves JSX settings from the tsconfig at
+      // the subprocess cwd, so mirror the package tsconfig's @opentui/solid
+      // settings or transpilation falls back to react/jsx-dev-runtime.
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(home, "tsconfig.json"),
+          JSON.stringify({ compilerOptions: { jsx: "preserve", jsxImportSource: "@opentui/solid" } }),
+        ),
+      )
+      const result = yield* opencode.spawn(["--resume", "--fork"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("--fork requires --continue or --session")
+    }),
+  )
+
+  cliIt.live("rejects --resume with --continue on attach", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["attach", "http://localhost:4096", "--resume", "--continue"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("--resume cannot be used with --continue or --session")
+    }),
+  )
 })

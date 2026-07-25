@@ -28,6 +28,10 @@ export const AttachCommand = cmd({
         type: "string",
         describe: "session id to continue",
       })
+      .option("resume", {
+        type: "boolean",
+        describe: "pick a session to resume from the sessions in this directory",
+      })
       .option("fork", {
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
@@ -66,6 +70,17 @@ export const AttachCommand = cmd({
       return
     }
     const noReplay = args.replay === false || args.noReplay === true
+
+    if (args.resume && (args.continue || args.session)) {
+      UI.error("--resume cannot be used with --continue or --session")
+      process.exitCode = 1
+      return
+    }
+    if (args.resume && args.mini) {
+      UI.error("--resume is not supported with --mini; use --continue or --session")
+      process.exitCode = 1
+      return
+    }
 
     const directory = (() => {
       if (!args.dir) return undefined
@@ -138,6 +153,7 @@ export const AttachCommand = cmd({
         args: {
           continue: args.continue,
           sessionID: args.session,
+          resume: args.resume,
           fork: args.fork,
         },
         directory,
