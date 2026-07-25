@@ -186,6 +186,7 @@ describe("SessionRunnerLLM recorded", () => {
       yield* agents.transform((draft) =>
         draft.update(AgentV2.ID.make("build"), (agent) => {
           agent.mode = "primary"
+          agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
         }),
       )
       const pluginHost = host({

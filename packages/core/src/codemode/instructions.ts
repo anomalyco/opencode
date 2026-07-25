@@ -6,9 +6,7 @@ import { Instructions } from "../instructions/index"
 import { CodeModeCatalog } from "./catalog"
 
 // prettier-ignore
-const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
-
-Inside Code Mode, \`tools\` contains only the tools shown below${hasMoreTools ? " or returned by `search`" : ""}; surrounding top-level agent tools are not available and must not be called from the code.${hasMoreTools ? `
+const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.${hasMoreTools ? `
 
 ## Search
 
@@ -19,7 +17,8 @@ Use \`search\` to discover exact paths and signatures for additional tools:
 ## Available tools`
 
 export function render(catalog: CodeModeCatalog.Summary) {
-  if (catalog.total === 0) return "No tools are currently available."
+  if (catalog.total === 0)
+    return "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
 
   const tools = catalog.namespaces.flatMap((namespace) => {
     const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`
@@ -38,12 +37,13 @@ ${tools.join("\n")}`
 }
 
 export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatalog.Summary) {
-  const full = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
+  const replacement = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
 
 ${render(current)}`
+  if (current.total === 0) return replacement
   const previousComplete = previous.shown === previous.total
   const currentComplete = current.shown === current.total
-  if (previousComplete !== currentComplete) return full
+  if (previousComplete !== currentComplete) return replacement
 
   const diff = Instructions.diffByKey(
     previous.namespaces.flatMap((namespace) => namespace.entries),
@@ -54,7 +54,7 @@ ${render(current)}`
   const entriesChanged = diff.added.length > 0 || diff.removed.length > 0 || diff.changed.length > 0
 
   if (!currentComplete) {
-    if (entriesChanged) return full
+    if (entriesChanged) return replacement
     const namespaces = Instructions.diffByKey(
       previous.namespaces,
       current.namespaces,
@@ -62,7 +62,7 @@ ${render(current)}`
       (before, after) => before.count !== after.count,
     )
     const changed = namespaces.added.length > 0 || namespaces.removed.length > 0 || namespaces.changed.length > 0
-    if (!changed) return full
+    if (!changed) return replacement
 
     const parts = ["The Code Mode tool catalog has changed."]
     if (namespaces.added.length > 0) {
@@ -87,11 +87,11 @@ ${render(current)}`
       )
     }
     const delta = parts.join("\n\n")
-    if (delta.length < full.length) return delta
-    return full
+    if (delta.length < replacement.length) return delta
+    return replacement
   }
 
-  if (!entriesChanged) return full
+  if (!entriesChanged) return replacement
   const parts = ["The Code Mode tool catalog has changed."]
   if (diff.added.length > 0) {
     parts.push(
@@ -117,19 +117,19 @@ ${render(current)}`
     )
   }
   const delta = parts.join("\n\n")
-  if (delta.length < full.length) return delta
-  return full
+  if (delta.length < replacement.length) return delta
+  return replacement
 }
 
 const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
 export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.Instructions => {
-  const catalog = CodeModeCatalog.summarize(entries ?? [])
+  const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries)
   return Instructions.make({
     key,
     codec,
-    read: Effect.succeed(catalog.total === 0 ? Instructions.removed : catalog),
+    read: Effect.succeed(catalog),
     render: {
       initial: render,
       changed: update,

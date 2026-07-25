@@ -21,6 +21,25 @@ const lookup: CodeModeCatalog.Entry = {
 }
 
 describe("CodeModeInstructions", () => {
+  it.effect("instructs the model not to call execute while the catalog is empty", () =>
+    Effect.gen(function* () {
+      const initialized = yield* readInitial(CodeModeInstructions.make([]))
+      expect(initialized.text).toBe(
+        "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
+      )
+
+      const added = yield* readUpdate(CodeModeInstructions.make([echo]), initialized)
+      expect(added.text).toContain("New tools are available in addition to those previously listed:")
+      expect(added.text).toContain(echo.signature)
+
+      expect(yield* readUpdate(CodeModeInstructions.make([]), { values: added.values })).toMatchObject({
+        text:
+          "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.\n\n" +
+          "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
+      })
+    }),
+  )
+
   it.effect("renders the initial catalog, semantic deltas, and removal", () =>
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make([echo]))

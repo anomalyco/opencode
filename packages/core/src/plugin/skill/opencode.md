@@ -4,7 +4,7 @@ Use this guide as the starting point for work involving OpenCode itself. It
 covers the core concepts needed to configure and customize OpenCode, extend it
 with plugins, and build integrations with the OpenCode SDK, clients, and API.
 
-Full documentation is available at <https://v2.opencode.ai/>. This overview is
+Full documentation is available at <https://v2.opencode.ai/docs>. This overview is
 only an index of core concepts. Before answering a question about a topic below,
 fetch the URL named in that section and use the full page as the source of
 truth. Follow links from that page when the question needs more detail. Fetch
@@ -16,7 +16,7 @@ documentation page.
 Always answer for OpenCode V2 unless the user explicitly asks about V1,
 legacy OpenCode, or migrating from V1.
 
-Use only <https://v2.opencode.ai/> documentation as the source of truth for V2.
+Use only <https://v2.opencode.ai/docs> documentation as the source of truth for V2.
 Do not use <https://opencode.ai/docs/>, which documents V1, and do not use
 general web search to resolve a V2 documentation question when the V2 docs or
 their `llms.txt` index cover it. The schema served from
@@ -29,7 +29,7 @@ V1 documentation and syntax may be consulted only when the user explicitly
 asks about V1 or when needed as migration input. Outputs and recommendations
 must still use V2 unless the user specifically requests a V1 result.
 
-## [Configuration](https://v2.opencode.ai/config)
+## [Configuration](https://v2.opencode.ai/docs/config)
 
 OpenCode configuration uses JSON or JSONC. Include the published schema so the
 user's editor can validate fields and provide autocomplete:
@@ -60,14 +60,14 @@ linked topic guide as the source of truth, and preserve unrelated settings when
 editing an existing file. Keep the published `$schema` URL in configuration
 examples, but do not fetch it to determine the V2 configuration shape.
 
-See the [full configuration guide](https://v2.opencode.ai/config) for
+See the [full configuration guide](https://v2.opencode.ai/docs/config) for
 every field, examples, config locations, and links to dedicated feature guides.
 
-## [V1 to V2 migration](https://v2.opencode.ai/migrate-v1)
+## [V1 to V2 migration](https://v2.opencode.ai/docs/migrate-v1)
 
 For any request to migrate OpenCode configuration, agents, commands, skills,
 plugins, integrations, or other behavior from V1 to V2, read the full
-[migration guide](https://v2.opencode.ai/migrate-v1) before acting. In
+[migration guide](https://v2.opencode.ai/docs/migrate-v1) before acting. In
 the repository, its source is `packages/docs/migrate-v1.mdx`.
 
 V1 config files and `.opencode/` definitions are intended to remain compatible.
@@ -76,18 +76,18 @@ V2 config uses more ergonomic shapes, but conversion is optional. When the user
 requests conversion, inspect the complete configuration, preserve behavior and
 unrelated settings, and apply only the relevant migrations from the guide. For
 plugin migrations, fetch and follow both the migration guide and the full
-[plugins guide](https://v2.opencode.ai/build/plugins). If non-API V1
+[plugins guide](https://v2.opencode.ai/docs/build/plugins). If non-API V1
 functionality fails in V2, use the `report` skill to file it as a compatibility
 bug.
 
-## [Plugins](https://v2.opencode.ai/build/plugins)
+## [Plugins](https://v2.opencode.ai/docs/build/plugins)
 
 For questions about creating, configuring, loading, publishing, or migrating
-plugins, fetch the full [plugins guide](https://v2.opencode.ai/build/plugins)
+plugins, fetch the full [plugins guide](https://v2.opencode.ai/docs/build/plugins)
 before answering. This includes questions about the Effect plugin API, hooks,
 transforms, tools, plugin context capabilities, and package entrypoints.
 
-## [Service](https://v2.opencode.ai/troubleshooting#check-the-background-service)
+## [Service](https://v2.opencode.ai/docs/troubleshooting#check-the-background-service)
 
 OpenCode uses a client-server architecture. Interfaces such as the TUI connect
 to a background OpenCode service, which owns sessions, configuration, plugins,
@@ -106,7 +106,7 @@ Check its status after restarting:
 opencode2 service status
 ```
 
-## [API](https://v2.opencode.ai/api)
+## [API](https://v2.opencode.ai/docs/api)
 
 OpenCode exposes an HTTP API from its server. The API is described by an
 OpenAPI document available from the running server at `/openapi.json`.
@@ -135,15 +135,15 @@ connected to an explicit server instead of its managed background service, use
 the same configured server and authentication context rather than constructing
 an unauthenticated request separately.
 
-See the [full API reference](https://v2.opencode.ai/api) for available
+See the [full API reference](https://v2.opencode.ai/docs/api) for available
 endpoints, parameters, request bodies, and response schemas. The
 raw [OpenAPI specification](https://v2.opencode.ai/openapi.json) is also
 available for code generation and other tooling.
 
-## [Client](https://v2.opencode.ai/build/client)
+## [Client](https://v2.opencode.ai/docs/build/client)
 
 For questions about connecting an application to OpenCode over the network,
-fetch the full [client guide](https://v2.opencode.ai/build/client) before
+fetch the full [client guide](https://v2.opencode.ai/docs/build/client) before
 answering.
 
 `@opencode-ai/client` is the generated TypeScript client for the OpenCode HTTP
@@ -154,7 +154,7 @@ exposes typed Effects, Streams, and decoded OpenCode schema values. Its
 `Service` API can discover, start, stop, and authenticate with the local
 background service from a Node application.
 
-## [Troubleshooting](https://v2.opencode.ai/troubleshooting)
+## [Troubleshooting](https://v2.opencode.ai/docs/troubleshooting)
 
 OpenCode runs a client and a background server. Start by determining whether a
 problem belongs to the client, the shared server, or one project.
@@ -174,6 +174,6 @@ problem belongs to the client, the shared server, or one project.
 - Redact API keys, authorization headers, prompts, file contents, and other
   sensitive data before sharing diagnostics.
 
-See the [full troubleshooting guide](https://v2.opencode.ai/troubleshooting)
+See the [full troubleshooting guide](https://v2.opencode.ai/docs/troubleshooting)
 for service lifecycle commands, API inspection, log locations, explicit server
 connections, issue-reporting details, and local development paths.

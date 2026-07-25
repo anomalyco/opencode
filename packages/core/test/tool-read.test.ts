@@ -197,8 +197,12 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* toolDefinitions(registry)).toMatchObject([{ name: "read" }])
-      expect(yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).toEqual([])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["read", "execute"])
+      expect(
+        (yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).map(
+          (tool) => tool.name,
+        ),
+      ).toEqual(["execute"])
       const execution = yield* executeTool(registry, {
         sessionID,
         ...toolIdentity,

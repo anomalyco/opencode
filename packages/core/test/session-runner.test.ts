@@ -880,6 +880,46 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("advertises execute and durable guidance for an empty Code Mode catalog", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const empty = {
+        catalog: [],
+        tool: Tool.make({
+          description: "Execute Code Mode",
+          input: Schema.Struct({ code: Schema.String }),
+          output: Schema.String,
+          execute: () => Effect.succeed({ output: "unused" }),
+        }),
+      }
+      codeModeMaterializations = [empty, empty, {}]
+      yield* admit(session, "Continue without Code Mode tools")
+      response = reply.stop()
+
+      yield* session.resume(sessionID)
+      yield* admit(session, "Still no Code Mode tools")
+      yield* session.resume(sessionID)
+      yield* admit(session, "Code Mode denied")
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      expect(requests[0]?.tools.map((tool) => tool.name)).toEqual(["defect", "echo", "storefail", "execute"])
+      expect(requests[0]?.system.some((part) => part.text.includes("Do not call `execute`"))).toBe(true)
+      expect(requests[1]?.tools.map((tool) => tool.name)).toEqual(["defect", "echo", "storefail", "execute"])
+      expect(requests[1]?.messages.filter((message) => message.role === "system")).toEqual([])
+      expect(requests[2]?.tools.map((tool) => tool.name)).toEqual(["defect", "echo", "storefail"])
+      expect(
+        requests[2]?.messages.some(
+          (message) =>
+            message.role === "system" &&
+            message.content.some(
+              (part) => part.type === "text" && part.text.includes("Code Mode tools are no longer available"),
+            ),
+        ),
+      ).toBe(true)
+    }),
+  )
+
   it.effect("applies session context hooks without exposing unavailable tools", () =>
     Effect.gen(function* () {
       const session = yield* setup

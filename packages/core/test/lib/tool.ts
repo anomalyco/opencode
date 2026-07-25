@@ -32,6 +32,22 @@ export function waitForTool(
   })
 }
 
+export function waitForCodeModeTool(
+  registry: ToolRegistry.Interface,
+  path: string,
+  remaining = 1000,
+): Effect.Effect<ToolRegistry.ToolSet, Error> {
+  return Effect.gen(function* () {
+    const toolSet = yield* registry.snapshot()
+    if (toolSet.codeModeCatalog?.some((tool) => tool.path === path)) return toolSet
+    if (remaining === 0) {
+      return yield* Effect.fail(new Error(`Timed out waiting for Code Mode tool: ${path}`))
+    }
+    yield* Effect.promise(() => Bun.sleep(1))
+    return yield* waitForCodeModeTool(registry, path, remaining - 1)
+  })
+}
+
 /**
  * Registers a core tool plugin's tools against the real registry without booting the
  * full plugin host. Only the tool domain is live; focused tool tests exercise
