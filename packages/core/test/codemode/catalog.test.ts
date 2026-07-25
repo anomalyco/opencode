@@ -67,9 +67,7 @@ describe("CodeModeInstructions.render", () => {
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
     expect(instructions).not.toContain("## Search")
     expect(instructions).toContain("The Code Mode tool catalog below is complete.")
-    expect(instructions).toContain(
-      "`tools` contains only the tools shown below; surrounding top-level agent tools are not available and must not be called from the code.",
-    )
+    expect(instructions).not.toContain("surrounding top-level agent tools")
   })
 
   test("adds search guidance when the catalog exceeds the budget", () => {
@@ -78,9 +76,7 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain("- orders (1 tool, none shown)")
     expect(partial).toContain("## Search")
     expect(partial).toContain("The Code Mode tool catalog below is partial.")
-    expect(partial).toContain(
-      "`tools` contains only the tools shown below or returned by `search`; surrounding top-level agent tools are not available and must not be called from the code.",
-    )
+    expect(partial).not.toContain("surrounding top-level agent tools")
     expect(partial).toContain("- search(input: {")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
     expect(partial).not.toContain("tools.orders.lookup(input:")
@@ -127,7 +123,8 @@ describe("CodeModeInstructions.update", () => {
   test("renders additions, changes, and removals as a compact semantic delta", () => {
     const changed = { ...echo, signature: "tools.notes.echo(input: {\n  text: string,\n}): Promise<string>" }
     const added = entry("notes.list", "List notes")
-    const text = update([echo, lookup], [changed, added])
+    const unchanged = Array.from({ length: 5 }, (_, index) => entry(`stable.tool${index}`, `Stable ${index}`))
+    const text = update([echo, lookup, ...unchanged], [changed, added, ...unchanged])
     expect(text).toContain("The Code Mode tool catalog has changed.")
     expect(text).toContain(`New tools are available in addition to those previously listed:\n  - ${added.signature}`)
     expect(text).toContain(
