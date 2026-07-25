@@ -21,13 +21,7 @@ export const Output = Schema.Struct({
   directory: Schema.String,
   output: Schema.String,
 })
-export const description = [
-  "Load a specialized skill when the task at hand matches one of the available skills in the instructions.",
-  "",
-  "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
-  "",
-  "The skill ID must match one of the available skills in the instructions.",
-].join("\n")
+export const description = "Load a specialized skill's instructions and resources into the current conversation."
 
 export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>) => {
   const directory = path.dirname(skill.location)
