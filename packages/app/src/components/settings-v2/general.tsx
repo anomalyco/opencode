@@ -7,6 +7,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
@@ -86,6 +87,7 @@ export const SettingsGeneralV2: Component<{
 }> = (props) => {
   const theme = useTheme()
   const language = useLanguage()
+  const layout = useLayout()
   const permission = usePermission()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -407,6 +409,18 @@ export const SettingsGeneralV2: Component<{
             <Switch
               checked={settings.general.showCustomAgents()}
               onChange={(checked) => settings.general.setShowCustomAgents(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.pinSidebar.title")}
+          description={language.t("settings.general.row.pinSidebar.description")}
+        >
+          <div data-action="settings-pin-sidebar">
+            <Switch
+              checked={layout.sidebar.fixed()}
+              onChange={(checked) => layout.sidebar.setFixed(checked)}
             />
           </div>
         </SettingsRowV2>

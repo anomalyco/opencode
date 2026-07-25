@@ -792,6 +792,8 @@ export const dict = {
   "settings.general.row.mobileTitlebarBottom.description": "在移动设备上将标题栏和会话标签页置于屏幕底部",
   "settings.general.row.showCustomAgents.title": "自定义智能体",
   "settings.general.row.showCustomAgents.description": "在输入框中显示智能体选择器",
+  "settings.general.row.pinSidebar.title": "固定侧边栏",
+  "settings.general.row.pinSidebar.description": "始终展开显示侧边栏",
   "settings.general.row.reasoningSummaries.title": "显示推理摘要",
   "settings.general.row.reasoningSummaries.description": "在时间线中显示模型推理摘要",
   "settings.general.row.shellToolPartsExpanded.title": "展开 shell 工具部分",

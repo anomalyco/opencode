@@ -273,6 +273,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       createStore({
         sidebar: {
           opened: false,
+          fixed: false,
           width: DEFAULT_SIDEBAR_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
@@ -660,14 +661,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       sidebar: {
-        opened: createMemo(() => store.sidebar.opened),
+        opened: createMemo(() => store.sidebar.fixed || store.sidebar.opened),
+        fixed: createMemo(() => store.sidebar.fixed ?? false),
+        setFixed(value: boolean) {
+          setStore("sidebar", "fixed", value)
+          if (value) setStore("sidebar", "opened", true)
+        },
         open() {
+          if (store.sidebar.fixed) return
           setStore("sidebar", "opened", true)
         },
         close() {
+          if (store.sidebar.fixed) return
           setStore("sidebar", "opened", false)
         },
         toggle() {
+          if (store.sidebar.fixed) return
           setStore("sidebar", "opened", (x) => !x)
         },
         width: createMemo(() => store.sidebar.width),
