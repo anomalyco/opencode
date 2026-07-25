@@ -1,12 +1,23 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
-const it = testEffect(AppNodeBuilder.build(SkillV2.node))
+const watcherLayer = Layer.succeed(
+  Watcher.Service,
+  Watcher.Service.of({ watch: () => Effect.succeed(Effect.void) }),
+)
+
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([SkillV2.node, Database.node, EventV2.node]), [[Watcher.node, watcherLayer]]),
+)
 
 describe("SkillPlugin.Plugin", () => {
   it.effect("registers the built-in customize-opencode skill", () =>

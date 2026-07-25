@@ -5,6 +5,7 @@ import path from "path"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
+import { Flag } from "./flag/flag"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Location } from "./location"
@@ -144,19 +145,23 @@ const layer = Layer.effect(
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
 
-    const loadFile = Effect.fnUntraced(function* (filepath: string) {
-      const text = yield* fs.readFileStringSafe(filepath)
-      if (!text) return
-
+    const parseInfo = (text: string) => {
       const errors: ParseError[] = []
       const input: unknown = parse(text, errors, { allowTrailingComma: true })
-      if (errors.length) return
+      if (errors.length) return undefined
 
-      const info = Option.getOrUndefined(
+      return Option.getOrUndefined(
         ConfigMigrateV1.isV1(input)
           ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
           : decodeInfo(input),
       )
+    }
+
+    const loadFile = Effect.fnUntraced(function* (filepath: string) {
+      const text = yield* fs.readFileStringSafe(filepath)
+      if (!text) return
+
+      const info = parseInfo(text)
       if (!info) return
       return new Document({ type: "document", path: filepath, info })
     })
@@ -198,9 +203,21 @@ const layer = Layer.effect(
       Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
     )
     const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+    // Test/injection affordance shared with packages/opencode's own config
+    // loader: config content passed directly via env instead of a file on
+    // disk. Applied last (highest priority), same as the opencode-side loader.
+    const injectedInfo = Flag.OPENCODE_CONFIG_CONTENT ? parseInfo(Flag.OPENCODE_CONFIG_CONTENT) : undefined
+    const injected = injectedInfo
+      ? new Document({ type: "document", path: "OPENCODE_CONFIG_CONTENT", info: injectedInfo })
+      : undefined
     // Apply general settings first and more specific settings last:
     // global config, project files, then `.opencode` files.
-    const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
+    const configs = [
+      ...(supplementary[0] ?? []),
+      ...direct,
+      ...supplementary.slice(1).flat(),
+      ...(injected ? [injected] : []),
+    ]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(

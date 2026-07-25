@@ -4,7 +4,7 @@ export * as Watcher from "./watcher"
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { makeLocationNode } from "../effect/app-node"
-import { Cause, Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer, Scope } from "effect"
 import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
 import path from "path"
 import { Config } from "../config"
@@ -50,14 +50,18 @@ function protecteds(dir: string) {
 
 export const hasNativeBinding = () => !!watcher()
 
-export interface Interface {}
+export type Unsubscribe = Effect.Effect<void>
+
+export interface Interface {
+  readonly watch: (directory: string, ignore?: string[]) => Effect.Effect<Unsubscribe, never, Scope.Scope>
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileWatcher") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return Service.of({})
+    if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return Service.of({ watch: () => Effect.succeed(Effect.void) })
 
     const backend = getBackend()
     const location = yield* Location.Service
@@ -66,11 +70,11 @@ const layer = Layer.effect(
         directory: location.directory,
         platform: process.platform,
       })
-      return Service.of({})
+      return Service.of({ watch: () => Effect.succeed(Effect.void) })
     }
 
     const w = watcher()
-    if (!w) return Service.of({})
+    if (!w) return Service.of({ watch: () => Effect.succeed(Effect.void) })
 
     yield* Effect.logInfo("watcher backend", { directory: location.directory, platform: process.platform, backend })
     const events = yield* EventV2.Service
@@ -103,6 +107,27 @@ const layer = Layer.effect(
       )
     }
 
+    const watch = (directory: string, ignore: string[] = []) =>
+      Effect.acquireRelease(
+        Effect.suspend(() => {
+          const pending = w.subscribe(directory, callback, { ignore, backend })
+          return Effect.promise(() => pending).pipe(
+            Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
+            Effect.map((subscription) => Effect.promise(() => subscription.unsubscribe()).pipe(Effect.ignore)),
+            Effect.catchCause((cause) => {
+              // A late-resolving subscribe() after the timeout must still be
+              // unsubscribed, or its native watch handle leaks for the
+              // process lifetime (mirrors subscribe() above).
+              pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
+              return Effect.logError("failed to watch directory", { directory, cause: Cause.pretty(cause) }).pipe(
+                Effect.as(Effect.void),
+              )
+            }),
+          )
+        }),
+        (unsubscribe) => unsubscribe,
+      )
+
     const config = (yield* (yield* Config.Service).entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
@@ -123,11 +148,11 @@ const layer = Layer.effect(
       }
     }
 
-    return Service.of({})
+    return Service.of({ watch })
   }).pipe(
     Effect.catchCause((cause) => {
       return Effect.logError("failed to init watcher service", { cause: Cause.pretty(cause) }).pipe(
-        Effect.as(Service.of({})),
+        Effect.as(Service.of({ watch: () => Effect.succeed(Effect.void) })),
       )
     }),
   ),

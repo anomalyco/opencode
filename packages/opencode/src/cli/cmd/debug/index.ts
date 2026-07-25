@@ -11,6 +11,7 @@ import { LSPCommand } from "./lsp"
 import { RipgrepCommand } from "./ripgrep"
 import { ScrapCommand } from "./scrap"
 import { SkillCommand } from "./skill"
+import { SkillV2Command } from "./skill-v2"
 import { SnapshotCommand } from "./snapshot"
 import { AgentCommand } from "./agent"
 import { StartupCommand } from "./startup"
@@ -27,6 +28,7 @@ export const DebugCommand = cmd({
       .command(FileCommand)
       .command(ScrapCommand)
       .command(SkillCommand)
+      .command(SkillV2Command)
       .command(SnapshotCommand)
       .command(StartupCommand)
       .command(AgentCommand)

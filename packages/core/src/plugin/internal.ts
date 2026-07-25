@@ -11,6 +11,7 @@ import { Config } from "../config"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
 import { ConfigExternalPlugin } from "../config/plugin/external"
+import { ConfigExternalSkillPlugin } from "../config/plugin/external-skill"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
@@ -115,6 +116,7 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigAgentPlugin.Plugin)
         yield* add(ConfigCommandPlugin.Plugin)
         yield* add(ConfigSkillPlugin.Plugin)
+        yield* add(ConfigExternalSkillPlugin.Plugin)
         for (const item of ProviderPlugins) yield* add(item)
         yield* add(ConfigExternalPlugin.Plugin)
         yield* add(ConfigProviderPlugin.Plugin)

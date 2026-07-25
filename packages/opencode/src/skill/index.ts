@@ -5,8 +5,13 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
+import { Location } from "@opencode-ai/core/location"
+import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { PluginV2 } from "@opencode-ai/core/plugin"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
+import { SkillV2 } from "@opencode-ai/core/skill"
 import { Permission } from "@/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
@@ -256,6 +261,7 @@ const layer = Layer.effect(
     const fsys = yield* FSUtil.Service
     const global = yield* Global.Service
     const flags = yield* RuntimeFlags.Service
+    const locations = yield* LocationServiceMap.Service
     const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
         return yield* discoverSkills(
@@ -270,19 +276,69 @@ const layer = Layer.effect(
         )
       }),
     )
+    // Chain of responsibility: SkillV2 (event-driven, no-restart refresh) is
+    // the primary handler. Its list() has no typed error channel, so any
+    // failure surfaces as a defect; on that defect, fall back to this
+    // service's own disk discovery, unchanged, as it behaved before SkillV2
+    // existed. An empty SkillV2 result is not a failure.
+    const fromV2 = (skills: readonly SkillV2.Info[]): State => ({
+      skills: Object.fromEntries(
+        skills.map((skill): [string, Info] => [
+          skill.name,
+          {
+            name: skill.name,
+            description: skill.description,
+            // SkillV2's embedded (built-in) skills use a /builtin/ pseudo-path;
+            // normalize to V1's "<built-in>" sentinel, which command/index.ts
+            // and this service's own consumers already branch on.
+            location: skill.location.startsWith("/builtin/") ? "<built-in>" : skill.location,
+            content: skill.content,
+          },
+        ]),
+      ),
+      dirs: new Set(),
+    })
+    const stateFromV1 = Effect.fn("Skill.stateFromV1")(function* () {
+      const s: State = { skills: {}, dirs: new Set() }
+      // Register the built-in skill BEFORE disk discovery so a user-disk
+      // skill with the same name can override it.
+      s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
+        name: CUSTOMIZE_OPENCODE_SKILL_NAME,
+        description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
+        location: "<built-in>",
+        content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+      }
+      yield* loadSkills(s, yield* InstanceState.get(discovered), events)
+      return s
+    })
     const state = yield* InstanceState.make(
-      Effect.fn("Skill.state")(function* () {
-        const s: State = { skills: {}, dirs: new Set() }
-        // Register the built-in skill BEFORE disk discovery so a user-disk
-        // skill with the same name can override it.
-        s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
-          name: CUSTOMIZE_OPENCODE_SKILL_NAME,
-          description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
-          location: "<built-in>",
-          content: CUSTOMIZE_OPENCODE_SKILL_BODY,
-        }
-        yield* loadSkills(s, yield* InstanceState.get(discovered), events)
-        return s
+      Effect.fn("Skill.state")(function* (ctx) {
+        // SkillV2 is Location-scoped; resolve the instance matching this
+        // Skill instance's own directory rather than binding one fixed copy.
+        const locationLayer = locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))
+        return yield* Effect.gen(function* () {
+          // The plugins that turn Config entries into skill sources
+          // (config-skill, config-external-skill) load on a forked fiber.
+          // plugin.wait only guarantees each plugin's transform is
+          // *registered*; the transform callback itself only actually runs on
+          // the next materialize, which the shared plugin-load batch defers
+          // until every plugin in the same boot sequence has registered.
+          // Force one explicitly so SkillV2 reflects what was just
+          // registered instead of whatever it last materialized.
+          const plugin = yield* PluginV2.Service
+          yield* plugin.wait(PluginV2.ID.make("config-skill"))
+          yield* plugin.wait(PluginV2.ID.make("config-external-skill"))
+          const skillV2 = yield* SkillV2.Service
+          yield* skillV2.reload()
+          return fromV2(yield* skillV2.list())
+        }).pipe(
+          Effect.provide(locationLayer),
+          Effect.catchDefect((defect) =>
+            Effect.logWarning("SkillV2 failed, falling back to V1 skill discovery", { defect }).pipe(
+              Effect.andThen(stateFromV1()),
+            ),
+          ),
+        )
       }),
     )
 
@@ -345,10 +401,24 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
   ].join("\n")
 }
 
+const locationServiceMapNode = LayerNode.make({
+  service: LocationServiceMap.Service,
+  layer: locationServiceMapLayer,
+  deps: [],
+})
+
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Discovery.node, Config.node, EventV2Bridge.node, FSUtil.node, Global.node, RuntimeFlags.node],
+  deps: [
+    Discovery.node,
+    Config.node,
+    EventV2Bridge.node,
+    FSUtil.node,
+    Global.node,
+    RuntimeFlags.node,
+    locationServiceMapNode,
+  ],
 })
 
 export * as Skill from "."

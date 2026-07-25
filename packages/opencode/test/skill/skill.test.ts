@@ -63,6 +63,24 @@ const withHome = <A, E, R>(home: string, self: Effect.Effect<A, E, R>) =>
       }),
   )
 
+// SkillV2's discovery reads these as raw env vars (see packages/core/src/flag/flag.ts),
+// independent of RuntimeFlags' layer-injected value, so tests exercising the
+// disable behavior must set both to cover the primary V2 path and the V1 fallback.
+const withEnv = <A, E, R>(name: string, value: string, self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const prev = process.env[name]
+      process.env[name] = value
+      return prev
+    }),
+    () => self,
+    (prev) =>
+      Effect.sync(() => {
+        if (prev === undefined) delete process.env[name]
+        else process.env[name] = prev
+      }),
+  )
+
 describe("skill", () => {
   it.effect("formats verbose locations as XML-safe filesystem paths", () =>
     Effect.sync(() => {
@@ -475,7 +493,7 @@ description: A skill in the .agents/skills directory.
           const skill = yield* Skill.Service
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
           expect(list.map((s) => s.name)).toEqual(["agent-skill"])
-        }),
+        }).pipe((self) => withEnv("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS", "true", self)),
       { git: true },
     ),
   )
@@ -522,7 +540,7 @@ description: A skill in the .opencode/skill directory.
           const skill = yield* Skill.Service
           const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
           expect(list.map((s) => s.name)).toEqual(["opencode-skill"])
-        }),
+        }).pipe((self) => withEnv("OPENCODE_DISABLE_EXTERNAL_SKILLS", "true", self)),
       { git: true },
     ),
   )
