@@ -259,7 +259,7 @@ test("step finish records settlement without publishing step ended", async () =>
   await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } })))
 
   expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
-  expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
+  expect(publisher.record().finish).toMatchObject({ finish: "stop" })
 })
 
 test("content-filter finish retains failure evidence until step closeout", async () => {
@@ -280,7 +280,7 @@ test("content-filter finish retains failure evidence until step closeout", async
   )
 
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
-  const settlement = publisher.stepSettlement()
+  const settlement = publisher.record().finish
   expect(settlement).toMatchObject({
     finish: "content-filter",
     tokens: { input: 8, output: 2, reasoning: 1 },

@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm"
 
 import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent, type ToolCall } from "@opencode-ai/ai"
-import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Semaphore, Stream } from "effect"
+import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { PermissionV2 } from "../../permission"
@@ -18,7 +18,7 @@ import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTitle } from "../title"
 import { Service } from "./index"
-import { createLLMEventPublisher } from "./publish-llm-event"
+import { createLLMEventPublisher, type StepRecord } from "./publish-llm-event"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -70,7 +70,7 @@ const classifyToolExits = (
       Cause.isFailReason(reason) ? (isDecline(reason.error) ? [] : [Cause.makeFailReason(reason.error)]) : [reason],
     )
     return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
-  })[0]
+  }).at(0)
   return {
     interrupted: causes.some(Cause.hasInterrupts),
     declines,
@@ -78,6 +78,10 @@ const classifyToolExits = (
     infraError: failure === undefined ? undefined : Option.getOrUndefined(Cause.findErrorOption(failure)),
   }
 }
+
+const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
+const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
+const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
 
 const layer = Layer.effect(
   Service,
@@ -226,7 +230,6 @@ const layer = Layer.effect(
         readonly fiber: Fiber.Fiber<void, SessionModelRequest.ExecuteError>
       }> = []
       const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
-      let needsContinuation = false
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
@@ -238,15 +241,9 @@ const layer = Layer.effect(
         snapshot: startSnapshot,
         assistantMessageID,
       })
-      const publication = Semaphore.makeUnsafe(1)
-      // Durable publishes are serialized so tool fibers and step settlement never interleave
-      // mid-event.
-      const serialized = <A, E, R>(effect: Effect.Effect<A, E, R>) => publication.withPermit(effect)
-      const publish = (event: LLMEvent) => serialized(publisher.publish(event))
-
-      const stepUsage = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) => ({
-        cost: SessionUsage.calculateCost(resolved.cost, settlement.tokens),
-        tokens: settlement.tokens,
+      const stepUsage = (finish: NonNullable<StepRecord["finish"]>) => ({
+        cost: SessionUsage.calculateCost(resolved.cost, finish.tokens),
+        tokens: finish.tokens,
       })
 
       const captureStepEnd = Effect.fnUntraced(function* () {
@@ -260,20 +257,26 @@ const layer = Layer.effect(
         return { snapshot, files }
       })
 
-      const publishStepEnd = (settlement: NonNullable<ReturnType<typeof publisher.stepSettlement>>) =>
+      const publishStepEnd = (finish: NonNullable<StepRecord["finish"]>) =>
         Effect.gen(function* () {
           const end = yield* captureStepEnd()
-          yield* serialized(
-            events.publish(SessionEvent.Step.Ended, {
-              sessionID: session.id,
-              assistantMessageID: yield* publisher.startAssistant(),
-              finish: settlement.finish,
-              ...stepUsage(settlement),
-              ...end,
-            }),
-          )
+          yield* events.publish(SessionEvent.Step.Ended, {
+            sessionID: session.id,
+            assistantMessageID: yield* publisher.startAssistant(),
+            finish: finish.finish,
+            ...stepUsage(finish),
+            ...end,
+          })
         })
 
+      // Concurrent writers, no lock: the provider loop and each tool fiber publish
+      // durable events unserialized. This is safe because every publisher method commits
+      // its state marks synchronously before its first await (see publish-llm-event.ts),
+      // every required event order is per-source (each source is one sequential fiber),
+      // and a fiber's events are causally after its own Tool.Called: the fork happens
+      // below that publish. Cross-source order is unconstrained; either interleaving is
+      // a truthful history of concurrent work.
+      //
       // The stream is defined here but runs inside the settlement mask below: publish each
       // event durably, fork one fiber per local tool call, and hold back a virgin
       // context-overflow provider error so settlement may recover it via compaction.
@@ -283,20 +286,13 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
             if (LLMEvent.is.providerError(event)) {
-              if (isContextOverflowFailure(event) && !publisher.hasRetryEvidence()) {
+              if (isContextOverflowFailure(event) && !publisher.record().outputStarted) {
                 overflowFailure = event
                 return
               }
             }
-            yield* publish(event)
-            if (LLMEvent.is.toolInputError(event)) {
-              if (!prepared.stepLimitReached) needsContinuation = true
-              return
-            }
+            yield* publisher.publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
-            // Unavailable calls fail individually through the same execution seam;
-            // continuation depends only on remaining Step allowance.
-            if (!prepared.stepLimitReached) needsContinuation = true
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
             toolRuns.push({
               call: event,
@@ -307,20 +303,23 @@ const layer = Layer.effect(
                     agent: agent.id,
                     messageID: assistantMessageID,
                     call: event,
-                    progress: (update) => serialized(publisher.progress(event.id, update)),
+                    // Progress is ephemeral, not durable history: nothing to order.
+                    progress: (update) => publisher.progress(event.id, update),
                   }),
                 ).pipe(
-                  Effect.flatMap((execution) => serialized(publisher.toolExecution(event.id, event.name, execution))),
+                  // The fiber owns its call: it publishes its own completion, masked so a
+                  // finished execution always reaches its durable settlement.
+                  Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
                 ),
               ).pipe(Effect.forkScoped),
             })
           }),
         ),
-        Effect.ensuring(serialized(publisher.flush())),
+        Effect.ensuring(publisher.flush()),
       )
 
-      // Settle: only the stream itself is interruptible (restore); every line after it is
-      // protected so a started call always reaches one durable outcome.
+      // Settle: only the stream and the fiber joins are interruptible (restore); every
+      // other line is protected so a started call always reaches one durable outcome.
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const stream = yield* restore(providerStream).pipe(Effect.exit)
@@ -329,107 +328,103 @@ const layer = Layer.effect(
           // away non-interrupt failures, so both interrupt checks stay Cause-based.
           const streamInterrupted = stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)
 
+          // Join every owned tool run first: await all exits, not just the first failure.
+          // Afterwards no fiber is alive, settlement is the only writer, and the record
+          // is final. A failed join means the waiting itself was interrupted, so the runs
+          // we abandoned are interrupted before settlement closes them out.
+          if (streamInterrupted) yield* interruptTools
+          const joined = yield* restore(
+            Effect.forEach(toolRuns, (run) => Fiber.await(run.fiber), { concurrency: "unbounded" }),
+          ).pipe(Effect.exit)
+          if (joined._tag === "Failure") yield* interruptTools
+          const tools = classifyToolExits(
+            joined,
+            toolRuns.map((run) => run.call),
+          )
+
           // A context overflow before any assistant output is recoverable: compact and
           // restart the step instead of surfacing the provider error.
           if (
             recoverOverflow &&
-            !publisher.hasRetryEvidence() &&
+            !publisher.record().outputStarted &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
             (yield* restore(compaction.compact(compactionInput))).status === "completed"
           )
             return CallOutcome.Restart({ step: currentStep, recoveredOverflow: true })
 
-          // An unrecovered held-back overflow becomes the step's durable provider error. A
-          // thrown LLM failure records the assistant failure unless a provider error was
-          // already recorded from the stream. Terminal publication waits for owned tools.
-          if (overflowFailure) yield* publish(overflowFailure)
+          // An unrecovered held-back overflow becomes the step's durable provider error.
+          if (overflowFailure) yield* publisher.publish(overflowFailure)
+          // A thrown LLM failure not already recorded as the provider error either
+          // escapes as a scheduled retry or fails the assistant durably.
           const llmFailure = streamFailure instanceof LLMError ? streamFailure : undefined
-          if (llmFailure && !publisher.hasProviderError()) {
-            const error = toSessionError(llmFailure)
-            if (SessionRunnerRetry.isRetryable(llmFailure) && !publisher.hasRetryEvidence()) {
-              // RetryScheduled and Step.Failed fold onto an existing assistant message, so
-              // Step.Started must be durable before the failure escapes.
-              yield* serialized(publisher.startAssistant())
-              return yield* new SessionRunnerRetry.RetryableFailure({
-                cause: llmFailure,
-                error,
-                step: currentStep,
-              })
-            }
-            yield* serialized(publisher.failAssistant(error))
+          const llmError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
+          if (llmFailure && llmError && SessionRunnerRetry.isRetryable(llmFailure) && !publisher.record().outputStarted) {
+            // RetryScheduled and Step.Failed fold onto an existing assistant message, so
+            // Step.Started must be durable before the failure escapes.
+            yield* publisher.startAssistant()
+            return yield* new SessionRunnerRetry.RetryableFailure({
+              cause: llmFailure,
+              error: llmError,
+              step: currentStep,
+            })
           }
-          // Provider error events only arrive from the stream, so the flag is final here.
-          const providerFailed = publisher.hasProviderError()
+          if (llmError) yield* publisher.failAssistant(llmError)
 
-          // Settle every owned tool run: await all exits, not just the first failure,
-          // before publishing the terminal step event.
-          if (streamInterrupted) yield* interruptTools
-          const settled = yield* restore(
-            Effect.forEach(toolRuns, (run) => Fiber.await(run.fiber), { concurrency: "unbounded" }),
-          ).pipe(Effect.exit)
-          if (settled._tag === "Failure") yield* interruptTools
-          const tools = classifyToolExits(
-            settled,
-            toolRuns.map((run) => run.call),
-          )
-
-          // A declined call settles durably with its reason before the generic sweeps.
+          // Close every unsettled call with the reason it could not settle truthfully,
+          // and fail the assistant when the step itself cannot complete. A declined call
+          // settles with its own reason before the generic sweeps.
           for (const decline of tools.declines)
-            yield* serialized(
-              publisher.failTool(decline.call.id, {
-                type: "aborted",
-                message:
-                  decline.reason._tag === "QuestionTool.CancelledError"
-                    ? decline.reason.message
-                    : "The user declined this tool call",
-              }),
-            )
+            yield* publisher.failTool(decline.call.id, {
+              type: "aborted",
+              message:
+                decline.reason._tag === "QuestionTool.CancelledError"
+                  ? decline.reason.message
+                  : "The user declined this tool call",
+            })
           if (tools.declines.length > 0 || streamInterrupted || tools.interrupted) {
-            yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-            yield* serialized(publisher.failAssistant({ type: "aborted", message: "Step interrupted" }))
+            yield* publisher.failUnsettledTools(TOOLS_INTERRUPTED)
+            yield* publisher.failAssistant(STEP_INTERRUPTED)
           }
           if (tools.failure !== undefined) {
             const error = toSessionError(tools.infraError ?? Cause.squash(tools.failure))
-            yield* serialized(publisher.failUnsettledTools(error))
-            if (tools.infraError !== undefined) yield* serialized(publisher.failAssistant(error))
+            yield* publisher.failUnsettledTools(error)
+            if (tools.infraError !== undefined) yield* publisher.failAssistant(error)
           }
-
-          // Fail unresolved calls before the terminal step event. Local calls have joined, so
-          // these sweeps only close calls that could not produce a truthful settlement.
-          if (providerFailed)
-            yield* serialized(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
-          const resultMissing = {
-            type: "tool.result-missing",
-            message: "Provider did not return a tool result",
-          } as const
-          if (llmFailure && !providerFailed) yield* serialized(publisher.failUnsettledTools(resultMissing, "hosted"))
+          // Local calls have joined, so the remaining sweeps only close hosted calls the
+          // provider promised but never resolved.
+          if (publisher.record().providerFailed) yield* publisher.failUnsettledTools(TOOLS_INTERRUPTED)
+          if (llmError) yield* publisher.failUnsettledTools(RESULT_MISSING, "hosted")
           // A clean stream that still left hosted calls unresolved fails the step itself.
-          if (stream._tag === "Success" && !providerFailed) {
-            const hostedResultMissing = yield* serialized(publisher.failUnsettledTools(resultMissing, "hosted"))
-            if (hostedResultMissing && !publisher.stepSettlement())
-              yield* serialized(publisher.failAssistant(resultMissing))
+          if (stream._tag === "Success" && !publisher.record().providerFailed) {
+            const hostedResultMissing = yield* publisher.failUnsettledTools(RESULT_MISSING, "hosted")
+            if (hostedResultMissing && !publisher.record().finish) yield* publisher.failAssistant(RESULT_MISSING)
           }
 
-          const stepFailure = publisher.stepFailure()
-          const stepSettlement = publisher.stepSettlement()
-          if (stepSettlement && !stepFailure) yield* publishStepEnd(stepSettlement)
-          if (stepFailure) {
+          // One terminal event: Step.Ended on a clean finish, Step.Failed otherwise.
+          const record = publisher.record()
+          if (record.finish && !record.failure) yield* publishStepEnd(record.finish)
+          if (record.failure) {
             const end = yield* captureStepEnd()
-            yield* serialized(
-              publisher.publishStepFailure({
-                ...(stepSettlement ? stepUsage(stepSettlement) : {}),
-                ...end,
-              }),
-            )
+            yield* publisher.publishStepFailure({
+              ...(record.finish ? stepUsage(record.finish) : {}),
+              ...end,
+            })
           }
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (tools.declines.length > 0) return yield* Effect.interrupt
           if ((tools.interrupted || tools.infraError !== undefined) && tools.failure)
             return yield* Effect.failCause(tools.failure)
-          if (tools.interrupted && settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
-          if (stepFailure) return yield* new StepFailedError({ error: stepFailure })
-          return CallOutcome.Completed({ needsContinuation, step: currentStep })
+          if (tools.interrupted && joined._tag === "Failure") return yield* Effect.failCause(joined.cause)
+          if (record.failure) return yield* new StepFailedError({ error: record.failure })
+          return CallOutcome.Completed({
+            // A local call or malformed tool input requires another model step, unless
+            // this step already exhausted the agent's allowance.
+            needsContinuation:
+              !prepared.stepLimitReached &&
+              record.calls.some((call) => !call.providerExecuted && (call.called || call.settled)),
+            step: currentStep,
+          })
         }),
       )
     }, Effect.scoped)
