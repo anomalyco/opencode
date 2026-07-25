@@ -73,14 +73,14 @@ function directoryState() {
 }
 
 describe("bootstrapDirectory", () => {
-  test("marks a loading directory partial during bootstrap and complete after success", async () => {
+  test("uses legacy MCP endpoints while refreshing a v1 directory", async () => {
     const mcpReads: string[] = []
     const [store, setStore] = directoryState()
 
     await bootstrapDirectory({
       directory: "/project",
       scope: ServerScope.local,
-      mcp: false,
+      mcp: true,
       global: {
         config: {} satisfies Config,
         path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
@@ -90,6 +90,7 @@ describe("bootstrapDirectory", () => {
       sdk: {
         app: { agents: async () => ({ data: [{ name: "build", mode: "primary" }] }) },
         config: { get: async () => ({ data: {} }) },
+        session: { status: async () => ({ data: {} }) },
         vcs: { get: async () => ({ data: undefined }) },
         command: {
           list: async () => {
@@ -106,6 +107,14 @@ describe("bootstrapDirectory", () => {
             return { data: {} }
           },
         },
+        experimental: {
+          resource: {
+            list: async () => {
+              mcpReads.push("resource")
+              return { data: {} }
+            },
+          },
+        },
         provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
       } as unknown as OpencodeClient,
       api,
@@ -115,6 +124,7 @@ describe("bootstrapDirectory", () => {
       loadSessions() {},
       translate: (key) => key,
       queryClient: new QueryClient(),
+      protocol: Promise.resolve("v1"),
     })
 
     expect(store.status).toBe("partial")
@@ -122,7 +132,7 @@ describe("bootstrapDirectory", () => {
     await new Promise((resolve) => setTimeout(resolve, 80))
 
     expect(store.status).toBe("complete")
-    expect(mcpReads).toEqual([])
+    expect(mcpReads.sort()).toEqual(["command", "resource", "status"])
   })
 })
 

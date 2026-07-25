@@ -503,9 +503,16 @@ export async function bootstrapDirectory(input: {
           }),
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
-      input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, input.directory, input.api.mcp))),
       input.mcp &&
-        (() => input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, input.directory, input.api.mcp))),
+        (() =>
+          input.queryClient.fetchQuery(
+            loadMcpQuery(input.scope, input.directory, input.api.mcp, input.sdk, input.protocol),
+          )),
+      input.mcp &&
+        (() =>
+          input.queryClient.fetchQuery(
+            loadMcpResourcesQuery(input.scope, input.directory, input.api.mcp, input.sdk, input.protocol),
+          )),
       () =>
         input.queryClient
           .fetchQuery(loadProvidersQuery(input.scope, input.directory, input.api, input.sdk, input.protocol))
