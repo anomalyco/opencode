@@ -260,3 +260,146 @@ test("a message removed during hydration does not regain stale parts", async () 
     app.renderer.destroy()
   }
 })
+
+test("hydrates pending prompts without overwriting live prompt changes", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let resolvePermissions!: (response: Response) => void
+  const permissions = new Promise<Response>((resolve) => {
+    resolvePermissions = resolve
+  })
+  let resolveQuestions!: (response: Response) => void
+  const questions = new Promise<Response>((resolve) => {
+    resolveQuestions = resolve
+  })
+  let requestedPermissions = false
+  let requestedQuestions = false
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) return json([])
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    if (url.pathname === "/permission") {
+      requestedPermissions = true
+      return permissions
+    }
+    if (url.pathname === "/question") {
+      requestedQuestions = true
+      return questions
+    }
+    return undefined
+  }, tmp.path)
+
+  try {
+    emit(
+      global({
+        id: "evt_permission_pending",
+        type: "permission.asked",
+        properties: { id: "permission_pending", sessionID, permission: "bash", patterns: [], metadata: {}, always: [] },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_question_pending",
+        type: "question.asked",
+        properties: { id: "question_pending", sessionID, questions: [{ question: "pending", options: [] }] },
+      }),
+    )
+    const hydrate = sync.session.sync(sessionID)
+    await wait(() => requestedPermissions && requestedQuestions)
+    emit(
+      global({
+        id: "evt_permission_replied",
+        type: "permission.replied",
+        properties: { sessionID, requestID: "permission_pending", reply: "once" },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_question_rejected",
+        type: "question.rejected",
+        properties: { sessionID, requestID: "question_pending" },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_permission",
+        type: "permission.asked",
+        properties: { id: "permission_live", sessionID, permission: "bash", patterns: ["live"], metadata: {}, always: [] },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_question",
+        type: "question.asked",
+        properties: { id: "question_live", sessionID, questions: [{ question: "live", options: [] }] },
+      }),
+    )
+    resolvePermissions(
+      json([
+        { id: "permission_server", sessionID, permission: "read", patterns: ["server"], metadata: {}, always: [] },
+        { id: "permission_live", sessionID, permission: "bash", patterns: ["stale"], metadata: {}, always: [] },
+        { id: "permission_pending", sessionID, permission: "bash", patterns: [], metadata: {}, always: [] },
+        { id: "permission_other", sessionID: "ses_other", permission: "read", patterns: [], metadata: {}, always: [] },
+      ]),
+    )
+    resolveQuestions(
+      json([
+        { id: "question_server", sessionID, questions: [{ question: "server", options: [] }] },
+        { id: "question_live", sessionID, questions: [{ question: "stale", options: [] }] },
+        { id: "question_pending", sessionID, questions: [{ question: "pending", options: [] }] },
+        { id: "question_other", sessionID: "ses_other", questions: [] },
+      ]),
+    )
+    await hydrate
+
+    expect(sync.data.permission[sessionID]).toMatchObject([
+      { id: "permission_live", patterns: ["live"] },
+      { id: "permission_server", patterns: ["server"] },
+    ])
+    expect(sync.data.question[sessionID]).toMatchObject([
+      { id: "question_live", questions: [{ question: "live" }] },
+      { id: "question_server", questions: [{ question: "server" }] },
+    ])
+    expect(sync.data.permission[sessionID].map((request) => request.id)).toEqual(["permission_live", "permission_server"])
+    expect(sync.data.question[sessionID].map((request) => request.id)).toEqual(["question_live", "question_server"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("undefined prompt lists do not clear pending prompts", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) return json([])
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    if (url.pathname === "/permission" || url.pathname === "/question") return json({}, { status: 500 })
+    return undefined
+  }, tmp.path)
+
+  try {
+    emit(
+      global({
+        id: "evt_permission",
+        type: "permission.asked",
+        properties: { id: "permission_live", sessionID, permission: "bash", patterns: ["live"], metadata: {}, always: [] },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_question",
+        type: "question.asked",
+        properties: { id: "question_live", sessionID, questions: [{ question: "live", options: [] }] },
+      }),
+    )
+    await sync.session.sync(sessionID)
+
+    expect(sync.data.permission[sessionID]).toMatchObject([{ id: "permission_live" }])
+    expect(sync.data.question[sessionID]).toMatchObject([{ id: "question_live" }])
+  } finally {
+    app.renderer.destroy()
+  }
+})

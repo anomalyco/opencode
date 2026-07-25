@@ -143,12 +143,21 @@ export const {
 
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
-    const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const hydratingSessions = new Map<
+      string,
+      { messages: Set<string>; parts: Set<string>; permissions: Set<string>; questions: Set<string> }
+    >()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
     const touchPart = (sessionID: string, partID: string) => {
       hydratingSessions.get(sessionID)?.parts.add(partID)
+    }
+    const touchPermission = (sessionID: string, requestID: string) => {
+      hydratingSessions.get(sessionID)?.permissions.add(requestID)
+    }
+    const touchQuestion = (sessionID: string, requestID: string) => {
+      hydratingSessions.get(sessionID)?.questions.add(requestID)
     }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
@@ -173,6 +182,7 @@ export const {
           void bootstrap()
           break
         case "permission.replied": {
+          touchPermission(event.properties.sessionID, event.properties.requestID)
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -189,6 +199,7 @@ export const {
 
         case "permission.asked": {
           const request = event.properties
+          touchPermission(request.sessionID, request.id)
           if (permission.mode === "auto") {
             void sdk.client.permission.reply({
               requestID: request.id,
@@ -220,6 +231,7 @@ export const {
 
         case "question.replied":
         case "question.rejected": {
+          touchQuestion(event.properties.sessionID, event.properties.requestID)
           const requests = store.question[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -236,6 +248,7 @@ export const {
 
         case "question.asked": {
           const request = event.properties
+          touchQuestion(request.sessionID, request.id)
           const requests = store.question[request.sessionID]
           if (!requests) {
             setStore("question", request.sessionID, [request])
@@ -589,14 +602,21 @@ export const {
           if (fullSyncedSessions.has(sessionID)) return
           const syncing = syncingSessions.get(sessionID)
           if (syncing) return syncing
-          const tracker = { messages: new Set<string>(), parts: new Set<string>() }
+          const tracker = {
+            messages: new Set<string>(),
+            parts: new Set<string>(),
+            permissions: new Set<string>(),
+            questions: new Set<string>(),
+          }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
-            const [session, messages, todo, diff] = await Promise.all([
+            const [session, messages, todo, diff, permissions, questions] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
+              sdk.client.permission.list(),
+              sdk.client.question.list(),
             ])
             setStore(
               produce((draft) => {
@@ -604,6 +624,38 @@ export const {
                 if (match.found) draft.session[match.index] = session.data!
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
+                if (permissions.data !== undefined) {
+                  const currentPermissions = draft.permission[sessionID] ?? []
+                  draft.permission[sessionID] = [
+                    ...permissions.data.filter(
+                      (request, index, all) =>
+                        request.sessionID === sessionID &&
+                        !tracker.permissions.has(request.id) &&
+                        all.findIndex((item) => item.sessionID === sessionID && item.id === request.id) === index,
+                    ),
+                    ...currentPermissions.filter(
+                      (request, index, all) =>
+                        tracker.permissions.has(request.id) &&
+                        all.findIndex((item) => item.id === request.id) === index,
+                    ),
+                  ].toSorted((a, b) => a.id.localeCompare(b.id))
+                }
+                if (questions.data !== undefined) {
+                  const currentQuestions = draft.question[sessionID] ?? []
+                  draft.question[sessionID] = [
+                    ...questions.data.filter(
+                      (request, index, all) =>
+                        request.sessionID === sessionID &&
+                        !tracker.questions.has(request.id) &&
+                        all.findIndex((item) => item.sessionID === sessionID && item.id === request.id) === index,
+                    ),
+                    ...currentQuestions.filter(
+                      (request, index, all) =>
+                        tracker.questions.has(request.id) &&
+                        all.findIndex((item) => item.id === request.id) === index,
+                    ),
+                  ].toSorted((a, b) => a.id.localeCompare(b.id))
+                }
                 const currentMessages = draft.message[sessionID] ?? []
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]
