@@ -1,10 +1,9 @@
-import { marked } from "marked"
+import { marked, type MarkedExtension, type Tokens } from "marked"
 import markedShiki from "marked-shiki"
 import katex from "katex"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { markedCodeSpanBoundary } from "./marked-code-span"
-import { markedKatex } from "./marked-katex"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
 export const OpenCodeTheme = {
@@ -412,6 +411,56 @@ function renderMathInText(text: string): string {
   return result
 }
 
+const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
+const blockMathRegex = /^(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\])(?:\n|$)/
+
+const katexExtension: MarkedExtension = {
+  extensions: [
+    {
+      name: "inlineKatex",
+      level: "inline",
+      start(src) {
+        const index = src.indexOf("\\(")
+        if (index === -1) return
+        return index
+      },
+      tokenizer(src) {
+        const match = src.match(inlineMathRegex)
+        if (!match) return
+        return {
+          type: "inlineKatex",
+          raw: match[0],
+          text: match[1].trim(),
+          displayMode: false,
+        }
+      },
+      renderer: renderKatexToken,
+    },
+    {
+      name: "blockKatex",
+      level: "block",
+      tokenizer(src) {
+        const match = src.match(blockMathRegex)
+        if (!match) return
+        return {
+          type: "blockKatex",
+          raw: match[0],
+          text: (match[1] ?? match[2]).trim(),
+          displayMode: true,
+        }
+      },
+      renderer: renderKatexToken,
+    },
+  ],
+}
+
+function renderKatexToken(token: Tokens.Generic) {
+  return katex.renderToString(typeof token.text === "string" ? token.text : "", {
+    displayMode: token.displayMode === true,
+    throwOnError: false,
+  })
+}
+
 function renderMathExpressions(html: string): string {
   // Split on code/pre/kbd tags to avoid processing their contents
   const codeBlockPattern = /(<(?:pre|code|kbd)[^>]*>[\s\S]*?<\/(?:pre|code|kbd)>)/gi
@@ -482,7 +531,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           },
         },
       },
-      markedKatex,
+      katexExtension,
       markedShiki({
         async highlight(code, lang) {
           const highlighter = await getSharedHighlighter({
