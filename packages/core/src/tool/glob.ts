@@ -18,10 +18,10 @@ export const name = "glob"
 export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
   path: RelativePath.pipe(Schema.optional).annotate({
-    description: "Relative directory to search. Defaults to the active Location.",
+    description: "Directory to search. Defaults to the current working directory.",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
-    description: `Maximum results to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
+    description: `Maximum number of matching files to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
   }),
 })
 
@@ -55,13 +55,14 @@ export const Plugin = {
           name,
           Tool.make({
             description:
-              "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
+              'Search file paths using a glob pattern (examples: "**/*.ts", "src/**/*.tsx").',
             input: Input,
             output: Output,
             execute: (input, context) =>
               Effect.gen(function* () {
+                const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
                 const source = { type: "tool" as const, messageID: context.messageID, callID: context.callID }
-                const target = yield* mutation.resolve({ path: input.path ?? ".", kind: "directory" })
+                const target = yield* mutation.resolve({ path: searchPath ?? ".", kind: "directory" })
                 const external = target.externalDirectory
                 if (external)
                   yield* permission.assert({
@@ -75,8 +76,8 @@ export const Plugin = {
                   resources: [input.pattern],
                   save: ["*"],
                   metadata: {
-                    root: input.path ?? ".",
-                    path: input.path,
+                    root: searchPath ?? ".",
+                    path: searchPath,
                     limit: input.limit,
                   },
                   sessionID: context.sessionID,
@@ -87,14 +88,14 @@ export const Plugin = {
                   .stat(target.canonical)
                   .pipe(
                     Effect.catchReason("PlatformError", "NotFound", () =>
-                      Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
+                      Effect.fail(new ToolFailure({ message: `Search path does not exist: ${searchPath ?? "."}` })),
                     ),
                   )
                 if (info.type !== "Directory")
                   return yield* Effect.fail(
-                    new ToolFailure({ message: `Search path is not a directory: ${input.path ?? "."}` }),
+                    new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
                   )
-                const root = path.resolve(location.directory, input.path ?? ".")
+                const root = path.resolve(location.directory, searchPath ?? ".")
                 const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
                 const entries = yield* ripgrep
                   .glob({
