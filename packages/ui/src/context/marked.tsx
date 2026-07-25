@@ -1,9 +1,10 @@
-import { marked, type MarkedExtension, type Tokens } from "marked"
+import { marked } from "marked"
 import markedShiki from "marked-shiki"
 import katex from "katex"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { markedCodeSpanBoundary } from "./marked-code-span"
+import { markedKatex } from "./marked-katex"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
 export const OpenCodeTheme = {
@@ -382,95 +383,33 @@ registerCustomTheme("OpenCode", () => Promise.resolve(OpenCodeTheme))
 function renderMathInText(text: string): string {
   let result = text
 
-  // Display math: $$...$$ or \[...\]
-  const displayMathRegex = /(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\])/g
-  result = result.replace(displayMathRegex, (match, dollarMath, bracketMath) => {
-    const math = (dollarMath ?? bracketMath).trim()
+  // Display math: $$...$$
+  const displayMathRegex = /\$\$([\s\S]*?)\$\$/g
+  result = result.replace(displayMathRegex, (_, math) => {
     try {
       return katex.renderToString(math, {
         displayMode: true,
         throwOnError: false,
       })
     } catch {
-      return match
+      return `$$${math}$$`
     }
   })
 
-  // Inline math: \(...\) or $...$
-  const inlineMathRegex =
-    /(?:\\\(((?:\\.|[^\\\n])+?)\\\)|\$(?!\$)((?:\\.|[^\\$\n])+?)\$(?=[\s\p{P}]|$))/gu
-  result = result.replace(inlineMathRegex, (match, parenMath, dollarMath) => {
-    const math = (parenMath ?? dollarMath).trim()
+  // Inline math: \(...\)
+  const inlineMathRegex = /\\\(((?:\\.|[^\\\n])*?)\\\)/g
+  result = result.replace(inlineMathRegex, (_, math) => {
     try {
       return katex.renderToString(math, {
         displayMode: false,
         throwOnError: false,
       })
     } catch {
-      return match
+      return `\\(${math}\\)`
     }
   })
 
   return result
-}
-
-const blockMathRegex = /^(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\])(?:\n|$)/
-const inlineMathRegex =
-  /^(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\]|\\\(((?:\\.|[^\\\n])+?)\\\)|\$(?!\$)((?:\\.|[^\\$\n])+?)\$(?=[\s\p{P}]|$))/u
-
-const katexExtension: MarkedExtension = {
-  extensions: [
-    {
-      name: "inlineKatex",
-      level: "inline",
-      start(src) {
-        const parenIdx = src.indexOf("\\(")
-        const dollarIdx = src.indexOf("$")
-        if (parenIdx === -1 && dollarIdx === -1) return
-        if (parenIdx === -1) return dollarIdx
-        if (dollarIdx === -1) return parenIdx
-        return Math.min(parenIdx, dollarIdx)
-      },
-      tokenizer(src) {
-        const match = src.match(inlineMathRegex)
-        if (!match) return
-        const raw = match[0]
-        const displayMode = raw.startsWith("$$") || raw.startsWith("\\[")
-        const text = (match[1] ?? match[2] ?? match[3] ?? match[4] ?? raw.slice(2, -2)).trim()
-        return {
-          type: "inlineKatex",
-          raw,
-          text,
-          displayMode,
-        }
-      },
-      renderer: renderKatexToken,
-    },
-    {
-      name: "blockKatex",
-      level: "block",
-      tokenizer(src) {
-        const match = src.match(blockMathRegex)
-        if (!match) return
-        const raw = match[0]
-        const text = (match[1] ?? match[2] ?? raw.slice(2, -2)).trim()
-        return {
-          type: "blockKatex",
-          raw,
-          text,
-          displayMode: true,
-        }
-      },
-      renderer: renderKatexToken,
-    },
-  ],
-}
-
-function renderKatexToken(token: Tokens.Generic) {
-  return katex.renderToString(typeof token.text === "string" ? token.text : "", {
-    displayMode: token.displayMode === true,
-    throwOnError: false,
-  })
 }
 
 function renderMathExpressions(html: string): string {
@@ -543,7 +482,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           },
         },
       },
-      katexExtension,
+      markedKatex,
       markedShiki({
         async highlight(code, lang) {
           const highlighter = await getSharedHighlighter({
