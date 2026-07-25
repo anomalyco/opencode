@@ -58,6 +58,28 @@ function sdkKey(npm: string): string | undefined {
       return "vertex"
     case "@ai-sdk/google":
       return "google"
+    case "@ai-sdk/alibaba":
+      return "alibaba"
+    case "@ai-sdk/cerebras":
+      return "cerebras"
+    case "@ai-sdk/cohere":
+      return "cohere"
+    case "@ai-sdk/deepinfra":
+      return "deepinfra"
+    case "@ai-sdk/groq":
+      return "groq"
+    case "@ai-sdk/mistral":
+      return "mistral"
+    case "@ai-sdk/perplexity":
+      return "perplexity"
+    case "@ai-sdk/togetherai":
+      return "togetherai"
+    case "@ai-sdk/vercel":
+      return "vercel"
+    case "@ai-sdk/xai":
+      return "xai"
+    case "venice-ai-sdk-provider":
+      return "venice"
     case "@ai-sdk/gateway":
       return "gateway"
     case "@openrouter/ai-sdk-provider":
@@ -227,10 +249,10 @@ function normalizeMessages(
     })
   }
 
+  const modelID = model.api.id.toLowerCase()
   if (
     model.providerID === "mistral" ||
-    model.api.id.toLowerCase().includes("mistral") ||
-    model.api.id.toLowerCase().includes("devstral")
+    ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
   ) {
     const scrub = (id: string) => {
       return id
@@ -442,6 +464,9 @@ function mapProviderOptions(
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  const usesAnthropicAutomaticCaching =
+    options.cacheControl !== undefined &&
+    (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic")
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
@@ -451,7 +476,8 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic" ||
       model.api.npm === "@ai-sdk/alibaba") &&
-    model.api.npm !== "@ai-sdk/gateway"
+    model.api.npm !== "@ai-sdk/gateway" &&
+    !usesAnthropicAutomaticCaching
   ) {
     msgs = applyCaching(msgs, model)
   }
@@ -609,24 +635,23 @@ function openaiCompatibleReasoningEfforts(id: string) {
   return gpt5CodexReasoningEfforts(apiId) ?? versionedGpt5ReasoningEfforts(apiId) ?? OPENAI_EFFORTS
 }
 
-function anthropicOpus47OrLater(apiId: string) {
-  // Matches "opus-4.7" (Anthropic/Bedrock/Vertex) and "claude-4.7-opus" (SAP AI Core inverted).
-  // Greedy \d+ correctly extends to multi-digit majors (e.g. "claude-10.0-opus") for forward compatibility.
-  const version = /opus-(\d+)[.-](\d+)(?:[.@-]|$)|claude-(\d+)[.-](\d+)-opus(?:[.@-]|$)/i.exec(apiId)
-  if (!version) return false
-  const major = Number(version[1] ?? version[3])
-  const minor = Number(version[2] ?? version[4])
+function anthropicUsesModernAdaptiveThinking(apiId: string) {
+  if (!apiId.toLowerCase().includes("claude-")) return false
+  // Covers family-first IDs such as claude-opus-4.7 and version-first IDs such as claude-4.7-opus.
+  // Limit minors to two digits so release dates in IDs such as claude-opus-4-20250514 are not versions.
+  const version = /claude-(?:[a-z]+-)?(\d+)(?:[.-](\d{1,2}))?(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return true
+  const major = Number(version[1])
+  const minor = Number(version[2] ?? 0)
   return major > 4 || (major === 4 && minor >= 7)
 }
 
-function anthropicSonnet5OrLater(apiId: string) {
-  const version = /sonnet-(\d+)(?:[.@-]|$)|claude-(\d+)-sonnet(?:[.@-]|$)/i.exec(apiId)
-  if (!version) return false
-  return Number(version[1] ?? version[2]) >= 5
+function anthropicOpus45(apiId: string) {
+  return ["opus-4-5", "opus-4.5"].some((value) => apiId.includes(value))
 }
 
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
-  if (anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes("fable-5")) {
+  if (anthropicUsesModernAdaptiveThinking(apiId)) {
     return ["low", "medium", "high", "xhigh", "max"]
   }
   if (
@@ -640,7 +665,7 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
 }
 
 function anthropicOmitsThinking(apiId: string) {
-  return anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes("fable-5")
+  return anthropicUsesModernAdaptiveThinking(apiId)
 }
 
 function googleThinkingLevelEfforts(apiId: string) {
@@ -693,6 +718,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     model.api.id.toLowerCase().includes("minimax-m3") &&
     ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(model.api.npm)
   ) {
+    if (["nvidia", "lilac"].includes(model.providerID)) {
+      return {
+        none: { chat_template_kwargs: { thinking_mode: "disabled" } },
+        thinking: { chat_template_kwargs: { thinking_mode: "enabled" } },
+      }
+    }
     return {
       none: { thinking: { type: "disabled" } },
       thinking: { thinking: { type: "adaptive" } },
@@ -958,8 +989,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         )
       }
 
-      if (["opus-4-5", "opus-4.5"].some((v) => model.api.id.includes(v))) {
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { effort }]))
+      if (anthropicOpus45(model.api.id)) {
+        return Object.fromEntries(
+          WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, anthropicOpus45Effort(model, effort)]),
+        )
       }
 
       return {
@@ -1071,7 +1104,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       if (id.includes("anthropic")) {
         if (adaptiveEfforts) {
           // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
-          // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
+          // native which inlines it). Claude 4.7+ defaults `display` to "omitted".
           return wrapInSapModelParams(
             Object.fromEntries(
               adaptiveEfforts.map((effort) => [
@@ -1131,7 +1164,6 @@ export function options(input: {
 
   if (input.model.api.npm === "@ai-sdk/azure") {
     result["store"] = false
-    result["promptCacheKey"] = input.sessionID
   }
 
   if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
@@ -1160,18 +1192,7 @@ export function options(input: {
     }
   }
 
-  if (
-    input.providerOptions?.setCacheKey !== false &&
-    (input.model.providerID === "openai" ||
-      input.model.api.npm === "@ai-sdk/openai" ||
-      input.model.api.npm === "@ai-sdk/xai" ||
-      input.providerOptions?.setCacheKey)
-  ) {
-    result["promptCacheKey"] = input.sessionID
-  }
-
   if (input.model.providerID === "meta" && input.model.api.npm === "@ai-sdk/openai") {
-    result["reasoningEffort"] = "xhigh"
     result["reasoningSummary"] = "auto"
     result["include"] = INCLUDE_ENCRYPTED_REASONING
   }
@@ -1219,6 +1240,25 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
+  if (input.providerOptions?.setCacheKey !== false) {
+    if (input.model.api.npm === "@ai-sdk/deepinfra" || input.model.api.npm === "@ai-sdk/cerebras") {
+      result["prompt_cache_key"] = input.sessionID
+    } else if (
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/azure" ||
+      input.model.api.npm === "@ai-sdk/xai" ||
+      input.model.api.npm === "@ai-sdk/mistral" ||
+      input.model.api.npm === "venice-ai-sdk-provider" ||
+      input.providerOptions?.setCacheKey === true
+    ) {
+      result["promptCacheKey"] = input.sessionID
+    }
+  }
+
+  if (input.model.api.npm === "@ai-sdk/gateway") {
+    result["gateway"] = { caching: "auto" }
+  }
+
   if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
     result["reasoningSummary"] = "auto"
     return result
@@ -1251,23 +1291,10 @@ export function options(input: {
       result["textVerbosity"] = "low"
     }
 
-    if (input.model.providerID.startsWith("opencode")) {
+    if (input.model.providerID.startsWith("opencode") && input.providerOptions?.setCacheKey !== false) {
       result["promptCacheKey"] = input.sessionID
       result["include"] = INCLUDE_ENCRYPTED_REASONING
       result["reasoningSummary"] = "auto"
-    }
-  }
-
-  if (input.model.providerID === "venice") {
-    result["promptCacheKey"] = input.sessionID
-  }
-
-  if (input.model.providerID === "openrouter") {
-    result["prompt_cache_key"] = input.sessionID
-  }
-  if (input.model.api.npm === "@ai-sdk/gateway") {
-    result["gateway"] = {
-      caching: "auto",
     }
   }
 
@@ -1685,6 +1712,14 @@ function reasoningEffort(model: Provider.Model, effort: string) {
             ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}),
           },
         }
+      if (anthropicOpus45(model.api.id))
+        return {
+          reasoningConfig: {
+            type: "enabled",
+            budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
+            maxReasoningEffort: effort,
+          },
+        }
       if (model.api.id.includes("anthropic")) return
       return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
     case "@ai-sdk/gateway":
@@ -1725,7 +1760,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
 }
 
 function anthropicEffort(model: Provider.Model, effort: string) {
-  if (["opus-4-5", "opus-4.5"].some((value) => model.api.id.includes(value))) return { effort }
+  if (anthropicOpus45(model.api.id)) return anthropicOpus45Effort(model, effort)
   // Kimi defaults to omitting adaptive thinking text unless summarized display is requested.
   if (isKimiFamily(model)) return { thinking: { type: "adaptive", display: "summarized" }, effort }
   if (!anthropicAdaptiveEfforts(model.api.id)) return
@@ -1733,6 +1768,16 @@ function anthropicEffort(model: Provider.Model, effort: string) {
     thinking: {
       type: "adaptive",
       ...(anthropicOmitsThinking(model.api.id) ? { display: "summarized" } : {}),
+    },
+    effort,
+  }
+}
+
+function anthropicOpus45Effort(model: Provider.Model, effort: string) {
+  return {
+    thinking: {
+      type: "enabled",
+      budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
     },
     effort,
   }
