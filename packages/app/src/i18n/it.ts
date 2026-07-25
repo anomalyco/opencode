@@ -595,10 +595,10 @@ export const dict = {
   "error.chain.didYouMean": "Intendevi: {{suggestions}}",
   "error.chain.modelNotFound": "Modello non trovato: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Controlla i nomi provider/modello nel tuo config (opencode.json)",
-  "error.chain.mcpFailed": 'Server MCP "{{name}}" fallito. Nota, OpenCode non supporta ancora l'autenticazione MCP.',
+  "error.chain.mcpFailed": "Server MCP \"{{name}}\" fallito. Nota, OpenCode non supporta ancora l'autenticazione MCP.",
   "error.chain.providerAuthFailed": "Autenticazione provider fallita ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
-    'Inizializzazione provider "{{provider}}" fallita. Controlla credenziali e configurazione.',
+    "Inizializzazione provider \"{{provider}}\" fallita. Controlla credenziali e configurazione.",
   "error.chain.configJsonInvalid": "File config su {{path}} non è JSON(C) valido",
   "error.chain.configJsonInvalidWithMessage": "File config su {{path}} non è JSON(C) valido: {{message}}",
   "error.chain.configDirectoryTypo":
