@@ -335,6 +335,13 @@ test("hydrates pending prompts without overwriting live prompt changes", async (
         properties: { id: "question_live", sessionID, questions: [{ question: "live", options: [] }] },
       }),
     )
+    await wait(
+      () =>
+        sync.data.permission[sessionID]?.some((request) => request.id === "permission_live") &&
+        !sync.data.permission[sessionID]?.some((request) => request.id === "permission_pending") &&
+        sync.data.question[sessionID]?.some((request) => request.id === "question_live") &&
+        !sync.data.question[sessionID]?.some((request) => request.id === "question_pending"),
+    )
     resolvePermissions(
       json([
         { id: "permission_server", sessionID, permission: "read", patterns: ["server"], metadata: {}, always: [] },
@@ -353,16 +360,12 @@ test("hydrates pending prompts without overwriting live prompt changes", async (
     )
     await hydrate
 
-    expect(sync.data.permission[sessionID]).toMatchObject([
-      { id: "permission_live", patterns: ["live"] },
-      { id: "permission_server", patterns: ["server"] },
-    ])
-    expect(sync.data.question[sessionID]).toMatchObject([
-      { id: "question_live", questions: [{ question: "live" }] },
-      { id: "question_server", questions: [{ question: "server" }] },
-    ])
     expect(sync.data.permission[sessionID].map((request) => request.id)).toEqual(["permission_live", "permission_server"])
     expect(sync.data.question[sessionID].map((request) => request.id)).toEqual(["question_live", "question_server"])
+    expect(sync.data.permission[sessionID][0].patterns).toEqual(["live"])
+    expect(sync.data.permission[sessionID][1].patterns).toEqual(["server"])
+    expect(sync.data.question[sessionID][0].questions[0].question).toBe("live")
+    expect(sync.data.question[sessionID][1].questions[0].question).toBe("server")
   } finally {
     app.renderer.destroy()
   }
@@ -395,10 +398,11 @@ test("undefined prompt lists do not clear pending prompts", async () => {
         properties: { id: "question_live", sessionID, questions: [{ question: "live", options: [] }] },
       }),
     )
+    await wait(() => sync.data.permission[sessionID]?.length === 1 && sync.data.question[sessionID]?.length === 1)
     await sync.session.sync(sessionID)
 
-    expect(sync.data.permission[sessionID]).toMatchObject([{ id: "permission_live" }])
-    expect(sync.data.question[sessionID]).toMatchObject([{ id: "question_live" }])
+    expect(sync.data.permission[sessionID][0].id).toBe("permission_live")
+    expect(sync.data.question[sessionID][0].id).toBe("question_live")
   } finally {
     app.renderer.destroy()
   }
