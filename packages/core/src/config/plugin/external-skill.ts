@@ -12,7 +12,6 @@ import { SkillV2 } from "../../skill"
 
 const CLAUDE_DIR = ".claude"
 const AGENTS_DIR = ".agents"
-const SKILL_PATTERN = "skills/**/SKILL.md"
 
 export const Plugin = define({
   id: "config-external-skill",
