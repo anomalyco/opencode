@@ -546,8 +546,8 @@ export function createServerSession(
         })
       const first = await request(before)
       const pages = [first]
-      while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
-        const response = await request(pages.at(-1)!.cursor.next ?? undefined)
+      while (pages.at(-1)?.cursor?.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
+        const response = await request(pages.at(-1)?.cursor?.next ?? undefined)
         pages.push(response)
         if (!response.data.length) break
       }
@@ -935,7 +935,7 @@ export function createServerSession(
   }
 
   const applyV2 = (event: OpenCodeEvent) => {
-    if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
+    if (!("data" in event) || !event.data || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
     const reduction = v2.reduce(data.session_message[sessionID] ?? [], event)
     if (reduction) {

@@ -1,9 +1,10 @@
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
+import { DialogProvider, useDialog } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { File } from "@opencode-ai/session-ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
@@ -69,6 +70,7 @@ import { createSessionLineage } from "@/pages/session/session-lineage"
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
 import { LegacyHome } from "@/pages/home/legacy-home"
+import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -493,6 +495,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
 function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key: ServerConnection.Key) => void }) {
   const language = useLanguage()
   const server = useServer()
+  const dialog = useDialog()
   const others = () => server.list.filter((s) => ServerConnection.key(s) !== server.key)
   const name = createMemo(() => server.name || server.key)
   const serverToken = "\u0000server\u0000"
@@ -533,6 +536,15 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
           </div>
         </div>
       </Show>
+      
+      <div class="mt-4">
+        <ButtonV2 
+          appearance="base" 
+          onClick={() => dialog.push(() => <DialogServerV2 mode="add" />)}
+        >
+          {language.t("dialog.server.add.button")}
+        </ButtonV2>
+      </div>
     </div>
   )
 }

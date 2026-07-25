@@ -139,7 +139,7 @@ export function applyDirectoryEvent(input: {
       const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
-      if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
+      if (!info?.parentID) input.setStore("sessionTotal", (value) => value + 1)
       break
     }
     case "session.updated": {
@@ -155,7 +155,7 @@ export function applyDirectoryEvent(input: {
           }),
         )
         cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
-        if (info.parentID) break
+        if (info?.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
       }

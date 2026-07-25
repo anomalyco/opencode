@@ -376,7 +376,7 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     if (!pathInput) {
       const results = await args.sdk.api.file
         .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
-        .then((result) => result.data.map((entry) => entry.path))
+        .then((result) => (result.data ?? []).map((entry) => entry.path))
         .catch(() => [])
       if (!active()) return []
       return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)

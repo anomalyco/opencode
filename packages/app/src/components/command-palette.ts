@@ -256,7 +256,7 @@ export function createServerSessionEntries(props: {
     return props
       .load(search, current.signal)
       .then((result) =>
-        result.data
+        (result.data ?? [])
           .map(normalizeSessionInfo)
           .filter((session) => !session.time.archived)
           .map((session) => {

@@ -446,8 +446,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const [childStore] = serverSync().child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
-        ? serverSync().data.project.find((x) => x.id === projectID)
-        : serverSync().data.project.find((x) => x.worktree === project.worktree)
+        ? serverSync().data.project?.find((x) => x.id === projectID)
+        : serverSync().data.project?.find((x) => x.worktree === project.worktree)
 
       // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
       // Without this, different subdirectories of the same git repo would share the same
@@ -580,7 +580,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             .then((result) => {
               if (!result) return
               serverSync().set("project", (items) =>
-                items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
+                (items ?? []).map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
               )
             })
         })().catch(() => {

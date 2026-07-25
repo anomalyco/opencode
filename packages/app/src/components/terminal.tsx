@@ -556,7 +556,7 @@ export const Terminal = (props: TerminalProps) => {
         if ((await sdk().protocol) === "v1") {
           const result = await sdk()
             .client.pty.connectToken(
-              { ptyID: id, directory },
+              { ptyID: id, dir: directory },
               {
                 throwOnError: false,
                 headers: { "x-opencode-ticket": "1" },

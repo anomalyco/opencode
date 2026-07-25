@@ -429,7 +429,7 @@ function ProviderConnection(props: {
   )
   const loading = createMemo(() => integration.loading)
   const methods = createMemo<ConnectMethod[]>(() => {
-    const values = integration.latest?.methods.filter(
+    const values = integration.latest?.methods?.filter(
       (method): method is ConnectMethod => method.type === "key" || method.type === "oauth",
     )
     return values?.length ? values : fallback()

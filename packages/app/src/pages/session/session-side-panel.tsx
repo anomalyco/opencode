@@ -733,18 +733,22 @@ export function SessionSidePanel(props: {
                             classList={{ hidden: !fileBrowserVisible() }}
                             inert={!fileBrowserVisible() || undefined}
                           >
-                            <SessionFileBrowserTab
-                              tab={browserTab() ?? activeFileTab() ?? SESSION_OPEN_FILE_TAB}
-                              placeholder={
-                                (browserTab() ?? activeFileTab() ?? SESSION_OPEN_FILE_TAB) === SESSION_OPEN_FILE_TAB
-                              }
-                              active={file.pathFromTab(browserTab() ?? activeFileTab() ?? "")}
-                              kinds={kinds()}
-                              state={props.fileBrowserState!}
-                              onSelect={(path) => previewTab(file.tab(path))}
-                              onSelectPermanent={(path) => openTab(file.tab(path))}
-                              filterRef={(element) => (fileFilter = element)}
-                            />
+                            <Show when={props.fileBrowserState}>
+                              {(state) => (
+                                <SessionFileBrowserTab
+                                  tab={browserTab() ?? activeFileTab() ?? SESSION_OPEN_FILE_TAB}
+                                  placeholder={
+                                    (browserTab() ?? activeFileTab() ?? SESSION_OPEN_FILE_TAB) === SESSION_OPEN_FILE_TAB
+                                  }
+                                  active={file.pathFromTab(browserTab() ?? activeFileTab() ?? "")}
+                                  kinds={kinds()}
+                                  state={state()}
+                                  onSelect={(path) => previewTab(file.tab(path))}
+                                  onSelectPermanent={(path) => openTab(file.tab(path))}
+                                  filterRef={(element) => (fileFilter = element)}
+                                />
+                              )}
+                            </Show>
                           </div>
                         </Show>
                       </Tabs>

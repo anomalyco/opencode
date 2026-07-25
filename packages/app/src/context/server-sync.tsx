@@ -179,23 +179,23 @@ export function seedActiveSessionStatuses(
 function makeQueryOptionsApi(
   scope: ServerScope,
   serverSDK: () => OpencodeClient,
-  serverAPI: ServerApi,
+  serverAPI: () => ServerApi,
   sdkFor: (dir: PathKey) => OpencodeClient,
   protocol: Promise<"v1" | "v2">,
 ) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope, serverSDK()),
-    projects: () => loadProjectsQuery(scope, serverAPI.project),
+    projects: () => loadProjectsQuery(scope, serverAPI().project),
     providers: (directory: PathKey | null) =>
-      loadProvidersQuery(scope, directory, serverAPI, directory ? sdkFor(directory) : serverSDK(), protocol),
+      loadProvidersQuery(scope, directory, serverAPI(), directory ? sdkFor(directory) : serverSDK(), protocol),
     path: (directory: PathKey | null) =>
       loadPathQuery(scope, directory, directory ? sdkFor(directory) : serverSDK(), protocol),
-    agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI.agent, sdkFor(directory), protocol),
+    agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI().agent, sdkFor(directory), protocol),
     references: (directory: PathKey) =>
-      loadReferencesQuery(scope, directory, serverAPI.reference, sdkFor(directory), protocol),
-    mcp: (directory: PathKey) => loadMcpQuery(scope, directory, serverAPI.mcp, sdkFor(directory), protocol),
+      loadReferencesQuery(scope, directory, serverAPI().reference, sdkFor(directory), protocol),
+    mcp: (directory: PathKey) => loadMcpQuery(scope, directory, serverAPI().mcp, sdkFor(directory), protocol),
     mcpResources: (directory: PathKey) =>
-      loadMcpResourcesQuery(scope, directory, serverAPI.mcp, sdkFor(directory), protocol),
+      loadMcpResourcesQuery(scope, directory, serverAPI().mcp, sdkFor(directory), protocol),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory, sdkFor(directory)),
     sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
@@ -230,7 +230,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const queryOptionsApi = makeQueryOptionsApi(
     serverSDK.scope,
     () => serverSDK.client,
-    serverSDK.api,
+    () => serverSDK.api,
     sdkFor,
     serverSDK.protocol,
   )
@@ -360,7 +360,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     },
     onMcp: (directory, setStore) => {
       void loadCommands(directory, serverSDK.api.command, sdkFor(directory), serverSDK.protocol)
-        .then((commands) => setStore("command", commands))
+        .then((commands) => setStore("command", commands ?? []))
         .catch((err) => {
           showToast({
             variant: "error",
@@ -568,14 +568,14 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     }
 
     if (event.current?.type === "session.moved") {
-      const info = session.get(event.current.data.sessionID)
+      const info = event.current.data?.sessionID ? session.get(event.current.data.sessionID) : undefined
       if (info) indexSession(info)
     }
     if (event.current?.type === "session.forked")
-      void session
+      void (event.current.data?.sessionID && session
         .resolve(event.current.data.sessionID, { force: true })
         .then(indexSession)
-        .catch(() => {})
+        .catch(() => {}))
 
     const existing = children.children[key]
     if (!existing) return

@@ -13,6 +13,7 @@ export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/p
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Agent[] {
+  if (!Array.isArray(input)) return []
   if (input.every((agent) => !("request" in agent))) return input as Agent[]
   return (input as AgentListOutput["data"]).map((agent) => ({
     name: agent.id,
@@ -20,8 +21,8 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
     mode: agent.mode,
     hidden: agent.hidden,
     temperature:
-      typeof agent.request.settings.temperature === "number" ? agent.request.settings.temperature : undefined,
-    topP: typeof agent.request.settings.topP === "number" ? agent.request.settings.topP : undefined,
+      typeof agent.request.settings?.temperature === "number" ? agent.request.settings.temperature : undefined,
+    topP: typeof agent.request.settings?.topP === "number" ? agent.request.settings.topP : undefined,
     color: agent.color,
     permission: agent.permissions.map((rule) => ({
       permission: rule.action,
@@ -101,21 +102,21 @@ export function normalizeProviderList(
       capabilities: {
         temperature: false,
         reasoning: false,
-        attachment: model.capabilities.input.some((item) => item !== "text"),
-        toolcall: model.capabilities.tools,
+        attachment: model.capabilities?.input?.some((item) => item !== "text") ?? false,
+        toolcall: model.capabilities?.tools ?? false,
         input: {
-          text: model.capabilities.input.includes("text"),
-          audio: model.capabilities.input.includes("audio"),
-          image: model.capabilities.input.includes("image"),
-          video: model.capabilities.input.includes("video"),
-          pdf: model.capabilities.input.includes("pdf"),
+          text: model.capabilities?.input?.includes("text") ?? false,
+          audio: model.capabilities?.input?.includes("audio") ?? false,
+          image: model.capabilities?.input?.includes("image") ?? false,
+          video: model.capabilities?.input?.includes("video") ?? false,
+          pdf: model.capabilities?.input?.includes("pdf") ?? false,
         },
         output: {
-          text: model.capabilities.output.includes("text"),
-          audio: model.capabilities.output.includes("audio"),
-          image: model.capabilities.output.includes("image"),
-          video: model.capabilities.output.includes("video"),
-          pdf: model.capabilities.output.includes("pdf"),
+          text: model.capabilities?.output?.includes("text") ?? false,
+          audio: model.capabilities?.output?.includes("audio") ?? false,
+          image: model.capabilities?.output?.includes("image") ?? false,
+          video: model.capabilities?.output?.includes("video") ?? false,
+          pdf: model.capabilities?.output?.includes("pdf") ?? false,
         },
         interleaved: false,
       },
@@ -123,8 +124,8 @@ export function normalizeProviderList(
         input: cost?.input ?? 0,
         output: cost?.output ?? 0,
         cache: {
-          read: cost?.cache.read ?? 0,
-          write: cost?.cache.write ?? 0,
+          read: cost?.cache?.read ?? 0,
+          write: cost?.cache?.write ?? 0,
         },
       },
       limit: model.limit,

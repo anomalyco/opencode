@@ -130,7 +130,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
         return sdk.api.file
           .list({ location: { directory: absolute } })
           .then((result) =>
-            result.data.map((entry) => ({
+            (result.data ?? []).map((entry) => ({
               name: getFilename(entry.path.replace(/[\\/]+$/, "")),
               type: entry.type,
             })),

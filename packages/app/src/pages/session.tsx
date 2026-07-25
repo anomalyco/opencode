@@ -742,7 +742,7 @@ export default function Page() {
                 mode: mode === "git" ? "working" : mode,
                 context,
               })
-              .then((result) => result.data),
+              .then((result) => result.data ?? []),
         })
         .then((diffs) => diffs.find((diff) => diff.file === file))
 

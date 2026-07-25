@@ -1539,7 +1539,7 @@ export default function LegacyLayout(props: ParentProps) {
       serverSDK()
         .api.vcs.status({ location: { directory: props.directory } })
         .then((result) => {
-          const files = result.data
+          const files = result.data ?? []
           const dirty = files.length > 0
           setData({ status: "ready", dirty })
         })
@@ -1607,7 +1607,7 @@ export default function LegacyLayout(props: ParentProps) {
       serverSDK()
         .api.vcs.status({ location: { directory: props.directory } })
         .then((result) => {
-          const files = result.data
+          const files = result.data ?? []
           const dirty = files.length > 0
           setState({ status: "ready", dirty })
           void refresh()
