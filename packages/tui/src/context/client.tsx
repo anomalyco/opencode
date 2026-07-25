@@ -49,36 +49,35 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       if (history.length > connectionHistoryLimit) history.shift()
     }
 
-    async function connect(controller: AbortController, attempt: number) {
+    async function runConnection(signal: AbortSignal, attempt: number) {
       let connectedAt: number | undefined
       const request = new AbortController()
-      const cancel = () => request.abort(controller.signal.reason)
+      const cancel = () => request.abort(signal.reason)
       const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), connectTimeout)
-      controller.signal.addEventListener("abort", cancel, { once: true })
+      signal.addEventListener("abort", cancel, { once: true })
 
       try {
         record(attempt === 0 ? "connecting" : "reconnecting", attempt)
         log.info("event stream connecting", { attempt })
         const iterator = api.event.subscribe({ signal: request.signal })[Symbol.asyncIterator]()
         const first = await iterator.next()
-        if (abort.signal.aborted || controller.signal.aborted) return { error: undefined, connectedAt }
-        if (first.done) {
-          const error =
-            request.signal.reason instanceof Error ? request.signal.reason : new Error("Event stream disconnected")
-          return { error, connectedAt }
-        }
+        if (signal.aborted) return { error: undefined, connectedAt }
+        if (first.done)
+          throw request.signal.reason instanceof Error
+            ? request.signal.reason
+            : new Error("Event stream disconnected")
         if (first.value.type !== "server.connected")
-          return { error: new Error("Event stream did not start with server.connected"), connectedAt }
+          throw new Error("Event stream did not start with server.connected")
         clearTimeout(timeout)
         record("connected", attempt)
         connectedAt = Date.now()
         log.info("event stream connected")
         events.emit(first.value.type, first.value)
         setConnection({ status: "connected", attempt: 0, error: undefined })
-        while (!abort.signal.aborted && !controller.signal.aborted) {
+        while (!signal.aborted) {
           const event = await iterator.next()
-          if (abort.signal.aborted || controller.signal.aborted) return { error: undefined, connectedAt }
-          if (event.done) return { error: new Error("Event stream disconnected"), connectedAt }
+          if (signal.aborted) return { error: undefined, connectedAt }
+          if (event.done) throw new Error("Event stream disconnected")
           if ("durable" in event.value)
             log.debug("event", {
               type: event.value.type,
@@ -93,7 +92,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       } finally {
         request.abort()
         clearTimeout(timeout)
-        controller.signal.removeEventListener("abort", cancel)
+        signal.removeEventListener("abort", cancel)
       }
     }
 
@@ -104,7 +103,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       void (async () => {
         let attempt = 0
         while (!abort.signal.aborted && !controller.signal.aborted) {
-          const result = await connect(controller, attempt)
+          const result = await runConnection(controller.signal, attempt)
           if (abort.signal.aborted || controller.signal.aborted) return
           if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= 1_000) attempt = 0
           attempt += 1
