@@ -63,7 +63,6 @@ const layer = Layer.effect(
           if (rule?.resource === "*" && rule.effect === "deny") continue
           registrations.set(name, registration)
         }
-        if (registrations.size === 0) return {}
         const executeRule = rules.findLast((rule) => Wildcard.match("execute", rule.action))
         if (executeRule?.resource === "*" && executeRule.effect === "deny") return {}
         return {

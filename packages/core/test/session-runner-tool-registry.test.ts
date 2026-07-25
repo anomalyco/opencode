@@ -88,7 +88,7 @@ describe("ToolRegistry", () => {
 
       expect(error).toBeInstanceOf(Tool.RegistrationError)
       expect(error.message).toBe('Invalid tool namespace: "slack..admin"')
-      expect((yield* service.snapshot()).definitions).toEqual([])
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 
@@ -102,7 +102,7 @@ describe("ToolRegistry", () => {
         .register({ "echo.tool": make(), echo_tool: make() }, { codemode: false })
         .pipe(Effect.flip)
       expect(collision.message).toBe("Duplicate normalized tool name: echo_tool")
-      expect((yield* service.snapshot()).definitions).toEqual([])
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 
@@ -117,7 +117,7 @@ describe("ToolRegistry", () => {
         .pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Tool.RegistrationError)
-      expect((yield* service.snapshot()).definitions).toEqual([])
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 
@@ -148,6 +148,20 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("keeps execute available without Code Mode tools unless explicitly denied", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+
+      const available = yield* service.snapshot()
+      expect(available.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(available.codeModeCatalog).toEqual([])
+
+      const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }])
+      expect(denied.definitions).toEqual([])
+      expect(denied.codeModeCatalog).toBeUndefined()
+    }),
+  )
+
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
@@ -156,7 +170,12 @@ describe("ToolRegistry", () => {
       const names = (permissions: PermissionV2.Ruleset) =>
         toolDefinitions(service, permissions).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
 
-      expect(yield* names([{ action: "question", resource: "*", effect: "deny" }])).toEqual(["bash", "edit", "write"])
+      expect(yield* names([{ action: "question", resource: "*", effect: "deny" }])).toEqual([
+        "bash",
+        "edit",
+        "write",
+        "execute",
+      ])
       expect(
         yield* names([
           { action: "*", resource: "*", effect: "deny" },
@@ -169,7 +188,11 @@ describe("ToolRegistry", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
-      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question"])
+      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual([
+        "bash",
+        "question",
+        "execute",
+      ])
     }),
   )
 
@@ -182,7 +205,7 @@ describe("ToolRegistry", () => {
 
       expect(
         (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map((tool) => tool.name),
-      ).toEqual(["first"])
+      ).toEqual(["first", "execute"])
     }),
   )
 
@@ -191,9 +214,9 @@ describe("ToolRegistry", () => {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
       yield* service.register({ echo: make() }, { codemode: false }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo", "execute"])
       yield* Scope.close(scope, Exit.void)
-      expect(yield* toolDefinitions(service)).toEqual([])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 
@@ -213,9 +236,9 @@ describe("ToolRegistry", () => {
       yield* Deferred.await(registered)
       yield* Fiber.interrupt(fiber)
 
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo", "execute"])
       yield* Scope.close(scope, Exit.void)
-      expect(yield* toolDefinitions(service)).toEqual([])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 

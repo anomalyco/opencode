@@ -19,7 +19,8 @@ Use \`search\` to discover exact paths and signatures for additional tools:
 ## Available tools`
 
 export function render(catalog: CodeModeCatalog.Summary) {
-  if (catalog.total === 0) return "No tools are currently available."
+  if (catalog.total === 0)
+    return "No Code Mode tools are currently available. Do not call `execute` until a later system update announces available tools."
 
   const tools = catalog.namespaces.flatMap((namespace) => {
     const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`
@@ -41,6 +42,7 @@ export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatal
   const full = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
 
 ${render(current)}`
+  if (current.total === 0) return full
   const previousComplete = previous.shown === previous.total
   const currentComplete = current.shown === current.total
   if (previousComplete !== currentComplete) return full
@@ -125,11 +127,11 @@ const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
 export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.Instructions => {
-  const catalog = CodeModeCatalog.summarize(entries ?? [])
+  const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries)
   return Instructions.make({
     key,
     codec,
-    read: Effect.succeed(catalog.total === 0 ? Instructions.removed : catalog),
+    read: Effect.succeed(catalog),
     render: {
       initial: render,
       changed: update,

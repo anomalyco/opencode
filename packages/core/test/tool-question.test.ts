@@ -97,7 +97,11 @@ describe("QuestionTool", () => {
       deny = true
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* toolDefinitions(registry, [{ action: "question", resource: "*", effect: "deny" }])).toEqual([])
+      expect(
+        (yield* toolDefinitions(registry, [{ action: "question", resource: "*", effect: "deny" }])).map(
+          (tool) => tool.name,
+        ),
+      ).toEqual(["execute"])
       expect(
         yield* executeTool(registry, {
           sessionID,
@@ -142,7 +146,7 @@ describe("QuestionTool", () => {
         },
       ]
 
-      expect((yield* toolDefinitions(registry)).map((definition) => definition.name)).toEqual(["question"])
+      expect((yield* toolDefinitions(registry)).map((definition) => definition.name)).toEqual(["question", "execute"])
       expect(
         yield* executeTool(registry, {
           sessionID,

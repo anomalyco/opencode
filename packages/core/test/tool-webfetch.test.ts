@@ -92,7 +92,7 @@ describe("WebFetchTool registration", () => {
       const registry = yield* ToolRegistry.Service
       const url = "http://example.com/public"
 
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["webfetch"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["webfetch", "execute"])
       expect(yield* executeTool(registry, call({ url, format: "text", timeout: 4 }))).toEqual({
         status: "completed",
         output: { url, contentType: "text/plain", format: "text", output: "hello" },

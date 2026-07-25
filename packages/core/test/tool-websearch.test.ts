@@ -154,7 +154,7 @@ describe("WebSearchTool registration", () => {
       config = { provider: "exa", enableExa: false, enableParallel: false }
       const registry = yield* ToolRegistry.Service
 
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["websearch"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["websearch", "execute"])
       expect(
         yield* executeTool(registry, {
           sessionID,

@@ -33,7 +33,7 @@ import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
-import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, toolDefinitions, toolIdentity, waitForCodeModeTool, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<PermissionV2.AssertInput> | undefined
 let decision: Effect.Effect<void, PermissionV2.Error> = Effect.void
@@ -802,10 +802,16 @@ test("serializes concurrent MCP lifecycle operations", async () => {
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
-    yield* waitForTool(registry, "execute")
-    const definitions = yield* toolDefinitions(registry)
-    const execute = definitions.find((tool) => tool.name === "execute")
+    const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
+    const execute = toolSet.definitions.find((tool) => tool.name === "execute")
 
+    expect(toolSet.definitions.map((tool) => tool.name)).toEqual([
+      "direct_fail",
+      "direct_lookup",
+      "direct_media",
+      "execute",
+    ])
+    expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).toContain("ok: boolean")
     expect(execute?.description).not.toContain("tools.demo.search")
   }),
 )
@@ -873,9 +879,9 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const permission = yield* Deferred.make<void>()
     decision = Deferred.await(permission)
     const registry = yield* ToolRegistry.Service
-    yield* waitForTool(registry, "execute")
+    const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
 
-    const fiber = yield* executeTool(registry, {
+    const fiber = yield* toolSet.execute({
       sessionID: SessionV2.ID.make("ses_mcp_permission"),
       ...toolIdentity,
       call: {
@@ -912,9 +918,9 @@ it.effect("does not call MCP when permission is blocked", () =>
     assertion = yield* Deferred.make<PermissionV2.AssertInput>()
     decision = Effect.fail(new PermissionV2.BlockedError({ rules: [], permission: "demo_search", resources: ["*"] }))
     const registry = yield* ToolRegistry.Service
-    yield* waitForTool(registry, "execute")
+    const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
 
-    const execution = yield* executeTool(registry, {
+    const execution = yield* toolSet.execute({
       sessionID: SessionV2.ID.make("ses_mcp_blocked"),
       ...toolIdentity,
       call: {
