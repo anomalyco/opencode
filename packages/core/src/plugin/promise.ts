@@ -90,7 +90,26 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.command.reload()),
           },
           event: {
-            subscribe: () => Stream.toAsyncIterable(host.event.subscribe().pipe(Stream.map(wireEvent))),
+            // Tie the async iterator to the plugin generation scope. Plugins often
+            // detach a `for await` loop and never call `return()`, so without this
+            // the PubSub subscriber survives location expiry/reboot forever.
+            // Close without awaiting: awaiting return() deadlocks while next() is in flight.
+            subscribe: () => {
+              const iterator = Stream.toAsyncIterable(host.event.subscribe().pipe(Stream.map(wireEvent)))[
+                Symbol.asyncIterator
+              ]()
+              Effect.runSync(
+                Scope.addFinalizer(
+                  scope,
+                  Effect.sync(() => {
+                    const close = iterator.return
+                    if (!close) return
+                    void close.call(iterator)
+                  }),
+                ),
+              )
+              return { [Symbol.asyncIterator]: () => iterator }
+            },
           },
           integration: {
             list: (input) => run(host.integration.list(input)),

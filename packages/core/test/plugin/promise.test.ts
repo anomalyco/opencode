@@ -1,6 +1,6 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Message, SystemPart } from "@opencode-ai/ai"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -270,6 +270,50 @@ describe("fromPromise", () => {
       expect(events).toEqual(["setup", "cleanup"])
     }),
   )
+
+  test("closes detached event subscriptions when the plugin scope closes", async () => {
+    const active = { count: 0 }
+    const host = testHost({
+      event: {
+        subscribe: () =>
+          Stream.unwrap(
+            Effect.sync(() => {
+              active.count++
+              return Stream.never.pipe(Stream.ensuring(Effect.sync(() => active.count--)))
+            }),
+          ),
+      },
+    })
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.forEach(
+          Array.from({ length: 5 }),
+          () =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                yield* PluginPromise.fromPromise(
+                  Plugin.define({
+                    id: "promise-event-leak",
+                    setup: async (ctx) => {
+                      void (async () => {
+                        for await (const _event of ctx.event.subscribe()) {
+                        }
+                      })()
+                    },
+                  }),
+                ).effect(host)
+                yield* Effect.sleep("50 millis")
+                expect(active.count).toBe(1)
+              }),
+            ),
+          { discard: true },
+        )
+        yield* Effect.sleep("50 millis")
+        expect(active.count).toBe(0)
+      }),
+    )
+  })
 
   it.effect("constructs plain Promise tool definitions in the host", () =>
     Effect.gen(function* () {
