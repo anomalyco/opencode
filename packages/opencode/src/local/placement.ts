@@ -192,6 +192,48 @@ export function bestModel(input: {
  * (Session.updatePart), and a function anywhere inside it throws
  * DataCloneError and kills the subagent spawn.
  */
+/**
+ * Whether the parent's own provider can absorb a subagent.
+ *
+ * `pick` returns a bare null for three different reasons — a cloud parent, no
+ * local peers, and a failed probe — and the caller cannot tell them apart. It
+ * therefore inherits in all three, which on a busy single-slot llama.cpp server
+ * queues the subagent invisibly behind its own parent. That request never
+ * returns and the session appears hung.
+ *
+ *   "free"    — inherit is safe (cloud parent, or a local parent with a slot)
+ *   "no-slot" — the parent is local and has no free slot; inheriting would queue
+ *   "unknown" — the parent is local but unprobeable; the caller decides
+ *
+ * "unknown" is deliberately not folded into "no-slot": a provider that simply
+ * does not serve /api/hardware is not necessarily busy, and hard-failing those
+ * would break working setups to fix a different bug.
+ */
+export type ParentCapacity = "free" | "no-slot" | "unknown"
+
+/** Pure decision half of parentCapacity, split out so it is unit-testable. */
+export function capacityFromProbe(result: Probe | undefined | null, reserved: number): ParentCapacity {
+  if (!result) return "unknown"
+  return freeSlots(result.hardware, reserved) > 0 ? "free" : "no-slot"
+}
+
+export async function parentCapacity(input: {
+  parent: Placement
+  providers: Record<string, Provider.Info>
+  timeoutMs?: number
+}): Promise<ParentCapacity> {
+  const parentInfo = input.providers[input.parent.providerID]
+  if (!parentInfo) return "unknown"
+  const baseURL = baseURLOf(parentInfo)
+  // A cloud parent has no slot model and no queue problem.
+  if (!baseURL) return "free"
+
+  const aborter = new AbortController()
+  const timer = setTimeout(() => aborter.abort(), input.timeoutMs ?? 1_500)
+  const result = await probe(parentInfo.id, baseURL, aborter.signal).finally(() => clearTimeout(timer))
+  return capacityFromProbe(result, reservedFor(parentInfo.id))
+}
+
 export async function pick(input: {
   parent: Placement
   providers: Record<string, Provider.Info>

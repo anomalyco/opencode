@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { bestModel, estimateRequiredCtx, freeSlots, type Probe } from "../../src/local/placement"
+import {
+  bestModel,
+  capacityFromProbe,
+  estimateRequiredCtx,
+  freeSlots,
+  parentCapacity,
+  type Probe,
+} from "../../src/local/placement"
 import type { Provider } from "../../src/provider/provider"
 import type { ModelFit, ResourceSnapshot } from "../../src/local/llama-skein/gen/types.gen"
 
@@ -98,5 +105,46 @@ describe("bestModel context-adequacy filter", () => {
     expect(bestModel({ probe: p, info: info("big"), parentModelID: "cloud", requiredCtx })?.modelID as string).toBe(
       "big",
     )
+  })
+})
+
+// Regression guard for the reported session hang: a subagent was dispatched to
+// the parent's own single-slot provider whenever placement found no idle peer,
+// where it queued behind its parent and never returned.
+describe("parent capacity gate", () => {
+  test("busy single-slot parent reports no-slot", () => {
+    const busy = { ...probe([]), hardware: hw({ slots_total: 1, in_flight: 1, busy: true }) }
+    expect(capacityFromProbe(busy, 0)).toBe("no-slot")
+  })
+
+  test("idle parent reports free", () => {
+    expect(capacityFromProbe(probe([]), 0)).toBe("free")
+  })
+
+  test("a reservation consumes the only slot", () => {
+    expect(capacityFromProbe(probe([]), 1)).toBe("no-slot")
+  })
+
+  test("unprobeable parent is unknown, not no-slot", () => {
+    // A provider that simply does not serve /api/hardware is not necessarily
+    // busy; hard-failing those would break working setups.
+    expect(capacityFromProbe(undefined, 0)).toBe("unknown")
+  })
+
+  test("cloud parent is always free — no slot model, no queue", async () => {
+    const cloud = { id: "anthropic", models: {} } as unknown as Provider.Info
+    const got = await parentCapacity({
+      parent: { providerID: "anthropic" as never, modelID: "m" as never },
+      providers: { anthropic: cloud },
+    })
+    expect(got).toBe("free")
+  })
+
+  test("unknown parent provider does not block", async () => {
+    const got = await parentCapacity({
+      parent: { providerID: "ghost" as never, modelID: "m" as never },
+      providers: {},
+    })
+    expect(got).toBe("unknown")
   })
 })

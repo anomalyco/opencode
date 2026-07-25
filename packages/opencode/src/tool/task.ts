@@ -204,6 +204,36 @@ export const TaskTool = Tool.define(
                   ),
                 ),
               )
+      // Placement found no idle peer, so we are about to fall back to the
+      // parent's own provider. On a single-slot llama.cpp server that queues
+      // the subagent behind its parent, which never returns — the session
+      // reads as hung. Refuse instead of queueing invisibly.
+      //
+      // Only checked when placement actually ran and came back empty: an
+      // explicit model or a resumed session is a deliberate choice, not a
+      // fallback.
+      const willInherit = !next.model && !placed
+      const placementRan =
+        !!provider && !next.model && !session && cfg.experimental?.local_subagent_placement !== false
+      if (willInherit && placementRan) {
+        const capacity = yield* provider
+          .list()
+          .pipe(
+            Effect.flatMap((providers) =>
+              Effect.promise(() => LocalPlacement.parentCapacity({ parent: inherited, providers })),
+            ),
+          )
+        if (capacity === "no-slot") {
+          return yield* Effect.fail(
+            new Error(
+              `No capacity for subagent: local provider "${inherited.providerID}" has no free slot ` +
+                `and no idle local peer was available. It serves one session at a time, so running ` +
+                `here would queue behind this session and never return. Retry when it frees up, or ` +
+                `pass an explicit model on a different provider.`,
+            ),
+          )
+        }
+      }
       // Only the data half of the placement goes anywhere near metadata —
       // part metadata is structuredClone()d on every update event, and the
       // release() handle is a function (DataCloneError, dead subagent).
