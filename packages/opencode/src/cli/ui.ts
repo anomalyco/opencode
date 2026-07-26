@@ -1,6 +1,7 @@
 import { EOL } from "os"
 import { Schema } from "effect"
 import { logo as glyphs } from "./logo"
+import { latexToUnicode } from "./cmd/run/latex-unicode"
 
 const wordmark = [
   `⠀                                ▄     `,
@@ -125,8 +126,9 @@ export function error(message: string) {
   println(Style.TEXT_DANGER_BOLD + "Error: " + Style.TEXT_NORMAL + message)
 }
 
+
 export function markdown(text: string): string {
-  return text
+  return latexToUnicode(text)
 }
 
 export * as UI from "./ui"

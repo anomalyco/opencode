@@ -1,3 +1,4 @@
+import { latexToUnicode } from "./latex-unicode"
 import { toolEntryBody } from "./tool"
 import type { RunEntryBody, StreamCommit } from "./types"
 
@@ -44,7 +45,8 @@ function markdownBody(content: string): RunEntryBody {
 
   return {
     type: "markdown",
-    content,
+    // Terminal cannot run KaTeX; rewrite common math to Unicode first.
+    content: latexToUnicode(content),
   }
 }
 
@@ -59,7 +61,7 @@ function userBody(raw: string): RunEntryBody {
 }
 
 function reasoningBody(raw: string): RunEntryBody {
-  const clean = raw.replace(/\[REDACTED\]/g, "")
+  const clean = latexToUnicode(raw.replace(/\[REDACTED\]/g, ""))
   if (!clean) {
     return RUN_ENTRY_NONE
   }
