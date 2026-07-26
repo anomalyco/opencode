@@ -74,6 +74,8 @@ export interface DialogSelectOption<T = any> {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
+  selected(): DialogSelectOption<T> | undefined
+  focusInput(): void
   moveTo(value: T): void
 }
 
@@ -489,6 +491,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     },
     get filtered() {
       return filtered()
+    },
+    selected() {
+      return selected()
+    },
+    focusInput() {
+      if (input.isDestroyed) return
+      input.focus()
     },
     moveTo(value) {
       const index = flat().findIndex((option) => isDeepEqual(option.value, value))
