@@ -35,11 +35,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
-          const snippets = ctx.query.search
+          const snippets = query.search
             ? Object.fromEntries(
                 (yield* session.searchSnippets({
                   sessionIDs: sessions.map((item) => item.id),
-                  search: ctx.query.search,
+                  search: query.search,
                 })).map((item) => [item.sessionID, item.snippet]),
               )
             : undefined
