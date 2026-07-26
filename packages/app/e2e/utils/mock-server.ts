@@ -8,6 +8,7 @@ export interface MockServerConfig {
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  onInstanceDispose?: () => void
   directory: string
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
@@ -82,6 +83,10 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const legacyAuth = path.match(/^\/auth\/([^/]+)$/)?.[1]
     if (legacyAuth && route.request().method() === "PUT") {
       config.onConnectKey?.({ integrationID: legacyAuth, body: route.request().postDataJSON() })
+      return json(route, true)
+    }
+    if (path === "/instance/dispose" && route.request().method() === "POST") {
+      config.onInstanceDispose?.()
       return json(route, true)
     }
     if (path === "/permission")

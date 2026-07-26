@@ -6,6 +6,7 @@ const directory = "C:/OpenCode/NewProject"
 
 test("creates a session in a new project, connects OpenCode Go, and selects its model", async ({ page }) => {
   let connectedGo = false
+  let pendingGo = false
   const connections: Array<{ integrationID: string; body: unknown }> = []
 
   await mockOpenCodeServer(page, {
@@ -51,7 +52,10 @@ test("creates a session in a new project, connects OpenCode Go, and selects its 
     integrationMethods: { "opencode-go": [{ type: "api", label: "API key" }] },
     onConnectKey: (input) => {
       connections.push(input)
-      if (input.integrationID === "opencode-go") connectedGo = true
+      if (input.integrationID === "opencode-go") pendingGo = true
+    },
+    onInstanceDispose: () => {
+      if (pendingGo) connectedGo = true
     },
     sessions: [],
     pageMessages: () => ({ items: [] }),
