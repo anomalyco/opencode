@@ -1,4 +1,4 @@
-import { expect, mock, spyOn, test } from "bun:test"
+import { expect, mock, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -217,14 +217,8 @@ test("session startup prompt is submitted exactly once", async () => {
 
 test("configured app bindings execute settings and permission commands", async () => {
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
-  const core = await import("@opentui/core")
-  const createCliRenderer = spyOn(core, "createCliRenderer").mockImplementation(async () => setup.renderer)
+  setup.renderer.start()
   const ready = Promise.withResolvers<void>()
-  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
-  setup.renderer.setTerminalTitle = (title) => {
-    if (title === "OpenCode") ready.resolve()
-    setTitle(title)
-  }
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
@@ -244,10 +238,12 @@ test("configured app bindings execute settings and permission commands", async (
         },
         packages: { resolve: async () => undefined },
         args: {},
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
     )
     await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("commands"))
 
     setup.mockInput.pressKey("F6")
     const settings = await setup.waitForFrame((frame) => frame.includes("Settings"))
@@ -261,10 +257,14 @@ test("configured app bindings execute settings and permission commands", async (
     setup.mockInput.pressKey("p", { ctrl: true })
     await setup.waitForFrame((frame) => frame.includes("Commands"))
     setup.mockInput.pressKey("END")
-    setup.mockInput.pressArrow("up")
-    setup.mockInput.pressArrow("up")
-    setup.mockInput.pressArrow("up")
-    const commands = await setup.waitForFrame((frame) => frame.includes("Disable auto-approve permissions"))
+    const commands = await setup.waitForFrame(
+      (frame) => {
+        if (frame.includes("Disable auto-approve permissions")) return true
+        setup.mockInput.pressArrow("up")
+        return false
+      },
+      { maxPasses: 100 },
+    )
     expect(commands).not.toContain("Enable auto-approve permissions")
 
     setup.renderer.destroy()
@@ -272,6 +272,5 @@ test("configured app bindings execute settings and permission commands", async (
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    createCliRenderer.mockRestore()
   }
 })
