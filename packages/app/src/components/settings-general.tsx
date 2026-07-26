@@ -127,11 +127,14 @@ export const SettingsGeneral: Component = () => {
   const serverSdk = useServerSDK()
 
   const [shells] = createResource(
-    () =>
-      serverSdk()
-        .client.pty.shells()
-        .then((res) => res.data ?? [])
-        .catch(() => [] as ShellOption[]),
+    async () => {
+      const sdk = serverSdk()
+      if ((await sdk.protocol) === "v1") {
+        return (await sdk.client.pty.shells()).data ?? []
+      }
+      // return (await sdk.api.pty.shells()).data
+      return [] as ShellOption[]
+    },
     { initialValue: [] as ShellOption[] },
   )
 

@@ -310,7 +310,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   )
   const resources = createMemo(() =>
     Object.values(sync().data.mcp_resource).map((resource) => ({
-      id: `resource:${resource.client}:${resource.uri}`,
+      id: `resource:${resource.server}:${resource.uri}`,
       kind: "resource" as const,
       label: `@${resource.name}`,
       path: resource.uri,
@@ -327,7 +327,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         source: {
           type: "resource" as const,
           text: { value: `@${resource.name}`, start: 0, end: resource.name.length + 1 },
-          clientName: resource.client,
+          clientName: resource.server,
           uri: resource.uri,
         },
       },
@@ -447,15 +447,16 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
     view: {
       placeholder: designPlaceholder,
-      agent:
-        props.controls.agents.visible && props.controls.agents.options.length > 0
+      get agent() {
+        return props.controls.agents.visible && props.controls.agents.options.length > 0
           ? {
               options: () => props.controls.agents.options.map((name) => ({ id: name, label: name })),
               current: () => props.controls.agents.current,
-              onSelect: props.controls.agents.select,
+              onSelect: (value: string) => props.controls.agents.select(value),
               keybind: () => command.keybindParts("agent.cycle"),
             }
-          : undefined,
+          : undefined
+      },
       variant: {
         options: () => variants().map((value) => ({ id: value, label: value })),
         current: () => props.controls.model.selection.variant.current() ?? "default",
