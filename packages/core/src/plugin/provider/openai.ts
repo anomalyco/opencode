@@ -180,6 +180,12 @@ export const OpenAIPlugin = define({
     })
     yield* load()
     yield* ctx.catalog.transform((evt) => {
+      const codex = evt.provider.get(ProviderV2.ID.make("openai-codex"))
+      if (codex)
+        for (const model of codex.models.values())
+          evt.model.update(codex.provider.id, model.id, (draft) => {
+            draft.enabled = false
+          })
       for (const item of evt.provider.list()) {
         if (!ProviderV2.isAISDK(item.provider.package)) continue
         if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/openai") continue
@@ -205,6 +211,8 @@ export const OpenAIPlugin = define({
             draft.enabled = false
             return
           }
+          const route = codex?.models.get(draft.id)
+          if (route) draft.limit = { ...route.limit }
           draft.cost = []
         })
       }

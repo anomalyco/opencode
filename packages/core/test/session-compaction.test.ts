@@ -16,11 +16,15 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { AgentV2 } from "@opencode-ai/core/agent"
+import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -130,6 +134,40 @@ test("compaction prompt requires the checkpoint headings in order", () => {
   expect(prompt).toContain("next action if known")
   expect(prompt).toContain("Keep every section, even when empty.")
 })
+
+it.effect("auto compaction uses the model input limit", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const session = SessionV2.Info.make({
+      id: SessionV2.ID.make("ses_input_limit"),
+      projectID: Project.ID.global,
+      title: "Input limit",
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+      location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+    })
+    const route = Model.make({
+      id: "codex-model",
+      provider: "openai",
+      route: OpenAIChat.route.with({ limits: { context: 400_000, input: 272_000, output: 128_000 } }),
+    })
+    const message = (input: number) =>
+      SessionMessage.Assistant.make({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: AgentV2.defaultID,
+        model: { id: ModelV2.ID.make("codex-model"), providerID: ProviderV2.ID.openai },
+        content: [],
+        cost: Money.USD.zero,
+        tokens: { input, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0) },
+      })
+
+    expect(compaction.required({ session, model: route, cost: [], messages: [message(251_999)] })).toBe(false)
+    expect(compaction.required({ session, model: route, cost: [], messages: [message(252_000)] })).toBe(true)
+  }),
+)
 
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {

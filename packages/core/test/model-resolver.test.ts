@@ -17,6 +17,7 @@ interface ModelOptions {
   readonly headers?: ModelV2.Info["headers"]
   readonly body?: ModelV2.Info["body"]
   readonly variants?: ModelV2.Info["variants"]
+  readonly limit?: ModelV2.Info["limit"]
 }
 
 const model = (packageName: string | undefined, options: ModelOptions = {}) =>
@@ -36,7 +37,7 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
     cost: [],
     status: "active",
     enabled: true,
-    limit: { context: 100, output: 20 },
+    limit: options.limit ?? { context: 100, output: 20 },
   })
 
 describe("ModelResolver", () => {
@@ -44,6 +45,7 @@ describe("ModelResolver", () => {
     Effect.gen(function* () {
       const catalog = model(ProviderV2.aisdk("@ai-sdk/openai"), {
         settings: { baseURL: "https://openai.example/v1" },
+        limit: { context: 100, input: 70, output: 20 },
       })
       const resolved = yield* ModelResolver.fromCatalogModel(catalog)
 
@@ -55,7 +57,7 @@ describe("ModelResolver", () => {
         endpoint: { baseURL: "https://openai.example/v1" },
         defaults: {
           headers: { "x-test": "header" },
-          limits: { context: 100, output: 20 },
+          limits: { context: 100, input: 70, output: 20 },
           http: { body: { custom_extension: { enabled: true } } },
         },
       })

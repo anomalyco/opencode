@@ -29,9 +29,10 @@ export function contextUsage(
     last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
   if (tokens <= 0) return
   const model = models?.find((model) => model.providerID === last.model.providerID && model.id === last.model.id)
+  const limit = model?.limit.input ?? model?.limit.context
   return {
     tokens,
-    percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : undefined,
+    percent: limit ? Math.round((tokens / limit) * 100) : undefined,
   }
 }
 

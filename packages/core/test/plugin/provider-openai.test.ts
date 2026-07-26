@@ -164,6 +164,16 @@ describe("OpenAIPlugin", () => {
       const catalog = yield* Catalog.Service
       const credentials = yield* Credential.Service
       yield* catalog.transform((catalog) => {
+        const codex = ProviderV2.Info.make({
+          ...ProviderV2.Info.empty(ProviderV2.ID.make("openai-codex")),
+          package: ProviderV2.aisdk("@ai-sdk/openai"),
+        })
+        catalog.provider.update(codex.id, (draft) => {
+          draft.package = codex.package
+        })
+        catalog.model.update(codex.id, ModelV2.ID.make("gpt-5.6-sol"), (model) => {
+          model.limit = { context: 400_000, input: 272_000, output: 128_000 }
+        })
         const item = ProviderV2.Info.make({
           ...ProviderV2.Info.empty(ProviderV2.ID.openai),
           package: ProviderV2.aisdk("@ai-sdk/openai"),
@@ -189,7 +199,9 @@ describe("OpenAIPlugin", () => {
           model.body = { reasoning: { mode: "pro" } }
         })
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5.6"), () => {})
-        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.6-sol"), () => {})
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.6-sol"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
         catalog.model.update(item.id, ModelV2.ID.make("gpt-4.1"), () => {})
       })
       yield* credentials.create({
@@ -215,9 +227,13 @@ describe("OpenAIPlugin", () => {
         false,
       )
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6"))).enabled).toBe(false)
-      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-sol"))).enabled).toBe(
-        true,
-      )
+      const sol = required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-sol")))
+      expect(sol.enabled).toBe(true)
+      expect(sol.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+      expect(
+        required(yield* catalog.model.get(ProviderV2.ID.make("openai-codex"), ModelV2.ID.make("gpt-5.6-sol")))
+          .enabled,
+      ).toBe(false)
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-4.1"))).enabled).toBe(false)
     }),
   )
@@ -227,6 +243,16 @@ describe("OpenAIPlugin", () => {
       const catalog = yield* Catalog.Service
       const credentials = yield* Credential.Service
       yield* catalog.transform((catalog) => {
+        const codex = ProviderV2.Info.make({
+          ...ProviderV2.Info.empty(ProviderV2.ID.make("openai-codex")),
+          package: ProviderV2.aisdk("@ai-sdk/openai"),
+        })
+        catalog.provider.update(codex.id, (draft) => {
+          draft.package = codex.package
+        })
+        catalog.model.update(codex.id, ModelV2.ID.make("gpt-5.5"), (model) => {
+          model.limit = { context: 400_000, input: 272_000, output: 128_000 }
+        })
         const item = ProviderV2.Info.make({
           ...ProviderV2.Info.empty(ProviderV2.ID.openai),
           package: ProviderV2.aisdk("@ai-sdk/openai"),
@@ -234,7 +260,9 @@ describe("OpenAIPlugin", () => {
         catalog.provider.update(item.id, (draft) => {
           draft.package = item.package
         })
-        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.5"), () => {})
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.5"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
         catalog.model.update(item.id, ModelV2.ID.make("gpt-4.1"), () => {})
       })
       yield* credentials.create({
@@ -243,7 +271,9 @@ describe("OpenAIPlugin", () => {
       })
       yield* addPlugin()
 
-      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.5"))).enabled).toBe(true)
+      const model = required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.5")))
+      expect(model.enabled).toBe(true)
+      expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-4.1"))).enabled).toBe(true)
     }),
   )

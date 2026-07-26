@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode-ai/client"
-import { isDefaultTitle, lastAssistantWithUsage } from "../../src/util/session"
+import type { ModelInfo, SessionMessageInfo } from "@opencode-ai/client"
+import { contextUsage, isDefaultTitle, lastAssistantWithUsage } from "../../src/util/session"
 
 const assistant = (id: string, input: number): SessionMessageInfo => ({
   id,
@@ -44,5 +44,20 @@ describe("util.session", () => {
 
     messages.push(assistant("msg_after", 5))
     expect(lastAssistantWithUsage(messages)?.tokens.input).toBe(5)
+  })
+
+  test("reports usage against the effective input window", () => {
+    const models = [
+      {
+        id: "model",
+        providerID: "provider",
+        limit: { context: 400_000, input: 272_000, output: 128_000 },
+      } as unknown as ModelInfo,
+    ]
+
+    expect(contextUsage([assistant("msg_input_limit", 252_000)], models)).toEqual({
+      tokens: 252_000,
+      percent: 93,
+    })
   })
 })
