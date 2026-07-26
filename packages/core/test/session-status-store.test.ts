@@ -16,11 +16,7 @@ const sessionID = "ses_test" as never
 
 const seed = Effect.gen(function* () {
   const db = (yield* Database.Service).db
-  yield* db
-    .insert(ProjectTable)
-    .values({ id: projectID, worktree: "/project", sandboxes: [] })
-    .run()
-    .pipe(Effect.orDie)
+  yield* db.insert(ProjectTable).values({ id: projectID, worktree: "/project", sandboxes: [] }).run().pipe(Effect.orDie)
   yield* db
     .insert(SessionTable)
     .values({

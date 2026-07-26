@@ -56,7 +56,12 @@ export function statusDisplay(status: StatusType, timeChanged: number, now: numb
     case "needs_input":
       return {
         label: "Needs input",
-        color: age < FRESH_INPUT ? theme.warning : age < OLD_INPUT ? tint(theme.background, theme.warning, 0.55) : theme.textMuted,
+        color:
+          age < FRESH_INPUT
+            ? theme.warning
+            : age < OLD_INPUT
+              ? tint(theme.background, theme.warning, 0.55)
+              : theme.textMuted,
       }
     case "retrying":
       return { label: "Retrying", color: theme.error }

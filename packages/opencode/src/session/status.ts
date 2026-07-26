@@ -63,12 +63,11 @@ const layer = Layer.effect(
       data.set(sessionID, status)
     })
 
-    const setNeedsInput: Interface["setNeedsInput"] = Effect.fn("SessionStatus.setNeedsInput")(function* (
-      sessionID,
-      detail,
-    ) {
-      yield* store.set(sessionID, "needs_input", detail.slice(0, 120)).pipe(Effect.ignore, Effect.forkIn(scope))
-    })
+    const setNeedsInput: Interface["setNeedsInput"] = Effect.fn("SessionStatus.setNeedsInput")(
+      function* (sessionID, detail) {
+        yield* store.set(sessionID, "needs_input", detail.slice(0, 120)).pipe(Effect.ignore, Effect.forkIn(scope))
+      },
+    )
 
     // Restore the persisted status from the runtime map once a pending
     // question or permission is resolved.

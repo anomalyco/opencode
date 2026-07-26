@@ -17,19 +17,30 @@ const boot = Date.now()
 describe("resolveStatus", () => {
   test("prefers runtime signals over the persisted row", () => {
     expect(
-      resolveStatus({ pendingInput: true, runtime: "busy", persisted: { status: "done", time: { created: 0, updated: 0 } }, bootTime: boot }),
+      resolveStatus({
+        pendingInput: true,
+        runtime: "busy",
+        persisted: { status: "done", time: { created: 0, updated: 0 } },
+        bootTime: boot,
+      }),
     ).toBe("needs_input")
-    expect(resolveStatus({ runtime: "retry", persisted: { status: "done", time: { created: 0, updated: 0 } }, bootTime: boot })).toBe(
-      "retrying",
-    )
+    expect(
+      resolveStatus({
+        runtime: "retry",
+        persisted: { status: "done", time: { created: 0, updated: 0 } },
+        bootTime: boot,
+      }),
+    ).toBe("retrying")
     expect(resolveStatus({ runtime: "busy", bootTime: boot })).toBe("working")
   })
 
   test("reads needs_input and done from the persisted row", () => {
-    expect(resolveStatus({ persisted: { status: "needs_input", time: { created: 0, updated: 0 } }, bootTime: boot })).toBe(
-      "needs_input",
+    expect(
+      resolveStatus({ persisted: { status: "needs_input", time: { created: 0, updated: 0 } }, bootTime: boot }),
+    ).toBe("needs_input")
+    expect(resolveStatus({ persisted: { status: "done", time: { created: 0, updated: 0 } }, bootTime: boot })).toBe(
+      "done",
     )
-    expect(resolveStatus({ persisted: { status: "done", time: { created: 0, updated: 0 } }, bootTime: boot })).toBe("done")
   })
 
   test("derives interrupted for active statuses older than this process", () => {
@@ -41,7 +52,9 @@ describe("resolveStatus", () => {
 
   test("shows nothing for idle or missing rows", () => {
     expect(resolveStatus({ bootTime: boot })).toBeUndefined()
-    expect(resolveStatus({ persisted: { status: "idle", time: { created: 0, updated: 0 } }, bootTime: boot })).toBeUndefined()
+    expect(
+      resolveStatus({ persisted: { status: "idle", time: { created: 0, updated: 0 } }, bootTime: boot }),
+    ).toBeUndefined()
   })
 })
 

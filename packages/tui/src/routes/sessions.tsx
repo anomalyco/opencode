@@ -193,37 +193,39 @@ export function Sessions() {
   const options = createMemo(() => {
     const today = new Date().toDateString()
     const at = now()
-    return (sessions() ?? []).toSorted((a, b) => b.time.updated - a.time.updated).map((session) => {
-      const updated = new Date(session.time.updated).toDateString()
-      const isDeleting = toDelete() === session.id
-      const row = persisted().get(session.id)
-      const status = resolveStatus({
-        persisted: row,
-        runtime: sync.data.session_status[session.id]?.type,
-        pendingInput:
-          (sync.data.permission[session.id]?.length ?? 0) > 0 || (sync.data.question[session.id]?.length ?? 0) > 0,
-        bootTime,
+    return (sessions() ?? [])
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .map((session) => {
+        const updated = new Date(session.time.updated).toDateString()
+        const isDeleting = toDelete() === session.id
+        const row = persisted().get(session.id)
+        const status = resolveStatus({
+          persisted: row,
+          runtime: sync.data.session_status[session.id]?.type,
+          pendingInput:
+            (sync.data.permission[session.id]?.length ?? 0) > 0 || (sync.data.question[session.id]?.length ?? 0) > 0,
+          bootTime,
+        })
+        const display = status ? statusDisplay(status, row?.time.updated ?? at, at, theme) : undefined
+        const detail = status === "interrupted" ? "stopped while running" : row?.detail
+        const dateLabel = updated === today ? "Today" : updated.slice(4, 10)
+        return {
+          title: isDeleting ? `Press ${deleteHint()} again to confirm` : session.title,
+          bg: isDeleting ? theme.error : undefined,
+          description: detail ? Locale.truncate(detail, 48) : undefined,
+          footer: display ? (
+            <>
+              <span style={{ fg: display.color }}>{display.label}</span>
+              <span>{` · ${dateLabel}`}</span>
+            </>
+          ) : (
+            dateLabel
+          ),
+          gutter: status === "working" || status === "retrying" ? () => <Spinner /> : undefined,
+          value: session.id,
+          category: session.directory,
+        }
       })
-      const display = status ? statusDisplay(status, row?.time.updated ?? at, at, theme) : undefined
-      const detail = status === "interrupted" ? "stopped while running" : row?.detail
-      const dateLabel = updated === today ? "Today" : updated.slice(4, 10)
-      return {
-        title: isDeleting ? `Press ${deleteHint()} again to confirm` : session.title,
-        bg: isDeleting ? theme.error : undefined,
-        description: detail ? Locale.truncate(detail, 48) : undefined,
-        footer: display ? (
-          <>
-            <span style={{ fg: display.color }}>{display.label}</span>
-            <span>{` · ${dateLabel}`}</span>
-          </>
-        ) : (
-          dateLabel
-        ),
-        gutter: status === "working" || status === "retrying" ? () => <Spinner /> : undefined,
-        value: session.id,
-        category: session.directory,
-      }
-    })
   })
 
   // The footer operates in the context of the selected session row: directory
