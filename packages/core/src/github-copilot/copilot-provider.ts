@@ -40,10 +40,6 @@ export interface OpenaiCompatibleProvider {
   chat(modelId: OpenaiCompatibleModelId): LanguageModelV3
   responses(modelId: OpenaiCompatibleModelId): LanguageModelV3
   languageModel(modelId: OpenaiCompatibleModelId): LanguageModelV3
-
-  // embeddingModel(modelId: any): EmbeddingModelV2
-
-  // imageModel(modelId: any): ImageModelV2
 }
 
 /**
