@@ -5,7 +5,6 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
@@ -19,6 +18,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionOwnership } from "./session-ownership"
+import { useLocal } from "@/context/local"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -40,7 +40,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const dialog = useDialog()
   const file = useFile()
   const language = useLanguage()
-  const local = useLocal()
   const permission = usePermission()
   const prompt = usePrompt()
   const sdk = useSDK()
@@ -48,6 +47,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
+  const local = useLocal()
   const navigate = useNavigate()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
@@ -306,7 +306,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const client = sdk().client
+    const session = sdk().api.session
     const directory = sdk().directory
     const promptSession = prompt.capture()
     const revert = info()?.revert?.messageID
@@ -316,13 +316,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const parts = sync().data.part[message.id]
 
     if (sync().data.session_working(sessionID)) {
-      await client.session.abort({ sessionID }).catch(() => {})
+      await session.interrupt({ sessionID }).catch(() => {})
     }
 
     await runCommand({
       owner,
       prompt: promptSession,
-      request: () => client.session.revert({ sessionID, messageID: message.id }),
+      request: () => session.revert.stage({ sessionID, messageID: message.id }),
       updatePrompt: (promptSession) => {
         if (parts) promptSession.set(extractPromptFromParts(parts, { directory }))
       },
@@ -334,7 +334,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const client = sdk().client
+    const session = sdk().api.session
     const messages = userMessages()
     const promptSession = prompt.capture()
 
@@ -346,7 +346,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       await runCommand({
         owner,
         prompt: promptSession,
-        request: () => client.session.unrevert({ sessionID }),
+        request: () => session.revert.clear({ sessionID }),
         updatePrompt: (promptSession) => promptSession.reset(),
         updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id >= revertMessageID)),
       })
@@ -356,7 +356,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await runCommand({
       owner,
       prompt: promptSession,
-      request: () => client.session.revert({ sessionID, messageID: next.id }),
+      request: () => session.revert.stage({ sessionID, messageID: next.id }),
       updatePrompt: () => undefined,
       updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id < next.id)),
     })
@@ -375,10 +375,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    await sdk().client.session.summarize({
+    await sdk().api.session.compact({
       sessionID,
-      modelID: model.id,
-      providerID: model.provider.id,
+      model: { providerID: model.provider.id, modelID: model.id },
     })
   }
 

@@ -21,7 +21,7 @@ describe("message-file", () => {
     expect(attached(file())).toBe(false)
   })
 
-  test("treats only non-attachment source ranges as inline references", () => {
+  test("keeps data-backed file mentions inline", () => {
     expect(
       inline(
         file({
@@ -34,18 +34,16 @@ describe("message-file", () => {
       ),
     ).toBe(true)
 
-    expect(
-      inline(
-        file({
-          url: "data:text/plain;base64,SGVsbG8=",
-          source: {
-            type: "file",
-            path: "/repo/README.txt",
-            text: { value: "@README.txt", start: 0, end: 11 },
-          },
-        }),
-      ),
-    ).toBe(false)
+    const mentioned = file({
+      url: "data:text/plain;base64,SGVsbG8=",
+      source: {
+        type: "file",
+        path: "/repo/README.txt",
+        text: { value: "@README.txt", start: 0, end: 11 },
+      },
+    })
+    expect(inline(mentioned)).toBe(true)
+    expect(attached(mentioned)).toBe(false)
   })
 
   test("separates image and file attachment kinds", () => {
