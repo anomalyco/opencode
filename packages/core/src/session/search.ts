@@ -6,7 +6,7 @@ import { PartTable, SessionMessageTable, SessionTable } from "./sql"
 export function where(input: string) {
   const pattern = searchPattern(input)
   const fields = match(input)
-  // Search readable values explicitly so JSON field names and type tags do not become false matches.
+  // Search conversational values explicitly so JSON metadata and generated tool output do not become false matches.
   return or(
     matches(SessionTable.title, pattern),
     sql`exists (
@@ -31,8 +31,6 @@ export function match(input: string) {
       sql`json_extract(${PartTable.data}, '$.text')`,
       sql`json_extract(${PartTable.data}, '$.prompt')`,
       sql`json_extract(${PartTable.data}, '$.description')`,
-      sql`json_extract(${PartTable.data}, '$.state.output')`,
-      sql`json_extract(${PartTable.data}, '$.state.error')`,
     ],
     pattern,
   )
@@ -47,7 +45,6 @@ export function match(input: string) {
       [
         sql`json_extract(${SessionMessageTable.data}, '$.text')`,
         sql`json_extract(${SessionMessageTable.data}, '$.command')`,
-        sql`json_extract(${SessionMessageTable.data}, '$.output')`,
         sql`json_extract(${SessionMessageTable.data}, '$.summary')`,
         sql`json_extract(${SessionMessageTable.data}, '$.recent')`,
       ],
