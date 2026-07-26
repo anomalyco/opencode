@@ -1,5 +1,5 @@
 import type * as Arr from "effect/Array"
-import { NodeFileSystem, NodeSink, NodeStream } from "@effect/platform-node"
+import { NodeSink, NodeStream } from "@effect/platform-node"
 import * as NodePath from "@effect/platform-node/NodePath"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
