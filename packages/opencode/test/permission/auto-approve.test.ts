@@ -6,7 +6,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { LLMEvent } from "@opencode-ai/llm"
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@/config/config"
 import { PermissionAutoApprove } from "@/permission/auto-approve"
 import { Provider } from "@/provider/provider"
@@ -139,9 +139,13 @@ function layer(input: {
   ])
 }
 
-function classify(input: Parameters<typeof layer>[0], value = request()) {
-  return PermissionAutoApprove.Service.use((service) => service.classify(value)).pipe(
+function classify(input: Parameters<typeof layer>[0], value = request(), logs?: unknown[]) {
+  const effect = PermissionAutoApprove.Service.use((service) => service.classify(value)).pipe(
     Effect.provide(layer(input)),
+  )
+  if (!logs) return Effect.runPromise(effect)
+  return effect.pipe(
+    Effect.withLogger(Logger.make((options) => logs.push(options.message))),
     Effect.runPromise,
   )
 }
@@ -522,6 +526,35 @@ describe("permission auto-approve model execution", () => {
       ),
     ).toBe(true)
     expect(providers).toEqual(["session-provider"])
+  })
+
+  test("logs a structured record for classifier evals", async () => {
+    const current = turn("Delete the generated build directory")
+    const value = request({
+      patterns: ["rm -rf build"],
+      metadata: { command: "rm -rf build" },
+      tool: current.tool,
+    })
+    const logs: unknown[] = []
+
+    expect(await classify({ history: current.history, output: "ASK" }, value, logs)).toBe(false)
+    expect(logs).toContainEqual([
+      "auto-approve classification",
+      {
+        requestID: value.id,
+        sessionID,
+        providerID: "openai",
+        modelID: "gpt-5.2",
+        userRequest: "Delete the generated build directory",
+        action: {
+          permission: "bash",
+          patterns: ["rm -rf build"],
+          metadata: { command: "rm -rf build" },
+        },
+        response: "ASK",
+        decision: "ASK",
+      },
+    ])
   })
 
   test("rejects invalid explicit model syntax without fallback", async () => {

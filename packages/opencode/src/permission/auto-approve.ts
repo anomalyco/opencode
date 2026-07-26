@@ -358,7 +358,21 @@ const layer = Layer.effect(
         })
         .pipe(Stream.runCollect)
 
-      return approved(events)
+      const decision = approved(events)
+      yield* Effect.logInfo("auto-approve classification", {
+        requestID: request.id,
+        sessionID: request.sessionID,
+        providerID: model.providerID,
+        modelID: model.id,
+        userRequest: context.input.userRequest,
+        action: context.input.action,
+        response: events
+          .filter(LLMEvent.is.textDelta)
+          .map((event) => event.text)
+          .join(""),
+        decision: decision ? "AUTO_APPROVE" : "ASK",
+      })
+      return decision
     })
 
     const classify: Interface["classify"] = (request) =>
