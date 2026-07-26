@@ -1446,13 +1446,21 @@ export const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
-              sys.skills(agent),
+            const sparse = session.contextMode === "sparse"
+
+            const instructions = yield* (sparse
+              ? instruction.systemScoped("project").pipe(Effect.orDie)
+              : instruction.system().pipe(Effect.orDie))
+
+            const [env, modelMsgs] = yield* Effect.all([
               sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
-              sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+
+            const [skills, mcpInstructions] = sparse
+              ? ([undefined, undefined] as const)
+              : yield* Effect.all([sys.skills(agent), sys.mcp(agent, session.permission)])
+
             const system = [
               ...env,
               ...instructions,
@@ -1535,6 +1543,17 @@ export const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
+      // Wake-on-message registration. Must run HERE (inside a fiber that
+      // already has InstanceRef from the caller — an HTTP request or CLI
+      // run), not at layer-build time: Messaging.registerWakeHandler reads
+      // InstanceState.get, which dies with "InstanceRef not provided" if
+      // InstanceRef is absent, and it is always absent at layer init (it is
+      // provided only transiently per request/run). Re-registering on every
+      // loop() call is idempotent (registerWakeHandler just overwrites the
+      // stored closure) and independent of experimentalS2S — wake-on-message
+      // is a task.ts/coordinator-messaging feature, not an s2s one.
+      yield* messaging.registerWakeHandler((sessionID) => loop({ sessionID }).pipe(Effect.ignore))
+
       // Task 9, Seam 2 — register-on-run. Cover the case of an existing
       // session opened in a fresh process (e.g. the user re-opens a session
       // in a new OC instance): the session is not yet in this process's local

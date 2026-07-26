@@ -1,9 +1,12 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Duration, Effect, Layer, Schema, Context, Option } from "effect"
+import { Deferred, Duration, Effect, Layer, Schema, Context, Option, Scope } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "@/session/schema"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { MessagingEvent } from "@opencode-ai/schema/messaging-event"
+import { attach } from "@/effect/run-service"
+import { SessionStatus } from "@/session/status"
+import { Session } from "@/session/session"
 
 export const Sent = MessagingEvent.Sent
 export const Replied = MessagingEvent.Replied
@@ -84,6 +87,12 @@ interface State {
   // consults this to decide whether a wake can be served by an in-process
   // drain (local) or must be persisted to the s2s_inbox table (remote).
   local: Set<SessionID>
+  // Wake-on-message: per-session wake budget. A session must be in this map
+  // (with budget > 0) for enqueue to attempt a wake.
+  wakePolicy: Map<SessionID, { budget: number }>
+  // Registered by SessionPrompt at layer init so prompt.loop can wake a child
+  // without Messaging importing SessionPrompt.
+  wakeHandler: ((sessionID: SessionID) => Effect.Effect<void>) | null
 }
 
 export interface Interface {
@@ -123,6 +132,10 @@ export interface Interface {
   readonly registerLocal: (sessionID: SessionID) => Effect.Effect<void>
   readonly isLocal: (sessionID: SessionID) => Effect.Effect<boolean>
   readonly localSet: () => Effect.Effect<ReadonlyArray<SessionID>>
+  readonly registerWakeHandler: (
+    handler: (sessionID: SessionID) => Effect.Effect<void>,
+  ) => Effect.Effect<void>
+  readonly setWakePolicy: (input: { sessionID: SessionID; budget: number }) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Messaging") {}
@@ -131,6 +144,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    // Layer-lifetime scope for wake-handler forks. `attach` re-provides the
+    // caller's InstanceRef into the forked effect; forking into THIS scope
+    // (not a bare Effect.runFork, which starts a fresh top-level runtime with
+    // an empty context and drops InstanceRef) ties the fiber's lifetime to
+    // the Messaging layer instead of leaking it.
+    const scope = yield* Scope.Scope
     const state = yield* InstanceState.make<State>(
       Effect.fn("Messaging.state")(function* () {
         const state: State = {
@@ -144,6 +163,8 @@ export const layer = Layer.effect(
           waiters: new Map<SessionID, Deferred.Deferred<void>>(),
           treeTotal: { count: 0 },
           local: new Set<SessionID>(),
+          wakePolicy: new Map<SessionID, { budget: number }>(),
+          wakeHandler: null,
         }
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
@@ -160,6 +181,8 @@ export const layer = Layer.effect(
             state.waiters.clear()
             state.treeTotal.count = 0
             state.local.clear()
+            state.wakePolicy.clear()
+            state.wakeHandler = null
           }),
         )
         return state
@@ -343,6 +366,14 @@ export const layer = Layer.effect(
         v.waiters.delete(input.target)
         yield* Deferred.succeed(w, undefined)
       }
+
+      // Wake-on-message: after persisting the message, check whether the
+      // recipient has a wake policy with remaining budget and is idle.
+      // The handler is forked via attach(...).forkIn(scope) so it inherits
+      // the caller's InstanceRef (a bare fork would die without it). A wake
+      // failure must never break the enqueue/send.
+      yield* wakeIfIdle(input.target).pipe(Effect.catchCause(() => Effect.void))
+      return undefined as unknown as void
     })
 
     const drain: Interface["drain"] = Effect.fn("Messaging.drain")(function* (sessionID) {
@@ -396,6 +427,78 @@ export const layer = Layer.effect(
       return [...v.local]
     })
 
+    const registerWakeHandler: Interface["registerWakeHandler"] = Effect.fn(
+      "Messaging.registerWakeHandler",
+    )(function* (handler) {
+      const v = yield* InstanceState.get(state)
+      v.wakeHandler = handler
+    })
+
+    const setWakePolicy: Interface["setWakePolicy"] = Effect.fn("Messaging.setWakePolicy")(
+      function* (input) {
+        const v = yield* InstanceState.get(state)
+        v.wakePolicy.set(input.sessionID, { budget: input.budget })
+      },
+    )
+
+    // Runs after enqueue persistence to check whether the recipient should
+    // be woken. All predicate checks must hold before budget decrement and
+    // handler invocation. Mirrors S2SPoller.wakeIfIdle but runs via the
+    // registered handler (prompt.loop) instead of calling it directly.
+    const wakeIfIdle = Effect.fn("Messaging.wakeIfIdle")(function* (target: SessionID) {
+      const v = yield* InstanceState.get(state)
+      const handler = v.wakeHandler
+      if (!handler) return
+
+      const policy = v.wakePolicy.get(target)
+      if (!policy || policy.budget <= 0) return
+
+      // Service-dependent predicate checks — use serviceOption so this
+      // gracefully skips when SessionStatus/Session are not provided
+      // (e.g. in minimal test layers).
+      const statusOpt = yield* Effect.serviceOption(SessionStatus.Service)
+      const sessionsOpt = yield* Effect.serviceOption(Session.Service)
+      if (Option.isNone(statusOpt) || Option.isNone(sessionsOpt)) {
+        // Without the predicate services, we trust the caller (the
+        // wake-policy setter) and invoke the handler unconditionally.
+        policy.budget -= 1
+        // attach(...) re-provides THIS fiber's InstanceRef into the forked
+        // effect before forkIn hands it to the layer scope — a bare
+        // Effect.runFork here would start a new top-level runtime with an
+        // empty context, so the forked handler's InstanceState.context read
+        // would die with "InstanceRef not provided" the instant it ran.
+        yield* attach(handler(target)).pipe(Effect.forkIn(scope))
+        return
+      }
+      const status = statusOpt.value
+      const sessions = sessionsOpt.value
+
+      const st = yield* status.get(target)
+      if (st.type !== "idle") return
+
+      const last = yield* sessions.findMessage(target, (m) => m.info.role === "user")
+      if (Option.isNone(last)) return
+
+      // Ancestor chain: walk parentID to root; every ancestor session row
+      // must still exist. V1 has no terminal "completed" session state, so
+      // row existence is the predicate.
+      const sessionRow = yield* sessions.get(target).pipe(Effect.option)
+      if (Option.isNone(sessionRow)) return
+      let ancestor = sessionRow.value.parentID
+      while (ancestor) {
+        const ancRow = yield* sessions.get(ancestor).pipe(Effect.option)
+        if (Option.isNone(ancRow)) return
+        ancestor = ancRow.value.parentID
+      }
+
+      // All predicates passed — decrement budget and invoke handler.
+      // attach(...) carries THIS fiber's InstanceRef into the fork (see the
+      // no-predicate-services branch above for why a bare Effect.runFork
+      // would silently kill the forked handler).
+      policy.budget -= 1
+      yield* attach(handler(target)).pipe(Effect.forkIn(scope))
+    })
+
     return Service.of({
       send,
       reply,
@@ -412,6 +515,8 @@ export const layer = Layer.effect(
       registerLocal,
       isLocal,
       localSet,
+      registerWakeHandler,
+      setWakePolicy,
     })
   }),
 )

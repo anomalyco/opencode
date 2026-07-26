@@ -250,4 +250,16 @@ describe("Session", () => {
       expect(saved.metadata).toBeUndefined()
     }),
   )
+
+  it.instance("setResult persists and get returns it", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "result-test" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      yield* session.setResult({ sessionID: created.id, result: { verdict: "ok", counts: { must: 0 } } })
+      const read = yield* session.get(created.id)
+      expect(read.result).toEqual({ verdict: "ok", counts: { must: 0 } })
+    }),
+  )
 })

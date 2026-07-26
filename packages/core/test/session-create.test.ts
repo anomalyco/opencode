@@ -422,4 +422,23 @@ describe("SessionV2.create", () => {
       ).toBe("Session.NotFoundError")
     }),
   )
+
+  it.effect("returns result when the column is populated on the Session row", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      const created = yield* session.create({ location })
+      const value = { verdict: "ok", counts: { must: 0 } }
+
+      yield* db
+        .update(SessionTable)
+        .set({ result: value })
+        .where(eq(SessionTable.id, created.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      const got = yield* session.get(created.id)
+      expect(got.result).toEqual(value)
+    }),
+  )
 })

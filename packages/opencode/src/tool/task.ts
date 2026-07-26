@@ -12,6 +12,7 @@ import type { SessionPrompt } from "../session/prompt"
 import { writeMarker as writeMessageMarker } from "./message"
 import { Messaging } from "../messaging"
 import { Config } from "@/config/config"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -64,6 +65,17 @@ const BaseParameterFields = {
     description:
       "Optional slugs (other task_ids you spawn) this subagent may message. Empty/omitted → parent only.",
   }),
+  completion: Schema.optional(Schema.Literals(["full", "terse"])).annotate({
+    description: "Completion display mode for this dispatch (default: full — the full child output is shown inline)",
+  }),
+  context: Schema.optional(Schema.Literals(["full", "sparse"])).annotate({
+    description:
+      "Context mode for the subagent: 'full' sends all instruction files and skills; 'sparse' sends only the project AGENTS.md chain, dropping global instructions, skills, and MCP docs (default: full)",
+  }),
+  wake_on_message: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "When true, if the dispatched child agent becomes idle and a sibling or coordinator message lands in its inbox, the child will be woken to process it instead of the message sitting undelivered",
+  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -109,6 +121,44 @@ function renderMessage(input: { sessionID: SessionID; body: string }) {
     "</task>",
   ].join("\n")
 }
+
+export function childResultBlock(result: Record<string, unknown> | undefined): string {
+  if (!result) return ""
+  return `\n\n<task_return>\n${JSON.stringify(result, null, 2)}\n</task_return>`
+}
+
+export const TERSE_TAIL_CHARS = 500
+
+export function resolveCompletionMode(
+  dispatch: "full" | "terse" | undefined,
+  agent: Agent.Info,
+  cfg: ConfigV1.Info,
+): "full" | "terse" {
+  return dispatch ?? agent.completion ?? cfg.task?.completion ?? "full"
+}
+
+export function resolveContextMode(
+  dispatch: "full" | "sparse" | undefined,
+  agent: Agent.Info,
+  cfg: ConfigV1.Info,
+): "full" | "sparse" {
+  return dispatch ?? agent.context ?? cfg.task?.context ?? "full"
+}
+
+function terseText(
+  fullText: string,
+  result: Record<string, unknown> | undefined,
+  childID: string,
+  slug: string | undefined,
+) {
+  const parts: string[] = []
+  if (result) parts.push(JSON.stringify(result, null, 2))
+  if (fullText) parts.push(`…${fullText.slice(-TERSE_TAIL_CHARS)}`)
+  parts.push(`full result: task session ${childID}${slug ? ` (task_id: ${slug})` : ""}`)
+  return parts.join("\n\n")
+}
+
+export const WAKE_BUDGET_DEFAULT = 5
 
 export const TaskTool = Tool.define(
   id,
@@ -167,6 +217,7 @@ export const TaskTool = Tool.define(
             elapsedMs,
             tokens: { input, output, reasoning, cacheRead, cacheWrite },
             cost: totalCost,
+            result: s?.result,
           }
         }),
       )
@@ -179,6 +230,9 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
+      const callingAgent = yield* agent.get(ctx.agent)
+      const completionMode = resolveCompletionMode(params.completion, callingAgent!, cfg)
+      const contextMode = resolveContextMode(params.context, callingAgent!, cfg)
       const runInBackground = params.background === true
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
@@ -267,10 +321,13 @@ export const TaskTool = Tool.define(
                 ),
             ),
           ],
+          ...(contextMode === "sparse" ? { contextMode } : {}),
         }))
 
       if (params.task_id) yield* messaging.registerSlug(params.task_id, nextSession.id)
       yield* messaging.setAllow(nextSession.id, [...(params.message_allow ?? [])])
+      if (params.wake_on_message === true)
+        yield* messaging.setWakePolicy({ sessionID: nextSession.id, budget: WAKE_BUDGET_DEFAULT })
 
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
         Effect.provideService(Database.Service, database),
@@ -320,6 +377,22 @@ export const TaskTool = Tool.define(
         reason?: string,
       ) {
         const currentParent = yield* sessions.get(ctx.sessionID)
+        const child = yield* sessions.get(nextSession.id).pipe(Effect.option)
+        const childVal = Option.getOrUndefined(child)
+        const frameBody =
+          completionMode === "terse"
+            ? terseText(text, childVal?.result, nextSession.id, childVal?.slug)
+            : renderOutput({
+                sessionID: nextSession.id,
+                state,
+                summary:
+                  state === "completed"
+                    ? `Background task completed: ${params.description}`
+                    : state === "aborted"
+                      ? `Background task aborted: ${reason ?? params.description}`
+                      : `Background task failed: ${params.description}`,
+                text,
+              }) + childResultBlock(childVal?.result)
         yield* ops
           .prompt({
             sessionID: ctx.sessionID,
@@ -329,17 +402,7 @@ export const TaskTool = Tool.define(
               {
                 type: "text",
                 synthetic: true,
-                text: renderOutput({
-                  sessionID: nextSession.id,
-                  state,
-                  summary:
-                    state === "completed"
-                      ? `Background task completed: ${params.description}`
-                      : state === "aborted"
-                        ? `Background task aborted: ${reason ?? params.description}`
-                        : `Background task failed: ${params.description}`,
-                  text,
-                }),
+                text: frameBody,
               },
             ],
           })
@@ -488,6 +551,9 @@ export const TaskTool = Tool.define(
             if (outcome.kind === "promoted") return backgroundResult()
             const result = outcome.info
             if (result?.metadata?.background === true) return backgroundResult()
+            const child = yield* sessions.get(nextSession.id).pipe(Effect.option)
+            const childVal = Option.getOrUndefined(child)
+            const childResult = childVal?.result
             if (result?.status === "error") {
               yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "error", startedAt))
               return yield* Effect.fail(new Error(result.error ?? "Task failed"))
@@ -495,36 +561,49 @@ export const TaskTool = Tool.define(
           if (result?.status === "cancelled") {
             const aborted = yield* interrupt.terminal(nextSession.id)
             yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "aborted", startedAt))
+            const outputText = result?.output ?? ""
             return {
               title: params.description,
               metadata,
-              output: renderOutput({
-                sessionID: nextSession.id,
-                state: "aborted",
-                summary: Option.isSome(aborted) ? `Aborted: ${aborted.value.reason}` : "Aborted",
-                text: result?.output ?? "",
-              }),
+              output:
+                completionMode === "terse"
+                  ? terseText(outputText, childResult, nextSession.id, childVal?.slug)
+                  : renderOutput({
+                      sessionID: nextSession.id,
+                      state: "aborted",
+                      summary: Option.isSome(aborted) ? `Aborted: ${aborted.value.reason}` : "Aborted",
+                      text: outputText,
+                    }) + childResultBlock(childResult),
             }
           }
           const aborted = yield* interrupt.terminal(nextSession.id)
           if (Option.isSome(aborted)) {
             yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "aborted", startedAt))
+            const outputText = result?.output ?? ""
             return {
               title: params.description,
               metadata,
-              output: renderOutput({
-                sessionID: nextSession.id,
-                state: "aborted",
-                summary: `Aborted: ${aborted.value.reason}`,
-                text: result?.output ?? "",
-              }),
+              output:
+                completionMode === "terse"
+                  ? terseText(outputText, childResult, nextSession.id, childVal?.slug)
+                  : renderOutput({
+                      sessionID: nextSession.id,
+                      state: "aborted",
+                      summary: `Aborted: ${aborted.value.reason}`,
+                      text: outputText,
+                    }) + childResultBlock(childResult),
             }
           }
           yield* events.publish(Event.Completed, yield* completedPayload(nextSession.id, ctx.sessionID, "ok", startedAt))
+          const outputText = result?.output ?? ""
           return {
             title: params.description,
             metadata,
-            output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+            output:
+              completionMode === "terse"
+                ? terseText(outputText, childResult, nextSession.id, childVal?.slug)
+                : renderOutput({ sessionID: nextSession.id, state: "completed", text: outputText }) +
+                  childResultBlock(childResult),
           }
           }),
         (_, exit) =>

@@ -262,3 +262,81 @@ describe("Instruction.systemPaths global config", () => {
     }),
   )
 })
+
+describe("Instruction.systemScoped", () => {
+  it.live("systemScoped('project') excludes global config-dir instruction files", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
+      const projectTmp = yield* tmpWithFiles({ "AGENTS.md": "# Project Instructions" })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const projectOnly = yield* svc.systemScoped("project")
+        const all = yield* svc.systemScoped("all")
+
+        // "project" scope: only project AGENTS.md, not global
+        expect(projectOnly).toHaveLength(1)
+        expect(projectOnly[0]).toContain("Project Instructions")
+        expect(projectOnly[0]).not.toContain("Global Instructions")
+
+        // "all" scope: both
+        expect(all).toHaveLength(2)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("systemScoped('all') equals system() byte-compat", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
+      const projectTmp = yield* tmpWithFiles({ "AGENTS.md": "# Project Instructions" })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const full = yield* svc.system()
+        const scoped = yield* svc.systemScoped("all")
+        expect(scoped).toEqual(full)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+})
+
+describe("Instruction.systemScoped config-instructions", () => {
+  it.live("systemScoped('project') excludes config instructions, systemScoped('all') includes them", () =>
+    Effect.gen(function* () {
+      const projectTmp = yield* tmpWithFiles({
+        "AGENTS.md": "# Project Instructions",
+        "extra.md": "# Extra Config Instructions",
+      })
+
+      const instructions = [path.join(projectTmp, "extra.md")]
+      const customConfigLayer = TestConfig.layer({
+        get: () => Effect.succeed({ instructions }),
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const projectOnly = yield* svc.systemScoped("project")
+        const all = yield* svc.systemScoped("all")
+
+        // "project" scope: only project AGENTS.md, not config extra.md
+        expect(projectOnly).toHaveLength(1)
+        expect(projectOnly[0]).toContain("Project Instructions")
+        expect(projectOnly[0]).not.toContain("Extra Config Instructions")
+
+        // "all" scope: includes extra.md from config instructions
+        expect(all.length).toBeGreaterThanOrEqual(2)
+        const hasExtra = all.some((s) => s.includes("Extra Config Instructions"))
+        expect(hasExtra).toBe(true)
+      }).pipe(
+        provideInstance(projectTmp),
+        Effect.provide(
+          AppNodeBuilder.build(Instruction.node, [
+            [Config.node, customConfigLayer],
+            [Global.node, Global.layerWith({ home: projectTmp, config: projectTmp })],
+            [RuntimeFlags.node, RuntimeFlags.layer({})],
+          ]),
+        ),
+      )
+    }),
+  )
+})

@@ -557,6 +557,7 @@ export const SessionInfo = Schema.Struct({
   model: optional(SessionModel),
   version: Schema.String,
   metadata: optional(Schema.Record(Schema.String, Schema.Any)),
+  result: optional(Schema.Record(Schema.String, Schema.Any)),
   time: Schema.Struct({
     created: NonNegativeInt,
     updated: NonNegativeInt,
@@ -565,6 +566,7 @@ export const SessionInfo = Schema.Struct({
   }),
   permission: optional(PermissionV1.Ruleset),
   revert: optional(SessionRevert),
+  contextMode: optional(Schema.Literals(["full", "sparse"])),
 }).annotate({ identifier: "Session" })
 export type SessionInfo = typeof SessionInfo.Type
 

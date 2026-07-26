@@ -166,6 +166,16 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  task: Schema.optional(
+    Schema.Struct({
+      completion: Schema.optional(Schema.Literals(["full", "terse"])).annotate({
+        description: "Completion display mode for task dispatches (default: full)",
+      }),
+      context: Schema.optional(Schema.Literals(["full", "sparse"])).annotate({
+        description: "Context display mode for task dispatches (default: full)",
+      }),
+    }),
+  ).annotate({ description: "Task dispatch configuration" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

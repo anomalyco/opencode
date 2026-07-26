@@ -342,6 +342,8 @@ describe("S2SPoller: reaper cutoff advances per tick (FIX 1 regression guard)", 
       localSet: () => Effect.succeed([]),
       isLocal: () => Effect.succeed(false),
       registerLocal: () => Effect.void,
+      registerWakeHandler: () => Effect.die("unexpected Messaging.registerWakeHandler in reaper test"),
+      setWakePolicy: () => Effect.die("unexpected Messaging.setWakePolicy in reaper test"),
     }),
   )
 

@@ -106,6 +106,8 @@ export function fromRow(row: SessionRow): Info {
     },
     share,
     metadata: row.metadata ?? undefined,
+    result: row.result ?? undefined,
+    contextMode: row.context_mode ?? undefined,
     revert,
     permission: row.permission ? [...row.permission] : undefined,
     time: {
@@ -136,6 +138,8 @@ export function toRow(info: Info) {
     summary_files: info.summary?.files,
     summary_diffs: info.summary?.diffs,
     metadata: info.metadata,
+    result: info.result,
+    context_mode: info.contextMode,
     cost: info.cost ?? 0,
     tokens_input: (info.tokens ?? EmptyTokens).input,
     tokens_output: (info.tokens ?? EmptyTokens).output,
@@ -220,6 +224,7 @@ const Model = Schema.Struct({
 })
 
 export const Metadata = Schema.Record(Schema.String, Schema.Any)
+export const Result = Schema.Record(Schema.String, Schema.Any)
 
 export const Info = Schema.Struct({
   id: SessionID,
@@ -238,6 +243,8 @@ export const Info = Schema.Struct({
   model: optional(Model),
   version: Schema.String,
   metadata: optional(Metadata),
+  result: optional(Result),
+  contextMode: optional(Schema.Literals(["full", "sparse"])),
   time: Time,
   permission: optional(PermissionV1.Ruleset),
   revert: optional(Revert),
@@ -266,6 +273,7 @@ export const CreateInput = Schema.optional(
     metadata: Schema.optional(Metadata),
     permission: Schema.optional(PermissionV1.Ruleset),
     workspaceID: Schema.optional(WorkspaceV2.ID),
+    contextMode: Schema.optional(Schema.Literals(["full", "sparse"])),
   }),
 )
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -285,6 +293,10 @@ export const SetArchivedInput = Schema.Struct({
 export const SetMetadataInput = Schema.Struct({
   sessionID: SessionID,
   metadata: Metadata,
+})
+export const SetResultInput = Schema.Struct({
+  sessionID: SessionID,
+  result: Result,
 })
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
@@ -423,6 +435,7 @@ export interface Interface {
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
+    contextMode?: "full" | "sparse"
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
@@ -430,6 +443,7 @@ export interface Interface {
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
+  readonly setResult: (input: typeof SetResultInput.Type) => Effect.Effect<void>
   readonly setAgentModel: (input: {
     sessionID: SessionID
     agent: string
@@ -509,6 +523,7 @@ const layer: Layer.Layer<
       path?: string
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      contextMode?: "full" | "sparse"
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -525,6 +540,7 @@ const layer: Layer.Layer<
         model: input.model,
         metadata: input.metadata,
         permission: input.permission ? [...input.permission] : undefined,
+        contextMode: input.contextMode,
         cost: 0,
         tokens: EmptyTokens,
         time: {
@@ -674,6 +690,7 @@ const layer: Layer.Layer<
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
       workspaceID?: WorkspaceV2.ID
+      contextMode?: "full" | "sparse"
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
@@ -686,6 +703,7 @@ const layer: Layer.Layer<
         model: input?.model,
         metadata: input?.metadata,
         permission: input?.permission,
+        contextMode: input?.contextMode,
         workspaceID: input?.workspaceID ?? workspace,
       })
     })
@@ -762,6 +780,10 @@ const layer: Layer.Layer<
 
     const setMetadata = Effect.fn("Session.setMetadata")(function* (input: typeof SetMetadataInput.Type) {
       yield* patch(input.sessionID, { metadata: input.metadata, time: { updated: Date.now() } }).pipe(Effect.orDie)
+    })
+
+    const setResult = Effect.fn("Session.setResult")(function* (input: typeof SetResultInput.Type) {
+      yield* patch(input.sessionID, { result: input.result, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
     const setAgentModel = Effect.fn("Session.setAgentModel")(function* (input: {
@@ -915,6 +937,7 @@ const layer: Layer.Layer<
       setTitle,
       setArchived,
       setMetadata,
+      setResult,
       setAgentModel,
       setPermission,
       setRevert,

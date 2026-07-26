@@ -12,6 +12,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { TaskReturnTool } from "./task-return"
 import { TaskSteerTool, TaskCancelTool, TaskAbortTool } from "./task-interrupt"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
@@ -101,6 +102,7 @@ export const layer = Layer.effect(
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
+    const taskReturn = yield* TaskReturnTool
     const taskSteer = yield* TaskSteerTool
     const taskCancel = yield* TaskCancelTool
     const taskAbort = yield* TaskAbortTool
@@ -221,6 +223,7 @@ export const layer = Layer.effect(
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
+          task_return: Tool.init(taskReturn),
           task_steer: Tool.init(taskSteer),
           task_cancel: Tool.init(taskCancel),
           task_abort: Tool.init(taskAbort),
@@ -251,6 +254,7 @@ export const layer = Layer.effect(
             tool.edit,
             tool.write,
             tool.task,
+            tool.task_return,
             ...(flags.experimentalSubagentInterrupt ? [tool.task_steer, tool.task_cancel, tool.task_abort] : []),
             tool.fetch,
             tool.todo,

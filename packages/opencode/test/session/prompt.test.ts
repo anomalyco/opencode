@@ -548,6 +548,69 @@ withMcpInstructions.instance(
   15_000,
 )
 
+withMcpInstructions.instance(
+  "sparse child system prompt drops skills and MCP blocks, keeps project instructions",
+  () =>
+    Effect.gen(function* () {
+      const { llm, dir } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const write = yield* FSUtil.Service
+
+      // Write a project AGENTS.md so sparse can pick it up
+      yield* write.writeWithDirs(path.join(dir, "AGENTS.md"), "# Project Instructions")
+
+      const base = { permission: [{ permission: "*", pattern: "*", action: "allow" }] } as const
+
+      // Sparse child session
+      const sparseChild = yield* sessions.create({
+        parentID: undefined,
+        title: "Sparse Child",
+        contextMode: "sparse",
+        ...base,
+      })
+
+      yield* llm.hang
+      yield* user(sparseChild.id, "hello")
+      const sparseFiber = yield* prompt.loop({ sessionID: sparseChild.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for sparse LLM request", "10 seconds")
+
+      const sparseHits = yield* llm.hits
+      const sparseBody = JSON.stringify(sparseHits[0]?.body)
+      // Sparse: no skills block, no MCP instructions block
+      expect(sparseBody).not.toContain("Skills provide specialized instructions")
+      expect(sparseBody).not.toContain("<mcp_instructions>")
+      // Sparse: project AGENTS.md included
+      expect(sparseBody).toContain("Project Instructions")
+      yield* Fiber.interrupt(sparseFiber)
+      yield* llm.reset
+
+      // Full-mode child session (default contextMode)
+      const fullChild = yield* sessions.create({
+        parentID: undefined,
+        title: "Full Child",
+        ...base,
+      })
+
+      yield* llm.hang
+      yield* user(fullChild.id, "hello")
+      const fullFiber = yield* prompt.loop({ sessionID: fullChild.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for full LLM request", "10 seconds")
+
+      const fullHits = yield* llm.hits
+      const fullBody = JSON.stringify(fullHits[0]?.body)
+      // Full: skills and MCP blocks present
+      expect(fullBody).toContain("Skills provide specialized instructions")
+      expect(fullBody).toContain("<mcp_instructions>")
+      expect(fullBody).toContain(`<server name=\\"guide-server\\">`)
+      expect(fullBody).toContain("Use lookup before mutate.")
+      // Full: project instructions also present
+      expect(fullBody).toContain("Project Instructions")
+      yield* Fiber.interrupt(fullFiber)
+    }),
+  30_000,
+)
+
 it.instance("legacy prompt emits message events without session.next events", () =>
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service

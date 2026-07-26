@@ -25,6 +25,7 @@ export const Completed = Event.define({
       }),
     ),
     cost: Schema.optional(Schema.Finite),
+    result: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   },
 })
 

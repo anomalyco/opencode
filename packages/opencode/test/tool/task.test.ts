@@ -17,7 +17,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
 import { Interrupt } from "../../src/session/interrupt"
-import { TaskTool, renderOutput, Event as TaskEventDef, type TaskPromptOps } from "../../src/tool/task"
+import { TaskTool, renderOutput, Event as TaskEventDef, type TaskPromptOps, childResultBlock } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -1163,6 +1163,10 @@ describe("tool.task", () => {
               Effect.all([
                 sessions.updateMessage(result.info),
                 sessions.updatePart(result.parts[0]!),
+                sessions.setResult({
+                  sessionID: input.sessionID,
+                  result: { verdict: "PASS" },
+                }),
               ], { discard: true }),
             ),
           ),
@@ -1205,6 +1209,8 @@ describe("tool.task", () => {
       expect(event.data.tokens?.cacheRead).toBe(10)
       expect(event.data.tokens?.cacheWrite).toBe(5)
       expect(event.data.cost).toBe(0.005)
+      expect(event.data.result).toEqual({ verdict: "PASS" })
+      expect(result.output).toContain(childResultBlock({ verdict: "PASS" }))
     }),
   )
 
@@ -1220,6 +1226,149 @@ const brokenSessionLayer = Layer.effect(
 )
 const itBroken = testEffect(Layer.provideMerge(brokenSessionLayer, withRipgrep()))
 
+
+  const TERSE_TAIL = 500
+  const EARLY_MARKER = "UNIQUE_EARLY_MARKER_12345"
+  // Build a long child output: ~2000 chars, with the marker near the start
+  // so terse mode (which only keeps the last 500 chars) must cap it.
+  const longOutput = EARLY_MARKER + "X".repeat(Math.max(0, 2000 - EARLY_MARKER.length)) + "\nFINAL VERDICT LINE"
+
+  it.instance("terse completion frame carries result, tail, and pointer", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.sync(() => {
+            const id = MessageID.ascending()
+            const info: SessionV1.Assistant = {
+              id,
+              role: "assistant",
+              parentID: input.messageID ?? MessageID.ascending(),
+              sessionID: input.sessionID,
+              mode: input.agent ?? "general",
+              agent: input.agent ?? "general",
+              cost: 0,
+              path: { cwd: "/tmp", root: "/tmp" },
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: input.model?.modelID ?? ref.modelID,
+              providerID: input.model?.providerID ?? ref.providerID,
+              time: { created: Date.now() },
+              finish: "stop",
+            }
+            const part = {
+              id: PartID.ascending(),
+              messageID: id,
+              sessionID: input.sessionID,
+              type: "text" as const,
+              text: longOutput,
+            }
+            return { info: info as SessionV1.Info, parts: [part] }
+          }).pipe(
+            Effect.tap((result) =>
+              Effect.all([
+                sessions.updateMessage(result.info),
+                sessions.updatePart(result.parts[0]!),
+                sessions.setResult({
+                  sessionID: input.sessionID,
+                  result: { verdict: "APPROVE" },
+                }),
+              ], { discard: true }),
+            ),
+          ),
+      }
+
+      const result = yield* def.execute(
+        { description: "inspect bug", prompt: "look into it", subagent_type: "general", completion: "terse" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain('"verdict": "APPROVE"')
+      expect(result.output).toContain("FINAL VERDICT LINE")
+      expect(result.output).not.toContain(EARLY_MARKER)
+      expect(result.output).toContain("full result: task session")
+    }),
+  )
+
+  it.instance("default completion mode is full (unchanged body)", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const childText = "CHILD_OUTPUT_BODY"
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.sync(() => {
+            const id = MessageID.ascending()
+            const info: SessionV1.Assistant = {
+              id,
+              role: "assistant",
+              parentID: input.messageID ?? MessageID.ascending(),
+              sessionID: input.sessionID,
+              mode: input.agent ?? "general",
+              agent: input.agent ?? "general",
+              cost: 0,
+              path: { cwd: "/tmp", root: "/tmp" },
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: input.model?.modelID ?? ref.modelID,
+              providerID: input.model?.providerID ?? ref.providerID,
+              time: { created: Date.now() },
+              finish: "stop",
+            }
+            const part = {
+              id: PartID.ascending(),
+              messageID: id,
+              sessionID: input.sessionID,
+              type: "text" as const,
+              text: childText,
+            }
+            return { info: info as SessionV1.Info, parts: [part] }
+          }).pipe(
+            Effect.tap((result) =>
+              Effect.all([
+                sessions.updateMessage(result.info),
+                sessions.updatePart(result.parts[0]!),
+              ], { discard: true }),
+            ),
+          ),
+      }
+
+      // No completion param → defaults to "full"
+      const result = yield* def.execute(
+        { description: "inspect bug", prompt: "look into it", subagent_type: "general" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain(childText)
+      // Full mode should NOT have the terse pointer
+      expect(result.output).not.toContain("full result: task session")
+    }),
+  )
 
   itBroken.instance("enrichment fallback publishes base payload when messages read dies", () =>
     Effect.gen(function* () {
@@ -1307,3 +1456,132 @@ const itBroken = testEffect(Layer.provideMerge(brokenSessionLayer, withRipgrep()
 
 
 })
+
+  it.instance("sparse context stores contextMode on the child session", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps({ text: "done" })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          context: "sparse",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.contextMode).toBe("sparse")
+    }),
+  )
+
+  it.instance("sparse persists across resume", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps({ text: "done" })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          context: "sparse",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      // Re-fetch — contextMode must survive the roundtrip
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.contextMode).toBe("sparse")
+      expect(child.id).toBe(result.metadata.sessionId)
+    }),
+  )
+
+  it.instance("default context mode is undefined (not stored)", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps({ text: "done" })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.contextMode).toBeUndefined()
+    }),
+  )
+
+  it.instance("context=full leaves contextMode undefined (no row noise)", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps({ text: "done" })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          context: "full",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.contextMode).toBeUndefined()
+    }),
+  )

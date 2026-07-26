@@ -309,6 +309,22 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "The command that triggered this task",
       "type": "string",
     },
+    "completion": {
+      "description": "Completion display mode for this dispatch (default: full — the full child output is shown inline)",
+      "enum": [
+        "full",
+        "terse",
+      ],
+      "type": "string",
+    },
+    "context": {
+      "description": "Context mode for the subagent: 'full' sends all instruction files and skills; 'sparse' sends only the project AGENTS.md chain, dropping global instructions, skills, and MCP docs (default: full)",
+      "enum": [
+        "full",
+        "sparse",
+      ],
+      "type": "string",
+    },
     "description": {
       "description": "A short (3-5 words) description of the task",
       "type": "string",
@@ -331,6 +347,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
     "task_id": {
       "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
       "type": "string",
+    },
+    "wake_on_message": {
+      "description": "When true, if the dispatched child agent becomes idle and a sibling or coordinator message lands in its inbox, the child will be woken to process it instead of the message sitting undelivered",
+      "type": "boolean",
     },
   },
   "required": [

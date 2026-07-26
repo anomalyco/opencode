@@ -35,6 +35,12 @@ const AgentSchema = Schema.StructWithRest(
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
+    completion: Schema.optional(Schema.Literals(["full", "terse"])).annotate({
+      description: "Completion display mode for task dispatches from this agent (default: full)",
+    }),
+    context: Schema.optional(Schema.Literals(["full", "sparse"])).annotate({
+      description: "Context display mode for task dispatches from this agent (default: full)",
+    }),
     permission: Schema.optional(ConfigPermissionV1.Info),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
@@ -57,6 +63,8 @@ const KNOWN_KEYS = new Set([
   "permission",
   "disable",
   "tools",
+  "completion",
+  "context",
 ])
 
 const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema.Type<typeof AgentSchema> => {

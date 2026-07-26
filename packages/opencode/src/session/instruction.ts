@@ -35,6 +35,7 @@ export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
   readonly systemPaths: () => Effect.Effect<Set<string>, FSUtil.Error>
   readonly system: () => Effect.Effect<string[], FSUtil.Error>
+  readonly systemScoped: (scope: "all" | "project") => Effect.Effect<string[], FSUtil.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, FSUtil.Error>
   readonly resolve: (
     messages: SessionV1.WithParts[],
@@ -107,14 +108,22 @@ export const layer: Layer.Layer<
       s.claims.delete(messageID)
     })
 
+    type Origin = "global" | "project" | "config"
+    type TaggedEntry = { path: string; origin: Origin; isUrl: boolean }
+
     const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
+      const tagged = yield* systemTagged()
+      return new Set(tagged.map((e) => e.path))
+    })
+
+    const systemTagged = Effect.fn("Instruction.systemTagged")(function* () {
       const config = yield* cfg.get()
       const ctx = yield* InstanceState.context
-      const paths = new Set<string>()
+      const tagged: TaggedEntry[] = []
 
       for (const file of globalFiles) {
         if (yield* fs.existsSafe(file)) {
-          paths.add(path.resolve(file))
+          tagged.push({ path: path.resolve(file), origin: "global", isUrl: false })
           break
         }
       }
@@ -126,15 +135,21 @@ export const layer: Layer.Layer<
             .findUp(file, ctx.directory, ctx.worktree)
             .pipe(Effect.catch(() => Effect.succeed([])))
           if (matches.length > 0) {
-            matches.forEach((item) => paths.add(path.resolve(item)))
+            for (const item of matches) {
+              tagged.push({ path: path.resolve(item), origin: "project", isUrl: false })
+            }
             break
           }
         }
       }
 
+      // Config instructions: file paths AND URLs are both classified as "config" origin.
       if (config.instructions) {
         for (const raw of config.instructions) {
-          if (raw.startsWith("https://") || raw.startsWith("http://")) continue
+          if (raw.startsWith("https://") || raw.startsWith("http://")) {
+            tagged.push({ path: raw, origin: "config", isUrl: true })
+            continue
+          }
           const instruction = raw.startsWith("~/") ? path.join(global.home, raw.slice(2)) : raw
           const matches = yield* (
             path.isAbsolute(instruction)
@@ -145,26 +160,41 @@ export const layer: Layer.Layer<
                 })
               : relative(instruction)
           ).pipe(Effect.catch(() => Effect.succeed([] as string[])))
-          matches.forEach((item) => paths.add(path.resolve(item)))
+          for (const item of matches) {
+            tagged.push({ path: path.resolve(item), origin: "config", isUrl: false })
+          }
         }
       }
 
-      return paths
+      return tagged
     })
 
     const system = Effect.fn("Instruction.system")(function* () {
-      const config = yield* cfg.get()
-      const paths = yield* systemPaths()
-      const urls = (config.instructions ?? []).filter(
-        (item) => item.startsWith("https://") || item.startsWith("http://"),
-      )
+      return yield* buildSystem(scoped("all")(yield* systemTagged()))
+    })
 
-      const files = yield* Effect.forEach(Array.from(paths), read, { concurrency: 8 })
-      const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
+    const systemScoped = Effect.fn("Instruction.systemScoped")(function* (scope: "all" | "project") {
+      const tagged = yield* systemTagged()
+      return yield* buildSystem(scoped(scope)(tagged))
+    })
+
+    function scoped(scope: "all" | "project") {
+      return (tagged: TaggedEntry[]): TaggedEntry[] => {
+        if (scope === "all") return tagged
+        return tagged.filter((e) => e.origin === "project")
+      }
+    }
+
+    const buildSystem = Effect.fn("Instruction.buildSystem")(function* (tagged: TaggedEntry[]) {
+      const fileEntries = tagged.filter((e) => !e.isUrl)
+      const urlEntries = tagged.filter((e) => e.isUrl)
+
+      const files = yield* Effect.forEach(fileEntries.map((e) => e.path), read, { concurrency: 8 })
+      const remote = yield* Effect.forEach(urlEntries.map((e) => e.path), fetch, { concurrency: 4 })
 
       return [
-        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`Instructions from: ${item}\n${files[i]}`] : [])),
-        ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
+        ...fileEntries.flatMap((entry, i) => (files[i] ? [`Instructions from: ${entry.path}\n${files[i]}`] : [])),
+        ...urlEntries.flatMap((entry, i) => (remote[i] ? [`Instructions from: ${entry.path}\n${remote[i]}`] : [])),
       ]
     })
 
@@ -220,7 +250,7 @@ export const layer: Layer.Layer<
       return results
     })
 
-    return Service.of({ clear, systemPaths, system, find, resolve })
+    return Service.of({ clear, systemPaths, system, systemScoped, find, resolve })
   }),
 )
 
