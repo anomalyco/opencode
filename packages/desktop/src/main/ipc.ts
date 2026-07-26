@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
-import { stat } from "node:fs/promises"
-import { basename } from "node:path"
+import { mkdir, stat, writeFile } from "node:fs/promises"
+import { basename, join } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
@@ -88,6 +88,13 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
+  ipcMain.handle("write-paste-file", async (_event: IpcMainInvokeEvent, id: string, text: string) => {
+    const dir = join(app.getPath("userData"), "pastes")
+    await mkdir(dir, { recursive: true })
+    const filePath = join(dir, `${id}.txt`)
+    await writeFile(filePath, text, "utf-8")
+    return filePath
+  })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)

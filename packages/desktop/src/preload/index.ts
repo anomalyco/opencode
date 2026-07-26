@@ -123,6 +123,7 @@ const api: ElectronAPI = {
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
+  writePasteFile: (id, text) => ipcRenderer.invoke("write-paste-file", id, text),
 }
 
 contextBridge.exposeInMainWorld("api", api)

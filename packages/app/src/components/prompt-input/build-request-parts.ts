@@ -5,6 +5,7 @@ import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
+import { getPasteText, isPastePath } from "./paste-store"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -101,11 +102,19 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
+
+    let textValue = attachment.content
+    if (isPastePath(attachment.path)) {
+      const pasteId = path.split("/").pop()?.split("\\").pop()?.replace(".txt", "") ?? ""
+      const stored = getPasteText(pasteId)
+      if (stored) textValue = stored
+    }
+
     const source = attachment.source
       ? {
           ...attachment.source,
           text: {
-            value: attachment.content,
+            value: textValue,
             start: attachment.start,
             end: attachment.end,
           },
@@ -113,7 +122,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       : {
           type: "file" as const,
           text: {
-            value: attachment.content,
+            value: textValue,
             start: attachment.start,
             end: attachment.end,
           },
@@ -195,6 +204,25 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   })
 
   const images = input.images.map((attachment) => {
+    const pastePath = attachment.sourcePath
+    if (pastePath && isPastePath(pastePath)) {
+      const pasteId = pastePath.split("/").pop()?.split("\\").pop()?.replace(".txt", "") ?? ""
+      const stored = getPasteText(pasteId)
+      if (stored) {
+        return {
+          id: Identifier.ascending("part"),
+          type: "file",
+          mime: attachment.mime,
+          url: pastePath,
+          filename: attachment.filename,
+          source: {
+            type: "file" as const,
+            text: { value: stored, start: 0, end: stored.length },
+            path: pastePath,
+          },
+        } satisfies PromptRequestPart
+      }
+    }
     return {
       id: Identifier.ascending("part"),
       type: "file",

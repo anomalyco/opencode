@@ -7,6 +7,7 @@ import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
+import { storePasteTextFile } from "./paste-store"
 
 function dataUrl(file: File, mime: string) {
   return new Promise<string>((resolve) => {
@@ -145,7 +146,20 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
     }
 
     if (pasteMode(text) === "manual") {
-      put()
+      const id = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2)
+      const filePath = await storePasteTextFile(id, text)
+      const filename = "pasted-text.txt"
+      target.prompt.set(
+        [...target.prompt.current(), {
+          type: "image",
+          id,
+          filename,
+          sourcePath: filePath,
+          mime: "text/plain",
+          dataUrl: "",
+        } satisfies ImageAttachmentPart],
+        target.cursor,
+      )
       return
     }
 

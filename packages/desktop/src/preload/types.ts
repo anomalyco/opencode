@@ -106,4 +106,5 @@ export type ElectronAPI = {
   exportDebugLogs: () => Promise<string>
   setForceFocus: (enabled: boolean) => Promise<void>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
+  writePasteFile: (id: string, text: string) => Promise<string>
 }
