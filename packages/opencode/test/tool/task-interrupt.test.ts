@@ -23,6 +23,7 @@ import { Permission } from "@/permission"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { ToolRegistry } from "@/tool/registry"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Messaging } from "@/messaging"
 
 const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
@@ -34,6 +35,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       CrossSpawnSpawner.node,
       Permission.node,
       Interrupt.node,
+      Messaging.node,
       Session.node,
       SessionProjector.node,
       SessionRunState.node,
@@ -192,6 +194,109 @@ describe("tool.task-interrupt", () => {
         expect(pending[0]?.intent).toBe("steer")
         expect(pending[0]?.reason).toBe("use the config file")
         expect(pending[0]?.origin).toBe("parent")
+      }),
+  )
+
+  it.instance(
+    "task_steer: a running child addressed by slug returns delivered",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const messaging = yield* Messaging.Service
+        const interrupt = yield* Interrupt.Service
+        const steer = yield* (yield* TaskSteerTool).init()
+
+        const parent = yield* sessions.create({ title: "caller" })
+        const child = yield* startRunningChild(parent.id)
+        yield* messaging.registerSlug("direct-child", child.id)
+
+        const result = yield* steer.execute(
+          { task_id: "direct-child", reason: "use the config file" },
+          ctxFor(parent.id),
+        )
+
+        expect(result.metadata.state).toBe("delivered")
+        expect((yield* interrupt.list())[0]?.sessionID).toBe(child.id)
+      }),
+  )
+
+  it.instance(
+    "task_abort: a running child addressed by slug returns aborted",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const messaging = yield* Messaging.Service
+        const jobs = yield* BackgroundJob.Service
+        const abort = yield* (yield* TaskAbortTool).init()
+
+        const parent = yield* sessions.create({ title: "caller" })
+        const child = yield* startRunningChild(parent.id)
+        yield* messaging.registerSlug("abort-child", child.id)
+
+        const result = yield* abort.execute({ task_id: "abort-child" }, ctxFor(parent.id))
+
+        expect(result.metadata.state).toBe("aborted")
+        expect((yield* jobs.get(child.id))?.status).toBe("cancelled")
+      }),
+  )
+
+  it.instance(
+    "task_steer: a running grandchild addressed by slug returns delivered",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const messaging = yield* Messaging.Service
+        const interrupt = yield* Interrupt.Service
+        const steer = yield* (yield* TaskSteerTool).init()
+
+        const parent = yield* sessions.create({ title: "caller" })
+        const child = yield* sessions.create({ parentID: parent.id, title: "child" })
+        const grandchild = yield* startRunningChild(child.id)
+        yield* messaging.registerSlug("nested-child", grandchild.id)
+
+        const result = yield* steer.execute(
+          { task_id: "nested-child", reason: "change direction" },
+          ctxFor(parent.id),
+        )
+
+        expect(result.metadata.state).toBe("delivered")
+        expect((yield* interrupt.list())[0]?.sessionID).toBe(grandchild.id)
+      }),
+  )
+
+  it.instance(
+    "task_abort: an unregistered slug returns not_found",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const abort = yield* (yield* TaskAbortTool).init()
+
+        const parent = yield* sessions.create({ title: "caller" })
+
+        const result = yield* abort.execute({ task_id: "missing-child" }, ctxFor(parent.id))
+
+        expect(result.metadata.state).toBe("not_found")
+      }),
+  )
+
+  it.instance(
+    "task_abort: a slug registered to a non-descendant returns not_found",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const messaging = yield* Messaging.Service
+        const jobs = yield* BackgroundJob.Service
+        const abort = yield* (yield* TaskAbortTool).init()
+
+        const caller = yield* sessions.create({ title: "caller" })
+        const foreignParent = yield* sessions.create({ title: "foreign parent" })
+        const foreignChild = yield* startRunningChild(foreignParent.id)
+        yield* messaging.registerSlug("foreign-child", foreignChild.id)
+
+        const result = yield* abort.execute({ task_id: "foreign-child" }, ctxFor(caller.id))
+
+        expect(result.metadata.state).toBe("not_found")
+        expect((yield* jobs.get(foreignChild.id))?.status).toBe("running")
       }),
   )
 
@@ -549,7 +654,7 @@ describe("tool.task-interrupt", () => {
             ),
         )
         expect(visibleAbort).toBe(true)
-        // UX4: the marker is tagged via metadata.interrupt so the TUI can render
+        // UX4: the marker is tagged via metadata.marker so the TUI can render
         // it as a distinct system-event line instead of joining it into normal
         // user prose.
         const markerPart = childMessages
@@ -557,7 +662,9 @@ describe("tool.task-interrupt", () => {
           .find((part) => part.type === "text" && part.synthetic === false && part.text.startsWith("⊘ "))
         expect(markerPart).toBeDefined()
         if (markerPart && markerPart.type === "text") {
-          expect(markerPart.metadata).toMatchObject({ interrupt: { intent: "abort", origin: "parent" } })
+          expect(markerPart.metadata).toMatchObject({
+            marker: { kind: "interrupt", intent: "abort", origin: "parent" },
+          })
         }
       }),
   )

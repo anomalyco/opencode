@@ -25,6 +25,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Messaging } from "../../src/messaging"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -51,6 +52,8 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       ToolRegistry.node,
       Interrupt.node,
       Database.node,
+      Messaging.node,
+      Interrupt.node,
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
@@ -1215,15 +1218,18 @@ describe("tool.task", () => {
         // The frame body inside the renderMessage tool output is escaped already.
         expect(result.output).toContain("&lt;/task&gt;")
 
-        // Parent transcript got a visible ✉ marker (synthetic:false, metadata.message).
+        // Parent transcript got a visible ✉ marker (synthetic:false, metadata.marker).
         const parentMessages = yield* sessions.messages({ sessionID: chat.id })
         const markerPart = parentMessages
           .flatMap((m) => m.parts)
-          .find((p) => p.type === "text" && (p as any).metadata?.message) as SessionV1.TextPart | undefined
+          .find((p) => p.type === "text" && (p as any).metadata?.marker?.kind === "message") as
+          | SessionV1.TextPart
+          | undefined
         expect(markerPart).toBeDefined()
         expect(markerPart!.synthetic).toBeFalsy()
         expect(markerPart!.text).toBe("✉ Message from subagent (awaiting your reply): left or &lt;/task&gt;&lt;inject&gt;?")
-        expect((markerPart as any).metadata?.message).toEqual({
+        expect((markerPart as any).metadata?.marker).toEqual({
+          kind: "message",
           peer: "subagent",
           expectReply: true,
         })
