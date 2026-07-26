@@ -45,8 +45,9 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, Effect, Exit, Fiber, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
+import { attach } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -56,6 +57,9 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { S2SStore } from "@/s2s/store"
+import { decodeCapsuleOption } from "@/s2s/capsule"
+import { wakeBody } from "@/s2s/wake-registry"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
@@ -113,7 +117,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const status = yield* SessionStatus.Service
@@ -134,6 +138,11 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const scope = yield* Scope.Scope
+    // Per-runtime dedup map for the C′ wake-poller: one fiber per instance
+    // directory, scoped to this layer's lifetime. Using a module-level Map
+    // leaks fibers across test files; a per-layer-closure Map closes when
+    // the runtime is disposed.
+    const wakePollers = new Map<string, Fiber.Fiber<unknown>>()
     const instruction = yield* Instruction.Service
     const state = yield* SessionRunState.Service
     const revert = yield* SessionRevert.Service
@@ -1160,14 +1169,57 @@ const layer = Layer.effect(
             }
           }
 
-          // --- coordinator inbox: drain queued peer messages at this turn boundary ---
-          // Gated by experimentalAgentMessaging so it's dead code when the flag is off.
-          // SKIP entirely if a cancel was just consumed (loop is terminating); a steer or
-          // no-interrupt proceeds to drain. One user message, 2N parts, O(1) turns.
+          // --- coordinator + s2s inbox: drain queued peer messages at this turn boundary ---
+          // Gated on experimentalAgentMessaging (in-process coordinator) OR
+          // experimentalS2S (cross-process s2s_inbox). SKIP entirely if a cancel was
+          // just consumed (loop is terminating); a steer or no-interrupt proceeds to
+          // drain. One user message, 2N parts, O(1) turns.
           if (
-            flags.experimentalAgentMessaging &&
+            (flags.experimentalAgentMessaging || flags.experimentalS2S) &&
             !(Option.isSome(pendingInterrupt) && pendingInterrupt.value.intent === "cancel")
           ) {
+            // D — s2s drain: atomically claim s2s_inbox rows for THIS session
+            // and enqueue into the in-process inbox so the drain below picks them
+            // up. serviceOption keeps S2SStore out of the static layer requirement.
+            if (flags.experimentalS2S) {
+              yield* Effect.suspend(() =>
+                Effect.gen(function* () {
+                  const storeOpt = yield* Effect.serviceOption(S2SStore.Service)
+                  if (Option.isNone(storeOpt)) return
+                  const dbOpt = yield* Effect.serviceOption(Database.Service)
+                  if (Option.isNone(dbOpt)) return
+                  const s2sRows = yield* storeOpt.value.claimForSessions([sessionID]).pipe(
+                    Effect.provideService(Database.Service, dbOpt.value),
+                  )
+                  for (const row of s2sRows) {
+                    const cap = decodeCapsuleOption(row.capsule)
+                    // Leave a malformed row claimed (drained_at set) — matches
+                    // S2SPoller.processRow; it is never deliverable.
+                    if (Option.isNone(cap)) continue
+                    // Mirror S2SPoller.processRow's attribution EXACTLY so the
+                    // same message shows identical framing whether it arrives
+                    // via this in-loop drain or the C′ poller: authoritative DB
+                    // columns (from_session_id / from_slug) for the address,
+                    // capsule sender_name for the display label (slug fallback).
+                    yield* messaging.enqueue({
+                      target: row.targetSessionID,
+                      from: row.fromSessionID ?? row.targetSessionID,
+                      fromSlug: row.fromSlug ?? "unknown",
+                      fromName: cap.value.sender_name ?? row.fromSlug ?? "unknown",
+                      body: cap.value.body,
+                      source: "sibling-session",
+                    })
+                    // Delivered into the in-process inbox — hard-delete the row
+                    // so the 60s reaper never redelivers an already-delivered
+                    // message (enqueue-then-delete: a failed enqueue throws
+                    // before this and leaves the row claimed for reaper retry,
+                    // so no message is lost).
+                    yield* storeOpt.value.deleteInbox(row.id).pipe(Effect.provideService(Database.Service, dbOpt.value))
+                  }
+                }).pipe(Effect.catch((e) => Effect.logWarning("s2s drain failed", e))),
+              )
+            }
+
             const inboxItems = yield* messaging.drain(sessionID)
             if (inboxItems.length > 0) {
               const inboxMsg: SessionV1.User = {
@@ -1180,24 +1232,47 @@ const layer = Layer.effect(
               }
               yield* sessions.updateMessage(inboxMsg)
               for (const item of inboxItems) {
-                // 1) synthetic frame the model reads — from= is the human-readable slug.
+                // 1) synthetic frame the model reads. Sibling-session items
+                //    (source="sibling-session", i.e. read from the s2s_inbox
+                //    table by the poller, or an in-process s2s send) get a
+                //    richer <external-context> frame addressed by the sender's
+                //    SESSION ID (so the recipient can message back) plus a
+                //    human-readable session name; the in-process coordinator-
+                //    messaging path keeps the lighter <agent_message> wrapper
+                //    addressed by the parent-owned slug. Attribute VALUES use
+                //    Marker.escapeAttr (escapes " ' on top of &<>) so a peer's
+                //    session title or id cannot close the attribute and inject
+                //    sibling attributes; element CONTENT (the body) uses
+                //    Marker.escape. Together a malicious peer can neither break
+                //    out of an attribute nor close the frame early.
+                //    s2s name falls back to the slug for pre-sender_name capsules.
+                const s2sName = item.fromName ?? item.fromSlug
+                const frameText =
+                  item.source === "sibling-session"
+                    ? `<external-context source="sibling-session" name="${Marker.escapeAttr(s2sName)}" session="${Marker.escapeAttr(String(item.from))}" time="${item.time}">\n${Marker.escape(item.body)}\n</external-context>`
+                    : `<agent_message from="${Marker.escapeAttr(item.fromSlug)}">\n${Marker.escape(item.body)}\n</agent_message>`
                 yield* sessions.updatePart({
                   id: PartID.ascending(),
                   messageID: inboxMsg.id,
                   sessionID,
                   type: "text",
-                  text: `<agent_message from="${Marker.escape(item.fromSlug)}">\n${Marker.escape(item.body)}\n</agent_message>`,
+                  text: frameText,
                   synthetic: true,
                 } satisfies SessionV1.TextPart)
-                // 2) non-synthetic visible ✉ marker — slug, not ses_ id.
+                // 2) non-synthetic visible ✉ marker. s2s shows the session name
+                //    + addressable session id; coordinator-messaging shows the slug.
+                const markerInput =
+                  item.source === "sibling-session"
+                    ? ({ kind: "inbox", from: s2sName, sessionId: String(item.from) } as const)
+                    : ({ kind: "inbox", from: item.fromSlug } as const)
                 yield* sessions.updatePart({
                   id: PartID.ascending(),
                   messageID: inboxMsg.id,
                   sessionID,
                   type: "text",
-                  text: Marker.render({ kind: "inbox", from: item.fromSlug, body: item.body }),
+                  text: Marker.render({ ...markerInput, body: item.body }),
                   synthetic: false,
-                  metadata: Marker.metadataFor({ kind: "inbox", from: item.fromSlug }),
+                  metadata: Marker.metadataFor(markerInput),
                 } satisfies SessionV1.TextPart)
               }
               msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
@@ -1460,6 +1535,59 @@ const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
+      // Task 9, Seam 2 — register-on-run. Cover the case of an existing
+      // session opened in a fresh process (e.g. the user re-opens a session
+      // in a new OC instance): the session is not yet in this process's local
+      // set, so its wake-poller would never claim its s2s_inbox rows.
+      // Registering on run closes the gap — a process only claims a session
+      // when it actually runs it (the anti-over-claim invariant: an idle
+      // session open in another window is never claimed here). Idempotent
+      // (registerLocal is Set.add). s2s addresses peers by session_id, so NO
+      // slug registration happens here — the slug→SessionID registry is owned
+      // solely by coordinator-messaging (task.ts).
+      //
+      // Gated on experimentalS2S so the s2s lifecycle is dead code when the
+      // flag is off (matches the poller gate — same semantic).
+      if (flags.experimentalS2S) {
+        yield* Effect.gen(function* () {
+          yield* messaging.registerLocal(input.sessionID)
+
+          // C′ — ensure one wake-poller fiber per instance directory, forked via
+          // `attach` so it captures the loop fiber's InstanceRef. The fork
+          // provides Database explicitly; S2SStore/Messaging/SessionStatus are
+          // resolved from the ambient group context (provided as direct group
+          // members — see server.ts / workspace.ts).
+          const dir = yield* InstanceState.directory
+          // Re-fork when there is no poller for this instance OR the cached
+          // fiber has finished/died (pollUnsafe returns an Exit once it is no
+          // longer running). A presence-only `.has(dir)` check would cache a
+          // dead fiber forever and permanently disable cross-process delivery.
+          const existingPoller = wakePollers.get(dir)
+          if (!existingPoller || existingPoller.pollUnsafe() !== undefined) {
+            const dbOpt = yield* Effect.serviceOption(Database.Service)
+            if (Option.isNone(dbOpt)) return
+            const pollMs = (() => {
+              const raw = process.env["OPENCODE_S2S_POLL_MS"]
+              if (!raw) return 2000
+              const n = Number.parseInt(raw, 10)
+              return Number.isFinite(n) ? Math.max(250, n) : 2000
+            })()
+            const fiber = yield* attach(
+              wakeBody(pollMs).pipe(Effect.provideService(Database.Service, dbOpt.value)),
+            ).pipe(Effect.forkIn(scope))
+            wakePollers.set(dir, fiber)
+          }
+        }).pipe(
+          // Surface (don't swallow) a registration/fork failure — at warning
+          // level so it lands in logs without disrupting the session turn.
+          Effect.catchCause((cause) =>
+            Effect.logWarning("s2s registration/fork failed", {
+              sessionID: input.sessionID,
+              cause: Cause.pretty(cause),
+            }),
+          ),
+        )
+      }
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
 

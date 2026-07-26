@@ -15,7 +15,10 @@ export const INBOX_OUTBOUND_BUDGET = 20
 export const INBOX_CAP = 50
 export const DEDUP_WINDOW = 100
 export const TREE_MESSAGE_CAP = 2000
+export const S2S_HOURLY_OUTBOUND_CAP = 50
 
+export const PeerSent = MessagingEvent.PeerSent
+export const S2sDelivered = MessagingEvent.S2sDelivered
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("Messaging.RejectedError", {}) {
   override get message() {
     return "The parent agent is no longer available to reply"
@@ -53,8 +56,18 @@ interface ChildCounters {
 export interface InboxItem {
   from: SessionID
   fromSlug: string
+  // Human-readable sender session name (title) for s2s items; absent for
+  // coordinator-messaging (which displays the parent-owned slug instead).
+  fromName?: string
   body: string
   time: number
+  // Set by the cross-session poller when this item originated in another
+  // process (read from the s2s_inbox table, not pushed in-process). Absent
+  // for items enqueued by a tool/model running in this same process.
+  // The runLoop's drain branch (Task 6) reads this to decide whether to
+  // render the inbox message with the <external-context> framing or with
+  // the lighter in-process marker.
+  source?: "sibling-session"
 }
 
 interface State {
@@ -67,6 +80,10 @@ interface State {
   outbound: Map<SessionID, number>
   waiters: Map<SessionID, Deferred.Deferred<void>>
   treeTotal: { count: number }
+  // Set of SessionIDs that live in THIS process. The cross-session poller
+  // consults this to decide whether a wake can be served by an in-process
+  // drain (local) or must be persisted to the s2s_inbox table (remote).
+  local: Set<SessionID>
 }
 
 export interface Interface {
@@ -94,13 +111,18 @@ export interface Interface {
     target: SessionID
     from: SessionID
     fromSlug: string
+    fromName?: string
     body: string
-  }) => Effect.Effect<void, AbuseError | NotFoundError>
+    source?: "sibling-session"
+  }) => Effect.Effect<void, AbuseError>
   readonly drain: (sessionID: SessionID) => Effect.Effect<ReadonlyArray<InboxItem>>
   readonly awaitInbox: (
     sessionID: SessionID,
     opts: { timeoutMs: number },
   ) => Effect.Effect<boolean>
+  readonly registerLocal: (sessionID: SessionID) => Effect.Effect<void>
+  readonly isLocal: (sessionID: SessionID) => Effect.Effect<boolean>
+  readonly localSet: () => Effect.Effect<ReadonlyArray<SessionID>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Messaging") {}
@@ -121,6 +143,7 @@ export const layer = Layer.effect(
           outbound: new Map<SessionID, number>(),
           waiters: new Map<SessionID, Deferred.Deferred<void>>(),
           treeTotal: { count: 0 },
+          local: new Set<SessionID>(),
         }
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
@@ -136,6 +159,7 @@ export const layer = Layer.effect(
             state.outbound.clear()
             state.waiters.clear()
             state.treeTotal.count = 0
+            state.local.clear()
           }),
         )
         return state
@@ -278,17 +302,42 @@ export const layer = Layer.effect(
       const used = v.outbound.get(input.from) ?? 0
       if (used >= INBOX_OUTBOUND_BUDGET)
         return yield* new AbuseError({ detail: `per-agent outbound budget (${INBOX_OUTBOUND_BUDGET}) reached` })
-      const queue = v.inbox.get(input.target)
-      if (queue === undefined) return yield* new NotFoundError({ childSessionID: input.target })
+      // Lazily init the recipient queue. The inbox no longer depends on a prior
+      // registerSlug/registerLocal having pre-created it — s2s addresses peers
+      // by session_id and never registers a slug, and the coordinator-messaging
+      // path already gates on getAllow+resolveSlug before reaching here.
+      const queue = v.inbox.get(input.target) ?? []
       const hash = `${String(input.from)}\u0000${input.body}`
       const seen = v.dedup.get(input.target) ?? []
       if (seen.includes(hash)) return
       if (queue.length >= INBOX_CAP)
         return yield* new AbuseError({ detail: `recipient inbox cap (${INBOX_CAP}) reached` })
-      queue.push({ from: input.from, fromSlug: input.fromSlug, body: input.body, time: Date.now() })
+      queue.push({
+        from: input.from,
+        fromSlug: input.fromSlug,
+        fromName: input.fromName,
+        body: input.body,
+        time: Date.now(),
+        source: input.source,
+      })
+      v.inbox.set(input.target, queue)
       v.outbound.set(input.from, used + 1)
       v.treeTotal.count++
       v.dedup.set(input.target, [...seen, hash].slice(-DEDUP_WINDOW))
+      if (input.source === "sibling-session")
+        yield* events.publish(S2sDelivered, {
+          target: input.target,
+          from: input.from,
+          fromName: input.fromName,
+          body: input.body,
+        })
+      else
+        yield* events.publish(PeerSent, {
+          from: input.from,
+          target: input.target,
+          fromSlug: input.fromSlug,
+          body: input.body,
+        })
       const w = v.waiters.get(input.target)
       if (w) {
         v.waiters.delete(input.target)
@@ -332,6 +381,21 @@ export const layer = Layer.effect(
       return Option.isSome(woke)
     })
 
+    const registerLocal: Interface["registerLocal"] = Effect.fn("Messaging.registerLocal")(function* (sessionID) {
+      const v = yield* InstanceState.get(state)
+      v.local.add(sessionID)
+    })
+
+    const isLocal: Interface["isLocal"] = Effect.fn("Messaging.isLocal")(function* (sessionID) {
+      const v = yield* InstanceState.get(state)
+      return v.local.has(sessionID)
+    })
+
+    const localSet: Interface["localSet"] = Effect.fn("Messaging.localSet")(function* () {
+      const v = yield* InstanceState.get(state)
+      return [...v.local]
+    })
+
     return Service.of({
       send,
       reply,
@@ -345,12 +409,14 @@ export const layer = Layer.effect(
       enqueue,
       drain,
       awaitInbox,
+      registerLocal,
+      isLocal,
+      localSet,
     })
   }),
 )
 
 export const node = LayerNode.make({ service: Service, layer, deps: [EventV2Bridge.node] })
-
 export const defaultLayer = layer
 
 export * as Messaging from "."

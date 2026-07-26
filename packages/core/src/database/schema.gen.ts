@@ -24,6 +24,35 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`s2s_allow\` (
+          \`session_id\` text NOT NULL,
+          \`allowed_session_id\` text NOT NULL,
+          \`established_at\` integer NOT NULL,
+          CONSTRAINT \`s2s_allow_pk\` PRIMARY KEY(\`session_id\`, \`allowed_session_id\`)
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`s2s_inbox\` (
+          \`id\` text PRIMARY KEY,
+          \`target_session_id\` text NOT NULL,
+          \`from_session_id\` text,
+          \`from_slug\` text,
+          \`capsule\` text NOT NULL,
+          \`drained_at\` integer,
+          \`time_created\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`s2s_token\` (
+          \`token\` text PRIMARY KEY,
+          \`inviter_session_id\` text NOT NULL,
+          \`inviter_slug\` text NOT NULL,
+          \`accepted_by\` text,
+          \`accepted_at\` integer,
+          \`created_at\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`account_state\` (
           \`id\` integer PRIMARY KEY,
           \`active_account_id\` text,
@@ -236,6 +265,7 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`CREATE INDEX \`s2s_inbox_target\` ON \`s2s_inbox\` (\`target_session_id\`,\`drained_at\`);`)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(
