@@ -368,13 +368,13 @@ const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
 
-const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
+const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string, agent = "build") {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
     id: MessageID.ascending(),
     role: "user",
     sessionID,
-    agent: "build",
+    agent,
     model: ref,
     time: { created: Date.now() },
   })
@@ -578,6 +578,66 @@ withMcpInstructions.instance(
       yield* Fiber.interrupt(fiber)
     }),
   15_000,
+)
+
+withMcpInstructions.instance(
+  "audience: main file is included for root session, absent for dispatched child",
+  () =>
+    Effect.gen(function* () {
+      const { llm, dir } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const write = yield* FSUtil.Service
+      yield* write.writeWithDirs(path.join(dir, "AGENTS.md"), "---\nopencode:\n  audience: main\n---\nMAIN-ONLY DOCTRINE\n")
+      const base = { permission: [{ permission: "*", pattern: "*", action: "allow" }] } as const
+      const root = yield* sessions.create({ title: "Root", ...base })
+      yield* llm.hang
+      yield* user(root.id, "hello")
+      const rootFiber = yield* prompt.loop({ sessionID: root.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for root LLM request", "10 seconds")
+      expect(JSON.stringify((yield* llm.hits)[0]?.body)).toContain("MAIN-ONLY DOCTRINE")
+      yield* Fiber.interrupt(rootFiber)
+      yield* llm.reset
+      const child = yield* sessions.create({ parentID: root.id, title: "Child", ...base })
+      yield* llm.hang
+      yield* user(child.id, "hello")
+      const childFiber = yield* prompt.loop({ sessionID: child.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for child LLM request", "10 seconds")
+      expect(JSON.stringify((yield* llm.hits)[0]?.body)).not.toContain("MAIN-ONLY DOCTRINE")
+      yield* Fiber.interrupt(childFiber)
+    }),
+  30_000,
+)
+
+withMcpInstructions.instance(
+  "agent wildcard includes a matching build session and excludes a non-matching directive",
+  () =>
+    Effect.gen(function* () {
+      const { llm, dir } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const write = yield* FSUtil.Service
+      yield* write.writeWithDirs(path.join(dir, "AGENTS.md"), "---\nopencode:\n  audience:\n    - agent: bui*\n---\nBUILD-ONLY DOCTRINE\n")
+      const base = { permission: [{ permission: "*", pattern: "*", action: "allow" }] } as const
+      const root = yield* sessions.create({ title: "Root", ...base })
+      const matching = yield* sessions.create({ parentID: root.id, title: "Matching", ...base })
+      yield* llm.hang
+      yield* user(matching.id, "hello")
+      const matchingFiber = yield* prompt.loop({ sessionID: matching.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for matching LLM request", "10 seconds")
+      expect(JSON.stringify((yield* llm.hits)[0]?.body)).toContain("BUILD-ONLY DOCTRINE")
+      yield* Fiber.interrupt(matchingFiber)
+      yield* llm.reset
+      yield* write.writeWithDirs(path.join(dir, "AGENTS.md"), "---\nopencode:\n  audience:\n    - agent: reviewer*\n---\nREVIEWER-ONLY DOCTRINE\n")
+      const nonMatching = yield* sessions.create({ parentID: root.id, title: "NonMatching", ...base })
+      yield* llm.hang
+      yield* user(nonMatching.id, "hello")
+      const nonMatchingFiber = yield* prompt.loop({ sessionID: nonMatching.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for non-matching LLM request", "10 seconds")
+      expect(JSON.stringify((yield* llm.hits)[0]?.body)).not.toContain("REVIEWER-ONLY DOCTRINE")
+      yield* Fiber.interrupt(nonMatchingFiber)
+    }),
+  30_000,
 )
 
 it.instance("legacy prompt emits message events without session.next events", () =>
@@ -2126,6 +2186,37 @@ noLLMServer.instance(
     }),
   { config: cfg },
   30_000,
+)
+
+noLLMServer.instance(
+  "child file attachment excludes nearby audience: main instructions",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const write = yield* FSUtil.Service
+      yield* write.writeWithDirs(
+        path.join(dir, "subdir", "AGENTS.md"),
+        "---\nopencode:\n  audience: main\n---\nMAIN-ONLY ATTACHMENT DOCTRINE\n",
+      )
+      const filepath = path.join(dir, "subdir", "nested", "file.ts")
+      yield* write.writeWithDirs(filepath, "const x = 1\n")
+      const root = yield* sessions.create({ title: "Root" })
+      const child = yield* sessions.create({ parentID: root.id, title: "Child", agent: "build" })
+      const msg = yield* prompt.prompt({
+        sessionID: child.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "review attached file" },
+          { type: "file", url: `file://${filepath}`, filename: "file.ts", mime: "text/plain" },
+        ],
+      })
+      const text = msg.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n")
+      expect(text).not.toContain("MAIN-ONLY ATTACHMENT DOCTRINE")
+    }),
+  { config: cfg },
 )
 
 // Missing file handling

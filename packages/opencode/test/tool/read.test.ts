@@ -38,6 +38,7 @@ const ctx = {
   messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "build",
+  reader: { role: "main" as const, agent: "build" },
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
@@ -147,6 +148,34 @@ const asks = () => {
     },
   }
 }
+
+describe("tool.read reader identity", () => {
+  it.live("fails closed when instruction resolution has no reader", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "file.ts"), "const x = 1\n")
+      const { reader: _reader, ...next } = ctx
+      const error = yield* fail(dir, { filePath: path.join(dir, "file.ts") }, next)
+      expect(error.message).toContain("requires reader identity")
+    }),
+  )
+})
+
+describe("tool.read instruction audience", () => {
+  it.live("child reader does not load a nested AGENTS.md marked audience: main", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "subdir", "AGENTS.md"), "---\nopencode:\n  audience: main\n---\nMAIN-ONLY NESTED DOCTRINE\n")
+      yield* put(path.join(dir, "subdir", "nested", "file.ts"), "const x = 1\n")
+      const result = yield* exec(dir, { filePath: path.join(dir, "subdir", "nested", "file.ts") }, {
+        ...ctx,
+        reader: { role: "subagent", agent: "build" },
+      })
+      expect(result.metadata.loaded).toEqual([])
+      expect(result.output).not.toContain("MAIN-ONLY NESTED DOCTRINE")
+    }),
+  )
+})
 
 describe("tool.read external_directory permission", () => {
   it.live("allows reading absolute path inside project directory", () =>

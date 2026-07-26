@@ -15,6 +15,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
+import { InstructionAudience } from "./instruction-audience"
 import { Plugin } from "../plugin"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 import { ToolRegistry } from "@/tool/registry"
@@ -818,6 +819,7 @@ const layer = Layer.effect(
                     sessionID: input.sessionID,
                     abort: controller.signal,
                     agent: input.agent!,
+                    reader: { role: current.parentID == null ? "main" : "subagent", agent: input.agent! },
                     messageID: info.id,
                     extra: { bypassCwdCheck: true, ...extra },
                     messages: [],
@@ -1254,10 +1256,14 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+            const reader: InstructionAudience.Reader = {
+              role: session.parentID == null ? "main" : "subagent",
+              agent: agent.name,
+            }
             const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
+              instruction.system(reader).pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
