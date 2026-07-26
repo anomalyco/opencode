@@ -585,6 +585,8 @@ export const dict = {
   "settings.general.row.terminalFont.description": "터미널에서 사용할 글꼴을 설정합니다",
   "settings.general.row.uiFont.title": "UI 글꼴",
   "settings.general.row.uiFont.description": "인터페이스 전반에 사용되는 글꼴을 사용자 지정",
+  "settings.general.row.fontSize.title": "Font Size",
+  "settings.general.row.fontSize.description": "Adjust the base font size for the interface",
   "settings.general.row.followup.title": "후속 조치 동작",
   "settings.general.row.followup.description": "후속 프롬프트를 즉시 실행할지 대기열에 넣을지 선택하세요",
   "settings.general.row.followup.option.queue": "대기열",

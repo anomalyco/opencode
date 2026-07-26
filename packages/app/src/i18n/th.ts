@@ -777,6 +777,8 @@ export const dict = {
   "settings.general.row.terminalFont.description": "ปรับแต่งฟอนต์ที่ใช้ในเทอร์มินัล",
   "settings.general.row.uiFont.title": "ฟอนต์ UI",
   "settings.general.row.uiFont.description": "ปรับแต่งฟอนต์ที่ใช้ทั่วทั้งอินเทอร์เฟซ",
+  "settings.general.row.fontSize.title": "Font Size",
+  "settings.general.row.fontSize.description": "Adjust the base font size for the interface",
   "settings.general.row.followup.title": "พฤติกรรมการติดตามผล",
   "settings.general.row.followup.description": "เลือกว่าจะให้พร้อมท์ติดตามผลทำงานทันทีหรือรอในคิว",
   "settings.general.row.followup.option.queue": "คิว",

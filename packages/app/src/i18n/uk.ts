@@ -877,6 +877,8 @@ export const dict = {
   "settings.general.row.terminalFont.description": "Налаштуйте шрифт, який використовується в терміналі",
   "settings.general.row.uiFont.title": "Шрифт інтерфейсу",
   "settings.general.row.uiFont.description": "Налаштуйте шрифт, який використовується в інтерфейсі",
+  "settings.general.row.fontSize.title": "Font Size",
+  "settings.general.row.fontSize.description": "Adjust the base font size for the interface",
   "settings.general.row.followup.title": "Поведінка продовження",
   "settings.general.row.followup.description": "Виберіть, чи продовження виконується негайно, чи чекає в черзі",
   "settings.general.row.followup.option.queue": "Черга",

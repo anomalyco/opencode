@@ -730,6 +730,8 @@ export const dict = {
   "settings.general.row.terminalFont.description": "Passe die im Terminal verwendete Schriftart an",
   "settings.general.row.uiFont.title": "UI-Schriftart",
   "settings.general.row.uiFont.description": "Die im gesamten Interface verwendete Schriftart anpassen",
+  "settings.general.row.fontSize.title": "Font Size",
+  "settings.general.row.fontSize.description": "Adjust the base font size for the interface",
   "settings.general.row.followup.title": "Verhalten bei Folgefragen",
   "settings.general.row.followup.description":
     "Wählen Sie, ob Folgefragen sofort steuern oder in einer Warteschlange warten",

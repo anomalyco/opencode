@@ -710,6 +710,8 @@ export const dict = {
   "settings.general.row.terminalFont.description": "خصّص الخط المستخدم في الطرفية",
   "settings.general.row.uiFont.title": "خط الواجهة",
   "settings.general.row.uiFont.description": "خصّص الخط المستخدم في الواجهة بأكملها",
+  "settings.general.row.fontSize.title": "Font Size",
+  "settings.general.row.fontSize.description": "Adjust the base font size for the interface",
   "settings.general.row.followup.title": "سلوك المتابعة",
   "settings.general.row.followup.description": "اختر ما إذا كانت طلبات المتابعة توجه فورًا أو تنتظر في قائمة انتظار",
   "settings.general.row.followup.option.queue": "قائمة انتظار",

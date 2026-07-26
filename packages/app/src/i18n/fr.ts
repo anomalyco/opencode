@@ -726,6 +726,8 @@ export const dict = {
   "settings.general.row.terminalFont.description": "Personnalisez la police utilisée dans le terminal",
   "settings.general.row.uiFont.title": "Police de l'interface",
   "settings.general.row.uiFont.description": "Personnaliser la police utilisée dans toute l'interface",
+  "settings.general.row.fontSize.title": "Font Size",
+  "settings.general.row.fontSize.description": "Adjust the base font size for the interface",
   "settings.general.row.followup.title": "Comportement de suivi",
   "settings.general.row.followup.description":
     "Choisissez si les messages de suivi dirigent immédiatement ou attendent dans une file d'attente",

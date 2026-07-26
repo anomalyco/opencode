@@ -528,6 +528,31 @@ export const SettingsGeneralV2: Component<{
             />
           </div>
         </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.fontSize.title")}
+          description={language.t("settings.general.row.fontSize.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextInputV2
+              data-action="settings-font-size"
+              type="number"
+              appearance="base"
+              value={settings.appearance.fontSize().toString()}
+              onInput={(event) => {
+                const value = parseInt(event.currentTarget.value, 10)
+                if (!isNaN(value) && value > 0) {
+                  settings.appearance.setFontSize(value)
+                }
+              }}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              aria-label={language.t("settings.general.row.fontSize.title")}
+            />
+          </div>
+        </SettingsRowV2>
       </SettingsListV2>
     </div>
   )

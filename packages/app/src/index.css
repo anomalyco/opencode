@@ -17,6 +17,14 @@
   font-style: normal;
 }
 
+:root {
+  --font-size-ui: 14px;
+}
+
+html {
+  font-size: var(--font-size-ui);
+}
+
 @media (display-mode: standalone) {
   /* WebKit excludes safe-area insets from dvh in installed apps. */
   #root {
