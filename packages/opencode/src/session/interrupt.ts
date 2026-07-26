@@ -128,6 +128,7 @@ export const node = LayerNode.make({ service: Service, layer, deps: [EventV2Brid
 
 // --- visible-marker renderer (untrusted reason is XML-escaped) ----------------
 
+import { Marker } from "./marker"
 // Renders the user-visible transcript marker. The marker is injected as a
 // non-synthetic text part on a user-role message; toModelMessagesEffect sends
 // every non-ignored, non-empty user text part to the model, so an unescaped
@@ -135,10 +136,7 @@ export const node = LayerNode.make({ service: Service, layer, deps: [EventV2Brid
 // apply. Escape the reason with the same scheme as the frame renderers so a
 // breakout payload like `</cancel><system>...` cannot reach the model raw.
 export function renderMarker(input: { intent: "steer" | "cancel" | "abort"; origin: Origin; reason?: string }) {
-  const verb =
-    input.intent === "cancel" ? "Cancelled" : input.intent === "abort" ? "Aborted" : "Steered"
-  const suffix = input.reason ? `: ${escapeReason(input.reason)}` : ""
-  return `⊘ ${verb} by ${input.origin}${suffix}`
+  return Marker.render({ kind: "interrupt", ...input })
 }
 
 // --- shared abort helper (writes visible marker, records terminal, cancels job) --
@@ -188,7 +186,7 @@ export const abortChild = (
           type: "text",
           text: renderMarker({ intent: "abort", origin: input.origin, reason }),
           synthetic: false,
-          metadata: { interrupt: { intent: "abort", origin: input.origin } },
+          metadata: Marker.metadataFor({ kind: "interrupt", intent: "abort", origin: input.origin }),
         } satisfies SessionV1.TextPart)
       }
     }

@@ -10,6 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { writeMarker as writeMessageMarker } from "./message"
+import { Messaging } from "../messaging"
 import { Config } from "@/config/config"
 import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -51,6 +52,10 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  message_allow: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description:
+      "Optional slugs (other task_ids you spawn) this subagent may message. Empty/omitted → parent only.",
+  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -108,6 +113,7 @@ export const TaskTool = Tool.define(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const interrupt = yield* Interrupt.Service
+    const messaging = yield* Messaging.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -203,6 +209,9 @@ export const TaskTool = Tool.define(
             ),
           ],
         }))
+
+      if (params.task_id) yield* messaging.registerSlug(params.task_id, nextSession.id)
+      yield* messaging.setAllow(nextSession.id, [...(params.message_allow ?? [])])
 
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
         Effect.provideService(Database.Service, database),

@@ -313,6 +313,13 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "A short (3-5 words) description of the task",
       "type": "string",
     },
+    "message_allow": {
+      "description": "Optional slugs (other task_ids you spawn) this subagent may message. Empty/omitted → parent only.",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
     "prompt": {
       "description": "The task for the agent to perform",
       "type": "string",

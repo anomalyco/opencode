@@ -442,6 +442,7 @@ export const node = LayerNode.make({
     Question.node,
     Messaging.node,
     Permission.node,
+    Messaging.node,
     Todo.node,
     Agent.node,
     Skill.node,

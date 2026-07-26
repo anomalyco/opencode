@@ -6,6 +6,8 @@ import os from "os"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Interrupt } from "./interrupt"
+import { Marker } from "./marker"
+import { Messaging } from "../messaging"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
 import { Agent } from "../agent/agent"
@@ -142,6 +144,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const interrupt = yield* Interrupt.Service
+    const messaging = yield* Messaging.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1127,7 +1130,7 @@ const layer = Layer.effect(
             } satisfies SessionV1.TextPart)
             // The non-synthetic line is the visible transcript marker the user sees.
             // Origin ("user" / "parent") attributes the marker to who issued it.
-            // metadata.interrupt tags the part so the TUI renders it as a distinct
+            // metadata.marker tags the part so the TUI renders it as a distinct
             // system-event line rather than as normal user prose.
             const visibleLine = Interrupt.renderMarker({
               intent: pendingInterrupt.value.intent,
@@ -1141,12 +1144,11 @@ const layer = Layer.effect(
               type: "text",
               text: visibleLine,
               synthetic: false,
-              metadata: {
-                interrupt: {
-                  intent: pendingInterrupt.value.intent,
-                  origin: pendingInterrupt.value.origin,
-                },
-              },
+              metadata: Marker.metadataFor({
+                kind: "interrupt",
+                intent: pendingInterrupt.value.intent,
+                origin: pendingInterrupt.value.origin,
+              }),
             } satisfies SessionV1.TextPart)
             // Reload so the new user turn is the latest and the break-check below runs a turn on it.
             msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(Effect.provideService(Database.Service, database))
@@ -1155,6 +1157,54 @@ const layer = Layer.effect(
             if (pendingInterrupt.value.intent === "cancel") {
               cancelDeadline = step + Interrupt.CANCEL_GRACE_TURNS
               yield* interrupt.recordTerminal({ sessionID, reason: pendingInterrupt.value.reason })
+            }
+          }
+
+          // --- coordinator inbox: drain queued peer messages at this turn boundary ---
+          // Gated by experimentalAgentMessaging so it's dead code when the flag is off.
+          // SKIP entirely if a cancel was just consumed (loop is terminating); a steer or
+          // no-interrupt proceeds to drain. One user message, 2N parts, O(1) turns.
+          if (
+            flags.experimentalAgentMessaging &&
+            !(Option.isSome(pendingInterrupt) && pendingInterrupt.value.intent === "cancel")
+          ) {
+            const inboxItems = yield* messaging.drain(sessionID)
+            if (inboxItems.length > 0) {
+              const inboxMsg: SessionV1.User = {
+                id: MessageID.ascending(),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              }
+              yield* sessions.updateMessage(inboxMsg)
+              for (const item of inboxItems) {
+                // 1) synthetic frame the model reads — from= is the human-readable slug.
+                yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  messageID: inboxMsg.id,
+                  sessionID,
+                  type: "text",
+                  text: `<agent_message from="${Marker.escape(item.fromSlug)}">\n${Marker.escape(item.body)}\n</agent_message>`,
+                  synthetic: true,
+                } satisfies SessionV1.TextPart)
+                // 2) non-synthetic visible ✉ marker — slug, not ses_ id.
+                yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  messageID: inboxMsg.id,
+                  sessionID,
+                  type: "text",
+                  text: Marker.render({ kind: "inbox", from: item.fromSlug, body: item.body }),
+                  synthetic: false,
+                  metadata: Marker.metadataFor({ kind: "inbox", from: item.fromSlug }),
+                } satisfies SessionV1.TextPart)
+              }
+              msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              ;({ user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs))
+              if (!lastUser) throw new Error("No user message after inbox drain.")
             }
           }
 
@@ -1693,6 +1743,7 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
     Database.node,
     Interrupt.node,
+    Messaging.node,
   ],
 })
 

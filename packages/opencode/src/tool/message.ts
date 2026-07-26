@@ -6,14 +6,16 @@ import { BackgroundJob } from "@/background/job"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MessageID, PartID, SessionID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
+import { Marker } from "../session/marker"
 import type { TaskPromptOps } from "./task"
 import DESCRIPTION from "./message.txt"
 
 const MAX_BODY_LENGTH = 16000
 
 export const Parameters = Schema.Struct({
-  target: Schema.Literals(["parent", "subagent"]).annotate({
-    description: "Who to message: 'parent' (the agent that spawned you) or 'subagent' (reply to one you spawned)",
+  target: Schema.String.annotate({
+    description:
+      "Who to message: 'parent' (the agent that spawned you), 'subagent' (reply to one you spawned), or a peer slug you were allow-listed to reach",
   }),
   body: Schema.String.annotate({ description: "The message or question text" }),
   expect_reply: Schema.optional(Schema.Boolean).annotate({
@@ -84,7 +86,43 @@ export const MessageTool = Tool.define<
         }
       }
 
-      // target === "parent"
+      // not "subagent" (handled above) and not "parent" (handled below) —
+      // the only remaining case is a peer-slug send (sibling / coordinator).
+      if (params.target !== "parent") {
+        // peer-slug send (sibling/coordinator) — fire-and-forget only
+        if (params.expect_reply === true)
+          return yield* Effect.fail(
+            new Error(
+              `expect_reply is not allowed for peer messaging (target "${params.target}"); it is fire-and-forget`,
+            ),
+          )
+        const allow = yield* messaging.getAllow(ctx.sessionID)
+        if (!allow.includes(params.target))
+          return yield* Effect.fail(
+            new Error(`target "${params.target}" is not in your message_allow list`),
+          )
+        const targetID = Option.getOrUndefined(yield* messaging.resolveSlug(params.target))
+        if (!targetID)
+          return yield* Effect.fail(
+            new Error(`target "${params.target}" has not spawned yet`),
+          )
+        const me = yield* sessions.get(ctx.sessionID)
+        const peer = yield* sessions.get(targetID)
+        if (!peer.parentID || peer.parentID !== me.parentID)
+          return yield* Effect.fail(
+            new Error(`target "${params.target}" is not a sibling (parent mismatch)`),
+          )
+        const fromSlug = yield* messaging.slugFor(ctx.sessionID)
+        yield* messaging
+          .enqueue({ target: targetID, from: ctx.sessionID, fromSlug, body: params.body })
+          .pipe(Effect.catchTag("Messaging.AbuseError", (e) => Effect.fail(new Error(e.detail))))
+        return {
+          title: `Sent to ${params.target}`,
+          metadata: { target: params.target, expect_reply: false },
+          output: "Queued to recipient inbox.",
+        }
+      }
+
       const self = yield* sessions.get(ctx.sessionID)
       const parentID = self.parentID
       if (!parentID)
@@ -122,7 +160,7 @@ export const MessageTool = Tool.define<
       //   1. synthetic <agent_message> frame — the model reads this and is told how to reply.
       //   2. non-synthetic ✉ Message marker — the human reading the TUI sees a distinct line.
       // The TUI's UserMessage filters synthetic parts out of the prose memo and routes the
-      // metadata.message-tagged part into a separate muted marker row (mirrors interrupt UX).
+      // metadata.marker-tagged part into a separate muted marker row (mirrors interrupt UX).
       const inject = Effect.fn("MessageTool.inject")(function* () {
         const parent = yield* sessions.get(parentID)
         const parentMessages = yield* sessions.messages({ sessionID: parentID }).pipe(Effect.option)
@@ -147,7 +185,7 @@ export const MessageTool = Tool.define<
               {
                 type: "text",
                 text: renderMarker({ peer: "subagent", body: params.body, expectReply }),
-                metadata: { message: { peer: "subagent", expectReply } },
+                metadata: Marker.metadataFor({ kind: "message", peer: "subagent", expectReply }),
               },
             ],
           })
@@ -232,18 +270,11 @@ function renderInbound(childSessionID: SessionID, body: string, expectReply: boo
 // so the TUI can render it without changing the visibility predicate), so the
 // untrusted body is XML-escaped with the same scheme as the synthetic frame.
 export function renderMarker(input: { peer: MessageMarkerPeer; body: string; expectReply?: boolean }) {
-  const verb = renderVerb(input)
-  return `✉ ${verb}: ${escapeBody(input.body)}`
-}
-
-function renderVerb(input: { peer: MessageMarkerPeer; expectReply?: boolean }) {
-  if (input.peer === "subagent")
-    return input.expectReply ? "Message from subagent (awaiting your reply)" : "Message from subagent"
-  return "Reply from parent"
+  return Marker.render({ kind: "message", ...input })
 }
 
 // Write a visible ✉ marker into a session's transcript as a new user-role message
-// carrying a single non-synthetic text part tagged with metadata.message. Mirrors
+// carrying a single non-synthetic text part tagged with metadata.marker. Mirrors
 // the abortChild pattern in interrupt.ts: derive agent/model from the most recent
 // user message of the target session (real subagent sessions have no session.model
 // — the model lives on user messages), and skip cleanly when the session has no
@@ -279,11 +310,6 @@ export const writeMarker = (
       type: "text",
       text: renderMarker(input),
       synthetic: false,
-      metadata: {
-        message: {
-          peer: input.peer,
-          ...(input.expectReply !== undefined ? { expectReply: input.expectReply } : {}),
-        },
-      },
+      metadata: Marker.metadataFor({ kind: "message", peer: input.peer, expectReply: input.expectReply }),
     } satisfies SessionV1.TextPart)
   })
