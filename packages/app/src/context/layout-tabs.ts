@@ -56,6 +56,13 @@ export function openSessionTab(current: SessionTabState, tab: string): SessionTa
     }
   }
 
+  if (tab === "agents") {
+    return {
+      tabs: { all: [tab, ...current.tabs.all.filter((item) => item !== tab)], active: tab },
+      preview,
+    }
+  }
+
   const previewIndex = preview ? current.tabs.all.indexOf(preview) : -1
   const existingIndex = current.tabs.all.indexOf(tab)
   if (existingIndex !== -1) {
@@ -84,6 +91,15 @@ export function closeSessionTab(current: SessionTabState, tab: string): SessionT
     if (current.tabs.active !== tab) return current
     return {
       tabs: { all: current.tabs.all, active: current.tabs.all[0] },
+      preview: current.preview,
+    }
+  }
+
+  if (tab === "agents") {
+    const all = current.tabs.all.filter((item) => item !== tab)
+    if (current.tabs.active !== tab) return { tabs: { ...current.tabs, all }, preview: current.preview }
+    return {
+      tabs: { all, active: all[0] },
       preview: current.preview,
     }
   }
