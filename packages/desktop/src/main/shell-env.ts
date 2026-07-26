@@ -1,12 +1,25 @@
 import { spawnSync } from "node:child_process"
+import { userInfo } from "node:os"
 import { basename } from "node:path"
 
 const TIMEOUT = 5_000
 
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
+type ShellEnvLogger = {
+  log: (message: string) => void
+}
+
+export function resolveUserShell(envShell: string | undefined, loginShell: string | null | undefined) {
+  const resolvedLoginShell = loginShell && loginShell !== "unknown" ? loginShell : undefined
+  return envShell || resolvedLoginShell || "/bin/sh"
+}
 
 export function getUserShell() {
-  return process.env.SHELL || "/bin/sh"
+  try {
+    return resolveUserShell(process.env.SHELL, userInfo().shell)
+  } catch {
+    return resolveUserShell(process.env.SHELL, undefined)
+  }
 }
 
 export function parseShellEnv(out: Buffer) {
@@ -54,29 +67,29 @@ export function isNushell(shell: string) {
   return name === "nu" || name === "nu.exe" || raw.endsWith("\\nu.exe")
 }
 
-export function loadShellEnv(shell: string) {
+export function loadShellEnv(shell: string, logger: ShellEnvLogger) {
   if (isNushell(shell)) {
-    console.log(`[server] Skipping shell env probe for nushell: ${shell}`)
+    logger.log(`[server] Skipping shell env probe for nushell: ${shell}`)
     return null
   }
 
   const interactive = probe(shell, "-il")
   if (interactive.type === "Loaded") {
-    console.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
+    logger.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
     return interactive.value
   }
   if (interactive.type === "Timeout") {
-    console.warn(`[server] Interactive shell env probe timed out: ${shell}`)
+    logger.log(`[server] Interactive shell env probe timed out: ${shell}`)
     return null
   }
 
   const login = probe(shell, "-l")
   if (login.type === "Loaded") {
-    console.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
+    logger.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
     return login.value
   }
 
-  console.warn(`[server] Falling back to app environment: ${shell}`)
+  logger.log(`[server] Falling back to app environment: ${shell}`)
   return null
 }
 

@@ -28,7 +28,9 @@ export async function GET(input: APIEvent) {
     )
   })()
 
-  const models = Object.keys(ZenData.list("full").models).filter((id) => !disabledModels.includes(id))
+  const models = Object.keys(ZenData.list("full").models)
+    .filter((id) => !id.endsWith(":global"))
+    .filter((id) => !disabledModels.includes(id))
 
   return buildModelsResponse(models)
 }

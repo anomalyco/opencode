@@ -1,17 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ProjectID } from "../../src/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { Session } from "../../src/session/session"
 
 const info = {
   id: SessionID.descending(),
   slug: "test-session",
-  projectID: ProjectID.global,
+  projectID: ProjectV2.ID.global,
   workspaceID: undefined,
   directory: "/tmp/opencode",
   parentID: undefined,
   summary: undefined,
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   share: undefined,
   title: "Test session",
   version: "1.0.0",
@@ -41,7 +43,7 @@ describe("Session schema", () => {
     const encoded = Schema.encodeUnknownSync(Session.GlobalInfo)({
       ...info,
       project: {
-        id: ProjectID.global,
+        id: ProjectV2.ID.global,
         name: undefined,
         worktree: "/tmp/opencode",
       },

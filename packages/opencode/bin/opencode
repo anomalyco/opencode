@@ -5,31 +5,51 @@ const fs = require("fs")
 const path = require("path")
 const os = require("os")
 
+const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
+
 function run(target) {
-  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+  const child = childProcess.spawn(target, process.argv.slice(2), {
     stdio: "inherit",
   })
-  if (result.error) {
-    console.error(result.error.message)
+
+  child.on("error", (error) => {
+    console.error(error.message)
     process.exit(1)
+  })
+
+  const forwarders = {}
+  for (const signal of forwardedSignals) {
+    forwarders[signal] = () => {
+      try {
+        child.kill(signal)
+      } catch {
+        // The child may have already exited.
+      }
+    }
+    process.on(signal, forwarders[signal])
   }
-  const code = typeof result.status === "number" ? result.status : 0
-  process.exit(code)
+
+  child.on("exit", (code, signal) => {
+    for (const forwardedSignal of forwardedSignals) {
+      process.removeListener(forwardedSignal, forwarders[forwardedSignal])
+    }
+
+    if (signal) {
+      process.kill(process.pid, signal)
+      return
+    }
+
+    process.exit(typeof code === "number" ? code : 0)
+  })
 }
 
 const envPath = process.env.OPENCODE_BIN_PATH
-if (envPath) {
-  run(envPath)
-}
 
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
 //
 const cached = path.join(scriptDir, ".opencode")
-if (fs.existsSync(cached)) {
-  run(cached)
-}
 
 const platformMap = {
   darwin: "darwin",
@@ -166,7 +186,7 @@ function findBinary(startDir) {
   }
 }
 
-const resolved = findBinary(scriptDir)
+const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
 if (!resolved) {
   console.error(
     "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +

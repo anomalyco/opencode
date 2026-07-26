@@ -7,7 +7,7 @@ import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { useLayout, type LocalProject } from "@/context/layout"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
@@ -56,6 +56,7 @@ const ProjectTile = (props: {
   sidebarHovering: Accessor<boolean>
   selected: Accessor<boolean>
   active: Accessor<boolean>
+  isWorking: Accessor<boolean>
   overlay: Accessor<boolean>
   suppressHover: Accessor<boolean>
   dirs: Accessor<string[]>
@@ -143,7 +144,7 @@ const ProjectTile = (props: {
         }}
         onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
+        <ProjectIcon project={props.project} notify working={props.isWorking()} />
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
@@ -273,7 +274,7 @@ export const SortableProject = (props: {
   ctx: ProjectSidebarContext
   sortNow: Accessor<number>
 }): JSX.Element => {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
   const selected = createMemo(() => props.ctx.currentProject()?.worktree === props.project.worktree)
@@ -293,17 +294,25 @@ export const SortableProject = (props: {
   const hoverOpen = () => isHoverProject() && preview() && !selected() && !state.menu
 
   const label = (directory: string) => {
-    const [data] = globalSync.child(directory, { bootstrap: false })
+    const [data] = serverSync().child(directory, { bootstrap: false })
     const kind =
       directory === props.project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
     const name = props.ctx.workspaceLabel(directory, data.vcs?.branch, props.project.id)
     return `${kind} : ${name}`
   }
 
-  const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
+  const projectStore = createMemo(() => serverSync().child(props.project.worktree, { bootstrap: false })[0])
+  const isWorking = createMemo(() =>
+    dirs().some((directory) => {
+      return Object.keys(serverSync().session.data.session_status).some((id) => {
+        if (serverSync().session.get(id)?.directory !== directory) return false
+        return serverSync().session.data.session_working(id)
+      })
+    }),
+  )
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
   const workspaceSessions = (directory: string) => {
-    const [data] = globalSync.child(directory, { bootstrap: false })
+    const [data] = serverSync().child(directory, { bootstrap: false })
     return sortedRootSessions(data, props.sortNow())
   }
   const tile = () => (
@@ -313,6 +322,7 @@ export const SortableProject = (props: {
       sidebarHovering={props.ctx.sidebarHovering}
       selected={selected}
       active={active}
+      isWorking={isWorking}
       overlay={overlay}
       suppressHover={() => state.suppressHover}
       dirs={dirs}

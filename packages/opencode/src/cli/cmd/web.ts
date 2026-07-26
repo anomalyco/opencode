@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import { Server } from "../../server/server"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
@@ -37,10 +36,11 @@ export const WebCommand = effectCmd({
   // ambient project InstanceContext needed at startup.
   instance: false,
   handler: Effect.fn("Cli.web")(function* (args) {
+    const { Server } = yield* Effect.promise(() => import("../../server/server"))
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
-    const opts = yield* Effect.promise(() => resolveNetworkOptions(args))
+    const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
     UI.empty()
     UI.println(UI.logo("  "))
@@ -72,7 +72,7 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      open(localhostUrl.toString()).catch(() => {})
+      open(localhostUrl).catch(() => {})
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)

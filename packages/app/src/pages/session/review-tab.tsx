@@ -1,12 +1,13 @@
 import { createEffect, onCleanup, type JSX } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import { SessionReview } from "@opencode-ai/ui/session-review"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import type {
   SessionReviewCommentActions,
   SessionReviewCommentDelete,
   SessionReviewCommentUpdate,
-} from "@opencode-ai/ui/session-review"
+} from "@opencode-ai/session-ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
@@ -14,7 +15,7 @@ import type { LineComment } from "@/context/comments"
 
 export type DiffStyle = "unified" | "split"
 
-type ReviewDiff = SnapshotFileDiff | VcsFileDiff
+type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
 
 export interface SessionReviewTabProps {
   title?: JSX.Element
@@ -32,7 +33,7 @@ export interface SessionReviewTabProps {
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
-  onScrollRef?: (el: HTMLDivElement) => void
+  onScrollRef?: (el: HTMLDivElement | undefined) => void
   commentMentions?: {
     items: (query: string) => string[] | Promise<string[]>
   }
@@ -53,8 +54,8 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   const layout = useLayout()
 
   const readFile = async (path: string) => {
-    return sdk.client.file
-      .read({ path })
+    return sdk()
+      .client.file.read({ path })
       .then((x) => x.data)
       .catch((error) => {
         console.debug("[session-review] failed to read file", { path, error })
@@ -126,6 +127,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
+    props.onScrollRef?.(undefined)
   })
 
   return (

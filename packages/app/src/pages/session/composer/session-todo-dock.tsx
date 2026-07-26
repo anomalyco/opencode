@@ -8,8 +8,10 @@ import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Index, createEffect, createMemo } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 
 const doneToken = "\u0000done\u0000"
 const totalToken = "\u0000total\u0000"
@@ -40,19 +42,18 @@ function dot(status: Todo["status"]) {
 }
 
 export function SessionTodoDock(props: {
-  sessionID?: string
   todos: Todo[]
+  collapsed: boolean
+  onToggle: () => void
   collapseLabel: string
   expandLabel: string
   dockProgress: number
 }) {
   const language = useLanguage()
+  const settings = useSettings()
   const [store, setStore] = createStore({
-    collapsed: false,
-    height: 320,
+    height: 78,
   })
-
-  const toggle = () => setStore("collapsed", (value) => !value)
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
@@ -72,7 +73,7 @@ export function SessionTodoDock(props: {
   )
 
   const preview = createMemo(() => active()?.content ?? "")
-  const collapse = useSpring(() => (store.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const collapse = useSpring(() => (props.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress)))
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
@@ -86,15 +87,20 @@ export function SessionTodoDock(props: {
     const el = contentRef
     if (!el) return
     const update = () => {
-      setStore("height", el.getBoundingClientRect().height)
+      setStore("height", (height) => Math.max(height, el.scrollHeight))
     }
     update()
     createResizeObserver(el, update)
   })
 
   return (
-    <DockTray
+    <Dynamic
+      component={settings.general.newLayoutDesigns() ? "div" : DockTray}
       data-component="session-todo-dock"
+      classList={{
+        "w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01":
+          settings.general.newLayoutDesigns(),
+      }}
       style={{
         "overflow-x": "visible",
         "overflow-y": "hidden",
@@ -104,18 +110,27 @@ export function SessionTodoDock(props: {
       <div ref={contentRef}>
         <div
           data-action="session-todo-toggle"
-          class="pl-3 pr-2 py-2 flex items-center gap-2 overflow-visible"
+          classList={{
+            "flex items-center gap-2 overflow-visible": true,
+            "h-[42px] pl-4 pr-2": settings.general.newLayoutDesigns(),
+            "pl-3 pr-2 py-2": !settings.general.newLayoutDesigns(),
+          }}
           role="button"
           tabIndex={0}
-          onClick={toggle}
+          onClick={props.onToggle}
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== " ") return
             event.preventDefault()
-            toggle()
+            props.onToggle()
           }}
         >
           <span
-            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 overflow-visible"
+            classList={{
+              "cursor-default inline-flex items-baseline shrink-0 overflow-visible": true,
+              "font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted":
+                settings.general.newLayoutDesigns(),
+              "text-14-regular text-text-strong": !settings.general.newLayoutDesigns(),
+            }}
             aria-label={label()}
             style={{
               "--tool-motion-odometer-ms": "600ms",
@@ -147,8 +162,12 @@ export function SessionTodoDock(props: {
             }}
           >
             <TextReveal
-              class="text-14-regular text-text-base cursor-default"
-              text={store.collapsed ? preview() : undefined}
+              class={
+                settings.general.newLayoutDesigns()
+                  ? "cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint"
+                  : "text-14-regular text-text-base cursor-default"
+              }
+              text={props.collapsed ? preview() : undefined}
               duration={600}
               travel={25}
               edge={17}
@@ -161,7 +180,7 @@ export function SessionTodoDock(props: {
           <div class="ml-auto">
             <IconButton
               data-action="session-todo-toggle-button"
-              data-collapsed={store.collapsed ? "true" : "false"}
+              data-collapsed={props.collapsed ? "true" : "false"}
               icon="chevron-down"
               size="normal"
               variant="ghost"
@@ -172,16 +191,16 @@ export function SessionTodoDock(props: {
               }}
               onClick={(event) => {
                 event.stopPropagation()
-                toggle()
+                props.onToggle()
               }}
-              aria-label={store.collapsed ? props.expandLabel : props.collapseLabel}
+              aria-label={props.collapsed ? props.expandLabel : props.collapseLabel}
             />
           </div>
         </div>
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={store.collapsed || off()}
+          aria-hidden={props.collapsed || off()}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}
@@ -193,7 +212,7 @@ export function SessionTodoDock(props: {
           <TodoList todos={props.todos} />
         </div>
       </div>
-    </DockTray>
+    </Dynamic>
   )
 }
 

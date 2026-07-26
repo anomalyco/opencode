@@ -80,7 +80,9 @@ const baseState = (input: Partial<State> = {}) =>
     vcs: undefined,
     limit: 10,
     message: {},
+    session_message: {},
     part: {},
+    part_text_accum_delta: {},
     ...input,
   }) as State
 
@@ -133,6 +135,47 @@ describe("applyGlobalEvent", () => {
 })
 
 describe("applyDirectoryEvent", () => {
+  test("initializes text delta accumulation from the current part text", () => {
+    const part = { ...textPart("part", "session", "message"), text: "existing" }
+    const [store, setStore] = createStore(baseState({ part: { message: [part] } }))
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.delta",
+        properties: { messageID: "message", partID: "part", field: "text", delta: " appended" },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.part_text_accum_delta.part).toBe("existing appended")
+    expect((store.part.message?.[0] as { text: string }).text).toBe("existing appended")
+  })
+
+  test("preserves a Home-specific retained session limit", () => {
+    const [store, setStore] = createStore(
+      baseState({
+        limit: 1,
+        session: [rootSession({ id: "a" }), rootSession({ id: "b" }), rootSession({ id: "c" })],
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: { type: "session.created", properties: { info: rootSession({ id: "d" }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      retainedLimit: 3,
+    })
+
+    expect(store.session).toHaveLength(3)
+  })
+
   test("inserts root sessions in sorted order and updates sessionTotal", () => {
     const [store, setStore] = createStore(
       baseState({
@@ -201,10 +244,26 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
+  test("ignores an archived session absent from a passive directory store", () => {
+    const [store, setStore] = createStore(baseState({ session: [], sessionTotal: 0 }))
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "missing", archived: 10 }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session).toEqual([])
+    expect(store.sessionTotal).toBe(0)
+  })
+
   test("cleans session caches when deleted and decrements only root totals", () => {
     const cases = [
-      { info: rootSession({ id: "ses_1" }), expectedTotal: 1 },
-      { info: rootSession({ id: "ses_2", parentID: "ses_1" }), expectedTotal: 2 },
+      { info: rootSession({ id: "ses_1" }), expectedTotal: 1, current: false },
+      { info: rootSession({ id: "ses_2", parentID: "ses_1" }), expectedTotal: 2, current: true },
     ]
 
     for (const item of cases) {
@@ -228,7 +287,10 @@ describe("applyDirectoryEvent", () => {
       )
 
       applyDirectoryEvent({
-        event: { type: "session.deleted", properties: { info: item.info } },
+        event: {
+          type: "session.deleted",
+          properties: item.current ? { sessionID: item.info.id } : { info: item.info },
+        },
         store,
         setStore,
         push() {},

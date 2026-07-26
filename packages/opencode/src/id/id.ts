@@ -1,25 +1,18 @@
-import z from "zod"
 import { randomBytes } from "crypto"
 
 const prefixes = {
+  job: "job",
   event: "evt",
   session: "ses",
   message: "msg",
   permission: "per",
   question: "que",
-  user: "usr",
   part: "prt",
   pty: "pty",
   tool: "tool",
   workspace: "wrk",
-  entry: "ent",
-  account: "act",
   secureinput: "sec",
 } as const
-
-export function schema(prefix: keyof typeof prefixes) {
-  return z.string().startsWith(prefixes[prefix])
-}
 
 const LENGTH = 26
 

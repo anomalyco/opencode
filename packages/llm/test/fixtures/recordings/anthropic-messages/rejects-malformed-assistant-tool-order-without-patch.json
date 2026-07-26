@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "anthropic-messages/rejects-malformed-assistant-tool-order-without-patch",
+    "recordedAt": "2026-05-05T20:08:42.597Z",
+    "tags": ["prefix:anthropic-messages", "provider:anthropic", "protocol:anthropic-messages", "tool", "sad-path"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}},{\"type\":\"text\",\"text\":\"I will check the weather.\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"{\\\"temperature\\\":\\\"72F\\\"}\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Use that result to answer briefly.\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get weather\",\"input_schema\":{\"type\":\"object\",\"properties\":{}}}],\"stream\":true,\"max_tokens\":4096}"
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"messages.1: `tool_use` ids were found without `tool_result` blocks immediately after: call_1. Each `tool_use` block must have a corresponding `tool_result` block in the next message.\"},\"request_id\":\"req_011Cak2XdJgnzxKCY2BC2Beh\"}"
+      }
+    }
+  ]
+}

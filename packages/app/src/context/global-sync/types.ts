@@ -1,21 +1,21 @@
 import type {
   Agent,
-  Command,
   Config,
   LspStatus,
-  McpStatus,
   Message,
   Part,
   Path,
   PermissionRequest,
-  ProviderListResponse,
   QuestionRequest,
+  ReferenceInfo,
   Session,
   SessionStatus,
-  SnapshotFileDiff,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import type { CommandInfo, McpResource, McpServer, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -33,12 +33,13 @@ export type ProjectMeta = {
 export type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
-  command: Command[]
+  command: CommandInfo[]
+  reference: ReferenceInfo[]
   project: string
   projectMeta: ProjectMeta | undefined
   icon: string | undefined
   provider_ready: boolean
-  provider: ProviderListResponse
+  provider: NormalizedProviderListResponse
   config: Config
   path: Path
   session: Session[]
@@ -46,8 +47,9 @@ export type State = {
   session_status: {
     [sessionID: string]: SessionStatus
   }
+  session_working(id: string): boolean
   session_diff: {
-    [sessionID: string]: SnapshotFileDiff[]
+    [sessionID: string]: FileDiffInfo[]
   }
   todo: {
     [sessionID: string]: Todo[]
@@ -60,7 +62,10 @@ export type State = {
   }
   mcp_ready: boolean
   mcp: {
-    [name: string]: McpStatus
+    [name: string]: McpServer["status"]
+  }
+  mcp_resource: {
+    [key: string]: McpResource
   }
   lsp_ready: boolean
   lsp: LspStatus[]
@@ -69,8 +74,14 @@ export type State = {
   message: {
     [sessionID: string]: Message[]
   }
+  session_message: {
+    [sessionID: string]: SessionMessageInfo[]
+  }
   part: {
     [messageID: string]: Part[]
+  }
+  part_text_accum_delta: {
+    [partID: string]: string
   }
 }
 
@@ -94,6 +105,7 @@ export type IconCache = {
 
 export type ChildOptions = {
   bootstrap?: boolean
+  mcp?: boolean
 }
 
 export type DirState = {
@@ -115,18 +127,6 @@ export type DisposeCheck = {
   pinned: boolean
   booting: boolean
   loadingSessions: boolean
-}
-
-export type RootLoadArgs = {
-  directory: string
-  limit: number
-  list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
-}
-
-export type RootLoadResult = {
-  data?: Session[]
-  limit: number
-  limited: boolean
 }
 
 export const MAX_DIR_STORES = 30

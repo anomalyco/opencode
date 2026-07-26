@@ -1,34 +1,40 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer } from "effect"
-import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from "effect/unstable/http"
+import { Effect, Fiber, Layer, Schema } from "effect"
+import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { registerAdapter } from "../../src/control-plane/adapters"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
-import { Instance } from "../../src/project/instance"
-import { InstanceLayer } from "../../src/project/instance-layer"
 import { Project } from "../../src/project/project"
+import { Session } from "../../src/session/session"
 import { disposeMiddleware, markInstanceForDisposal } from "../../src/server/routes/instance/httpapi/lifecycle"
-import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
-import { workspaceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
+import {
+  InstanceContextMiddleware,
+  instanceContextLayer,
+} from "../../src/server/routes/instance/httpapi/middleware/instance-context"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  workspaceRoutingLayer,
+} from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
+import { withFixedWorkspaceID } from "../fixture/flag"
+import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
 import { waitGlobalBusEvent } from "./global-bus"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
     yield* Effect.promise(() => resetDatabase())
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await disposeAllInstances()
         await resetDatabase()
       }),
@@ -36,20 +42,14 @@ const testStateLayer = Layer.effectDiscard(
   }),
 )
 
-const it = testEffect(
-  Layer.mergeAll(
-    testStateLayer,
-    NodeHttpServer.layerTest,
-    NodeServices.layer,
-    InstanceLayer.layer,
-    Project.defaultLayer,
-    Workspace.defaultLayer,
-  ),
-)
+const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: true })
 
-const instanceContextTestLayer = instanceRouterMiddleware
-  .combine(workspaceRouterMiddleware)
-  .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+const it = testEffect(Layer.mergeAll(testStateLayer, NodeHttpServer.layerTest, NodeServices.layer, workspaceLayer))
+
+const instanceContextTestLayer = Layer.mergeAll(
+  instanceContextLayer,
+  workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+)
 
 const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",
@@ -74,26 +74,63 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
         projectID: input.projectID,
       })
     }),
-    (info) => Workspace.Service.use((workspace) => workspace.remove(info.id)).pipe(Effect.ignore),
+    (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
 const probeInstanceContext = Effect.gen(function* () {
   const instance = yield* InstanceRef
   const workspaceID = yield* WorkspaceRef
-  return yield* HttpServerResponse.json({
+  return {
     directory: instance?.directory,
     worktree: instance?.worktree,
     projectID: instance?.project.id,
     workspaceID,
-  })
+  }
 })
 
-const serveProbe = (probePath: HttpRouter.PathInput = "/probe") =>
-  HttpRouter.add("GET", probePath, probeInstanceContext).pipe(
-    Layer.provide(instanceContextTestLayer),
-    HttpRouter.serve,
-    Layer.build,
-  )
+const ProbeResult = Schema.Struct({
+  directory: Schema.optional(Schema.String),
+  worktree: Schema.optional(Schema.String),
+  projectID: Schema.optional(Schema.String),
+  workspaceID: Schema.optional(Schema.String),
+})
+
+const ProbeApi = HttpApi.make("instance-context-probe").add(
+  HttpApiGroup.make("probe")
+    .add(
+      HttpApiEndpoint.get("get", "/probe", { query: WorkspaceRoutingQuery, success: ProbeResult }),
+      HttpApiEndpoint.get("session", "/session", { query: WorkspaceRoutingQuery, success: ProbeResult }),
+      HttpApiEndpoint.post("dispose", "/dispose-probe", {
+        query: WorkspaceRoutingQuery,
+        success: Schema.Boolean,
+      }),
+    )
+    .middleware(InstanceContextMiddleware)
+    .middleware(WorkspaceRoutingMiddleware),
+)
+
+const probeHandlers = HttpApiBuilder.group(ProbeApi, "probe", (handlers) =>
+  handlers
+    .handle("get", () => probeInstanceContext)
+    .handle("session", () => probeInstanceContext)
+    .handle(
+      "dispose",
+      Effect.fn("InstanceContextProbe.dispose")(function* () {
+        const instance = yield* InstanceRef
+        if (!instance) return false
+        yield* markInstanceForDisposal(instance)
+        return true
+      }),
+    ),
+)
+
+const probeRoutes = HttpApiBuilder.layer(ProbeApi).pipe(
+  Layer.provide(probeHandlers),
+  Layer.provide(instanceContextTestLayer),
+  Layer.provide(Layer.mock(Session.Service)({})),
+)
+
+const serveProbe = () => probeRoutes.pipe(HttpRouter.serve, Layer.build)
 
 const waitDisposedEvent = waitGlobalBusEvent({
   message: "timed out waiting for instance disposal",
@@ -101,19 +138,9 @@ const waitDisposedEvent = waitGlobalBusEvent({
 }).pipe(Effect.map((event) => ({ directory: event.directory, workspace: event.workspace })))
 
 const serveDisposeProbe = () =>
-  HttpRouter.serve(
-    HttpRouter.add(
-      "POST",
-      "/dispose-probe",
-      Effect.gen(function* () {
-        const instance = yield* InstanceRef
-        if (!instance) return HttpServerResponse.empty({ status: 500 })
-        yield* markInstanceForDisposal(instance)
-        return yield* HttpServerResponse.json(true)
-      }),
-    ).pipe(Layer.provide(instanceContextTestLayer)),
-    { middleware: disposeMiddleware, disableListenLog: true, disableLogger: true },
-  ).pipe(Layer.build)
+  HttpRouter.serve(probeRoutes, { middleware: disposeMiddleware, disableListenLog: true, disableLogger: true }).pipe(
+    Layer.build,
+  )
 
 describe("HttpApi instance context middleware", () => {
   it.live("provides instance context from the routed directory", () =>
@@ -129,6 +156,7 @@ describe("HttpApi instance context middleware", () => {
         directory: dir,
         worktree: dir,
         projectID: project.project.id,
+        workspaceID: null,
       })
     }),
   )
@@ -156,7 +184,7 @@ describe("HttpApi instance context middleware", () => {
         type: "instance-context-workspace-ref",
         directory: workspaceDir,
       })
-      yield* serveProbe("/session")
+      yield* serveProbe()
 
       const response = yield* HttpClientRequest.get(`/session?workspace=${workspace.id}`).pipe(
         HttpClientRequest.setHeader("x-opencode-directory", dir),
@@ -196,6 +224,94 @@ describe("HttpApi instance context middleware", () => {
     }),
   )
 
+  it.live("uses configured workspace id instead of routing to the requested workspace", () =>
+    Effect.gen(function* () {
+      const fixedWorkspaceID = WorkspaceV2.ID.ascending()
+      yield* withFixedWorkspaceID(fixedWorkspaceID)
+
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "instance-context-fixed-workspace-ref",
+        directory: workspaceDir,
+      })
+      yield* serveProbe()
+
+      const response = yield* HttpClientRequest.get(`/probe?workspace=${workspace.id}`).pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", dir),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: dir,
+        workspaceID: fixedWorkspaceID,
+      })
+    }),
+  )
+
+  it.live("falls through to local instead of MissingWorkspace when configured workspace id is set", () =>
+    Effect.gen(function* () {
+      const fixedWorkspaceID = WorkspaceV2.ID.ascending()
+      yield* withFixedWorkspaceID(fixedWorkspaceID)
+
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* Project.use.fromDirectory(dir)
+      yield* serveProbe()
+
+      // Reference a workspace id that is not registered locally. Without the
+      // configured env override, this would short-circuit to a 500
+      // MissingWorkspace response. With the env set, planRequest must skip the
+      // MissingWorkspace branch and fall through to Local with the configured
+      // workspace id.
+      const unknownWorkspaceID = WorkspaceV2.ID.ascending()
+      const response = yield* HttpClientRequest.get(`/probe?workspace=${unknownWorkspaceID}`).pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", dir),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: dir,
+        workspaceID: fixedWorkspaceID,
+      })
+    }),
+  )
+
+  it.live("keeps configured workspace id on control-plane routes without remote routing", () =>
+    Effect.gen(function* () {
+      const fixedWorkspaceID = WorkspaceV2.ID.ascending()
+      yield* withFixedWorkspaceID(fixedWorkspaceID)
+
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "instance-context-fixed-workspace-control-plane",
+        directory: workspaceDir,
+      })
+      // /session is matched by isLocalWorkspaceRoute, so shouldStayOnControlPlane
+      // is true. Combined with the env override, the route must stay Local with
+      // the configured workspace id (not divert to the requested workspace's
+      // local directory).
+      yield* serveProbe()
+
+      const response = yield* HttpClientRequest.get(`/session?workspace=${workspace.id}`).pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", dir),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: dir,
+        workspaceID: fixedWorkspaceID,
+      })
+    }),
+  )
+
   it.live("preserves selected workspace id on instance disposal events", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
@@ -207,7 +323,7 @@ describe("HttpApi instance context middleware", () => {
         directory: workspaceDir,
       })
       yield* serveDisposeProbe()
-      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped)
+      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped({ startImmediately: true }))
 
       const response = yield* HttpClientRequest.post(`/dispose-probe?workspace=${workspace.id}`).pipe(
         HttpClient.execute,

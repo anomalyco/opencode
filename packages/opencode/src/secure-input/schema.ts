@@ -1,16 +1,23 @@
 import { Schema } from "effect"
+import { create } from "@/id/id"
 
-import { Identifier } from "@/id/id"
-import { zod, ZodOverride } from "@/util/effect-zod"
-import { Newtype } from "@/util/schema"
+const prefix = "sec"
 
-export class SecureInputID extends Newtype<SecureInputID>()(
-  "SecureInputID",
-  Schema.String.annotate({ [ZodOverride]: Identifier.schema("secureinput") }),
-) {
-  static ascending(id?: string): SecureInputID {
-    return this.make(Identifier.ascending("secureinput", id))
+export const SecureInputID = Schema.String.pipe(Schema.brand("SecureInputID"))
+export type SecureInputID = typeof SecureInputID.Type
+
+export function nextSecureInputID(id?: string): SecureInputID {
+  if (id !== undefined) {
+    if (!id.startsWith(prefix + "_")) throw new Error(`ID ${id} does not start with ${prefix}_`)
+    return id as SecureInputID
   }
-
-  static readonly zod = zod(this)
+  return create(prefix, "ascending") as SecureInputID
 }
+
+export const SecureInputRequest = Schema.Struct({
+  id: SecureInputID,
+  sessionID: Schema.String,
+  prompt: Schema.String,
+  command: Schema.optional(Schema.String),
+})
+export type SecureInputRequest = Schema.Schema.Type<typeof SecureInputRequest>

@@ -5,11 +5,11 @@ import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
-import { Bus } from "../bus"
-import { File } from "../file"
-import { FileWatcher } from "../file/watcher"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Format } from "../format"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -28,8 +28,8 @@ export const WriteTool = Tool.define(
   "write",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
-    const fs = yield* AppFileSystem.Service
-    const bus = yield* Bus.Service
+    const fs = yield* FSUtil.Service
+    const events = yield* EventV2Bridge.Service
     const format = yield* Format.Service
 
     return {
@@ -65,8 +65,8 @@ export const WriteTool = Tool.define(
           if (yield* format.file(filepath)) {
             yield* Bom.syncFile(fs, filepath, desiredBom)
           }
-          yield* bus.publish(File.Event.Edited, { file: filepath })
-          yield* bus.publish(FileWatcher.Event.Updated, {
+          yield* events.publish(FileSystem.Event.Edited, { file: filepath })
+          yield* events.publish(Watcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",
           })
@@ -74,7 +74,7 @@ export const WriteTool = Tool.define(
           let output = "Wrote file successfully."
           yield* lsp.touchFile(filepath, "document")
           const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilepath = AppFileSystem.normalizePath(filepath)
+          const normalizedFilepath = FSUtil.normalizePath(filepath)
           let projectDiagnosticsCount = 0
           for (const [file, issues] of Object.entries(diagnostics)) {
             const current = file === normalizedFilepath

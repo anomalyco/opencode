@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://example.test/poll",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\":\"job_1\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"status\":\"pending\"}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://example.test/poll",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\":\"job_1\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"status\":\"complete\"}"
+      }
+    }
+  ]
+}

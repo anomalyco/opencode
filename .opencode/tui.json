@@ -7,10 +7,11 @@
         "enabled": false,
         "label": "workspace",
         "keybinds": {
-          "modal": "ctrl+alt+m",
-          "screen": "ctrl+alt+o",
-          "home": "escape,ctrl+shift+h",
-          "dialog_close": "escape,q"
+          "smoke_modal": "ctrl+alt+m",
+          "smoke_screen": "ctrl+alt+o",
+          "smoke_screen_home": "escape,ctrl+shift+h",
+          "smoke_screen_modal": "ctrl+alt+m",
+          "smoke_dialog_close": "escape,q"
         }
       }
     ]

@@ -2,13 +2,10 @@ import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
-import { Agent } from "../../agent/agent"
-import { Provider } from "@/provider/provider"
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import matter from "gray-matter"
-import { InstanceRef } from "@/effect/instance-ref"
 import { EOL } from "os"
 import type { Argv } from "yargs"
 import { Effect } from "effect"
@@ -62,10 +59,15 @@ const AgentCreateCommand = effectCmd({
         describe: "model to use in the format of provider/model",
       }),
   handler: Effect.fn("Cli.agent.create")(function* (args) {
+    const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
+    const { Agent } = yield* Effect.promise(() => import("../../agent/agent"))
+    const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
     const maybeCtx = yield* InstanceRef
     if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
     const ctx = maybeCtx
     const agentSvc = yield* Agent.Service
+    const runLocalEffect = <A, E>(effect: Effect.Effect<A, E>) =>
+      Effect.runPromise(effect.pipe(Effect.provideService(InstanceRef, ctx)))
     yield* Effect.promise(async () => {
       const cliPath = args.path
       const cliDescription = args.description
@@ -84,7 +86,7 @@ const AgentCreateCommand = effectCmd({
       // Determine scope/path
       let targetPath: string
       if (cliPath) {
-        targetPath = path.join(cliPath, "agent")
+        targetPath = path.join(cliPath, "agents")
       } else {
         let scope: "global" | "project" = "global"
         if (project.vcs === "git") {
@@ -106,7 +108,7 @@ const AgentCreateCommand = effectCmd({
           if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
           scope = scopeResult
         }
-        targetPath = path.join(scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".opencode"), "agent")
+        targetPath = path.join(scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".opencode"), "agents")
       }
 
       // Get description
@@ -127,7 +129,7 @@ const AgentCreateCommand = effectCmd({
       const spinner = prompts.spinner()
       spinner.start("Generating agent configuration...")
       const model = args.model ? Provider.parseModel(args.model) : undefined
-      const generated = await Effect.runPromise(agentSvc.generate({ description, model })).catch((error) => {
+      const generated = await runLocalEffect(agentSvc.generate({ description, model })).catch((error) => {
         spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
         if (isFullyNonInteractive) process.exit(1)
         throw new UI.CancelledError()
@@ -233,6 +235,7 @@ const AgentListCommand = effectCmd({
   command: "list",
   describe: "list all available agents",
   handler: Effect.fn("Cli.agent.list")(function* () {
+    const { Agent } = yield* Effect.promise(() => import("../../agent/agent"))
     const agents = yield* Agent.Service.use((svc) => svc.list())
     const sortedAgents = agents.sort((a, b) => {
       if (a.native !== b.native) {

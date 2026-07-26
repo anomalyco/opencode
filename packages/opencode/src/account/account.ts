@@ -1,4 +1,7 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, Context } from "effect"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import {
   FetchHttpClient,
   HttpClient,
@@ -181,7 +184,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Account") {}
 
-export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient.HttpClient> = Layer.effect(
+export const use = serviceUse(Service)
+
+const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient.HttpClient> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const repo = yield* AccountRepo.Service
@@ -343,6 +348,18 @@ export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient
       return yield* fetchOrgs(account.url, accessToken)
     })
 
+    const remove = Effect.fn("Account.remove")(function* (accountID: AccountID) {
+      const active = yield* repo.active()
+      yield* repo.remove(accountID)
+      if (Option.isNone(active) || active.value.id !== accountID) return
+
+      const next = (yield* orgsByAccount()).flatMap((group) =>
+        group.orgs.map((org) => ({ accountID: group.account.id, orgID: org.id })),
+      )[0]
+      if (!next) return
+      yield* repo.use(next.accountID, Option.some(next.orgID))
+    })
+
     const config = Effect.fn("Account.config")(function* (accountID: AccountID, orgID: OrgID) {
       const resolved = yield* resolveAccess(accountID)
       if (Option.isNone(resolved)) return Option.none()
@@ -440,7 +457,7 @@ export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient
       activeOrg,
       list: repo.list,
       orgsByAccount,
-      remove: repo.remove,
+      remove,
       use: repo.use,
       orgs,
       config,
@@ -451,6 +468,6 @@ export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(FetchHttpClient.layer))
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [AccountRepo.node, httpClient] })
 
 export * as Account from "./account"

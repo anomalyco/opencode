@@ -1,80 +1,47 @@
-import { Deferred, Effect, Layer, Schema, Context } from "effect"
-import { Bus } from "@/bus"
-import { BusEvent } from "@/bus/bus-event"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Effect, Layer, Schema, Duration, Context } from "effect"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "@/session/schema"
-import { lazy } from "@/util/lazy"
-import * as Log from "@opencode-ai/core/util/log"
-import { SecureInputID } from "./schema"
+import { SecureInputID, nextSecureInputID, SecureInputRequest } from "./schema"
+export { SecureInputID, SecureInputRequest } from "./schema"
+import { spawn } from "@opencode-ai/core/pty"
 
-const log = Log.create({ service: "secure-input" })
-
-// ── Password prompt patterns ────────────────────────────────────────────────
 const PASSWORD_PATTERNS = [
   /\[sudo\] password for .+:/i,
   /Password:/i,
   /Enter passphrase for .+:/i,
   /BECOME password:/i,
   /SSH password:/i,
-  /passphrase:/i,
+  /passphrase for .+:/i,
   /password for .+:/i,
+  /Sorry, try again\./i,
   /\(yes\/no.*\)\?/i,
 ] as const
 
-// ── Commands that typically require interaction ──────────────────────────────
 const INTERACTIVE_COMMANDS = [
   /^sudo\s/,
   /\bsudo\s/,
-  /^ssh\s.*-t\b/,
-  /\bssh\s.*-t\b/,
+  /^ssh\b/,
+  /\bssh\b/,
   /^ansible\b.*-K\b/,
   /^ansible\b.*--ask-become-pass\b/,
   /^ansible-playbook\b.*-K\b/,
   /^ansible-playbook\b.*--ask-become-pass\b/,
   /^su\s/,
   /^gpg\s/,
-  /\bsudo\b/,
 ] as const
 
-// ── Schemas ─────────────────────────────────────────────────────────────────
-
-export class Request extends Schema.Class<Request>("SecureInputRequest")({
-  id: SecureInputID,
-  sessionID: SessionID,
-  prompt: Schema.String.annotate({
-    description: "The password prompt text displayed to the user",
-  }),
-  command: Schema.optional(Schema.String).annotate({
-    description: "The command that triggered this prompt",
-  }),
-}) {
-  static readonly zod = SecureInputID.zod
+export function isInteractiveCommand(command: string): boolean {
+  return INTERACTIVE_COMMANDS.some((re) => re.test(command))
 }
 
-export class Submitted extends Schema.Class<Submitted>("SecureInputSubmitted")({
-  sessionID: SessionID,
-  requestID: SecureInputID,
-}) {}
-
-export class Cancelled extends Schema.Class<Cancelled>("SecureInputCancelled")({
-  sessionID: SessionID,
-  requestID: SecureInputID,
-}) {}
-
-export class TimedOut extends Schema.Class<TimedOut>("SecureInputTimedOut")({
-  sessionID: SessionID,
-  requestID: SecureInputID,
-}) {}
-
-// ── Events ──────────────────────────────────────────────────────────────────
-
-export const Event = {
-  Requested: BusEvent.define("secure-input.requested", Request),
-  Submitted: BusEvent.define("secure-input.submitted", Submitted),
-  Cancelled: BusEvent.define("secure-input.cancelled", Cancelled),
-  TimedOut: BusEvent.define("secure-input.timed-out", TimedOut),
+export function detectPasswordPrompt(output: string): string | undefined {
+  for (const re of PASSWORD_PATTERNS) {
+    const match = output.match(re)
+    if (match) return match[0]
+  }
+  return undefined
 }
-
-// ── Errors ──────────────────────────────────────────────────────────────────
 
 export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("SecureInputCancelledError", {}) {
   override get message() {
@@ -88,111 +55,95 @@ export class TimedOutError extends Schema.TaggedErrorClass<TimedOutError>()("Sec
   }
 }
 
-// ── Internal state ──────────────────────────────────────────────────────────
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("SecureInput.NotFoundError", {
+  requestID: SecureInputID,
+}) {}
 
 interface PendingEntry {
-  info: Request
-  deferred: Deferred.Deferred<string, CancelledError | TimedOutError>
+  info: SecureInputRequest
+  resolve: (value: string) => void
+  reject: (error: CancelledError | TimedOutError) => void
+  promise: Promise<string>
 }
 
-// ── Helpesr ─────────────────────────────────────────────────────────────────
-
-const ptySpawn = lazy(async () => {
-  const { spawn } = await import("#pty")
-  return spawn
-})
-
-/**
- * Check whether a command string looks like it needs interactive input.
- */
-export function isInteractiveCommand(command: string): boolean {
-  return INTERACTIVE_COMMANDS.some((re) => re.test(command))
+interface State {
+  pending: Map<SecureInputID, PendingEntry>
 }
-
-/**
- * Check whether a chunk of PTY output contains a password prompt.
- */
-export function detectPasswordPrompt(output: string): string | undefined {
-  for (const re of PASSWORD_PATTERNS) {
-    const match = output.match(re)
-    if (match) return match[0]
-  }
-  return undefined
-}
-
-// ── Service ─────────────────────────────────────────────────────────────────
 
 export interface Interface {
-  /** Request a secure input (password) from the user. Returns the password string. */
   readonly request: (input: {
     sessionID: SessionID
     prompt: string
     command?: string
   }) => Effect.Effect<string, CancelledError | TimedOutError>
-
-  /** Submit a password for a pending request. */
-  readonly submit: (input: { requestID: SecureInputID; input: string }) => Effect.Effect<void>
-
-  /** Cancel a pending request. */
-  readonly cancel: (requestID: SecureInputID) => Effect.Effect<void>
-
-  /** List all pending requests. */
-  readonly list: () => Effect.Effect<ReadonlyArray<Request>>
-
-  /**
-   * Execute a command interactively via PTY.
-   * Detects password prompts and delegates to request() for user input.
-   */
+  readonly submit: (input: { requestID: SecureInputID; input: string }) => Effect.Effect<void, NotFoundError>
+  readonly cancel: (requestID: SecureInputID) => Effect.Effect<void, NotFoundError>
+  readonly list: () => Effect.Effect<ReadonlyArray<SecureInputRequest>>
   readonly execute: (input: {
     command: string
     cwd: string
     env: Record<string, string>
     sessionID: SessionID
-    timeout: number
+    timeout: Duration.DurationInput
   }) => Effect.Effect<{ output: string; exitCode: number | null }>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SecureInput") {}
 
-export const layer = Layer.effect(
+
+function createEntry(info: SecureInputRequest): PendingEntry {
+  let resolve!: (value: string) => void
+  let reject!: (error: CancelledError | TimedOutError) => void
+  const promise = new Promise<string>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { info, resolve, reject, promise }
+}
+
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const pending = new Map<SecureInputID, PendingEntry>()
-
-    // Clean up all pending requests when the layer is finalized
-    yield* Effect.addFinalizer(() =>
-      Effect.gen(function* () {
-        for (const item of pending.values()) {
-          yield* Deferred.fail(item.deferred, new CancelledError())
-        }
-        pending.clear()
+    const state = yield* InstanceState.make<State>(
+      Effect.fn("SecureInput.state")(function* () {
+        const pending = new Map<SecureInputID, PendingEntry>()
+        yield* Effect.addFinalizer(
+          Effect.sync(() => {
+            for (const item of pending.values()) {
+              item.reject(new CancelledError())
+            }
+            pending.clear()
+          }),
+        )
+        return { pending }
       }),
     )
+
+    const getPending = () => Effect.map(InstanceState.get(state), (s) => s.pending)
 
     const request = Effect.fn("SecureInput.request")(function* (input: {
       sessionID: SessionID
       prompt: string
       command?: string
     }) {
-      const id = SecureInputID.ascending()
-      log.info("requesting secure input", { id, sessionID: input.sessionID })
+      const pending = yield* getPending()
+      const id = nextSecureInputID()
+      yield* Effect.logInfo("requesting secure input", { id })
 
-      const deferred = yield* Deferred.make<string, CancelledError | TimedOutError>()
-      const info = Schema.decodeUnknownSync(Request)({
+      const info: SecureInputRequest = {
         id,
         sessionID: input.sessionID,
         prompt: input.prompt,
         command: input.command,
-      })
-      pending.set(id, { info, deferred })
-      yield* bus.publish(Event.Requested, info)
+      }
+      const entry = createEntry(info)
+      pending.set(id, entry)
 
-      return yield* Effect.ensuring(
-        Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
+      return yield* Effect.tryPromise({
+        try: () => entry.promise,
+        catch: (error) => error as CancelledError | TimedOutError,
+      }).pipe(
+        Effect.ensuring(Effect.sync(() => pending.delete(id))),
       )
     })
 
@@ -200,36 +151,31 @@ export const layer = Layer.effect(
       requestID: SecureInputID
       input: string
     }) {
+      const pending = yield* getPending()
       const existing = pending.get(input.requestID)
       if (!existing) {
-        log.warn("submit for unknown request", { requestID: input.requestID })
-        return
+        yield* Effect.logWarning("submit for unknown request", { requestID: input.requestID })
+        return yield* new NotFoundError({ requestID: input.requestID })
       }
       pending.delete(input.requestID)
-      log.info("secure input submitted", { requestID: input.requestID })
-      yield* bus.publish(Event.Submitted, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-      })
-      yield* Deferred.succeed(existing.deferred, input.input)
+      yield* Effect.logInfo("secure input submitted", { requestID: input.requestID })
+      existing.resolve(input.input)
     })
 
     const cancel = Effect.fn("SecureInput.cancel")(function* (requestID: SecureInputID) {
+      const pending = yield* getPending()
       const existing = pending.get(requestID)
       if (!existing) {
-        log.warn("cancel for unknown request", { requestID })
-        return
+        yield* Effect.logWarning("cancel for unknown request", { requestID })
+        return yield* new NotFoundError({ requestID })
       }
       pending.delete(requestID)
-      log.info("secure input cancelled", { requestID })
-      yield* bus.publish(Event.Cancelled, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-      })
-      yield* Deferred.fail(existing.deferred, new CancelledError())
+      yield* Effect.logInfo("secure input cancelled", { requestID })
+      existing.reject(new CancelledError())
     })
 
     const list = Effect.fn("SecureInput.list")(function* () {
+      const pending = yield* getPending()
       return Array.from(pending.values(), (x) => x.info)
     })
 
@@ -238,10 +184,11 @@ export const layer = Layer.effect(
       cwd: string
       env: Record<string, string>
       sessionID: SessionID
-      timeout: number
+      timeout: Duration.DurationInput
     }) {
-      const spawn = yield* Effect.promise(() => ptySpawn())
+      const pending = yield* getPending()
       const shell = process.platform === "win32" ? "cmd.exe" : "/bin/bash"
+      const timeoutMs = Duration.toMillis(Duration.decode(input.timeout))
 
       const pty = yield* Effect.sync(() =>
         spawn(shell, ["-c", input.command], {
@@ -251,72 +198,74 @@ export const layer = Layer.effect(
         }),
       )
 
-      let output = ""
-      let passwordResolve: ((value: string) => void) | null = null
-      let passwordBuffer = ""
-      let exited = false
-      let exitCode: number | null = null
-
-      const done = yield* Effect.promise<{ output: string; exitCode: number | null }>(
+      return yield* Effect.promise<{ output: string; exitCode: number | null }>(
         () =>
           new Promise<{ output: string; exitCode: number | null }>((resolve) => {
-            // ── PTY data handler ──────────────────────────────────────────────
+            let output = ""
+            let exitCode: number | null = null
+            let passwordBuffer = ""
+            let currentEntry: PendingEntry | null = null
+            let currentID: SecureInputID | null = null
+
             const dataDisp = pty.onData((chunk: string) => {
               output += chunk
 
-              // If we're waiting for a password, buffer the output and check for prompts
-              if (!passwordResolve) {
-                passwordBuffer += chunk
-                // Only keep last 4KB for prompt detection
-                if (Buffer.byteLength(passwordBuffer, "utf-8") > 4096) {
-                  passwordBuffer = passwordBuffer.slice(-2048)
-                }
-
-                const prompt = detectPasswordPrompt(passwordBuffer)
-                if (prompt) {
-                  passwordResolve = (() => {
-                    const id = SecureInputID.ascending()
-                    const info = Schema.decodeUnknownSync(Request)({
-                      id,
-                      sessionID: input.sessionID,
-                      prompt,
-                      command: input.command,
-                    })
-                    // Password input uses a simple callback; not a Deferred
-                    // (we are inside an Effect.promise callback, not in Effect world)
-                    const entry = { info, callback: null as ((value: string) => void) | null }
-                    pending.set(id, { info, deferred: null as any })
-
-                    bus.publish(Event.Requested, info).pipe(Effect.runFork)
-
-                    return (value: string) => {
-                      pty.write(value + "\n")
-                      passwordResolve = null
-                      passwordBuffer = ""
-                      // Strip the prompt from output
-                      output = output.replace(prompt, "[password supplied]")
-                    }
-                  })()
-                }
+              if (currentEntry) {
+                if (currentID) pending.delete(currentID)
+                currentEntry = null
+                currentID = null
+                passwordBuffer = ""
+                return
               }
+
+              passwordBuffer += chunk
+              if (Buffer.byteLength(passwordBuffer, "utf-8") > 4096) {
+                passwordBuffer = passwordBuffer.slice(-2048)
+              }
+
+              const promptText = detectPasswordPrompt(passwordBuffer)
+              if (!promptText) return
+
+              const id = nextSecureInputID()
+              currentID = id
+              const info: SecureInputRequest = {
+                id,
+                sessionID: input.sessionID,
+                prompt: promptText,
+                command: input.command,
+              }
+              currentEntry = createEntry(info)
+              pending.set(id, currentEntry)
+              output = output.replace(promptText, "[password supplied]")
+              passwordBuffer = ""
+
+              currentEntry.promise.then((password) => {
+                pty.write(password + "\n")
+              }).catch(() => {
+                pty.kill()
+              })
             })
 
-            // ── PTY exit handler ──────────────────────────────────────────────
-            const exitDisp = pty.onExit((event: { exitCode: number }) => {
-              exited = true
+            const exitDisp = pty.onExit((event) => {
               exitCode = event.exitCode
+              if (currentID && currentEntry) {
+                pending.delete(currentID)
+                currentEntry.reject(new CancelledError())
+              }
               resolve({ output, exitCode })
             })
 
-            // ── Timeout ───────────────────────────────────────────────────────
             const timeoutId = setTimeout(() => {
-              if (!exited) {
+              if (exitCode === null) {
                 pty.kill()
+                if (currentID && currentEntry) {
+                  pending.delete(currentID)
+                  currentEntry.reject(new TimedOutError())
+                }
                 resolve({ output, exitCode: null })
               }
-            }, input.timeout)
+            }, timeoutMs)
 
-            // ── Abort handler (via memory dealloc) ────────────────────────────
             return () => {
               clearTimeout(timeoutId)
               dataDisp.dispose()
@@ -324,14 +273,12 @@ export const layer = Layer.effect(
             }
           }),
       )
-
-      return done
     })
 
     return Service.of({ request, submit, cancel, list, execute })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+export const node = LayerNode.make({ service: Service, layer, deps: [] })
 
 export * as SecureInput from "."

@@ -37,6 +37,20 @@ This directory contains:
 
 ---
 
+## Uninstall
+
+To uninstall the OpenCode CLI and remove its related files, run:
+
+```bash
+opencode uninstall
+```
+
+The command shows what will be removed and asks for confirmation. See the [CLI reference](/docs/cli#uninstall) for options to keep your configuration or application data.
+
+To remove OpenCode Desktop, uninstall the application through your operating system's app management tools.
+
+---
+
 ## Desktop app
 
 OpenCode Desktop runs a local OpenCode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.

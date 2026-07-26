@@ -1,18 +1,19 @@
-import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Effect, Layer, Context, Schema, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
-import { Bus } from "@/bus"
-import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { FileWatcher } from "@/file/watcher"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "@/git"
-import * as Log from "@opencode-ai/core/util/log"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
+import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 
-const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647
 const MAX_PATCH_BYTES = 10_000_000
 const MAX_TOTAL_PATCH_BYTES = 10_000_000
+type DiffOptions = {
+  readonly context?: number
+}
 
 const emptyPatch = (file: string) => formatPatch(structuredPatch(file, file, "", "", "", "", { context: 0 }))
 
@@ -93,14 +94,19 @@ const splitGitPatch = (patch: Git.Patch) => {
   return chunks.slice(0, -1)
 }
 
-const batchPatches = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string, list: Git.Item[]) {
+const batchPatches = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  ref: string,
+  list: Git.Item[],
+  options?: DiffOptions,
+) {
   if (list.length === 0) return { patches: new Map<string, string>(), capped: false }
 
   const result = yield* git.patchAll(cwd, ref, {
-    context: PATCH_CONTEXT_LINES,
+    context: options?.context ?? PATCH_CONTEXT_LINES,
     maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
   })
-  if (result.truncated) log.warn("batched patch exceeded byte limit", { max: MAX_TOTAL_PATCH_BYTES })
 
   return {
     patches: splitGitPatch(result).reduce((acc, patch, index) => {
@@ -118,20 +124,25 @@ const nativePatch = Effect.fnUntraced(function* (
   cwd: string,
   ref: string | undefined,
   item: Git.Item,
+  options?: DiffOptions,
 ) {
   const result =
     item.code === "??" || !ref
-      ? yield* git.patchUntracked(cwd, item.file, { context: PATCH_CONTEXT_LINES, maxOutputBytes: MAX_PATCH_BYTES })
-      : yield* git.patch(cwd, ref, item.file, { context: PATCH_CONTEXT_LINES, maxOutputBytes: MAX_PATCH_BYTES })
+      ? yield* git.patchUntracked(cwd, item.file, {
+          context: options?.context ?? PATCH_CONTEXT_LINES,
+          maxOutputBytes: MAX_PATCH_BYTES,
+        })
+      : yield* git.patch(cwd, ref, item.file, {
+          context: options?.context ?? PATCH_CONTEXT_LINES,
+          maxOutputBytes: MAX_PATCH_BYTES,
+        })
   if (!result.truncated && result.text) return result.text
 
-  if (result.truncated) log.warn("patch exceeded byte limit", { file: item.file, max: MAX_PATCH_BYTES })
   return emptyPatch(item.file)
 })
 
 const totalPatch = (file: string, patch: string, total: number) => {
   if (total + Buffer.byteLength(patch) <= MAX_TOTAL_PATCH_BYTES) return { patch, capped: false }
-  log.warn("total patch budget exceeded", { file, max: MAX_TOTAL_PATCH_BYTES })
   return { patch: emptyPatch(file), capped: true }
 }
 
@@ -142,13 +153,14 @@ const patchForItem = Effect.fnUntraced(function* (
   item: Git.Item,
   batch: { patches: Map<string, string>; capped: boolean },
   capped: boolean,
+  options?: DiffOptions,
 ) {
   if (capped) return emptyPatch(item.file)
 
   const batched = batch.patches.get(item.file)
   if (batched !== undefined) return batched
   if (item.code !== "??" && batch.capped) return emptyPatch(item.file)
-  return yield* nativePatch(git, cwd, ref, item)
+  return yield* nativePatch(git, cwd, ref, item, options)
 })
 
 const files = Effect.fnUntraced(function* (
@@ -158,6 +170,7 @@ const files = Effect.fnUntraced(function* (
   list: Git.Item[],
   map: Map<string, { additions: number; deletions: number }>,
   batch: { patches: Map<string, string>; capped: boolean },
+  options?: DiffOptions,
 ) {
   const next: FileDiff[] = []
   let total = 0
@@ -165,7 +178,7 @@ const files = Effect.fnUntraced(function* (
 
   for (const item of list.toSorted((a, b) => a.file.localeCompare(b.file))) {
     const stat = map.get(item.file) ?? (item.status === "added" ? yield* git.statUntracked(cwd, item.file) : undefined)
-    const patch = yield* patchForItem(git, cwd, ref, item, batch, capped)
+    const patch = yield* patchForItem(git, cwd, ref, item, batch, capped, options)
     const result: { patch: string; capped: boolean } = capped
       ? { patch, capped: true }
       : totalPatch(item.file, patch, total)
@@ -186,7 +199,12 @@ const files = Effect.fnUntraced(function* (
   return next
 })
 
-const diffAgainstRef = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string) {
+const diffAgainstRef = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  ref: string,
+  options?: DiffOptions,
+) {
   const [list, stats, extra] = yield* Effect.all([git.diff(cwd, ref), git.stats(cwd, ref), git.status(cwd)], {
     concurrency: 3,
   })
@@ -199,51 +217,75 @@ const diffAgainstRef = Effect.fnUntraced(function* (git: Git.Interface, cwd: str
       extra.filter((item) => item.code === "??"),
     ),
     nums(stats),
-    yield* batchPatches(git, cwd, ref, list),
+    yield* batchPatches(git, cwd, ref, list, options),
+    options,
   )
 })
 
-const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string | undefined) {
-  if (!ref) return yield* files(git, cwd, ref, yield* git.status(cwd), new Map(), emptyBatch())
-  return yield* diffAgainstRef(git, cwd, ref)
+const track = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  ref: string | undefined,
+  options?: DiffOptions,
+) {
+  if (!ref) return yield* files(git, cwd, ref, yield* git.status(cwd), new Map(), emptyBatch(), options)
+  return yield* diffAgainstRef(git, cwd, ref, options)
 })
 
-export const Mode = Schema.Literals(["git", "branch"]).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Mode = Schema.Literals(["git", "branch"])
 export type Mode = Schema.Schema.Type<typeof Mode>
 
-export const Event = {
-  BranchUpdated: BusEvent.define(
-    "vcs.branch.updated",
-    Schema.Struct({
-      branch: Schema.optional(Schema.String),
-    }),
-  ),
-}
+export const Event = VcsEvent
 
 export const Info = Schema.Struct({
   branch: Schema.optional(Schema.String),
   default_branch: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "VcsInfo" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "VcsInfo" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const FileDiff = Schema.Struct({
   file: Schema.String,
-  patch: Schema.String,
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
+  // Mirrors Snapshot.FileDiff (see #26574). The current producer always
+  // populates patch, but loosening matches the sibling schema so a
+  // future code path that omits it can't crash /instance/vcs/diff.
+  patch: Schema.optional(Schema.String),
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
-})
-  .annotate({ identifier: "VcsFileDiff" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "VcsFileDiff" })
 export type FileDiff = Schema.Schema.Type<typeof FileDiff>
+
+export const FileStatus = Schema.Struct({
+  file: Schema.String,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  status: Schema.Literals(["added", "deleted", "modified"]),
+}).annotate({ identifier: "VcsFileStatus" })
+export type FileStatus = Schema.Schema.Type<typeof FileStatus>
+
+export const ApplyInput = Schema.Struct({
+  patch: Schema.String,
+})
+export type ApplyInput = Schema.Schema.Type<typeof ApplyInput>
+
+export const ApplyResult = Schema.Struct({
+  applied: Schema.Boolean,
+})
+export type ApplyResult = Schema.Schema.Type<typeof ApplyResult>
+
+export class PatchApplyError extends Schema.TaggedErrorClass<PatchApplyError>()("VcsPatchApplyError", {
+  message: Schema.String,
+  reason: Schema.Literals(["non-git", "not-clean"]),
+}) {}
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly branch: () => Effect.Effect<string | undefined>
   readonly defaultBranch: () => Effect.Effect<string | undefined>
-  readonly diff: (mode: Mode) => Effect.Effect<FileDiff[]>
+  readonly status: () => Effect.Effect<FileStatus[]>
+  readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff[]>
+  readonly diffRaw: () => Effect.Effect<string>
+  readonly apply: (input: ApplyInput) => Effect.Effect<ApplyResult, PatchApplyError>
 }
 
 interface State {
@@ -253,11 +295,11 @@ interface State {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
-export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const git = yield* Git.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
     const state = yield* InstanceState.make<State>(
@@ -273,22 +315,21 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
           concurrency: 2,
         })
         const value = { current, root }
-        log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
-        yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
-          Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
-          Stream.runForEach((_evt) =>
-            Effect.gen(function* () {
-              const next = yield* get()
-              if (next !== value.current) {
-                log.info("branch changed", { from: value.current, to: next })
-                value.current = next
-                yield* bus.publish(Event.BranchUpdated, { branch: next })
-              }
-            }),
-          ),
-          Effect.forkScoped,
-        )
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
+            return Effect.void
+          const data = event.data as EventV2.Data<typeof Watcher.Event.Updated>
+          if (!data.file.endsWith("HEAD")) return Effect.void
+          return Effect.gen(function* () {
+            const next = yield* get()
+            if (next !== value.current) {
+              value.current = next
+              yield* events.publish(Event.BranchUpdated, { branch: next })
+            }
+          })
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
 
         return value
       }),
@@ -304,24 +345,79 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
       defaultBranch: Effect.fn("Vcs.defaultBranch")(function* () {
         return yield* InstanceState.use(state, (x) => x.root?.name)
       }),
-      diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
+      status: Effect.fn("Vcs.status")(function* () {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return []
+        const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+        const [list, stats] = yield* Effect.all(
+          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
+          { concurrency: 2 },
+        )
+        const map = nums(stats)
+        return yield* Effect.forEach(
+          list.toSorted((a, b) => a.file.localeCompare(b.file)),
+          (item) =>
+            Effect.gen(function* () {
+              const stat =
+                map.get(item.file) ??
+                (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
+              return {
+                file: item.file,
+                additions: stat?.additions ?? 0,
+                deletions: stat?.deletions ?? 0,
+                status: item.status,
+              } satisfies FileStatus
+            }),
+        )
+      }),
+      diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
         const value = yield* InstanceState.get(state)
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
         if (mode === "git") {
-          return yield* track(git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined)
+          return yield* track(git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options)
         }
 
         if (!value.root) return []
         if (value.current && value.current === value.root.name) return []
         const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
         if (!ref) return []
-        return yield* diffAgainstRef(git, ctx.directory, ref)
+        return yield* diffAgainstRef(git, ctx.directory, ref, options)
+      }),
+      diffRaw: Effect.fn("Vcs.diffRaw")(function* () {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return ""
+        const [hasHead, status] = yield* Effect.all([git.hasHead(ctx.directory), git.status(ctx.directory)], {
+          concurrency: 2,
+        })
+        const tracked = hasHead ? (yield* git.patchAll(ctx.directory, "HEAD")).text : ""
+        const untracked = yield* Effect.forEach(
+          status.filter((item) => item.code === "??"),
+          (item) => git.patchUntracked(ctx.directory, item.file).pipe(Effect.map((patch) => patch.text)),
+        )
+        return [tracked, ...untracked].filter(Boolean).join("\n")
+      }),
+      apply: Effect.fn("Vcs.apply")(function* (input: ApplyInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") {
+          return yield* new PatchApplyError({
+            message: "Patch can't be applied because the project is not git-based",
+            reason: "non-git",
+          })
+        }
+        const applied = yield* git.applyPatch(ctx.directory, input.patch)
+        if (applied.exitCode !== 0) {
+          return yield* new PatchApplyError({
+            message: "Patch can't be applied",
+            reason: "not-clean",
+          })
+        }
+        return { applied: true }
       }),
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(Bus.layer))
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [Git.node, EventV2Bridge.node] })
 
 export * as Vcs from "./vcs"

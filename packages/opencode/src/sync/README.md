@@ -55,9 +55,9 @@ There are now "sync events" which are different than "bus events". Bus events ar
 ```ts
 const Diff = BusEvent.define(
   "session.diff",
-  z.object({
-    sessionID: SessionID.zod,
-    diff: Snapshot.FileDiff.array(),
+  Schema.Struct({
+    sessionID: SessionID,
+    diff: Schema.Array(Snapshot.FileDiff),
   }),
 )
 ```
@@ -71,8 +71,8 @@ const Created = SyncEvent.define({
   type: "session.created",
   version: 1,
   aggregate: "sessionID",
-  schema: z.object({
-    sessionID: SessionID.zod,
+  schema: Schema.Struct({
+    sessionID: SessionID,
     info: Info,
   }),
 })
@@ -114,7 +114,7 @@ This allows you to "reshape" an event from the sync system before it's published
 
 The only time we use this is the `session.updated` event. Previously this event contained the entire session object. The sync event only contains the fields updated. We convert the event to contain the full object for backwards compatibility (but ideally we'd remove this).
 
-It's very important that types are correct when working with events. Event definitions have a `schema` which carries the definition of the event shape (provided by a zod schema, inferred into a TypeScript type). Examples:
+It's very important that types are correct when working with events. Event definitions have a `schema` which carries the definition of the event shape. Examples:
 
 ```ts
 // The schema from `Updated` typechecks the object correctly
@@ -149,12 +149,12 @@ const Update = SyncEvent.define({
   type: "session.updated",
   version: 1,
   aggregate: "sessionID",
-  schema: z.object({
-    sessionID: SessionID.zod,
+  schema: Schema.Struct({
+    sessionID: SessionID,
     info: partialSchema(Info),
   }),
-  busSchema: z.object({
-    sessionID: SessionID.zod,
+  busSchema: Schema.Struct({
+    sessionID: SessionID,
     info: Info,
   }),
 })

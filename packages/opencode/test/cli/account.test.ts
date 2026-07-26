@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import stripAnsi from "strip-ansi"
 
-import { formatAccountLabel, formatOrgLine } from "../../src/cli/cmd/account"
+import { defaultConsoleUrl, formatAccountLabel, formatOrgLine } from "../../src/cli/cmd/account"
 
 describe("console account display", () => {
+  test("uses console.opencode.ai as the default login URL", () => {
+    expect(defaultConsoleUrl).toBe("https://console.opencode.ai")
+  })
+
   test("includes the account url in account labels", () => {
     expect(stripAnsi(formatAccountLabel({ email: "one@example.com", url: "https://one.example.com" }, false))).toBe(
       "one@example.com https://one.example.com",

@@ -85,7 +85,7 @@ Use these to inform your review:
 
 - **Explore agent** - Find how existing code handles similar problems. Check patterns, conventions, and prior art before claiming something doesn't fit.
 - **Exa Code Context** - Verify correct usage of libraries/APIs before flagging something as wrong.
-- **Exa Web Search** - Research best practices if you're unsure about a pattern.
+- **Web Search** - Research best practices if you're unsure about a pattern.
 
 If you're uncertain about something and can't verify it with these tools, say "I'm not sure about X" rather than flagging it as a definite issue.
 

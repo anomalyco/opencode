@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://example.test/echo",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"step\":1}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"reply\":\"first\"}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://example.test/echo",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"step\":2}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"reply\":\"second\"}"
+      }
+    }
+  ]
+}

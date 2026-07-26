@@ -9,6 +9,8 @@ export namespace Subscription {
     free: z.object({
       promoTokens: z.number().int(),
       dailyRequests: z.number().int(),
+      dailyRequestsFallback: z.number().int(),
+      checkHeaders: z.record(z.string(), z.string()),
     }),
     lite: z.object({
       rollingLimit: z.number().int(),

@@ -48,6 +48,42 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
+#### Hiding models
+
+You can hide specific models from the `/models` picker for a provider using the `blacklist` option. This is useful when a provider exposes models you don't want to use or select.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "blacklist": ["claude-opus-4-20250514"]
+    }
+  }
+}
+```
+
+The inverse `whitelist` option hides every model except the ones listed.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "whitelist": ["claude-sonnet-4-20250514"]
+    }
+  }
+}
+```
+
+Both options take an array of model IDs — the same IDs shown in the `/models` picker.
+
+- `blacklist` removes the listed models from the picker.
+- `whitelist` keeps only the listed models and hides the rest.
+- You can combine them: `whitelist` narrows the set, then `blacklist` removes entries from it.
+
+---
+
 ## OpenCode Zen
 
 OpenCode Zen is a list of models provided by the OpenCode team that have been
@@ -721,6 +757,92 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ---
 
+### DigitalOcean
+
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
+
+OpenCode supports two authentication methods:
+
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode uses your DigitalOcean API token directly for inference and discovers your Inference Routers.
+- **Model Access Key** — Paste an existing key from the DigitalOcean console.
+
+#### OAuth (Recommended)
+
+1. Run the `/connect` command and search for **DigitalOcean**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **Login with DigitalOcean**.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with DigitalOcean
+   │ Paste Model Access Key
+   └
+   ```
+
+3. Your browser opens to authorize OpenCode. Sign in and approve.
+
+   :::note
+   OpenCode requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
+   :::
+
+   :::note
+   Inference Routers only appear in the model picker after OAuth. Pasting a Model Access Key manually does not discover routers.
+   :::
+
+4. Run the `/models` command. Your Inference Routers appear as the format `router:` in the model selection.
+
+   ```txt
+   /models
+   ```
+
+5. To pick up newly created Inference Routers, re-run `/connect` and select **DigitalOcean** again.
+
+#### Using a Model Access Key
+
+If you'd rather paste a key directly:
+
+1. Head over to the **Manage** page in the Inference section of the [DigitalOcean console](https://cloud.digitalocean.com/) and create a new key.
+
+2. Run the `/connect` command and select **DigitalOcean**, then **Paste Model Access Key**.
+
+   ```txt
+   ┌ Enter your DigitalOcean Model Access Key
+   │
+   │
+   └ enter
+   ```
+
+   :::note
+   Inference Routers are not auto-discovered with this method. To surface them in the model picker, sign in via OAuth instead.
+   :::
+
+3. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+#### Environment Variable
+
+Alternatively, set your Model Access Key as an environment variable.
+
+```bash frame="none"
+export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
+```
+
+#### Inference Routers
+
+Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, OpenCode surfaces each router as `router:<router-name>` in the model picker.
+
+Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
+
+---
+
 ### FrogBot
 
 1. Head over to the [FrogBot dashboard](https://app.frogbot.ai/signup), create an account, and generate an API key.
@@ -977,6 +1099,35 @@ subscription](https://github.com/features/copilot/plans) to use.
    ```
 
 3. Now run the `/models` command to select the model you want.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### GMI Cloud
+
+To use GMI Cloud with OpenCode:
+
+1. Head over to the [GMI Cloud console](https://console.gmicloud.ai/) to create an API key. You can also review the [API reference](https://docs.gmicloud.ai/inference-engine/api-reference/llm-api-reference) for the endpoint details.
+
+2. Run the `/connect` command and search for **GMI Cloud**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your GMI Cloud API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select the model you want.
 
    ```txt
    /models
@@ -1854,6 +2005,109 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
 
 ---
 
+### Snowflake Cortex
+
+[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api) gives you access to frontier models (Claude, OpenAI GPT-5, and more) via an OpenAI-compatible API. All inference runs within the Snowflake perimeter and is billed in Snowflake credits. For per-model rates, see the [Snowflake Service Consumption Table](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf).
+
+Don't have a Snowflake account? [Sign up for a free trial](https://signup.snowflake.com/?utm_source=opencode&utm_medium=docs&utm_campaign=cortex-provider).
+
+opencode's core workflow for coding, editing files, and running commands relies on tool calling. Only the Claude and OpenAI families within Snowflake Cortex support this. The provider is limited to those families to support the core workflow.
+
+OpenCode supports two authentication methods:
+
+- **Browser OAuth (Recommended)** — sign in with your IdP/SSO; no secrets to manage, tokens refresh automatically.
+- **Manual bearer token** — paste a PAT or JWT from the Snowflake console.
+
+#### Browser OAuth (Recommended)
+
+1. Run the `/connect` command and search for **Snowflake Cortex**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **Login with Snowflake (External Browser)**.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with Snowflake (External Browser)
+   │ Paste PAT or bearer token manually
+   └
+   ```
+
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted, for example `myorg-myaccount` or `xy12345.us-east-1`.
+
+   ```txt
+   ┌ Snowflake Account Identifier
+   │
+   │
+   └ enter
+   ```
+
+4. Optionally enter a Snowflake role to scope the session (e.g. `SYSADMIN`). Leave blank to use your default role.
+
+5. Complete sign-in in the browser that opens. OpenCode captures the OAuth callback automatically and stores the token — no copy/paste needed.
+
+6. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+:::note
+Browser OAuth uses Snowflake's built-in `SNOWFLAKE$LOCAL_APPLICATION` security integration ([docs](https://docs.snowflake.com/en/user-guide/oauth-local-applications)), which is rolling out to all accounts. To check availability in your account:
+
+```sql
+SHOW SECURITY INTEGRATIONS LIKE 'SNOWFLAKE$LOCAL_APPLICATION';
+```
+
+If the result is empty, use the **Manual bearer token** method below while the integration rolls out to your account.
+:::
+
+#### Manual bearer token
+
+If you prefer to paste a token directly, or if `SNOWFLAKE$LOCAL_APPLICATION` is not yet available in your account:
+
+1. Generate a [Programmatic Access Token (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) in your Snowflake account.
+
+2. Run the `/connect` command, search for **Snowflake Cortex**, and select **Paste PAT or bearer token manually**.
+
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted.
+
+4. Paste your PAT.
+
+5. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+#### Environment variable
+
+For CI or headless environments, set a PAT or JWT before starting opencode:
+
+```bash
+export SNOWFLAKE_ACCOUNT=myorg-myaccount
+export SNOWFLAKE_CORTEX_TOKEN=your-pat-or-jwt
+```
+
+:::note
+`SNOWFLAKE_CORTEX_TOKEN` accepts a PAT or JWT only — the browser OAuth flow is available via `/connect` only and cannot be configured through an environment variable. `SNOWFLAKE_CORTEX_PAT` is still supported for backward compatibility.
+:::
+
+The model catalog is provided automatically. A minimal `opencode.json` is all that's needed:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "snowflake-cortex/claude-sonnet-4-6",
+  "small_model": "snowflake-cortex/claude-haiku-4-5"
+}
+```
+
+---
+
 ### Together AI
 
 1. Head over to the [Together AI console](https://api.together.ai), create an account, and click **Add Key**.
@@ -1966,6 +2220,46 @@ Some useful routing options:
 
 ### xAI
 
+Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same SuperGrok subscription via a headless device-code flow (for VPS / SSH / Docker), or a pay-as-you-go API key from the xAI console.
+
+#### Option A — SuperGrok OAuth (browser login)
+
+1. Run the `/connect` command and search for **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **xAI Grok OAuth (SuperGrok Subscription)**. OpenCode opens xAI's consent screen in your browser and waits for the callback on `http://127.0.0.1:56121/callback`.
+
+3. Run the `/models` command to select a Grok model.
+
+   ```txt
+   /models
+   ```
+
+OpenCode refreshes the OAuth access token automatically. Any Grok or X Premium plan that includes Grok API access works; you do not need a separate `XAI_API_KEY`.
+
+#### Option B — SuperGrok device-code (headless / remote server / VPS)
+
+Use this when OpenCode is running somewhere a browser can't reach the loopback redirect: a VPS, a remote dev box over SSH, inside Docker, in CI, etc. No callback port is opened on the host running OpenCode — instead xAI hands the CLI a short code that you type into a browser on any other device (laptop, phone, …).
+
+1. Run the `/connect` command on the remote host and search for **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **xAI Grok OAuth (Headless / Remote / VPS)**. OpenCode prints a verification URL and a short user code.
+
+   ```txt
+   Open https://x.ai/device on any device and enter code: ABCD-1234
+   ```
+
+3. Open the URL on a device that has a browser (your laptop or phone), enter the code, and approve the consent screen. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve. Token refresh works the same as Option A.
+
+#### Option C — API key
+
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
 
 2. Run the `/connect` command and search for **xAI**.
@@ -1974,7 +2268,7 @@ Some useful routing options:
    /connect
    ```
 
-3. Enter your xAI API key.
+3. Select **Manually enter API Key** and paste your xAI API key.
 
    ```txt
    ┌ API key

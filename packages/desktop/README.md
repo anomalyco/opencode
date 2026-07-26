@@ -1,32 +1,19 @@
 # OpenCode Desktop
 
-Native OpenCode desktop app, built with Tauri v2.
+The OpenCode Desktop app, built with Electron.
 
 ## Development
 
-From the repo root:
-
 ```bash
 bun install
-bun run --cwd packages/desktop tauri dev
-```
-
-This starts the Vite dev server on http://localhost:1420 and opens the native window.
-
-If you only want the web dev server (no native shell):
-
-```bash
-bun run --cwd packages/desktop dev
+bun dev
 ```
 
 ## Build
 
-To create a production `dist/` and build the native app bundle:
+Run the `build` script to build the app's JS assets, then `package` to
+bundle the assets as an application. The resulting app will be in `dist/`.
 
 ```bash
-bun run --cwd packages/desktop tauri build
+bun run build && bun run package
 ```
-
-## Prerequisites
-
-Running the desktop app requires additional Tauri dependencies (Rust toolchain, platform-specific libraries). See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for setup instructions.

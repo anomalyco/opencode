@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "bedrock-converse/streams-text",
+    "recordedAt": "2026-04-28T21:18:46.553Z",
+    "tags": ["prefix:bedrock-converse", "provider:amazon-bedrock", "protocol:bedrock-converse"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"modelId\":\"us.amazon.nova-micro-v1:0\",\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"Say hello.\"}]}],\"system\":[{\"text\":\"Reply with the single word 'Hello'.\"}],\"inferenceConfig\":{\"maxTokens\":16,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/vnd.amazon.eventstream"
+        },
+        "body": "AAAAmQAAAFI8UarQCzpldmVudC10eXBlBwAMbWVzc2FnZVN0YXJ0DTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUIiLCJyb2xlIjoiYXNzaXN0YW50In3SL1jNAAAAvQAAAFd4etebCzpldmVudC10eXBlBwARY29udGVudEJsb2NrRGVsdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidGV4dCI6IkhlbGxvIn0sInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFIn2B0NR6AAAAxgAAAFf2eAZFCzpldmVudC10eXBlBwARY29udGVudEJsb2NrRGVsdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidGV4dCI6IiJ9LCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTIn3XaHMvAAAAhwAAAFbk7EcqCzpldmVudC10eXBlBwAQY29udGVudEJsb2NrU3RvcA06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImNvbnRlbnRCbG9ja0luZGV4IjowLCJwIjoiYWJjIn3Lqeu3AAAAjwAAAFFK+JlICzpldmVudC10eXBlBwALbWVzc2FnZVN0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJwIjoiYWJjZGVmZ2hpamtsbW4iLCJzdG9wUmVhc29uIjoiZW5kX3R1cm4ifZ+RQqEAAAECAAAATkXaMzsLOmV2ZW50LXR5cGUHAAhtZXRhZGF0YQ06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7Im1ldHJpY3MiOnsibGF0ZW5jeU1zIjozMDZ9LCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTVCIsInVzYWdlIjp7ImlucHV0VG9rZW5zIjoxMiwib3V0cHV0VG9rZW5zIjoyLCJzZXJ2ZXJUb29sVXNhZ2UiOnt9LCJ0b3RhbFRva2VucyI6MTR9fSnnkUk=",
+        "bodyEncoding": "base64"
+      }
+    }
+  ]
+}

@@ -35,13 +35,13 @@ OpenCode dolazi sa dva ugrađena primarna agenta, **Build** i **Plan**. Pogledat
 
 Subagenti su specijalizovani pomoćnici koje primarni agenti mogu pozvati za određene zadatke. Možete ih i ručno pozvati **@ spominjanjem** u svojim porukama.
 
-OpenCode dolazi sa dva ugrađena subagenta, **General** i **Explore**. Ovo ćemo pogledati u nastavku.
+OpenCode dolazi sa tri ugrađena subagenta, **General**, **Explore** i **Scout**. Ovo ćemo pogledati u nastavku.
 
 ---
 
 ## Ugrađeni
 
-OpenCode dolazi sa dva ugrađena primarna agenta i dva ugrađena subagenta.
+OpenCode dolazi sa dva ugrađena primarna agenta i tri ugrađena subagenta.
 
 ---
 
@@ -80,6 +80,14 @@ Agent opće namjene za istraživanje složenih pitanja i izvršavanje zadataka u
 _Režim_: `subagent`
 
 Brzi agent samo za čitanje za istraživanje kodnih baza. Nije moguće mijenjati fajlove. Koristite ovo kada trebate brzo pronaći datoteke po uzorku, pretražiti kod za ključne riječi ili odgovoriti na pitanja o bazi kodova.
+
+---
+
+### Scout agent
+
+_Režim_: `subagent`
+
+Agent samo za čitanje za istraživanje eksterne dokumentacije i zavisnosti. Koristite ga kada trebate klonirati repozitorij zavisnosti u OpenCode-ov upravljani cache, pregledati izvorni kod biblioteke ili uporediti lokalni kod sa upstream implementacijama bez mijenjanja vašeg radnog prostora.
 
 ---
 

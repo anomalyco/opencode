@@ -1,24 +1,24 @@
 import { cmd } from "./cmd"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { effectCmd } from "../effect-cmd"
 import { Cause } from "effect"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
-import { ConfigMCP } from "../../config/mcp"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
-import { Installation } from "../../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
-import { Bus } from "../../bus"
 import { Effect } from "effect"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
@@ -43,9 +43,9 @@ function getAuthStatusText(status: MCP.AuthStatus): string {
   }
 }
 
-type McpEntry = NonNullable<Config.Info["mcp"]>[string]
+type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
-type McpConfigured = ConfigMCP.Info
+type McpConfigured = ConfigMCPV1.Info
 function isMcpConfigured(config: McpEntry): config is McpConfigured {
   return typeof config === "object" && config !== null && "type" in config
 }
@@ -55,11 +55,11 @@ function isMcpRemote(config: McpEntry): config is McpRemote {
   return isMcpConfigured(config) && config.type === "remote"
 }
 
-function configuredServers(config: Config.Info) {
+function configuredServers(config: ConfigV1.Info) {
   return Object.entries(config.mcp ?? {}).filter((entry): entry is [string, McpConfigured] => isMcpConfigured(entry[1]))
 }
 
-function oauthServers(config: Config.Info) {
+function oauthServers(config: ConfigV1.Info) {
   return configuredServers(config).filter(
     (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && entry[1].oauth !== false,
   )
@@ -256,17 +256,13 @@ export const McpAuthCommand = effectCmd({
     const spinner = prompts.spinner()
     spinner.start("Starting OAuth flow...")
 
-    // Subscribe to browser open failure events to show URL for manual opening
-    const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
-      if (evt.properties.mcpName === serverName) {
-        spinner.stop("Could not open browser automatically")
-        prompts.log.warn("Please open this URL in your browser to authenticate:")
-        prompts.log.info(evt.properties.url)
+    yield* MCP.Service.use((mcp) =>
+      mcp.authenticate(serverName, (url) => {
+        spinner.stop("Authorize in your browser:")
+        prompts.log.info(url)
         spinner.start("Waiting for authorization...")
-      }
-    })
-
-    yield* MCP.Service.use((mcp) => mcp.authenticate(serverName)).pipe(
+      }),
+    ).pipe(
       Effect.tap((status) =>
         Effect.sync(() => {
           if (status.status === "connected") {
@@ -301,7 +297,6 @@ export const McpAuthCommand = effectCmd({
           prompts.log.error(error instanceof Error ? error.message : String(error))
         }),
       ),
-      Effect.ensuring(Effect.sync(() => unsubscribe())),
     )
 
     prompts.outro("Done")
@@ -414,7 +409,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
   return candidates[0]
 }
 
-async function addMcpToConfig(name: string, mcpConfig: ConfigMCP.Info, configPath: string) {
+async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
   let text = "{}"
   if (await Filesystem.exists(configPath)) {
     text = await Filesystem.readText(configPath)
@@ -432,13 +427,79 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCP.Info, configPat
 }
 
 export const McpAddCommand = effectCmd({
-  command: "add",
+  command: "add [name]",
   describe: "add an MCP server",
-  handler: Effect.fn("Cli.mcp.add")(function* () {
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        describe: "name of the MCP server",
+        type: "string",
+      })
+      .option("url", {
+        describe: "URL for a remote MCP server",
+        type: "string",
+      })
+      .option("env", {
+        describe: "environment variable for a local MCP server (KEY=VALUE)",
+        type: "string",
+        array: true,
+      })
+      .option("header", {
+        describe: "HTTP header for a remote MCP server (KEY=VALUE)",
+        type: "string",
+        array: true,
+      }),
+  handler: Effect.fn("Cli.mcp.add")(function* (args) {
     const maybeCtx = yield* InstanceRef
     if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
     const ctx = maybeCtx
     yield* Effect.promise(async () => {
+      const command = args["--"] ?? []
+      if (!args.name && (args.url || args.env?.length || args.header?.length || command.length)) {
+        throw new Error("A server name is required for non-interactive MCP configuration")
+      }
+      if (args.name) {
+        if (!!args.url === !!command.length) {
+          throw new Error("Provide either --url <url> or a command after --")
+        }
+        if (args.url && !URL.canParse(args.url)) {
+          throw new Error(`Invalid URL: ${args.url}`)
+        }
+        if (args.url && args.env?.length) {
+          throw new Error("--env is only valid for local MCP servers")
+        }
+        if (command.length && args.header?.length) {
+          throw new Error("--header is only valid for remote MCP servers")
+        }
+
+        const entries = (values: string[], kind: string) =>
+          Object.fromEntries(
+            values.map((entry) => {
+              const index = entry.indexOf("=")
+              if (index < 1) throw new Error(`Invalid ${kind}: ${entry}. Expected KEY=VALUE`)
+              return [entry.slice(0, index), entry.slice(index + 1)]
+            }),
+          )
+        const environment = entries(args.env ?? [], "environment variable")
+        const headers = entries(args.header ?? [], "HTTP header")
+        const mcpConfig: ConfigMCPV1.Info = args.url
+          ? {
+              type: "remote",
+              url: args.url,
+              ...(Object.keys(headers).length ? { headers } : {}),
+            }
+          : {
+              type: "local",
+              command,
+              ...(Object.keys(environment).length ? { environment } : {}),
+            }
+
+        const configPath = await resolveConfigPath(Global.Path.config, true)
+        await addMcpToConfig(args.name, mcpConfig, configPath)
+        prompts.log.success(`MCP server "${args.name}" added to ${configPath}`)
+        return
+      }
+
       UI.empty()
       prompts.intro("Add MCP server")
 
@@ -503,7 +564,7 @@ export const McpAddCommand = effectCmd({
         })
         if (prompts.isCancel(command)) throw new UI.CancelledError()
 
-        const mcpConfig: ConfigMCP.Info = {
+        const mcpConfig: ConfigMCPV1.Info = {
           type: "local",
           command: command.split(" "),
         }
@@ -533,7 +594,7 @@ export const McpAddCommand = effectCmd({
         })
         if (prompts.isCancel(useOAuth)) throw new UI.CancelledError()
 
-        let mcpConfig: ConfigMCP.Info
+        let mcpConfig: ConfigMCPV1.Info
 
         if (useOAuth) {
           const hasClientId = await prompts.confirm({
@@ -608,14 +669,20 @@ export const McpDebugCommand = effectCmd({
     const config = yield* Config.Service.use((cfg) => cfg.get())
     const mcp = yield* MCP.Service
     const auth = yield* McpAuth.Service
+    const serverConfig = config.mcp?.[args.name]
+    const authInfo =
+      serverConfig && isMcpRemote(serverConfig) && serverConfig.oauth !== false
+        ? yield* Effect.all({
+            authStatus: mcp.getAuthStatus(args.name),
+            entry: auth.get(args.name),
+          })
+        : undefined
     yield* Effect.promise(async () => {
       UI.empty()
       prompts.intro("MCP OAuth Debug")
 
-      const mcpServers = config.mcp ?? {}
       const serverName = args.name
 
-      const serverConfig = mcpServers[serverName]
       if (!serverConfig) {
         prompts.log.error(`MCP server not found: ${serverName}`)
         prompts.outro("Done")
@@ -637,17 +704,13 @@ export const McpDebugCommand = effectCmd({
       prompts.log.info(`Server: ${serverName}`)
       prompts.log.info(`URL: ${serverConfig.url}`)
 
-      // Check stored auth status — services already in hand, run inline.
-      const { authStatus, entry } = await Effect.runPromise(
-        Effect.all({
-          authStatus: mcp.getAuthStatus(serverName),
-          entry: auth.get(serverName),
-        }),
-      )
+      const { authStatus, entry } = authInfo!
       prompts.log.info(`Auth status: ${getAuthStatusIcon(authStatus)} ${getAuthStatusText(authStatus)}`)
 
       if (entry?.tokens) {
-        prompts.log.info(`  Access token: ${entry.tokens.accessToken.substring(0, 20)}...`)
+        prompts.log.info(
+          `  Access token: ${entry.tokens.accessToken.length > 8 ? `${entry.tokens.accessToken.slice(0, 4)}***${entry.tokens.accessToken.slice(-4)}` : "***"}`,
+        )
         if (entry.tokens.expiresAt) {
           const expiresDate = new Date(entry.tokens.expiresAt * 1000)
           const isExpired = entry.tokens.expiresAt < Date.now() / 1000
@@ -673,6 +736,7 @@ export const McpDebugCommand = effectCmd({
         const response = await fetch(serverConfig.url, {
           method: "POST",
           headers: {
+            ...serverConfig.headers,
             "Content-Type": "application/json",
             Accept: "application/json, text/event-stream",
           },
@@ -680,7 +744,7 @@ export const McpDebugCommand = effectCmd({
             jsonrpc: "2.0",
             method: "initialize",
             params: {
-              protocolVersion: "2024-11-05",
+              protocolVersion: LATEST_PROTOCOL_VERSION,
               capabilities: {},
               clientInfo: { name: "opencode-debug", version: InstallationVersion },
             },
@@ -697,7 +761,7 @@ export const McpDebugCommand = effectCmd({
         }
 
         if (response.status === 401) {
-          prompts.log.warn("Server returned 401 Unauthorized")
+          prompts.log.info("Initial unauthenticated check returned 401, so this server requires OAuth")
 
           // Try to discover OAuth metadata
           const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
@@ -721,6 +785,7 @@ export const McpDebugCommand = effectCmd({
           // Try creating transport with auth provider to trigger discovery
           const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
             authProvider,
+            requestInit: serverConfig.headers ? { headers: serverConfig.headers } : undefined,
           })
 
           try {

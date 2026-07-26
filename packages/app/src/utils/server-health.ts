@@ -1,6 +1,9 @@
 import { usePlatform } from "@/context/platform"
-import type { ServerConnection } from "@/context/server"
-import { createSdkForServer } from "./server"
+import { ServerConnection } from "@/context/server"
+import { authTokenFromCredentials, createSdkForServer } from "./server"
+import { ClientError, OpenCode } from "@opencode-ai/client"
+import { Accessor, createEffect, onCleanup } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 
 export type ServerHealth = { healthy: boolean; version?: string }
 
@@ -11,7 +14,7 @@ interface CheckServerHealthOptions {
   retryDelayMs?: number
 }
 
-const defaultTimeoutMs = 3000
+const defaultTimeoutMs = 30_000
 const defaultRetryCount = 2
 const defaultRetryDelayMs = 100
 const cacheMs = 750
@@ -59,6 +62,7 @@ function wait(ms: number, signal?: AbortSignal) {
 
 function retryable(error: unknown, signal?: AbortSignal) {
   if (signal?.aborted) return false
+  if (error instanceof ClientError) return error.reason === "Transport"
   if (!(error instanceof Error)) return false
   if (error.name === "AbortError" || error.name === "TimeoutError") return false
   if (error instanceof TypeError) return true
@@ -80,17 +84,35 @@ export async function checkServerHealth(
       .then(() => attempt(count + 1))
       .catch(() => ({ healthy: false }))
   }
-  const attempt = (count: number): Promise<ServerHealth> =>
-    createSdkForServer({
-      server,
+  const attempt = async (count: number): Promise<ServerHealth> => {
+    const current = await OpenCode.make({
+      baseUrl: server.url,
       fetch,
-      signal,
+      headers: server.password
+        ? {
+            Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
+          }
+        : undefined,
     })
+      .health.get({ signal })
+      .then((x) =>
+        typeof x.healthy === "boolean"
+          ? { data: { healthy: x.healthy, version: x.version } }
+          : { error: new Error("Invalid health response") },
+      )
+      .catch((error) => ({ error }))
+    if ("data" in current && current.data) return current.data
+    if (signal?.aborted) return { healthy: false }
+
+    return createSdkForServer({ server, fetch, signal })
       .global.health()
       .then((x) => (x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }))
       .catch((error) => next(count, error))
+  }
   return attempt(0).finally(() => timeout?.clear?.())
 }
+
+const pollMs = 10_000
 
 export function useCheckServerHealth() {
   const platform = usePlatform()
@@ -110,4 +132,41 @@ export function useCheckServerHealth() {
     healthCache.set(key, { at: now, done: false, fetch: fetcher, promise })
     return promise
   }
+}
+
+export const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
+  const checkServerHealth = useCheckServerHealth()
+  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
+
+  createEffect(() => {
+    if (!enabled()) {
+      setStatus(reconcile({}))
+      return
+    }
+    const list = servers()
+    let dead = false
+
+    const refresh = async () => {
+      const results: Record<string, ServerHealth> = {}
+      await Promise.all(
+        list.map(async (conn) => {
+          const key = ServerConnection.key(conn)
+          const result = await checkServerHealth(conn.http)
+          results[key] = result
+          if (!dead) setStatus(key, result)
+        }),
+      )
+      if (dead) return
+      setStatus(reconcile(results))
+    }
+
+    void refresh()
+    const id = setInterval(() => void refresh(), pollMs)
+    onCleanup(() => {
+      dead = true
+      clearInterval(id)
+    })
+  })
+
+  return status
 }

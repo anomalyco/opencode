@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Result, Schema } from "effect"
-import { toJsonSchema } from "../../src/util/effect-zod"
+import { ToolJsonSchema } from "../../src/tool/json-schema"
 
 // Each tool exports its parameters schema at module scope so this test can
 // import them without running the tool's Effect-based init. The JSON Schema
 // snapshot captures what the LLM sees; the parse assertions pin down the
-// accepts/rejects contract. `toJsonSchema` is the same helper `session/
+// accepts/rejects contract. `ToolJsonSchema.fromSchema` is the same helper `session/
 // prompt.ts` uses to emit tool schemas to the LLM, so the snapshots stay
-// byte-identical regardless of whether a tool has migrated from zod to Schema.
+// provider-compatible while tools use Effect Schema internally.
 
 import { Parameters as ApplyPatch } from "../../src/tool/apply_patch"
 import { Parameters as Edit } from "../../src/tool/edit"
@@ -32,6 +32,8 @@ const parse = <S extends Schema.Decoder<unknown>>(schema: S, input: unknown): S[
 const accepts = (schema: Schema.Decoder<unknown>, input: unknown): boolean =>
   Result.isSuccess(Schema.decodeUnknownResult(schema)(input))
 
+const toJsonSchema = ToolJsonSchema.fromSchema
+
 describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
@@ -50,6 +52,43 @@ describe("tool parameters", () => {
     test("webfetch", () => expect(toJsonSchema(WebFetch)).toMatchSnapshot())
     test("websearch", () => expect(toJsonSchema(WebSearch)).toMatchSnapshot())
     test("write", () => expect(toJsonSchema(Write)).toMatchSnapshot())
+
+    test("inlines named child schemas for provider compatibility", () => {
+      const schema = toJsonSchema(Question)
+      expect(schema).not.toHaveProperty("$defs")
+      expect(schema).toMatchObject({
+        properties: {
+          questions: { items: { properties: { options: { items: { properties: { label: { type: "string" } } } } } } },
+        },
+      })
+    })
+
+    test("preserves required nullable fields", () => {
+      expect(toJsonSchema(Schema.Struct({ value: Schema.NullOr(Schema.String) }))).toMatchObject({
+        properties: { value: { anyOf: expect.arrayContaining([{ type: "null" }]) } },
+      })
+    })
+
+    test("keeps repeated allOf constraints instead of dropping duplicates", () => {
+      expect(
+        toJsonSchema(
+          Schema.Struct({ value: Schema.String.check(Schema.isPattern(/^a/)).check(Schema.isPattern(/z$/)) }),
+        ),
+      ).toMatchObject({ properties: { value: { allOf: [{ pattern: "^a" }, { pattern: "z$" }] } } })
+    })
+
+    test("bounds bare integer fields to safe integer range", () => {
+      expect(toJsonSchema(Schema.Struct({ value: Schema.Int }))).toMatchObject({
+        properties: { value: { minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER } },
+      })
+    })
+
+    test("does not expose defaulted optional keys as nullable", () => {
+      expect(toJsonSchema(WebFetch)).toMatchObject({
+        properties: { format: { type: "string", enum: ["text", "markdown", "html"], default: "markdown" } },
+      })
+      expect(toJsonSchema(WebFetch).properties?.format).not.toHaveProperty("anyOf")
+    })
   })
 
   describe("apply_patch", () => {
@@ -67,19 +106,16 @@ describe("tool parameters", () => {
   })
 
   describe("shell", () => {
-    test("accepts minimum: command + description", () => {
-      expect(parse(Shell, { command: "ls", description: "list" })).toEqual({ command: "ls", description: "list" })
+    test("accepts command", () => {
+      expect(parse(Shell, { command: "ls" })).toEqual({ command: "ls" })
     })
     test("accepts optional timeout + workdir", () => {
-      const parsed = parse(Shell, { command: "ls", description: "list", timeout: 5000, workdir: "/tmp" })
+      const parsed = parse(Shell, { command: "ls", timeout: 5000, workdir: "/tmp" })
       expect(parsed.timeout).toBe(5000)
       expect(parsed.workdir).toBe("/tmp")
     })
-    test("rejects missing description", () => {
-      expect(accepts(Shell, { command: "ls" })).toBe(false)
-    })
     test("rejects missing command", () => {
-      expect(accepts(Shell, { description: "list" })).toBe(false)
+      expect(accepts(Shell, {})).toBe(false)
     })
   })
 
@@ -203,6 +239,10 @@ describe("tool parameters", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general" })
       expect(parsed.subagent_type).toBe("general")
     })
+    test("accepts optional background flag", () => {
+      const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", background: true })
+      expect(parsed.background).toBe(true)
+    })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)
     })
@@ -221,8 +261,15 @@ describe("tool parameters", () => {
   })
 
   describe("webfetch", () => {
-    test("accepts url-only", () => {
-      expect(parse(WebFetch, { url: "https://example.com" }).url).toBe("https://example.com")
+    test("defaults omitted format to markdown", () => {
+      expect(parse(WebFetch, { url: "https://example.com" })).toEqual({
+        url: "https://example.com",
+        format: "markdown",
+      })
+      expect(parse(WebFetch, { url: "https://example.com", format: undefined })).toEqual({
+        url: "https://example.com",
+        format: "markdown",
+      })
     })
   })
 

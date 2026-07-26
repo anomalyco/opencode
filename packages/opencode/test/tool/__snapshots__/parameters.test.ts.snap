@@ -24,27 +24,11 @@ exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
       "description": "The command to execute",
       "type": "string",
     },
-    "description": {
-      "description": 
-"Clear, concise description of what this command does in 5-10 words. Examples:
-Input: ls
-Output: Lists files in current directory
-
-Input: git status
-Output: Shows working tree status
-
-Input: npm install
-Output: Installs package dependencies
-
-Input: mkdir foo
-Output: Creates directory 'foo'"
-,
-      "type": "string",
-    },
     "timeout": {
       "description": "Optional timeout in milliseconds",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
       "type": "integer",
     },
     "workdir": {
@@ -54,7 +38,6 @@ Output: Creates directory 'foo'"
   },
   "required": [
     "command",
-    "description",
   ],
   "type": "object",
 }
@@ -240,7 +223,6 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
                   "type": "string",
                 },
               },
-              "ref": "QuestionOption",
               "required": [
                 "label",
                 "description",
@@ -254,7 +236,6 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
             "type": "string",
           },
         },
-        "ref": "QuestionPrompt",
         "required": [
           "question",
           "header",
@@ -320,6 +301,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "background": {
+      "description": "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
+      "type": "boolean",
+    },
     "command": {
       "description": "The command that triggered this task",
       "type": "string",

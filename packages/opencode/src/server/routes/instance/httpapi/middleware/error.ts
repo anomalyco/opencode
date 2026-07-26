@@ -1,13 +1,7 @@
-import { Provider } from "@/provider/provider"
-import { Session } from "@/session/session"
-import { NotFoundError } from "@/storage/storage"
-import { iife } from "@/util/iife"
 import { NamedError } from "@opencode-ai/core/util/error"
-import * as Log from "@opencode-ai/core/util/log"
+import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
 import { Cause, Effect } from "effect"
 import { HttpRouter, HttpServerError, HttpServerRespondable, HttpServerResponse } from "effect/unstable/http"
-
-const log = Log.create({ service: "server" })
 
 // Keep typed HttpApi failures on their declared error path; this boundary only replaces defect-only empty 500s.
 export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect) =>
@@ -22,35 +16,26 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
       if (!defect) return Effect.failCause(cause)
 
       const error = defect.defect
-      log.error("failed", { error, cause: Cause.pretty(cause) })
-
-      if (error instanceof NamedError) {
-        return Effect.succeed(
-          HttpServerResponse.jsonUnsafe(error.toObject(), {
-            status: iife(() => {
-              if (error instanceof NotFoundError) return 404
-              if (error instanceof Provider.ModelNotFoundError) return 400
-              if (error.name === "ProviderAuthValidationFailed") return 400
-              if (error.name.startsWith("Worktree")) return 400
-              return 500
-            }),
-          }),
-        )
-      }
-      if (error instanceof Session.BusyError) {
-        return Effect.succeed(
-          HttpServerResponse.jsonUnsafe(new NamedError.Unknown({ message: error.message }).toObject(), {
-            status: 400,
-          }),
-        )
+      if (
+        ConfigErrorV1.JsonError.isInstance(error) ||
+        ConfigErrorV1.InvalidError.isInstance(error) ||
+        ConfigErrorV1.FrontmatterError.isInstance(error) ||
+        ConfigErrorV1.DirectoryTypoError.isInstance(error)
+      ) {
+        return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 400 }))
       }
 
-      return Effect.succeed(
-        HttpServerResponse.jsonUnsafe(
-          new NamedError.Unknown({
-            message: error instanceof Error && error.stack ? error.stack : String(error),
-          }).toObject(),
-          { status: 500 },
+      const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+
+      return Effect.logError("failed", { ref, error, cause: Cause.pretty(cause) }).pipe(
+        Effect.as(
+          HttpServerResponse.jsonUnsafe(
+            new NamedError.Unknown({
+              message: "Unexpected server error. Check server logs for details.",
+              ref,
+            }).toObject(),
+            { status: 500 },
+          ),
         ),
       )
     }),
