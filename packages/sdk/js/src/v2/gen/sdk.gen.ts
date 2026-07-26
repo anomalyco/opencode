@@ -46,6 +46,8 @@ import type {
   ExperimentalSessionBackgroundResponses,
   ExperimentalSessionListErrors,
   ExperimentalSessionListResponses,
+  ExperimentalSessionStatusListErrors,
+  ExperimentalSessionStatusListResponses,
   ExperimentalWorkspaceAdapterListErrors,
   ExperimentalWorkspaceAdapterListResponses,
   ExperimentalWorkspaceCreateErrors,
@@ -802,6 +804,21 @@ export class Console extends HeyApiClient {
   }
 }
 
+export class Status extends HeyApiClient {
+  /**
+   * List session statuses
+   *
+   * Get the persisted status of every session across projects, including when it last changed and an optional short detail.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      ExperimentalSessionStatusListResponses,
+      ExperimentalSessionStatusListErrors,
+      ThrowOnError
+    >({ url: "/experimental/session/status", ...options })
+  }
+}
+
 export class Session extends HeyApiClient {
   /**
    * List sessions
@@ -883,6 +900,11 @@ export class Session extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _status?: Status
+  get status(): Status {
+    return (this._status ??= new Status({ client: this.client }))
   }
 }
 

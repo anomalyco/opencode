@@ -8,6 +8,7 @@ import type { Snapshot } from "../snapshot"
 import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
+import type { SessionStatusStore } from "./status-store"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
@@ -78,6 +79,16 @@ export const MessageTable = sqliteTable(
   },
   (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
+
+export const SessionStatusTable = sqliteTable("session_status", {
+  session_id: text()
+    .$type<SessionSchema.ID>()
+    .primaryKey()
+    .references(() => SessionTable.id, { onDelete: "cascade" }),
+  status: text().$type<SessionStatusStore.Status>().notNull(),
+  detail: text(),
+  ...Timestamps,
+})
 
 export const PartTable = sqliteTable(
   "part",

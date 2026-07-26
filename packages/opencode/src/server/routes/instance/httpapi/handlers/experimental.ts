@@ -8,6 +8,7 @@ import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
+import { SessionStatusStore } from "@opencode-ai/core/session/status-store"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Worktree } from "@/worktree"
@@ -33,6 +34,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const registry = yield* ToolRegistry.Service
     const worktreeSvc = yield* Worktree.Service
     const sessions = yield* Session.Service
+    const sessionStatusStore = yield* SessionStatusStore.Service
     const background = yield* BackgroundJob.Service
     const flags = yield* RuntimeFlags.Service
 
@@ -156,6 +158,10 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       })
     })
 
+    const sessionStatus = Effect.fn("ExperimentalHttpApi.sessionStatus")(function* () {
+      return yield* sessionStatusStore.list()
+    })
+
     const sessionBackground = Effect.fn("ExperimentalHttpApi.sessionBackground")(function* (ctx: {
       params: { sessionID: SessionID }
     }) {
@@ -187,6 +193,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       .handle("worktreeRemove", worktreeRemove)
       .handle("worktreeReset", worktreeReset)
       .handle("session", session)
+      .handle("sessionStatus", sessionStatus)
       .handle("sessionBackground", sessionBackground)
       .handle("resource", resource)
   }),

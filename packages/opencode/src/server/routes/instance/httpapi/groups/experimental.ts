@@ -5,6 +5,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { Worktree } from "@/worktree"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { SessionStatusStore } from "@opencode-ai/core/session/status-store"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -97,6 +98,7 @@ export const ExperimentalPaths = {
   worktree: "/experimental/worktree",
   worktreeReset: "/experimental/worktree/reset",
   session: "/experimental/session",
+  sessionStatus: "/experimental/session/status",
   sessionBackground: "/experimental/session/:sessionID/background",
   resource: "/experimental/resource",
 } as const
@@ -230,6 +232,16 @@ export const ExperimentalApi = HttpApi.make("experimental")
             summary: "List sessions",
             description:
               "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+          }),
+        ),
+        HttpApiEndpoint.get("sessionStatus", ExperimentalPaths.sessionStatus, {
+          success: described(Schema.Array(SessionStatusStore.Info), "Persisted session statuses"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.status.list",
+            summary: "List session statuses",
+            description:
+              "Get the persisted status of every session across projects, including when it last changed and an optional short detail.",
           }),
         ),
         HttpApiEndpoint.post("sessionBackground", ExperimentalPaths.sessionBackground, {

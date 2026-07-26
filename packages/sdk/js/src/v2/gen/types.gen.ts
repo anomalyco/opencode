@@ -7822,6 +7822,41 @@ export type ExperimentalSessionListResponses = {
 
 export type ExperimentalSessionListResponse = ExperimentalSessionListResponses[keyof ExperimentalSessionListResponses]
 
+export type ExperimentalSessionStatusListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/experimental/session/status"
+}
+
+export type ExperimentalSessionStatusListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalSessionStatusListError =
+  ExperimentalSessionStatusListErrors[keyof ExperimentalSessionStatusListErrors]
+
+export type ExperimentalSessionStatusListResponses = {
+  /**
+   * Persisted session statuses
+   */
+  200: Array<{
+    sessionID: string
+    status: "working" | "retrying" | "needs_input" | "done" | "idle"
+    detail?: string
+    time: {
+      created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      updated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+  }>
+}
+
+export type ExperimentalSessionStatusListResponse =
+  ExperimentalSessionStatusListResponses[keyof ExperimentalSessionStatusListResponses]
+
 export type ExperimentalSessionBackgroundData = {
   body?: never
   path: {

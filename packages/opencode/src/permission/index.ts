@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
+import { SessionStatus } from "@/session/status"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
@@ -43,6 +44,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const sessionStatus = yield* SessionStatus.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -98,6 +100,7 @@ const layer = Layer.effect(
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
       pending.set(id, { info, deferred })
       yield* events.publish(Event.Asked, info)
+      yield* sessionStatus.setNeedsInput(request.sessionID, `${request.permission}: ${request.patterns.join(", ")}`)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
         Effect.sync(() => {
@@ -110,6 +113,14 @@ const layer = Layer.effect(
       const { approved, pending } = yield* InstanceState.get(state)
       const existing = pending.get(input.requestID)
       if (!existing) return yield* new PermissionV1.NotFoundError({ requestID: input.requestID })
+
+      // Restore the persisted status once no permission requests remain
+      // pending for the session (any reply path, including cascades).
+      const restore = Effect.suspend(() =>
+        [...pending.values()].some((item) => item.info.sessionID === existing.info.sessionID)
+          ? Effect.void
+          : sessionStatus.syncPersisted(existing.info.sessionID),
+      )
 
       pending.delete(input.requestID)
       yield* events.publish(Event.Replied, {
@@ -136,11 +147,15 @@ const layer = Layer.effect(
           })
           yield* Deferred.fail(item.deferred, new PermissionV1.RejectedError())
         }
+        yield* restore
         return
       }
 
       yield* Deferred.succeed(existing.deferred, undefined)
-      if (input.reply === "once") return
+      if (input.reply === "once") {
+        yield* restore
+        return
+      }
 
       for (const pattern of existing.info.always) {
         approved.push({
@@ -164,6 +179,7 @@ const layer = Layer.effect(
         })
         yield* Deferred.succeed(item.deferred, undefined)
       }
+      yield* restore
     })
 
     const list = Effect.fn("Permission.list")(function* () {
@@ -218,6 +234,6 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, SessionStatus.node] })
 
 export * as Permission from "."
