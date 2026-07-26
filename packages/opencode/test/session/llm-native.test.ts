@@ -378,6 +378,32 @@ describe("session.llm-native.request", () => {
     expect(openrouter.route.endpoint.baseURL).toBe("https://openrouter.ai/api/v1")
   })
 
+  it.effect("enables OpenRouter prompt caching for Anthropic models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* prepareNativeRequest({
+        model: {
+          ...baseModel,
+          id: ModelV2.ID.make("anthropic/claude-opus-4.8"),
+          providerID: ProviderV2.ID.openrouter,
+          api: {
+            id: "anthropic/claude-opus-4.8",
+            url: "https://openrouter.ai/api/v1",
+            npm: "@openrouter/ai-sdk-provider",
+          },
+        },
+        apiKey: "test-key",
+        messages: [storedSession.user("Say hello.")],
+      })
+
+      expect(prepared).toMatchObject({
+        route: "openrouter",
+        body: {
+          cache_control: { type: "ephemeral" },
+        },
+      })
+    }),
+  )
+
   test("fails fast for unsupported provider packages", () => {
     expect(() =>
       LLMNative.request({

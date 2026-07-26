@@ -8,6 +8,7 @@ import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
 import { isRecord } from "../protocols/shared"
+import { ttlBucket } from "../protocols/utils/cache"
 
 export const profile = OpenAICompatibleProfiles.profiles.openrouter
 export const id = ProviderID.make(profile.provider)
@@ -18,6 +19,11 @@ export interface OpenRouterOptions {
   readonly usage?: boolean | Record<string, unknown>
   readonly reasoning?: Record<string, unknown>
   readonly promptCacheKey?: string
+  readonly prompt_cache_key?: string
+  readonly sessionID?: string
+  readonly session_id?: string
+  readonly cacheControl?: Record<string, unknown>
+  readonly cache_control?: Record<string, unknown>
 }
 
 export type OpenRouterProviderOptionsInput = ProviderOptions & {
@@ -41,13 +47,28 @@ export const protocol = Protocol.make({
     schema: OpenRouterBody,
     from: (request) =>
       OpenAIChat.protocol.body.from(request).pipe(
-        Effect.map(
-          (body) =>
-            ({
-              ...body,
-              ...bodyOptions(request.providerOptions?.openrouter),
-            }) as OpenRouterBody,
-        ),
+        Effect.map((body) => {
+          const options = bodyOptions(request.providerOptions?.openrouter)
+          const policy = request.cache
+          const cacheEnabled =
+            policy === undefined ||
+            policy === "auto" ||
+            (typeof policy === "object" && Boolean(policy.tools || policy.system || policy.messages))
+          const automaticCacheControl =
+            request.model.id.replace(/^~/, "").startsWith("anthropic/") && cacheEnabled
+              ? {
+                  type: "ephemeral",
+                  ...(ttlBucket(typeof policy === "object" ? policy.ttlSeconds : undefined) === "1h"
+                    ? { ttl: "1h" }
+                    : {}),
+                }
+              : undefined
+          return {
+            ...body,
+            ...(automaticCacheControl ? { cache_control: automaticCacheControl } : {}),
+            ...options,
+          } as OpenRouterBody
+        }),
       ),
   },
   stream: OpenAIChat.protocol.stream,
@@ -55,6 +76,11 @@ export const protocol = Protocol.make({
 
 const bodyOptions = (input: unknown) => {
   const openrouter = isRecord(input) ? input : {}
+  const cacheControl = isRecord(openrouter.cacheControl)
+    ? openrouter.cacheControl
+    : isRecord(openrouter.cache_control)
+      ? openrouter.cache_control
+      : undefined
   return {
     ...(openrouter.usage === true
       ? { usage: { include: true } }
@@ -62,7 +88,17 @@ const bodyOptions = (input: unknown) => {
         ? { usage: openrouter.usage }
         : {}),
     ...(isRecord(openrouter.reasoning) ? { reasoning: openrouter.reasoning } : {}),
-    ...(typeof openrouter.promptCacheKey === "string" ? { prompt_cache_key: openrouter.promptCacheKey } : {}),
+    ...(typeof openrouter.promptCacheKey === "string"
+      ? { prompt_cache_key: openrouter.promptCacheKey }
+      : typeof openrouter.prompt_cache_key === "string"
+        ? { prompt_cache_key: openrouter.prompt_cache_key }
+        : {}),
+    ...(typeof openrouter.sessionID === "string"
+      ? { session_id: openrouter.sessionID }
+      : typeof openrouter.session_id === "string"
+        ? { session_id: openrouter.session_id }
+        : {}),
+    ...(cacheControl ? { cache_control: cacheControl } : {}),
   }
 }
 
