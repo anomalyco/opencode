@@ -111,4 +111,35 @@ describe("QuestionV2", () => {
       yield* Scope.close(secondScope, Exit.void)
     }),
   )
+
+  it.effect("serializes competing settlements for the same question", () =>
+    Effect.gen(function* () {
+      const service = yield* QuestionV2.Service
+      const events = yield* EventV2.Service
+      const terminal = new Array<string>()
+      const unsubscribe = yield* events.listen((event) => {
+        if (event.type !== QuestionV2.Event.Replied.type && event.type !== QuestionV2.Event.Rejected.type)
+          return Effect.void
+        return Effect.sync(() => {
+          terminal.push(event.type)
+        }).pipe(Effect.andThen(Effect.promise(() => Bun.sleep(10))))
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const { request } = yield* waitForAsk(service, { sessionID, questions: [question] })
+
+      const exits = yield* Effect.all(
+        [
+          service.reply({ requestID: request.id, answers: [["One"]] }).pipe(Effect.exit),
+          service.reject(request.id).pipe(Effect.exit),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      expect(exits.filter(Exit.isSuccess)).toHaveLength(1)
+      expect(exits.filter(Exit.isFailure)).toHaveLength(1)
+      if (Exit.isFailure(exits[0])) expect(exits[0].cause.toString()).toContain("QuestionV2.NotFoundError")
+      if (Exit.isFailure(exits[1])) expect(exits[1].cause.toString()).toContain("QuestionV2.NotFoundError")
+      expect(terminal).toHaveLength(1)
+    }),
+  )
 })

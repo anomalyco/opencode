@@ -1,7 +1,7 @@
 export * as PermissionV2 from "./permission"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema, Semaphore } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -124,6 +124,9 @@ const layer = Layer.effect(
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const pending = new Map<ID, Pending>()
+    // Reject and saved "always" replies can settle other pending requests, so
+    // permission settlement must be serialized across the whole service.
+    const settlements = Semaphore.makeUnsafe(1)
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
@@ -298,7 +301,7 @@ const layer = Layer.effect(
             yield* Deferred.succeed(item.deferred, undefined)
             pending.delete(id)
           }
-        }),
+        }).pipe((effect) => settlements.withPermit(effect)),
       ),
     )
 

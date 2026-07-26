@@ -3,6 +3,7 @@ export * as Form from "./form"
 import { Form } from "@opencode-ai/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { KeyedMutex } from "./effect/keyed-mutex"
 import { EventV2 } from "./event"
 
 const RETENTION = Duration.minutes(10)
@@ -100,6 +101,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
+    const settlements = KeyedMutex.makeUnsafe<ID>()
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
       {
@@ -186,7 +188,7 @@ export const layer = Layer.effect(
           yield* events.publish(Event.Replied, { id: input.id, sessionID: entry.form.sessionID, answer: input.answer })
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
-        }),
+        }).pipe(settlements.withLock(input.id)),
       ),
     )
 
@@ -199,7 +201,7 @@ export const layer = Layer.effect(
           yield* events.publish(Event.Cancelled, { id, sessionID: entry.form.sessionID })
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
-        }),
+        }).pipe(settlements.withLock(id)),
       ),
     )
 
