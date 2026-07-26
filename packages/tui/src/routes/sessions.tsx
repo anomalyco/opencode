@@ -1,4 +1,4 @@
-import { createMemo, createResource, createSignal, onCleanup, Show, For } from "solid-js"
+import { createMemo, createResource, createSignal, onCleanup, onMount, Show, For } from "solid-js"
 import path from "path"
 import { existsSync, statSync, readdirSync } from "node:fs"
 import type { TextareaRenderable } from "@opentui/core"
@@ -7,6 +7,7 @@ import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useSDK } from "../context/sdk"
 import { useEvent } from "../context/event"
+import { useSync } from "../context/sync"
 import { useTheme } from "../context/theme"
 import { useLocal } from "../context/local"
 import { useTuiPaths } from "../context/runtime"
@@ -15,6 +16,9 @@ import { useTuiConfig } from "../config"
 import { useBindings, useCommandShortcut } from "../keymap"
 import { createDebouncedSignal } from "../util/signal"
 import { errorMessage } from "../util/error"
+import { Locale } from "../util/locale"
+import { Spinner } from "../component/spinner"
+import { resolveStatus, statusDisplay, type PersistedStatus } from "../util/session-status"
 
 export function createSessionsListQuery(input: { search?: string }) {
   const search = input.search?.trim()
@@ -109,10 +113,15 @@ function readdirDirectories(dir: string): string[] {
   }
 }
 
+// Approximates the server boot (same launch): persisted active statuses older
+// than this had their writer die, so they render as interrupted.
+const bootTime = Date.now()
+
 export function Sessions() {
   const route = useRoute()
   const sdk = useSDK()
   const event = useEvent()
+  const sync = useSync()
   const local = useLocal()
   const paths = useTuiPaths()
   const toast = useToast()
@@ -125,9 +134,12 @@ export function Sessions() {
   const [suggestionIndex, setSuggestionIndex] = createSignal(0)
   const [toDelete, setToDelete] = createSignal<string>()
   const [completionAnchor, setCompletionAnchor] = createSignal<string>()
+  const [persisted, setPersisted] = createSignal(new Map<string, PersistedStatus>())
+  const [now, setNow] = createSignal(Date.now())
   const deleteHint = useCommandShortcut("session.delete")
   let selectRef: DialogSelectRef<string> | undefined
   let textarea: TextareaRenderable
+  let statusTimer: ReturnType<typeof setTimeout> | undefined
 
   const [sessions, { refetch }] = createResource(
     () => search(),
@@ -137,19 +149,79 @@ export function Sessions() {
         .then((result) => result.data ?? []),
   )
 
+  // Status rows only change server-side on transitions, so any lifecycle event
+  // is a hint to pull them again; debounced because transitions come in bursts.
+  async function refetchStatuses() {
+    const result = await sdk.globalClient.experimental.session.status.list()
+    if (!result.data) return
+    setPersisted(
+      new Map(
+        result.data.map((row) => [
+          row.sessionID,
+          {
+            status: row.status,
+            detail: row.detail,
+            time: { created: Number(row.time.created), updated: Number(row.time.updated) },
+          },
+        ]),
+      ),
+    )
+  }
+
+  function scheduleStatusRefetch() {
+    clearTimeout(statusTimer)
+    statusTimer = setTimeout(() => void refetchStatuses(), 400)
+  }
+
+  onMount(() => {
+    void refetchStatuses()
+    const ticker = setInterval(() => setNow(Date.now()), 30_000)
+    onCleanup(() => {
+      clearInterval(ticker)
+      clearTimeout(statusTimer)
+    })
+  })
+
   onCleanup(event.on("session.deleted", () => refetch()))
+  onCleanup(event.on("session.status", scheduleStatusRefetch))
+  onCleanup(event.on("question.asked", scheduleStatusRefetch))
+  onCleanup(event.on("question.replied", scheduleStatusRefetch))
+  onCleanup(event.on("question.rejected", scheduleStatusRefetch))
+  onCleanup(event.on("permission.asked", scheduleStatusRefetch))
+  onCleanup(event.on("permission.replied", scheduleStatusRefetch))
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
+    const at = now()
     return (sessions() ?? []).toSorted((a, b) => b.time.updated - a.time.updated).map((session) => {
       const updated = new Date(session.time.updated).toDateString()
       const isDeleting = toDelete() === session.id
+      const row = persisted().get(session.id)
+      const status = resolveStatus({
+        persisted: row,
+        runtime: sync.data.session_status[session.id]?.type,
+        pendingInput:
+          (sync.data.permission[session.id]?.length ?? 0) > 0 || (sync.data.question[session.id]?.length ?? 0) > 0,
+        bootTime,
+      })
+      const display = status ? statusDisplay(status, row?.time.updated ?? at, at, theme) : undefined
+      const detail = status === "interrupted" ? "stopped while running" : row?.detail
+      const dateLabel = updated === today ? "Today" : updated.slice(4, 10)
       return {
         title: isDeleting ? `Press ${deleteHint()} again to confirm` : session.title,
         bg: isDeleting ? theme.error : undefined,
+        description: detail ? Locale.truncate(detail, 48) : undefined,
+        footer: display ? (
+          <>
+            <span style={{ fg: display.color }}>{display.label}</span>
+            <span>{` · ${dateLabel}`}</span>
+          </>
+        ) : (
+          dateLabel
+        ),
+        gutter: status === "working" || status === "retrying" ? () => <Spinner /> : undefined,
         value: session.id,
         category: session.directory,
-        footer: updated === today ? "Today" : updated.slice(4, 10),
       }
     })
   })
