@@ -4,6 +4,13 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
+## PR conventions
+
+- The PR body MUST follow `.github/pull_request_template.md`. It enumerates the required sections (`Issue for this PR`, `Type of change`, `What does this PR do?`, `How did you verify your code works?`, `Screenshots / recordings`, `Checklist`). PRs that miss the template get auto-closed by `pr-standards.yml` — typically within a couple of hours — so fill every section before requesting review.
+- Open PRs against `dev` (see the bullet above); a local `main` ref may not exist.
+- Read `CONTRIBUTING.md` before opening a PR. In particular: any core product or UI feature must go through a design review with the core team before implementation. If you are unsure whether a PR would be accepted, ask a maintainer or look for issues labelled `help wanted`, `good first issue`, `bug`, or `perf`.
+- Commit messages and PR titles follow conventional commits (see `## Commits and PR Titles`); this PR is itself a `docs:` change and should set `Type of change` to `Documentation`.
+
 ## Branch Names
 
 Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
