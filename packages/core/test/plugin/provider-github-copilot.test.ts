@@ -1,8 +1,9 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { App } from "@opencode-ai/core/app"
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -15,11 +16,20 @@ import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
-const addPlugin = Effect.fn(function* () {
+const addPlugin = Effect.fn(function* (credential?: Credential.OAuth) {
   const plugin = yield* PluginV2.Service
   const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
-  yield* GithubCopilotPlugin.effect(host)
+  yield* GithubCopilotPlugin.effect({
+    ...host,
+    integration: {
+      ...host.integration,
+      connection: {
+        active: () => Effect.succeed(credential ? ({ type: "env", name: "TEST" } as const) : undefined),
+        resolve: () => Effect.succeed(credential),
+      },
+    },
+  })
 })
 
 function required<T>(value: T | undefined): T {
@@ -60,6 +70,69 @@ describe("GithubCopilotPlugin", () => {
         prompts: expect.any(Array),
       })
     }),
+  )
+
+  it.live("waits for initial Copilot models before exposing the connected catalog", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requested = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        const server = Bun.serve({
+          port: 0,
+          fetch: async () => {
+            requested.resolve()
+            await release.promise
+            return Response.json({
+              data: [
+                {
+                  model_picker_enabled: true,
+                  id: "gpt-5",
+                  name: "GPT-5",
+                  version: "gpt-5-2026-06-01",
+                  supported_endpoints: ["/responses"],
+                  capabilities: {
+                    family: "gpt",
+                    limits: { max_output_tokens: 16_384, max_prompt_tokens: 180_000 },
+                    supports: { tool_calls: true },
+                  },
+                },
+              ],
+            })
+          },
+        })
+        return { release, requested, server }
+      }),
+      ({ release, requested, server }) =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((draft) => {
+            draft.provider.update(ProviderV2.ID.githubCopilot, () => {})
+            draft.model.update(ProviderV2.ID.githubCopilot, ModelV2.ID.make("stale"), () => {})
+          })
+          const credential = Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("device"),
+            access: "access",
+            refresh: "refresh",
+            expires: 0,
+            metadata: { apiEndpoint: server.url.origin },
+          })
+
+          const plugin = yield* addPlugin(credential).pipe(Effect.forkScoped({ startImmediately: true }))
+          yield* Effect.promise(() => requested.promise)
+          const pending = plugin.pollUnsafe() === undefined
+          release.resolve()
+          yield* Fiber.join(plugin)
+
+          expect(pending).toBe(true)
+          expect(yield* catalog.model.get(ProviderV2.ID.githubCopilot, ModelV2.ID.make("stale"))).toBeUndefined()
+          expect(yield* catalog.model.get(ProviderV2.ID.githubCopilot, ModelV2.ID.make("gpt-5"))).toBeDefined()
+        }),
+      ({ release, server }) => {
+        release.resolve()
+        return Effect.promise(() => server.stop(true))
+      },
+    ),
   )
 
   it.live("adds Copilot authentication and request metadata headers", () =>

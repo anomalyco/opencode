@@ -196,6 +196,7 @@ export const GithubCopilotPlugin = define({
     yield* ctx.integration.transform((draft) => {
       draft.method.update(oauth(ctx.app))
     })
+    yield* load()
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(ProviderV2.ID.githubCopilot)
       if (!item) return
@@ -227,7 +228,6 @@ export const GithubCopilotPlugin = define({
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh().pipe(Effect.forkScoped)
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
