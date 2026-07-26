@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { createDialogSessionListQuery, loadDialogSessionList } from "../../src/component/dialog-session-list"
+import {
+  createDialogSessionListQuery,
+  currentDialogSessionSearch,
+  filterDialogSessionList,
+  loadDialogSessionList,
+} from "../../src/component/dialog-session-list"
 
 describe("dialog session list", () => {
   test("requests root sessions for the default browse list", () => {
@@ -42,5 +47,35 @@ describe("dialog session list", () => {
         list: () => Promise.reject(new Error("offline")),
       }),
     ).toBeUndefined()
+  })
+
+  test("keeps server-side content matches whose titles do not match", () => {
+    const content = { id: "content", title: "Unrelated title" }
+    const title = { id: "title", title: "Deploy the app" }
+    const unrelated = { id: "unrelated", title: "Other session" }
+
+    expect(
+      filterDialogSessionList({
+        sessions: [content, title, unrelated],
+        resultIDs: new Set([content.id]),
+        search: "deploy",
+      }),
+    ).toEqual([content, title])
+  })
+
+  test("does not reuse content matches from a previous query", () => {
+    const result = {
+      query: "deploy",
+      filter: { path: "packages/tui" },
+      sessions: [{ id: "content", title: "Unrelated title" }],
+    }
+
+    expect(currentDialogSessionSearch(result, { query: "deploy", filter: { path: "packages/tui" } })).toEqual(
+      result.sessions,
+    )
+    expect(
+      currentDialogSessionSearch(result, { query: "deployment", filter: { path: "packages/tui" } }),
+    ).toBeUndefined()
+    expect(currentDialogSessionSearch(result, { query: "deploy", filter: { path: "packages/app" } })).toBeUndefined()
   })
 })

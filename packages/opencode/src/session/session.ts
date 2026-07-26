@@ -44,6 +44,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { SessionSearch } from "@opencode-ai/core/session/search"
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
@@ -560,7 +561,7 @@ const layer: Layer.Layer<
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
-      if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+      if (input?.search) conditions.push(SessionSearch.where(input.search))
       if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
 
       const query =
@@ -991,7 +992,7 @@ function listByProject(
     conditions.push(gte(SessionTable.time_updated, input.start))
   }
   if (input.search) {
-    conditions.push(like(SessionTable.title, `%${input.search}%`))
+    conditions.push(SessionSearch.where(input.search))
   }
 
   const limit = input.limit ?? 100

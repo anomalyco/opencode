@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -14,7 +14,7 @@ import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { EventV2 } from "./event"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
-import { SessionMessageTable, SessionTable } from "./session/sql"
+import { PartTable, SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
@@ -37,6 +37,7 @@ import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
+import { SessionSearch } from "./session/search"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -112,6 +113,10 @@ export type Error = NotFoundError | MessageDecodeError | OperationUnavailableErr
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
+  readonly searchSnippets: (input: {
+    sessionIDs: SessionSchema.ID[]
+    search: string
+  }) => Effect.Effect<Array<{ sessionID: SessionSchema.ID; snippet: string }>>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
@@ -274,7 +279,7 @@ const layer = Layer.effect(
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
-        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+        if (input.search) conditions.push(SessionSearch.where(input.search))
         if (input.anchor) {
           conditions.push(
             order === "asc"
@@ -300,6 +305,41 @@ const layer = Layer.effect(
           Effect.orDie,
         )
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+      }),
+      searchSnippets: Effect.fn("V2Session.searchSnippets")(function* (input) {
+        if (input.sessionIDs.length === 0 || !input.search) return []
+        const fields = SessionSearch.match(input.search)
+        const [parts, messages] = yield* Effect.all([
+          db
+            .select({
+              sessionID: PartTable.session_id,
+              timeCreated: PartTable.time_created,
+              snippet: fields.part.snippet,
+            })
+            .from(PartTable)
+            .where(and(inArray(PartTable.session_id, input.sessionIDs), fields.part.where))
+            .orderBy(asc(PartTable.time_created), asc(PartTable.id))
+            .all()
+            .pipe(Effect.orDie),
+          db
+            .select({
+              sessionID: SessionMessageTable.session_id,
+              timeCreated: SessionMessageTable.time_created,
+              snippet: fields.message.snippet,
+            })
+            .from(SessionMessageTable)
+            .where(and(inArray(SessionMessageTable.session_id, input.sessionIDs), fields.message.where))
+            .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
+            .all()
+            .pipe(Effect.orDie),
+        ])
+        return [
+          ...new Map(
+            [...parts.map((row) => ({ ...row, source: 0 })), ...messages.map((row) => ({ ...row, source: 1 }))]
+              .sort((a, b) => a.timeCreated - b.timeCreated || a.source - b.source)
+              .map((row) => [row.sessionID, { sessionID: row.sessionID, snippet: row.snippet }] as const),
+          ).values(),
+        ]
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
         yield* result.get(input.sessionID)

@@ -29,6 +29,8 @@ export type HomeSessionRecord = {
   session: Session
   project: LocalProject
   projectName: string
+  snippet?: string
+  stale?: boolean
 }
 
 export type HomeSessionGroup = {
@@ -174,6 +176,18 @@ export function createHomeSessionsController(home: HomeController) {
       groups,
       loading: () => sessionLoad.isLoading,
       searchRecords: allRecords,
+      searchResultRecords: (input: { sessions: Session[]; snippets: Record<string, string>; stale: boolean }) =>
+        buildHomeSessionRecords({
+          sessions: () => input.sessions,
+          projectDirectories,
+          projects: home.project.list,
+          projectByID,
+          includeUnknown: !home.project.selected(),
+        }).map((record) => ({
+          ...record,
+          snippet: input.snippets[record.session.id],
+          stale: input.stale,
+        })),
     },
     session: {
       showProjectName: () => !home.project.selected(),
@@ -252,9 +266,12 @@ function buildHomeSessionRecords(input: {
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
-}) {
+  includeUnknown?: boolean
+}): HomeSessionRecord[] {
   const directories = new Set(input.projectDirectories().map(pathKey))
-  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  const sessions = input.includeUnknown
+    ? input.sessions()
+    : input.sessions().filter((session) => directories.has(pathKey(session.directory)))
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
     .flatMap((session) => {
@@ -266,8 +283,9 @@ function buildHomeSessionRecords(input: {
             (item) =>
               pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
           ) ?? projectForSession(session, input.projects(), input.projectByID())
-      if (!project) return []
-      return { session, project, projectName: displayName(project) }
+      const resolved = project ?? (input.includeUnknown ? { worktree: session.directory, expanded: false } : undefined)
+      if (!resolved) return []
+      return { session, project: resolved, projectName: displayName(resolved) }
     })
 }
 
