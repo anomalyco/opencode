@@ -26,43 +26,32 @@ export function where(input: string) {
 
 export function match(input: string) {
   const pattern = searchPattern(input)
-  const part = matchedValue(
-    [
-      sql`json_extract(${PartTable.data}, '$.text')`,
-      sql`json_extract(${PartTable.data}, '$.prompt')`,
-      sql`json_extract(${PartTable.data}, '$.description')`,
-    ],
-    pattern,
-  )
+  const partText = sql`json_extract(${PartTable.data}, '$.text')`
+  const part = sql<string | null>`case
+    when json_extract(${PartTable.data}, '$.type') = 'text'
+      and coalesce(json_extract(${PartTable.data}, '$.synthetic'), 0) = 0
+      and coalesce(json_extract(${PartTable.data}, '$.ignored'), 0) = 0
+      and ${matches(partText, pattern)}
+    then ${partText}
+  end`
   const content = sql<string | null>`(
     select json_extract(content.value, '$.text')
     from json_each(${SessionMessageTable.data}, '$.content') as content
-    where ${matches(sql`json_extract(content.value, '$.text')`, pattern)}
+    where json_extract(content.value, '$.type') = 'text'
+      and ${matches(sql`json_extract(content.value, '$.text')`, pattern)}
     limit 1
   )`
-  const message = sql<string | null>`coalesce(
-    ${matchedValue(
-      [
-        sql`json_extract(${SessionMessageTable.data}, '$.text')`,
-        sql`json_extract(${SessionMessageTable.data}, '$.command')`,
-        sql`json_extract(${SessionMessageTable.data}, '$.summary')`,
-        sql`json_extract(${SessionMessageTable.data}, '$.recent')`,
-      ],
-      pattern,
-    )},
-    ${content}
-  )`
+  const text = sql`json_extract(${SessionMessageTable.data}, '$.text')`
+  const command = sql`json_extract(${SessionMessageTable.data}, '$.command')`
+  const message = sql<string | null>`case
+    when ${SessionMessageTable.type} = 'user' and ${matches(text, pattern)} then ${text}
+    when ${SessionMessageTable.type} = 'shell' and ${matches(command, pattern)} then ${command}
+    when ${SessionMessageTable.type} = 'assistant' and ${content} is not null then ${content}
+  end`
   return {
     part: { where: sql`${part} is not null`, snippet: excerpt(part, input) },
     message: { where: sql`${message} is not null`, snippet: excerpt(message, input) },
   }
-}
-
-function matchedValue(values: SQL[], pattern: string) {
-  return sql<string | null>`case ${sql.join(
-    values.map((value) => sql`when ${matches(value, pattern)} then ${value}`),
-    sql` `,
-  )} end`
 }
 
 function searchPattern(input: string) {
