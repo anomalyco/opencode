@@ -37,7 +37,14 @@ const globToolNode = makeLocationNode({
 const grepToolNode = makeLocationNode({
   name: "test/grep-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GrepTool.Plugin)),
-  deps: [ToolRegistry.toolsNode, FSUtil.node, Ripgrep.node, Location.node, PermissionV2.node],
+  deps: [
+    ToolRegistry.toolsNode,
+    FSUtil.node,
+    Ripgrep.node,
+    Location.node,
+    LocationMutation.node,
+    PermissionV2.node,
+  ],
 })
 const sessionID = SessionV2.ID.make("ses_search_tool_test")
 
@@ -180,6 +187,94 @@ describe("search tools", () => {
           ),
         ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("reports no grep matches", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "haystack\n")).pipe(
+          Effect.andThen(
+            withTools(tmp.path, (registry) => executeTool(registry, call("grep", { pattern: "needle" }))),
+          ),
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              expect(result).toMatchObject({
+                status: "completed",
+                content: [{ type: "text", text: "No matches found" }],
+                metadata: { matches: 0, truncated: false },
+              })
+            }),
+          ),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("reports invalid grep regex details", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        withTools(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const result = yield* executeTool(registry, call("grep", { pattern: "[" }))
+            expect(result).toMatchObject({
+              status: "error",
+              error: { type: "tool.execution" },
+            })
+            if (result.status !== "error") return
+            expect(result.error.message).toStartWith("Invalid regex pattern:")
+            expect(result.error.message).toContain("unclosed character class")
+          }),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("requires external_directory approval for external grep files and directories", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        const assertions: PermissionV2.AssertInput[] = []
+        return Effect.promise(() => fs.writeFile(path.join(outside.path, "outside.txt"), "needle\n")).pipe(
+          Effect.andThen(
+            withTools(
+              active.path,
+              (registry) =>
+                Effect.gen(function* () {
+                  const directory = yield* executeTool(
+                    registry,
+                    call("grep", { path: outside.path, pattern: "needle" }),
+                  )
+                  const file = yield* executeTool(
+                    registry,
+                    call("grep", { path: path.join(outside.path, "outside.txt"), pattern: "needle" }),
+                  )
+                  expect(directory.status).toBe("completed")
+                  expect(file.status).toBe("completed")
+                }),
+              assertions,
+            ),
+          ),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              expect(assertions.map((input) => input.action)).toEqual([
+                "external_directory",
+                "grep",
+                "external_directory",
+                "grep",
+              ])
+              expect(assertions[0]?.resources).toEqual([path.join(outside.path, "*").replaceAll("\\", "/")])
+              expect(assertions[2]?.resources).toEqual([path.join(outside.path, "*").replaceAll("\\", "/")])
+            }),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
     ),
   )
 
