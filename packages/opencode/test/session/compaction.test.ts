@@ -562,14 +562,17 @@ describe("session.compaction.create", () => {
         yield* compact.create({
           sessionID: info.id,
           agent: "build",
-          model: ref,
+          model: { ...ref, variant: "max" },
           auto: true,
           overflow: true,
         })
 
         const msgs = yield* ssn.messages({ sessionID: info.id })
         expect(msgs).toHaveLength(1)
-        expect(msgs[0].info.role).toBe("user")
+        expect(msgs[0].info).toMatchObject({
+          role: "user",
+          model: { ...ref, variant: "max" },
+        })
         expect(msgs[0].parts).toHaveLength(1)
         expect(msgs[0].parts[0]).toMatchObject({
           type: "compaction",
