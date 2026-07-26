@@ -120,7 +120,7 @@ function stubOps(record?: (input: CapturedPrompt) => void): TaskPromptOps {
   }
 }
 
-// Return the visible message-marker text parts (synthetic:false + metadata.message)
+// Return the visible message-marker text parts (synthetic:false + metadata.marker)
 // most-recently written to a session.
 const collectMarkers = Effect.fn("MessageToolTest.collectMarkers")(function* (sessionID: SessionID) {
   const sessions = yield* Session.Service
@@ -130,10 +130,12 @@ const collectMarkers = Effect.fn("MessageToolTest.collectMarkers")(function* (se
     if (m.info.role !== "user") continue
     for (const p of m.parts) {
       if (p.type !== "text") continue
-      const meta = (p as any).metadata as { message?: { peer: string; expectReply?: boolean } } | undefined
-      if (!meta?.message) continue
+      const meta = (p as any).metadata as
+        | { marker?: { kind: string; peer?: string; expectReply?: boolean } }
+        | undefined
+      if (!meta?.marker || meta.marker.kind !== "message") continue
       if (p.synthetic) throw new Error("marker should be non-synthetic")
-      markers.push({ text: p.text, meta: meta.message })
+      markers.push({ text: p.text, meta: meta.marker })
     }
   }
   return markers
@@ -170,7 +172,7 @@ describe("tool.message", () => {
 
   describe("writeMarker", () => {
     it.instance(
-      "appends a visible non-synthetic text part tagged with metadata.message",
+      "appends a visible non-synthetic text part tagged with metadata.marker",
       () =>
         Effect.gen(function* () {
           const sessions = yield* Session.Service
@@ -186,7 +188,7 @@ describe("tool.message", () => {
           expect(markers[0]?.text).toBe(
             "✉ Message from subagent (awaiting your reply): go left or right?",
           )
-          expect(markers[0]?.meta).toEqual({ peer: "subagent", expectReply: true })
+          expect(markers[0]?.meta).toEqual({ kind: "message", peer: "subagent", expectReply: true })
         }),
     )
 
@@ -303,14 +305,15 @@ describe("tool.message", () => {
             | (SessionV1.TextPart & { synthetic: true })
             | undefined
           const marker = injected!.parts.find(
-            (p) => p.type === "text" && (p as any).metadata?.message,
+            (p) => p.type === "text" && (p as any).metadata?.marker?.kind === "message",
           ) as SessionV1.TextPart | undefined
           expect(synthetic).toBeDefined()
           expect(synthetic!.text).toContain("<agent_message")
           expect(marker).toBeDefined()
           expect(marker!.synthetic).toBeFalsy()
           expect(marker!.text).toBe("✉ Message from subagent: fyi-only")
-          expect((marker as any).metadata?.message).toEqual({
+          expect((marker as any).metadata?.marker).toEqual({
+            kind: "message",
             peer: "subagent",
             expectReply: false,
           })
@@ -364,7 +367,7 @@ describe("tool.message", () => {
           const injected = captured.find((c) => c.sessionID === parent.id)
           expect(injected).toBeDefined()
           const marker = injected!.parts.find(
-            (p) => p.type === "text" && (p as any).metadata?.message,
+            (p) => p.type === "text" && (p as any).metadata?.marker?.kind === "message",
           ) as SessionV1.TextPart
           expect(marker.text).toContain("&lt;/agent_message&gt;")
           expect(marker.text).not.toContain("</agent_message>")

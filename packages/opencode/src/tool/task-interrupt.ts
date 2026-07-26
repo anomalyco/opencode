@@ -5,6 +5,7 @@ import { Session } from "@/session/session"
 import { BackgroundJob } from "@/background/job"
 import { Permission } from "@/permission"
 import { Agent } from "@/agent/agent"
+import { Messaging } from "@/messaging"
 import { SessionID } from "../session/schema"
 import STEER_DESCRIPTION from "./task-steer.txt"
 import CANCEL_DESCRIPTION from "./task-cancel.txt"
@@ -26,12 +27,16 @@ const AbortParameters = Schema.Struct({
 const resolveChild = (
   sessions: Session.Interface,
   background: BackgroundJob.Interface,
+  messaging: Messaging.Interface,
   taskId: string,
   callerSessionID: SessionID,
 ) =>
   Effect.gen(function* () {
-    const childID = SessionID.make(taskId)
-    const child = yield* sessions.get(childID).pipe(Effect.option)
+    const childID = taskId.startsWith("ses_") ? Option.some(SessionID.make(taskId)) : yield* messaging.resolveSlug(taskId)
+    if (Option.isNone(childID)) return { kind: "not_found" as const }
+
+    // Slugs are process-global, so resolution must not bypass the descendant authorization below.
+    const child = yield* sessions.get(childID.value).pipe(Effect.option)
     if (Option.isNone(child) || child.value.id === callerSessionID) return { kind: "not_found" as const }
 
     let ancestorID = child.value.parentID
@@ -39,9 +44,9 @@ const resolveChild = (
     for (let hop = 0; hop < 64; hop++) {
       if (!ancestorID) return { kind: "not_found" as const }
       if (ancestorID === callerSessionID) {
-        const job = yield* background.get(childID)
+        const job = yield* background.get(childID.value)
         const running = !!job && job.status === "running"
-        return { kind: "resolved" as const, childID, running }
+        return { kind: "resolved" as const, childID: childID.value, running }
       }
       const ancestor = yield* sessions.get(ancestorID).pipe(Effect.option)
       if (Option.isNone(ancestor)) return { kind: "not_found" as const }
@@ -53,7 +58,7 @@ const resolveChild = (
 export const TaskSteerTool = Tool.define<
   typeof SteerParameters,
   { task_id: string; state: string },
-  Interrupt.Service | Session.Service | BackgroundJob.Service | Permission.Service | Agent.Service
+  Interrupt.Service | Session.Service | BackgroundJob.Service | Permission.Service | Agent.Service | Messaging.Service
 >(
   "task_steer",
   Effect.gen(function* () {
@@ -62,12 +67,13 @@ export const TaskSteerTool = Tool.define<
     const background = yield* BackgroundJob.Service
     const permission = yield* Permission.Service
     const agents = yield* Agent.Service
+    const messaging = yield* Messaging.Service
     return {
       description: STEER_DESCRIPTION,
       parameters: SteerParameters,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const resolved = yield* resolveChild(sessions, background, params.task_id, ctx.sessionID)
+          const resolved = yield* resolveChild(sessions, background, messaging, params.task_id, ctx.sessionID)
           if (resolved.kind === "not_found")
             return {
               title: "Steer: not found",
@@ -108,7 +114,7 @@ export const TaskSteerTool = Tool.define<
 export const TaskCancelTool = Tool.define<
   typeof CancelParameters,
   { task_id: string; state: string },
-  Interrupt.Service | Session.Service | BackgroundJob.Service | Permission.Service | Agent.Service
+  Interrupt.Service | Session.Service | BackgroundJob.Service | Permission.Service | Agent.Service | Messaging.Service
 >(
   "task_cancel",
   Effect.gen(function* () {
@@ -117,12 +123,13 @@ export const TaskCancelTool = Tool.define<
     const background = yield* BackgroundJob.Service
     const permission = yield* Permission.Service
     const agents = yield* Agent.Service
+    const messaging = yield* Messaging.Service
     return {
       description: CANCEL_DESCRIPTION,
       parameters: CancelParameters,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const resolved = yield* resolveChild(sessions, background, params.task_id, ctx.sessionID)
+          const resolved = yield* resolveChild(sessions, background, messaging, params.task_id, ctx.sessionID)
           if (resolved.kind === "not_found")
             return {
               title: "Cancel: not found",
@@ -163,7 +170,7 @@ export const TaskCancelTool = Tool.define<
 export const TaskAbortTool = Tool.define<
   typeof AbortParameters,
   { task_id: string; state: string },
-  Interrupt.Service | Session.Service | BackgroundJob.Service | Permission.Service | Agent.Service
+  Interrupt.Service | Session.Service | BackgroundJob.Service | Permission.Service | Agent.Service | Messaging.Service
 >(
   "task_abort",
   Effect.gen(function* () {
@@ -172,12 +179,13 @@ export const TaskAbortTool = Tool.define<
     const background = yield* BackgroundJob.Service
     const permission = yield* Permission.Service
     const agents = yield* Agent.Service
+    const messaging = yield* Messaging.Service
     return {
       description: ABORT_DESCRIPTION,
       parameters: AbortParameters,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const resolved = yield* resolveChild(sessions, background, params.task_id, ctx.sessionID)
+          const resolved = yield* resolveChild(sessions, background, messaging, params.task_id, ctx.sessionID)
           if (resolved.kind === "not_found")
             return {
               title: "Abort: not found",

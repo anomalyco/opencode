@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as FileSystem from "effect/FileSystem"
 import * as Layer from "effect/Layer"
+import { LayerNode } from "./effect/layer-node"
 import * as Path from "effect/Path"
 import * as PlatformError from "effect/PlatformError"
 import * as Predicate from "effect/Predicate"
@@ -497,11 +498,12 @@ export const make = Effect.gen(function* () {
   return makeSpawner(spawnCommand)
 })
 
-const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
+export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
   ChildProcessSpawner,
   make,
 )
 
 export const node = makeGlobalNode({ service: ChildProcessSpawner, layer, deps: [filesystem, path] })
+export const defaultLayer = layer
 
 export * as CrossSpawnSpawner from "./cross-spawn-spawner"
