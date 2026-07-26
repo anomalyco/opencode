@@ -569,10 +569,12 @@ export function Session() {
           })
           return
         }
+        // Manual v1 compaction synthesizes a user message instead of inheriting the last prompt's model state.
         void sdk.client.session.summarize({
           sessionID: route.sessionID,
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
+          variant: local.model.variant.current(),
         })
         dialog.clear()
       },

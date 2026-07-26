@@ -375,9 +375,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
+    // The v1 adapter needs the active variant when it translates this command to legacy summarize.
     await sdk().api.session.compact({
       sessionID,
-      model: { providerID: model.provider.id, modelID: model.id },
+      model: {
+        providerID: model.provider.id,
+        modelID: model.id,
+        variant: local.model.variant.current(),
+      },
     })
   }
 

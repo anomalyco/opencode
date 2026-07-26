@@ -279,12 +279,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const defaultAgent = yield* agentSvc.defaultAgent()
       const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
 
+      // Manual compaction has no prompt payload from which the synthetic user message can inherit a variant.
       yield* compactSvc.create({
         sessionID: ctx.params.sessionID,
         agent: currentAgent,
         model: {
           providerID: ctx.payload.providerID,
           modelID: ctx.payload.modelID,
+          variant: ctx.payload.variant,
         },
         auto: ctx.payload.auto ?? false,
       })

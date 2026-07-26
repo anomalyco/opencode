@@ -41,7 +41,7 @@ export type CompatibleApi = Omit<ServerApi, "session" | "permission"> & {
 }
 type LegacyPrompt = {
   agent?: string
-  model?: { providerID: string; modelID: string }
+  model?: { providerID: string; modelID: string; variant?: string }
   variant?: string
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
 }
@@ -274,10 +274,12 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
       },
       compact: async (value: SessionCompactInput & { model?: LegacyPrompt["model"] }) => {
         if (!value.model) throw new Error("A model is required to compact a V1 session")
+        // Legacy summarize creates a synthetic user message, so forward the UI selection explicitly.
         await legacy().session.summarize({
           sessionID: value.sessionID,
           providerID: value.model.providerID,
           modelID: value.model.modelID,
+          variant: value.model.variant,
         })
         return {
           admittedSeq: 0,
