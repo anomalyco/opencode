@@ -36,8 +36,7 @@ export const resolvePolicy = (policy: CachePolicy | undefined): CachePolicyObjec
   return policy
 }
 
-// Protocols that cache a whole request in one directive, rather than at the
-// breakpoints `applyCachePolicy` places, have no placements to read — only this.
+// For protocols that cache a whole request in one directive and have no placements to read.
 export const policyEnabled = (policy: CachePolicyObject): boolean =>
   Boolean(policy.tools || policy.system || policy.messages)
 

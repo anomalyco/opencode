@@ -300,11 +300,12 @@ describe("ProviderTransform.options - setCacheKey", () => {
         providerOptions: {},
       })
       expect(result.cache_control).toEqual({ type: "ephemeral" })
+      expect(result.session_id).toBe(sessionID)
       expect(result.prompt_cache_key).toBeUndefined()
     })
   }
 
-  test("should not enable OpenRouter automatic caching for non-Anthropic models", () => {
+  test("should keep OpenRouter sticky routing but not caching for non-Anthropic models", () => {
     const result = ProviderTransform.options({
       model: {
         ...mockModel,
@@ -314,6 +315,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
       sessionID,
       providerOptions: {},
     })
+    expect(result.session_id).toBe(sessionID)
     expect(result.cache_control).toBeUndefined()
     expect(result.prompt_cache_key).toBeUndefined()
   })

@@ -41,11 +41,10 @@ export type OpenRouterBody = Schema.Schema.Type<typeof OpenRouterBody>
 const EPHEMERAL_5M = { type: "ephemeral" as const }
 const EPHEMERAL_1H = { type: "ephemeral" as const, ttl: "1h" as const }
 
-// `~anthropic/*` are OpenRouter catalog aliases for the same upstream models.
+// `~anthropic/*` are catalog aliases for the same models.
 const isAnthropicModel = (modelID: string) => modelID.replace(/^~/, "").startsWith("anthropic/")
 
-// "Automatic" caching is a whole-request directive, so the policy's breakpoint
-// placements do not apply here — only whether it is on, and its TTL.
+// Whole-request directive, so only the policy's on/off and TTL apply, not its placements.
 const automaticCacheControl = (request: LLMRequest) => {
   if (!isAnthropicModel(request.model.id)) return undefined
   const policy = resolvePolicy(request.cache)
