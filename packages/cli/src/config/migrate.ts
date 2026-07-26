@@ -4,17 +4,13 @@ import { TuiConfigV1 } from "@opencode-ai/tui/config/v1"
 import { TuiKeybind } from "@opencode-ai/tui/config/v1/keybind"
 import { Definitions } from "@opencode-ai/tui/config/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
-import {
-  createScanner,
-  parse,
-  parseTree,
-  type Node,
-  type ParseError,
-} from "jsonc-parser"
+import { randomUUID } from "crypto"
+import { createScanner, parse, parseTree, type Node, type ParseError } from "jsonc-parser"
 import path from "path"
-import type { Info } from "./schema"
+import { Info } from "./schema"
 
 const decodeV1 = Schema.decodeUnknownOption(TuiConfigV1.Info)
+const decodeInfo = Schema.decodeUnknownOption(Info)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Any))
 const LegacyKeybindTargets = new Set<string>(Object.values(TuiKeybind.CommandMap))
 
@@ -24,6 +20,20 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
   readonly state: string
 }) {
   const fs = yield* FileSystem.FileSystem
+  const persist = Effect.fnUntraced(function* (text: string, info: Info) {
+    const temp = `${input.file}.${process.pid}.${randomUUID()}.tmp`
+    const cause = yield* Effect.gen(function* () {
+      yield* fs.makeDirectory(path.dirname(input.file), { recursive: true })
+      yield* fs.writeFileString(temp, text, { mode: 0o600 })
+      yield* fs.rename(temp, input.file)
+    }).pipe(
+      Effect.as(undefined),
+      Effect.catchCause((cause) => Effect.succeed(cause)),
+      Effect.ensuring(fs.remove(temp).pipe(Effect.ignore)),
+    )
+    return cause === undefined ? { info } : { info, cause }
+  })
+
   if (yield* fs.exists(input.file).pipe(Effect.orElseSucceed(() => false))) {
     const text = yield* fs.readFileString(input.file)
     const errors: ParseError[] = []
@@ -59,10 +69,10 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
       return updated.slice(0, key.offset) + JSON.stringify(target) + updated.slice(key.offset + key.length)
     }, deduped)
     if (updated === text) return
-    const temp = input.file + ".tmp"
-    yield* fs.writeFileString(temp, updated, { mode: 0o600 })
-    yield* fs.rename(temp, input.file)
-    return
+    const updatedErrors: ParseError[] = []
+    const info = Option.getOrUndefined(decodeInfo(parse(updated, updatedErrors, { allowTrailingComma: true })))
+    if (updatedErrors.length || info === undefined) return
+    return yield* persist(updated, info)
   }
 
   const legacyValue = yield* readJson(path.join(input.config, "tui.json"))
@@ -71,17 +81,16 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
   const migrated = migrateV1(legacy, kv ?? {})
   if (!Object.keys(migrated).length) return
 
-  const temp = input.file + ".tmp"
-  yield* fs.makeDirectory(path.dirname(input.file), { recursive: true })
-  yield* fs.writeFileString(temp, JSON.stringify(migrated, null, 2) + "\n", { mode: 0o600 })
-  yield* fs.rename(temp, input.file)
-  yield* Effect.logInfo("migrated cli config", {
-    from: [
-      legacyValue === undefined ? undefined : path.join(input.config, "tui.json"),
-      kv === undefined ? undefined : path.join(input.state, "kv.json"),
-    ].filter(Boolean),
-    to: input.file,
-  })
+  const result = yield* persist(JSON.stringify(migrated, null, 2) + "\n", migrated)
+  if (result.cause === undefined)
+    yield* Effect.logInfo("migrated cli config", {
+      from: [
+        legacyValue === undefined ? undefined : path.join(input.config, "tui.json"),
+        kv === undefined ? undefined : path.join(input.state, "kv.json"),
+      ].filter(Boolean),
+      to: input.file,
+    })
+  return result
 })
 
 function findKeybindProperties(text: string, name: string) {
@@ -102,16 +111,15 @@ function removeProperty(text: string, property: Node) {
   const next = properties[index + 1]
   if (next) {
     const comma = findComma(text, end, next.offset)
-    if (comma !== undefined) return text.slice(0, property.offset) + text.slice(comma + 1)
+    if (comma !== undefined) return text.slice(0, property.offset) + text.slice(end, comma) + text.slice(comma + 1)
   }
   const previous = properties[index - 1]
   if (previous) {
     const comma = findComma(text, previous.offset + previous.length, property.offset)
-    if (comma !== undefined)
-      return text.slice(0, comma) + text.slice(comma + 1, property.offset) + text.slice(end)
+    if (comma !== undefined) return text.slice(0, comma) + text.slice(comma + 1, property.offset) + text.slice(end)
   }
   const comma = findComma(text, end, (property.parent?.offset ?? 0) + (property.parent?.length ?? 0))
-  if (comma !== undefined) return text.slice(0, property.offset) + text.slice(comma + 1)
+  if (comma !== undefined) return text.slice(0, property.offset) + text.slice(end, comma) + text.slice(comma + 1)
   return text.slice(0, property.offset) + text.slice(end)
 }
 

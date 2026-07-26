@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { Flock } from "@opencode-ai/util/flock"
 import { Global } from "@opencode-ai/util/global"
-import { Effect, Fiber, FileSystem, Latch } from "effect"
+import { Effect, FileSystem, Option } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
 import path from "path"
@@ -14,36 +15,6 @@ function run<A, E>(directory: string, effect: Effect.Effect<A, E, Config.Service
       Effect.provide(NodeFileSystem.layer),
     ),
   )
-}
-
-function gateMigrationWrite(file: string, initial: string) {
-  return Effect.gen(function* () {
-    const node = yield* FileSystem.FileSystem
-    const release = Latch.makeUnsafe()
-    const state = { blocked: true, writes: 0 }
-    const exists: FileSystem.FileSystem["exists"] = (target) =>
-      state.blocked && target === file ? Effect.succeed(true) : node.exists(target)
-    const readFileString: FileSystem.FileSystem["readFileString"] = (target, encoding) =>
-      state.blocked && target === file ? Effect.succeed(initial) : node.readFileString(target, encoding)
-    const writeFileString: FileSystem.FileSystem["writeFileString"] = (target, data, options) => {
-      state.writes++
-      if (state.writes !== 1) return node.writeFileString(target, data, options)
-      return Effect.gen(function* () {
-        yield* release.await
-        state.blocked = false
-        yield* node.writeFileString(target, data, options)
-      })
-    }
-    const fs = new Proxy(node, {
-      get(target, property, receiver) {
-        if (property === "exists") return exists
-        if (property === "readFileString") return readFileString
-        if (property === "writeFileString") return writeFileString
-        return Reflect.get(target, property, receiver)
-      },
-    })
-    return { fs, release, state }
-  })
 }
 
 test("migrates tui and kv config into cli.json", async () => {
@@ -152,9 +123,7 @@ test("migrates before the first update and does not remigrate afterward", async 
           draft.animations = false
           draft.mouse = false
         })
-        yield* Effect.promise(() =>
-          Bun.write(path.join(directory, "tui.json"), JSON.stringify({ theme: "changed" })),
-        )
+        yield* Effect.promise(() => Bun.write(path.join(directory, "tui.json"), JSON.stringify({ theme: "changed" })))
         return yield* service.get()
       }),
     )
@@ -241,6 +210,38 @@ test("migrates legacy keybind names in an existing cli.json", async () => {
   }
 })
 
+test("uses migrated keybinds when persistence fails", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(file, `{"keybinds":{"session_list":"ctrl+l"}}`)
+  const node = await Effect.runPromise(FileSystem.FileSystem.pipe(Effect.provide(NodeFileSystem.layer)))
+  const fs = new Proxy(node, {
+    get(target, property, receiver) {
+      if (property === "rename") return () => Effect.die(new Error("read-only config"))
+      return Reflect.get(target, property, receiver)
+    },
+  })
+
+  try {
+    const config = await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }).pipe(
+        Effect.provide(Config.layer),
+        Effect.provide(Global.layerWith({ config: directory, state: directory })),
+        Effect.provideService(FileSystem.FileSystem, fs),
+      ),
+    )
+
+    expect(config.keybinds).toEqual({ "session.list": "ctrl+l" })
+    expect(await Bun.file(file).json()).toEqual({ keybinds: { session_list: "ctrl+l" } })
+    expect(await Array.fromAsync(new Bun.Glob("*.tmp").scan(directory))).toEqual([])
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
 test("preserves the effective value when migrating duplicate legacy keybinds", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
@@ -286,47 +287,65 @@ test("migrates and updates the effective duplicate top-level keybinds", async ()
   }
 })
 
-test("does not overwrite a concurrent update from another config layer", async () => {
+test("serializes migration and updates across processes", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
-  const initial = `{"keybinds":{"session_delete":"ctrl+d"}}`
-  await Bun.write(file, initial)
-  const gated = await Effect.runPromise(gateMigrationWrite(file, initial).pipe(Effect.provide(NodeFileSystem.layer)))
-  const make = () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        return yield* Config.Service
-      }).pipe(
-        Effect.provide(Config.layer),
-        Effect.provide(Global.layerWith({ config: directory, state: directory })),
-        Effect.provideService(FileSystem.FileSystem, gated.fs),
-      ),
-    )
+  const started = path.join(directory, "started")
+  const release = path.join(directory, "release")
+  const migrateReady = path.join(directory, "migrate-ready")
+  const updateReady = path.join(directory, "update-ready")
+  await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+d"}}`)
+  const worker = path.join(import.meta.dir, "fixture/config-concurrency.ts")
+  const migrate = Bun.spawn([process.execPath, worker, "migrate", directory, started, release, migrateReady], {
+    stdout: "ignore",
+    stderr: "pipe",
+  })
 
   try {
-    const first = await make()
-    const second = await make()
-    const config = await Effect.runPromise(
-      Effect.gen(function* () {
-        const reading = yield* first.get().pipe(Effect.forkChild({ startImmediately: true }))
-        expect(gated.state.writes).toBe(1)
-        const updating = yield* second
-          .update((draft) => {
-            draft.mouse = false
-          })
-          .pipe(Effect.forkChild({ startImmediately: true }))
-        expect(gated.state.writes).toBe(1)
-        yield* gated.release.open
-        yield* Fiber.join(reading)
-        yield* Fiber.join(updating)
-        return yield* second.get()
-      }),
-    )
-
-    expect(config).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
-    expect(await Bun.file(file).json()).toMatchObject({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
+    await waitForFile(started, migrate.exited)
+    const update = Bun.spawn([process.execPath, worker, "update", directory, started, release, updateReady], {
+      stdout: "ignore",
+      stderr: "pipe",
+    })
+    try {
+      await waitForFile(updateReady, update.exited)
+      expect(await Promise.race([update.exited.then(() => true), Bun.sleep(500).then(() => false)])).toBe(false)
+      await Bun.write(release, "")
+      const [migrateCode, updateCode] = await Promise.all([migrate.exited, update.exited])
+      expect(await new Response(migrate.stderr).text()).toBe("")
+      expect(await new Response(update.stderr).text()).toBe("")
+      expect([migrateCode, updateCode]).toEqual([0, 0])
+      expect(await Bun.file(file).json()).toEqual({ keybinds: { "session.delete": "ctrl+d" }, mouse: false })
+    } finally {
+      update.kill()
+      await update.exited
+    }
   } finally {
-    gated.release.openUnsafe()
+    await Bun.write(release, "")
+    migrate.kill()
+    await migrate.exited
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("config reads remain interruptible while waiting for the file lock", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  const locks = path.join(directory, "locks")
+  const held = await Flock.acquire(file, { dir: locks })
+
+  try {
+    const service = await Effect.runPromise(
+      Config.Service.pipe(
+        Effect.provide(Config.layer),
+        Effect.provide(Global.layerWith({ config: directory, state: directory })),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    const result = Effect.runPromise(service.get().pipe(Effect.timeoutOption("50 millis")))
+    expect(await Promise.race([result, Bun.sleep(250).then(() => "blocked" as const)])).toEqual(Option.none())
+  } finally {
+    await held.release()
     await Bun.$`rm -rf ${directory}`
   }
 })
@@ -361,15 +380,15 @@ test("updates effective duplicate canonical keybinds", async () => {
   }
 })
 
-test("removes a sole orphaned keybind with a trailing comma", async () => {
+test("removes orphaned keybinds without deleting trailing comments", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")
   await Bun.write(
     file,
     `{
   "keybinds": {
-    // Removed v2 command
-    "app.heap_snapshot": "ctrl+h",
+    "app_heap_snapshot": "ctrl+h" /* Keep legacy explanation */,
+    "app.heap_snapshot": "ctrl+shift+h" /* Keep canonical explanation */,
   },
 }
 `,
@@ -386,7 +405,8 @@ test("removes a sole orphaned keybind with a trailing comma", async () => {
 
     expect(config.keybinds).toEqual({})
     const text = await Bun.file(file).text()
-    expect(text).toContain("// Removed v2 command")
+    expect(text).toContain("/* Keep legacy explanation */")
+    expect(text).toContain("/* Keep canonical explanation */")
     expect(parse(text).keybinds).toEqual({})
   } finally {
     await Bun.$`rm -rf ${directory}`
@@ -395,7 +415,7 @@ test("removes a sole orphaned keybind with a trailing comma", async () => {
 
 test("updates a config draft while preserving JSONC comments", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  await Bun.write(path.join(directory, "cli.json"), "{\n  // Keep this comment\n  \"animations\": true\n}\n")
+  await Bun.write(path.join(directory, "cli.json"), '{\n  // Keep this comment\n  "animations": true\n}\n')
 
   try {
     const config = await run(
@@ -419,3 +439,15 @@ test("updates a config draft while preserving JSONC comments", async () => {
     await Bun.$`rm -rf ${directory}`
   }
 })
+
+async function waitForFile(file: string, exited: Promise<number>) {
+  const found = await Promise.race([
+    (async () => {
+      while (!(await Bun.file(file).exists())) await Bun.sleep(10)
+      return true
+    })(),
+    exited.then(() => false),
+    Bun.sleep(5000).then(() => false),
+  ])
+  if (!found) throw new Error(`timed out waiting for ${file}`)
+}
