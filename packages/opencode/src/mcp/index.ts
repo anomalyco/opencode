@@ -1,7 +1,6 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { type Tool } from "ai"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
@@ -27,7 +26,6 @@ import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
-import open from "open"
 import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -35,6 +33,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
+import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -154,11 +153,19 @@ export interface ServerInstructions {
   tools: string[]
 }
 
+/** An MCP tool in its native shape; consumers adapt it to their own tool format. */
+export interface McpTool {
+  /** Shared cached definition; consumers must copy rather than mutate it. */
+  readonly def: MCPToolDef
+  readonly client: MCPClient
+  readonly timeout?: number
+}
+
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
-  readonly tools: () => Effect.Effect<Record<string, Tool>>
+  readonly tools: () => Effect.Effect<Record<string, McpTool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: (clientName?: string) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
   readonly resourceTemplates: (
@@ -200,6 +207,7 @@ const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
     const events = yield* EventV2Bridge.Service
+    const browser = yield* McpBrowser.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -656,7 +664,7 @@ const layer = Layer.effect(
     }
 
     const tools = Effect.fn("MCP.tools")(function* () {
-      const result: Record<string, Tool> = {}
+      const result: Record<string, McpTool> = {}
       const s = yield* InstanceState.get(state)
 
       const cfg = yield* cfgSvc.get()
@@ -672,9 +680,8 @@ const layer = Layer.effect(
           continue
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
-        for (const mcpTool of listed) {
-          const key = McpCatalog.toolName(clientName, mcpTool.name)
-          result[key] = McpCatalog.convertTool(mcpTool, client, timeout)
+        for (const def of listed) {
+          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
         }
       }
       return result
@@ -891,22 +898,7 @@ const layer = Layer.effect(
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
       onAuthorization?.(result.authorizationUrl)
 
-      yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
-        Effect.flatMap((subprocess) =>
-          Effect.callback<void, Error>((resume) => {
-            const timer = setTimeout(() => resume(Effect.void), 500)
-            subprocess.on("error", (err) => {
-              clearTimeout(timer)
-              resume(Effect.fail(err))
-            })
-            subprocess.on("exit", (code) => {
-              if (code !== null && code !== 0) {
-                clearTimeout(timer)
-                resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))
-              }
-            })
-          }),
-        ),
+      yield* browser.open(result.authorizationUrl).pipe(
         Effect.catch(() => {
           return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
         }),
@@ -1006,7 +998,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node],
+  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node, McpBrowser.node],
 })
 
 export * as MCP from "."

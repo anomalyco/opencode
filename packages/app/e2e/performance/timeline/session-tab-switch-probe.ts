@@ -8,9 +8,16 @@ type SessionSwitchProbe = {
 
 async function installSessionSwitchProbe(
   page: Page,
-  input: { destinationIDs: string[]; sourceIDs: string[]; lastID: string; href: string },
+  input: {
+    destinationIDs: string[]
+    sourceIDs: string[]
+    lastID: string
+    requiredPartID?: string
+    requireBottomAnchor?: boolean
+    href: string
+  },
 ) {
-  await page.evaluate(({ destinationIDs, sourceIDs, lastID, href }) => {
+  await page.evaluate(({ destinationIDs, sourceIDs, lastID, requiredPartID, requireBottomAnchor, href }) => {
     const destination = new Set(destinationIDs)
     const source = new Set(sourceIDs)
     const samples: SessionSwitchSample[] = []
@@ -66,6 +73,13 @@ async function installSessionSwitchProbe(
             const rect = element.getBoundingClientRect()
             return rect.bottom > view.top && rect.top < view.bottom
           })
+          const requiredPartVisible = requiredPartID
+            ? [...root.querySelectorAll<HTMLElement>("[data-timeline-part-id]")].some((element) => {
+                if (element.dataset.timelinePartId !== requiredPartID) return false
+                const rect = element.getBoundingClientRect()
+                return rect.width > 0 && rect.height > 0 && rect.bottom > view.top && rect.top < view.bottom
+              })
+            : undefined
           const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
           samples.push({
             observedAtMs,
@@ -73,11 +87,22 @@ async function installSessionSwitchProbe(
             source: visible.filter((id) => source.has(id)),
             hasVisibleRows,
             last: visible.includes(lastID),
+            requiredPartVisible,
+            bottomAnchorRequired: requireBottomAnchor !== false,
             bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined,
             review,
           })
         } else {
-          samples.push({ observedAtMs, destination: [], source: [], hasVisibleRows: false, last: false, review })
+          samples.push({
+            observedAtMs,
+            destination: [],
+            source: [],
+            hasVisibleRows: false,
+            last: false,
+            requiredPartVisible: requiredPartID ? false : undefined,
+            bottomAnchorRequired: requireBottomAnchor !== false,
+            review,
+          })
         }
         requestAnimationFrame(sample)
       }, 0)
@@ -117,7 +142,8 @@ async function waitForStableSessionSwitch(page: Page) {
             sample.destination.length > 0 &&
             sample.source.length === 0 &&
             sample.last &&
-            Math.abs(sample.bottomErrorPx ?? Infinity) <= 1,
+            sample.requiredPartVisible !== false &&
+            (sample.bottomAnchorRequired === false || Math.abs(sample.bottomErrorPx ?? Infinity) <= 1),
         )
       )
     })
@@ -135,13 +161,27 @@ async function collectSessionSwitchResult(page: Page) {
 
 export async function measureSessionSwitch(
   page: Page,
-  input: { destinationIDs: string[]; sourceIDs: string[]; lastID: string; href: string; switch: () => Promise<void> },
+  input: {
+    destinationIDs: string[]
+    sourceIDs: string[]
+    lastID: string
+    requiredPartID?: string
+    requireBottomAnchor?: boolean
+    href: string
+    switch: () => Promise<void>
+  },
 ) {
   const { switch: run, ...probe } = input
   await installSessionSwitchProbe(page, probe)
-  await run()
-  await waitForStableSessionSwitch(page)
-  return collectSessionSwitchResult(page)
+  try {
+    await run()
+    await waitForStableSessionSwitch(page)
+    return await collectSessionSwitchResult(page)
+  } finally {
+    await page.evaluate(() => {
+      ;(window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe?.stop()
+    })
+  }
 }
 
 export async function waitForStableTimeline(page: Page, lastID: string) {

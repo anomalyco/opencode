@@ -6,6 +6,7 @@ export interface DialogProps extends ParentProps {
   size?: "normal" | "large" | "x-large"
   variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
+  containerClass?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
 }
@@ -79,7 +80,7 @@ export function DialogHeader(props: DialogHeaderProps) {
 }
 
 export function Dialog(props: DialogProps) {
-  const [local] = splitProps(props, ["size", "variant", "class", "classList", "fit", "children"])
+  const [local] = splitProps(props, ["size", "variant", "class", "containerClass", "classList", "fit", "children"])
 
   return (
     <div
@@ -88,7 +89,7 @@ export function Dialog(props: DialogProps) {
       data-fit={local.fit ? true : undefined}
       data-size={local.size || "normal"}
     >
-      <div data-slot="dialog-container">
+      <div data-slot="dialog-container" class={local.containerClass}>
         <Kobalte.Content
           data-slot="dialog-content"
           classList={{
@@ -100,7 +101,7 @@ export function Dialog(props: DialogProps) {
             const autofocusEl = target?.querySelector("[autofocus]") as HTMLElement | null
             if (autofocusEl) {
               e.preventDefault()
-              autofocusEl.focus()
+              autofocusEl.focus({ preventScroll: true })
             }
           }}
         >

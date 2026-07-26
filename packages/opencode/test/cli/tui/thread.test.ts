@@ -16,6 +16,12 @@ describe("tui thread", () => {
     expect(source).not.toContain('import("./app")')
   })
 
+  test("forwards the CLI environment to the TUI worker", async () => {
+    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
+
+    expect(source).toMatch(/new Worker\(file, \{\s*env: Object\.fromEntries\(\s*Object\.entries\(process\.env\)/)
+  })
+
   async function check(project?: string) {
     await using tmp = await tmpdir({ git: true })
     const link = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-link")

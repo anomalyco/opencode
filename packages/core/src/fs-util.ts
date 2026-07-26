@@ -38,6 +38,7 @@ export namespace FSUtil {
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
     readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
+    readonly resolve: (path: string) => Effect.Effect<string>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
     readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
@@ -59,9 +60,10 @@ export namespace FSUtil {
       })
 
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
-        return yield* fs
-          .readFileString(path)
-          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+        return yield* fs.readFileString(path).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+          Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
+        )
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
@@ -89,6 +91,14 @@ export namespace FSUtil {
         })
       })
 
+      const resolve = Effect.fn("FileSystem.resolve")(function* (path: string) {
+        const resolved = pathResolve(windowsPath(path))
+        return yield* fs.realPath(resolved).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
+          Effect.orDie,
+        )
+      })
+
       const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
         const text = yield* fs.readFileString(path)
         return yield* Effect.try({
@@ -104,7 +114,14 @@ export namespace FSUtil {
       })
 
       const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
-        yield* fs.makeDirectory(path, { recursive: true })
+        yield* fs.makeDirectory(path, { recursive: true }).pipe(
+          // Bun on Windows can throw EEXIST here despite recursive mode.
+          // https://github.com/oven-sh/bun/issues/21901
+          Effect.catchIf(
+            (error) => error.reason._tag === "AlreadyExists",
+            (error) => isDir(path).pipe(Effect.flatMap((exists) => (exists ? Effect.void : Effect.fail(error)))),
+          ),
+        )
       })
 
       const writeWithDirs = Effect.fn("FileSystem.writeWithDirs")(function* (
@@ -187,6 +204,7 @@ export namespace FSUtil {
         isDir,
         isFile,
         readDirectoryEntries,
+        resolve,
         readJson,
         writeJson,
         ensureDir,

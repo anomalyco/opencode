@@ -326,15 +326,15 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
   let current = 0
 
   const scoped = (value: string) => {
+    const raw = normalizePickerDrive(value)
+    const root = pickerRoot(raw)
+    if (root) return { directory: trimPickerPath(root), path: raw.slice(root.length) }
     const base = args.base()
     if (!base) return
-    const raw = normalizePickerDrive(value)
     if (!raw) return { directory: trimPickerPath(base), path: "" }
     const home = args.home()
     if (raw === "~") return { directory: trimPickerPath(home || base), path: "" }
     if (raw.startsWith("~/")) return { directory: trimPickerPath(home || base), path: raw.slice(2) }
-    const root = pickerRoot(raw)
-    if (root) return { directory: trimPickerPath(root), path: raw.slice(root.length) }
     return { directory: trimPickerPath(base), path: raw }
   }
 
@@ -342,14 +342,17 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const key = trimPickerPath(directory)
     const existing = cache.get(key)
     if (existing) return existing
-    const request = args.sdk.client.file
-      .list({ directory: key, path: "" })
-      .then((result) => result.data ?? [])
+    const request = args.sdk.api.file
+      .list({ location: { directory: key } })
+      .then((result) => result.data)
       .catch(() => [])
       .then((nodes) =>
         nodes
           .filter((node) => node.type === "directory")
-          .map((node) => ({ name: node.name, absolute: trimPickerPath(normalizePickerDrive(node.absolute)) })),
+          .map((node) => {
+            const relative = trimPickerPath(normalizePickerDrive(node.path))
+            return { name: getFilename(relative), absolute: joinPickerPath(key, relative) }
+          }),
       )
     cache.set(key, request)
     return request
@@ -371,9 +374,9 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
-      const results = await args.sdk.client.find
-        .files({ directory: input.directory, query, type: "directory", limit: 50 })
-        .then((result) => result.data ?? [])
+      const results = await args.sdk.api.file
+        .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
+        .then((result) => result.data.map((entry) => entry.path))
         .catch(() => [])
       if (!active()) return []
       return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
