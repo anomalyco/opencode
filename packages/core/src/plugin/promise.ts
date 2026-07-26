@@ -1,5 +1,6 @@
 export * as PluginPromise from "./promise"
 
+import type { IntegrationDefinition } from "@opencode-ai/plugin/v2/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/v2/plugin"
 import type { Any, RegisterOptions } from "@opencode-ai/plugin/v2/tool"
@@ -164,6 +165,7 @@ export function fromPromise(plugin: Plugin) {
                   }),
                 ),
             },
+            register: (definition) => register(host.integration.register(adaptIntegration(definition))),
             transform: transform(host.integration),
             reload: () => run(host.integration.reload()),
             connection: {
@@ -196,6 +198,17 @@ export function fromPromise(plugin: Plugin) {
               ),
             hook: (name, callback) =>
               register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
+          websearch: {
+            register: (definition) =>
+              register(
+                host.websearch.register({
+                  id: definition.id,
+                  name: definition.name,
+                  execute: (input, execution) =>
+                    attempt((signal) => definition.execute(input, { ...execution, signal })),
+                }),
+              ),
           },
           session: {
             hook: (name, callback) =>
@@ -268,6 +281,44 @@ export function fromPromise(plugin: Plugin) {
         yield* Effect.addFinalizer(() => Effect.promise(() => Promise.resolve(cleanup())))
       }),
   })
+}
+
+function adaptIntegration(definition: IntegrationDefinition) {
+  const { methods, ...definitionInfo } = definition
+  return {
+    ...definitionInfo,
+    methods: methods?.map((method) => {
+      if (method.type !== "oauth") return method
+      const { authorize, refresh, ...methodInfo } = method
+      return {
+        ...methodInfo,
+        authorize: (inputs: Parameters<typeof authorize>[0]) =>
+          attempt(() => authorize(inputs)).pipe(
+            Effect.map((authorization) => {
+              if (authorization.mode === "auto") {
+                return {
+                  ...authorization,
+                  callback: attempt(() => authorization.callback),
+                }
+              }
+              return {
+                ...authorization,
+                callback: (code: string) => attempt(() => authorization.callback(code)),
+              }
+            }),
+          ),
+        ...(refresh
+          ? {
+              refresh: (credential: Parameters<typeof refresh>[0]) => attempt(() => refresh(credential)),
+            }
+          : {}),
+      }
+    }),
+  }
+}
+
+function attempt<A>(evaluate: (signal: AbortSignal) => PromiseLike<A>) {
+  return Effect.tryPromise({ try: evaluate, catch: (cause) => cause })
 }
 
 function model(input: { readonly id: string; readonly providerID: string; readonly variant?: string }) {

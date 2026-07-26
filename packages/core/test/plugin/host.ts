@@ -1,11 +1,14 @@
-import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
+import { Plugin } from "@opencode-ai/plugin/v2/effect"
+import type { IntegrationDefinition, IntegrationMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { WebSearch } from "@opencode-ai/core/websearch"
 import type {
+  CredentialOAuth,
   IntegrationCommandMethod,
   IntegrationEnvMethod,
   IntegrationKeyMethod,
@@ -13,11 +16,11 @@ import type {
 } from "@opencode-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
 
-type Overrides = Partial<Omit<PluginContext, "options" | "session">> & {
-  readonly session?: Partial<PluginContext["session"]>
+type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
+  readonly session?: Partial<Plugin.Context["session"]>
 }
 
-export function host(overrides: Overrides = {}): PluginContext {
+export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
     options: {},
@@ -68,6 +71,7 @@ export function host(overrides: Overrides = {}): PluginContext {
         status: () => Effect.die("unused integration.command.status"),
         cancel: () => Effect.die("unused integration.command.cancel"),
       },
+      register: () => Effect.die("unused integration.register"),
       transform: () => Effect.die("unused integration.transform"),
       reload: () => Effect.die("unused integration.reload"),
       connection: {
@@ -92,6 +96,9 @@ export function host(overrides: Overrides = {}): PluginContext {
       transform: () => Effect.die("unused tool.transform"),
       hook: () => Effect.die("unused tool.hook"),
     },
+    websearch: overrides.websearch ?? {
+      register: () => Effect.die("unused websearch.register"),
+    },
     session: {
       hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
       create: overrides.session?.create ?? (() => Effect.die("unused session.create")),
@@ -105,7 +112,7 @@ export function host(overrides: Overrides = {}): PluginContext {
   }
 }
 
-export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
+export function agentHost(agent: AgentV2.Interface): Plugin.Context["agent"] {
   return {
     get: (id) => agent.get(AgentV2.ID.make(id)).pipe(Effect.map((value) => value && agentInfo(value))),
     list: () => Effect.die("unused agent.list"),
@@ -131,7 +138,7 @@ export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
   }
 }
 
-export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"] {
+export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog"] {
   return {
     provider: {
       list: () => Effect.die("unused catalog.provider.list"),
@@ -207,7 +214,7 @@ export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"
   }
 }
 
-export function integrationHost(integration: Integration.Interface): PluginContext["integration"] {
+export function integrationHost(integration: Integration.Interface): Plugin.Context["integration"] {
   return {
     list: () => Effect.die("unused integration.list"),
     get: () => Effect.die("unused integration.get"),
@@ -233,6 +240,7 @@ export function integrationHost(integration: Integration.Interface): PluginConte
           connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
         ),
     },
+    register: (definition) => integration.transform((draft) => registerIntegration(draft, definition)),
     transform: (callback) =>
       integration.transform((draft) =>
         callback({
@@ -327,6 +335,87 @@ export function integrationHost(integration: Integration.Interface): PluginConte
         }),
       ),
   }
+}
+
+export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["websearch"] {
+  return {
+    register: (definition) =>
+      websearch.register({
+        id: WebSearch.ID.make(definition.id),
+        name: definition.name,
+        execute: definition.execute,
+      }),
+  }
+}
+
+function registerIntegration(draft: Integration.Draft, definition: IntegrationDefinition) {
+  const integrationID = Integration.ID.make(definition.id)
+  draft.update(integrationID, (integration) => (integration.name = definition.name))
+  for (const method of definition.methods ?? []) {
+    if (method.type === "env") {
+      draft.method.update(methodImplementation({ integrationID: definition.id, method }))
+      continue
+    }
+    if (method.type === "key") {
+      draft.method.update(methodImplementation({ integrationID: definition.id, method }))
+      continue
+    }
+    const { authorize, refresh, credentialLabel, ...info } = method
+    draft.method.update(
+      methodImplementation({
+        integrationID: definition.id,
+        method: info,
+        authorize,
+        ...(refresh ? { refresh } : {}),
+        ...(credentialLabel ? { label: credentialLabel } : {}),
+      }),
+    )
+  }
+}
+
+function methodImplementation(input: IntegrationMethodRegistration): Integration.Implementation {
+  if ("authorize" in input) {
+    const refresh = input.refresh
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
+      authorize: (inputs) =>
+        input.authorize(inputs).pipe(
+          Effect.map((authorization) => {
+            if (authorization.mode === "auto") {
+              return { ...authorization, callback: authorization.callback.pipe(Effect.map(oauthCredential)) }
+            }
+            return {
+              ...authorization,
+              callback: (code: string) => authorization.callback(code).pipe(Effect.map(oauthCredential)),
+            }
+          }),
+        ),
+      ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(oauthCredential)) } : {}),
+      ...(input.label ? { label: input.label } : {}),
+    }
+  }
+  if (input.method.type === "env") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, names: [...input.method.names] },
+    }
+  }
+  if (input.method.type === "command") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: {
+        ...input.method,
+        id: Integration.MethodID.make(input.method.id),
+        command: [...input.method.command],
+      },
+    }
+  }
+  return { integrationID: Integration.ID.make(input.integrationID), method: input.method }
+}
+
+function oauthCredential(value: CredentialOAuth) {
+  return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
 function method(value: Integration.Method) {

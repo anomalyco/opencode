@@ -34,7 +34,7 @@ import { Shell } from "../shell"
 import { SkillV2 } from "../skill"
 import { ReadToolFileSystem } from "../tool/read-filesystem"
 import { ToolRegistry } from "../tool/registry"
-import { WebSearchTool } from "../tool/websearch"
+import { WebSearch } from "../websearch"
 import { WellKnown } from "../wellknown"
 import { PluginInternal } from "./internal"
 import { PluginRuntime } from "./runtime"
@@ -303,7 +303,7 @@ export const node = makeLocationNode({
     Shell.node,
     SkillV2.node,
     ToolRegistry.toolsNode,
-    WebSearchTool.configNode,
+    WebSearch.node,
     WellKnown.node,
   ],
 })

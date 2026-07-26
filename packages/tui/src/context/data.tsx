@@ -27,6 +27,7 @@ import type {
   ShellInfo,
   SkillInfo,
   OpenCodeEvent,
+  WebSearchProvider,
 } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/v2/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -56,6 +57,8 @@ type LocationData = {
   model?: ModelInfo[]
   provider?: ProviderV2Info[]
   reference?: ReferenceInfo[]
+  websearch?: WebSearchProvider[]
+  websearchSelected?: WebSearchProvider["id"] | null
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellInfo>
@@ -875,6 +878,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             result.location.provider.sync(event.location),
           ])
           break
+        case "config.updated":
+        case "websearch.updated":
+          void result.location.websearch.refresh(event.location)
+          break
         // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
         // so the mcp list syncs here rather than off integration.updated.
         case "mcp.status.changed":
@@ -1249,6 +1256,27 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           invalidate(ref?: LocationRef) {
             sync.invalidate(`location.reference:${locationKey(ref ?? defaultLocation())}`)
+          },
+        },
+        websearch: {
+          list(location?: LocationRef) {
+            return store.location[locationKey(location ?? defaultLocation())]?.websearch
+          },
+          provider(location?: LocationRef) {
+            return store.location[locationKey(location ?? defaultLocation())]?.websearchSelected ?? undefined
+          },
+          async refresh(ref?: LocationRef) {
+            const input = { location: locationQuery(ref ?? defaultLocation()) }
+            const [providers, selected] = await Promise.all([
+              client.api.websearch.provider.list(input),
+              client.api.websearch.provider.selected(input),
+            ])
+            const key = locationKey(providers.location)
+            setStore("location", key, {
+              ...store.location[key],
+              websearch: providers.data,
+              websearchSelected: selected.data ?? null,
+            })
           },
         },
         skill: {

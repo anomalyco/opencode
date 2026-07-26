@@ -125,6 +125,13 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       })
     if (url.pathname === "/api/reference")
       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    if (url.pathname === "/api/websearch/provider") {
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
+    if (url.pathname === "/api/websearch/provider/selected") {
+      if (request.method === "POST") return new Response(null, { status: 204 })
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: null })
+    }
     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
     if (url.pathname === "/session") return json([])
     if (url.pathname === "/vcs") return json({ branch: "main" })

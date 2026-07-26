@@ -213,6 +213,9 @@ test("refreshes resources into reactive getters", async () => {
         location,
         data: [{ id: "build", request: { headers: {}, body: {} }, mode: "primary", hidden: false, permissions: [] }],
       })
+    if (url.pathname === "/api/websearch/provider")
+      return json({ location, data: [{ id: "standalone", name: "Standalone" }] })
+    if (url.pathname === "/api/websearch/provider/selected") return json({ location, data: "standalone" })
     return undefined
   }, events)
   let data!: ReturnType<typeof useData>
@@ -248,6 +251,7 @@ test("refreshes resources into reactive getters", async () => {
     await data.session.sync("ses_test")
     await data.session.message.sync("ses_test")
     await data.location.agent.sync()
+    await data.location.websearch.refresh()
 
     expect(data.session.get("ses_test")?.title).toBe("Test session")
     expect(data.session.message.list("ses_test").map((message) => message.id)).toEqual(["msg_first", "msg_second"])
@@ -256,6 +260,8 @@ test("refreshes resources into reactive getters", async () => {
     expect(app.captureCharFrame()).toContain("msg_second")
     expect(data.location.default()).toEqual({ directory, workspaceID: undefined })
     expect(data.location.agent.list(location)?.map((agent) => agent.id)).toEqual(["build"])
+    expect(data.location.websearch.list(location)).toEqual([{ id: "standalone", name: "Standalone" }])
+    expect(data.location.websearch.provider(location)).toBe("standalone")
   } finally {
     app.renderer.destroy()
   }

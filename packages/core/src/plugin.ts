@@ -14,6 +14,7 @@ import { Integration } from "./integration"
 import { Location } from "./location"
 import { PluginHost } from "./plugin/host"
 import { PluginRuntime } from "./plugin/runtime"
+import { WebSearch } from "./websearch"
 import { Reference } from "./reference"
 import { SkillV2 } from "./skill"
 import { State } from "./state"
@@ -158,5 +159,6 @@ export const node = makeLocationNode({
     ToolHooks.node,
     PluginHooks.node,
     PluginRuntime.node,
+    WebSearch.node,
   ],
 })

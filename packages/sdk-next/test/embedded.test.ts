@@ -328,6 +328,36 @@ it.live(
   10_000,
 )
 
+it.live("embedded client exposes plugin-backed web search", () =>
+  withEmbedded("opencode-embedded-websearch-", (fixture) =>
+    Effect.gen(function* () {
+      const opencode = yield* fixture.sdk.OpenCode.create()
+      const providerID = fixture.sdk.WebSearch.ID.make("embedded-websearch")
+      yield* opencode.plugin({
+        id: `embedded-websearch-${crypto.randomUUID()}`,
+        effect: (ctx) =>
+          ctx.websearch.register({
+            id: providerID,
+            name: "Embedded web search",
+            execute: (input) => Effect.succeed({ text: `Found ${input.query}`, metadata: { source: "embedded" } }),
+          }),
+      })
+
+      const result = yield* opencode.websearch.query({
+        query: "opencode",
+        providerID,
+        location: location(fixture),
+      })
+
+      expect(result.data).toEqual({
+        providerID,
+        text: "Found opencode",
+        metadata: { source: "embedded" },
+      })
+    }),
+  ),
+)
+
 it.live(
   "Location-owned runner events reach the ready global client",
   () =>

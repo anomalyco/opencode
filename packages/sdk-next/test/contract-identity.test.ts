@@ -11,6 +11,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
 import { Project } from "@opencode-ai/schema/project"
 import { Provider } from "@opencode-ai/schema/provider"
+import { WebSearch } from "@opencode-ai/schema/websearch"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionPending } from "@opencode-ai/schema/session-pending"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -24,6 +25,7 @@ const SDK = await import("../src/index")
 test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Agent).toBe(Agent)
   expect(SDK.Model).toBe(Model)
+  expect(SDK.WebSearch).toBe(WebSearch)
   expect(SDK.Session).toBe(Session)
   expect(Object.keys(SDK).sort()).toEqual([
     "AbsolutePath",
@@ -52,6 +54,7 @@ test("re-exports canonical contracts directly from Schema", () => {
     "SessionPending",
     "Skill",
     "Tool",
+    "WebSearch",
   ])
 })
 

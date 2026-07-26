@@ -12,6 +12,7 @@ import type { ReferenceDomain } from "./reference.js"
 import type { SessionDomain } from "./session.js"
 import type { SkillDomain } from "./skill.js"
 import type { ToolDomain } from "./tool.js"
+import type { WebSearchDomain } from "./websearch.js"
 
 export interface Context {
   readonly app: App
@@ -27,6 +28,7 @@ export interface Context {
   readonly session: SessionDomain
   readonly skill: SkillDomain
   readonly tool: ToolDomain
+  readonly websearch: WebSearchDomain
 }
 
 export interface Plugin<R = Scope.Scope> {

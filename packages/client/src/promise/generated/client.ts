@@ -207,6 +207,14 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  WebsearchProviderListInput,
+  WebsearchProviderListOutput,
+  WebsearchProviderSelectedInput,
+  WebsearchProviderSelectedOutput,
+  WebsearchProviderSelectInput,
+  WebsearchProviderSelectOutput,
+  WebsearchQueryInput,
+  WebsearchQueryOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -1734,6 +1742,60 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+    },
+    websearch: {
+      provider: {
+        list: (input?: WebsearchProviderListInput, requestOptions?: RequestOptions) =>
+          request<WebsearchProviderListOutput>(
+            {
+              method: "GET",
+              path: `/api/websearch/provider`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [503, 401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        selected: (input?: WebsearchProviderSelectedInput, requestOptions?: RequestOptions) =>
+          request<WebsearchProviderSelectedOutput>(
+            {
+              method: "GET",
+              path: `/api/websearch/provider/selected`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        select: (input: WebsearchProviderSelectInput, requestOptions?: RequestOptions) =>
+          request<WebsearchProviderSelectOutput>(
+            {
+              method: "POST",
+              path: `/api/websearch/provider/selected`,
+              query: { location: input["location"] },
+              body: { providerID: input["providerID"] },
+              successStatus: 204,
+              declaredStatuses: [400, 503, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      query: (input: WebsearchQueryInput, requestOptions?: RequestOptions) =>
+        request<WebsearchQueryOutput>(
+          {
+            method: "POST",
+            path: `/api/websearch`,
+            query: { location: input["location"] },
+            body: { query: input["query"], providerID: input["providerID"] },
+            successStatus: 200,
+            declaredStatuses: [400, 503, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
     },
   }
 }

@@ -27,6 +27,7 @@ import { ModelsDev } from "../models-dev"
 import { Npm } from "@opencode-ai/util/npm"
 import { PermissionV2 } from "../permission"
 import { Reference } from "../reference"
+import { WebSearch } from "../websearch"
 import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
 import { Shell } from "../shell"
@@ -50,6 +51,7 @@ import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
+import { WebSearchPlugins } from "./websearch"
 import { PluginRuntime } from "./runtime"
 import { SkillPlugin } from "./skill"
 import { SystemPromptPlugin } from "./system-prompt"
@@ -79,12 +81,12 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const form = yield* Form.Service
   const read = yield* ReadToolFileSystem.Service
   const reference = yield* Reference.Service
+  const websearch = yield* WebSearch.Service
   const ripgrep = yield* Ripgrep.Service
   const instructions = yield* SessionInstructions.Service
   const shell = yield* Shell.Service
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
-  const websearch = yield* WebSearchTool.ConfigService
   const wellknown = yield* WellKnown.Service
   return Context.mergeAll(
     Context.make(AgentV2.Service, agent),
@@ -108,12 +110,12 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Form.Service, form),
     Context.make(ReadToolFileSystem.Service, read),
     Context.make(Reference.Service, reference),
+    Context.make(WebSearch.Service, websearch),
     Context.make(Ripgrep.Service, ripgrep),
     Context.make(SessionInstructions.Service, instructions),
     Context.make(Shell.Service, shell),
     Context.make(SkillV2.Service, skill),
     Context.make(Tools.Service, tools),
-    Context.make(WebSearchTool.ConfigService, websearch),
     Context.make(WellKnown.Service, wellknown),
   )
 })
@@ -132,6 +134,7 @@ const pre = [
   ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
   ...ProviderPlugins,
+  ...WebSearchPlugins,
   PatchTool.Plugin,
   EditTool.Plugin,
   GlobTool.Plugin,

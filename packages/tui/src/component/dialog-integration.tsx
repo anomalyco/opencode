@@ -5,6 +5,7 @@ import type {
   IntegrationInfo,
   IntegrationOauthConnectOutput,
   IntegrationOAuthMethod,
+  WebSearchProvider,
 } from "@opencode-ai/client"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
@@ -59,29 +60,60 @@ export function connectionSummary(integration: IntegrationInfo) {
     .join(", ")
 }
 
-export function DialogIntegration(props: { onConnected?: OnIntegrationConnected } = {}) {
+export function DialogIntegration(
+  props: { onConnected?: OnIntegrationConnected; integrationID?: string; connectionOnly?: boolean } = {},
+) {
   const data = useData()
   const dialog = useDialog()
   const { themeV2 } = useTheme().contextual("elevated")
-  const options = createMemo(() =>
-    integrationOptions(data.location.integration.list() ?? []).map((integration) => {
-      const methods = connectMethods(integration)
-      const connected = integration.connections.length > 0
-      return {
-        title: integration.name,
-        value: integration.id,
-        description: methods.length ? undefined : "Environment only",
-        footer: connectionSummary(integration) || undefined,
-        category: integration.id in INTEGRATION_PRIORITY ? "Popular" : "Services",
-        disabled: methods.length === 0,
-        gutter: connected ? () => <text fg={themeV2.text.feedback.success.default}>✓</text> : undefined,
-        onSelect: () =>
-          credentialConnections(integration).length
-            ? manageConnections(integration, methods, dialog, props.onConnected)
-            : selectMethod(integration, methods, dialog, props.onConnected),
-      }
-    }),
-  )
+  const options = createMemo(() => {
+    const providers = data.location.websearch.list() ?? []
+    const providersByID = new Map(providers.map((provider) => [provider.id, provider]))
+    const selectedProvider = data.location.websearch.provider()
+    const integrations = integrationOptions(data.location.integration.list() ?? []).filter(
+      (integration) => props.integrationID === undefined || integration.id === props.integrationID,
+    )
+    const integrationIDs = new Set(integrations.map((integration) => integration.id))
+    return [
+      ...integrations.map((integration) => {
+        const methods = connectMethods(integration)
+        const provider = providersByID.get(integration.id)
+        const credentials = credentialConnections(integration)
+        let category = "Services"
+        if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
+        if (provider) category = "Web search"
+        return {
+          title: integration.name,
+          value: integration.id,
+          description: methods.length === 0 ? "Environment only" : undefined,
+          footer:
+            [connectionSummary(integration), selectedProvider === provider?.id ? "Web search default" : undefined]
+              .filter((value) => value !== undefined && value.length > 0)
+              .join(" · ") || undefined,
+          category,
+          disabled: methods.length === 0 && !provider,
+          gutter:
+            integration.connections.length > 0
+              ? () => <text fg={themeV2.text.feedback.success.default}>✓</text>
+              : undefined,
+          onSelect: () => {
+            if (!props.connectionOnly && provider) return manageWebSearch(provider, dialog, integration, methods)
+            if (credentials.length) return manageConnections(integration, methods, dialog, props.onConnected)
+            return selectMethod(integration, methods, dialog, props.onConnected)
+          },
+        }
+      }),
+      ...providers
+        .filter((provider) => props.integrationID === undefined && !integrationIDs.has(provider.id))
+        .map((provider) => ({
+          title: provider.name,
+          value: provider.id,
+          footer: selectedProvider === provider.id ? "Web search default" : undefined,
+          category: "Web search",
+          onSelect: () => manageWebSearch(provider, dialog),
+        })),
+    ]
+  })
 
   return (
     <DialogSelect
@@ -99,6 +131,63 @@ export function DialogIntegration(props: { onConnected?: OnIntegrationConnected 
       }
     />
   )
+}
+
+function manageWebSearch(
+  provider: WebSearchProvider,
+  dialog: ReturnType<typeof useDialog>,
+  integration?: IntegrationInfo,
+  methods: ConnectMethod[] = [],
+) {
+  dialog.replace(() => {
+    const data = useData()
+    const client = useClient()
+    const toast = useToast()
+    const credentials = integration ? credentialConnections(integration) : []
+    const selected = createMemo(() => data.location.websearch.provider() === provider.id)
+    const selectWebSearch = () => {
+      void client.api.websearch.provider
+        .select({
+          providerID: provider.id,
+          location: location(data),
+        })
+        .then(async () => {
+          const refreshes = integration
+            ? [data.location.integration.sync(), data.location.websearch.refresh()]
+            : [data.location.websearch.refresh()]
+          await Promise.all(refreshes)
+          toast.show({ variant: "success", message: `${provider.name} is now the web search default` })
+          dialog.clear()
+        })
+        .catch(toast.error)
+    }
+
+    return (
+      <DialogSelect
+        title={provider.name}
+        options={[
+          {
+            title: selected() ? "Web search default" : "Use for web search",
+            value: "websearch",
+            disabled: selected(),
+            onSelect: selectWebSearch,
+          },
+          ...(integration && methods.length
+            ? [
+                {
+                  title: credentials.length ? "Manage connections" : "Connect",
+                  value: "connect",
+                  onSelect: () => {
+                    if (credentials.length) return manageConnections(integration, methods, dialog)
+                    return selectMethod(integration, methods, dialog)
+                  },
+                },
+              ]
+            : []),
+        ]}
+      />
+    )
+  })
 }
 
 function manageConnections(

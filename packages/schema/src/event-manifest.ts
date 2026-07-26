@@ -36,6 +36,7 @@ import { TuiEvent } from "./tui-event.js"
 import { VcsEvent } from "./vcs-event.js"
 import { WorkspaceEvent } from "./workspace-event.js"
 import { WorktreeEvent } from "./worktree-event.js"
+import { WebSearch } from "./websearch.js"
 
 const sessionV1DurableDefinitions = SessionV1.Event.Definitions.filter(
   (definition) => definition.durability === "durable",
@@ -67,6 +68,7 @@ const featureDefinitions = Event.inventory(
   ...Shell.Event.Definitions,
   ...Question.Event.Definitions,
   ...Form.Event.Definitions,
+  ...WebSearch.Event.Definitions,
 )
 
 export const ServerDefinitions = Event.inventory(

@@ -29,6 +29,7 @@ import { Pty } from "./pty"
 import { QuestionV2 } from "./question"
 import { Shell } from "./shell"
 import { Reference } from "./reference"
+import { WebSearch } from "./websearch"
 import { ReferenceInstructions } from "./reference/instructions"
 import { SessionRunnerLLM } from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
@@ -56,6 +57,7 @@ const locationServiceNodes = [
   AgentV2.node,
   CommandV2.node,
   Reference.node,
+  WebSearch.node,
   Integration.node,
   Catalog.node,
   ModelResolver.node,

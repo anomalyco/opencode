@@ -539,6 +539,8 @@ export type VcsFileStatus = {
   status: "added" | "deleted" | "modified"
 }
 
+export type WebSearchProvider = { id: string; name: string }
+
 export type SessionMessageModelSelected = {
   id: string
   metadata?: { [x: string]: JsonValue }
@@ -1056,6 +1058,15 @@ export type FormCancelled = {
   type: "form.cancelled"
   location?: LocationRef
   data: { id: string; sessionID: string }
+}
+
+export type WebsearchUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "websearch.updated"
+  location?: LocationRef
+  data: {}
 }
 
 export type SessionIdle = {
@@ -2355,6 +2366,7 @@ export type V2Event =
   | FormCreated
   | FormReplied
   | FormCancelled
+  | WebsearchUpdated
   | SessionStatus2
   | SessionIdle
   | TuiPromptAppend
@@ -4958,3 +4970,47 @@ export type DebugLocationEvictInput = {
 }
 
 export type DebugLocationEvictOutput = void
+
+export type WebsearchProviderListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type WebsearchProviderListOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: Array<WebSearchProvider>
+}
+
+export type WebsearchProviderSelectedInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type WebsearchProviderSelectedOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: string | null
+}
+
+export type WebsearchProviderSelectInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly providerID: { readonly providerID: string }["providerID"]
+}
+
+export type WebsearchProviderSelectOutput = void
+
+export type WebsearchQueryInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly query: { readonly query: string; readonly providerID?: string }["query"]
+  readonly providerID?: { readonly query: string; readonly providerID?: string }["providerID"]
+}
+
+export type WebsearchQueryOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: { providerID: string; text: string; metadata?: JsonValue }
+}

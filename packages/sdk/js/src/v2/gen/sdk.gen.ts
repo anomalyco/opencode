@@ -476,6 +476,14 @@ import type {
   V2VcsDiffResponses,
   V2VcsStatusErrors,
   V2VcsStatusResponses,
+  V2WebsearchProviderListErrors,
+  V2WebsearchProviderListResponses,
+  V2WebsearchProviderSelectedErrors,
+  V2WebsearchProviderSelectedResponses,
+  V2WebsearchProviderSelectErrors,
+  V2WebsearchProviderSelectResponses,
+  V2WebsearchQueryErrors,
+  V2WebsearchQueryResponses,
   VcsApplyErrors,
   VcsApplyResponses,
   VcsDiffErrors,
@@ -8541,6 +8549,149 @@ export class Debug extends HeyApiClient {
   }
 }
 
+export class Provider3 extends HeyApiClient {
+  /**
+   * List web search providers
+   *
+   * Return the registered web search providers.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<
+      V2WebsearchProviderListResponses,
+      V2WebsearchProviderListErrors,
+      ThrowOnError
+    >({
+      url: "/api/websearch/provider",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get selected web search provider
+   *
+   * Return the globally selected web search provider.
+   */
+  public selected<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<
+      V2WebsearchProviderSelectedResponses,
+      V2WebsearchProviderSelectedErrors,
+      ThrowOnError
+    >({
+      url: "/api/websearch/provider/selected",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Select default web search provider
+   *
+   * Persist the global web search provider in the user configuration.
+   */
+  public select<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      providerID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "body", key: "providerID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2WebsearchProviderSelectResponses,
+      V2WebsearchProviderSelectErrors,
+      ThrowOnError
+    >({
+      url: "/api/websearch/provider/selected",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Websearch extends HeyApiClient {
+  /**
+   * Search the web
+   *
+   * Run one web search through the selected provider. Specify a provider to override the configured default.
+   */
+  public query<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      query?: string
+      providerID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "body", key: "query" },
+            { in: "body", key: "providerID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2WebsearchQueryResponses, V2WebsearchQueryErrors, ThrowOnError>({
+      url: "/api/websearch",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _provider?: Provider3
+  get provider(): Provider3 {
+    return (this._provider ??= new Provider3({ client: this.client }))
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
@@ -8680,6 +8831,11 @@ export class V2 extends HeyApiClient {
   private _debug?: Debug
   get debug(): Debug {
     return (this._debug ??= new Debug({ client: this.client }))
+  }
+
+  private _websearch?: Websearch
+  get websearch(): Websearch {
+    return (this._websearch ??= new Websearch({ client: this.client }))
   }
 }
 
