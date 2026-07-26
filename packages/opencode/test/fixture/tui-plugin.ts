@@ -92,6 +92,7 @@ type Opts = {
   mode?: HostPluginApi["mode"]
   count?: Count
   keymap?: HostPluginApi["keymap"]
+  prompt?: HostPluginApi["prompt"]
   tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
   app?: Partial<HostPluginApi["app"]>
   state?: {
@@ -113,6 +114,7 @@ type Opts = {
     mode?: HostPluginApi["theme"]["mode"]
     ready?: boolean
     current?: HostPluginApi["theme"]["current"]
+    syntax?: HostPluginApi["theme"]["syntax"]
   }
 }
 
@@ -220,6 +222,11 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     renderer,
     slots: {
       register: () => "fixture-slot",
+    },
+    prompt: opts.prompt ?? {
+      ref: () => undefined,
+      onChange: () => () => {},
+      onCursorChange: () => () => {},
     },
     plugins: {
       list: () => [],
@@ -350,6 +357,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       get ready() {
         return opts.theme?.ready ?? true
       },
+      syntax: opts.theme?.syntax ?? (() => ({
+        registerStyle: () => 0,
+        getStyleId: () => null,
+      })),
     },
   }
 }

@@ -16,7 +16,7 @@ import type {
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
+import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode, TextareaRenderable } from "@opentui/core"
 import type { Binding, Keymap } from "@opentui/keymap"
 import {
   createBindingLookup as createKeymapBindingLookup,
@@ -206,6 +206,48 @@ export type TuiPromptRef = {
   blur(): void
   focus(): void
   submit(): void
+  readonly text: string
+  getTextRange(startOffset: number, endOffset: number): string
+  /** Replace [startOffset, endOffset) (display-width offsets) with `replacement`.
+   *  If startOffset > endOffset the range is treated as a pure INSERTION at
+   *  min(startOffset, endOffset) — it never deletes. Cursor lands at the end of
+   *  the replacement. Preserves undo history and the extmark controller. */
+  replaceRange(startOffset: number, endOffset: number, replacement: string): void
+  readonly extmarks: Pick<NonNullable<TextareaRenderable["extmarks"]>,
+    | "create" | "delete" | "get" | "getAll" | "getVirtual" | "getAtOffset"
+    | "getAllForTypeId" | "registerType" | "getTypeId" | "getTypeName" | "getMetadataFor"
+  >
+  readonly cursorOffset: number
+  /** Move the cursor to a display-width offset (same model as cursorOffset). */
+  setCursorOffset(offset: number): void
+  /** Convert a display-width offset (same model as cursorOffset) to
+   *  absolute screen coordinates. Returns null when the prompt is
+   *  unmounted, the offset is out of range, or the textarea has not
+   *  been laid out yet. */
+  offsetToScreen(offset: number): { x: number; y: number } | null
+}
+
+export type TuiPromptApi = {
+  /** The live prompt ref, or undefined before the prompt has mounted. Read
+   *  on demand (e.g. inside onChange) — the ref is replaced on route
+   *  changes. */
+  ref(): TuiPromptRef | undefined
+  /** Subscribe to prompt content changes (per keystroke / programmatic
+   *  edit). Survives prompt remounts. Returns a disposer. Note:
+   *  per-channel reentrancy is guarded (a nested same-channel emit is
+   *  dropped), but a subscriber that mutates the OTHER channel which in
+   *  turn mutates this one can form a synchronous A→B→A loop. Plugins
+   *  MUST NOT create circular cross-channel mutations. */
+  onChange(callback: () => void): () => void
+  /** Subscribe to prompt cursor moves (arrows, click positioning, drag,
+   *  word-moves, paste, delete, undo/redo). Deduplicated per offset — one
+   *  callback per logical move. Survives prompt remounts. Returns a
+   *  disposer. Note: per-channel reentrancy is guarded (a nested
+   *  same-channel emit is dropped), but a subscriber that mutates the
+   *  OTHER channel which in turn mutates this one can form a synchronous
+   *  A→B→A loop. Plugins MUST NOT create circular cross-channel
+   *  mutations. */
+  onCursorChange(callback: () => void): () => void
 }
 
 export type TuiPromptProps = {
@@ -356,6 +398,23 @@ export type TuiThemeCurrent = {
   readonly thinkingOpacity: number
 }
 
+export type TuiStyleDefinition = {
+  fg?: string
+  bg?: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  dim?: boolean
+}
+
+export type TuiSyntaxStyle = {
+  /** Register (or update) a named syntax style. Returns the same id for a given
+   *  name across calls and updates the style definition on repeat registration. */
+  registerStyle(name: string, definition: TuiStyleDefinition): number
+  /** Look up a style id by name, or null if not registered. */
+  getStyleId(name: string): number | null
+}
+
 export type TuiTheme = {
   readonly current: TuiThemeCurrent
   readonly selected: string
@@ -364,6 +423,10 @@ export type TuiTheme = {
   install: (jsonPath: string) => Promise<void>
   mode: () => "dark" | "light"
   readonly ready: boolean
+  /** Register a named style and get back a style id. Use the id when
+   *  creating extmarks to render styled underlines/cursors on the
+   *  prompt. Re-registering the same name is idempotent. */
+  syntax(): TuiSyntaxStyle
 }
 
 export type TuiKV = {
@@ -591,6 +654,7 @@ export type TuiPluginApi = {
   keys: TuiKeys
   keymap: TuiKeymap
   mode: TuiModeApi
+  prompt: TuiPromptApi
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void
