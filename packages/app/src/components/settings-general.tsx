@@ -132,7 +132,8 @@ export const SettingsGeneral: Component = () => {
       if ((await sdk.protocol) === "v1") {
         return (await sdk.client.pty.shells()).data ?? []
       }
-      return (await sdk.api.pty.shells()).data
+      // return (await sdk.api.pty.shells()).data
+      return [] as ShellOption[]
     },
     { initialValue: [] as ShellOption[] },
   )
