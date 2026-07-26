@@ -14,12 +14,14 @@
   justify-content: flex-start;
   gap: 6px;
   padding-right: 8px;
+  overflow: visible;
   border: none;
   border-radius: 6px;
   background-color: transparent;
   color: var(--v2-text-text-muted);
   text-align: left;
   cursor: pointer;
+  scroll-margin-block: 8px;
   transition:
     background-color 120ms ease,
     color 120ms ease;
@@ -40,6 +42,21 @@
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected]:hover {
   background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-guide"] {
+  position: absolute;
+  top: 0;
+  margin-top: -2px;
+  height: calc(100% + 2px);
+  width: 1px;
+  pointer-events: none;
+  background-color: var(--v2-border-border-muted);
+  opacity: 0;
+}
+
+[data-component="file-tree-v2"]:hover [data-slot="file-tree-v2-guide"] {
+  opacity: 0.5;
 }
 
 [data-component="file-tree-v2"] .filetree-icon--mono {
@@ -108,7 +125,7 @@
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="modified"] {
-  opacity: 0;
+  color: var(--v2-state-fg-info);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="added"] {

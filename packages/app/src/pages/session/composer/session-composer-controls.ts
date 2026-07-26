@@ -2,7 +2,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createQuery } from "@tanstack/solid-query"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { type Accessor, createMemo } from "solid-js"
-import type { PromptInputControls } from "@/components/prompt-input"
+import type { PromptInputControls } from "@/components/prompt-input/contracts"
 import type { PromptProjectControls } from "@/components/prompt-project-selector"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { useGlobal } from "@/context/global"
@@ -12,7 +12,6 @@ import type { QueryOptionsApi } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
-import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { useProviders } from "@/hooks/use-providers"
@@ -26,36 +25,39 @@ export function createPromptInputController(input: {
 }) {
   const layout = useLayout()
   const local = useLocal()
-  const providers = useProviders()
-  const settings = useSettings()
-  const sync = useSync()
   const sdk = useSDK()
+  const sync = useSync()
+  const providers = useProviders(() => sdk().directory)
   const view = layout.view(input.sessionKey)
   const agentsQuery = createQuery(() => input.queryOptions.agents(pathKey(sdk().directory)))
   const globalProvidersQuery = createQuery(() => input.queryOptions.providers(null))
   const providersQuery = createQuery(() => input.queryOptions.providers(pathKey(sdk().directory)))
 
-  return createMemo<PromptInputControls>(() => ({
-    agents: {
-      available: sync().data.agent,
-      options: local.agent.list().map((agent) => agent.name),
-      current: local.agent.current()?.name ?? "",
-      loading: agentsQuery.isLoading,
-      visible: settings.visibility.customAgents(),
-      select: local.agent.set,
-    },
-    model: {
-      selection: input.model ?? local.model,
-      paid: providers.paid().length > 0,
-      loading: agentsQuery.isLoading || providersQuery.isLoading || globalProvidersQuery.isLoading,
-    },
-    session: {
-      id: input.sessionID(),
-      tabs: layout.tabs(input.sessionKey),
-      reviewPanel: view.reviewPanel,
-    },
-    newLayoutDesigns: settings.general.newLayoutDesigns(),
-  }))
+  return createMemo<PromptInputControls>(() => {
+    return {
+      agents: {
+        available: sync().data.agent,
+        options: local.agent.list().map((agent) => agent.name),
+        current: local.agent.current()?.name ?? "",
+        loading: agentsQuery.isLoading,
+        visible: local.agent.visible(),
+        select: local.agent.set,
+      },
+      model: {
+        selection: input.model ?? local.model,
+        paid: providers.paid().length > 0,
+        loading:
+          (local.agent.visible() && agentsQuery.isLoading) ||
+          providersQuery.isLoading ||
+          globalProvidersQuery.isLoading,
+      },
+      session: {
+        id: input.sessionID(),
+        tabs: layout.tabs(input.sessionKey),
+        reviewPanel: view.reviewPanel,
+      },
+    }
+  })
 }
 
 export function createPromptProjectControls() {

@@ -40,7 +40,7 @@ export function DialogCustomProvider(props: Props) {
   )
 }
 
-export function CustomProviderForm() {
+export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
@@ -131,6 +131,7 @@ export function CustomProviderForm() {
 
   const saveMutation = useMutation(() => ({
     mutationFn: async (result: NonNullable<ReturnType<typeof validate>>) => {
+      if ((await serverSDK().protocol) !== "v1") throw new Error("Custom providers are unavailable on this server")
       const disabledProviders = serverSync().data.config.disabled_providers ?? []
       const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
@@ -192,7 +193,7 @@ export function CustomProviderForm() {
 
         <div class="flex flex-col gap-4">
           <TextField
-            autofocus
+            autofocus={props.autofocus ?? true}
             label={language.t("provider.custom.field.providerID.label")}
             placeholder={language.t("provider.custom.field.providerID.placeholder")}
             description={language.t("provider.custom.field.providerID.description")}
