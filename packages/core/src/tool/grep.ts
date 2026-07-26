@@ -15,7 +15,7 @@ import { Tool } from "./tool"
 export const name = "grep"
 
 export const Input = Schema.Struct({
-  pattern: FileSystem.GrepInput.fields.pattern.annotate({
+  pattern: FileSystem.GrepInput.fields.pattern.check(Schema.isMinLength(1)).annotate({
     description: "Regex pattern to search for in file contents",
   }),
   path: RelativePath.pipe(Schema.optional).annotate({
@@ -33,7 +33,7 @@ export const Output = Schema.Array(FileSystem.Match)
 type ModelOutput = typeof Output.Encoded
 
 /** Format raw search matches into the familiar concise model output. */
-export const toModelOutput = (output: ModelOutput) => {
+export const toModelOutput = (output: ModelOutput, truncated = false) => {
   const lines = output.length === 0 ? ["No files found"] : [`Found ${output.length} matches`]
   let current = ""
   for (const match of output) {
@@ -44,6 +44,11 @@ export const toModelOutput = (output: ModelOutput) => {
     }
     lines.push(`  Line ${match.line}: ${match.text}`)
   }
+  if (truncated)
+    lines.push(
+      "",
+      `(Results are truncated: showing first ${output.length} results. Consider using a more specific path or pattern.)`,
+    )
   return lines.join("\n")
 }
 
@@ -89,13 +94,14 @@ export const Plugin = {
                       Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
                     ),
                   )
-                return yield* ripgrep
+                const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
+                const matches = yield* ripgrep
                   .grep({
                     cwd: info?.type === "Directory" ? target : path.dirname(target),
                     pattern: input.pattern,
                     file: info?.type === "File" ? path.basename(target) : undefined,
                     include: input.include,
-                    limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
+                    limit: limit + 1,
                   })
                   .pipe(
                     Effect.map((result) =>
@@ -118,16 +124,18 @@ export const Plugin = {
                       ),
                     ),
                   )
+                return { matches: matches.slice(0, limit), truncated: matches.length > limit }
               }).pipe(
-                Effect.map((output) => ({
-                  output,
+                Effect.map((result) => ({
+                  output: result.matches,
                   content: toModelOutput(
-                    output.map((match) => ({
+                    result.matches.map((match) => ({
                       ...match,
                       entry: { ...match.entry, path: path.resolve(location.directory, match.entry.path) },
                     })),
+                    result.truncated,
                   ),
-                  metadata: { matches: output.length },
+                  metadata: { matches: result.matches.length, truncated: result.truncated },
                 })),
                 Effect.mapError((error) =>
                   error instanceof ToolFailure

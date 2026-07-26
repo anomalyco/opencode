@@ -104,7 +104,7 @@ describe("search tools", () => {
               const grep = yield* executeTool(registry, call("grep", { pattern: "needle" }))
 
               expect(glob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
-              expect(grep.metadata).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT })
+              expect(grep.metadata).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
               expect(glob.content).toHaveLength(1)
               expect(grep.content).toHaveLength(1)
               const globText = glob.content?.[0]?.type === "text" ? glob.content[0].text : ""
@@ -114,9 +114,68 @@ describe("search tools", () => {
                 `(Results are truncated: showing first ${FileSystem.DEFAULT_SEARCH_LIMIT} results. Consider using a more specific path or pattern.)`,
               )
               expect(grepText).toStartWith(`Found ${FileSystem.DEFAULT_SEARCH_LIMIT} matches\n`)
+              expect(grepText).toEndWith(
+                `(Results are truncated: showing first ${FileSystem.DEFAULT_SEARCH_LIMIT} results. Consider using a more specific path or pattern.)`,
+              )
             }),
           )
         }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects an empty grep pattern", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        withTools(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            expect(yield* executeTool(registry, call("grep", { pattern: "" }))).toMatchObject({
+              status: "error",
+              error: { type: "tool.execution", message: expect.stringContaining("Invalid tool input") },
+            })
+          }),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("handles explicit grep file and directory paths", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.promise(() =>
+          Promise.all([
+            fs.writeFile(path.join(tmp.path, "target.txt"), "needle\n"),
+            fs.writeFile(path.join(tmp.path, "other.txt"), "needle\n"),
+          ]),
+        ).pipe(
+          Effect.andThen(
+            withTools(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const file = yield* executeTool(registry, call("grep", { path: "target.txt", pattern: "needle" }))
+                expect(file).toMatchObject({
+                  status: "completed",
+                  output: [{ entry: { path: "target.txt" }, line: 1, text: "needle\n" }],
+                  metadata: { matches: 1, truncated: false },
+                })
+
+                const directory = yield* executeTool(registry, call("grep", { path: ".", pattern: "needle" }))
+                expect(directory).toMatchObject({
+                  status: "completed",
+                  metadata: { matches: 2, truncated: false },
+                })
+                if (directory.status !== "completed") return
+                expect(directory.output).toEqual(
+                  expect.arrayContaining([
+                    expect.objectContaining({ entry: expect.objectContaining({ path: "target.txt" }) }),
+                    expect.objectContaining({ entry: expect.objectContaining({ path: "other.txt" }) }),
+                  ]),
+                )
+              }),
+            ),
+          ),
+        ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
