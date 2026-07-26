@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  findHomeSessionSearchResult,
   isHomeSessionSearchResultCurrent,
   mergeHomeSessionSearchResults,
   settledHomeSessionSearchResult,
@@ -179,7 +180,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
         const index = records.findIndex((record) => homeSessionSearchKey(record) === active())
         const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
         setState("highlighted", homeSessionSearchKey(records[next]))
-        list?.querySelector<HTMLElement>(`[data-key="${state.highlighted}"]`)?.scrollIntoView({ block: "nearest" })
+        findHomeSessionSearchResult(list, state.highlighted)?.scrollIntoView({ block: "nearest" })
       },
       select,
       selectActive: () => {
