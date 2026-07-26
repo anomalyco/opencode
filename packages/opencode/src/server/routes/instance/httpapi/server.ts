@@ -34,6 +34,8 @@ import { Interrupt } from "@/session/interrupt"
 import { LLM } from "@/session/llm"
 import { SessionProcessor } from "@/session/processor"
 import { SessionPrompt } from "@/session/prompt"
+import { S2SStore } from "@/s2s/store"
+import { Messaging } from "@/messaging"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { Session } from "@/session/session"
@@ -214,6 +216,12 @@ const app = LayerNode.group([
   Npm.node,
   FSUtil.node,
   Database.node,
+  // S2S recipient delivery: the forked C′ wake-poller + runLoop D-drain resolve
+  // these from the request fiber's AMBIENT context, which is THIS group. A
+  // LayerNode.group exposes only its DIRECT children — without these the poller
+  // throws "Service not found: @opencode/S2SStore". (memory #340/#350)
+  S2SStore.node,
+  Messaging.node,
   Auth.node,
   Account.node,
   Config.node,

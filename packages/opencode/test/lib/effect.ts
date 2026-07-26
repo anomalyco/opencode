@@ -50,19 +50,23 @@ const isolatedRun: Runner = (value, layer) =>
 // services (Bus, Session, …) match Server.Default's instances. Use for tests
 // that publish to an in-process HTTP server and need pub/sub identity with
 // the server's handlers.
-const sharedRun: Runner = (value, layer) =>
-  Effect.gen(function* () {
-    const scope = yield* Scope.make()
-    const ctx = yield* Layer.buildWithMemoMap(layer, memoMap, scope)
-    const exit = yield* body(value).pipe(Effect.scoped, Effect.provide(ctx), Effect.exit)
-    yield* Scope.close(scope, Exit.void)
-    if (Exit.isFailure(exit)) {
-      for (const err of Cause.prettyErrors(exit.cause)) {
-        yield* Effect.logError(err)
+const memoizedRun =
+  (map: Layer.MemoMap): Runner =>
+  (value, layer) =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const ctx = yield* Layer.buildWithMemoMap(layer, map, scope)
+      const exit = yield* body(value).pipe(Effect.scoped, Effect.provide(ctx), Effect.exit)
+      yield* Scope.close(scope, Exit.void)
+      if (Exit.isFailure(exit)) {
+        for (const err of Cause.prettyErrors(exit.cause)) {
+          yield* Effect.logError(err)
+        }
       }
-    }
-    return yield* exit
-  }).pipe(Effect.runPromise)
+      return yield* exit
+    }).pipe(Effect.runPromise)
+
+const sharedRun = memoizedRun(memoMap)
 
 const make = <R, E>(testLayer: Layer.Layer<R, E>, liveLayer: Layer.Layer<R, E>, run: Runner = isolatedRun) => {
   const effect = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
@@ -145,6 +149,15 @@ export const testEffect = <R, E>(layer: Layer.Layer<R, E>) =>
 // an in-process HTTP server — most tests should stick with `testEffect`.
 export const testEffectShared = <R, E>(layer: Layer.Layer<R, E>) =>
   make<R, E>(Layer.provideMerge(layer, testEnv), Layer.provideMerge(layer, liveEnv), sharedRun)
+
+// Keeps service identity across a test file without reusing process-global
+// HTTP router registrations initialized by unrelated files.
+export const testEffectIsolatedShared = <R, E>(layer: Layer.Layer<R, E>) =>
+  make<R, E>(
+    Layer.provideMerge(layer, testEnv),
+    Layer.provideMerge(layer, liveEnv),
+    memoizedRun(Layer.makeMemoMapUnsafe()),
+  )
 
 export const awaitWithTimeout = <A, E, R>(
   self: Effect.Effect<A, E, R>,

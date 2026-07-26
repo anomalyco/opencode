@@ -25,6 +25,7 @@ import { LLM } from "@/session/llm"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { Messaging } from "../../src/messaging"
+import { S2SStore } from "../../src/s2s/store"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Permission } from "@/permission"
 import { Plugin } from "../../src/plugin"
@@ -305,6 +306,7 @@ function makeRunLoopLayer(flagOn: boolean) {
     BackgroundJob.node,
     EventV2Bridge.node,
     Interrupt.node,
+    S2SStore.node,
     Messaging.node,
     Todo.node,
     Question.node,

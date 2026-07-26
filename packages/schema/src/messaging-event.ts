@@ -30,4 +30,24 @@ export const Rejected = Event.define({
   },
 })
 
-export const Definitions = Event.inventory(Sent, Replied, Rejected)
+export const PeerSent = Event.define({
+  type: "messaging.peer_sent",
+  schema: {
+    from: SessionID,
+    target: SessionID,
+    fromSlug: Schema.String,
+    body: Schema.String,
+  },
+})
+
+export const S2sDelivered = Event.define({
+  type: "s2s.delivered",
+  schema: {
+    target: SessionID,
+    from: SessionID,
+    fromName: Schema.optional(Schema.String),
+    body: Schema.String,
+  },
+})
+
+export const Definitions = Event.inventory(Sent, Replied, Rejected, PeerSent, S2sDelivered)

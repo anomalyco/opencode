@@ -45,7 +45,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Instruction") {}
 
-const layer: Layer.Layer<
+export const layer: Layer.Layer<
   Service,
   never,
   FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient | RuntimeFlags.Service

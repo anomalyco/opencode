@@ -26,6 +26,7 @@ import { Image } from "../../src/image/image"
 import { Question } from "../../src/question"
 import { Interrupt } from "../../src/session/interrupt"
 import { Messaging } from "../../src/messaging"
+import { S2SStore } from "../../src/s2s/store"
 import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
@@ -194,6 +195,7 @@ const promptRoot = LayerNode.group([
   EventV2Bridge.node,
   Question.node,
   Messaging.node,
+  S2SStore.node,
   Todo.node,
   Interrupt.node,
   ToolRegistry.node,
@@ -243,9 +245,11 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
   return makePrompt(input)
 }
 
-const it = testEffect(makeHttp())
-const noLLMServer = testEffect(makeHttpNoLLMServer())
-const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const it = testEffect(makeHttp() as unknown as Layer.Layer<any, any, never>)
+const noLLMServer = testEffect(makeHttpNoLLMServer() as unknown as Layer.Layer<any, any, never>)
+const raceNoLLMServer = testEffect(
+  makeHttpNoLLMServer({ processor: "blocking" }) as unknown as Layer.Layer<any, any, never>,
+)
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -255,7 +259,7 @@ const withMcpInstructions = testEffect(
         tools: ["guide-server_lookup"],
       },
     ],
-  }),
+  }) as unknown as Layer.Layer<any, any, never>,
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip

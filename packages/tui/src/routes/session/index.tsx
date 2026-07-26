@@ -1443,29 +1443,21 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
-  // Agent-message markers (✉ lines injected on a user message by the message
-  // tool / task tool's awaiting-reply path) are non-synthetic so they remain
-  // visible, but they aren't user prose — tag them via metadata.message at
-  // write-time and split them off here so they render as a distinct system-
-  // event line below the user text rather than masquerading as user input.
-  const isMessage = (
+  // System-event markers (interrupt ⊘ lines, message ✉ lines, future inbox
+  // ✉ lines) are non-synthetic so they remain visible, but they aren't user
+  // prose — tag them via metadata.marker at write-time and split them off
+  // here so they render as a distinct system-event line below the user text
+  // rather than masquerading as something the user typed.
+  const isEventMarker = (
     x: Part,
-  ): x is TextPart & {
-    metadata: { message: { peer: "parent" | "subagent"; expectReply?: boolean } }
-  } => x.type === "text" && !!(x.metadata as { message?: unknown } | undefined)?.message
-  // Interrupt markers (steer/cancel/abort lines injected on a user message) are
-  // non-synthetic so they remain visible, but they aren't user prose — tag them
-  // via metadata.interrupt at write-time and split them off here so they render
-  // as a distinct system-event line below the user text rather than masquerading
-  // as something the user typed.
-  const isInterrupt = (
-    x: Part,
-  ): x is TextPart & { metadata: { interrupt: { intent: "steer" | "cancel" | "abort"; origin: "user" | "parent" } } } =>
-    x.type === "text" && !!(x.metadata as { interrupt?: unknown } | undefined)?.interrupt
+  ): x is TextPart & { metadata: { marker: { kind: string } } } =>
+    x.type === "text" &&
+    !x.synthetic &&
+    (x.metadata as { marker?: { kind?: unknown } } | undefined)?.marker?.kind !== undefined
   const text = createMemo(() => {
     const texts = props.parts
       .map((x) => {
-        if (x.type === "text" && !x.synthetic && !isMessage(x) && !isInterrupt(x)) {
+        if (x.type === "text" && !x.synthetic && !isEventMarker(x)) {
           return x.text
         }
         return null
@@ -1473,8 +1465,7 @@ function UserMessage(props: {
       .filter(Boolean)
     return texts.join("\n\n")
   })
-  const messages = createMemo(() => props.parts.filter(isMessage))
-  const interrupts = createMemo(() => props.parts.filter(isInterrupt))
+  const markers = createMemo(() => props.parts.filter(isEventMarker))
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
@@ -1547,25 +1538,18 @@ function UserMessage(props: {
           </box>
         </box>
       </Show>
-      <For each={messages()}>
-        {(part) => (
-          <box marginTop={1} paddingLeft={3}>
-            <text fg={theme.textMuted}>
-              <span style={{ fg: theme.textMuted, bold: true }}>Message</span>
-              <span style={{ fg: theme.textMuted }}> · {part.text}</span>
-            </text>
-          </box>
-        )}
-      </For>
-      <For each={interrupts()}>
-        {(part) => (
-          <box marginTop={1} paddingLeft={3}>
-            <text fg={theme.textMuted}>
-              <span style={{ fg: theme.textMuted, bold: true }}>Interrupt</span>
-              <span style={{ fg: theme.textMuted }}> · {part.text}</span>
-            </text>
-          </box>
-        )}
+      <For each={markers()}>
+        {(part) => {
+          // Marker.render() already prefixes the text with a self-describing
+          // glyph + verb (e.g. "✉ Inbox from <slug>: <body>", "✉ Message from
+          // subagent: <body>", "⊘ Steered by user"), so the row is just the
+          // rendered marker text — no separate hardcoded label here.
+          return (
+            <box marginTop={1} paddingLeft={3}>
+              <text fg={theme.textMuted}>{part.text}</text>
+            </box>
+          )
+        }}
       </For>
       <Show when={compaction()}>
         <box
