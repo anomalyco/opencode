@@ -64,6 +64,21 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+#### Build and install from source
+
+From a source checkout, `install.sh` builds the checked-out files for the current machine and installs the resulting binary. The default source build is CLI/TUI-focused and does not embed WebUI assets.
+
+```bash
+./install.sh
+./install.sh --tui-only
+./install.sh --with-web-ui
+OPENCODE_INSTALL_DIR=/path/to/bin ./install.sh
+```
+
+Plain `opencode` launches the TUI in every build. `--tui-only` is a compatible explicit spelling for the default, while `--with-web-ui` embeds assets used by explicit web commands. `opencode web` and `opencode serve` remain available either way.
+
+The script uses the exact Bun version pinned by the repository and can bootstrap it privately through `npx` when needed. It never changes shell configuration or persistently modifies `PATH`. The existing `./install` script remains the release installer and does not build the source checkout.
+
 ### Desktop App (BETA)
 
 OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
@@ -84,7 +99,7 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 #### Installation Directory
 
-The install script respects the following priority order for the installation path:
+The release installer (`./install` or `https://opencode.ai/install`) respects the following priority order for the installation path:
 
 1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
 2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
