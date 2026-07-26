@@ -394,12 +394,10 @@ export const RunCommand = effectCmd({
               await handle.close()
             }
           })()
-          const detected = FSUtil.mimeType(resolvedPath)
+          const detected = await FSUtil.mimeType(resolvedPath)
           const text = content?.toString("utf8")
-          const mime = !args.attach
-            ? isDirectory
-              ? "application/x-directory"
-              : "text/plain"
+          const mime = isDirectory
+            ? "application/x-directory"
             : content && text !== undefined && Buffer.from(text, "utf8").equals(content)
               ? "text/plain"
               : detected
