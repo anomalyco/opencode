@@ -78,6 +78,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
+import { createTwoFilesPatch } from "diff"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
@@ -2101,6 +2102,7 @@ function Write(props: ToolProps) {
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
   })
+  const streaming = createMemo(() => props.part.state.status === "pending")
 
   return (
     <Switch>
@@ -2116,6 +2118,20 @@ function Write(props: ToolProps) {
             />
           </line_number>
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
+        </BlockTool>
+      </Match>
+      <Match when={code()}>
+        <BlockTool title={"# Writing " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
+          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
+            <code
+              conceal={false}
+              fg={theme.text}
+              filetype={filetype(stringValue(props.input.filePath))}
+              syntaxStyle={syntax()}
+              streaming={streaming()}
+              content={code()}
+            />
+          </line_number>
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -2399,11 +2415,14 @@ function Edit(props: ToolProps) {
 
   const ft = createMemo(() => filetype(stringValue(props.input.filePath)))
 
-  const diffContent = createMemo(() => stringValue(props.metadata.diff) ?? "")
+  const diffContent = createMemo(
+    () =>
+      stringValue(props.metadata.diff) ?? (props.part.state.status === "pending" ? streamedEditDiff(props.input) : ""),
+  )
 
   return (
     <Switch>
-      <Match when={stringValue(props.metadata.diff) !== undefined}>
+      <Match when={diffContent()}>
         <BlockTool title={"← Edit " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
           <box paddingLeft={1}>
             <diff
@@ -2444,6 +2463,7 @@ function ApplyPatch(props: ToolProps) {
   const pathFormatter = usePathFormatter()
 
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
+  const patch = createMemo(() => stringValue(props.input.patchText) ?? "")
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -2504,6 +2524,20 @@ function ApplyPatch(props: ToolProps) {
             </BlockTool>
           )}
         </For>
+      </Match>
+      <Match when={patch()}>
+        <BlockTool title="# Preparing patch" part={props.part}>
+          <box paddingLeft={1}>
+            <code
+              conceal={false}
+              fg={theme.text}
+              filetype="diff"
+              syntaxStyle={syntax()}
+              streaming={props.part.state.status === "pending"}
+              content={patch()}
+            />
+          </box>
+        </BlockTool>
       </Match>
       <Match when={true}>
         <InlineTool icon="%" pending="Preparing patch..." failure="Patch failed" complete={false} part={props.part}>
@@ -2646,6 +2680,14 @@ const toolDisplays = new Set([
 
 export function toolDisplay(tool: string) {
   return toolDisplays.has(tool) ? tool : "generic"
+}
+
+export function streamedEditDiff(input: Record<string, unknown>) {
+  const oldString = stringValue(input.oldString)
+  const newString = stringValue(input.newString)
+  if (oldString === undefined || newString === undefined) return ""
+  const filePath = stringValue(input.filePath) ?? "file"
+  return createTwoFilesPatch(filePath, filePath, oldString, newString)
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {

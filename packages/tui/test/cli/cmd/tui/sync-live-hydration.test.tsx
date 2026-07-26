@@ -85,6 +85,68 @@ test("stale session hydration does not overwrite live message parts", async () =
   }
 })
 
+test("raw tool deltas hydrate pending write input", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const { app, emit, sync } = await mount(undefined, tmp.path)
+
+  try {
+    emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
+    emit(
+      global({
+        id: "evt_tool",
+        type: "message.part.updated",
+        properties: {
+          sessionID,
+          time: 1,
+          part: {
+            id: partID,
+            sessionID,
+            messageID,
+            type: "tool",
+            callID: "call_write",
+            tool: "write",
+            state: { status: "pending", input: {}, raw: "" },
+          },
+        },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_delta_1",
+        type: "message.part.delta",
+        properties: {
+          sessionID,
+          messageID,
+          partID,
+          field: "raw",
+          delta: '{"filePath":"src/a.ts","content":"hel',
+        },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_delta_2",
+        type: "message.part.delta",
+        properties: { sessionID, messageID, partID, field: "raw", delta: 'lo\\nworld"}' },
+      }),
+    )
+
+    await wait(() => {
+      const part = sync.data.part[messageID]?.[0]
+      return part?.type === "tool" && part.state.status === "pending" && part.state.input.content === "hello\nworld"
+    })
+    expect(sync.data.part[messageID][0]).toMatchObject({
+      state: {
+        status: "pending",
+        input: { filePath: "src/a.ts", content: "hello\nworld" },
+      },
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("orphan live deltas do not suppress hydrated parts", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")

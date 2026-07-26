@@ -32,6 +32,7 @@ import { batch, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
+import { parseJSON } from "partial-json"
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
@@ -49,6 +50,19 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
     else right = middle - 1
   }
   return { found: false, index: left }
+}
+
+function appendToolInput(part: Part, delta: string) {
+  if (part.type !== "tool" || part.state.status !== "pending") return false
+  const raw = part.state.raw + delta
+  part.state.raw = raw
+  try {
+    const input = parseJSON(raw)
+    if (input && typeof input === "object" && !Array.isArray(input)) part.state.input = { ...input }
+  } catch {
+    // Partial JSON can be temporarily invalid between streamed tokens.
+  }
+  return true
 }
 
 export const {
@@ -400,6 +414,7 @@ export const {
             event.properties.messageID,
             produce((draft) => {
               const part = draft[result.index]
+              if (event.properties.field === "raw" && appendToolInput(part, event.properties.delta)) return
               const field = event.properties.field as keyof typeof part
               const existing = part[field] as string | undefined
               ;(part[field] as string) = (existing ?? "") + event.properties.delta

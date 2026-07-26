@@ -15,6 +15,7 @@ import {
   parseTodos,
   alwaysSeparate,
   toolDisplay,
+  streamedEditDiff,
 } from "../../../src/routes/session"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
@@ -226,6 +227,17 @@ describe("TUI inline tool wrapping", () => {
   test("falls back for unknown tool names", () => {
     expect(toolDisplay("bash")).toBe("bash")
     expect(toolDisplay("plugin_tool")).toBe("generic")
+  })
+
+  test("builds a live diff from streamed edit input", () => {
+    const diff = streamedEditDiff({
+      filePath: "src/a.ts",
+      oldString: "const answer = 41\n",
+      newString: "const answer = 42\n",
+    })
+    expect(diff).toContain("-const answer = 41")
+    expect(diff).toContain("+const answer = 42")
+    expect(streamedEditDiff({ oldString: "old" })).toBe("")
   })
 
   test("replaces pending copy when a tool fails before completion", async () => {

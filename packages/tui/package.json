@@ -61,6 +61,7 @@
     "fuzzysort": "catalog:",
     "open": "10.1.2",
     "opentui-spinner": "catalog:",
+    "partial-json": "0.1.7",
     "remeda": "catalog:",
     "strip-ansi": "7.1.2",
     "solid-js": "catalog:"
