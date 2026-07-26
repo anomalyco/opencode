@@ -127,6 +127,15 @@ function createServerCtx(
     return base
   }
 
+  // A browser that has never opened a project keeps an empty local project list, which
+  // leaves the home session list, the sidebar and New Session with nothing to anchor to
+  // even when the server has sessions. Adopt the directory the server was started in so
+  // a fresh client lands on the same project the CLI would use there.
+  createEffect(() => {
+    const directory = sync.data.path.directory
+    if (directory) projects.adopt(directory)
+  })
+
   const projectsList = createMemo(() => projects.list().map(enrich))
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
