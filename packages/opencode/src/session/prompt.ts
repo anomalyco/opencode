@@ -467,13 +467,14 @@ const layer = Layer.effect(
               throw error
             }
             const model = input.model ?? agent.model ?? (yield* currentModel(input.sessionID))
+            const variant = "variant" in model && typeof model.variant === "string" ? model.variant : undefined
             const userMsg: SessionV1.User = {
               id: input.messageID ?? MessageID.ascending(),
               sessionID: input.sessionID,
               time: { created: Date.now() },
               role: "user",
               agent: input.agent,
-              model: { providerID: model.providerID, modelID: model.modelID },
+              model: { providerID: model.providerID, modelID: model.modelID, variant },
             }
             yield* sessions.updateMessage(userMsg)
             const userPart: SessionV1.Part = {

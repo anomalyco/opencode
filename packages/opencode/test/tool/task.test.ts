@@ -739,10 +739,23 @@ describe("tool.task", () => {
       expect(waited.info?.status).toBe("completed")
       expect(waited.info?.output).toBe("second done")
       const notification = yield* Effect.promise(() => injected.promise)
+      expect(notification.model).toEqual({
+        providerID: ref.providerID,
+        modelID: ref.modelID,
+      })
       expect(notification.variant).toBe("xhigh")
       expect(notification.parts[0]?.type).toBe("text")
       if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
     }),
+    {
+      config: {
+        agent: {
+          build: {
+            model: "configured/configured-model",
+          },
+        },
+      },
+    },
   )
 
   background.instance("background tasks complete through the background job service", () =>

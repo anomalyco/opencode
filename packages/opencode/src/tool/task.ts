@@ -10,7 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -218,11 +218,19 @@ export const TaskTool = Tool.define(
         text: string,
       ) {
         const currentParent = yield* sessions.get(ctx.sessionID)
+        const parentMessages = yield* sessions.messages({ sessionID: ctx.sessionID }).pipe(Effect.option)
+        if (Option.isNone(parentMessages)) return
+        const { user: lastUser } = MessageV2.latest(parentMessages.value)
+        if (!lastUser) return
         yield* ops
           .prompt({
             sessionID: ctx.sessionID,
             agent: currentParent.agent ?? ctx.agent,
-            variant,
+            model: {
+              providerID: lastUser.model.providerID,
+              modelID: lastUser.model.modelID,
+            },
+            variant: lastUser.model.variant ?? variant,
             parts: [
               {
                 type: "text",
