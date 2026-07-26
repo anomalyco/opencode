@@ -341,7 +341,7 @@ export const layer = (options?: Options) => Layer.effect(
 
     const initial = yield* discover()
     let configs = initial
-    const updates = yield* PubSub.unbounded<Watcher.Update>()
+    const updates = yield* PubSub.unbounded<{ readonly target: Watcher.WatchInput; readonly update: Watcher.Update }>()
     const subscriptions = new Map<string, Effect.Effect<unknown>>()
     const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
       const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
@@ -361,20 +361,21 @@ export const layer = (options?: Options) => Layer.effect(
       for (const [key, target] of next) {
         if (subscriptions.has(key)) continue
         const fiber = yield* watcher.subscribe(target).pipe(
-          Stream.runForEach((update) => PubSub.publish(updates, update)),
+          Stream.runForEach((update) => PubSub.publish(updates, { target, update })),
           Effect.forkScoped({ startImmediately: true }),
         )
         subscriptions.set(key, Fiber.interrupt(fiber))
       }
     })
 
-    const reload = Effect.fn("Config.reload")(() =>
+    const reload = Effect.fn("Config.reload")((force = false) =>
       reloadLock.withPermit(
         Effect.gen(function* () {
           const next = yield* discover()
-          if (isDeepStrictEqual(configs, next)) return
+          const changed = !isDeepStrictEqual(configs, next)
+          if (!changed && !force) return
           configs = next
-          yield* reconcile(next)
+          if (changed) yield* reconcile(next)
           yield* events.publish(ConfigSchema.Event.Updated, {})
         }),
       ),
@@ -382,8 +383,8 @@ export const layer = (options?: Options) => Layer.effect(
 
     yield* Stream.fromPubSub(updates).pipe(
       Stream.debounce("100 millis"),
-      Stream.runForEach((update) =>
-        reload().pipe(
+      Stream.runForEach(({ target, update }) =>
+        reload(target.type === "directory").pipe(
           Effect.catchCause((cause) => Effect.logError("failed to reload config", { path: update.path, cause })),
         ),
       ),
