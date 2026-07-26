@@ -11,7 +11,7 @@ import { useLocal } from "../context/local"
 import { useTuiPaths } from "../context/runtime"
 import { useToast } from "../ui/toast"
 import { useTuiConfig } from "../config"
-import { useBindings } from "../keymap"
+import { useBindings, useCommandShortcut } from "../keymap"
 import { createDebouncedSignal } from "../util/signal"
 import { errorMessage } from "../util/error"
 
@@ -89,6 +89,8 @@ export function Sessions() {
   const [inputText, setInputText] = createSignal("")
   const [dismissed, setDismissed] = createSignal(false)
   const [suggestionIndex, setSuggestionIndex] = createSignal(0)
+  const [toDelete, setToDelete] = createSignal<string>()
+  const deleteHint = useCommandShortcut("session.delete")
   let selectRef: DialogSelectRef<string> | undefined
   let textarea: TextareaRenderable
 
@@ -106,8 +108,10 @@ export function Sessions() {
     const today = new Date().toDateString()
     return (sessions() ?? []).toSorted((a, b) => b.time.updated - a.time.updated).map((session) => {
       const updated = new Date(session.time.updated).toDateString()
+      const isDeleting = toDelete() === session.id
       return {
-        title: session.title,
+        title: isDeleting ? `Press ${deleteHint()} again to confirm` : session.title,
+        bg: isDeleting ? theme.error : undefined,
         value: session.id,
         category: session.directory,
         footer: updated === today ? "Today" : updated.slice(4, 10),
@@ -127,6 +131,23 @@ export function Sessions() {
 
   function open(sessionID: string) {
     route.navigate({ type: "session", sessionID })
+  }
+
+  // Same two-step pattern as the project session dialog: the first press arms
+  // the row, the second deletes. Server-side removal is keyed by session ID
+  // only, so sessions from other directories delete through the same call.
+  async function remove(sessionID: string) {
+    if (toDelete() !== sessionID) {
+      setToDelete(sessionID)
+      return
+    }
+    setToDelete(undefined)
+    const result = await sdk.client.session.delete({ sessionID })
+    if (result.error) {
+      toast.show({ title: "Failed to delete session", message: errorMessage(result.error), variant: "error" })
+      return
+    }
+    await refetch()
   }
 
   function acceptSuggestion() {
@@ -286,7 +307,15 @@ export function Sessions() {
         preserveSelection={true}
         ref={(ref) => (selectRef = ref)}
         onFilter={setSearch}
+        onMove={() => setToDelete(undefined)}
         onSelect={(option) => open(option.value)}
+        actions={[
+          {
+            command: "session.delete",
+            title: "delete",
+            onTrigger: (option: { value: string }) => void remove(option.value),
+          },
+        ]}
         bindings={[
           { key: "escape", desc: "Back to home", group: "Dialog", cmd: () => route.navigate({ type: "home" }) },
         ]}
