@@ -1,7 +1,7 @@
 export * as PluginHost from "./host"
 
 import { Plugin } from "@opencode-ai/plugin/v2/effect"
-import type { IntegrationDefinition, IntegrationMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
+import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { App } from "../app"
@@ -242,7 +242,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
           ),
       },
-      register: (definition) => integration.transform((draft) => registerIntegration(draft, definition)),
       transform: (callback) =>
         integration.transform((draft) => {
           callback({
@@ -364,11 +363,29 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       },
     },
     websearch: {
-      register: (definition) =>
-        websearch.register({
-          id: WebSearch.ID.make(definition.id),
-          name: definition.name,
-          execute: definition.execute,
+      providers: () => response(websearch.providers()),
+      query: (input) =>
+        response(
+          websearch.query({
+            query: input.query,
+            providerID: input.providerID === undefined ? undefined : WebSearch.ID.make(input.providerID),
+          }),
+        ),
+      reload: websearch.reload,
+      transform: (callback) =>
+        websearch.transform((draft) => {
+          callback({
+            add: (definition) =>
+              draft.add({
+                id: WebSearch.ID.make(definition.id),
+                name: definition.name,
+                execute: definition.execute,
+              }),
+            default: {
+              get: draft.default.get,
+              set: (providerID) => draft.default.set(WebSearch.ID.make(providerID)),
+            },
+          })
         }),
     },
     session: {
@@ -390,31 +407,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     },
   } satisfies Plugin.Context
 })
-
-function registerIntegration(draft: Integration.Draft, definition: IntegrationDefinition) {
-  const integrationID = Integration.ID.make(definition.id)
-  draft.update(integrationID, (integration) => (integration.name = definition.name))
-  for (const method of definition.methods ?? []) {
-    if (method.type === "env") {
-      draft.method.update(methodImplementation({ integrationID: definition.id, method }))
-      continue
-    }
-    if (method.type === "key") {
-      draft.method.update(methodImplementation({ integrationID: definition.id, method }))
-      continue
-    }
-    const { authorize, refresh, credentialLabel, ...info } = method
-    draft.method.update(
-      methodImplementation({
-        integrationID: definition.id,
-        method: info,
-        authorize,
-        ...(refresh ? { refresh } : {}),
-        ...(credentialLabel ? { label: credentialLabel } : {}),
-      }),
-    )
-  }
-}
 
 function methodImplementation(input: IntegrationMethodRegistration): Integration.Implementation {
   if ("authorize" in input) {

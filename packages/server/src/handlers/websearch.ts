@@ -2,7 +2,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
 
@@ -25,36 +25,11 @@ export const WebSearchHandler = HttpApiBuilder.group(Api, "server.websearch", (h
     })
     return handlers
       .handle(
-        "websearch.provider.list",
-        Effect.fn("server.websearch.provider.list")(function* () {
+        "websearch.providers",
+        Effect.fn("server.websearch.providers")(function* () {
           yield* awaitPlugins()
           const websearch = yield* WebSearch.Service
-          return yield* response(websearch.list())
-        }),
-      )
-      .handle(
-        "websearch.provider.selected",
-        Effect.fn("server.websearch.provider.selected")(function* () {
-          const websearch = yield* WebSearch.Service
-          return yield* response(websearch.selected())
-        }),
-      )
-      .handle(
-        "websearch.provider.select",
-        Effect.fn("server.websearch.provider.select")(function* (request) {
-          yield* awaitPlugins()
-          const websearch = yield* WebSearch.Service
-          yield* websearch.select(request.payload.providerID).pipe(
-            Effect.mapError(
-              (error) =>
-                new InvalidRequestError({
-                  message: `Web search provider not found: ${error.providerID}`,
-                  kind: "websearch_provider_not_found",
-                  field: "providerID",
-                }),
-            ),
-          )
-          return HttpApiSchema.NoContent.make()
+          return yield* response(websearch.providers())
         }),
       )
       .handle(
@@ -77,8 +52,8 @@ export const WebSearchHandler = HttpApiBuilder.group(Api, "server.websearch", (h
                     kind: "websearch_provider_not_found",
                     field: "providerID",
                   }),
-                "WebSearch.Cancelled": () =>
-                  new InvalidRequestError({ message: "Web search cancelled", kind: "websearch_cancelled" }),
+                "WebSearch.Disabled": () =>
+                  new InvalidRequestError({ message: "Web search is disabled", kind: "websearch_disabled" }),
                 "WebSearch.Request": (error) =>
                   new ServiceUnavailableError({
                     message: `Web search request failed: ${error.providerID}`,

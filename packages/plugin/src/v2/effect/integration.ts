@@ -12,7 +12,7 @@ import type {
 } from "@opencode-ai/sdk/v2/types"
 import type { IntegrationApi } from "@opencode-ai/client/effect/api"
 import type { Effect, Scope } from "effect"
-import type { Registration, Transform } from "./registration.js"
+import type { Transform } from "./registration.js"
 
 export type IntegrationOAuthAuthorization = {
   readonly url: string
@@ -50,20 +50,6 @@ export type IntegrationMethodRegistration =
       readonly method: IntegrationEnvMethod
     }
 
-export type IntegrationOAuthMethodDefinition = IntegrationOAuthMethod & {
-  readonly authorize: (inputs: IntegrationInputs) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
-  readonly refresh?: (credential: CredentialOAuth) => Effect.Effect<CredentialOAuth, unknown>
-  readonly credentialLabel?: (credential: CredentialOAuth) => string | undefined
-}
-
-export type IntegrationMethodDefinition = IntegrationOAuthMethodDefinition | IntegrationKeyMethod | IntegrationEnvMethod
-
-export interface IntegrationDefinition {
-  readonly id: string
-  readonly name: string
-  readonly methods?: readonly IntegrationMethodDefinition[]
-}
-
 export interface IntegrationDraft {
   list(): readonly IntegrationRef[]
   get(id: string): IntegrationRef | undefined
@@ -77,7 +63,6 @@ export interface IntegrationDraft {
 }
 
 export interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
-  readonly register: (definition: IntegrationDefinition) => Effect.Effect<Registration, never, Scope.Scope>
   readonly transform: Transform<IntegrationDraft>
   readonly reload: () => Effect.Effect<void>
   readonly connection: {

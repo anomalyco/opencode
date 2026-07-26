@@ -1042,45 +1042,22 @@ export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
-type Endpoint27_0Request = Parameters<RawClient["server.websearch"]["websearch.provider.list"]>[0]
+type Endpoint27_0Request = Parameters<RawClient["server.websearch"]["websearch.providers"]>[0]
 export type Endpoint27_0Input = { readonly location?: Endpoint27_0Request["query"]["location"] }
-export type Endpoint27_0Output = EffectValue<ReturnType<RawClient["server.websearch"]["websearch.provider.list"]>>
-export type WebsearchProviderListOperation<E = never> = (
-  input?: Endpoint27_0Input,
-) => Effect.Effect<Endpoint27_0Output, E>
+export type Endpoint27_0Output = EffectValue<ReturnType<RawClient["server.websearch"]["websearch.providers"]>>
+export type WebsearchProvidersOperation<E = never> = (input?: Endpoint27_0Input) => Effect.Effect<Endpoint27_0Output, E>
 
-type Endpoint27_1Request = Parameters<RawClient["server.websearch"]["websearch.provider.selected"]>[0]
-export type Endpoint27_1Input = { readonly location?: Endpoint27_1Request["query"]["location"] }
-export type Endpoint27_1Output = EffectValue<ReturnType<RawClient["server.websearch"]["websearch.provider.selected"]>>
-export type WebsearchProviderSelectedOperation<E = never> = (
-  input?: Endpoint27_1Input,
-) => Effect.Effect<Endpoint27_1Output, E>
-
-type Endpoint27_2Request = Parameters<RawClient["server.websearch"]["websearch.provider.select"]>[0]
-export type Endpoint27_2Input = {
-  readonly location?: Endpoint27_2Request["query"]["location"]
-  readonly providerID: Endpoint27_2Request["payload"]["providerID"]
+type Endpoint27_1Request = Parameters<RawClient["server.websearch"]["websearch.query"]>[0]
+export type Endpoint27_1Input = {
+  readonly location?: Endpoint27_1Request["query"]["location"]
+  readonly query: Endpoint27_1Request["payload"]["query"]
+  readonly providerID?: Endpoint27_1Request["payload"]["providerID"]
 }
-export type Endpoint27_2Output = EffectValue<ReturnType<RawClient["server.websearch"]["websearch.provider.select"]>>
-export type WebsearchProviderSelectOperation<E = never> = (
-  input: Endpoint27_2Input,
-) => Effect.Effect<Endpoint27_2Output, E>
-
-type Endpoint27_3Request = Parameters<RawClient["server.websearch"]["websearch.query"]>[0]
-export type Endpoint27_3Input = {
-  readonly location?: Endpoint27_3Request["query"]["location"]
-  readonly query: Endpoint27_3Request["payload"]["query"]
-  readonly providerID?: Endpoint27_3Request["payload"]["providerID"]
-}
-export type Endpoint27_3Output = EffectValue<ReturnType<RawClient["server.websearch"]["websearch.query"]>>
-export type WebsearchQueryOperation<E = never> = (input: Endpoint27_3Input) => Effect.Effect<Endpoint27_3Output, E>
+export type Endpoint27_1Output = EffectValue<ReturnType<RawClient["server.websearch"]["websearch.query"]>>
+export type WebsearchQueryOperation<E = never> = (input: Endpoint27_1Input) => Effect.Effect<Endpoint27_1Output, E>
 
 export interface WebsearchApi<E = never> {
-  readonly provider: {
-    readonly list: WebsearchProviderListOperation<E>
-    readonly selected: WebsearchProviderSelectedOperation<E>
-    readonly select: WebsearchProviderSelectOperation<E>
-  }
+  readonly providers: WebsearchProvidersOperation<E>
   readonly query: WebsearchQueryOperation<E>
 }
 

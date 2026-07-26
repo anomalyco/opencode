@@ -13,6 +13,7 @@ import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { ConfigPolicyPlugin } from "../config/plugin/policy"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
+import { ConfigWebSearchPlugin } from "../config/plugin/websearch"
 import { EventV2 } from "../event"
 import { FileMutation } from "../file-mutation"
 import { Form } from "../form"
@@ -21,6 +22,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Image } from "../image"
 import { Integration } from "../integration"
+import { KV } from "../kv"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { ModelsDev } from "../models-dev"
@@ -72,6 +74,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const http = yield* HttpClient.HttpClient
   const image = yield* Image.Service
   const integration = yield* Integration.Service
+  const kv = yield* KV.Service
   const location = yield* Location.Service
   const locationMutation = yield* LocationMutation.Service
   const models = yield* ModelsDev.Service
@@ -101,6 +104,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(HttpClient.HttpClient, http),
     Context.make(Image.Service, image),
     Context.make(Integration.Service, integration),
+    Context.make(KV.Service, kv),
     Context.make(Location.Service, location),
     Context.make(LocationMutation.Service, locationMutation),
     Context.make(ModelsDev.Service, models),
@@ -156,6 +160,7 @@ const post = [
   ConfigCommandPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
+  ConfigWebSearchPlugin.Plugin,
   VariantPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]

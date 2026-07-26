@@ -1,6 +1,5 @@
 export * as PluginPromise from "./promise"
 
-import type { IntegrationDefinition } from "@opencode-ai/plugin/v2/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/v2/plugin"
 import type { Any, RegisterOptions } from "@opencode-ai/plugin/v2/tool"
@@ -13,6 +12,7 @@ import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
+import { WebSearch } from "@opencode-ai/schema/websearch"
 import { DateTime, Effect, Scope, Stream } from "effect"
 import { Tool } from "../tool/tool"
 
@@ -165,7 +165,6 @@ export function fromPromise(plugin: Plugin) {
                   }),
                 ),
             },
-            register: (definition) => register(host.integration.register(adaptIntegration(definition))),
             transform: transform(host.integration),
             reload: () => run(host.integration.reload()),
             connection: {
@@ -200,13 +199,27 @@ export function fromPromise(plugin: Plugin) {
               register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
           },
           websearch: {
-            register: (definition) =>
+            providers: (input) => run(host.websearch.providers(input)),
+            query: (input) =>
+              run(
+                host.websearch.query({
+                  ...input,
+                  providerID: input.providerID === undefined ? undefined : WebSearch.ID.make(input.providerID),
+                }),
+              ),
+            reload: () => run(host.websearch.reload()),
+            transform: (callback) =>
               register(
-                host.websearch.register({
-                  id: definition.id,
-                  name: definition.name,
-                  execute: (input, execution) =>
-                    attempt((signal) => definition.execute(input, { ...execution, signal })),
+                host.websearch.transform((draft) => {
+                  callback({
+                    add: (definition) =>
+                      draft.add({
+                        id: definition.id,
+                        name: definition.name,
+                        execute: (input) => attempt((signal) => definition.execute(input, { signal })),
+                      }),
+                    default: draft.default,
+                  })
                 }),
               ),
           },
@@ -281,40 +294,6 @@ export function fromPromise(plugin: Plugin) {
         yield* Effect.addFinalizer(() => Effect.promise(() => Promise.resolve(cleanup())))
       }),
   })
-}
-
-function adaptIntegration(definition: IntegrationDefinition) {
-  const { methods, ...definitionInfo } = definition
-  return {
-    ...definitionInfo,
-    methods: methods?.map((method) => {
-      if (method.type !== "oauth") return method
-      const { authorize, refresh, ...methodInfo } = method
-      return {
-        ...methodInfo,
-        authorize: (inputs: Parameters<typeof authorize>[0]) =>
-          attempt(() => authorize(inputs)).pipe(
-            Effect.map((authorization) => {
-              if (authorization.mode === "auto") {
-                return {
-                  ...authorization,
-                  callback: attempt(() => authorization.callback),
-                }
-              }
-              return {
-                ...authorization,
-                callback: (code: string) => attempt(() => authorization.callback(code)),
-              }
-            }),
-          ),
-        ...(refresh
-          ? {
-              refresh: (credential: Parameters<typeof refresh>[0]) => attempt(() => refresh(credential)),
-            }
-          : {}),
-      }
-    }),
-  }
 }
 
 function attempt<A>(evaluate: (signal: AbortSignal) => PromiseLike<A>) {

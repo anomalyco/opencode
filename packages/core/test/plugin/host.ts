@@ -1,11 +1,13 @@
 import { Plugin } from "@opencode-ai/plugin/v2/effect"
-import type { IntegrationDefinition, IntegrationMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
+import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Project } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import type {
   CredentialOAuth,
@@ -71,7 +73,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
         status: () => Effect.die("unused integration.command.status"),
         cancel: () => Effect.die("unused integration.command.cancel"),
       },
-      register: () => Effect.die("unused integration.register"),
       transform: () => Effect.die("unused integration.transform"),
       reload: () => Effect.die("unused integration.reload"),
       connection: {
@@ -97,7 +98,10 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       hook: () => Effect.die("unused tool.hook"),
     },
     websearch: overrides.websearch ?? {
-      register: () => Effect.die("unused websearch.register"),
+      providers: () => Effect.die("unused websearch.providers"),
+      query: () => Effect.die("unused websearch.query"),
+      transform: () => Effect.die("unused websearch.transform"),
+      reload: () => Effect.die("unused websearch.reload"),
     },
     session: {
       hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
@@ -240,7 +244,6 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
           connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
         ),
     },
-    register: (definition) => integration.transform((draft) => registerIntegration(draft, definition)),
     transform: (callback) =>
       integration.transform((draft) =>
         callback({
@@ -338,80 +341,33 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
 }
 
 export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["websearch"] {
+  const location = Location.Info.make({
+    directory: AbsolutePath.make("/tmp/websearch-test"),
+    project: { id: Project.ID.make("websearch-test"), directory: AbsolutePath.make("/tmp/websearch-test") },
+  })
   return {
-    register: (definition) =>
-      websearch.register({
-        id: WebSearch.ID.make(definition.id),
-        name: definition.name,
-        execute: definition.execute,
+    providers: () => websearch.providers().pipe(Effect.map((data) => ({ location, data }))),
+    query: (input) =>
+      websearch
+        .query({ query: input.query, providerID: input.providerID && WebSearch.ID.make(input.providerID) })
+        .pipe(Effect.map((data) => ({ location, data }))),
+    reload: websearch.reload,
+    transform: (callback) =>
+      websearch.transform((draft) => {
+        callback({
+          add: (definition) =>
+            draft.add({
+              id: WebSearch.ID.make(definition.id),
+              name: definition.name,
+              execute: definition.execute,
+            }),
+          default: {
+            get: draft.default.get,
+            set: (providerID) => draft.default.set(WebSearch.ID.make(providerID)),
+          },
+        })
       }),
   }
-}
-
-function registerIntegration(draft: Integration.Draft, definition: IntegrationDefinition) {
-  const integrationID = Integration.ID.make(definition.id)
-  draft.update(integrationID, (integration) => (integration.name = definition.name))
-  for (const method of definition.methods ?? []) {
-    if (method.type === "env") {
-      draft.method.update(methodImplementation({ integrationID: definition.id, method }))
-      continue
-    }
-    if (method.type === "key") {
-      draft.method.update(methodImplementation({ integrationID: definition.id, method }))
-      continue
-    }
-    const { authorize, refresh, credentialLabel, ...info } = method
-    draft.method.update(
-      methodImplementation({
-        integrationID: definition.id,
-        method: info,
-        authorize,
-        ...(refresh ? { refresh } : {}),
-        ...(credentialLabel ? { label: credentialLabel } : {}),
-      }),
-    )
-  }
-}
-
-function methodImplementation(input: IntegrationMethodRegistration): Integration.Implementation {
-  if ("authorize" in input) {
-    const refresh = input.refresh
-    return {
-      integrationID: Integration.ID.make(input.integrationID),
-      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
-      authorize: (inputs) =>
-        input.authorize(inputs).pipe(
-          Effect.map((authorization) => {
-            if (authorization.mode === "auto") {
-              return { ...authorization, callback: authorization.callback.pipe(Effect.map(oauthCredential)) }
-            }
-            return {
-              ...authorization,
-              callback: (code: string) => authorization.callback(code).pipe(Effect.map(oauthCredential)),
-            }
-          }),
-        ),
-      ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(oauthCredential)) } : {}),
-      ...(input.label ? { label: input.label } : {}),
-    }
-  }
-  if (input.method.type === "env") {
-    return {
-      integrationID: Integration.ID.make(input.integrationID),
-      method: { ...input.method, names: [...input.method.names] },
-    }
-  }
-  if (input.method.type === "command") {
-    return {
-      integrationID: Integration.ID.make(input.integrationID),
-      method: {
-        ...input.method,
-        id: Integration.MethodID.make(input.method.id),
-        command: [...input.method.command],
-      },
-    }
-  }
-  return { integrationID: Integration.ID.make(input.integrationID), method: input.method }
 }
 
 function oauthCredential(value: CredentialOAuth) {

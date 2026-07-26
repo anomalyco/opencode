@@ -3,6 +3,8 @@ import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Form } from "@opencode-ai/core/form"
+import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
@@ -13,22 +15,34 @@ import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { webSearchHost } from "./plugin/host"
 
 const webSearchToolNode = makeLocationNode({
   name: "test/websearch-tool-plugin",
-  layer: Layer.effectDiscard(registerToolPlugin(WebSearchTool.Plugin)),
-  deps: [ToolRegistry.toolsNode, PermissionV2.node, WebSearch.node],
+  layer: Layer.effectDiscard(
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      yield* registerToolPlugin(WebSearchTool.Plugin, { websearch: webSearchHost(websearch) })
+    }),
+  ),
+  deps: [ToolRegistry.toolsNode, PermissionV2.node, WebSearch.node, Form.node, KV.node],
 })
 
 const sessionID = SessionV2.ID.make("ses_websearch_test")
 const assertions: PermissionV2.AssertInput[] = []
-const queries: WebSearch.QueryInput[] = []
-let result = new WebSearch.Result({ providerID: WebSearch.ID.make("exa"), text: "search results" })
+const queries: WebSearch.Input[] = []
+let result = new WebSearch.Response({
+  providerID: WebSearch.ID.make("exa"),
+  results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
+})
 
 beforeEach(() => {
   assertions.length = 0
   queries.length = 0
-  result = new WebSearch.Result({ providerID: WebSearch.ID.make("exa"), text: "search results" })
+  result = new WebSearch.Response({
+    providerID: WebSearch.ID.make("exa"),
+    results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
+  })
 })
 
 const permission = Layer.succeed(
@@ -45,15 +59,35 @@ const permission = Layer.succeed(
 const websearch = Layer.succeed(
   WebSearch.Service,
   WebSearch.Service.of({
-    register: () => Effect.die("unused"),
-    list: () => Effect.succeed([]),
-    selected: () => Effect.succeed(undefined),
-    select: () => Effect.die("unused"),
+    transform: () => Effect.die("unused"),
+    reload: () => Effect.die("unused"),
+    providers: () => Effect.succeed([]),
+    default: () => Effect.succeed(undefined),
     query: (input) =>
       Effect.sync(() => {
         queries.push(input)
         return result
       }),
+  }),
+)
+const form = Layer.succeed(
+  Form.Service,
+  Form.Service.of({
+    create: () => Effect.die("unused"),
+    ask: () => Effect.die("unused"),
+    get: () => Effect.die("unused"),
+    list: () => Effect.die("unused"),
+    state: () => Effect.die("unused"),
+    reply: () => Effect.die("unused"),
+    cancel: () => Effect.die("unused"),
+  }),
+)
+const kv = Layer.succeed(
+  KV.Service,
+  KV.Service.of({
+    get: () => Effect.succeed(undefined),
+    set: () => Effect.void,
+    remove: () => Effect.void,
   }),
 )
 const it = testEffect(
@@ -62,6 +96,8 @@ const it = testEffect(
     [
       [PermissionV2.node, permission],
       [WebSearch.node, websearch],
+      [Form.node, form],
+      [KV.node, kv],
       [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
       [Image.node, imagePassthrough],
     ],
@@ -87,7 +123,7 @@ describe("WebSearchTool registration", () => {
         }),
       ).toMatchObject({
         status: "completed",
-        content: [{ type: "text", text: "search results" }],
+        content: [{ type: "text", text: "## [Search results](https://example.com)\n\nsearch results" }],
       })
       expect(assertions).toMatchObject([
         {
@@ -100,19 +136,24 @@ describe("WebSearchTool registration", () => {
       ])
       expect(queries).toEqual([
         {
-          sessionID,
           query: "effect typescript",
         },
       ])
     }),
   )
 
-  it.effect("keeps provider metadata in structured output", () =>
+  it.effect("keeps normalized results in structured output", () =>
     Effect.gen(function* () {
-      result = new WebSearch.Result({
+      result = new WebSearch.Response({
         providerID: WebSearch.ID.make("parallel"),
-        text: "parallel results",
-        metadata: { requestID: "req_1" },
+        results: [
+          {
+            url: "https://effect.website",
+            title: "Effect",
+            content: "parallel results",
+            time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
+          },
+        ],
       })
       const registry = yield* ToolRegistry.Service
 
@@ -124,8 +165,23 @@ describe("WebSearchTool registration", () => {
         }),
       ).toEqual({
         status: "completed",
-        output: { provider: "parallel", text: "parallel results", metadata: { requestID: "req_1" } },
-        content: [{ type: "text", text: "parallel results" }],
+        output: {
+          provider: "parallel",
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "parallel results",
+              time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
+            },
+          ],
+        },
+        content: [
+          {
+            type: "text",
+            text: "## [Effect](https://effect.website)\nPublished: 2026-07-25T00:00:00.000Z\n\nparallel results",
+          },
+        ],
         metadata: { provider: "parallel" },
       })
     }),
@@ -133,7 +189,7 @@ describe("WebSearchTool registration", () => {
 
   it.effect("uses the concise no-results fallback", () =>
     Effect.gen(function* () {
-      result = new WebSearch.Result({ providerID: WebSearch.ID.make("exa"), text: "" })
+      result = new WebSearch.Response({ providerID: WebSearch.ID.make("exa"), results: [] })
       const registry = yield* ToolRegistry.Service
 
       expect(

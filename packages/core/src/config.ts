@@ -1,5 +1,4 @@
 export * as Config from "./config"
-export * as ConfigGlobal from "./config/global"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"

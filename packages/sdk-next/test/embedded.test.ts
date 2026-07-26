@@ -336,10 +336,13 @@ it.live("embedded client exposes plugin-backed web search", () =>
       yield* opencode.plugin({
         id: `embedded-websearch-${crypto.randomUUID()}`,
         effect: (ctx) =>
-          ctx.websearch.register({
-            id: providerID,
-            name: "Embedded web search",
-            execute: (input) => Effect.succeed({ text: `Found ${input.query}`, metadata: { source: "embedded" } }),
+          ctx.websearch.transform((draft) => {
+            draft.add({
+              id: providerID,
+              name: "Embedded web search",
+              execute: (input) =>
+                Effect.succeed([{ url: "https://example.com", content: `Found ${input.query}`, time: {} }]),
+            })
           }),
       })
 
@@ -351,8 +354,7 @@ it.live("embedded client exposes plugin-backed web search", () =>
 
       expect(result.data).toEqual({
         providerID,
-        text: "Found opencode",
-        metadata: { source: "embedded" },
+        results: [{ url: "https://example.com", content: "Found opencode", time: {} }],
       })
     }),
   ),

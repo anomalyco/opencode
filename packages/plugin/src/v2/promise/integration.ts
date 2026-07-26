@@ -8,7 +8,7 @@ import type {
   IntegrationKeyMethod,
   IntegrationOAuthMethod,
 } from "@opencode-ai/sdk/v2/types"
-import type { Registration, Transform } from "./registration.js"
+import type { Transform } from "./registration.js"
 
 export type { IntegrationDraft, IntegrationMethodRegistration }
 
@@ -27,22 +27,7 @@ export type IntegrationOAuthAuthorization = {
     }
 )
 
-export type IntegrationOAuthMethodDefinition = IntegrationOAuthMethod & {
-  readonly authorize: (inputs: IntegrationInputs) => Promise<IntegrationOAuthAuthorization>
-  readonly refresh?: (credential: CredentialOAuth) => Promise<CredentialOAuth>
-  readonly credentialLabel?: (credential: CredentialOAuth) => string | undefined
-}
-
-export type IntegrationMethodDefinition = IntegrationOAuthMethodDefinition | IntegrationKeyMethod | IntegrationEnvMethod
-
-export interface IntegrationDefinition {
-  readonly id: string
-  readonly name: string
-  readonly methods?: readonly IntegrationMethodDefinition[]
-}
-
 export interface IntegrationDomain extends Omit<IntegrationApi, "wellknown"> {
-  readonly register: (definition: IntegrationDefinition) => Promise<Registration>
   readonly transform: Transform<IntegrationDraft>
   readonly reload: () => Promise<void>
   readonly connection: {

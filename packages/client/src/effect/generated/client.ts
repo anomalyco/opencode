@@ -1244,42 +1244,26 @@ const adaptGroup26 = (raw: RawClient["server.debug"]) => ({
   location: { list: Endpoint26_0(raw), evict: Endpoint26_1(raw) },
 })
 
-type Endpoint27_0Request = Parameters<RawClient["server.websearch"]["websearch.provider.list"]>[0]
+type Endpoint27_0Request = Parameters<RawClient["server.websearch"]["websearch.providers"]>[0]
 type Endpoint27_0Input = { readonly location?: Endpoint27_0Request["query"]["location"] }
 const Endpoint27_0 = (raw: RawClient["server.websearch"]) => (input?: Endpoint27_0Input) =>
-  raw["websearch.provider.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
+  raw["websearch.providers"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint27_1Request = Parameters<RawClient["server.websearch"]["websearch.provider.selected"]>[0]
-type Endpoint27_1Input = { readonly location?: Endpoint27_1Request["query"]["location"] }
-const Endpoint27_1 = (raw: RawClient["server.websearch"]) => (input?: Endpoint27_1Input) =>
-  raw["websearch.provider.selected"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError))
-
-type Endpoint27_2Request = Parameters<RawClient["server.websearch"]["websearch.provider.select"]>[0]
-type Endpoint27_2Input = {
-  readonly location?: Endpoint27_2Request["query"]["location"]
-  readonly providerID: Endpoint27_2Request["payload"]["providerID"]
+type Endpoint27_1Request = Parameters<RawClient["server.websearch"]["websearch.query"]>[0]
+type Endpoint27_1Input = {
+  readonly location?: Endpoint27_1Request["query"]["location"]
+  readonly query: Endpoint27_1Request["payload"]["query"]
+  readonly providerID?: Endpoint27_1Request["payload"]["providerID"]
 }
-const Endpoint27_2 = (raw: RawClient["server.websearch"]) => (input: Endpoint27_2Input) =>
-  raw["websearch.provider.select"]({
-    query: { location: input["location"] },
-    payload: { providerID: input["providerID"] },
-  }).pipe(Effect.mapError(mapClientError))
-
-type Endpoint27_3Request = Parameters<RawClient["server.websearch"]["websearch.query"]>[0]
-type Endpoint27_3Input = {
-  readonly location?: Endpoint27_3Request["query"]["location"]
-  readonly query: Endpoint27_3Request["payload"]["query"]
-  readonly providerID?: Endpoint27_3Request["payload"]["providerID"]
-}
-const Endpoint27_3 = (raw: RawClient["server.websearch"]) => (input: Endpoint27_3Input) =>
+const Endpoint27_1 = (raw: RawClient["server.websearch"]) => (input: Endpoint27_1Input) =>
   raw["websearch.query"]({
     query: { location: input["location"] },
     payload: { query: input["query"], providerID: input["providerID"] },
   }).pipe(Effect.mapError(mapClientError))
 
 const adaptGroup27 = (raw: RawClient["server.websearch"]) => ({
-  provider: { list: Endpoint27_0(raw), selected: Endpoint27_1(raw), select: Endpoint27_2(raw) },
-  query: Endpoint27_3(raw),
+  providers: Endpoint27_0(raw),
+  query: Endpoint27_1(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({

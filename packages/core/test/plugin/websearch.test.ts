@@ -12,7 +12,15 @@ beforeEach(() => {
     `event: message\ndata: ${JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
-      result: { content: [{ type: "text", text: "search results", _meta: { searchTime: 123 } }] },
+      result: {
+        content: [
+          {
+            type: "text",
+            text: "Title: Effect\nURL: https://effect.website\nPublished: 2026-07-25T00:00:00.000Z\nAuthor: N/A\nHighlights:\nEffect documentation",
+            _meta: { searchTime: 123 },
+          },
+        ],
+      },
     })}\n\n`,
   )
 })
@@ -24,19 +32,21 @@ describe("built-in web search providers", () => {
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const websearch = yield* WebSearch.Service
-      const registration = yield* webSearchHost(websearch).register({
-        id: "test-websearch",
-        name: "Test Web Search",
-        execute: (input) => Effect.succeed({ text: input.query }),
+      const registration = yield* webSearchHost(websearch).transform((draft) => {
+        draft.add({
+          id: "test-websearch",
+          name: "Test Web Search",
+          execute: (input) => Effect.succeed([{ url: "https://example.com", content: input.query, time: {} }]),
+        })
       })
 
       expect(yield* integrations.get(Integration.ID.make("test-websearch"))).toBeUndefined()
-      expect(yield* websearch.list()).toContainEqual({
+      expect(yield* websearch.providers()).toContainEqual({
         id: WebSearch.ID.make("test-websearch"),
         name: "Test Web Search",
       })
       yield* registration.dispose
-      expect(yield* websearch.list()).not.toContainEqual({
+      expect(yield* websearch.providers()).not.toContainEqual({
         id: WebSearch.ID.make("test-websearch"),
         name: "Test Web Search",
       })
@@ -58,13 +68,17 @@ describe("built-in web search providers", () => {
         methods: [{ type: "key" }, { type: "env", names: ["EXA_API_KEY"] }],
       })
       yield* integrations.connection.key({ integrationID: Integration.ID.make("exa"), key: "exa secret" })
-      expect(
-        yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") }),
-      ).toEqual(
-        new WebSearch.Result({
+      expect(yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })).toEqual(
+        new WebSearch.Response({
           providerID: WebSearch.ID.make("exa"),
-          text: "search results",
-          metadata: { searchTime: 123 },
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
+            },
+          ],
         }),
       )
       expect(requests).toEqual([
@@ -120,26 +134,18 @@ describe("built-in web search providers", () => {
       const output = yield* websearch.query({
         query: "effect layers",
         providerID: WebSearch.ID.make("parallel"),
-        sessionID: "ses_parallel",
       })
       expect(output).toEqual(
-        new WebSearch.Result({
+        new WebSearch.Response({
           providerID: WebSearch.ID.make("parallel"),
-          text: "search results",
-          metadata: {
-            search_id: "search_1",
-            results: [
-              {
-                url: "https://effect.website",
-                title: "Effect",
-                publish_date: null,
-                excerpts: ["Effect documentation"],
-              },
-            ],
-            warnings: null,
-            usage: [{ name: "sku_search", count: 1 }],
-            session_id: "ses_parallel",
-          },
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: {},
+            },
+          ],
         }),
       )
       expect(requests[0]).toMatchObject({
@@ -154,7 +160,6 @@ describe("built-in web search providers", () => {
             arguments: {
               objective: "effect layers",
               search_queries: ["effect layers"],
-              session_id: "ses_parallel",
             },
           },
         },

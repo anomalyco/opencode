@@ -541,6 +541,8 @@ export type VcsFileStatus = {
 
 export type WebSearchProvider = { id: string; name: string }
 
+export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
+
 export type SessionMessageModelSelected = {
   id: string
   metadata?: { [x: string]: JsonValue }
@@ -4971,36 +4973,16 @@ export type DebugLocationEvictInput = {
 
 export type DebugLocationEvictOutput = void
 
-export type WebsearchProviderListInput = {
+export type WebsearchProvidersInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type WebsearchProviderListOutput = {
+export type WebsearchProvidersOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: Array<WebSearchProvider>
 }
-
-export type WebsearchProviderSelectedInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type WebsearchProviderSelectedOutput = {
-  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: string | null
-}
-
-export type WebsearchProviderSelectInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-  readonly providerID: { readonly providerID: string }["providerID"]
-}
-
-export type WebsearchProviderSelectOutput = void
 
 export type WebsearchQueryInput = {
   readonly location?: {
@@ -5012,5 +4994,5 @@ export type WebsearchQueryInput = {
 
 export type WebsearchQueryOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: { providerID: string; text: string; metadata?: JsonValue }
+  data: { providerID: string; results: Array<WebSearchResult> }
 }

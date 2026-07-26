@@ -87,7 +87,6 @@ export type Event =
   | EventFormCreated
   | EventFormReplied
   | EventFormCancelled
-  | EventWebsearchUpdated
   | EventLspUpdated
   | EventPermissionAsked
   | EventPermissionReplied
@@ -1413,13 +1412,6 @@ export type GlobalEvent = {
         properties: {
           id: string
           sessionID: string
-        }
-      }
-    | {
-        id: string
-        type: "websearch.updated"
-        properties: {
-          [key: string]: unknown
         }
       }
     | {
@@ -2902,6 +2894,7 @@ export type SessionGenerateResponse = {
     text: string
   }
 }
+
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
 export type SessionLogItemJsonString = string
@@ -3088,7 +3081,6 @@ export type V2Event =
   | FormCreated
   | FormReplied
   | FormCancelled
-  | WebsearchUpdated
   | LspUpdated
   | PermissionAsked
   | PermissionReplied
@@ -6685,19 +6677,6 @@ export type FormCancelled = {
   }
 }
 
-export type WebsearchUpdated = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "websearch.updated"
-  location?: LocationRef
-  data: {
-    [key: string]: unknown
-  }
-}
-
 export type LspUpdated = {
   id: string
   created: number
@@ -7112,17 +7091,6 @@ export type ProjectCopyCopy = {
 }
 
 export type VcsMode = "working" | "branch"
-
-export type WebSearchProvider = {
-  id: string
-  name: string
-}
-
-export type WebSearchResult = {
-  providerID: string
-  text: string
-  metadata?: unknown
-}
 
 export type EventModelsDevRefreshed = {
   id: string
@@ -7973,14 +7941,6 @@ export type EventFormCancelled = {
   }
 }
 
-export type EventWebsearchUpdated = {
-  id: string
-  type: "websearch.updated"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventLspUpdated = {
   id: string
   type: "lsp.updated"
@@ -8796,7 +8756,6 @@ export type V2EventV2 =
   | FormCreatedV2
   | FormRepliedV2
   | FormCancelledV2
-  | WebsearchUpdatedV2
   | SessionStatusV22
   | SessionIdleV2
   | TuiPromptAppendV2
@@ -10833,21 +10792,6 @@ export type FormCancelledV2 = {
     id: string
     sessionID: string
   }
-}
-
-export type WebsearchUpdatedV2 = {
-  id: string
-  created: number
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "websearch.updated"
-  location?: LocationRefV2
-  data:
-    | {
-        [key: string]: unknown
-      }
-    | Array<unknown>
 }
 
 export type SessionIdleV2 = {
@@ -19371,171 +19315,6 @@ export type V2DebugLocationListResponses = {
 }
 
 export type V2DebugLocationListResponse = V2DebugLocationListResponses[keyof V2DebugLocationListResponses]
-
-export type V2WebsearchProviderListData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/websearch/provider"
-}
-
-export type V2WebsearchProviderListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableErrorV2
-}
-
-export type V2WebsearchProviderListError = V2WebsearchProviderListErrors[keyof V2WebsearchProviderListErrors]
-
-export type V2WebsearchProviderListResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfoV2
-    data: Array<WebSearchProvider>
-  }
-}
-
-export type V2WebsearchProviderListResponse = V2WebsearchProviderListResponses[keyof V2WebsearchProviderListResponses]
-
-export type V2WebsearchProviderSelectedData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/websearch/provider/selected"
-}
-
-export type V2WebsearchProviderSelectedErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-}
-
-export type V2WebsearchProviderSelectedError =
-  V2WebsearchProviderSelectedErrors[keyof V2WebsearchProviderSelectedErrors]
-
-export type V2WebsearchProviderSelectedResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfoV2
-    data: string | null
-  }
-}
-
-export type V2WebsearchProviderSelectedResponse =
-  V2WebsearchProviderSelectedResponses[keyof V2WebsearchProviderSelectedResponses]
-
-export type V2WebsearchProviderSelectData = {
-  body: {
-    providerID: string
-  }
-  path?: never
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/websearch/provider/selected"
-}
-
-export type V2WebsearchProviderSelectErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError1 | InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableErrorV2
-}
-
-export type V2WebsearchProviderSelectError = V2WebsearchProviderSelectErrors[keyof V2WebsearchProviderSelectErrors]
-
-export type V2WebsearchProviderSelectResponses = {
-  /**
-   * <No Content>
-   */
-  204: void
-}
-
-export type V2WebsearchProviderSelectResponse =
-  V2WebsearchProviderSelectResponses[keyof V2WebsearchProviderSelectResponses]
-
-export type V2WebsearchQueryData = {
-  body: {
-    query: string
-    providerID?: string
-  }
-  path?: never
-  query?: {
-    location?: {
-      directory?: string | null
-      workspace?: string | null
-    } | null
-  }
-  url: "/api/websearch"
-}
-
-export type V2WebsearchQueryErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError1 | InvalidRequestErrorV2
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableErrorV2
-}
-
-export type V2WebsearchQueryError = V2WebsearchQueryErrors[keyof V2WebsearchQueryErrors]
-
-export type V2WebsearchQueryResponses = {
-  /**
-   * Success
-   */
-  200: {
-    location: LocationInfoV2
-    data: WebSearchResult
-  }
-}
-
-export type V2WebsearchQueryResponse = V2WebsearchQueryResponses[keyof V2WebsearchQueryResponses]
 
 export type PtyConnectData = {
   body?: never

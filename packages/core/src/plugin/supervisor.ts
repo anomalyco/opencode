@@ -20,6 +20,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Image } from "../image"
 import { Integration } from "../integration"
+import { KV } from "../kv"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { ModelsDev } from "../models-dev"
@@ -289,6 +290,7 @@ export const node = makeLocationNode({
     httpClient,
     Image.node,
     Integration.node,
+    KV.node,
     Location.node,
     LocationMutation.node,
     ModelsDev.node,

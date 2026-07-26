@@ -58,7 +58,6 @@ type LocationData = {
   provider?: ProviderV2Info[]
   reference?: ReferenceInfo[]
   websearch?: WebSearchProvider[]
-  websearchSelected?: WebSearchProvider["id"] | null
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellInfo>
@@ -1262,20 +1261,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           list(location?: LocationRef) {
             return store.location[locationKey(location ?? defaultLocation())]?.websearch
           },
-          provider(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.websearchSelected ?? undefined
-          },
           async refresh(ref?: LocationRef) {
             const input = { location: locationQuery(ref ?? defaultLocation()) }
-            const [providers, selected] = await Promise.all([
-              client.api.websearch.provider.list(input),
-              client.api.websearch.provider.selected(input),
-            ])
+            const providers = await client.api.websearch.providers(input)
             const key = locationKey(providers.location)
             setStore("location", key, {
               ...store.location[key],
               websearch: providers.data,
-              websearchSelected: selected.data ?? null,
             })
           },
         },

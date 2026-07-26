@@ -253,23 +253,26 @@ describe("fromPromise", () => {
       const promisePlugin = Plugin.define({
         id: "promise-websearch",
         setup: async (ctx) => {
-          await ctx.websearch.register({
-            id: "promise-websearch",
-            name: "Promise Web Search",
-            execute: async (input) => ({ text: `promise: ${input.query}` }),
+          await ctx.websearch.transform((draft) => {
+            draft.add({
+              id: "promise-websearch",
+              name: "Promise Web Search",
+              execute: async (input) => [{ url: "https://example.com", content: `promise: ${input.query}`, time: {} }],
+            })
           })
         },
       })
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
-      expect(yield* websearch.list()).toContainEqual({
+      expect(yield* websearch.providers()).toContainEqual({
         id: WebSearch.ID.make("promise-websearch"),
         name: "Promise Web Search",
       })
-      expect(
-        yield* websearch.query({ query: "effect", providerID: WebSearch.ID.make("promise-websearch") }),
-      ).toEqual(
-        new WebSearch.Result({ providerID: WebSearch.ID.make("promise-websearch"), text: "promise: effect" }),
+      expect(yield* websearch.query({ query: "effect", providerID: WebSearch.ID.make("promise-websearch") })).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("promise-websearch"),
+          results: [{ url: "https://example.com", content: "promise: effect", time: {} }],
+        }),
       )
     }),
   )

@@ -53,13 +53,17 @@ export function waitForCodeModeTool(
  * full plugin host. Only the tool domain is live; focused tool tests exercise
  * registration, snapshots, and execution through the same path production uses.
  */
-export const registerToolPlugin = <R>(plugin: {
-  readonly id: string
-  readonly effect: (context: PluginContext) => Effect.Effect<void, never, R>
-}): Effect.Effect<void, never, R | Tools.Service | Scope.Scope> =>
+export const registerToolPlugin = <R>(
+  plugin: {
+    readonly id: string
+    readonly effect: (context: PluginContext) => Effect.Effect<void, never, R>
+  },
+  overrides: Parameters<typeof host>[0] = {},
+): Effect.Effect<void, never, R | Tools.Service | Scope.Scope> =>
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const context = host({
+      ...overrides,
       session: {
         hook: () => Effect.succeed({ dispose: Effect.void }),
       },

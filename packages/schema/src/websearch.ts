@@ -20,15 +20,19 @@ export const Input = Schema.Struct({
 }).annotate({ identifier: "WebSearch.Input" })
 export type ProviderInput = Pick<Input, "query">
 
-export interface ProviderOutput extends Schema.Schema.Type<typeof ProviderOutput> {}
-export const ProviderOutput = Schema.Struct({
-  text: Schema.String,
-  metadata: Schema.Json.pipe(optional),
-}).annotate({ identifier: "WebSearch.ProviderOutput" })
+export interface Result extends Schema.Schema.Type<typeof Result> {}
+export const Result = Schema.Struct({
+  url: Schema.String,
+  title: Schema.String.pipe(optional),
+  content: Schema.String.pipe(optional),
+  time: Schema.Struct({
+    published: Schema.Finite.pipe(optional),
+  }),
+}).annotate({ identifier: "WebSearch.Result" })
 
-export class Result extends Schema.Class<Result>("WebSearch.Result")({
+export class Response extends Schema.Class<Response>("WebSearch.Response")({
   providerID: ID,
-  ...ProviderOutput.fields,
+  results: Schema.Array(Result),
 }) {}
 
 const Updated = ephemeral({
