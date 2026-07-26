@@ -124,6 +124,7 @@ export function Sessions() {
   const [dismissed, setDismissed] = createSignal(false)
   const [suggestionIndex, setSuggestionIndex] = createSignal(0)
   const [toDelete, setToDelete] = createSignal<string>()
+  const [completionAnchor, setCompletionAnchor] = createSignal<string>()
   const deleteHint = useCommandShortcut("session.delete")
   let selectRef: DialogSelectRef<string> | undefined
   let textarea: TextareaRenderable
@@ -153,9 +154,16 @@ export function Sessions() {
     })
   })
 
+  // The footer operates in the context of the selected session row: directory
+  // completion anchors at the selected session's directory and sessions
+  // created without an explicit @path are created there, falling back to the
+  // launch cwd. The selection is frozen while the footer textarea has focus,
+  // so reading it lazily at compute time is enough.
+  const anchor = () => selectRef?.selected()?.category ?? paths.cwd
+
   const suggestions = createMemo(() => {
     if (dismissed()) return []
-    return directorySuggestions(inputText(), { cwd: paths.cwd, home: paths.home }, readdirDirectories)
+    return directorySuggestions(inputText(), { cwd: anchor(), home: paths.home }, readdirDirectories)
   })
 
   const highlighted = createMemo(() => {
@@ -187,6 +195,9 @@ export function Sessions() {
   function acceptSuggestion() {
     const picked = suggestions()[highlighted()]
     if (!picked) return
+    // Relative completions must resolve against the same anchor at submit
+    // time, even if the list selection changes before Enter.
+    setCompletionAnchor(anchor())
     textarea.setText("@" + picked + "/")
     textarea.gotoBufferEnd()
     setSuggestionIndex(0)
@@ -198,11 +209,15 @@ export function Sessions() {
   }
 
   async function create() {
-    const parsed = parseNewSessionInput(textarea.plainText, { cwd: paths.cwd, home: paths.home })
+    const parsed = parseNewSessionInput(textarea.plainText, {
+      cwd: completionAnchor() ?? anchor(),
+      home: paths.home,
+    })
     if (!parsed.directory && !parsed.prompt) return
 
-    if (parsed.directory && !(existsSync(parsed.directory) && statSync(parsed.directory).isDirectory())) {
-      toast.show({ message: `Directory not found: ${parsed.directory}`, variant: "error" })
+    const directory = parsed.directory ?? anchor()
+    if (!(existsSync(directory) && statSync(directory).isDirectory())) {
+      toast.show({ message: `Directory not found: ${directory}`, variant: "error" })
       return
     }
 
@@ -214,7 +229,7 @@ export function Sessions() {
     const model = local.model.current()
     const variant = local.model.variant.current()
     const res = await sdk.client.session.create({
-      directory: parsed.directory,
+      directory,
       agent: agent.name,
       ...(model ? { model: { providerID: model.providerID, id: model.modelID, variant } } : {}),
     })
@@ -382,6 +397,7 @@ export function Sessions() {
           }}
           onContentChange={() => {
             setInputText(textarea.plainText)
+            if (!textarea.plainText.trimStart().startsWith("@")) setCompletionAnchor(undefined)
             setDismissed(false)
             setSuggestionIndex(0)
           }}
