@@ -4,11 +4,12 @@ import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { Protocol } from "../route/protocol"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
+import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
 import { isRecord } from "../protocols/shared"
 import { ttlBucket } from "../protocols/utils/cache"
+import { policyEnabled, resolvePolicy } from "../cache-policy"
 
 export const profile = OpenAICompatibleProfiles.profiles.openrouter
 export const id = ProviderID.make(profile.provider)
@@ -19,11 +20,7 @@ export interface OpenRouterOptions {
   readonly usage?: boolean | Record<string, unknown>
   readonly reasoning?: Record<string, unknown>
   readonly promptCacheKey?: string
-  readonly prompt_cache_key?: string
-  readonly sessionID?: string
-  readonly session_id?: string
   readonly cacheControl?: Record<string, unknown>
-  readonly cache_control?: Record<string, unknown>
 }
 
 export type OpenRouterProviderOptionsInput = ProviderOptions & {
@@ -41,6 +38,21 @@ const OpenRouterBody = Schema.StructWithRest(Schema.Struct(OpenAIChat.bodyFields
 ])
 export type OpenRouterBody = Schema.Schema.Type<typeof OpenRouterBody>
 
+const EPHEMERAL_5M = { type: "ephemeral" as const }
+const EPHEMERAL_1H = { type: "ephemeral" as const, ttl: "1h" as const }
+
+// `~anthropic/*` are OpenRouter catalog aliases for the same upstream models.
+const isAnthropicModel = (modelID: string) => modelID.replace(/^~/, "").startsWith("anthropic/")
+
+// "Automatic" caching is a whole-request directive, so the policy's breakpoint
+// placements do not apply here — only whether it is on, and its TTL.
+const automaticCacheControl = (request: LLMRequest) => {
+  if (!isAnthropicModel(request.model.id)) return undefined
+  const policy = resolvePolicy(request.cache)
+  if (!policyEnabled(policy)) return undefined
+  return ttlBucket(policy.ttlSeconds) === "1h" ? EPHEMERAL_1H : EPHEMERAL_5M
+}
+
 export const protocol = Protocol.make({
   id: "openrouter-chat",
   body: {
@@ -48,25 +60,11 @@ export const protocol = Protocol.make({
     from: (request) =>
       OpenAIChat.protocol.body.from(request).pipe(
         Effect.map((body) => {
-          const options = bodyOptions(request.providerOptions?.openrouter)
-          const policy = request.cache
-          const cacheEnabled =
-            policy === undefined ||
-            policy === "auto" ||
-            (typeof policy === "object" && Boolean(policy.tools || policy.system || policy.messages))
-          const automaticCacheControl =
-            request.model.id.replace(/^~/, "").startsWith("anthropic/") && cacheEnabled
-              ? {
-                  type: "ephemeral",
-                  ...(ttlBucket(typeof policy === "object" ? policy.ttlSeconds : undefined) === "1h"
-                    ? { ttl: "1h" }
-                    : {}),
-                }
-              : undefined
+          const automatic = automaticCacheControl(request)
           return {
             ...body,
-            ...(automaticCacheControl ? { cache_control: automaticCacheControl } : {}),
-            ...options,
+            ...(automatic ? { cache_control: automatic } : {}),
+            ...bodyOptions(request.providerOptions?.openrouter),
           } as OpenRouterBody
         }),
       ),
@@ -76,11 +74,6 @@ export const protocol = Protocol.make({
 
 const bodyOptions = (input: unknown) => {
   const openrouter = isRecord(input) ? input : {}
-  const cacheControl = isRecord(openrouter.cacheControl)
-    ? openrouter.cacheControl
-    : isRecord(openrouter.cache_control)
-      ? openrouter.cache_control
-      : undefined
   return {
     ...(openrouter.usage === true
       ? { usage: { include: true } }
@@ -88,17 +81,8 @@ const bodyOptions = (input: unknown) => {
         ? { usage: openrouter.usage }
         : {}),
     ...(isRecord(openrouter.reasoning) ? { reasoning: openrouter.reasoning } : {}),
-    ...(typeof openrouter.promptCacheKey === "string"
-      ? { prompt_cache_key: openrouter.promptCacheKey }
-      : typeof openrouter.prompt_cache_key === "string"
-        ? { prompt_cache_key: openrouter.prompt_cache_key }
-        : {}),
-    ...(typeof openrouter.sessionID === "string"
-      ? { session_id: openrouter.sessionID }
-      : typeof openrouter.session_id === "string"
-        ? { session_id: openrouter.session_id }
-        : {}),
-    ...(cacheControl ? { cache_control: cacheControl } : {}),
+    ...(typeof openrouter.promptCacheKey === "string" ? { prompt_cache_key: openrouter.promptCacheKey } : {}),
+    ...(isRecord(openrouter.cacheControl) ? { cache_control: openrouter.cacheControl } : {}),
   }
 }
 

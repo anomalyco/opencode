@@ -30,11 +30,16 @@ const NONE: CachePolicyObject = {}
 //   - "auto"      → tools + system + latest user msg.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
 //   - object form → exactly what the caller asked for.
-const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
+export const resolvePolicy = (policy: CachePolicy | undefined): CachePolicyObject => {
   if (policy === undefined || policy === "auto") return AUTO
   if (policy === "none") return NONE
   return policy
 }
+
+// Protocols that cache a whole request in one directive, rather than at the
+// breakpoints `applyCachePolicy` places, have no placements to read — only this.
+export const policyEnabled = (policy: CachePolicyObject): boolean =>
+  Boolean(policy.tools || policy.system || policy.messages)
 
 // Protocols whose wire format ignores inline cache markers (OpenAI's implicit
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
@@ -98,8 +103,8 @@ const markMessages = (
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  const policy = resolve(request.cache)
-  if (!policy.tools && !policy.system && !policy.messages) return request
+  const policy = resolvePolicy(request.cache)
+  if (!policyEnabled(policy)) return request
 
   const hint = makeHint(policy.ttlSeconds)
   const tools = policy.tools ? markLastTool(request.tools, hint) : request.tools

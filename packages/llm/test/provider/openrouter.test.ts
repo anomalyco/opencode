@@ -39,7 +39,7 @@ describe("OpenRouter", () => {
               openrouter: {
                 usage: true,
                 reasoning: { effort: "high" },
-                session_id: "session_123",
+                promptCacheKey: "session_123",
                 cacheControl: { type: "ephemeral", ttl: "1h" },
               },
             },
@@ -51,7 +51,7 @@ describe("OpenRouter", () => {
       expect(prepared.body).toMatchObject({
         usage: { include: true },
         reasoning: { effort: "high" },
-        session_id: "session_123",
+        prompt_cache_key: "session_123",
         cache_control: { type: "ephemeral", ttl: "1h" },
       })
     }),
@@ -78,6 +78,15 @@ describe("OpenRouter", () => {
         }),
       )
       expect(disabled.body).not.toHaveProperty("cache_control")
+
+      const hourly = yield* LLMClient.prepare(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-opus-4.8"),
+          prompt: "Say hello.",
+          cache: { system: true, ttlSeconds: 3600 },
+        }),
+      )
+      expect(hourly.body).toMatchObject({ cache_control: { type: "ephemeral", ttl: "1h" } })
     }),
   )
 
