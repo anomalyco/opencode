@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
-import { Effect, FileSystem, Layer } from "effect"
+import { Cause, Effect, Exit, FileSystem, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
 import { Instruction } from "../../src/session/instruction"
+import { InstructionAudience } from "../../src/session/instruction-audience"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Global } from "@opencode-ai/core/global"
@@ -31,10 +32,15 @@ const it = testEffect(
 )
 
 const configLayer = Layer.succeed(Config.Service, TestConfig.make())
+const mainBuild: InstructionAudience.Reader = { role: "main", agent: "build" }
 
-const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
+const instructionLayer = (
+  global: Partial<Global.Interface>,
+  flags: Partial<RuntimeFlags.Info> = {},
+  config: Config.Interface = TestConfig.make(),
+) =>
   AppNodeBuilder.build(Instruction.node, [
-    [Config.node, configLayer],
+    [Config.node, Layer.succeed(Config.Service, config)],
     [Global.node, Global.layerWith(global)],
     [RuntimeFlags.node, RuntimeFlags.layer(flags)],
   ])
@@ -119,7 +125,7 @@ describe("Instruction.resolve", () => {
         const system = yield* svc.systemPaths()
         expect(system.has(path.join(dir, "AGENTS.md"))).toBe(true)
 
-        const results = yield* svc.resolve([], path.join(dir, "src", "file.ts"), MessageID.make("msg_message-test-1"))
+        const results = yield* svc.resolve([], path.join(dir, "src", "file.ts"), MessageID.make("msg_message-test-1"), mainBuild)
         expect(results).toEqual([])
       }),
     ),
@@ -136,6 +142,7 @@ describe("Instruction.resolve", () => {
           [],
           path.join(dir, "subdir", "nested", "file.ts"),
           MessageID.make("msg_message-test-2"),
+          mainBuild,
         )
         expect(results.length).toBe(1)
         expect(results[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
@@ -151,7 +158,7 @@ describe("Instruction.resolve", () => {
         const system = yield* svc.systemPaths()
         expect(system.has(filepath)).toBe(false)
 
-        const results = yield* svc.resolve([], filepath, MessageID.make("msg_message-test-3"))
+        const results = yield* svc.resolve([], filepath, MessageID.make("msg_message-test-3"), mainBuild)
         expect(results).toEqual([])
       }),
     ),
@@ -164,8 +171,8 @@ describe("Instruction.resolve", () => {
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
         const id = MessageID.make("msg_message-claim-1")
 
-        const first = yield* svc.resolve([], filepath, id)
-        const second = yield* svc.resolve([], filepath, id)
+        const first = yield* svc.resolve([], filepath, id, mainBuild)
+        const second = yield* svc.resolve([], filepath, id, mainBuild)
 
         expect(first).toHaveLength(1)
         expect(first[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
@@ -181,9 +188,9 @@ describe("Instruction.resolve", () => {
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
         const id = MessageID.make("msg_message-claim-2")
 
-        const first = yield* svc.resolve([], filepath, id)
+        const first = yield* svc.resolve([], filepath, id, mainBuild)
         yield* svc.clear(id)
-        const second = yield* svc.resolve([], filepath, id)
+        const second = yield* svc.resolve([], filepath, id, mainBuild)
 
         expect(first).toHaveLength(1)
         expect(second).toHaveLength(1)
@@ -200,9 +207,100 @@ describe("Instruction.resolve", () => {
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
         const id = MessageID.make("msg_message-claim-3")
 
-        const results = yield* svc.resolve(loaded(agents), filepath, id)
+        const results = yield* svc.resolve(loaded(agents), filepath, id, mainBuild)
         expect(results).toEqual([])
       }),
+    ),
+  )
+
+  it.live("a child reader cannot resolve a nested AGENTS.md marked audience: main", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "---\nopencode:\n  audience: main\n---\nMAIN-ONLY NESTED DOCTRINE\n",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const results = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-claim-audience"),
+            { role: "subagent", agent: "build" },
+          )
+          expect(results).toEqual([])
+        }),
+    ),
+  )
+
+  it.live("a matching nested instruction is included with frontmatter stripped", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "---\nopencode:\n  audience: main\n---\nMAIN-ONLY NESTED DOCTRINE\n",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const results = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-audience-main"),
+            mainBuild,
+          )
+          expect(results).toHaveLength(1)
+          expect(results[0].content).toContain("MAIN-ONLY NESTED DOCTRINE")
+          expect(results[0].content).not.toContain("audience: main")
+        }),
+    ),
+  )
+
+  it.live("delivers malformed audience as a typed failure rather than a defect", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "---\nopencode:\n  audiance: main\n---\nBody\n",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const exit = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-audience-typed-failure"),
+            mainBuild,
+          ).pipe(Effect.exit)
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) return
+          expect(Cause.hasDies(exit.cause)).toBe(false)
+          expect(Cause.hasFails(exit.cause)).toBe(true)
+          expect(Cause.squash(exit.cause)).toBeInstanceOf(InstructionAudience.AudienceError)
+        }),
+    ),
+  )
+
+  it.live("a malformed nested audience directive fails with its path", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "---\nopencode:\n  audiance: main\n---\nBody\n",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const filepath = path.join(dir, "subdir", "AGENTS.md")
+          const exit = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-audience-malformed"),
+            mainBuild,
+          ).pipe(Effect.exit)
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) return
+          const error = Cause.squash(exit.cause)
+          expect(error).toBeInstanceOf(InstructionAudience.AudienceError)
+          expect(String(error)).toContain(filepath)
+        }),
     ),
   )
 
@@ -221,11 +319,73 @@ describe("Instruction.system", () => {
         expect(paths.has(path.join(projectTmp, "AGENTS.md"))).toBe(true)
         expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
 
-        const rules = yield* svc.system()
+        const rules = yield* svc.system(mainBuild)
         expect(rules).toHaveLength(2)
         expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`)
         expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("origin and audience filters intersect independently", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({
+        "CONFIG_MATCH.md": "---\nopencode:\n  audience:\n    - agent: build*\n---\nCONFIG MATCH\n",
+      })
+      const projectTmp = yield* tmpWithFiles({
+        "AGENTS.md": "---\nopencode:\n  audience:\n    - agent: build*\n---\nPROJECT MATCH\n",
+        "PROJECT_WRONG.md": "---\nopencode:\n  audience:\n    - agent: other*\n---\nPROJECT WRONG AUDIENCE\n",
+      })
+      const config = TestConfig.make({
+        get: () => Effect.succeed({
+          instructions: [path.join(projectTmp, "PROJECT_WRONG.md"), path.join(globalTmp, "CONFIG_MATCH.md")],
+        }),
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const all = yield* svc.system(mainBuild)
+        expect(all.join("\n")).toContain("PROJECT MATCH")
+        expect(all.join("\n")).toContain("CONFIG MATCH")
+        expect(all.join("\n")).not.toContain("PROJECT WRONG AUDIENCE")
+      }).pipe(
+        provideInstance(projectTmp),
+        Effect.provide(instructionLayer({ home: globalTmp, config: globalTmp }, {}, config)),
+      )
+    }),
+  )
+
+  it.live("assembly preserves unrelated frontmatter and horizontal-rule bytes", () =>
+    Effect.gen(function* () {
+      const projectTmp = yield* tmpWithFiles({
+        "AGENTS.md": "---\ntitle: A Document\n---\nBody\n",
+        "RULE.md": "---\nA heading\n---\nBody text here\n",
+      })
+      const config = TestConfig.make({
+        get: () => Effect.succeed({ instructions: [path.join(projectTmp, "RULE.md")] }),
+      })
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rules = yield* svc.system(mainBuild)
+        expect(rules).toContain(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n---\ntitle: A Document\n---\nBody\n`)
+        expect(rules).toContain(`Instructions from: ${path.join(projectTmp, "RULE.md")}\n---\nA heading\n---\nBody text here\n`)
+      }).pipe(
+        provideInstance(projectTmp),
+        Effect.provide(instructionLayer({ home: projectTmp, config: projectTmp }, {}, config)),
+      )
+    }),
+  )
+
+  it.live("assembly strips a validated directive", () =>
+    Effect.gen(function* () {
+      const projectTmp = yield* tmpWithFiles({
+        "AGENTS.md": "---\nopencode:\n  audience: main\n---\nBODY\n",
+      })
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rules = yield* svc.system(mainBuild)
+        expect(rules).toContain(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\nBODY\n`)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: projectTmp, config: projectTmp }))
     }),
   )
 
@@ -239,7 +399,7 @@ describe("Instruction.system", () => {
         const paths = yield* svc.systemPaths()
         expect(paths.has(path.join(globalTmp, ".claude", "CLAUDE.md"))).toBe(false)
         expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(false)
-        expect(yield* svc.system()).toEqual([])
+        expect(yield* svc.system(mainBuild)).toEqual([])
       }).pipe(
         provideInstance(projectTmp),
         provideInstruction({ home: globalTmp, config: globalTmp }, { disableClaudeCodePrompt: true }),

@@ -37,6 +37,7 @@ export type Context<M extends Metadata = Metadata> = {
   sessionID: SessionID
   messageID: MessageID
   agent: string
+  reader?: { role: "main" | "subagent"; agent: string }
   abort: AbortSignal
   callID?: string
   extra?: { [key: string]: unknown }
