@@ -2,6 +2,7 @@ import { createMemo, createResource, createSignal, onCleanup, Show, For } from "
 import path from "path"
 import { existsSync, statSync, readdirSync } from "node:fs"
 import type { TextareaRenderable } from "@opentui/core"
+import { go } from "fuzzysort"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useSDK } from "../context/sdk"
@@ -41,8 +42,12 @@ export function parseNewSessionInput(input: string, paths: { cwd: string; home: 
 }
 
 // Directory completion for the new session input: only fires while the input
-// is a single @token (no prompt text yet). `readdir` is injected so tests can
-// stub the filesystem.
+// is a single @token (no prompt text yet). A bare name fuzzy-searches the
+// tree below the cwd so nested directories surface without descending level
+// by level; once the token contains a slash it completes the children of
+// that path instead. Results stay relative to the cwd when possible so both
+// the list and the completed input read short. `readdir` is injected so
+// tests can stub the filesystem.
 export function directorySuggestions(
   input: string,
   paths: { cwd: string; home: string },
@@ -51,18 +56,47 @@ export function directorySuggestions(
   const match = /^@(\S*)$/.exec(input.trim())
   if (!match) return []
   const token = match[1]
+  if (token && !token.includes("/") && !token.startsWith("~")) {
+    return go(token, walk(paths.cwd, readdir, token.startsWith(".")), { limit: 8 }).map((result) => result.target)
+  }
   const expanded = token.startsWith("~") ? path.join(paths.home, token.slice(1)) : token
-  const descend = expanded.endsWith("/") || token === "~"
+  const descend = expanded.endsWith("/") || token === "~" || token === ""
   const absolute = path.isAbsolute(expanded) ? expanded : path.resolve(paths.cwd, expanded)
-  const base = descend ? absolute : expanded.includes("/") ? path.dirname(absolute) : paths.cwd
-  const prefix = descend ? "" : expanded.includes("/") ? path.basename(absolute) : expanded
-  return readdir(base)
-    .filter((name) => name !== "node_modules")
-    .filter((name) => prefix.startsWith(".") || !name.startsWith("."))
-    .filter((name) => name.startsWith(prefix))
-    .toSorted()
-    .slice(0, 8)
-    .map((name) => path.join(base, name))
+  const base = descend ? absolute : path.dirname(absolute)
+  const needle = descend ? "" : path.basename(absolute)
+  const names = readdir(base).filter(
+    (name) => name !== "node_modules" && (needle.startsWith(".") || !name.startsWith(".")),
+  )
+  const matched = needle ? go(needle, names, { limit: 8 }).map((result) => result.target) : names.toSorted().slice(0, 8)
+  return matched.map((name) => shorten(path.join(base, name), paths.cwd))
+}
+
+// Breadth-first, depth-limited walk of the directories under root, returned
+// relative to it. node_modules is always skipped, and hidden directories are
+// skipped unless the needle asks for a dotfile, so the search stays fast.
+function walk(root: string, readdir: (dir: string) => string[], hidden: boolean) {
+  const result: string[] = []
+  let level = [root]
+  for (let depth = 0; depth < 4 && level.length > 0 && result.length < 2000; depth++) {
+    const next: string[] = []
+    for (const dir of level) {
+      for (const name of readdir(dir)) {
+        if (name === "node_modules") continue
+        if (!hidden && name.startsWith(".")) continue
+        result.push(path.join(dir, name))
+        next.push(path.join(dir, name))
+        if (result.length >= 2000) break
+      }
+    }
+    level = next
+  }
+  return result.map((dir) => path.relative(root, dir))
+}
+
+function shorten(dir: string, cwd: string) {
+  const relative = path.relative(cwd, dir)
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return dir
+  return relative
 }
 
 function readdirDirectories(dir: string): string[] {
@@ -121,7 +155,7 @@ export function Sessions() {
 
   const suggestions = createMemo(() => {
     if (dismissed()) return []
-    return directorySuggestions(inputText(), { cwd: sdk.directory ?? paths.cwd, home: paths.home }, readdirDirectories)
+    return directorySuggestions(inputText(), { cwd: paths.cwd, home: paths.home }, readdirDirectories)
   })
 
   const highlighted = createMemo(() => {
@@ -154,6 +188,7 @@ export function Sessions() {
     const picked = suggestions()[highlighted()]
     if (!picked) return
     textarea.setText("@" + picked + "/")
+    textarea.gotoBufferEnd()
     setSuggestionIndex(0)
   }
 
@@ -163,7 +198,7 @@ export function Sessions() {
   }
 
   async function create() {
-    const parsed = parseNewSessionInput(textarea.plainText, { cwd: sdk.directory ?? paths.cwd, home: paths.home })
+    const parsed = parseNewSessionInput(textarea.plainText, { cwd: paths.cwd, home: paths.home })
     if (!parsed.directory && !parsed.prompt) return
 
     if (parsed.directory && !(existsSync(parsed.directory) && statSync(parsed.directory).isDirectory())) {

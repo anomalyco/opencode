@@ -73,25 +73,37 @@ describe("directorySuggestions", () => {
   })
 
   test("lists directories of the cwd for a bare @", () => {
-    expect(directorySuggestions("@", paths, readdir)).toEqual([
-      "/work/current/packages",
-      "/work/current/src",
-    ])
+    expect(directorySuggestions("@", paths, readdir)).toEqual(["packages", "src"])
   })
 
-  test("filters by the last segment prefix", () => {
-    expect(directorySuggestions("@pac", paths, readdir)).toEqual(["/work/current/packages"])
+  test("fuzzy-searches nested directories from the cwd", () => {
+    const result = directorySuggestions("@pac", paths, readdir)
+    expect(result[0]).toBe("packages")
+    expect(result).toContain("packages/opencode")
+    expect(result).toContain("packages/tui")
+  })
+
+  test("finds a nested directory by name without descending", () => {
+    expect(directorySuggestions("@opencode", paths, readdir)).toEqual(["packages/opencode"])
+  })
+
+  test("stops searching past four levels", () => {
+    const deep: Record<string, string[]> = {
+      "/work/current": ["a"],
+      "/work/current/a": ["b"],
+      "/work/current/a/b": ["c"],
+      "/work/current/a/b/c": ["d"],
+      "/work/current/a/b/c/d": ["deep"],
+    }
+    expect(directorySuggestions("@deep", paths, (dir) => deep[dir] ?? [])).toEqual([])
   })
 
   test("descends into a path ending with a slash", () => {
-    expect(directorySuggestions("@packages/", paths, readdir)).toEqual([
-      "/work/current/packages/opencode",
-      "/work/current/packages/tui",
-    ])
+    expect(directorySuggestions("@packages/", paths, readdir)).toEqual(["packages/opencode", "packages/tui"])
   })
 
-  test("resolves nested relative prefixes", () => {
-    expect(directorySuggestions("@packages/t", paths, readdir)).toEqual(["/work/current/packages/tui"])
+  test("fuzzy-matches the last segment of a partial path", () => {
+    expect(directorySuggestions("@packages/t", paths, readdir)).toEqual(["packages/tui"])
   })
 
   test("expands ~ against the home directory", () => {
@@ -106,10 +118,10 @@ describe("directorySuggestions", () => {
     expect(directorySuggestions("@/", paths, readdir)).toEqual(["/home", "/mnt"])
   })
 
-  test("keeps dotfiles hidden unless the prefix starts with a dot", () => {
+  test("keeps dotfiles hidden unless the needle starts with a dot", () => {
     const withDot: Record<string, string[]> = { "/work/current": [".config", "src"] }
-    expect(directorySuggestions("@", paths, (dir) => withDot[dir] ?? [])).toEqual(["/work/current/src"])
-    expect(directorySuggestions("@.", paths, (dir) => withDot[dir] ?? [])).toEqual(["/work/current/.config"])
+    expect(directorySuggestions("@", paths, (dir) => withDot[dir] ?? [])).toEqual(["src"])
+    expect(directorySuggestions("@.", paths, (dir) => withDot[dir] ?? [])).toEqual([".config"])
   })
 
   test("caps the list at eight entries", () => {
