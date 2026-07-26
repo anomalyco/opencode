@@ -1330,3 +1330,107 @@ test("updates installed theme when plugin metadata changes", async () => {
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
+
+test("auto-disposes plugin prompt onChange subscriptions", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "prompt-change-plugin.ts")
+      const spec = pathToFileURL(file).href
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.prompt.change",
+  tui: async (api) => {
+    api.prompt.onChange(() => {})
+  },
+}
+`,
+      )
+      return { spec }
+    },
+  })
+
+  let change_add = 0
+  let change_drop = 0
+  const prompt = {
+    ref: () => undefined,
+    onChange: () => {
+      change_add += 1
+      return () => {
+        change_drop += 1
+      }
+    },
+    onCursorChange: () => () => {},
+  } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["prompt"]
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ prompt }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+    expect(change_add).toBe(1)
+    expect(change_drop).toBe(0)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(change_drop).toBe(1)
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
+test("auto-disposes plugin prompt onCursorChange subscriptions", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "prompt-cursor-plugin.ts")
+      const spec = pathToFileURL(file).href
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.prompt.cursor",
+  tui: async (api) => {
+    api.prompt.onCursorChange(() => {})
+  },
+}
+`,
+      )
+      return { spec }
+    },
+  })
+
+  let cursor_add = 0
+  let cursor_drop = 0
+  const prompt = {
+    ref: () => undefined,
+    onChange: () => () => {},
+    onCursorChange: () => {
+      cursor_add += 1
+      return () => {
+        cursor_drop += 1
+      }
+    },
+  } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["prompt"]
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ prompt }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+    expect(cursor_add).toBe(1)
+    expect(cursor_drop).toBe(0)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(cursor_drop).toBe(1)
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
