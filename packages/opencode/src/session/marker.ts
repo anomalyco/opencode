@@ -1,17 +1,31 @@
 export type MarkerInput =
   | { kind: "interrupt"; intent: "steer" | "cancel" | "abort"; origin: "user" | "parent"; reason?: string }
   | { kind: "message"; peer: "parent" | "subagent"; body: string; expectReply?: boolean }
-  | { kind: "inbox"; from: string; body?: string }
+  // `from` is the human-readable sender label (session name for s2s, slug for
+  // coordinator-messaging). `sessionId`, when present (s2s), is the addressable
+  // peer session id — shown so the recipient knows who to message back.
+  | { kind: "inbox"; from: string; sessionId?: string; body?: string }
 
 // The metadata tag carries small attributes only — body/reason are not echoed
 // onto the part, so call sites can omit them when calling metadataFor.
 export type MarkerMetadataInput =
   | { kind: "interrupt"; intent: "steer" | "cancel" | "abort"; origin: "user" | "parent" }
   | { kind: "message"; peer: "parent" | "subagent"; expectReply?: boolean }
-  | { kind: "inbox"; from: string }
+  | { kind: "inbox"; from: string; sessionId?: string }
 
 export function escape(text: string) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+// For double-quoted XML/HTML attribute *values*. Escapes the quote
+// characters on top of escape()'s &/</> so an untrusted value (e.g. a
+// peer's session title) cannot close the attribute and inject sibling
+// attributes or break out of the tag. Use this for anything interpolated
+// inside name="..." / session="..."; keep escape() for element *content*
+// (between tags) and the visible ✉/⊘ markers (where &quot; would render
+// literally and there is no attribute to break out of).
+export function escapeAttr(text: string) {
+  return escape(text).replace(/"/g, "&quot;").replace(/'/g, "&#39;")
 }
 
 export function render(input: MarkerInput): string {
@@ -28,7 +42,7 @@ export function render(input: MarkerInput): string {
         : "Reply from parent"
     return `✉ ${verb}: ${escape(input.body)}`
   }
-  return `✉ Inbox from ${escape(input.from)}${input.body ? `: ${escape(input.body)}` : ""}`
+  return `✉ Inbox from ${escape(input.from)}${input.sessionId ? ` (${escape(input.sessionId)})` : ""}${input.body ? `: ${escape(input.body)}` : ""}`
 }
 
 // The metadata tag written on the non-synthetic transcript part. The TUI keys
@@ -36,7 +50,7 @@ export function render(input: MarkerInput): string {
 export function metadataFor(input: MarkerMetadataInput): { marker: Record<string, unknown> } {
   if (input.kind === "interrupt") return { marker: { kind: "interrupt", intent: input.intent, origin: input.origin } }
   if (input.kind === "message") return { marker: { kind: "message", peer: input.peer, expectReply: input.expectReply } }
-  return { marker: { kind: "inbox", from: input.from } }
+  return { marker: { kind: "inbox", from: input.from, ...(input.sessionId ? { sessionId: input.sessionId } : {}) } }
 }
 
 export * as Marker from "./marker"

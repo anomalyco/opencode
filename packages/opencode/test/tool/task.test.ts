@@ -17,7 +17,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
 import { Interrupt } from "../../src/session/interrupt"
-import { TaskTool, renderOutput, type TaskPromptOps } from "../../src/tool/task"
+import { TaskTool, renderOutput, Event as TaskEventDef, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -53,15 +53,16 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Interrupt.node,
       Database.node,
       Messaging.node,
-      Interrupt.node,
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
     [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
 
-const it = testEffect(layer())
-const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
+const withRipgrep = (flags: Partial<RuntimeFlags.Info> = {}) => layer(flags)
+
+const it = testEffect(withRipgrep())
+const background = testEffect(withRipgrep({ experimentalBackgroundSubagents: true }))
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -1235,4 +1236,190 @@ describe("tool.task", () => {
         })
       }),
   )
+
+  it.instance("completed task publishes enriched task.completed event", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.sync(() => {
+            const id = MessageID.ascending()
+            const info: SessionV1.Assistant = {
+              id,
+              role: "assistant",
+              parentID: input.messageID ?? MessageID.ascending(),
+              sessionID: input.sessionID,
+              mode: input.agent ?? "general",
+              agent: input.agent ?? "general",
+              cost: 0.005,
+              path: { cwd: "/tmp", root: "/tmp" },
+              tokens: { input: 100, output: 50, reasoning: 20, cache: { read: 10, write: 5 } },
+              modelID: input.model?.modelID ?? ref.modelID,
+              providerID: input.model?.providerID ?? ref.providerID,
+              time: { created: Date.now() },
+              finish: "stop",
+            }
+            const part = {
+              id: PartID.ascending(),
+              messageID: id,
+              sessionID: input.sessionID,
+              type: "text" as const,
+              text: "done",
+            }
+            return { info: info as SessionV1.Info, parts: [part] }
+          }).pipe(
+            Effect.tap((result) =>
+              Effect.all([
+                sessions.updateMessage(result.info),
+                sessions.updatePart(result.parts[0]!),
+              ], { discard: true }),
+            ),
+          ),
+      }
+
+      const captured = yield* Deferred.make<any>()
+      yield* events.listen((e) => {
+        if (e.type === TaskEventDef.Completed.type) return Deferred.succeed(captured, e)
+        return Effect.void
+      })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const event = yield* Deferred.await(captured)
+      expect(event.type).toBe("task.completed")
+      expect(event.data.sessionID).toBe(result.metadata.sessionId)
+      expect(event.data.parentSessionID).toBe(chat.id)
+      expect(event.data.status).toBe("ok")
+      expect(event.data.agent).toBe("general")
+      expect(event.data.elapsedMs).toBeGreaterThan(0)
+      expect(event.data.tokens?.input).toBe(100)
+      expect(event.data.tokens?.output).toBe(50)
+      expect(event.data.tokens?.reasoning).toBe(20)
+      expect(event.data.tokens?.cacheRead).toBe(10)
+      expect(event.data.tokens?.cacheWrite).toBe(5)
+      expect(event.data.cost).toBe(0.005)
+    }),
+  )
+
+const brokenSessionLayer = Layer.effect(
+  Session.Service,
+  Effect.gen(function* () {
+    const real = yield* Session.Service
+    return Session.Service.of({
+      ...real,
+      messages: () => Effect.die(new Error("forced messages failure for enrichment fallback test")),
+    })
+  }),
+)
+const itBroken = testEffect(Layer.provideMerge(brokenSessionLayer, withRipgrep()))
+
+
+  itBroken.instance("enrichment fallback publishes base payload when messages read dies", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.sync(() => {
+            const id = MessageID.ascending()
+            const info: SessionV1.Assistant = {
+              id,
+              role: "assistant",
+              parentID: input.messageID ?? MessageID.ascending(),
+              sessionID: input.sessionID,
+              mode: input.agent ?? "general",
+              agent: input.agent ?? "general",
+              cost: 0.005,
+              path: { cwd: "/tmp", root: "/tmp" },
+              tokens: { input: 100, output: 50, reasoning: 20, cache: { read: 10, write: 5 } },
+              modelID: input.model?.modelID ?? ref.modelID,
+              providerID: input.model?.providerID ?? ref.providerID,
+              time: { created: Date.now() },
+              finish: "stop",
+            }
+            const part = {
+              id: PartID.ascending(),
+              messageID: id,
+              sessionID: input.sessionID,
+              type: "text" as const,
+              text: "done",
+            }
+            return { info: info as SessionV1.Info, parts: [part] }
+          }).pipe(
+            Effect.tap((result) =>
+              Effect.all([
+                sessions.updateMessage(result.info),
+                sessions.updatePart(result.parts[0]!),
+              ], { discard: true }),
+            ),
+          ),
+      }
+
+      const captured = yield* Deferred.make<any>()
+      yield* events.listen((e) => {
+        if (e.type === TaskEventDef.Completed.type) return Deferred.succeed(captured, e)
+        return Effect.void
+      })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const event = yield* Deferred.await(captured)
+      expect(event.type).toBe("task.completed")
+      expect(event.data.sessionID).toBe(result.metadata.sessionId)
+      expect(event.data.parentSessionID).toBe(chat.id)
+      expect(event.data.status).toBe("ok")
+      // Enriched fields should be absent because the enrichment assembly fell back
+      expect(event.data.agent).toBeUndefined()
+      expect(event.data.elapsedMs).toBeUndefined()
+      expect(event.data.tokens).toBeUndefined()
+      expect(event.data.cost).toBeUndefined()
+    }),
+  )
+
+
 })
