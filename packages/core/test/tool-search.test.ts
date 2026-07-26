@@ -130,9 +130,12 @@ describe("search tools", () => {
       (tmp) =>
         withTools(tmp.path, (registry) =>
           Effect.gen(function* () {
-            expect(yield* executeTool(registry, call("grep", { pattern: "" }))).toMatchObject({
+            expect(yield* executeTool(registry, call("grep", { pattern: "" }))).toEqual({
               status: "error",
-              error: { type: "tool.execution", message: expect.stringContaining("Invalid tool input") },
+              error: {
+                type: "tool.execution",
+                message: 'Invalid tool input: Pattern must not be empty\n  at ["pattern"]',
+              },
             })
           }),
         ),

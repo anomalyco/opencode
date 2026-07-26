@@ -15,7 +15,9 @@ import { Tool } from "./tool"
 export const name = "grep"
 
 export const Input = Schema.Struct({
-  pattern: FileSystem.GrepInput.fields.pattern.check(Schema.isMinLength(1)).annotate({
+  pattern: FileSystem.GrepInput.fields.pattern.check(
+    Schema.isMinLength(1, { message: "Pattern must not be empty" }),
+  ).annotate({
     description: "Regex pattern to search for in file contents",
   }),
   path: RelativePath.pipe(Schema.optional).annotate({
