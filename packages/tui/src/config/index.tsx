@@ -63,6 +63,9 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  // New cursor_style option: "beam" (vertical line), "underline", or "block".
+  cursor_style: Schema.optional(Schema.Literals(["beam", "underline", "block"]))
+    .annotate({ description: "Terminal cursor shape: 'beam' (vertical line), 'underline', or 'block'." }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 

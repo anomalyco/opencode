@@ -190,8 +190,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.gen(function* () {
       const renderer = yield* Effect.acquireRelease(
         Effect.tryPromise({
-          try: () =>
-            createCliRenderer({
+          try: () => {
+            const renderer = createCliRenderer({
               externalOutputMode: "passthrough",
               targetFps: 60,
               gatherStats: false,
@@ -203,7 +203,18 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
-            }),
+            })
+            // Apply cursor style if configured in tui.json
+            if (input.config?.cursor_style) {
+              const styleMap: Record<string, any> = {
+                beam: "line",
+                underline: "underline",
+                block: "block",
+              } as const
+              renderer.setCursorStyle({ style: styleMap[input.config.cursor_style] })
+            }
+            return renderer;
+          },
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }),
         (renderer) =>
