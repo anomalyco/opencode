@@ -8,6 +8,8 @@ export * as WriteTool from "./write"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
+import { FileDiff } from "@opencode-ai/schema/file-diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { LocationMutation } from "../location-mutation"
@@ -30,6 +32,7 @@ export const Output = Schema.Struct({
   target: Schema.String,
   resource: Schema.String,
   existed: Schema.Boolean,
+  files: Schema.Array(FileDiff.Info),
 })
 export type Output = typeof Output.Type
 
@@ -82,7 +85,28 @@ export const Plugin = {
                     agent: context.agent,
                     source,
                   })
-                  return yield* files.writeTextPreservingBom({ target, content: input.content })
+                  const result = yield* files.writeTextPreservingBom({ target, content: input.content })
+                  const counts = diffLines(result.before, result.after).reduce(
+                    (total, item) => ({
+                      additions: total.additions + (item.added ? (item.count ?? 0) : 0),
+                      deletions: total.deletions + (item.removed ? (item.count ?? 0) : 0),
+                    }),
+                    { additions: 0, deletions: 0 },
+                  )
+                  return {
+                    operation: result.operation,
+                    target: result.target,
+                    resource: result.resource,
+                    existed: result.existed,
+                    files: [
+                      {
+                        file: result.resource,
+                        patch: createTwoFilesPatch(result.resource, result.resource, result.before, result.after),
+                        status: result.existed ? "modified" : "added",
+                        ...counts,
+                      },
+                    ],
+                  } satisfies Output
                 }).pipe(
                   Effect.map((output) => ({ output, content: toModelOutput(output) })),
                   Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),

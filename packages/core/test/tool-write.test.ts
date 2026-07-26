@@ -120,13 +120,21 @@ describe("WriteTool", () => {
           Effect.gen(function* () {
             expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write", "execute"])
             const settled = yield* executeTool(registry, call({ path: "src/new.txt", content: "created" }))
-            expect(settled).toEqual({
+            expect(settled).toMatchObject({
               status: "completed",
               output: {
                 operation: "write",
                 target: path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
                 resource: "src/new.txt",
                 existed: false,
+                files: [
+                  {
+                    file: "src/new.txt",
+                    status: "added",
+                    additions: 1,
+                    deletions: 0,
+                  },
+                ],
               },
               content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
             })
@@ -156,7 +164,21 @@ describe("WriteTool", () => {
               expect(settled.status).toBe("completed")
               if (settled.status !== "completed") return
               expect(settled.content).toEqual([{ type: "text", text: "Wrote file successfully: existing.txt" }])
-              expect(settled.output).toMatchObject({ resource: "existing.txt", existed: true })
+              expect(settled.output).toMatchObject({
+                resource: "existing.txt",
+                existed: true,
+                files: [
+                  {
+                    file: "existing.txt",
+                    status: "modified",
+                    additions: 1,
+                    deletions: 1,
+                  },
+                ],
+              })
+              const output = settled.output as WriteTool.Output
+              expect(output.files[0]?.patch).toContain("-before")
+              expect(output.files[0]?.patch).toContain("+after")
               expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "existing.txt"), "utf8"))).toBe(
                 "after",
               )

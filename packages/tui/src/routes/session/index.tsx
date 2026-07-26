@@ -62,6 +62,7 @@ import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
+import { createTwoFilesPatch } from "diff"
 import { usePromptRef } from "../../context/prompt"
 import { projectedPromptInput } from "../../prompt/codec"
 import { useEpilogue } from "../../context/epilogue"
@@ -2705,28 +2706,56 @@ function Shell(props: ToolProps) {
 }
 
 function Write(props: ToolProps) {
+  const ctx = use()
   const { themeV2, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
   })
+  const file = createMemo(() => parseApplyPatchFiles(props.metadata.files)[0])
+  const patch = createMemo(
+    () => file()?.patch ?? createTwoFilesPatch("", stringValue(props.input.path) ?? "", "", code()),
+  )
+  const complete = createMemo(() => props.part.state.status === "completed")
+  const view = createMemo(() => {
+    if (ctx.config.diffs?.view === "unified") return "unified"
+    if (ctx.config.diffs?.view === "split") return "split"
+    return ctx.width > 120 ? "split" : "unified"
+  })
 
   return (
     <Switch>
-      <Match when={props.metadata.diagnostics !== undefined}>
+      <Match when={complete()}>
         <BlockTool
-          path={{ label: "# Wrote", value: pathFormatter.format(stringValue(props.input.path)) }}
+          path={{
+            label: props.metadata.existed === false ? "# Created" : "# Wrote",
+            value: pathFormatter.format(stringValue(props.input.path)),
+          }}
           part={props.part}
         >
-          <line_number fg={themeV2.text.subdued} minWidth={3} paddingRight={1}>
-            <code
-              conceal={false}
-              fg={themeV2.text.default}
-              filetype={filetype(stringValue(props.input.path))}
-              syntaxStyle={syntax()}
-              content={code()}
-            />
-          </line_number>
+          <Show when={code() || file()?.additions || file()?.deletions}>
+            <box paddingLeft={1}>
+              <diff
+                diff={patch()}
+                view={view()}
+                filetype={filetype(stringValue(props.input.path))}
+                syntaxStyle={syntax()}
+                showLineNumbers={true}
+                width="100%"
+                wrapMode={ctx.diffWrapMode()}
+                fg={themeV2.text.default}
+                addedBg={themeV2.diff.background.added}
+                removedBg={themeV2.diff.background.removed}
+                contextBg={themeV2.diff.background.context}
+                addedSignColor={themeV2.diff.highlight.added}
+                removedSignColor={themeV2.diff.highlight.removed}
+                lineNumberFg={themeV2.diff.lineNumber.text}
+                lineNumberBg={themeV2.diff.background.context}
+                addedLineNumberBg={themeV2.diff.lineNumber.background.added}
+                removedLineNumberBg={themeV2.diff.lineNumber.background.removed}
+              />
+            </box>
+          </Show>
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
         </BlockTool>
       </Match>

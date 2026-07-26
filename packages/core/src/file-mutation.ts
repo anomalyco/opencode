@@ -44,6 +44,11 @@ export interface WriteResult {
   readonly existed: boolean
 }
 
+export interface TextWriteResult extends WriteResult {
+  readonly before: string
+  readonly after: string
+}
+
 export interface RemoveResult {
   readonly operation: "remove"
   readonly target: string
@@ -56,7 +61,7 @@ export interface Interface {
   readonly create: (input: WriteInput) => Effect.Effect<WriteResult, TargetExistsError | FSUtil.Error>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
-  readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
+  readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<TextWriteResult, FSUtil.Error>
   /** Commit only if an existing target still has the expected bytes. */
   readonly writeIfUnchanged: (
     input: ConditionalWriteInput,
@@ -112,11 +117,13 @@ const layer = Layer.effect(
           const current = yield* fs
             .readFile(input.target.canonical)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
-          yield* fs.writeWithDirs(
-            input.target.canonical,
-            joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom),
-          )
-          return writeResult(input.target, current !== undefined)
+          const content = joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom)
+          yield* fs.writeWithDirs(input.target.canonical, content)
+          return {
+            ...writeResult(input.target, current !== undefined),
+            before: current ? new TextDecoder().decode(current).replace(/^\uFEFF/, "") : "",
+            after: content.replace(/^\uFEFF/, ""),
+          }
         }),
       ),
     )

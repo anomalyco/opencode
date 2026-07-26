@@ -80,9 +80,14 @@ describe("FileMutation", () => {
         const created = yield* (yield* LocationMutation.Service).resolve({ path: "created.txt" })
         const files = yield* FileMutation.Service
 
-        yield* files.writeTextPreservingBom({ target: preserved, content: "\uFEFFafter" })
-        yield* files.writeTextPreservingBom({ target: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
+        const preservedResult = yield* files.writeTextPreservingBom({ target: preserved, content: "\uFEFFafter" })
+        const createdResult = yield* files.writeTextPreservingBom({
+          target: created,
+          content: "\uFEFF\uFEFF\uFEFFcreated",
+        })
 
+        expect(preservedResult).toMatchObject({ existed: true, before: "before", after: "after" })
+        expect(createdResult).toMatchObject({ existed: false, before: "", after: "created" })
         expect(yield* Effect.promise(() => fs.readFile(preservedPath, "utf8"))).toBe("\uFEFFafter")
         expect(yield* Effect.promise(() => fs.readFile(created.canonical, "utf8"))).toBe("\uFEFFcreated")
       }).pipe(provide(directory)),
