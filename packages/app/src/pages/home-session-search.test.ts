@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  findHomeSessionSearchResult,
   isHomeSessionSearchResultCurrent,
   mergeHomeSessionSearchResults,
   settledHomeSessionSearchResult,
@@ -69,6 +70,18 @@ describe("mergeHomeSessionSearchResults", () => {
         key: (item) => item.id,
       }),
     ).toEqual([{ id: "content-match", snippet: "spectral cache" }])
+  })
+})
+
+describe("findHomeSessionSearchResult", () => {
+  test("matches arbitrary directory characters without parsing them as a selector", () => {
+    const root = document.createElement("div")
+    const expected = document.createElement("button")
+    const key = String.raw`/project/with "quotes"] and \slashes:ses_match`
+    expected.dataset.key = key
+    root.append(document.createElement("button"), expected)
+
+    expect(findHomeSessionSearchResult(root, key)).toBe(expected)
   })
 })
 

@@ -116,6 +116,78 @@ describe("SessionV2.create", () => {
     }),
   )
 
+  it.effect("excludes hidden and generated current messages from content search", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const db = (yield* Database.Service).db
+      const created = yield* session.create({ location })
+      const messages = [
+        SessionMessage.System.make({
+          id: SessionMessage.ID.make("msg_search_system"),
+          type: "system",
+          text: "private-system-context",
+          time: { created: DateTime.makeUnsafe(1) },
+        }),
+        SessionMessage.Synthetic.make({
+          id: SessionMessage.ID.make("msg_search_synthetic"),
+          sessionID: created.id,
+          type: "synthetic",
+          text: "synthetic-internal-context",
+          time: { created: DateTime.makeUnsafe(2) },
+        }),
+        SessionMessage.Shell.make({
+          id: SessionMessage.ID.make("msg_search_shell"),
+          type: "shell",
+          callID: "shell-search",
+          command: "visible-shell-command",
+          output: "private-shell-output",
+          time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
+        }),
+        SessionMessage.Assistant.make({
+          id: SessionMessage.ID.make("msg_search_assistant"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("test"), providerID: ProviderV2.ID.make("test") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-search",
+              text: "private-generated-reasoning",
+            }),
+          ],
+          time: { created: DateTime.makeUnsafe(4), completed: DateTime.makeUnsafe(5) },
+        }),
+      ]
+      yield* db
+        .insert(SessionMessageTable)
+        .values(
+          messages.map((message, index) => {
+            const { id: _, type: __, ...data } = Schema.encodeSync(SessionMessage.Message)(message)
+            return {
+              id: message.id,
+              session_id: created.id,
+              type: message.type,
+              seq: index + 1,
+              time_created: index + 1,
+              data,
+            }
+          }),
+        )
+        .run()
+        .pipe(Effect.orDie)
+
+      expect(yield* session.list({ search: "private-system-context" })).toEqual([])
+      expect(yield* session.list({ search: "synthetic-internal-context" })).toEqual([])
+      expect(yield* session.list({ search: "private-shell-output" })).toEqual([])
+      expect(yield* session.list({ search: "private-generated-reasoning" })).toEqual([])
+      expect((yield* session.list({ search: "visible-shell-command" })).map((item) => item.id)).toEqual([created.id])
+      expect(yield* session.searchSnippets({ sessionIDs: [created.id], search: "private-system-context" })).toEqual([])
+      expect(
+        (yield* session.searchSnippets({ sessionIDs: [created.id], search: "visible-shell-command" }))[0]?.snippet,
+      ).toContain("visible-shell-command")
+    }),
+  )
+
   it.effect("stores supplied immutable create attributes", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service

@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  findHomeSessionSearchResult,
   isHomeSessionSearchResultCurrent,
   mergeHomeSessionSearchResults,
   settledHomeSessionSearchResult,
@@ -99,6 +100,13 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       (a, b) => (b.session.time.updated ?? b.session.time.created) - (a.session.time.updated ?? a.session.time.created),
     )
   })
+  const loading = createMemo(
+    () =>
+      sessions.data.loading() ||
+      (query().length > 0 &&
+        results().length === 0 &&
+        (serverSearch() !== query() || sessionSearchLoad.isFetching)),
+  )
   const active = createMemo(() => {
     const records = results().filter((record) => !record.stale)
     if (records.some((record) => homeSessionSearchKey(record) === state.highlighted)) return state.highlighted
@@ -159,7 +167,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       close,
     },
     result: {
-      loading: sessions.data.loading,
+      loading,
       list: results,
       active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),
@@ -172,7 +180,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
         const index = records.findIndex((record) => homeSessionSearchKey(record) === active())
         const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
         setState("highlighted", homeSessionSearchKey(records[next]))
-        list?.querySelector<HTMLElement>(`[data-key="${state.highlighted}"]`)?.scrollIntoView({ block: "nearest" })
+        findHomeSessionSearchResult(list, state.highlighted)?.scrollIntoView({ block: "nearest" })
       },
       select,
       selectActive: () => {

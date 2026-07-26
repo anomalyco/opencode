@@ -20,6 +20,10 @@ export function mergeHomeSessionSearchResults<T>(input: { local: T[]; remote?: T
   return [...new Map([...input.local, ...input.remote].map((item) => [input.key(item), item])).values()]
 }
 
+export function findHomeSessionSearchResult(root: ParentNode | undefined, key: string) {
+  return [...(root?.querySelectorAll<HTMLElement>("[data-key]") ?? [])].find((element) => element.dataset.key === key)
+}
+
 export function splitHomeSessionSearchSnippet(snippet: string, query: string): HomeSessionSearchSnippetSegment[] {
   const term = query.trim()
   if (!term) return [{ text: snippet, match: false }]
