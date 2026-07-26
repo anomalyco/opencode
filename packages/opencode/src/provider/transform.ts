@@ -1255,6 +1255,15 @@ export function options(input: {
     }
   }
 
+  // Anthropic models proxied through OpenRouter cache nothing without an explicit
+  // breakpoint. `~anthropic/*` are catalog aliases for the same models.
+  if (
+    input.model.api.npm === "@openrouter/ai-sdk-provider" &&
+    input.model.api.id.replace(/^~/, "").startsWith("anthropic/")
+  ) {
+    result["cache_control"] = { type: "ephemeral" }
+  }
+
   if (input.model.api.npm === "@ai-sdk/gateway") {
     result["gateway"] = { caching: "auto" }
   }

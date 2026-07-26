@@ -288,16 +288,33 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
-  test("should not send an undocumented OpenRouter prompt_cache_key", () => {
+  for (const id of ["anthropic/claude-opus-4.8", "~anthropic/claude-opus-latest"]) {
+    test(`should enable OpenRouter automatic caching for ${id}`, () => {
+      const result = ProviderTransform.options({
+        model: {
+          ...mockModel,
+          providerID: "openrouter",
+          api: { ...mockModel.api, id, npm: "@openrouter/ai-sdk-provider" },
+        },
+        sessionID,
+        providerOptions: {},
+      })
+      expect(result.cache_control).toEqual({ type: "ephemeral" })
+      expect(result.prompt_cache_key).toBeUndefined()
+    })
+  }
+
+  test("should not enable OpenRouter automatic caching for non-Anthropic models", () => {
     const result = ProviderTransform.options({
       model: {
         ...mockModel,
         providerID: "openrouter",
-        api: { ...mockModel.api, npm: "@openrouter/ai-sdk-provider" },
+        api: { ...mockModel.api, id: "google/gemini-3.6-flash", npm: "@openrouter/ai-sdk-provider" },
       },
       sessionID,
       providerOptions: {},
     })
+    expect(result.cache_control).toBeUndefined()
     expect(result.prompt_cache_key).toBeUndefined()
   })
 })
