@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { parseNewSessionInput, sessionsSessionOrigin, createSessionsListQuery } from "../../src/routes/sessions"
+import { createSessionsListQuery, directorySuggestions, parseNewSessionInput } from "../../src/routes/sessions"
 
 describe("sessions list", () => {
   test("requests root sessions for the default browse list", () => {
@@ -16,37 +16,6 @@ describe("sessions list", () => {
       limit: 30,
       search: "deploy",
     })
-  })
-
-  test("prefers the project name as the session origin", () => {
-    expect(
-      sessionsSessionOrigin({
-        directory: "/repos/api/packages/server",
-        project: { id: "p1", name: "api", worktree: "/repos/api" },
-      }),
-    ).toBe("api")
-  })
-
-  test("falls back to the worktree basename when the project has no name", () => {
-    expect(
-      sessionsSessionOrigin({
-        directory: "/repos/api/packages/server",
-        project: { id: "p1", worktree: "/repos/api" },
-      }),
-    ).toBe("api")
-  })
-
-  test("falls back to the session directory basename without project info", () => {
-    expect(sessionsSessionOrigin({ directory: "/repos/api", project: null })).toBe("api")
-  })
-
-  test("falls back to the directory basename when the worktree is the filesystem root", () => {
-    expect(
-      sessionsSessionOrigin({
-        directory: "/tmp",
-        project: { id: "global", worktree: "/" },
-      }),
-    ).toBe("tmp")
   })
 })
 
@@ -85,5 +54,70 @@ describe("parseNewSessionInput", () => {
 
   test("a lone @ is kept as prompt text", () => {
     expect(parseNewSessionInput("@ not-a-path", paths)).toEqual({ directory: undefined, prompt: "@ not-a-path" })
+  })
+})
+
+describe("directorySuggestions", () => {
+  const paths = { cwd: "/work/current", home: "/home/user" }
+  const tree: Record<string, string[]> = {
+    "/work/current": ["packages", "src", ".git", "node_modules"],
+    "/work/current/packages": ["tui", "opencode"],
+    "/home/user": ["projects", "downloads"],
+    "/": ["mnt", "home"],
+  }
+  const readdir = (dir: string) => tree[dir] ?? []
+
+  test("does not fire without a leading @", () => {
+    expect(directorySuggestions("fix the bug", paths, readdir)).toEqual([])
+    expect(directorySuggestions("", paths, readdir)).toEqual([])
+  })
+
+  test("lists directories of the cwd for a bare @", () => {
+    expect(directorySuggestions("@", paths, readdir)).toEqual([
+      "/work/current/packages",
+      "/work/current/src",
+    ])
+  })
+
+  test("filters by the last segment prefix", () => {
+    expect(directorySuggestions("@pac", paths, readdir)).toEqual(["/work/current/packages"])
+  })
+
+  test("descends into a path ending with a slash", () => {
+    expect(directorySuggestions("@packages/", paths, readdir)).toEqual([
+      "/work/current/packages/opencode",
+      "/work/current/packages/tui",
+    ])
+  })
+
+  test("resolves nested relative prefixes", () => {
+    expect(directorySuggestions("@packages/t", paths, readdir)).toEqual(["/work/current/packages/tui"])
+  })
+
+  test("expands ~ against the home directory", () => {
+    expect(directorySuggestions("@~/pr", paths, readdir)).toEqual(["/home/user/projects"])
+  })
+
+  test("lists the home directory for a bare ~ token", () => {
+    expect(directorySuggestions("@~", paths, readdir)).toEqual(["/home/user/downloads", "/home/user/projects"])
+  })
+
+  test("lists the filesystem root", () => {
+    expect(directorySuggestions("@/", paths, readdir)).toEqual(["/home", "/mnt"])
+  })
+
+  test("keeps dotfiles hidden unless the prefix starts with a dot", () => {
+    const withDot: Record<string, string[]> = { "/work/current": [".config", "src"] }
+    expect(directorySuggestions("@", paths, (dir) => withDot[dir] ?? [])).toEqual(["/work/current/src"])
+    expect(directorySuggestions("@.", paths, (dir) => withDot[dir] ?? [])).toEqual(["/work/current/.config"])
+  })
+
+  test("caps the list at eight entries", () => {
+    const many: Record<string, string[]> = { "/work/current": ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"] }
+    expect(directorySuggestions("@", paths, (dir) => many[dir] ?? [])).toHaveLength(8)
+  })
+
+  test("stops firing once prompt text follows the path", () => {
+    expect(directorySuggestions("@/mnt fix things", paths, readdir)).toEqual([])
   })
 })

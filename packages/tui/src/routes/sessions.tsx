@@ -1,8 +1,7 @@
-import { createMemo, createResource, createSignal, onCleanup } from "solid-js"
+import { createMemo, createResource, createSignal, onCleanup, Show, For } from "solid-js"
 import path from "path"
-import { existsSync, statSync } from "node:fs"
+import { existsSync, statSync, readdirSync } from "node:fs"
 import type { TextareaRenderable } from "@opentui/core"
-import type { GlobalSession } from "@opencode-ai/sdk/v2"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useSDK } from "../context/sdk"
@@ -13,7 +12,6 @@ import { useTuiPaths } from "../context/runtime"
 import { useToast } from "../ui/toast"
 import { useTuiConfig } from "../config"
 import { useBindings } from "../keymap"
-import { Locale } from "../util/locale"
 import { createDebouncedSignal } from "../util/signal"
 import { errorMessage } from "../util/error"
 
@@ -24,14 +22,6 @@ export function createSessionsListQuery(input: { search?: string }) {
     limit: search ? 30 : 100,
     ...(search ? { search } : {}),
   }
-}
-
-export function sessionsSessionOrigin(session: Pick<GlobalSession, "directory" | "project">) {
-  const name = session.project?.name
-  if (name) return name
-  const worktree = path.basename(session.project?.worktree ?? "")
-  if (worktree) return worktree
-  return session.directory ? path.basename(session.directory) : ""
 }
 
 // A leading @path token picks the directory the new session is started in;
@@ -50,6 +40,41 @@ export function parseNewSessionInput(input: string, paths: { cwd: string; home: 
   return { directory: path.normalize(resolved), prompt: (match[2] ?? "").trim() }
 }
 
+// Directory completion for the new session input: only fires while the input
+// is a single @token (no prompt text yet). `readdir` is injected so tests can
+// stub the filesystem.
+export function directorySuggestions(
+  input: string,
+  paths: { cwd: string; home: string },
+  readdir: (dir: string) => string[],
+) {
+  const match = /^@(\S*)$/.exec(input.trim())
+  if (!match) return []
+  const token = match[1]
+  const expanded = token.startsWith("~") ? path.join(paths.home, token.slice(1)) : token
+  const descend = expanded.endsWith("/") || token === "~"
+  const absolute = path.isAbsolute(expanded) ? expanded : path.resolve(paths.cwd, expanded)
+  const base = descend ? absolute : expanded.includes("/") ? path.dirname(absolute) : paths.cwd
+  const prefix = descend ? "" : expanded.includes("/") ? path.basename(absolute) : expanded
+  return readdir(base)
+    .filter((name) => name !== "node_modules")
+    .filter((name) => prefix.startsWith(".") || !name.startsWith("."))
+    .filter((name) => name.startsWith(prefix))
+    .toSorted()
+    .slice(0, 8)
+    .map((name) => path.join(base, name))
+}
+
+function readdirDirectories(dir: string): string[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+  } catch {
+    return []
+  }
+}
+
 export function Sessions() {
   const route = useRoute()
   const sdk = useSDK()
@@ -61,6 +86,9 @@ export function Sessions() {
   const { theme } = useTheme()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
+  const [inputText, setInputText] = createSignal("")
+  const [dismissed, setDismissed] = createSignal(false)
+  const [suggestionIndex, setSuggestionIndex] = createSignal(0)
   let selectRef: DialogSelectRef<string> | undefined
   let textarea: TextareaRenderable
 
@@ -77,19 +105,40 @@ export function Sessions() {
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return (sessions() ?? []).toSorted((a, b) => b.time.updated - a.time.updated).map((session) => {
-      const label = new Date(session.time.updated).toDateString()
-      const origin = sessionsSessionOrigin(session)
+      const updated = new Date(session.time.updated).toDateString()
       return {
         title: session.title,
         value: session.id,
-        category: label === today ? "Today" : label,
-        footer: origin ? Locale.truncate(origin, 20) : "",
+        category: session.directory,
+        footer: updated === today ? "Today" : updated.slice(4, 10),
       }
     })
   })
 
+  const suggestions = createMemo(() => {
+    if (dismissed()) return []
+    return directorySuggestions(inputText(), { cwd: sdk.directory ?? paths.cwd, home: paths.home }, readdirDirectories)
+  })
+
+  const highlighted = createMemo(() => {
+    if (suggestions().length === 0) return 0
+    return suggestionIndex() % suggestions().length
+  })
+
   function open(sessionID: string) {
     route.navigate({ type: "session", sessionID })
+  }
+
+  function acceptSuggestion() {
+    const picked = suggestions()[highlighted()]
+    if (!picked) return
+    textarea.setText("@" + picked + "/")
+    setSuggestionIndex(0)
+  }
+
+  function leaveFooter() {
+    setDismissed(true)
+    selectRef?.focusInput()
   }
 
   async function create() {
@@ -179,8 +228,51 @@ export function Sessions() {
     ],
     bindings: [
       ...tuiConfig.keybinds.gather("sessions.create", ["sessions.create"]),
-      { key: "escape", desc: "Back to the sessions list", group: "Session", cmd: () => selectRef?.focusInput() },
-      { key: "tab", desc: "Back to the sessions list", group: "Session", cmd: () => selectRef?.focusInput() },
+      {
+        key: "escape",
+        desc: "Back to the sessions list",
+        group: "Session",
+        cmd: () => {
+          if (suggestions().length > 0) {
+            setDismissed(true)
+            return
+          }
+          leaveFooter()
+        },
+      },
+      {
+        key: "tab",
+        desc: "Complete directory",
+        group: "Session",
+        cmd: () => {
+          if (suggestions().length > 0) {
+            acceptSuggestion()
+            return
+          }
+          leaveFooter()
+        },
+      },
+    ],
+  }))
+
+  useBindings(() => ({
+    target: textareaTarget,
+    enabled: () => textareaTarget() !== undefined && suggestions().length > 0,
+    // Above the base textarea bindings while directory suggestions are open
+    priority: 2,
+    bindings: [
+      {
+        key: "up",
+        desc: "Previous directory",
+        group: "Session",
+        cmd: () => setSuggestionIndex((index) => index - 1 + suggestions().length),
+      },
+      {
+        key: "down",
+        desc: "Next directory",
+        group: "Session",
+        cmd: () => setSuggestionIndex((index) => index + 1),
+      },
     ],
   }))
 
@@ -204,6 +296,18 @@ export function Sessions() {
           { title: "back", label: "esc" },
         ]}
       />
+      <Show when={suggestions().length > 0}>
+        <box flexDirection="column" flexShrink={0} paddingLeft={4} paddingRight={4}>
+          <For each={suggestions()}>
+            {(suggestion, index) => (
+              <text fg={index() === highlighted() ? theme.primary : theme.textMuted}>
+                {index() === highlighted() ? "❯ " : "  "}
+                {suggestion}
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
       <box flexDirection="row" flexShrink={0} paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
         <text fg={theme.textMuted}>new session:</text>
         <textarea
@@ -211,6 +315,11 @@ export function Sessions() {
           ref={(val: TextareaRenderable) => {
             textarea = val
             setTextareaTarget(val)
+          }}
+          onContentChange={() => {
+            setInputText(textarea.plainText)
+            setDismissed(false)
+            setSuggestionIndex(0)
           }}
           placeholder="@path optional prompt"
           placeholderColor={theme.textMuted}
