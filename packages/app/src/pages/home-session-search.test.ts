@@ -2,8 +2,38 @@ import { describe, expect, test } from "bun:test"
 import {
   isHomeSessionSearchResultCurrent,
   mergeHomeSessionSearchResults,
+  settledHomeSessionSearchResult,
   splitHomeSessionSearchSnippet,
 } from "./home-session-search"
+
+describe("settledHomeSessionSearchResult", () => {
+  test("does not read query data before the first search settles", () => {
+    let reads = 0
+    const result = { sessions: [], snippets: {} }
+
+    expect(
+      settledHomeSessionSearchResult({
+        isSuccess: false,
+        get data() {
+          reads++
+          return result
+        },
+      }),
+    ).toBeUndefined()
+    expect(reads).toBe(0)
+
+    expect(
+      settledHomeSessionSearchResult({
+        isSuccess: true,
+        get data() {
+          reads++
+          return result
+        },
+      }),
+    ).toBe(result)
+    expect(reads).toBe(1)
+  })
+})
 
 describe("isHomeSessionSearchResultCurrent", () => {
   const result = { query: "spectral cache", server: "local", scope: "/project" }

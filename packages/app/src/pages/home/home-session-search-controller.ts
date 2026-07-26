@@ -8,7 +8,11 @@ import { debounce } from "@solid-primitives/scheduled"
 import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { isHomeSessionSearchResultCurrent, mergeHomeSessionSearchResults } from "../home-session-search"
+import {
+  isHomeSessionSearchResultCurrent,
+  mergeHomeSessionSearchResults,
+  settledHomeSessionSearchResult,
+} from "../home-session-search"
 import type { HomeController } from "./home-controller"
 import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./home-sessions-controller"
 
@@ -77,7 +81,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       .filter((record) =>
         `${record.session.title} ${record.projectName}`.toLowerCase().includes(current.query.toLowerCase()),
       )
-    const result = sessionSearchLoad.data
+    const result = settledHomeSessionSearchResult(sessionSearchLoad)
     const resultCurrent = result ? isHomeSessionSearchResultCurrent(result, current) : false
     const remote =
       result?.server === current.server
@@ -110,17 +114,6 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     }
     return language.t("home.sessions.search.placeholder")
   })
-
-  createEffect(
-    on(results, () => {
-      if (!open()) return
-      queueMicrotask(() => {
-        if (!open() || !input) return
-        if (document.activeElement !== document.body && document.activeElement !== document.documentElement) return
-        input.focus({ preventScroll: true })
-      })
-    }),
-  )
 
   onCleanup(
     makeEventListener(document, "pointerdown", (event) => {

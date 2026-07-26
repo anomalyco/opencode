@@ -3,6 +3,11 @@ export type HomeSessionSearchSnippetSegment = {
   match: boolean
 }
 
+export function settledHomeSessionSearchResult<T>(query: { isSuccess: boolean; data: T | undefined }) {
+  // Solid Query suspends when data is read during the first lazy fetch, which replaces the home tree at its boundary.
+  return query.isSuccess ? query.data : undefined
+}
+
 export function isHomeSessionSearchResultCurrent(
   result: { query: string; server: string; scope: string },
   current: { query: string; server: string; scope: string },
