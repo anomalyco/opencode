@@ -5,20 +5,20 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 start ACP (Agent Client Protocol) server
 
-Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure         run without external plugins                                          [boolean]
-      --port         port to listen on                                         [number] [default: 0]
-      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
+Opções:
+  -h, --help         show help                                                            [booleano]
+  -v, --version      show version number                                                  [booleano]
+      --print-logs   print logs to stderr                                                 [booleano]
+      --log-level    log level                   [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                         [booleano]
+      --port         port to listen on                                          [número] [padrão: 0]
+      --hostname     hostname to listen on                            [string] [padrão: "127.0.0.1"]
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
-                                                                          [boolean] [default: false]
+                                                                          [booleano] [padrão: false]
       --mdns-domain  custom domain name for mDNS service (default: opencode.local)
-                                                                [string] [default: "opencode.local"]
-      --cors         additional domains to allow for CORS                      [array] [default: []]
-      --cwd          working directory [string] [default: "<HOME>"]"
+                                                                 [string] [padrão: "opencode.local"]
+      --cors         additional domains to allow for CORS                       [array] [padrão: []]
+      --cwd          working directory                       [string] [padrão: "<HOME>"]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp --help 1`] = `
@@ -26,19 +26,19 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 manage MCP (Model Context Protocol) servers
 
-Commands:
+Comandos:
   opencode mcp add [name]     add an MCP server
-  opencode mcp list           list MCP servers and their status                        [aliases: ls]
+  opencode mcp list           list MCP servers and their status                      [sinônimos: ls]
   opencode mcp auth [name]    authenticate with an OAuth-enabled MCP server
   opencode mcp logout [name]  remove OAuth credentials for an MCP server
   opencode mcp debug <name>   debug OAuth connection for an MCP server
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode attach --help 1`] = `
@@ -46,25 +46,25 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 attach to a running opencode server
 
-Positionals:
-  url  http://localhost:4096                                                     [string] [required]
+Posicionais:
+  url  http://localhost:4096                                                  [string] [obrigatório]
 
-Options:
-  -h, --help          show help                                                            [boolean]
-  -v, --version       show version number                                                  [boolean]
-      --print-logs    print logs to stderr                                                 [boolean]
-      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure          run without external plugins                                         [boolean]
+Opções:
+  -h, --help          show help                                                           [booleano]
+  -v, --version       show version number                                                 [booleano]
+      --print-logs    print logs to stderr                                                [booleano]
+      --log-level     log level                  [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure          run without external plugins                                        [booleano]
       --dir           directory to run in                                                   [string]
-  -c, --continue      continue the last session                                            [boolean]
+  -c, --continue      continue the last session                                           [booleano]
   -s, --session       session id to continue                                                [string]
-      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --fork          fork the session when continuing (use with --continue or --session) [booleano]
   -p, --password      basic auth password (defaults to OPENCODE_SERVER_PASSWORD)            [string]
   -u, --username      basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
                                                                                             [string]
-      --mini          start the minimal interactive interface             [boolean] [default: false]
-      --no-replay     disable mini session history replay on resume and after resize       [boolean]
-      --replay-limit  cap visible mini replay to the newest N messages                      [number]"
+      --mini          start the minimal interactive interface             [booleano] [padrão: false]
+      --no-replay     disable mini session history replay on resume and after resize      [booleano]
+      --replay-limit  cap visible mini replay to the newest N messages                      [número]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode run --help 1`] = `
@@ -72,24 +72,24 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 run opencode with a message
 
-Positionals:
-  message  message to send                                                     [array] [default: []]
+Posicionais:
+  message  message to send                                                      [array] [padrão: []]
 
-Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure         run without external plugins                                          [boolean]
+Opções:
+  -h, --help         show help                                                            [booleano]
+  -v, --version      show version number                                                  [booleano]
+      --print-logs   print logs to stderr                                                 [booleano]
+      --log-level    log level                   [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                         [booleano]
       --command      the command to run, use message for args                               [string]
-  -c, --continue     continue the last session                                             [boolean]
+  -c, --continue     continue the last session                                            [booleano]
   -s, --session      session id to continue                                                 [string]
-      --fork         fork the session before continuing (requires --continue or --session) [boolean]
-      --share        share the session                                                     [boolean]
+      --fork         fork the session before continuing (requires --continue or --session)[booleano]
+      --share        share the session                                                    [booleano]
   -m, --model        model to use in the format of provider/model                           [string]
       --agent        agent to use                                                           [string]
       --format       format: default (formatted) or json (raw JSON events)
-                                          [string] [choices: "default", "json"] [default: "default"]
+                                            [string] [opções: "default", "json"] [padrão: "default"]
   -f, --file         file(s) to attach to message                                            [array]
       --title        title for the session (uses truncated prompt if no value provided)     [string]
       --attach       attach to a running opencode server (e.g., http://localhost:4096)      [string]
@@ -98,13 +98,13 @@ Options:
                                                                                             [string]
       --dir          directory to run in, path on remote server if attaching                [string]
       --port         port for the local server (defaults to random port if no value provided)
-                                                                                            [number]
+                                                                                            [número]
       --variant      model variant (provider-specific reasoning effort, e.g., high, max, minimal)
                                                                                             [string]
-      --thinking     show thinking blocks                                                  [boolean]
-  -i, --interactive  run in direct interactive split-footer mode          [boolean] [default: false]
+      --thinking     show thinking blocks                                                 [booleano]
+  -i, --interactive  run in direct interactive split-footer mode          [booleano] [padrão: false]
       --auto         auto-approve permissions that are not explicitly denied (dangerous!)
-                                                                          [boolean] [default: false]"
+                                                                          [booleano] [padrão: false]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode debug --help 1`] = `
@@ -112,7 +112,7 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 debugging and troubleshooting tools
 
-Commands:
+Comandos:
   opencode debug config        show resolved configuration
   opencode debug lsp           LSP debugging utilities
   opencode debug rg            ripgrep debugging utilities
@@ -127,12 +127,12 @@ Commands:
   opencode debug paths         show global paths (data, config, cache, state)
   opencode debug wait          wait indefinitely (for debugging)
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers --help 1`] = `
@@ -140,17 +140,17 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 manage AI providers and credentials
 
-Commands:
-  opencode providers list               list providers and credentials                 [aliases: ls]
+Comandos:
+  opencode providers list               list providers and credentials               [sinônimos: ls]
   opencode providers login [url]        log in to a provider
   opencode providers logout [provider]  log out from a configured provider
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent --help 1`] = `
@@ -158,16 +158,16 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 manage agents
 
-Commands:
+Comandos:
   opencode agent create  create a new agent
   opencode agent list    list all available agents
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode upgrade --help 1`] = `
@@ -175,17 +175,17 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 upgrade opencode to the latest or a specific version
 
-Positionals:
+Posicionais:
   target  version to upgrade to, for ex '0.1.48' or 'v0.1.48'                               [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
   -m, --method      installation method to use
-                          [string] [choices: "curl", "npm", "pnpm", "bun", "brew", "choco", "scoop"]"
+                           [string] [opções: "curl", "npm", "pnpm", "bun", "brew", "choco", "scoop"]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode uninstall --help 1`] = `
@@ -193,16 +193,16 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 uninstall opencode and remove all related files
 
-Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure         run without external plugins                                          [boolean]
-  -c, --keep-config  keep configuration files                             [boolean] [default: false]
-  -d, --keep-data    keep session data and snapshots                      [boolean] [default: false]
-      --dry-run      show what would be removed without removing          [boolean] [default: false]
-  -f, --force        skip confirmation prompts                            [boolean] [default: false]"
+Opções:
+  -h, --help         show help                                                            [booleano]
+  -v, --version      show version number                                                  [booleano]
+      --print-logs   print logs to stderr                                                 [booleano]
+      --log-level    log level                   [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                         [booleano]
+  -c, --keep-config  keep configuration files                             [booleano] [padrão: false]
+  -d, --keep-data    keep session data and snapshots                      [booleano] [padrão: false]
+      --dry-run      show what would be removed without removing          [booleano] [padrão: false]
+  -f, --force        skip confirmation prompts                            [booleano] [padrão: false]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode serve --help 1`] = `
@@ -210,19 +210,19 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 starts a headless opencode server
 
-Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure         run without external plugins                                          [boolean]
-      --port         port to listen on                                         [number] [default: 0]
-      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
+Opções:
+  -h, --help         show help                                                            [booleano]
+  -v, --version      show version number                                                  [booleano]
+      --print-logs   print logs to stderr                                                 [booleano]
+      --log-level    log level                   [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                         [booleano]
+      --port         port to listen on                                          [número] [padrão: 0]
+      --hostname     hostname to listen on                            [string] [padrão: "127.0.0.1"]
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
-                                                                          [boolean] [default: false]
+                                                                          [booleano] [padrão: false]
       --mdns-domain  custom domain name for mDNS service (default: opencode.local)
-                                                                [string] [default: "opencode.local"]
-      --cors         additional domains to allow for CORS                      [array] [default: []]"
+                                                                 [string] [padrão: "opencode.local"]
+      --cors         additional domains to allow for CORS                       [array] [padrão: []]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode web --help 1`] = `
@@ -230,19 +230,19 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 start opencode server and open web interface
 
-Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure         run without external plugins                                          [boolean]
-      --port         port to listen on                                         [number] [default: 0]
-      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
+Opções:
+  -h, --help         show help                                                            [booleano]
+  -v, --version      show version number                                                  [booleano]
+      --print-logs   print logs to stderr                                                 [booleano]
+      --log-level    log level                   [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                         [booleano]
+      --port         port to listen on                                          [número] [padrão: 0]
+      --hostname     hostname to listen on                            [string] [padrão: "127.0.0.1"]
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
-                                                                          [boolean] [default: false]
+                                                                          [booleano] [padrão: false]
       --mdns-domain  custom domain name for mDNS service (default: opencode.local)
-                                                                [string] [default: "opencode.local"]
-      --cors         additional domains to allow for CORS                      [array] [default: []]"
+                                                                 [string] [padrão: "opencode.local"]
+      --cors         additional domains to allow for CORS                       [array] [padrão: []]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode models --help 1`] = `
@@ -250,17 +250,17 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 list all available models
 
-Positionals:
+Posicionais:
   provider  provider ID to filter models by                                                 [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --verbose     use more verbose model output (includes metadata like costs)           [boolean]
-      --refresh     refresh the models cache from models.dev                               [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
+      --verbose     use more verbose model output (includes metadata like costs)          [booleano]
+      --refresh     refresh the models cache from models.dev                              [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode stats --help 1`] = `
@@ -268,14 +268,14 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 show token usage and cost statistics
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --days        show stats for the last N days (default: all time)                      [number]
-      --tools       number of tools to show (default: all)                                  [number]
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
+      --days        show stats for the last N days (default: all time)                      [número]
+      --tools       number of tools to show (default: all)                                  [número]
       --models      show model statistics (default: hidden). Pass a number to show top N, otherwise
                     shows all
       --project     filter by project (default: all projects, empty string: current project)[string]"
@@ -286,16 +286,16 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 export session data as JSON
 
-Positionals:
+Posicionais:
   sessionID  session id to export                                                           [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --sanitize    redact sensitive transcript and file data                              [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
+      --sanitize    redact sensitive transcript and file data                             [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode import --help 1`] = `
@@ -303,15 +303,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 import session data from JSON file or URL
 
-Positionals:
-  file  path to JSON file or share URL                                           [string] [required]
+Posicionais:
+  file  path to JSON file or share URL                                        [string] [obrigatório]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github --help 1`] = `
@@ -319,16 +319,16 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 manage GitHub agent
 
-Commands:
+Comandos:
   opencode github install  install the GitHub agent
   opencode github run      run the GitHub agent
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode pr --help 1`] = `
@@ -336,15 +336,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 fetch and checkout a GitHub PR branch, then run opencode
 
-Positionals:
-  number  PR number to checkout                                                  [number] [required]
+Posicionais:
+  number  PR number to checkout                                               [número] [obrigatório]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session --help 1`] = `
@@ -352,16 +352,39 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 manage sessions
 
-Commands:
+Comandos:
   opencode session list                list sessions
   opencode session delete <sessionID>  delete a session
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
+`;
+
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode sessions --help 1`] = `
+"opencode sessions [project]
+
+browse sessions across all projects
+
+Posicionais:
+  project  path to start opencode in                                                        [string]
+
+Opções:
+  -h, --help         show help                                                            [booleano]
+  -v, --version      show version number                                                  [booleano]
+      --print-logs   print logs to stderr                                                 [booleano]
+      --log-level    log level                   [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                         [booleano]
+      --port         port to listen on                                          [número] [padrão: 0]
+      --hostname     hostname to listen on                            [string] [padrão: "127.0.0.1"]
+      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [booleano] [padrão: false]
+      --mdns-domain  custom domain name for mDNS service (default: opencode.local)
+                                                                 [string] [padrão: "opencode.local"]
+      --cors         additional domains to allow for CORS                       [array] [padrão: []]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin --help 1`] = `
@@ -369,17 +392,17 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 install plugin and update config
 
-Positionals:
-  module  npm module name                                                        [string] [required]
+Posicionais:
+  module  npm module name                                                     [string] [obrigatório]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-  -g, --global      install in global config                              [boolean] [default: false]
-  -f, --force       replace existing plugin version                       [boolean] [default: false]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
+  -g, --global      install in global config                              [booleano] [padrão: false]
+  -f, --force       replace existing plugin version                       [booleano] [padrão: false]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode db --help 1`] = `
@@ -387,20 +410,20 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 database tools
 
-Commands:
+Comandos:
   opencode db [query]     open an interactive sqlite3 shell or run a query                 [default]
   opencode db path        print the database path
 
-Positionals:
+Posicionais:
   query  SQL query to execute                                                               [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-      --format      Output format                 [string] [choices: "json", "tsv"] [default: "tsv"]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
+      --format      Output format                   [string] [opções: "json", "tsv"] [padrão: "tsv"]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp list --help 1`] = `
@@ -408,12 +431,12 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 list MCP servers and their status
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp add --help 1`] = `
@@ -421,15 +444,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 add an MCP server
 
-Positionals:
+Posicionais:
   name  name of the MCP server                                                              [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
       --url         URL for a remote MCP server                                             [string]
       --env         environment variable for a local MCP server (KEY=VALUE)                  [array]
       --header      HTTP header for a remote MCP server (KEY=VALUE)                          [array]"
@@ -440,18 +463,18 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 authenticate with an OAuth-enabled MCP server
 
-Commands:
-  opencode mcp auth list  list OAuth-capable MCP servers and their auth status         [aliases: ls]
+Comandos:
+  opencode mcp auth list  list OAuth-capable MCP servers and their auth status       [sinônimos: ls]
 
-Positionals:
+Posicionais:
   name  name of the MCP server                                                              [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp logout --help 1`] = `
@@ -459,15 +482,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 remove OAuth credentials for an MCP server
 
-Positionals:
+Posicionais:
   name  name of the MCP server                                                              [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers list --help 1`] = `
@@ -475,12 +498,12 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 list providers and credentials
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers login --help 1`] = `
@@ -488,15 +511,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 log in to a provider
 
-Positionals:
+Posicionais:
   url  opencode auth provider                                                               [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
   -p, --provider    provider id or name to log in to (skips provider selection)             [string]
   -m, --method      login method label (skips method selection)                             [string]"
 `;
@@ -506,15 +529,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 log out from a configured provider
 
-Positionals:
+Posicionais:
   provider  provider id or name to log out from                                             [string]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent create --help 1`] = `
@@ -522,15 +545,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 create a new agent
 
-Options:
-  -h, --help                  show help                                                    [boolean]
-  -v, --version               show version number                                          [boolean]
-      --print-logs            print logs to stderr                                         [boolean]
-      --log-level             log level         [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure                  run without external plugins                                 [boolean]
+Opções:
+  -h, --help                  show help                                                   [booleano]
+  -v, --version               show version number                                         [booleano]
+      --print-logs            print logs to stderr                                        [booleano]
+      --log-level             log level          [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure                  run without external plugins                                [booleano]
       --path                  directory path to generate the agent file                     [string]
       --description           what the agent should do                                      [string]
-      --mode                  agent mode            [string] [choices: "all", "primary", "subagent"]
+      --mode                  agent mode             [string] [opções: "all", "primary", "subagent"]
       --permissions, --tools  comma-separated list of permissions to allow (default: all).
                               Available: "bash, read, edit, glob, grep, webfetch, task, todowrite,
                               websearch, lsp, skill"                                        [string]
@@ -542,12 +565,12 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 list all available agents
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session list --help 1`] = `
@@ -555,14 +578,14 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 list sessions
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
-  -n, --max-count   limit to N most recent sessions                                         [number]
-      --format      output format             [string] [choices: "table", "json"] [default: "table"]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
+  -n, --max-count   limit to N most recent sessions                                         [número]
+      --format      output format               [string] [opções: "table", "json"] [padrão: "table"]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session delete --help 1`] = `
@@ -570,15 +593,15 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 delete a session
 
-Positionals:
-  sessionID  session ID to delete                                                [string] [required]
+Posicionais:
+  sessionID  session ID to delete                                             [string] [obrigatório]
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github install --help 1`] = `
@@ -586,12 +609,12 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 install the GitHub agent
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github run --help 1`] = `
@@ -599,12 +622,12 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 run the GitHub agent
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]
       --event       GitHub mock event to run the agent for                                  [string]
       --token       GitHub personal access token (github_pat_********)                      [string]"
 `;
@@ -614,10 +637,10 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 
 print the database path
 
-Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --pure        run without external plugins                                           [boolean]"
+Opções:
+  -h, --help        show help                                                             [booleano]
+  -v, --version     show version number                                                   [booleano]
+      --print-logs  print logs to stderr                                                  [booleano]
+      --log-level   log level                    [string] [opções: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                          [booleano]"
 `;

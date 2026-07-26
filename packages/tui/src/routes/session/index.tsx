@@ -141,6 +141,7 @@ const sessionBindingCommands = [
   "session.parent",
   "session.child.next",
   "session.child.previous",
+  "sessions.back",
 ] as const
 
 const sessionGlobalBindingCommands = [
@@ -293,9 +294,18 @@ export function Session() {
 
       if (result.data.workspaceID !== previousWorkspace) {
         project.workspace.set(result.data.workspaceID)
+      }
 
-        // Sync all the data for this workspace. Note that this
-        // workspace may not exist anymore which is why this is not
+      // Sessions opened from another project (e.g. via the sessions list) move
+      // the whole TUI context to the directory the session was started in.
+      const directoryChanged = result.data.directory !== sdk.directory
+      if (directoryChanged) {
+        sdk.setDirectory(result.data.directory)
+      }
+
+      if (directoryChanged || result.data.workspaceID !== previousWorkspace) {
+        // Sync all the data for this directory/workspace. Note that this
+        // location may not exist anymore which is why this is not
         // fatal. If it doesn't we still want to show the session
         // (which will be non-interactive)
         try {
@@ -1077,6 +1087,22 @@ export function Session() {
         dialog.clear()
         moveChild(-1)
       }),
+    },
+    {
+      title: "Back to sessions list",
+      value: "sessions.back",
+      category: "Session",
+      hidden: true,
+      enabled: () => {
+        if (session()?.parentID) return false
+        if (dialog.stack.length > 0) return false
+        const current = promptRef.current
+        if (!current?.focused) return true
+        return current.current.input === ""
+      },
+      run: () => {
+        navigate({ type: "sessions" })
+      },
     },
   ])
 

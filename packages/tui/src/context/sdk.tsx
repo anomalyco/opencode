@@ -19,18 +19,29 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   }) => {
     const abort = new AbortController()
     let sse: AbortController | undefined
+    let directory = props.directory
 
     function createSDK() {
       return createOpencodeClient({
         baseUrl: props.url,
         signal: abort.signal,
-        directory: props.directory,
+        directory,
         fetch: props.fetch,
         headers: props.headers,
       })
     }
 
     let sdk = createSDK()
+
+    // Instance-scoped clients carry the current directory, which the server
+    // uses to scope requests (including filtering the global session list).
+    // This client intentionally has no directory so global endpoints stay global.
+    const globalClient = createOpencodeClient({
+      baseUrl: props.url,
+      signal: abort.signal,
+      fetch: props.fetch,
+      headers: props.headers,
+    })
 
     const handlers = new Set<(event: GlobalEvent) => void>()
     const emitter = {
@@ -142,7 +153,17 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       get client() {
         return sdk
       },
-      directory: props.directory,
+      globalClient,
+      get directory() {
+        return directory
+      },
+      // Recreates the HTTP client against another project directory. The event
+      // stream is global and keeps running on the original client.
+      setDirectory(next: string) {
+        if (next === directory) return
+        directory = next
+        sdk = createSDK()
+      },
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,

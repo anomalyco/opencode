@@ -65,6 +65,7 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       },
     }
   }
+  if (route.data.type === "sessions") return { name: "sessions" }
 
   return {
     name: route.data.id,

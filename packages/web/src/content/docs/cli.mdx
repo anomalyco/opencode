@@ -444,6 +444,18 @@ opencode session delete <sessionID>
 
 ---
 
+### sessions
+
+Browse sessions across all projects in a navigable list.
+
+```bash
+opencode sessions [project]
+```
+
+Opens the TUI directly on a screen listing sessions from every project stored in the global database. Use the arrow keys to navigate, `enter` or `right` to open the selected session, and `left` (with an empty prompt) inside a session to return to the list. Opening a session switches the TUI working context to the directory the session was started in.
+
+---
+
 ### stats
 
 Show token usage and cost statistics for your OpenCode sessions.
