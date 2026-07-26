@@ -47,10 +47,18 @@ function setup(rules: PermissionV2.Ruleset = []) {
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
+    yield* setupSession(SessionV2.ID.make("ses_test"))
+    yield* setRules(rules)
+  })
+}
+
+function setupSession(sessionID: SessionV2.ID) {
+  return Effect.gen(function* () {
+    const { db } = yield* Database.Service
     yield* db
       .insert(SessionTable)
       .values({
-        id: SessionV2.ID.make("ses_test"),
+        id: sessionID,
         project_id: Project.ID.global,
         slug: "test",
         directory: "/project",
@@ -61,7 +69,6 @@ function setup(rules: PermissionV2.Ruleset = []) {
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
-    yield* setRules(rules)
   })
 }
 
@@ -284,6 +291,21 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("rejects every pending permission in the same session", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      const first = assertion({ id: PermissionV2.ID.create("per_first") })
+      const second = assertion({ id: PermissionV2.ID.create("per_second") })
+      yield* service.ask(first)
+      yield* service.ask(second)
+
+      yield* service.reply({ requestID: first.id, reply: "reject" })
+
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("stores and removes saved resources for a project", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -311,6 +333,32 @@ describe("PermissionV2", () => {
       yield* service.assert(assertion({ id: PermissionV2.ID.create("per_next"), resources: ["src/next.ts"] }))
       yield* saved.remove(id)
       expect(yield* saved.list()).toEqual([])
+    }),
+  )
+
+  it.effect("resolves pending permissions covered by a saved approval", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const otherSession = SessionV2.ID.make("ses_other")
+      yield* setupSession(otherSession)
+      const service = yield* PermissionV2.Service
+      const selected = assertion({ id: PermissionV2.ID.create("per_selected"), save: ["src/*"] })
+      const covered = assertion({
+        id: PermissionV2.ID.create("per_covered"),
+        sessionID: otherSession,
+        resources: ["src/covered.ts"],
+      })
+      const uncovered = assertion({
+        id: PermissionV2.ID.create("per_uncovered"),
+        resources: ["README.md"],
+      })
+      yield* service.ask(selected)
+      yield* service.ask(covered)
+      yield* service.ask(uncovered)
+
+      yield* service.reply({ requestID: selected.id, reply: "always" })
+
+      expect(yield* service.list()).toEqual([uncovered])
     }),
   )
 })
