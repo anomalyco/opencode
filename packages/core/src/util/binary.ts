@@ -9,7 +9,9 @@ export namespace Binary {
 
       if (midId === id) {
         return { found: true, index: mid }
-      } else if (midId < id) {
+      }
+
+      if (midId < id) {
         left = mid + 1
       } else {
         right = mid - 1
