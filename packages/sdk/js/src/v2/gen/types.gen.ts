@@ -1927,6 +1927,9 @@ export type Config = {
   enabled_providers?: Array<string>
   model?: string
   small_model?: string
+  auto_approve?: {
+    model?: string
+  }
   default_agent?: string
   subagent_depth?: number
   username?: string
@@ -9293,6 +9296,40 @@ export type PermissionReplyResponses = {
 }
 
 export type PermissionReplyResponse = PermissionReplyResponses[keyof PermissionReplyResponses]
+
+export type PermissionClassifyData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/{requestID}/classify"
+}
+
+export type PermissionClassifyErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * PermissionNotFoundError
+   */
+  404: PermissionNotFoundError
+}
+
+export type PermissionClassifyError = PermissionClassifyErrors[keyof PermissionClassifyErrors]
+
+export type PermissionClassifyResponses = {
+  /**
+   * Whether the permission can be automatically approved
+   */
+  200: boolean
+}
+
+export type PermissionClassifyResponse = PermissionClassifyResponses[keyof PermissionClassifyResponses]
 
 export type ProviderListData = {
   body?: never

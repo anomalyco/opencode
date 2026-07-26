@@ -4,10 +4,12 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { PermissionNotFoundError } from "../errors"
+import { PermissionAutoApprove } from "@/permission/auto-approve"
 
 export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permission", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* Permission.Service
+    const autoApprove = yield* PermissionAutoApprove.Service
 
     const list = Effect.fn("PermissionHttpApi.list")(function* () {
       return yield* svc.list()
@@ -36,6 +38,21 @@ export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permiss
       return true
     })
 
-    return handlers.handle("list", list).handle("reply", reply)
+    const classify = Effect.fn("PermissionHttpApi.classify")(function* (ctx: {
+      params: { requestID: PermissionV1.ID }
+    }) {
+      const request = (yield* svc.list()).find((item) => item.id === ctx.params.requestID)
+      if (!request) {
+        return yield* new PermissionNotFoundError({
+          requestID: String(ctx.params.requestID),
+          message: `Permission request not found: ${ctx.params.requestID}`,
+        })
+      }
+      const approved = yield* autoApprove.classify(request)
+      if (!approved) return false
+      return (yield* svc.list()).some((item) => item.id === request.id)
+    })
+
+    return handlers.handle("list", list).handle("reply", reply).handle("classify", classify)
   }),
 )

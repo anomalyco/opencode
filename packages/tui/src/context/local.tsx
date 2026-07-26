@@ -13,6 +13,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { cycleMode, disableAutoMode, enableAutoMode, modeLabel, realAgentMode, startupMode } from "../mode-cycle"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -89,6 +90,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+      function apply(state: { agent: string; permission: "auto" | "normal" }) {
+        batch(() => {
+          if (state.permission === "normal") permission.set("normal")
+          setAgentStore("current", state.agent)
+          if (state.permission === "auto") permission.set("auto")
+        })
+      }
       return {
         list() {
           return agents()
@@ -96,25 +104,71 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         current() {
           return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
         },
-        set(name: string) {
+        set(name: string, options?: { preservePermission?: boolean }) {
           if (!agents().some((x) => x.name === name))
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
-          setAgentStore("current", name)
+          if (options?.preservePermission) setAgentStore("current", name)
+          else apply(realAgentMode(name))
+        },
+        start(input: { auto?: boolean; agent?: string }) {
+          const current = this.current()
+          if (!current) return
+          if (input.agent && !agents().some((item) => item.name === input.agent)) {
+            permission.set("normal")
+            return this.set(input.agent)
+          }
+          apply(
+            startupMode({
+              ...input,
+              current: current.name,
+              available: agents().map((item) => item.name),
+            }),
+          )
         },
         move(direction: 1 | -1) {
-          batch(() => {
-            const current = this.current()
-            if (!current) return
-            let next = agents().findIndex((x) => x.name === current.name) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
-            setAgentStore("current", value.name)
-          })
+          const current = this.current()
+          if (!current) return
+          apply(
+            cycleMode({
+              direction,
+              current: { agent: current.name, permission: permission.mode },
+              available: agents().map((item) => item.name),
+            }),
+          )
+        },
+        enableAuto() {
+          if (!agents().some((item) => item.name === "build")) {
+            permission.set("normal")
+            return toast.show({
+              variant: "warning",
+              message: "Auto-approve mode requires the Build agent",
+              duration: 3000,
+            })
+          }
+          apply(
+            enableAutoMode(
+              this.current()?.name ?? "build",
+              agents().map((item) => item.name),
+            ),
+          )
+        },
+        disableAuto() {
+          const current = this.current()
+          apply(
+            disableAutoMode(
+              current?.name ?? "build",
+              agents().map((item) => item.name),
+            ),
+          )
+        },
+        label() {
+          const current = this.current()
+          if (!current) return ""
+          return modeLabel({ agent: current.name, permission: permission.mode })
         },
         color(name: string) {
           const index = visibleAgents().findIndex((x) => x.name === name)
@@ -133,6 +187,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = createAgent()
+
+    createEffect(() => {
+      if (permission.mode !== "auto" || sync.status !== "complete") return
+      if (agent.current()?.name === "build" && agent.list().some((item) => item.name === "build")) return
+      permission.set("normal")
+    })
 
     function createModel() {
       const [modelStore, setModelStore] = createStore<{

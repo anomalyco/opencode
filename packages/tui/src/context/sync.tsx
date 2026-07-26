@@ -28,7 +28,7 @@ import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, createEffect, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
@@ -36,6 +36,15 @@ import { usePermission } from "./permission"
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
   switchableOrgCount: 0,
+}
+
+type AutoApprovalAttempt = {
+  request: PermissionRequest
+  revision: number
+  resolved: boolean
+  recovered: boolean
+  controller: AbortController
+  timeout?: ReturnType<typeof setTimeout>
 }
 
 function search<T>(items: T[], target: string, key: (item: T) => string) {
@@ -57,7 +66,7 @@ export const {
   provider: SyncProvider,
 } = createSimpleContext({
   name: "Sync",
-  init: () => {
+  init: (props: { autoApprovalTimeout?: number }) => {
     const startup = useTuiStartup()
     const kv = useKV()
     const permission = usePermission()
@@ -144,6 +153,7 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const autoApprovals = new Map<string, AutoApprovalAttempt>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -167,12 +177,63 @@ export const {
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    function upsertPermission(request: PermissionRequest) {
+      const requests = store.permission[request.sessionID]
+      if (!requests) {
+        setStore("permission", request.sessionID, [request])
+        return
+      }
+      const match = search(requests, request.id, (item) => item.id)
+      if (match.found) {
+        setStore("permission", request.sessionID, match.index, reconcile(request))
+        return
+      }
+      setStore(
+        "permission",
+        request.sessionID,
+        produce((draft) => {
+          draft.splice(match.index, 0, request)
+        }),
+      )
+    }
+
+    function fallbackPermission(attempt: AutoApprovalAttempt) {
+      if (attempt.resolved || attempt.recovered) return
+      attempt.recovered = true
+      clearTimeout(attempt.timeout)
+      attempt.controller.abort()
+      if (autoApprovals.get(attempt.request.id) === attempt) autoApprovals.delete(attempt.request.id)
+      upsertPermission(attempt.request)
+    }
+
+    function invalidatePermission(attempt: AutoApprovalAttempt) {
+      attempt.recovered = true
+      clearTimeout(attempt.timeout)
+      attempt.controller.abort()
+    }
+
+    createEffect(() => {
+      const mode = permission.mode
+      permission.revision
+      if (mode === "auto") return
+      for (const attempt of autoApprovals.values()) fallbackPermission(attempt)
+    })
+
     event.subscribe((event, { directory, workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
+          for (const attempt of autoApprovals.values()) invalidatePermission(attempt)
+          autoApprovals.clear()
           void bootstrap()
           break
         case "permission.replied": {
+          const attempt = autoApprovals.get(event.properties.requestID)
+          if (attempt) {
+            attempt.resolved = true
+            clearTimeout(attempt.timeout)
+            attempt.controller.abort()
+            autoApprovals.delete(event.properties.requestID)
+          }
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -190,31 +251,62 @@ export const {
         case "permission.asked": {
           const request = event.properties
           if (permission.mode === "auto") {
-            void sdk.client.permission.reply({
-              requestID: request.id,
-              reply: "once",
-              directory,
-              workspace,
-            })
+            const requests = store.permission[request.sessionID]
+            if (requests && search(requests, request.id, (item) => item.id).found) {
+              upsertPermission(request)
+              break
+            }
+            if (autoApprovals.has(request.id)) break
+            const controller = new AbortController()
+            const attempt: AutoApprovalAttempt = {
+              request,
+              revision: permission.revision,
+              resolved: false,
+              recovered: false,
+              controller,
+            }
+            attempt.timeout = setTimeout(() => fallbackPermission(attempt), props.autoApprovalTimeout ?? 6_000)
+            autoApprovals.set(request.id, attempt)
+            void sdk.client.permission
+              .classify({ requestID: request.id, directory, workspace }, { signal: controller.signal })
+              .then((result) => {
+                if (
+                  attempt.resolved ||
+                  attempt.recovered ||
+                  permission.mode !== "auto" ||
+                  permission.revision !== attempt.revision ||
+                  result.data !== true
+                ) {
+                  fallbackPermission(attempt)
+                  return
+                }
+                return sdk.client.permission
+                  .reply(
+                    {
+                      requestID: request.id,
+                      reply: "once",
+                      directory,
+                      workspace,
+                    },
+                    { signal: controller.signal },
+                  )
+                  .then((reply) => {
+                    if (reply.data === true) {
+                      attempt.resolved = true
+                      clearTimeout(attempt.timeout)
+                      return
+                    }
+                    if (attempt.resolved) {
+                      clearTimeout(attempt.timeout)
+                      return
+                    }
+                    fallbackPermission(attempt)
+                  })
+              })
+              .catch(() => fallbackPermission(attempt))
             break
           }
-          const requests = store.permission[request.sessionID]
-          if (!requests) {
-            setStore("permission", request.sessionID, [request])
-            break
-          }
-          const match = search(requests, request.id, (r) => r.id)
-          if (match.found) {
-            setStore("permission", request.sessionID, match.index, reconcile(request))
-            break
-          }
-          setStore(
-            "permission",
-            request.sessionID,
-            produce((draft) => {
-              draft.splice(match.index, 0, request)
-            }),
-          )
+          upsertPermission(request)
           break
         }
 

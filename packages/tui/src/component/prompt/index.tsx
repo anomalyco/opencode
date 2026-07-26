@@ -322,7 +322,10 @@ export function Prompt(props: PromptProps) {
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
         // Keep command line --agent if specified.
-        if (!args.agent) local.agent.set(msg.agent)
+        if (!args.agent)
+          local.agent.set(msg.agent, {
+            preservePermission: msg.agent === "build" && local.permission.mode === "auto",
+          })
         if (msg.model) {
           local.model.set(msg.model)
           local.model.variant.set(msg.model.variant)
@@ -1444,11 +1447,8 @@ export function Prompt(props: PromptProps) {
                   {(agent) => (
                     <>
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                        {store.mode === "shell" ? "Shell" : local.agent.label()}
                       </text>
-                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
-                      </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
@@ -1668,7 +1668,7 @@ export function Prompt(props: PromptProps) {
                     </Match>
                     <Match when={true}>
                       <text fg={theme.text}>
-                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
+                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>modes</span>
                       </text>
                     </Match>
                   </Switch>

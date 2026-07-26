@@ -77,6 +77,14 @@ export const Info = Schema.Struct({
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),
+  auto_approve: Schema.optional(
+    Schema.Struct({
+      model: Schema.optional(Schema.String.check(Schema.isPattern(/^[^/\s]+\/\S+$/))).annotate({
+        description:
+          "Model used to classify permission requests in TUI auto-approve mode, in the format provider/model. Defaults to the active provider's small model.",
+      }),
+    }),
+  ).annotate({ description: "Configure model-gated TUI auto-approval" }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",

@@ -143,7 +143,7 @@ describe("tool.lsp", () => {
     )
 
     it.instance(
-      "omits file and cursor details for workspaceSymbol",
+      "includes explicit query state and omits file and cursor details for workspaceSymbol",
       () =>
         Effect.gen(function* () {
           const dir = (yield* TestInstance).directory
@@ -158,6 +158,7 @@ describe("tool.lsp", () => {
           expect(req).toBeDefined()
           expect(req!.metadata).toEqual({
             operation: "workspaceSymbol",
+            query: "",
           })
           expect(result.title).toBe("workspaceSymbol")
         }),

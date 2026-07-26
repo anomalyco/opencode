@@ -86,6 +86,7 @@ import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
+import { paletteModeTitle } from "./mode-cycle"
 
 registerOpencodeSpinner()
 
@@ -478,7 +479,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const args = useArgs()
   onMount(() => {
     batch(() => {
-      if (args.agent) local.agent.set(args.agent)
+      if (args.auto || args.agent) local.agent.start({ auto: args.auto, agent: args.agent })
       if (args.model) {
         const { providerID, modelID } = Model.parse(args.model)
         if (!providerID || !modelID)
@@ -694,7 +695,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "agent.cycle",
-        title: "Agent cycle",
+        title: "Cycle modes: Build, Plan, Auto-approve",
         category: "Agent",
         hidden: true,
         run: () => {
@@ -728,7 +729,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "agent.cycle.reverse",
-        title: "Agent cycle reverse",
+        title: "Cycle modes in reverse: Build, Auto-approve, Plan",
         category: "Agent",
         hidden: true,
         run: () => {
@@ -945,11 +946,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "permission.mode",
-        title:
-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
+        title: paletteModeTitle(local.permission.mode),
         category: "System",
         run: () => {
-          local.permission.toggle()
+          if (local.permission.mode === "auto") local.agent.disableAuto()
+          else local.agent.enableAuto()
           dialog.clear()
         },
       },

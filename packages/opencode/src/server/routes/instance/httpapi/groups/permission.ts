@@ -41,6 +41,18 @@ export const PermissionApi = HttpApi.make("permission")
             description: "Approve or deny a permission request from the AI assistant.",
           }),
         ),
+        HttpApiEndpoint.post("classify", `${root}/:requestID/classify`, {
+          params: { requestID: PermissionV1.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Whether the permission can be automatically approved"),
+          error: [HttpApiError.BadRequest, PermissionNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "permission.classify",
+            summary: "Classify a permission request",
+            description: "Use the configured fast model to decide whether a pending permission can be auto-approved.",
+          }),
+        ),
       )
       .annotateMerge(
         OpenApi.annotations({

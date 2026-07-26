@@ -2086,20 +2086,20 @@ describe("session.llm.stream", () => {
             { role: "user", content: "Hello" },
             { role: "assistant", content: [{ type: "reasoning", text: "" }] },
           ],
+          maxOutputTokens: 16,
           tools: {},
         })
 
         const capture = yield* Effect.promise(() => request)
         const body = capture.body
         const config = body.generationConfig as
-          | { temperature?: number; topP?: number; maxOutputTokens?: number }
-          | undefined
+          { temperature?: number; topP?: number; maxOutputTokens?: number } | undefined
 
         expect(capture.url.pathname).toBe(pathSuffix)
         expect(body.contents).toEqual([{ role: "user", parts: [{ text: "Hello" }] }])
         expect(config?.temperature).toBe(0.3)
         expect(config?.topP).toBe(0.8)
-        expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
+        expect(config?.maxOutputTokens).toBe(16)
       }),
     {
       config: () => ({

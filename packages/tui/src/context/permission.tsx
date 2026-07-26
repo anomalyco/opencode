@@ -1,6 +1,7 @@
 import { createStore } from "solid-js/store"
 import { useArgs } from "./args"
 import { createSimpleContext } from "./helper"
+import { startupPermissionMode } from "../mode-cycle"
 
 export type PermissionMode = "auto" | "normal"
 
@@ -8,18 +9,20 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
   name: "Permission",
   init: () => {
     const args = useArgs()
-    const [store, setStore] = createStore<{ mode: PermissionMode }>({
-      mode: args.auto ? "auto" : "normal",
+    const [store, setStore] = createStore<{ mode: PermissionMode; revision: number }>({
+      mode: startupPermissionMode(args),
+      revision: 0,
     })
     return {
       get mode() {
         return store.mode
       },
-      set(mode: PermissionMode) {
-        setStore("mode", mode)
+      get revision() {
+        return store.revision
       },
-      toggle() {
-        setStore("mode", (mode) => (mode === "auto" ? "normal" : "auto"))
+      set(mode: PermissionMode) {
+        if (store.mode === mode) return
+        setStore({ mode, revision: store.revision + 1 })
       },
     }
   },
