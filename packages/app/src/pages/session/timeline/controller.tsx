@@ -14,7 +14,7 @@ import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
-import { useSessionKey } from "@/pages/session/session-layout"
+import type { SessionController } from "@/pages/session/session-controller"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { sessionTitle } from "@/utils/session-title"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
@@ -24,8 +24,6 @@ import { createTimelineProjection } from "./projection"
 
 const emptyMessages: Message[] = []
 const emptyParts: Part[] = []
-const idle = { type: "idle" as const }
-
 const taskDescription = (part: Part, sessionID: string): string | undefined => {
   if (part.type !== "tool" || part.tool !== "task") return undefined
   const metadata = "metadata" in part.state ? part.state.metadata : undefined
@@ -35,7 +33,16 @@ const taskDescription = (part: Part, sessionID: string): string | undefined => {
   return undefined
 }
 
-export function createTimelineController(input: { userMessages: Accessor<UserMessage[]> }) {
+export type TimelineSessionSource = {
+  identity: Pick<SessionController["identity"], "params" | "sessionID" | "sessionKey">
+  data: Pick<SessionController["data"], "info" | "parent" | "parentID" | "status">
+  history: Pick<SessionController["history"], "messages">
+}
+
+export function createTimelineController(input: {
+  session: TimelineSessionSource
+  userMessages: Accessor<UserMessage[]>
+}) {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
@@ -44,14 +51,11 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
-  const { params, sessionKey } = useSessionKey()
-  const sessionID = createMemo(() => params.id)
-  const status = createMemo(() => {
-    const id = sessionID()
-    if (!id) return idle
-    return sync().data.session_status[id] ?? idle
-  })
-  const messages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
+  const params = input.session.identity.params
+  const sessionKey = input.session.identity.sessionKey
+  const sessionID = input.session.identity.sessionID
+  const status = input.session.data.status
+  const messages = input.session.history.messages
   const projectedMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return []
@@ -62,19 +66,13 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
     const index = projected.findIndex((message) => message.id === boundary)
     return index < 0 ? projected : projected.slice(0, index)
   })
-  const info = createMemo(() => {
-    const id = sessionID()
-    return id ? sync().session.get(id) : undefined
-  })
+  const info = input.session.data.info
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = (): string | undefined => undefined
   const shareEnabled = () => false
-  const parentID = createMemo(() => info()?.parentID)
-  const parent = createMemo(() => {
-    const id = parentID()
-    return id ? sync().session.get(id) : undefined
-  })
+  const parentID = input.session.data.parentID
+  const parent = input.session.data.parent
   const parentMessages = createMemo(() => {
     const id = parentID()
     return id ? (sync().data.message[id] ?? emptyMessages) : emptyMessages

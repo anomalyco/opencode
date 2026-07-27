@@ -53,7 +53,7 @@ import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
-import { createTimelineController, type TimelineController } from "./controller"
+import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 
 const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
@@ -202,6 +202,7 @@ function TimelineDiffView(props: { diff: SummaryDiff }) {
 }
 
 type MessageTimelineProps = {
+  session: TimelineSessionSource
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
@@ -224,7 +225,7 @@ type MessageTimelineProps = {
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
-  const controller = createTimelineController({ userMessages: () => props.userMessages })
+  const controller = createTimelineController({ session: props.session, userMessages: () => props.userMessages })
   return (
     <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
   )

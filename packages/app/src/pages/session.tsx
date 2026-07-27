@@ -58,7 +58,7 @@ import { ServerConnection, serverName, useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
-import { TerminalProvider, useTerminal } from "@/context/terminal"
+import { TerminalProvider } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
 import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
@@ -71,11 +71,11 @@ import {
   createSessionComposerRegionController,
   SessionComposerRegion,
 } from "@/pages/session/composer"
-import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
+import { createOpenReviewFile, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
-import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionController } from "@/pages/session/session-controller"
 import { restorePromptModel, syncPromptModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import {
   clampSessionPanelWidth,
@@ -102,7 +102,6 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
-import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 
 type FollowupItem = FollowupDraft & { id: string }
@@ -367,15 +366,28 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const command = useCommand()
-  const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
-  const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
+  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
+  const canReview = createMemo(() => !!sync().project)
+  const session = createSessionController({
+    review: isDesktop,
+    hasReview: canReview,
+    fileBrowser: (sessionID) => newSessionDesign() && isDesktop() && !!sessionID,
+  })
+  const params = session.identity.params
+  const sessionKey = session.identity.sessionKey
+  const workspaceKey = session.identity.workspaceKey
+  const tabs = session.layout.tabs
+  const view = session.layout.view
   const reviewMode = () => view().review.mode() ?? "git"
   const reviewFile = () => view().review.file()
-  const sessionOwnership = createSessionOwnership(sessionKey)
-  const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
+  const sessionOwnership = session.ownership
+  const info = session.data.info
+  const isChildSession = session.data.isChild
+  const revertMessageID = session.data.revertMessageID
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -434,8 +446,8 @@ export default function Page() {
         const current = tabs().tabs()
         if (current.all.length > 0 || current.active) return
 
-        const all = normalizeTabs(from.all)
-        const active = from.active ? normalizeTab(from.active) : undefined
+        const all = session.tabs.normalizeAll(from.all)
+        const active = from.active ? session.tabs.normalize(from.active) : undefined
         tabs().setAll(all)
         tabs().setActive(active && all.includes(active) ? active : all[0])
 
@@ -446,7 +458,6 @@ export default function Page() {
     ),
   )
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
@@ -511,46 +522,16 @@ export default function Page() {
     }),
   )
 
-  function normalizeTab(tab: string) {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
-
-  function normalizeTabs(list: string[]) {
-    const seen = new Set<string>()
-    const next: string[] = []
-    for (const item of list) {
-      const value = normalizeTab(item)
-      if (seen.has(value)) continue
-      seen.add(value)
-      next.push(value)
-    }
-    return next
-  }
-
   const openReviewPanel = () => {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
-  const isChildSession = createMemo(() => !!info()?.parentID)
-  const canReview = createMemo(() => !!sync().project)
-  const reviewTab = createMemo(() => isDesktop())
-  const tabState = createSessionTabs({
-    tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab,
-    review: reviewTab,
-    hasReview: canReview,
-  })
-  const activeTab = tabState.activeTab
-  const activeFileTab = tabState.activeFileTab
-  const revertMessageID = createMemo(() => info()?.revert?.messageID)
-  const timeline = createTimelineModel({ sessionID: () => params.id, revertMessageID })
+  const activeTab = session.tabs.activeTab
+  const activeFileTab = session.tabs.activeFileTab
+  const timeline = createTimelineModel({ session })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
   const lastUserMessage = timeline.lastUserMessage
-  const messages = timeline.messages
   const messagesReady = timeline.ready
   const sessionSync = timeline.resource
   const userMessages = timeline.userMessages
@@ -1135,11 +1116,10 @@ export default function Page() {
 
   useComposerCommands()
   useSessionCommands({
+    session,
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
-    review: reviewTab,
-    fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
   command.register("session-palette", () => [
     {
@@ -1686,8 +1666,6 @@ export default function Page() {
     })
   }
 
-  const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) => target.session.remember(next)
-
   const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"], target = sync()) => {
     const session = target.session.get(sessionID)
     if (!session) return
@@ -1749,7 +1727,7 @@ export default function Page() {
   const queueEnabled = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
+    return settings.general.followup() === "queue" && session.data.working() && !composer.blocked() && !isChildSession()
   })
 
   const followupText = (item: FollowupDraft) => {
@@ -1931,7 +1909,7 @@ export default function Page() {
     if (followup.paused[sessionID]) return
     if (isChildSession()) return
     if (composer.blocked()) return
-    if (busy(sessionID)) return
+    if (session.data.working()) return
 
     void sendFollowup(sessionID, item.id)
   })
@@ -2079,6 +2057,7 @@ export default function Page() {
             <Show when={messagesReady() ? params.id : undefined} keyed>
               {(_id) => (
                 <MessageTimeline
+                  session={session}
                   actions={actions}
                   scroll={ui.scroll}
                   onResumeScroll={resumeScroll}
@@ -2156,7 +2135,7 @@ export default function Page() {
                 : undefined,
             onResponseSubmit: resumeScroll,
             openParent: () => {
-              const id = info()?.parentID
+              const id = session.data.parentID()
               if (!id) return
               navigate(
                 params.serverKey

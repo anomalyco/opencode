@@ -14,19 +14,25 @@ import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
-import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { UserMessage } from "@/types"
-import { useSessionLayout } from "@/pages/session/session-layout"
-import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
+import type { SessionController } from "./session-controller"
+
+type SessionCommandSource = {
+  identity: SessionController["identity"]
+  data: Pick<SessionController["data"], "info" | "revertMessageID">
+  history: Pick<SessionController["history"], "userMessages" | "visibleUserMessages">
+  layout: SessionController["layout"]
+  ownership: SessionController["ownership"]
+  tabs: Pick<SessionController["tabs"], "activeFileTab" | "closableTab">
+}
 
 export type SessionCommandContext = {
+  session: SessionCommandSource
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
-  review?: () => boolean
-  fileBrowser?: () => boolean
 }
 
 const withCategory = (category: string) => {
@@ -50,15 +56,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const layout = useLayout()
   const local = useLocal()
   const navigate = useNavigate()
-  const { params, sessionKey, tabs, view } = useSessionLayout()
-  const sessionOwnership = createSessionOwnership(sessionKey)
+  const params = actions.session.identity.params
+  const tabs = actions.session.layout.tabs
+  const view = actions.session.layout.view
+  const sessionOwnership = actions.session.ownership
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = sessionOwnership.capture()
     const value = await load()
     owner.run(() => show(value))
   }
   const runCommand = async <T,>(input: {
-    owner: ReturnType<ReturnType<typeof createSessionOwnership>["capture"]>
+    owner: ReturnType<SessionController["ownership"]["capture"]>
     prompt: T
     request: () => Promise<unknown>
     updatePrompt: (prompt: T) => void
@@ -69,40 +77,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     input.owner.run(input.updateViewport)
   }
 
-  const info = () => {
-    const id = params.id
-    if (!id) return
-    return sync().session.get(id)
-  }
-  const hasReview = () => !!params.id
-  const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
-  const tabState = createSessionTabs({
-    tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab,
-    review: actions.review,
-    hasReview,
-    fileBrowser: actions.fileBrowser,
-  })
-  const activeFileTab = tabState.activeFileTab
-  const closableTab = tabState.closableTab
+  const info = actions.session.data.info
+  const activeFileTab = actions.session.tabs.activeFileTab
+  const closableTab = actions.session.tabs.closableTab
   const shown = settings.visibility.fileTree
 
-  const messages = () => {
-    const id = params.id
-    if (!id) return []
-    return sync().data.message[id] ?? []
-  }
-  const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
-  const visibleUserMessages = () => {
-    const revert = info()?.revert?.messageID
-    if (!revert) return userMessages()
-    const boundary = userMessages().findIndex((message) => message.id === revert)
-    return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
-  }
+  const userMessages = actions.session.history.userMessages
+  const visibleUserMessages = actions.session.history.visibleUserMessages
 
   const showAllFiles = () => {
     if (layout.fileTree.tab() !== "changes") return
@@ -324,7 +305,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const session = sdk().api.session
     const directory = sdk().directory
     const promptSession = prompt.capture()
-    const revert = info()?.revert?.messageID
+    const revert = actions.session.data.revertMessageID()
     const messages = userMessages()
     const boundary = revert ? messages.findIndex((message) => message.id === revert) : messages.length
     if (boundary < 0) return
@@ -355,7 +336,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const messages = userMessages()
     const promptSession = prompt.capture()
 
-    const revertMessageID = info()?.revert?.messageID
+    const revertMessageID = actions.session.data.revertMessageID()
     if (!revertMessageID) return
 
     const boundary = messages.findIndex((message) => message.id === revertMessageID)
