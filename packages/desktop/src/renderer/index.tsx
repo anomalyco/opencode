@@ -27,6 +27,7 @@ import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import { windowFullscreen } from "./window-fullscreen"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
+import { pathFromFileHref } from "./file-link"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
@@ -360,10 +361,25 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-    if (link?.href) {
-      e.preventDefault()
-      platform.openLink(link.href)
+    if (!link?.href) return
+    e.preventDefault()
+
+    // Prefer the raw attribute so file: links aren't rewritten against oc://renderer.
+    const href = link.getAttribute("href") || link.href
+    const filePath = pathFromFileHref(href)
+    if (filePath) {
+      const reveal = e.metaKey || e.ctrlKey || e.altKey || e.button === 1
+      if (reveal && platform.revealPath) {
+        void platform.revealPath(filePath)
+        return
+      }
+      if (platform.openPath) {
+        void platform.openPath(filePath)
+        return
+      }
     }
+
+    platform.openLink(link.href)
   }
 
   function Inner() {

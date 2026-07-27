@@ -1,5 +1,6 @@
 import { checksum } from "@opencode-ai/core/util/encode"
 import DOMPurify from "dompurify"
+import { desktopAllowedUriRegexp, isDesktopRenderer } from "./markdown-desktop"
 import { project } from "./markdown-stream"
 
 export type MarkdownCacheEntry = {
@@ -34,6 +35,11 @@ if (typeof window !== "undefined" && DOMPurify.isSupported) {
 
 export function sanitizeMarkdown(html: string) {
   if (!DOMPurify.isSupported) return ""
+  // Desktop: keep file: hrefs so chat path links stay clickable. Web keeps the
+  // default scheme allowlist (browsers block file: navigation anyway).
+  if (isDesktopRenderer()) {
+    return DOMPurify.sanitize(html, { ...config, ALLOWED_URI_REGEXP: desktopAllowedUriRegexp })
+  }
   return DOMPurify.sanitize(html, config)
 }
 

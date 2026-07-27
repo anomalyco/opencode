@@ -30,6 +30,7 @@ import {
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
+import { absolutePathHref, isDesktopRenderer } from "./markdown-desktop"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 
 type RenderedBlock =
@@ -99,13 +100,16 @@ const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
 
 function codeUrl(text: string) {
   const href = text.trim().replace(/[),.;!?]+$/, "")
-  if (!urlPattern.test(href)) return
-  try {
-    const url = new URL(href)
-    return url.toString()
-  } catch {
-    return
+  if (urlPattern.test(href)) {
+    try {
+      return new URL(href).toString()
+    } catch {
+      return
+    }
   }
+  // Desktop only: turn absolute paths / file: URLs into clickable file links.
+  if (!isDesktopRenderer()) return
+  return absolutePathHref(href)
 }
 
 function createCopyButton(labels: CopyLabels) {
