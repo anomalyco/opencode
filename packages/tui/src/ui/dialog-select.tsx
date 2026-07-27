@@ -22,6 +22,7 @@ export interface DialogSelectProps<T> {
   noMatchView?: JSX.Element
   options: DialogSelectOption<T>[]
   flat?: boolean
+  filterThreshold?: number
   ref?: (ref: DialogSelectRef<T>) => void
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
@@ -64,6 +65,8 @@ export interface DialogSelectOption<T = any> {
   titleView?: JSX.Element
   value: T
   description?: string
+  searchText?: string
+  searchFooter?: JSX.Element | string
   details?: string[]
   detailsColor?: RGBA
   detailsWrap?: boolean
@@ -164,12 +167,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     )
     if (!needle) return options
 
-    // prioritize title matches (weight: 2) over category matches (weight: 1).
+    // prioritize title matches (weight: 2) over category and supplemental search text matches (weight: 1).
     // users typically search by the item name, and not its category.
     const result = fuzzysort
       .go(needle, options, {
-        keys: ["title", "category"],
-        scoreFn: (r) => r[0].score * 2 + r[1].score,
+        keys: ["title", "category", "searchText"],
+        scoreFn: (r) => r[0].score * 2 + r[1].score + r[2].score,
+        threshold: props.filterThreshold,
       })
       .map((x) => x.obj)
 
@@ -704,7 +708,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             <Option
                               title={option.title}
                               titleView={option.titleView}
-                              footer={flatten() ? (option.category ?? option.footer) : option.footer}
+                              footer={
+                                flatten() ? (option.searchFooter ?? option.category ?? option.footer) : option.footer
+                              }
                               titleWidth={option.titleWidth}
                               truncateTitle={option.truncateTitle}
                               description={option.description !== category ? option.description : undefined}
