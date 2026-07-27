@@ -2,22 +2,7 @@ import { Effect, Schema } from "effect"
 import { definition } from "../src/tool/runtime"
 
 const name = process.argv[2]
-const names = new Set([
-  "edit",
-  "glob",
-  "grep",
-  "patch",
-  "question",
-  "read",
-  "shell",
-  "skill",
-  "subagent",
-  "webfetch",
-  "websearch",
-  "write",
-])
-
-if (!name || !names.has(name)) throw new Error(`Usage: bun script/tool-schema.ts <${[...names].join("|")}>`)
+if (!name || !/^[a-z0-9-]+$/.test(name)) throw new Error("Usage: bun script/tool-schema.ts <tool-name>")
 
 const plugin: unknown = await import(`../src/tool/plugin/${name}.ts`)
 if (typeof plugin !== "object" || plugin === null || !("Input" in plugin) || !Schema.isSchema(plugin.Input))
