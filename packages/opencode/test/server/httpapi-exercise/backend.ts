@@ -2,7 +2,7 @@ import { ConfigProvider, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { parse } from "./assertions"
 import { runtime, type Runtime } from "./runtime"
-import type { ActiveScenario, BackendApp, CallResult, CaptureMode, SeededContext } from "./types"
+import type { ActiveScenario, BackendApp, CallResult, CaptureMode, Method, SeededContext } from "./types"
 
 type CallOptions = {
   auth?: {
@@ -15,6 +15,25 @@ export function call(scenario: ActiveScenario, ctx: SeededContext<unknown>, opti
   return Effect.promise(async () =>
     capture(await app(await runtime(), options).request(toRequest(scenario, ctx)), scenario.capture),
   )
+}
+
+/**
+ * Issue an extra HTTP request from inside a scenario assertion against the same
+ * cached app the primary `call` uses. Lets a single scenario drive a multi-step
+ * flow (e.g. workflow start → get → cancel → remove) entirely over HTTP so every
+ * handler success branch is exercised, not just the route the scenario is keyed
+ * to. Returns the parsed `CallResult` (full capture).
+ */
+export function request(spec: { method: Method; path: string; headers?: Record<string, string>; body?: unknown }) {
+  return Effect.promise(async () => {
+    const init: RequestInit = {
+      method: spec.method,
+      headers: spec.body === undefined ? spec.headers : { "content-type": "application/json", ...spec.headers },
+      body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
+    }
+    const httpRequest = new Request(new URL(spec.path, "http://localhost"), init)
+    return capture(await app(await runtime(), {}).request(httpRequest), "full")
+  })
 }
 
 export function callAuthProbe(scenario: ActiveScenario, credentials: "missing" | "valid" = "missing") {

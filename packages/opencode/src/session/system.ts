@@ -17,6 +17,10 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+// Cycle-free: tool/workflow.ts never imports session/system.ts (only prompt.ts
+// does), so the gate/trigger wording can live with the tool as single source of truth.
+import { ULTRACODE_SYSTEM_SECTION, WORKFLOW_TRIGGER_GUIDANCE } from "@/tool/workflow"
+import { Workflow } from "@/workflow/workflow"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -43,7 +47,12 @@ export function provider(model: Provider.Model) {
 
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
-  readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  /**
+   * Item 13: `opts.ultracode` (session.metadata.ultracode === true) appends the
+   * standing "quality over cost" opt-in section after the workflow section, so
+   * an ultracode session needs no per-message directive.
+   */
+  readonly skills: (agent: Agent.Info, opts?: { ultracode?: boolean }) => Effect.Effect<string | undefined>
   readonly mcp: (agent: Agent.Info, permission?: PermissionV1.Ruleset) => Effect.Effect<string | undefined>
 }
 
@@ -53,6 +62,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
+    const workflow = yield* Workflow.Service
     const mcp = yield* MCP.Service
     const locations = yield* LocationServiceMap.Service
 
@@ -95,18 +105,42 @@ const layer = Layer.effect(
         ].filter((part): part is string => part !== undefined)
       }),
 
-      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
-        if (Permission.disabled(["skill"], agent.permission).has("skill")) return
+      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info, opts?: { ultracode?: boolean }) {
+        const disabled = Permission.disabled(["skill", "workflow"], agent.permission)
 
-        const list = yield* skill.available(agent)
+        const skillList = disabled.has("skill") ? [] : yield* skill.available(agent)
+        const workflowList = disabled.has("workflow")
+          ? []
+          : yield* workflow.list().pipe(Effect.catch(() => Effect.succeed([])))
 
         return [
-          "Skills provide specialized instructions and workflows for specific tasks.",
-          "Use the skill tool to load a skill when a task matches its description.",
-          // the agents seem to ingest the information about skills a bit better if we present a more verbose
-          // version of them here and a less verbose version in tool description, rather than vice versa.
-          Skill.fmt(list, { verbose: true }),
-        ].join("\n")
+          skillList.length
+            ? [
+                "Skills provide specialized instructions and workflows for specific tasks.",
+                "Use the skill tool to load a skill when a task matches its description.",
+                // the agents seem to ingest the information about skills a bit better if we present a more verbose
+                // version of them here and a less verbose version in tool description, rather than vice versa.
+                Skill.fmt(skillList, { verbose: true }),
+              ].join("\n")
+            : undefined,
+          workflowList.length
+            ? [
+                "Workflows are project-local multi-step automations that can run agents, phases, and structured processes.",
+                // Item 3: trigger list, offer path, and hybrid scouting —
+                // shared verbatim with the workflow tool DESCRIPTION (one
+                // exported constant, no drift).
+                ...WORKFLOW_TRIGGER_GUIDANCE,
+                'Use the workflow tool with action="read" for details before starting a workflow if the arguments or behavior are unclear.',
+                Workflow.fmt(workflowList),
+              ].join("\n")
+            : undefined,
+          // Item 13: the standing ultracode opt-in (session.metadata.ultracode).
+          // Appended AFTER the workflow section; suppressed when the agent's
+          // permission ruleset denies the workflow tool outright.
+          opts?.ultracode && !disabled.has("workflow") ? ULTRACODE_SYSTEM_SECTION : undefined,
+        ]
+          .filter((section): section is string => section !== undefined)
+          .join("\n\n")
       }),
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {
@@ -139,7 +173,7 @@ const locationServiceMapNode = LayerNode.make({
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Skill.node, MCP.node, locationServiceMapNode],
+  deps: [Skill.node, MCP.node, Workflow.node, locationServiceMapNode],
 })
 
 export * as SystemPrompt from "./system"

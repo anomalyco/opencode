@@ -51,6 +51,8 @@ import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Workflow } from "@/workflow/workflow"
+import { WorkflowTool, workflowDescription } from "./workflow"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
@@ -77,6 +79,13 @@ export interface Interface {
     providerID: ProviderV2.ID
     modelID: ModelV2.ID
     agent: Agent.Info
+    /**
+     * Item 13: session.metadata.ultracode === true. Swaps the workflow tool's
+     * anti-default gate sentence for the standing "quality over cost" opt-in.
+     * Runs per prompt (descriptions are baked at Tool.init, so this is the
+     * only seam that can vary by session).
+     */
+    ultracode?: boolean
     permission?: PermissionV1.Ruleset
   }) => Effect.Effect<Tool.Def[]>
 }
@@ -109,6 +118,7 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const workflow = yield* WorkflowTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -218,6 +228,7 @@ const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          workflow: Tool.init(workflow),
           ...(codeModeTool ? { execute: Tool.init(codeModeTool) } : {}),
         })
 
@@ -235,6 +246,7 @@ const layer = Layer.effect(
             tool.task,
             tool.fetch,
             tool.todo,
+            tool.workflow,
             tool.search,
             tool.skill,
             tool.patch,
@@ -315,10 +327,18 @@ const layer = Layer.effect(
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema
               : undefined
+          // Item 13: ultracode sessions swap the workflow tool's gate sentence
+          // (after plugin.trigger, like the task-roster append below). A plugin
+          // that overrode the description via tool.definition wins — the swap
+          // only applies while the description is still the built-in default.
+          const description =
+            tool.id === WorkflowTool.id && input.ultracode && output.description === workflowDescription(false)
+              ? workflowDescription(true)
+              : output.description
           return {
             id: tool.id,
             description: [
-              output.description,
+              description,
               tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
               tool.id === "execute" ? codeModeDescription : undefined,
             ]
@@ -444,6 +464,7 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    Workflow.node,
   ],
 })
 

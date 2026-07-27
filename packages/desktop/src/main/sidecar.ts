@@ -1,5 +1,7 @@
 import * as http from "node:http"
+import * as path from "node:path"
 import * as tls from "node:tls"
+import { pathToFileURL } from "node:url"
 
 type NodeHttpWithEnvProxy = typeof http & {
   setGlobalProxyFromEnv: () => void
@@ -54,7 +56,13 @@ async function start(command: StartCommand) {
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
-    const { Server } = await import("virtual:opencode-server")
+    // The server bundle is copied verbatim next to this file at build time
+    // (see electron.vite.config.ts) and unpacked from the asar (asarUnpack) so
+    // the Node ESM loader and the wasm assets read from the real filesystem.
+    const serverEntry = pathToFileURL(
+      path.join(__dirname, "opencode-server.mjs").replace("app.asar", "app.asar.unpacked"),
+    ).href
+    const { Server } = (await import(/* @vite-ignore */ serverEntry)) as typeof import("virtual:opencode-server")
 
     listener = await Server.listen({
       port: command.port,

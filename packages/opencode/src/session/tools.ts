@@ -12,17 +12,19 @@ import { Truncate } from "@/tool/truncate"
 
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
+import type { TurnBudget } from "./turn-budget"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
-import { PartID } from "./schema"
+import { PartID, SessionID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { McpLazyActivation } from "./mcp-lazy"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -42,10 +44,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
+  permissionSessionID?: SessionID
   processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
+  turnBudget?: TurnBudget.Pool
+  mcpMode?: "eager" | "lazy"
 }) {
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
@@ -61,7 +66,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      turnBudget: input.turnBudget,
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>
@@ -82,7 +92,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       permission
         .ask({
           ...req,
-          sessionID: input.session.id,
+          sessionID: input.permissionSessionID ?? input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
         })
@@ -387,10 +397,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
   if (flags.experimentalCodeMode) return tools
 
-  for (const [key, entry] of Object.entries(yield* mcp.tools())) {
+  const registerMcpTool = Effect.fn(function* (key: string, entry: MCP.McpTool) {
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
     const execute = item.execute
-    if (!execute) continue
+    if (!execute) return
 
     const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
     const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
@@ -487,10 +497,99 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }),
       )
     tools[key] = item
+  })
+
+  const mcpEntries = Object.entries(yield* mcp.tools())
+  const lazy = input.mcpMode === "lazy" && mcpEntries.length > 0 && !(TOOL_SEARCH_KEY in tools)
+  if (!lazy) {
+    yield* Effect.forEach(mcpEntries, ([key, entry]) => registerMcpTool(key, entry), { discard: true })
+    return tools
   }
+
+  const activation = yield* McpLazyActivation.Service
+  const activated = yield* activation.get(input.session.id)
+  yield* Effect.forEach(
+    mcpEntries.filter(([key]) => activated.has(key)),
+    ([key, entry]) => registerMcpTool(key, entry),
+    { discard: true },
+  )
+
+  const index = mcpEntries.map(([key, entry]) => ({ key, entry, description: entry.def.description ?? "" }))
+  tools[TOOL_SEARCH_KEY] = tool({
+    description: TOOL_SEARCH_DESCRIPTION,
+    inputSchema: jsonSchema({
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Keywords describing the capability you need." },
+        max_results: { type: "number", description: "Maximum number of matches to return (default 5, max 10)." },
+      },
+      required: ["query"],
+    }),
+    execute(args: { query: string; max_results?: number }) {
+      return run.promise(
+        Effect.gen(function* () {
+          const matches = index
+            .map((entry) => ({ ...entry, score: toolSearchScore(args.query, entry.key, entry.description) }))
+            .filter((entry) => entry.score > 0)
+            .toSorted((a, b) => b.score - a.score)
+            .slice(0, Math.min(Math.max(1, Math.round(args.max_results ?? 5)), 10))
+          if (matches.length === 0) {
+            const available = index.slice(0, 20).map((entry) => entry.key)
+            return {
+              title: "Tool search",
+              metadata: { matches: [] },
+              output: [
+                `No MCP tools matched "${args.query}".`,
+                `Available tools: ${available.join(", ")}${index.length > available.length ? ", …" : ""}`,
+                "Try different keywords (tool names and descriptions are searched).",
+              ].join("\n"),
+            }
+          }
+          yield* activation.add(input.session.id, matches.map((entry) => entry.key))
+          const described = matches.map((entry) => ({
+            name: entry.key,
+            description: entry.description,
+            input_schema: entry.entry.def.inputSchema,
+          }))
+          const truncated = yield* truncate.output(JSON.stringify(described, null, 2), {}, input.agent)
+          return {
+            title: "Tool search",
+            metadata: { matches: matches.map((entry) => entry.key) },
+            output: [truncated.content, "", "These tools are registered and callable from your next step."].join("\n"),
+          }
+        }),
+      )
+    },
+    toModelOutput({ output }) {
+      return { type: "text", value: (output as { output: string }).output }
+    },
+  })
 
   return tools
 })
+
+const TOOL_SEARCH_KEY = "tool_search"
+
+const TOOL_SEARCH_DESCRIPTION = [
+  "Search the available MCP tools by capability keywords.",
+  "MCP tools are loaded lazily in this session: they are NOT in your tool list until you find them here.",
+  "A match registers the tool so you can call it from your NEXT step; the result lists name, description, and input schema.",
+].join("\n")
+
+function toolSearchScore(query: string, key: string, description: string) {
+  const terms = query
+    .toLowerCase()
+    .split(/[^a-z0-9_]+/)
+    .filter((term) => term.length > 0)
+  if (terms.length === 0) return 0
+  const keyLower = key.toLowerCase()
+  const haystack = `${keyLower} ${description.toLowerCase()}`
+  return terms.reduce(
+    (score, term) =>
+      score + (keyLower === term ? 5 : keyLower.includes(term) ? 3 : haystack.includes(term) ? 1 : 0),
+    0,
+  )
+}
 
 function toRecord(value: unknown) {
   if (isRecord(value)) return value

@@ -32,6 +32,7 @@ export async function mount(override?: FetchHandler, state?: string) {
   const ready = new Promise<void>((resolve) => {
     done = resolve
   })
+  const exits: unknown[] = []
 
   function Probe() {
     const ctx: Ctx = { kv: useKV(), project: useProject(), sync: useSync() }
@@ -51,7 +52,7 @@ export async function mount(override?: FetchHandler, state?: string) {
           <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
             <PermissionProvider>
               <ProjectProvider>
-                <ExitProvider exit={() => {}}>
+                <ExitProvider exit={(reason) => exits.push(reason)}>
                   <SyncProvider>
                     <Probe />
                   </SyncProvider>
@@ -66,5 +67,5 @@ export async function mount(override?: FetchHandler, state?: string) {
 
   await ready
   await wait(() => sync.status === "complete")
-  return { app, emit: events.emit, kv, project, sync, session: calls.session }
+  return { app, emit: events.emit, kv, project, sync, session: calls.session, exits }
 }

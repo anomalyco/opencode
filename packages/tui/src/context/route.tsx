@@ -11,6 +11,10 @@ export type HomeRoute = {
 export type SessionRoute = {
   type: "session"
   sessionID: string
+  workflowRunID?: string
+  workflowPhase?: string
+  workflowAgentID?: string
+  workflowReturnSessionID?: string
   prompt?: PromptInfo
 }
 

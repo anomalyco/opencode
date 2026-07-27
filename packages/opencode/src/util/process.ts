@@ -77,6 +77,8 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
     closed = true
 
     proc.kill(opts.kill ?? "SIGTERM")
+    proc.stdout?.destroy()
+    proc.stderr?.destroy()
 
     const ms = opts.timeout ?? 5_000
     if (ms <= 0) return

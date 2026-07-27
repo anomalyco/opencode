@@ -22,6 +22,7 @@ import { ScopedKey } from "@/utils/server-scope"
 import { createPromptSubmissionState } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
+import { buildBudgetPart, buildUltracodeParts } from "./ultracode"
 
 type PendingPrompt = {
   abort: AbortController
@@ -38,6 +39,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  directives?: string[]
 }
 
 type FollowupSendInput = {
@@ -113,6 +115,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     context: input.draft.context,
     images,
     text,
+    directives: input.draft.directives,
     sessionID: input.draft.sessionID,
     messageID,
     sessionDirectory: input.draft.sessionDirectory,
@@ -468,6 +471,23 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         input.queueScroll()
       })
       return true
+    }
+
+    if (mode === "normal" && !text.trimStart().startsWith("/")) {
+      const ultracode = buildUltracodeParts({
+        text,
+        keywordEnabled: sync().data.config?.workflows?.ultracode_keyword ?? true,
+      })
+      const budget = buildBudgetPart({
+        text: ultracode.text,
+        enabled: sync().data.config?.workflows?.budget_directive ?? true,
+      })
+      const directives = [...ultracode.directives, ...(budget.directive ? [budget.directive] : [])]
+      if (directives.length > 0) {
+        draft.directives = directives
+        const nonText = currentPrompt.filter((part) => part.type !== "text")
+        draft.prompt = [{ type: "text", content: budget.text, start: 0, end: 0 }, ...nonText]
+      }
     }
 
     if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {

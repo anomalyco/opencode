@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Exit, Schema } from "effect"
-import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const decodeFormat = Schema.decodeUnknownExit(SessionV1.Format)
 const decodeUser = Schema.decodeUnknownExit(SessionV1.User)
 const decodeAssistant = Schema.decodeUnknownExit(SessionV1.Assistant)
+const encodeWithParts = Schema.encodeUnknownSync(SessionV1.WithParts)
 
 describe("structured-output.OutputFormat", () => {
   test("parses text format", () => {
@@ -100,6 +100,33 @@ describe("structured-output.StructuredOutputError", () => {
 })
 
 describe("structured-output.UserMessage", () => {
+  test("user message with schema format encodes from persisted plain data", () => {
+    const sessionID = SessionID.descending()
+    const messageID = MessageID.ascending()
+    const encoded = encodeWithParts({
+      info: {
+        id: messageID,
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "default",
+        model: { providerID: "anthropic", modelID: "claude-3" },
+        format: {
+          type: "json_schema",
+          schema: { type: "object", properties: { name: { type: "string" } } },
+        },
+      },
+      parts: [],
+    })
+
+    expect(encoded.info.role).toBe("user")
+    if (encoded.info.role !== "user") return
+    expect(encoded.info.format).toEqual({
+      type: "json_schema",
+      schema: { type: "object", properties: { name: { type: "string" } } },
+    })
+  })
+
   test("user message accepts outputFormat", () => {
     const result = decodeUser({
       id: MessageID.ascending(),

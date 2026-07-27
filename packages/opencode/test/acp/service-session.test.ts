@@ -185,7 +185,28 @@ describe("ACP service sessions", () => {
       command: {
         list: () =>
           Promise.resolve({
-            data: [{ name: "init", description: "Initialize", source: "command", template: "init", hints: [] }],
+            data: [
+              { name: "init", description: "Initialize", source: "command", template: "init", hints: [] },
+              // Hint-bearing entry (simulates an enriched command/workflow Command.Info)
+              { name: "deploy", description: "Deploy it", source: "workflow", template: "", hints: ["env=<value>"] },
+            ],
+          }),
+      },
+      workflow: {
+        list: () =>
+          Promise.resolve({
+            data: [
+              {
+                name: "release",
+                valid: true,
+                meta: {
+                  name: "release",
+                  description: "Cut a release",
+                  arguments: { version: { type: "string" }, channel: { type: "string", default: "stable" } },
+                },
+              },
+              { name: "broken", valid: false, meta: { name: "broken" } },
+            ],
           }),
       },
       session: {
@@ -298,6 +319,37 @@ describe("ACP service sessions", () => {
     expect(JSON.stringify(updates[0])).toContain("available_commands_update")
     expect(JSON.stringify(updates[0])).toContain("review-skill")
     expect(mcpAdds).toEqual(["tools"])
+  })
+
+  it("forwards an input hint for commands that declare one", async () => {
+    const { service, updates } = makeService()
+    await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+
+    const update = updates.find((u) => u.update.sessionUpdate === "available_commands_update")
+    if (!update || update.update.sessionUpdate !== "available_commands_update") throw new Error("no update")
+    const deploy = update.update.availableCommands.find((c) => c.name === "deploy")
+    expect(deploy).toBeDefined()
+    expect(deploy?.input).toEqual({ hint: "env=<value>" })
+    // Commands without a hint carry NO input field (back-compat).
+    const init = update.update.availableCommands.find((c) => c.name === "init")
+    expect(init?.input).toBeUndefined()
+  })
+
+  it("surfaces discovered workflows with an argument hint and skips invalid ones", async () => {
+    const { service, updates } = makeService()
+    await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+
+    const update = updates.find((u) => u.update.sessionUpdate === "available_commands_update")
+    if (!update || update.update.sessionUpdate !== "available_commands_update") throw new Error("no update")
+    const names = update.update.availableCommands.map((c) => c.name)
+    expect(names).toContain("release")
+    expect(names).not.toContain("broken") // valid:false skipped
+    const release = update.update.availableCommands.find((c) => c.name === "release")
+    expect(release?.description).toBe("Cut a release")
+    // Hint from arguments keys, deterministically sorted; default-bearing arguments stay visible.
+    expect(release?.input).toEqual({ hint: "channel=<value> version=<value>" })
   })
 
   it("loads a session and restores model variant and mode from messages", async () => {
@@ -543,6 +595,9 @@ describe("ACP service sessions", () => {
         command: {
           list: () => Promise.resolve({ data: [] }),
         },
+        workflow: {
+          list: () => Promise.resolve({ data: [] }),
+        },
       } as unknown as OpencodeClient,
     })
     const error = await Effect.runPromise(
@@ -572,6 +627,9 @@ describe("ACP service sessions", () => {
         skills: () => Promise.resolve({ data: [] }),
       },
       command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      workflow: {
         list: () => Promise.resolve({ data: [] }),
       },
       session: {
@@ -609,6 +667,9 @@ describe("ACP service sessions", () => {
         skills: () => Promise.resolve({ data: [] }),
       },
       command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      workflow: {
         list: () => Promise.resolve({ data: [] }),
       },
       session: {
@@ -658,6 +719,9 @@ describe("ACP service sessions", () => {
       command: {
         list: () => Promise.resolve({ data: [] }),
       },
+      workflow: {
+        list: () => Promise.resolve({ data: [] }),
+      },
       session: {
         create: (input: { model?: { id?: string } }) => Promise.resolve({ data: { id: input.model?.id } }),
         list: () => Promise.resolve({ data: [] }),
@@ -686,6 +750,9 @@ describe("ACP service sessions", () => {
         skills: () => Promise.resolve({ data: [] }),
       },
       command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      workflow: {
         list: () => Promise.resolve({ data: [] }),
       },
       session: {
@@ -811,6 +878,9 @@ describe("ACP service sessions", () => {
           return Promise.resolve({ data: [] })
         },
       },
+      workflow: {
+        list: () => Promise.resolve({ data: [] }),
+      },
       session: {
         create: () => Promise.resolve({ data: { id: "ses_fast" } }),
         list: () => Promise.resolve({ data: [] }),
@@ -868,6 +938,9 @@ describe("ACP service sessions", () => {
           calls.commands++
           return Promise.resolve({ data: [] })
         },
+      },
+      workflow: {
+        list: () => Promise.resolve({ data: [] }),
       },
       session: {
         create: () => Promise.resolve({ data: { id: "ses_model_fast" } }),
@@ -928,6 +1001,9 @@ describe("ACP service sessions", () => {
           calls.commands++
           return Promise.resolve({ data: [] })
         },
+      },
+      workflow: {
+        list: () => Promise.resolve({ data: [] }),
       },
       session: {
         create: () => {
@@ -1185,6 +1261,9 @@ describe("ACP service sessions", () => {
           skills: () => Promise.resolve({ data: [] }),
         },
         command: {
+          list: () => Promise.resolve({ data: [] }),
+        },
+        workflow: {
           list: () => Promise.resolve({ data: [] }),
         },
         session: {

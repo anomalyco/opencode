@@ -494,6 +494,36 @@ describe("prompt submit worktree selection", () => {
     ])
   })
 
+  test("sends ultracode and budget directives as synthetic reminders", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "ultracode +$5 fix the bug", start: 0, end: 25 }]
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect((promptInputs[0] as { legacyParts?: { text?: string; synthetic?: boolean }[] }).legacyParts).toEqual([
+      expect.objectContaining({ text: expect.stringContaining("workflow orchestration"), synthetic: true }),
+      expect.objectContaining({ text: expect.stringContaining("cost budget of $5"), synthetic: true }),
+      expect.objectContaining({ text: "fix the bug" }),
+    ])
+  })
+
   test("submits slash commands through the current session API", async () => {
     params = { id: "session-1" }
     variant = "high"

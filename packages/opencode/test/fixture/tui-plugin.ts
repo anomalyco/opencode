@@ -139,7 +139,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         : fallback
   const client = () => read()
   let depth = 0
-  let size: "medium" | "large" | "xlarge" = "medium"
+  let size: "medium" | "large" | "xlarge" | "fullscreen" = "medium"
   const has = opts.theme?.has ?? (() => false)
   let selected = opts.theme?.selected ?? "opencode"
   const set =

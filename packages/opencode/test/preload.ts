@@ -6,6 +6,33 @@ import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll } from "bun:test"
 
+// Best-effort sweep of stale per-test tmpdirs (`opencode-test-*`) left behind by
+// PRIOR runs whose process was killed mid-test (timeout/crash/CI cancel) before
+// the scoped fixture finalizers could rm them. The in-run teardown
+// (tmpdirScoped's Effect.addFinalizer / tmpdir's Symbol.asyncDispose) fires
+// correctly on a normal scope close, but a SIGKILL skips every JS finalizer, so
+// orphans accumulate across runs. This is purely defensive: it is AGE-GATED
+// (older than 1h) so it can never race a live sibling test process's just-created
+// dir, and it swallows every error. Failure here must not affect tests.
+const STALE_MS = 60 * 60 * 1000
+try {
+  const root = os.tmpdir()
+  const now = Date.now()
+  const entries = await fs.readdir(root).catch(() => [] as string[])
+  await Promise.all(
+    entries
+      .filter((name) => name.startsWith("opencode-test-"))
+      .map(async (name) => {
+        const full = path.join(root, name)
+        const stat = await fs.stat(full).catch(() => undefined)
+        if (!stat || now - stat.mtimeMs < STALE_MS) return
+        await fs.rm(full, { recursive: true, force: true }).catch(() => undefined)
+      }),
+  )
+} catch {
+  // never fail preload on cleanup
+}
+
 // Set XDG env vars FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })

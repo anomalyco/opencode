@@ -17,6 +17,17 @@ function notify(api: TuiPluginApi, sessionID: string | undefined, message: strin
   })
 }
 
+// A background workflow run has no TUI session, so there is no title and the
+// notification is always the non-subagent blurred variant (QW2, Spec §5.2 (2)).
+function notifyWorkflow(api: TuiPluginApi, message: string, sound: TuiAttentionSoundName) {
+  void api.attention.notify({
+    title: undefined,
+    message,
+    notification: { when: "blurred" },
+    sound: { name: sound, when: "always" },
+  })
+}
+
 function sessionErrorMessage(error: SessionError) {
   if (error?.name === "MessageAbortedError") return "Session aborted"
   const data = error?.data
@@ -31,6 +42,7 @@ const tui: TuiPlugin = async (api) => {
   const errored = new Set<string>()
   const questions = new Set<string>()
   const permissions = new Set<string>()
+  const finishedRuns = new Set<string>()
 
   api.event.on("question.asked", (event) => {
     if (questions.has(event.properties.id)) return
@@ -83,6 +95,18 @@ const tui: TuiPlugin = async (api) => {
     if (!active.has(sessionID)) return
     errored.add(sessionID)
     notify(api, sessionID, sessionErrorMessage(event.properties.error), "error")
+  })
+
+  // QW2 (Spec §5.2 (2)): a background workflow run that finishes (or fails) gets
+  // an attention/toast just like a session going idle, deduped per run-id. The
+  // `workflow.run.finished` member is now part of the generated Event union, so
+  // the bus typing narrows `event.properties` for us with no cast.
+  api.event.on("workflow.run.finished", (event) => {
+    const run = event.properties
+    if (finishedRuns.has(run.id)) return
+    finishedRuns.add(run.id)
+    const done = run.status === "completed"
+    notifyWorkflow(api, `Workflow ${run.workflow} ${done ? "done" : run.status}`, done ? "done" : "error")
   })
 }
 

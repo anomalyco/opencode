@@ -70,7 +70,9 @@ type Part = {
   text: string
 }
 
-type Scan = {
+// Exported for the workflow engine's ctx.shell gate (Item 23), which consumes
+// the same Scan shape `scanCommand` returns.
+export type Scan = {
   dirs: Set<string>
   patterns: Set<string>
   always: Set<string>
@@ -260,6 +262,115 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
   return tree
 })
 
+// Item 23: the path/pattern derivation, extracted from the ShellTool factory so
+// it can be shared with the exported `scanCommand` (the workflow engine's
+// ctx.shell gate). Pure relocation — the ShellTool factory builds the same
+// scanner from its own resolved services, so the bash tool's behavior is
+// byte-identical.
+function makeScanner(spawner: ChildProcessSpawner["Service"], fs: FSUtil.Interface) {
+  const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
+    const lines = yield* spawner
+      .lines(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
+      .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+    const file = lines[0]?.trim()
+    if (!file) return
+    return FSUtil.normalizePath(file)
+  })
+
+  const resolvePath = Effect.fn("ShellTool.resolvePath")(function* (text: string, root: string, shell: string) {
+    if (process.platform === "win32") {
+      if (Shell.posix(shell) && text.startsWith("/") && FSUtil.windowsPath(text) === text) {
+        const file = yield* cygpath(shell, text)
+        if (file) return file
+      }
+      return FSUtil.normalizePath(path.resolve(root, FSUtil.windowsPath(text)))
+    }
+    return path.resolve(root, text)
+  })
+
+  const argPath = Effect.fn("ShellTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
+    const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
+    const file = text && prefix(text)
+    if (!file || dynamic(file, ps)) return
+    const next = ps ? provider(file) : file
+    if (!next) return
+    return yield* resolvePath(next, cwd, shell)
+  })
+
+  const collect = Effect.fn("ShellTool.collect")(function* (
+    root: Node,
+    cwd: string,
+    ps: boolean,
+    shell: string,
+    instance: InstanceContext,
+  ) {
+    const scan: Scan = {
+      dirs: new Set<string>(),
+      patterns: new Set<string>(),
+      always: new Set<string>(),
+    }
+    const shellKind = ShellID.toKind(Shell.name(shell))
+
+    for (const node of commands(root)) {
+      const command = parts(node)
+      const tokens = command.map((item) => item.text)
+      const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
+
+      if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
+        for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
+          const resolved = yield* argPath(arg, cwd, ps, shell)
+          yield* Effect.logInfo("resolved path", { arg, resolved })
+          if (!resolved || containsPath(resolved, instance)) continue
+          const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+          scan.dirs.add(dir)
+        }
+      }
+
+      if (tokens.length && (!cmd || !CWD.has(cmd))) {
+        scan.patterns.add(source(node))
+        scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
+      }
+    }
+
+    return scan
+  })
+
+  return { cygpath, resolvePath, argPath, collect }
+}
+
+/**
+ * Item 23 (Stufe 1): the bash tool's permission-pattern derivation, exported so
+ * the workflow engine's `ctx.shell` gate asks with EXACTLY the same granularity
+ * as the bash tool — a user's `git status*` allow/deny rules apply identically.
+ * Parses the command (AST, never executes it) and returns the Scan
+ * (`patterns`/`always` for the bash permission, `dirs` for external_directory);
+ * a `cwd` outside the workspace is added to `dirs` like the bash tool does.
+ * `shellOverride` lets the caller scan with the shell that will actually
+ * execute the command (the workflow engine uses Shell.preferred); omitted, it
+ * resolves the configured shell exactly like the bash tool.
+ */
+export const scanCommand = Effect.fn("ShellTool.scanCommand")(function* (
+  command: string,
+  cwd: string,
+  instance: InstanceContext,
+  shellOverride?: string,
+) {
+  const spawner = yield* ChildProcessSpawner
+  const fs = yield* FSUtil.Service
+  const config = yield* Config.Service
+  const shell = shellOverride ?? Shell.acceptable((yield* config.get()).shell)
+  const scanner = makeScanner(spawner, fs)
+  const ps = Shell.ps(shell)
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const tree = yield* Effect.acquireRelease(parse(command, ps), (tree) => Effect.sync(() => tree.delete()))
+      const scan = yield* scanner.collect(tree.rootNode, cwd, ps, shell, instance)
+      if (!containsPath(cwd, instance)) scan.dirs.add(cwd)
+      return scan
+    }),
+  )
+})
+
 const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan, input: { command: string }) {
   if (scan.dirs.size > 0) {
     const directories = Array.from(scan.dirs)
@@ -346,72 +457,10 @@ export const ShellTool = Tool.define(
     const flags = yield* RuntimeFlags.Service
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
-    const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
-      const lines = yield* spawner
-        .lines(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
-        .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-      const file = lines[0]?.trim()
-      if (!file) return
-      return FSUtil.normalizePath(file)
-    })
-
-    const resolvePath = Effect.fn("ShellTool.resolvePath")(function* (text: string, root: string, shell: string) {
-      if (process.platform === "win32") {
-        if (Shell.posix(shell) && text.startsWith("/") && FSUtil.windowsPath(text) === text) {
-          const file = yield* cygpath(shell, text)
-          if (file) return file
-        }
-        return FSUtil.normalizePath(path.resolve(root, FSUtil.windowsPath(text)))
-      }
-      return path.resolve(root, text)
-    })
-
-    const argPath = Effect.fn("ShellTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
-      const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
-      const file = text && prefix(text)
-      if (!file || dynamic(file, ps)) return
-      const next = ps ? provider(file) : file
-      if (!next) return
-      return yield* resolvePath(next, cwd, shell)
-    })
-
-    const collect = Effect.fn("ShellTool.collect")(function* (
-      root: Node,
-      cwd: string,
-      ps: boolean,
-      shell: string,
-      instance: InstanceContext,
-    ) {
-      const scan: Scan = {
-        dirs: new Set<string>(),
-        patterns: new Set<string>(),
-        always: new Set<string>(),
-      }
-      const shellKind = ShellID.toKind(Shell.name(shell))
-
-      for (const node of commands(root)) {
-        const command = parts(node)
-        const tokens = command.map((item) => item.text)
-        const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
-
-        if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
-          for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
-            const resolved = yield* argPath(arg, cwd, ps, shell)
-            yield* Effect.logInfo("resolved path", { arg, resolved })
-            if (!resolved || containsPath(resolved, instance)) continue
-            const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
-            scan.dirs.add(dir)
-          }
-        }
-
-        if (tokens.length && (!cmd || !CWD.has(cmd))) {
-          scan.patterns.add(source(node))
-          scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
-        }
-      }
-
-      return scan
-    })
+    // Item 23: the path/pattern derivation now lives in the module-level
+    // makeScanner (shared with the exported scanCommand); same services, same
+    // behavior.
+    const { resolvePath, collect } = makeScanner(spawner, fs)
 
     const shellEnv = Effect.fn("ShellTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
       const extra = yield* plugin.trigger(

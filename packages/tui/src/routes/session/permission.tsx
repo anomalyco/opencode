@@ -16,6 +16,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../config"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
+import { workflowPermissionDisplay } from "../../component/dialog-workflow-helpers"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -364,6 +365,36 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 body: (
                   <box paddingLeft={1}>
                     <text fg={theme.textMuted}>This keeps the session running despite repeated failures.</text>
+                  </box>
+                ),
+              }
+            }
+
+            // Item 9: an agent-initiated workflow start/create titles with the
+            // workflow's display name + description (the pure-literal meta exists
+            // for exactly this dialog) instead of the generic "Call tool workflow".
+            if (permission === "workflow") {
+              const d = workflowPermissionDisplay(props.request.metadata)
+              return {
+                icon: "❖",
+                title: d.title,
+                body: (
+                  <box paddingLeft={1} gap={1}>
+                    <Show when={d.description}>
+                      <text fg={theme.textMuted}>{d.description}</text>
+                    </Show>
+                    <Show when={d.commandName}>
+                      <text fg={theme.textMuted}>{"Workflow: " + d.commandName}</text>
+                    </Show>
+                    <Show when={d.args.length}>
+                      <box>
+                        <text fg={theme.textMuted}>Arguments</text>
+                        <For each={d.args}>{([key, value]) => <text fg={theme.text}>{`- ${key}=${value}`}</text>}</For>
+                      </box>
+                    </Show>
+                    <Show when={d.background}>
+                      <text fg={theme.textMuted}>Runs in background</text>
+                    </Show>
                   </box>
                 ),
               }

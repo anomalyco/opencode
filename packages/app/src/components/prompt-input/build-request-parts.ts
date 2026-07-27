@@ -5,6 +5,7 @@ import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
+import { systemReminder } from "./ultracode"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -24,6 +25,7 @@ type BuildRequestPartsInput = {
   context: ContextFile[]
   images: ImageAttachmentPart[]
   text: string
+  directives?: string[]
   messageID: string
   sessionID: string
   sessionDirectory: string
@@ -89,15 +91,26 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
 }
 
 export function buildRequestParts(input: BuildRequestPartsInput) {
-  const requestParts: PromptRequestPart[] = input.text.trim()
-    ? [
-        {
+  const requestParts: PromptRequestPart[] = [
+    ...(input.directives ?? []).map(
+      (directive) =>
+        ({
           id: Identifier.ascending("part"),
           type: "text",
-          text: input.text,
-        },
-      ]
-    : []
+          text: systemReminder(directive),
+          synthetic: true,
+        }) satisfies PromptRequestPart,
+    ),
+    ...(input.text.trim()
+      ? [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: input.text,
+          } satisfies PromptRequestPart,
+        ]
+      : []),
+  ]
 
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)

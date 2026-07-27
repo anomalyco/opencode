@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./tool": "./src/tool.ts",
+    "./workflow": "./src/workflow.ts",
     "./tui": "./src/tui.ts",
     "./v2/effect": "./src/v2/effect/index.ts",
     "./v2/effect/integration": "./src/v2/effect/integration.ts",

@@ -423,6 +423,15 @@ export interface Interface {
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
+    /**
+     * Working directory recorded on the session row. Defaults to the instance
+     * directory (`ctx.directory`) — the prior, only behaviour. A caller may
+     * override it to record that the session ran somewhere else (e.g. a workflow
+     * subagent isolated inside a git worktree), so the dashboard reflects where
+     * the work happened. Purely a metadata override; it does NOT change where
+     * tools resolve their cwd (that follows the effective `InstanceRef`).
+     */
+    directory?: string
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
@@ -674,12 +683,13 @@ const layer: Layer.Layer<
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
       workspaceID?: WorkspaceV2.ID
+      directory?: string
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
       return yield* createNext({
         parentID: input?.parentID,
-        directory: ctx.directory,
+        directory: input?.directory ?? ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),
         title: input?.title,
         agent: input?.agent,

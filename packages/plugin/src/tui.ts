@@ -120,7 +120,7 @@ export type TuiCommandApi = {
 }
 
 export type TuiDialogProps = {
-  size?: "medium" | "large" | "xlarge"
+  size?: "medium" | "large" | "xlarge" | "fullscreen"
   onClose: () => void
   children?: JSX.Element
 }
@@ -128,8 +128,8 @@ export type TuiDialogProps = {
 export type TuiDialogStack = {
   replace: (render: () => JSX.Element, onClose?: () => void) => void
   clear: () => void
-  setSize: (size: "medium" | "large" | "xlarge") => void
-  readonly size: "medium" | "large" | "xlarge"
+  setSize: (size: "medium" | "large" | "xlarge" | "fullscreen") => void
+  readonly size: "medium" | "large" | "xlarge" | "fullscreen"
   readonly depth: number
   readonly open: boolean
 }
