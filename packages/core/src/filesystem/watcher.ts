@@ -87,23 +87,6 @@ export interface TestInterface extends Interface {
 
 export class Test extends Context.Service<Test, TestInterface>()("@opencode/Watcher/Test") {}
 
-/** In-memory watcher for tests: records subscribe calls and broadcasts emitted updates. */
-export const testLayer = Layer.effectContext(
-  Effect.gen(function* () {
-    const updates = yield* PubSub.unbounded<Update>()
-    const subscriptions: WatchInput[] = []
-    const service = Test.of({
-      subscribe: (input) => {
-        subscriptions.push(input)
-        return Stream.fromPubSub(updates)
-      },
-      emit: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
-      subscriptions: () => Effect.sync(() => [...subscriptions]),
-    })
-    return Context.empty().pipe(Context.add(Service, service), Context.add(Test, service))
-  }),
-)
-
 export const layer = (options?: Options) =>
   Layer.effect(
     Service,
@@ -167,6 +150,43 @@ export const layer = (options?: Options) =>
       return Service.of({ subscribe })
     }),
   )
+
+/**
+ * Watcher for tests: the real lifecycle over an in-memory Native that records
+ * acquired watches and broadcasts emitted updates to every active watch.
+ */
+export const testLayer = Layer.effectContext(
+  Effect.gen(function* () {
+    const subscriptions: WatchInput[] = []
+    const active = new Set<(update: Update) => void>()
+    const native = Native.of({
+      subscribe: (input) =>
+        Effect.sync(() => {
+          subscriptions.push(
+            input.type === "file"
+              ? { path: input.target, type: "file" }
+              : input.ignore.length > 0
+                ? { path: input.target, type: "directory", ignore: input.ignore }
+                : { path: input.target, type: "directory" },
+          )
+          active.add(input.publish)
+          return {
+            unsubscribe: () => {
+              active.delete(input.publish)
+              return Promise.resolve()
+            },
+          }
+        }),
+    })
+    const context = yield* Layer.build(layer().pipe(Layer.provide(Layer.succeed(Native, native))))
+    const test = Test.of({
+      subscribe: Context.get(context, Service).subscribe,
+      emit: (update) => Effect.sync(() => active.forEach((publish) => publish(update))),
+      subscriptions: () => Effect.sync(() => [...subscriptions]),
+    })
+    return Context.empty().pipe(Context.add(Service, test), Context.add(Test, test))
+  }),
+)
 
 export const nativeLayer = Layer.succeed(
   Native,
