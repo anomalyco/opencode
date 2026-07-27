@@ -3213,6 +3213,7 @@ describe("ProviderTransform.reasoningVariants", () => {
       { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       "claude-opus-4-7",
     ],
+    ["@ai-sdk/anthropic", { thinking: { type: "adaptive", display: "summarized" }, effort: "high" }, "claude-opus-5"],
     ["@ai-sdk/google", { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } }],
     ["@ai-sdk/google-vertex", { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } }],
     [
@@ -3264,13 +3265,18 @@ describe("ProviderTransform.reasoningVariants", () => {
     )
   })
 
-  test("uses bare effort for Claude Opus 4.5", () => {
+  test("combines effort with extended thinking for Claude Opus 4.5", () => {
     expect(
       ProviderTransform.reasoningVariants(
         model([{ type: "effort", values: ["high"] }]),
         target("@ai-sdk/anthropic", "claude-opus-4-5"),
       ),
-    ).toEqual({ high: { effort: "high" } })
+    ).toEqual({
+      high: {
+        thinking: { type: "enabled", budgetTokens: 16_000 },
+        effort: "high",
+      },
+    })
   })
 
   test("uses explicit effort metadata for Anthropic-compatible models", () => {
@@ -3314,6 +3320,38 @@ describe("ProviderTransform.reasoningVariants", () => {
           type: "adaptive",
           maxReasoningEffort: "high",
           display: "summarized",
+        },
+      },
+    })
+  })
+
+  test("uses adaptive reasoning config for Claude Opus 5 on Bedrock", () => {
+    const result = ProviderTransform.reasoningVariants(
+      model([{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }]),
+      target("@ai-sdk/amazon-bedrock", "us.anthropic.claude-opus-5"),
+    )
+    expect(Object.keys(result ?? {})).toEqual(["low", "medium", "high", "xhigh", "max"])
+    expect(result?.high).toEqual({
+      reasoningConfig: {
+        type: "adaptive",
+        maxReasoningEffort: "high",
+        display: "summarized",
+      },
+    })
+  })
+
+  test("combines effort with extended thinking for Claude Opus 4.5 on Bedrock", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["high"] }]),
+        target("@ai-sdk/amazon-bedrock", "us.anthropic.claude-opus-4-5-20251101-v1:0"),
+      ),
+    ).toEqual({
+      high: {
+        reasoningConfig: {
+          type: "enabled",
+          budgetTokens: 16_000,
+          maxReasoningEffort: "high",
         },
       },
     })
@@ -4618,10 +4656,16 @@ describe("ProviderTransform.variants", () => {
   describe("@ai-sdk/anthropic", () => {
     for (const testCase of [
       {
+        name: "opus 4 dated",
+        apiIds: ["claude-opus-4-20250514"],
+        efforts: ["high", "max"],
+        expectedHigh: { thinking: { type: "enabled", budgetTokens: 16000 } },
+      },
+      {
         name: "opus 4.5",
         apiIds: ["claude-opus-4-5-20251101", "claude-opus-4.5-20251101"],
         efforts: ["low", "medium", "high"],
-        expectedHigh: { effort: "high" },
+        expectedHigh: { thinking: { type: "enabled", budgetTokens: 16000 }, effort: "high" },
       },
       {
         name: "sonnet 4.6",
@@ -4650,6 +4694,18 @@ describe("ProviderTransform.variants", () => {
       {
         name: "sonnet 5",
         apiIds: ["claude-sonnet-5", "claude-sonnet-5-20260630"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+      {
+        name: "opus 5",
+        apiIds: ["claude-opus-5", "claude-opus-5-20260724"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+      {
+        name: "unversioned future model",
+        apiIds: ["claude-future"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
         expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       },
@@ -4772,6 +4828,28 @@ describe("ProviderTransform.variants", () => {
         effort: "high",
       })
     })
+
+    test("opus 5 uses adaptive reasoning for Vertex model IDs", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "google-vertex-anthropic/claude-opus-5@default",
+          providerID: "google-vertex-anthropic",
+          api: {
+            id: "claude-opus-5@default",
+            url: "https://us-central1-aiplatform.googleapis.com",
+            npm: "@ai-sdk/google-vertex/anthropic",
+          },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "high",
+      })
+    })
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {
@@ -4852,6 +4930,28 @@ describe("ProviderTransform.variants", () => {
           providerID: "bedrock",
           api: {
             id: "anthropic.claude-sonnet-5",
+            url: "https://bedrock.amazonaws.com",
+            npm: "@ai-sdk/amazon-bedrock",
+          },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "high",
+          display: "summarized",
+        },
+      })
+    })
+
+    test("anthropic opus 5 returns adaptive reasoning options with xhigh", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "bedrock/anthropic-claude-opus-5",
+          providerID: "bedrock",
+          api: {
+            id: "us.anthropic.claude-opus-5-v1:0",
             url: "https://bedrock.amazonaws.com",
             npm: "@ai-sdk/amazon-bedrock",
           },
@@ -5052,6 +5152,12 @@ describe("ProviderTransform.variants", () => {
       {
         name: "sonnet 5",
         apiIds: ["anthropic--claude-sonnet-5", "anthropic--claude-5-sonnet"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        thinking: { type: "adaptive", display: "summarized" },
+      },
+      {
+        name: "opus 5",
+        apiIds: ["anthropic--claude-opus-5", "anthropic--claude-5-opus"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
         thinking: { type: "adaptive", display: "summarized" },
       },
