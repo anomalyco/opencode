@@ -98,6 +98,19 @@ function footer() {
 
 type SessionMessages = MessageListOutput["data"]
 
+function compaction(status: "running" | "completed", summary: string): SessionMessages[number] {
+  const message = {
+    id: "msg_compaction",
+    type: "compaction" as const,
+    reason: "auto" as const,
+    summary,
+    recent: "",
+    time: { created: 1 },
+  }
+  if (status === "running") return { ...message, status }
+  return { ...message, status }
+}
+
 function form(id: string, sessionID: string, title = id): FormInfo {
   return {
     id,
@@ -200,6 +213,71 @@ afterEach(() => {
 })
 
 describe("V2 mini transport", () => {
+  test("renders projected compactions as labeled transcript boundaries", async () => {
+    const events = feed()
+    events.push(connected())
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        streams: [events],
+        messages: {
+          ses_1: [compaction("completed", "## Transport")],
+        },
+      }),
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      footer: ui.api,
+    })
+
+    expect(ui.commits).toMatchObject([
+      { text: "Compaction", compaction: true, messageID: "msg_compaction" },
+      { text: "## Transport", phase: "progress", messageID: "msg_compaction" },
+      { text: "", phase: "final", messageID: "msg_compaction" },
+    ])
+    await transport.close()
+  })
+
+  test("shows an active compaction boundary before live summary output without history replay", async () => {
+    const events = feed()
+    events.push(connected())
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        streams: [events],
+        active: () => ({ ses_1: { type: "running" } }),
+        messages: {
+          ses_1: [compaction("running", "")],
+        },
+      }),
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+
+    events.push({
+      id: "evt_compaction_delta",
+      created: 2,
+      type: "session.compaction.delta",
+      data: { sessionID: "ses_1", text: "Transport" },
+    })
+    events.push({
+      id: "evt_compaction_ended",
+      created: 3,
+      type: "session.compaction.ended",
+      durable: durable("ses_1", 3),
+      data: { sessionID: "ses_1", reason: "auto", text: "Transport", recent: "" },
+    })
+
+    while (!ui.commits.some((commit) => commit.phase === "final")) await Bun.sleep(0)
+    expect(ui.commits).toMatchObject([
+      { text: "Compaction", compaction: true, messageID: "msg_compaction" },
+      { text: "Transport", phase: "progress", messageID: "msg_compaction" },
+      { text: "", phase: "final", messageID: "msg_compaction" },
+    ])
+    await transport.close()
+  })
+
   test("reports session title changes", async () => {
     const events = feed()
     events.push(connected())
