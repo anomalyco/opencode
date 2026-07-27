@@ -9,7 +9,7 @@ export const CorsConfig = Context.Reference<CorsOptions | undefined>("@opencode/
 })
 
 export function isAllowedCorsOrigin(input: string | undefined, opts?: CorsOptions) {
-  if (!input) return true
+  if (input === undefined) return true
   if (input.startsWith("http://localhost:")) return true
   if (input.startsWith("http://127.0.0.1:")) return true
   if (input.startsWith("oc://renderer")) return true
@@ -20,7 +20,7 @@ export function isAllowedCorsOrigin(input: string | undefined, opts?: CorsOption
 }
 
 export function isAllowedRequestOrigin(input: string | undefined, host: string | undefined, opts?: CorsOptions) {
-  if (!input) return true
+  if (input === undefined) return true
   if (host && sameHost(input, host)) return true
   return isAllowedCorsOrigin(input, opts)
 }
