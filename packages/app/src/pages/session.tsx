@@ -370,7 +370,7 @@ export default function Page() {
   const location = useLocation()
   const navigate = useNavigate()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
-  const reviewMode = () => view().review.mode() ?? "git"
+  const reviewMode = () => view().review.mode() ?? (sync().project?.vcs === "git" ? "git" : "turn")
   const reviewFile = () => view().review.file()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
@@ -714,6 +714,7 @@ export default function Page() {
   const reviewCount = () => reviewDiffs().length
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
+    if (sync().project?.vcs !== "git") return true
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
     return true
   }
@@ -1237,7 +1238,6 @@ export default function Page() {
     }
 
     if (reviewMode() === "turn") {
-      if (nogit()) return createGit(input)
       return empty(reviewEmptyText())
     }
 
@@ -1251,9 +1251,6 @@ export default function Page() {
   const reviewEmptyV2 = () => {
     if ((reviewMode() === "git" || reviewMode() === "branch") && !reviewReady()) {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
-    }
-    if (reviewMode() === "turn" && nogit()) {
-      return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
     }
     return <SessionReviewEmptyChangesV2 />
   }

@@ -107,6 +107,23 @@ const withGitConfigGlobal = <A, E, R>(config: string, self: Effect.Effect<A, E, 
   )
 
 it.instance(
+  "tracks and reverts file changes in non-git projects",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/a.txt`, "modified non-git content")
+      const patch = yield* snapshot.patch(before)
+      expect(patch.files).toContain(fwd(tmp.path, "a.txt"))
+
+      yield* snapshot.revert([patch])
+      const revertedContent = yield* readText(`${tmp.path}/a.txt`)
+      expect(revertedContent).toBe(tmp.extra.aContent)
+    }),
+  ),
+  { git: false },
+  60000,
+)
+
+it.instance(
   "tracks deleted files correctly",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
     Effect.gen(function* () {

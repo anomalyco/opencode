@@ -44,6 +44,16 @@ type LegacyPrompt = {
   model?: { providerID: string; modelID: string }
   variant?: string
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
+  text?: string
+  files?: {
+    uri: string
+    name?: string
+    mention?: { text: string; start: number; end: number }
+  }[]
+  agents?: {
+    name: string
+    mention?: { text: string; start: number; end: number }
+  }[]
 }
 type LegacyLocation = { directory?: string }
 type CompatibleInput = {
@@ -203,13 +213,13 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           ),
         )
       },
-      async rename(value: Parameters<ServerApi["session"]["rename"]>[0] & LegacyLocation) {
+      async rename(value: Parameters<SessionApi["rename"]>[0] & LegacyLocation) {
         await legacy(value).session.update({ sessionID: value.sessionID, title: value.title })
       },
-      async archive(value: Parameters<ServerApi["session"]["archive"]>[0] & LegacyLocation) {
+      async archive(value: Parameters<SessionApi["archive"]>[0] & LegacyLocation) {
         await legacy(value).session.update({ sessionID: value.sessionID, time: { archived: Date.now() } })
       },
-      async remove(value: Parameters<ServerApi["session"]["remove"]>[0] & LegacyLocation) {
+      async remove(value: Parameters<SessionApi["remove"]>[0] & LegacyLocation) {
         await legacy(value).session.delete(value)
       },
       async fork(value: Parameters<ServerApi["session"]["fork"]>[0]) {
@@ -227,8 +237,8 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           agent: value.agent,
           model: value.model,
           variant: value.variant,
-          parts: value.legacyParts ?? [
-            { type: "text", text: value.text },
+          parts: (value as any).parts ?? value.legacyParts ?? [
+            ...(value.text !== undefined && value.text !== null ? [{ type: "text" as const, text: value.text }] : []),
             ...(value.files ?? []).map((file) => ({
               type: "file" as const,
               mime: file.mention ? "text/plain" : mime(file.uri),
@@ -387,85 +397,92 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     file: {
       ...currentFile,
       async list(value?: Parameters<ServerApi["file"]["list"]>[0]) {
-        const result = await legacy(value?.location).file.list({ path: value?.path ?? "" })
-        return located(result.data ?? [], value?.location)
+        const val = value as any
+        const result = await legacy(val?.location).file.list({ path: val?.path ?? "" })
+        return located(result.data ?? [], val?.location)
       },
       async find(value: Parameters<ServerApi["file"]["find"]>[0]) {
-        const result = await legacy(value.location).find.files({
-          query: value.query,
-          dirs: value.type === undefined ? undefined : value.type === "directory" ? "true" : "false",
-          limit: value.limit,
+        const val = value as any
+        const result = await legacy(val?.location).find.files({
+          query: val?.query,
+          dirs: val?.type === undefined ? undefined : val?.type === "directory" ? "true" : "false",
+          limit: val?.limit,
         })
         return located(
-          (result.data ?? []).map((path) => ({ path, type: value.type ?? "file" })),
-          value.location,
+          (result.data ?? []).map((path: string) => ({ path, type: val?.type ?? "file" })),
+          val?.location,
         )
       },
     },
     integration: {
       ...currentIntegration,
       async get(value: Parameters<ServerApi["integration"]["get"]>[0]) {
-        const methods = ((await legacy(value.location).provider.auth()).data?.[value.integrationID] ?? []).map(
-          (method, index) =>
+        const val = value as any
+        const methods = ((await legacy(val?.location).provider.auth()).data?.[val?.integrationID] ?? []).map(
+          (method: any, index: number) =>
             method.type === "api"
               ? { type: "key" as const, label: method.label }
               : { type: "oauth" as const, id: String(index), label: method.label, prompts: method.prompts },
         )
         return located(
           {
-            id: value.integrationID,
-            name: value.integrationID,
+            id: val?.integrationID,
+            name: val?.integrationID,
             methods,
             connections: [],
           },
-          value.location,
+          val?.location,
         )
       },
       connect: {
         ...(currentIntegration.connect ?? {}),
         key: async (value: Parameters<ServerApi["integration"]["connect"]["key"]>[0]) => {
-          await legacy(value.location).auth.set({
-            providerID: value.integrationID,
-            auth: { type: "api", key: value.key },
+          const val = value as any
+          await legacy(val?.location).auth.set({
+            providerID: val?.integrationID,
+            auth: { type: "api", key: val?.key },
           })
         },
       },
       oauth: {
         ...(currentIntegration.oauth ?? {}),
         connect: async (value: Parameters<ServerApi["integration"]["oauth"]["connect"]>[0]) => {
-          const method = Number(value.methodID)
-          const result = await legacy(value.location).provider.oauth.authorize(
-            { providerID: value.integrationID, method, inputs: value.inputs },
+          const val = value as any
+          const method = Number(val?.methodID)
+          const result = await legacy(val?.location).provider.oauth.authorize(
+            { providerID: val?.integrationID, method, inputs: val?.inputs },
             { throwOnError: true },
           )
           if (!result.data) throw new Error("Failed to start OAuth authorization")
           return located(
             {
-              attemptID: `${value.integrationID}:${method}`,
+              attemptID: `${val?.integrationID}:${method}`,
               url: result.data.url,
               instructions: result.data.instructions,
               mode: result.data.method,
               time: { created: Date.now(), expires: Date.now() + 10 * 60 * 1000 },
             },
-            value.location,
+            val?.location,
           )
         },
         complete: async (value: Parameters<ServerApi["integration"]["oauth"]["complete"]>[0]) => {
-          const method = Number(value.attemptID.split(":").at(-1))
-          await legacy(value.location).provider.oauth.callback(
-            { providerID: value.integrationID, method, code: value.code },
+          const val = value as any
+          const method = Number(val?.attemptID?.split(":")?.at(-1))
+          await legacy(val?.location).provider.oauth.callback(
+            { providerID: val?.integrationID, method, code: val?.code },
             { throwOnError: true },
           )
         },
         status: async (value: Parameters<ServerApi["integration"]["oauth"]["status"]>[0]) => {
-          const method = Number(value.attemptID.split(":").at(-1))
-          await legacy(value.location).provider.oauth.callback(
-            { providerID: value.integrationID, method },
+          const val = value as any
+          const method = Number(val?.attemptID?.split(":")?.at(-1))
+          await legacy(val?.location).provider.oauth.callback(
+            { providerID: val?.integrationID, method },
             { throwOnError: true },
           )
           return located(
             { status: "complete" as const, time: { created: Date.now(), expires: Date.now() } },
-            value.location,
+            val?.location,
           )
         },
       },
@@ -473,66 +490,76 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     pty: {
       ...currentPty,
       async shells(value?: Parameters<ServerApi["pty"]["shells"]>[0]) {
-        return located((await legacy(value?.location).pty.shells()).data ?? [], value?.location)
+        const val = value as any
+        return located((await legacy(val?.location).pty.shells()).data ?? [], val?.location)
       },
       async list(value?: Parameters<ServerApi["pty"]["list"]>[0]) {
-        return located((await legacy(value?.location).pty.list()).data ?? [], value?.location)
+        const val = value as any
+        return located((await legacy(val?.location).pty.list()).data ?? [], val?.location)
       },
       async create(value?: Parameters<ServerApi["pty"]["create"]>[0]) {
-        const result = await legacy(value?.location).pty.create({
-          command: value?.command,
-          args: value?.args ? [...value.args] : undefined,
-          cwd: value?.cwd,
-          title: value?.title,
-          env: value?.env,
+        const val = value as any
+        const result = await legacy(val?.location).pty.create({
+          command: val?.command,
+          args: val?.args ? [...val.args] : undefined,
+          cwd: val?.cwd,
+          title: val?.title,
+          env: val?.env,
         })
         if (!result.data) throw new Error("Failed to create terminal")
-        return located(result.data, value?.location)
+        return located(result.data, val?.location)
       },
       async get(value: Parameters<ServerApi["pty"]["get"]>[0]) {
-        const result = await legacy(value.location).pty.get({ ptyID: value.ptyID })
-        if (!result.data) throw new Error(`Terminal not found: ${value.ptyID}`)
-        return located(result.data, value.location)
+        const val = value as any
+        const result = await legacy(val?.location).pty.get({ ptyID: val?.ptyID })
+        if (!result.data) throw new Error(`Terminal not found: ${val?.ptyID}`)
+        return located(result.data, val?.location)
       },
       async update(value: Parameters<ServerApi["pty"]["update"]>[0]) {
-        const result = await legacy(value.location).pty.update({
-          ptyID: value.ptyID,
-          title: value.title,
-          size: value.size,
+        const val = value as any
+        const result = await legacy(val?.location).pty.update({
+          ptyID: val?.ptyID,
+          title: val?.title,
+          size: val?.size,
         })
-        if (!result.data) throw new Error(`Terminal not found: ${value.ptyID}`)
-        return located(result.data, value.location)
+        if (!result.data) throw new Error(`Terminal not found: ${val?.ptyID}`)
+        return located(result.data, val?.location)
       },
       async remove(value: Parameters<ServerApi["pty"]["remove"]>[0]) {
-        await legacy(value.location).pty.remove({ ptyID: value.ptyID })
+        const val = value as any
+        await legacy(val?.location).pty.remove({ ptyID: val?.ptyID })
       },
       async connectToken(value: Parameters<ServerApi["pty"]["connectToken"]>[0]) {
-        const result = await legacy(value.location).pty.connectToken({ ptyID: value.ptyID })
-        if (!result.data) throw new Error(`Failed to connect terminal: ${value.ptyID}`)
-        return located(result.data, value.location)
+        const val = value as any
+        const result = await legacy(val?.location).pty.connectToken({ ptyID: val?.ptyID })
+        if (!result.data) throw new Error(`Failed to connect terminal: ${val?.ptyID}`)
+        return located(result.data, val?.location)
       },
     },
     permission: {
       ...currentPermission,
       async reply(value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } }) {
-        await legacy(value.location).permission.respond({
-          sessionID: value.sessionID,
-          permissionID: value.requestID,
-          response: value.reply,
-          directory: directory(value.location),
+        const input = value as any
+        await legacy(input.location).permission.respond({
+          sessionID: input.sessionID ?? "",
+          permissionID: input.requestID ?? input.permissionID,
+          response: input.reply ?? input.response,
+          directory: directory(input.location),
         })
       },
     },
     question: {
       ...currentQuestion,
       async reply(value: Parameters<ServerApi["question"]["reply"]>[0]) {
+        const val = value as any
         await legacy().question.reply({
-          requestID: value.requestID,
-          answers: value.answers.map((answer) => [...answer]),
+          requestID: val?.requestID,
+          answers: (val?.answers ?? []).map((answer: any) => [...answer]),
         })
       },
       async reject(value: Parameters<ServerApi["question"]["reject"]>[0]) {
-        await legacy().question.reject({ requestID: value.requestID })
+        const val = value as any
+        await legacy().question.reject({ requestID: val?.requestID })
       },
     },
   }

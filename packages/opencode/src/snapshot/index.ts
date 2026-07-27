@@ -65,11 +65,33 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Snapshot.state")(function* (ctx) {
+        const normalize = (p: string) => {
+          const norm = p.replaceAll("\\", "/")
+          if (norm.length > 1 && norm[1] === ":") {
+            return norm[0].toUpperCase() + norm.slice(1)
+          }
+          return norm
+        }
+
+        // For non-git projects ctx.worktree is set to "/" by the project layer;
+        // use ctx.directory as the actual snapshot worktree in that case.
+        const snapshotWorktree = ctx.worktree === "/" ? ctx.directory : ctx.worktree
+
         const state = {
-          directory: ctx.directory,
-          worktree: ctx.worktree,
-          gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
+          directory: normalize(ctx.directory),
+          worktree: normalize(snapshotWorktree),
+          gitdir: normalize(path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(snapshotWorktree))),
           vcs: ctx.project.vcs,
+        }
+
+        const toRelative = (file: string) => {
+          const norm = file.replaceAll("\\", "/")
+          const normWorktree = state.worktree.replaceAll("\\", "/")
+          // Case-insensitive prefix match to handle Windows drive letter casing differences.
+          if (norm.toLowerCase().startsWith(normWorktree.toLowerCase())) {
+            return norm.slice(normWorktree.length).replace(/^\//, "")
+          }
+          return norm
         }
 
         const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
@@ -101,6 +123,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return new Set<string>()
+          if (state.vcs !== "git") return new Set<string>()
           // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
           const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
           const check = yield* git(
@@ -165,11 +188,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
 
         const enabled = Effect.fnUntraced(function* () {
-          if (state.vcs !== "git") return false
           return (yield* config.get()).snapshot !== false
         })
 
         const excludes = Effect.fnUntraced(function* () {
+          if (state.vcs !== "git") return
           const result = yield* git(["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
             cwd: state.worktree,
           })
@@ -234,6 +257,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
         const add = Effect.fnUntraced(function* () {
           yield* sync()
+          yield* git(args(["update-index", "-q", "--really-refresh"]), { cwd: state.directory })
           const [diff, other] = yield* Effect.all(
             [
               git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
@@ -255,8 +279,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             return
           }
 
-          const tracked = diff.text.split("\0").filter(Boolean)
-          const untracked = other.text.split("\0").filter(Boolean)
+          const tracked = diff.text.split("\0").filter(Boolean).map(toRelative)
+          const untracked = other.text.split("\0").filter(Boolean).map(toRelative)
           const all = Array.from(new Set([...tracked, ...untracked]))
           if (!all.length) return
 
@@ -297,12 +321,22 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           yield* stage(allow.filter((item) => !block.has(item)))
         })
 
+        const getPrune = Effect.fnUntraced(function* () {
+          const cfg = yield* config.get()
+          const snapshotCfg = cfg.snapshot as { prune?: string } | undefined
+          if (typeof snapshotCfg === "object" && typeof snapshotCfg?.prune === "string" && snapshotCfg.prune) {
+            return snapshotCfg.prune
+          }
+          return "7.days"
+        })
+
         const cleanup = Effect.fnUntraced(function* () {
           return yield* locked(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
-              const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
+              const pruneTime = yield* getPrune()
+              const result = yield* git(args(["gc", `--prune=${pruneTime}`]), { cwd: state.directory })
               if (result.code !== 0) {
                 yield* Effect.logWarning("cleanup failed", {
                   exitCode: result.code,
@@ -310,7 +344,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 })
                 return
               }
-              yield* Effect.logInfo("cleanup", { prune })
+              yield* Effect.logInfo("cleanup", { prune: pruneTime })
             }),
           )
         })
@@ -365,6 +399,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 .split("\n")
                 .map((x) => x.trim())
                 .filter(Boolean)
+                .map(toRelative)
 
               // Hide ignored-file removals from the user-facing patch output.
               const ignored = yield* ignore(files)
