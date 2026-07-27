@@ -210,7 +210,6 @@ describe("ReadTool", () => {
     }
     readFailure = undefined
     listResult = new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
-    configEntries = []
   })
 
   it.effect("registers, authorizes, and reads through the location filesystem", () =>
