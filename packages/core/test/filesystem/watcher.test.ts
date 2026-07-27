@@ -38,7 +38,8 @@ describe("Watcher.testLayer", () => {
       yield* test.emit({ type: "update", path: "/root/file.md" })
 
       expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "update", path: "/root/file.md" }])
-      expect(yield* test.subscriptions()).toEqual([{ path: "/root", type: "directory" }])
+      // subscriptions() reports acquired watches, so paths come back resolved.
+      expect(yield* test.subscriptions()).toEqual([{ path: path.resolve("/root"), type: "directory" }])
     }).pipe(Effect.provide(Watcher.testLayer)),
   )
 })
