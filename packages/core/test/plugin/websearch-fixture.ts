@@ -46,10 +46,7 @@ export const webSearchIntegrationTest = testEffect(
       [
         [
           Config.node,
-          Layer.succeed(
-            Config.Service,
-            Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
-          ),
+          Config.testLayer(),
         ],
       ],
     ),

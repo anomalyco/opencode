@@ -23,10 +23,25 @@ type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
 
-const configLayer = Layer.succeed(
-  Config.Service,
-  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
-)
+const configLayer = Config.testLayer()
+
+describe("Watcher.testLayer", () => {
+  it.effect("records subscriptions and broadcasts emitted updates through the service", () =>
+    Effect.gen(function* () {
+      const watcher = yield* Watcher.Service
+      const test = yield* Watcher.Test
+      const received = yield* watcher
+        .subscribe({ path: "/root", type: "directory" })
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* Effect.yieldNow
+
+      yield* test.emit({ type: "update", path: "/root/file.md" })
+
+      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "update", path: "/root/file.md" }])
+      expect(yield* test.subscriptions()).toEqual([{ path: "/root", type: "directory" }])
+    }).pipe(Effect.provide(Watcher.testLayer)),
+  )
+})
 
 function provide(directory: string, vcs?: Location.Interface["vcs"]) {
   const locationLayer = Layer.succeed(

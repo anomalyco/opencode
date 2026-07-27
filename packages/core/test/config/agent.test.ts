@@ -31,9 +31,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("matches POSIX paths against home-relative permissions", () =>
     Effect.gen(function* () {
       const permissions = yield* loadHomePermissions("/home/test")
-      expect(Permission.evaluate("external_directory", "/home/test/p/opencode/src/*", permissions).effect).toBe(
-        "allow",
-      )
+      expect(Permission.evaluate("external_directory", "/home/test/p/opencode/src/*", permissions).effect).toBe("allow")
       expect(Permission.evaluate("external_directory", "/home/test/cache/files/*", permissions).effect).toBe("deny")
       expect(Permission.evaluate("external_directory", "/some/~/path", permissions).effect).toBe("deny")
       expect(Permission.evaluate("external_directory", "$HOMELESS/private/*", permissions).effect).toBe("deny")
@@ -66,49 +64,45 @@ describe("ConfigAgentPlugin.Plugin", () => {
         }),
       )
 
-      const config = Config.Service.of({
-        changes: () => Stream.empty,
-        entries: () =>
-          Effect.succeed([
-            new Config.Document({
-              type: "document",
-              info: decode({
-                permissions: [{ action: "bash", resource: "*", effect: "ask" }],
-                agents: {
-                  build: {
-                    permissions: [{ action: "bash", resource: "git *", effect: "allow" }],
-                  },
-                  reviewer: {
-                    model: "openrouter/openai/gpt-5",
-                    description: "Review changes",
-                    mode: "subagent",
-                    permissions: [
-                      { action: "edit", resource: "*", effect: "deny" },
-                      { action: "read", resource: "*", effect: "deny" },
-                    ],
-                  },
-                  removed: { description: "Removed later" },
-                },
-              }),
-            }),
-            new Config.Document({
-              type: "document",
-              info: decode({
-                permissions: [{ action: "read", resource: "*", effect: "allow" }],
-                agents: {
-                  reviewer: { model: "openrouter/openai/gpt-5#high", hidden: true },
-                  removed: { disabled: true },
-                  late: {
-                    permissions: [{ action: "edit", resource: "*", effect: "allow" }],
-                  },
-                },
-              }),
-            }),
-          ]),
-      })
+      const entries = [
+        new Config.Document({
+          type: "document",
+          info: decode({
+            permissions: [{ action: "bash", resource: "*", effect: "ask" }],
+            agents: {
+              build: {
+                permissions: [{ action: "bash", resource: "git *", effect: "allow" }],
+              },
+              reviewer: {
+                model: "openrouter/openai/gpt-5",
+                description: "Review changes",
+                mode: "subagent",
+                permissions: [
+                  { action: "edit", resource: "*", effect: "deny" },
+                  { action: "read", resource: "*", effect: "deny" },
+                ],
+              },
+              removed: { description: "Removed later" },
+            },
+          }),
+        }),
+        new Config.Document({
+          type: "document",
+          info: decode({
+            permissions: [{ action: "read", resource: "*", effect: "allow" }],
+            agents: {
+              reviewer: { model: "openrouter/openai/gpt-5#high", hidden: true },
+              removed: { disabled: true },
+              late: {
+                permissions: [{ action: "edit", resource: "*", effect: "allow" }],
+              },
+            },
+          }),
+        }),
+      ]
 
       yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
-        Effect.provideService(Config.Service, config),
+        Effect.provide(Config.testLayer(entries)),
       )
 
       const buildAgent = yield* agents.get(build)
@@ -152,48 +146,44 @@ describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("maps configured agent fields and preserves an unspecified model variant", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
-      const config = Config.Service.of({
-        changes: () => Stream.empty,
-        entries: () =>
-          Effect.succeed([
-            new Config.Document({
-              type: "document",
-              info: decode({
-                agents: {
-                  reviewer: {
-                    model: "anthropic/claude-sonnet",
-                    system: "Review carefully.",
-                    description: "Reviews changes",
-                    mode: "subagent",
-                    hidden: true,
-                    color: "#ff6b6b",
-                    steps: 12,
-                    request: {
-                      headers: { first: "one", shared: "first" },
-                      body: { enabled: true, profile: "review", effort: "medium" },
-                    },
-                  },
+      const entries = [
+        new Config.Document({
+          type: "document",
+          info: decode({
+            agents: {
+              reviewer: {
+                model: "anthropic/claude-sonnet",
+                system: "Review carefully.",
+                description: "Reviews changes",
+                mode: "subagent",
+                hidden: true,
+                color: "#ff6b6b",
+                steps: 12,
+                request: {
+                  headers: { first: "one", shared: "first" },
+                  body: { enabled: true, profile: "review", effort: "medium" },
                 },
-              }),
-            }),
-            new Config.Document({
-              type: "document",
-              info: decode({
-                agents: {
-                  reviewer: {
-                    request: {
-                      headers: { shared: "last", second: "two" },
-                      body: { retries: 2, effort: "high" },
-                    },
-                  },
+              },
+            },
+          }),
+        }),
+        new Config.Document({
+          type: "document",
+          info: decode({
+            agents: {
+              reviewer: {
+                request: {
+                  headers: { shared: "last", second: "two" },
+                  body: { retries: 2, effort: "high" },
                 },
-              }),
-            }),
-          ]),
-      })
+              },
+            },
+          }),
+        }),
+      ]
 
       yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
-        Effect.provideService(Config.Service, config),
+        Effect.provide(Config.testLayer(entries)),
       )
 
       const reviewer = yield* agents.get(Agent.ID.make("reviewer"))
@@ -221,19 +211,15 @@ describe("ConfigAgentPlugin.Plugin", () => {
       const build = Agent.ID.make("build")
       yield* agents.transform((editor) => editor.update(build, () => {}))
 
-      const config = Config.Service.of({
-        changes: () => Stream.empty,
-        entries: () =>
-          Effect.succeed([
-            new Config.Document({
-              type: "document",
-              info: decode({ agents: { build: { disabled: true } } }),
-            }),
-          ]),
-      })
+      const entries = [
+        new Config.Document({
+          type: "document",
+          info: decode({ agents: { build: { disabled: true } } }),
+        }),
+      ]
 
       yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
-        Effect.provideService(Config.Service, config),
+        Effect.provide(Config.testLayer(entries)),
       )
 
       expect(yield* agents.get(build)).toBeUndefined()
@@ -281,20 +267,16 @@ Use native v2 fields.`,
             await fs.writeFile(path.join(tmp.path, "modes", "plan.md"), "Make a plan.")
           })
           const agents = yield* Agent.Service
-          const config = Config.Service.of({
-            changes: () => Stream.empty,
-            entries: () =>
-              Effect.succeed([
-                new Config.Document({
-                  type: "document",
-                  info: decode({ agents: { reviewer: { description: "JSON description" } } }),
-                }),
-                new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
-              ]),
-          })
+          const entries = [
+            new Config.Document({
+              type: "document",
+              info: decode({ agents: { reviewer: { description: "JSON description" } } }),
+            }),
+            new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+          ]
 
           yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
-            Effect.provideService(Config.Service, config),
+            Effect.provide(Config.testLayer(entries)),
           )
 
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({
@@ -323,41 +305,37 @@ function loadHomePermissions(home: string) {
     const agents = yield* Agent.Service
     const build = Agent.ID.make("build")
     yield* agents.transform((editor) => editor.update(build, () => {}))
-    const config = Config.Service.of({
-      changes: () => Stream.empty,
-      entries: () =>
-        Effect.succeed([
-          new Config.Document({
-            type: "document",
-            info: decode(
-              ConfigMigrateV1.migrate({
+    const entries = [
+      new Config.Document({
+        type: "document",
+        info: decode(
+          ConfigMigrateV1.migrate({
+            permission: {
+              external_directory: {
+                "~/p/**": "allow",
+                "/some/~/path": "deny",
+                "$HOMELESS/**": "deny",
+              },
+              bash: {
+                "$HOME/private/**": "deny",
+              },
+            },
+            agent: {
+              build: {
                 permission: {
                   external_directory: {
-                    "~/p/**": "allow",
-                    "/some/~/path": "deny",
-                    "$HOMELESS/**": "deny",
-                  },
-                  bash: {
-                    "$HOME/private/**": "deny",
+                    "$HOME/cache/**": "deny",
                   },
                 },
-                agent: {
-                  build: {
-                    permission: {
-                      external_directory: {
-                        "$HOME/cache/**": "deny",
-                      },
-                    },
-                  },
-                },
-              }),
-            ),
+              },
+            },
           }),
-        ]),
-    })
+        ),
+      }),
+    ]
 
     yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
-      Effect.provideService(Config.Service, config),
+      Effect.provide(Config.testLayer(entries)),
       Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
     )
 

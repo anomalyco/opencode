@@ -67,7 +67,7 @@ function testLayer(
   globalDirectory = path.join(directory, "global"),
   projectDirectory = directory,
   vcs?: Project.Vcs,
-  watcher?: Layer.Layer<Watcher.Service>,
+  watcher: Layer.Layer<Watcher.Service | Watcher.Test> = Watcher.testLayer,
   credentialNode = emptyCredentialNode,
   wellknownNode = emptyWellknownNode,
   options?: Config.Options,
@@ -81,14 +81,17 @@ function testLayer(
       ),
     ),
   )
-  return AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+  const built = AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
     [Config.node, Config.configured(options)],
     [Location.node, locationLayer],
     [Global.node, Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })],
     [Credential.node, credentialNode],
     [WellKnown.node, wellknownNode],
-    ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
+    [Watcher.node, watcher],
   ])
+  // Merge the watcher layer by reference so Watcher.Test resolves to the same
+  // memoized instance the built graph uses.
+  return Layer.mergeAll(built, watcher)
 }
 
 const provider = {
@@ -184,32 +187,22 @@ describe("Config", () => {
             await fs.mkdir(project, { recursive: true })
             await fs.writeFile(file, JSON.stringify({ shell: "first" }))
           })
-          const updates = yield* PubSub.unbounded<Watcher.Update>()
-          const watcher = Layer.succeed(
-            Watcher.Service,
-            Watcher.Service.of({
-              subscribe: () => Stream.fromPubSub(updates),
-            }),
-          )
-
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
             const bus = yield* Bus.Service
+            const watcher = yield* Watcher.Test
             const changed = yield* bus
               .subscribe(ConfigSchema.Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.sleep("10 millis")
 
-            yield* PubSub.publish(updates, {
-              type: "update",
-              path: path.join(global, "commands", "review.md"),
-            } satisfies Watcher.Update)
+            yield* watcher.emit({ type: "update", path: path.join(global, "commands", "review.md") })
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "second" })))
-            yield* PubSub.publish(updates, { type: "update", path: file } satisfies Watcher.Update)
+            yield* watcher.emit({ type: "update", path: file })
 
             expect(yield* Fiber.join(changed)).toHaveLength(1)
             expect(Config.latest(yield* config.entries(), "shell")).toBe("second")
-          }).pipe(Effect.provide(testLayer(project, global, project, undefined, watcher)))
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
         }),
       ),
     ),
@@ -228,30 +221,42 @@ describe("Config", () => {
             await fs.mkdir(path.join(global, "commands"), { recursive: true })
             await fs.mkdir(project, { recursive: true })
           })
-          const updates = yield* PubSub.unbounded<Watcher.Update>()
-          const watcher = Layer.succeed(
-            Watcher.Service,
-            Watcher.Service.of({
-              subscribe: () => Stream.fromPubSub(updates),
-            }),
-          )
-
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
             const received = yield* config
               .changes()
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
             yield* Effect.sleep("10 millis")
 
             const file = path.join(global, "commands", "review.md")
-            yield* PubSub.publish(updates, { type: "update", path: file } satisfies Watcher.Update)
+            yield* watcher.emit({ type: "update", path: file })
 
             const collected = yield* Fiber.join(received).pipe(Effect.timeout("1 second"))
             expect(Array.from(collected)).toEqual([{ type: "update", path: file }])
-          }).pipe(Effect.provide(testLayer(project, global, project, undefined, watcher)))
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
         }),
       ),
     ),
+  )
+
+  it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.Service
+      const test = yield* Config.Test
+      expect(yield* config.entries()).toEqual([])
+
+      const entry = new Config.Document({ type: "document", info: new Config.Info({}) })
+      yield* test.setEntries([entry])
+      expect(yield* config.entries()).toEqual([entry])
+
+      const received = yield* config
+        .changes()
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* Effect.yieldNow
+      yield* test.emitChange({ type: "create", path: "/root/commands/review.md" })
+      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "create", path: "/root/commands/review.md" }])
+    }).pipe(Effect.provide(Config.testLayer())),
   )
 
   it.effect("returns the latest defined scalar from priority-ordered documents", () =>
@@ -544,23 +549,15 @@ describe("Config", () => {
               fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
             ]),
           )
-          const targets: Watcher.WatchInput[] = []
-          const watcher = Layer.succeed(
-            Watcher.Service,
-            Watcher.Service.of({
-              subscribe: (input) => {
-                targets.push(input)
-                return Stream.never
-              },
-            }),
-          )
-
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
             yield* config.entries()
 
-            expect(targets).toEqual([{ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }])
-          }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, watcher)))
+            expect(yield* watcher.subscriptions()).toEqual([
+              { type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) },
+            ])
+          }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, Watcher.testLayer)))
         }),
       ),
     ),

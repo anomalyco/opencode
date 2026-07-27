@@ -56,7 +56,6 @@ let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage = {
   mime: "text/plain",
 }
 let readFailure: ReadToolFileSystem.ReadError | undefined
-let configEntries: Config.Entry[] = []
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
   ReadToolFileSystem.Service.of({
@@ -100,10 +99,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const config = Layer.succeed(
-  Config.Service,
-  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed(configEntries) }),
-)
+const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 const testFileSystem = Layer.effect(
   FSUtil.Service,
@@ -161,16 +157,20 @@ const unavailableImage = Layer.succeed(
   Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
 )
 const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
-  AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode]), [
-    [ReadToolFileSystem.node, reader],
-    [Permission.node, permission],
-    [Config.node, config],
-    [Image.node, imageLayer],
-    [LocationMutation.node, mutation],
-    [FSUtil.node, testFileSystem],
-    [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ data: Global.Path.data })],
-  ])
+  Layer.mergeAll(
+    AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode]), [
+      [ReadToolFileSystem.node, reader],
+      [Permission.node, permission],
+      [Config.node, config],
+      [Image.node, imageLayer],
+      [LocationMutation.node, mutation],
+      [FSUtil.node, testFileSystem],
+      [Location.node, locationLayer],
+      [Global.node, Global.layerWith({ data: Global.Path.data })],
+    ]),
+    // Merge by reference so Config.Test resolves to the memoized instance.
+    config,
+  )
 const it = testEffect(readLayer(imageLayer))
 const itWithoutResizer = testEffect(readLayer(unavailableImage))
 const sessionID = Session.ID.make("ses_read_tool_test")
@@ -192,7 +192,6 @@ describe("ReadTool", () => {
       mime: "text/plain",
     }
     readFailure = undefined
-    configEntries = []
   })
 
   it.effect("registers, authorizes, and reads through the location filesystem", () =>
@@ -409,7 +408,8 @@ describe("ReadTool", () => {
         encoding: "base64",
         mime: "image/png",
       }
-      configEntries = [
+      const configTest = yield* Config.Test
+      yield* configTest.setEntries([
         new Config.Document({
           type: "document",
           info: new Config.Info({
@@ -418,7 +418,7 @@ describe("ReadTool", () => {
             }),
           }),
         }),
-      ]
+      ])
       const registry = yield* Tool.Service
 
       expect(
@@ -451,14 +451,15 @@ describe("ReadTool", () => {
         encoding: "base64",
         mime: "image/png",
       }
-      configEntries = [
+      const configTest = yield* Config.Test
+      yield* configTest.setEntries([
         new Config.Document({
           type: "document",
           info: new Config.Info({
             attachments: new ConfigAttachments.Info({ image: new ConfigAttachments.Image({ max_width: 4 }) }),
           }),
         }),
-      ]
+      ])
       const registry = yield* Tool.Service
       const result = yield* executeTool(registry, {
         sessionID,
@@ -489,7 +490,8 @@ describe("ReadTool", () => {
         encoding: "base64",
         mime: "image/png",
       }
-      configEntries = [
+      const configTest = yield* Config.Test
+      yield* configTest.setEntries([
         new Config.Document({
           type: "document",
           info: new Config.Info({
@@ -498,7 +500,7 @@ describe("ReadTool", () => {
             }),
           }),
         }),
-      ]
+      ])
       const registry = yield* Tool.Service
 
       expect(

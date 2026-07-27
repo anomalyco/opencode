@@ -17,7 +17,7 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Provider } from "@opencode-ai/core/provider"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -36,16 +36,13 @@ describe("config plugin reloads", () => {
       const references = yield* Reference.Service
       const skills = yield* Skill.Service
       const host = yield* PluginHost.make(plugins)
-      let entries: Config.Entry[] = [config("first")]
-      const service = Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.sync(() => entries) })
-      const setup = <R>(effect: Effect.Effect<void, never, R>) =>
-        effect.pipe(Effect.provideService(Config.Service, service))
+      const test = yield* Config.Test
 
-      yield* setup(ConfigAgentPlugin.Plugin.effect(host))
-      yield* setup(ConfigCommandPlugin.Plugin.effect(host))
-      yield* setup(ConfigSkillPlugin.Plugin.effect(host))
-      yield* setup(ConfigReferencePlugin.Plugin.effect(host))
-      yield* setup(ConfigProviderPlugin.Plugin.effect(host))
+      yield* ConfigAgentPlugin.Plugin.effect(host)
+      yield* ConfigCommandPlugin.Plugin.effect(host)
+      yield* ConfigSkillPlugin.Plugin.effect(host)
+      yield* ConfigReferencePlugin.Plugin.effect(host)
+      yield* ConfigProviderPlugin.Plugin.effect(host)
 
       expect((yield* agents.get(Agent.ID.make("first")))?.description).toBe("First agent")
       expect((yield* commands.get("first"))?.description).toBe("First command")
@@ -55,7 +52,7 @@ describe("config plugin reloads", () => {
       expect((yield* references.list()).map((reference) => reference.name)).toEqual(["first"])
       expect(yield* catalog.provider.get(Provider.ID.make("first"))).toBeDefined()
 
-      entries = [config("second")]
+      yield* test.setEntries([config("second")])
       yield* bus.publish(ConfigSchema.Event.Updated, {})
       yield* waitUntil(
         Effect.gen(function* () {
@@ -77,7 +74,10 @@ describe("config plugin reloads", () => {
       expect(
         (yield* skills.sources()).some((source) => source.type === "directory" && source.path === "/skills/second"),
       ).toBe(true)
-    }).pipe(Effect.provideService(Global.Service, Global.Service.of(Global.make()))),
+    }).pipe(
+      Effect.provide(Config.testLayer([config("first")])),
+      Effect.provideService(Global.Service, Global.Service.of(Global.make())),
+    ),
   )
 })
 

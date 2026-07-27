@@ -704,10 +704,7 @@ const toolLifecycleLayer = (endpoint: string) => {
     [
       [
         Config.node,
-        Layer.succeed(
-          Config.Service,
-          Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
-        ),
+        Config.testLayer(),
       ],
     ],
   )

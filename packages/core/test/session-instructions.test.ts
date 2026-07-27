@@ -70,10 +70,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const config = Layer.succeed(
-  Config.Service,
-  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
-)
+const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 
 const testLayer = AppNodeBuilder.build(

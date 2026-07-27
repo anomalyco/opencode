@@ -160,28 +160,21 @@ function resourceMcpLayer(
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
-        Layer.succeed(
-          Config.Service,
-          Config.Service.of({
-            changes: () => Stream.empty,
-            entries: () =>
-              Effect.succeed([
-                new Config.Document({
-                  type: "document",
-                  info: new Config.Info({
-                    mcp: new ConfigMCP.Info({
-                      servers: {
-                        resources:
-                          typeof server === "string"
-                            ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
-                            : server,
-                      },
-                    }),
-                  }),
-                }),
-              ]),
+        Config.testLayer([
+          new Config.Document({
+            type: "document",
+            info: new Config.Info({
+              mcp: new ConfigMCP.Info({
+                servers: {
+                  resources:
+                    typeof server === "string"
+                      ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
+                      : server,
+                },
+              }),
+            }),
           }),
-        ),
+        ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(Bus.Service, {
           subscribe: () => Stream.never,

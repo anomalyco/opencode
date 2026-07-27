@@ -60,12 +60,6 @@ export const PluginTestLayer = AppNodeBuilder.build(
   [
     [Location.node, tempLocationLayer],
     [Npm.node, npmLayer],
-    [
-      Config.node,
-      Layer.succeed(
-        Config.Service,
-        Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
-      ),
-    ],
+    [Config.node, Config.testLayer()],
   ],
 ) as unknown as Layer.Layer<unknown, never>

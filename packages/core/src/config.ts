@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { Context, Effect, Fiber, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -175,6 +175,31 @@ export const Options = Schema.Struct({
 export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
+
+export interface TestInterface extends Interface {
+  /** Replaces the entries returned by subsequent entries() calls. */
+  readonly setEntries: (entries: Entry[]) => Effect.Effect<void>
+  /** Emits one filesystem update to every changes() subscriber. */
+  readonly emitChange: (update: Watcher.Update) => Effect.Effect<void>
+}
+
+export class Test extends Context.Service<Test, TestInterface>()("@opencode/Config/Test") {}
+
+/** In-memory config for tests: static entries with replaceable state and a test-driven change feed. */
+export const testLayer = (initial: Entry[] = []) =>
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const entries = yield* Ref.make(initial)
+      const updates = yield* PubSub.unbounded<Watcher.Update>()
+      const service = Test.of({
+        entries: () => Ref.get(entries),
+        changes: () => Stream.fromPubSub(updates),
+        setEntries: (next) => Ref.set(entries, next),
+        emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
+      })
+      return Context.empty().pipe(Context.add(Service, service), Context.add(Test, service))
+    }),
+  )
 
 export const layer = (options?: Options) => Layer.effect(
   Service,

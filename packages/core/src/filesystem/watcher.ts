@@ -56,6 +56,32 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Watcher") {}
 
+export interface TestInterface extends Interface {
+  /** Broadcasts one update to every subscriber. */
+  readonly emit: (update: Update) => Effect.Effect<void>
+  /** Returns every subscribe call observed so far, in order. */
+  readonly subscriptions: () => Effect.Effect<readonly WatchInput[]>
+}
+
+export class Test extends Context.Service<Test, TestInterface>()("@opencode/Watcher/Test") {}
+
+/** In-memory watcher for tests: records subscribe calls and broadcasts emitted updates. */
+export const testLayer = Layer.effectContext(
+  Effect.gen(function* () {
+    const updates = yield* PubSub.unbounded<Update>()
+    const subscriptions: WatchInput[] = []
+    const service = Test.of({
+      subscribe: (input) => {
+        subscriptions.push(input)
+        return Stream.fromPubSub(updates)
+      },
+      emit: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
+      subscriptions: () => Effect.sync(() => [...subscriptions]),
+    })
+    return Context.empty().pipe(Context.add(Service, service), Context.add(Test, service))
+  }),
+)
+
 export const layer = (options?: Options) => Layer.effect(
   Service,
   Effect.gen(function* () {

@@ -14,10 +14,10 @@ import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
-const addPlugin = Effect.fn(function* (config: Config.Interface) {
+const addPlugin = Effect.fn(function* (entries: Config.Entry[]) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
-  yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provideService(Config.Service, config))
+  yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
 function required<T>(value: T | undefined): T {
@@ -54,25 +54,21 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("custom")
       const modelID = Model.ID.make("chat")
-      const config = Config.Service.of({
-        changes: () => Stream.empty,
-        entries: () =>
-          Effect.succeed([
-            new Config.Document({
-              type: "document",
-              info: decode({
-                providers: {
-                  custom: {
-                    package: "aisdk:@ai-sdk/openai-compatible",
-                    models: { chat: {} },
-                  },
-                },
-              }),
-            }),
-          ]),
-      })
+      const entries = [
+        new Config.Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { chat: {} },
+              },
+            },
+          }),
+        }),
+      ]
 
-      yield* addPlugin(config)
+      yield* addPlugin(entries)
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
@@ -93,30 +89,26 @@ describe("ConfigProviderPlugin.Plugin", () => {
           model.capabilities = { tools: false, input: ["text"], output: ["text"] }
         })
       })
-      const config = Config.Service.of({
-        changes: () => Stream.empty,
-        entries: () =>
-          Effect.succeed([
-            new Config.Document({
-              type: "document",
-              info: decode({
-                providers: {
-                  custom: {
-                    package: "aisdk:@ai-sdk/openai-compatible",
-                    models: {
-                      inherited: { name: "Inherited" },
-                      overridden: {
-                        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-                      },
-                    },
+      const entries = [
+        new Config.Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: {
+                  inherited: { name: "Inherited" },
+                  overridden: {
+                    capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
                   },
                 },
-              }),
-            }),
-          ]),
-      })
+              },
+            },
+          }),
+        }),
+      ]
 
-      yield* addPlugin(config)
+      yield* addPlugin(entries)
 
       expect((yield* catalog.model.get(providerID, inheritedID))?.capabilities).toEqual({
         tools: false,
@@ -136,39 +128,35 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.opencode
       const modelID = Model.ID.make("alpha-gpt-next")
-      const config = Config.Service.of({
-        changes: () => Stream.empty,
-        entries: () =>
-          Effect.succeed([
-            new Config.Document({
-              type: "document",
-              info: decode({
-                providers: {
-                  opencode: {
-                    package: "aisdk:@ai-sdk/openai",
-                    settings: { baseURL: "https://opencode.test/v1" },
-                    models: {
-                      "alpha-gpt-next": {
-                        variants: [
-                          {
-                            id: "high",
-                            body: {
-                              reasoningEffort: "high",
-                              reasoningSummary: "auto",
-                              include: ["reasoning.encrypted_content"],
-                            },
-                          },
-                        ],
+      const entries = [
+        new Config.Document({
+          type: "document",
+          info: decode({
+            providers: {
+              opencode: {
+                package: "aisdk:@ai-sdk/openai",
+                settings: { baseURL: "https://opencode.test/v1" },
+                models: {
+                  "alpha-gpt-next": {
+                    variants: [
+                      {
+                        id: "high",
+                        body: {
+                          reasoningEffort: "high",
+                          reasoningSummary: "auto",
+                          include: ["reasoning.encrypted_content"],
+                        },
                       },
-                    },
+                    ],
                   },
                 },
-              }),
-            }),
-          ]),
-      })
+              },
+            },
+          }),
+        }),
+      ]
 
-      yield* addPlugin(config)
+      yield* addPlugin(entries)
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.variants).toMatchObject([
@@ -189,39 +177,35 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.opencode
       const modelID = Model.ID.make("alpha-gpt-next")
-      const config = Config.Service.of({
-        changes: () => Stream.empty,
-        entries: () =>
-          Effect.succeed([
-            new Config.Document({
-              type: "document",
-              info: decode({
-                providers: {
-                  opencode: {
-                    package: "aisdk:@ai-sdk/openai",
-                    settings: { baseURL: "https://opencode.test/v1" },
+      const entries = [
+        new Config.Document({
+          type: "document",
+          info: decode({
+            providers: {
+              opencode: {
+                package: "aisdk:@ai-sdk/openai",
+                settings: { baseURL: "https://opencode.test/v1" },
+              },
+            },
+          }),
+        }),
+        new Config.Document({
+          type: "document",
+          info: decode({
+            providers: {
+              opencode: {
+                models: {
+                  "alpha-gpt-next": {
+                    variants: [{ id: "high", body: { reasoningEffort: "high" } }],
                   },
                 },
-              }),
-            }),
-            new Config.Document({
-              type: "document",
-              info: decode({
-                providers: {
-                  opencode: {
-                    models: {
-                      "alpha-gpt-next": {
-                        variants: [{ id: "high", body: { reasoningEffort: "high" } }],
-                      },
-                    },
-                  },
-                },
-              }),
-            }),
-          ]),
-      })
+              },
+            },
+          }),
+        }),
+      ]
 
-      yield* addPlugin(config)
+      yield* addPlugin(entries)
 
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.variants?.[0]).toMatchObject({
@@ -238,88 +222,84 @@ describe("ConfigProviderPlugin.Plugin", () => {
         const integrations = yield* Integration.Service
         const providerID = Provider.ID.make("custom")
         const modelID = Model.ID.make("chat")
-        const config = Config.Service.of({
-          changes: () => Stream.empty,
-          entries: () =>
-            Effect.succeed([
-              new Config.Document({
-                type: "document",
-                info: decode({
-                  model: "custom/first",
-                  providers: {
-                    custom: {
-                      name: "Configured",
-                      env: ["CUSTOM_API_KEY"],
-                      package: "native",
+        const entries = [
+          new Config.Document({
+            type: "document",
+            info: decode({
+              model: "custom/first",
+              providers: {
+                custom: {
+                  name: "Configured",
+                  env: ["CUSTOM_API_KEY"],
+                  package: "native",
+                  headers: { first: "first", shared: "first" },
+                  models: {
+                    chat: {
+                      name: "First",
+                      compatibility: { reasoningField: "vendor_reasoning" },
+                      capabilities: { tools: true, input: ["text"], output: ["text"] },
+                      disabled: true,
+                      limit: { context: 100, output: 50 },
+                      cost: { input: 1, output: 2 },
+                      settings: { retained: true },
                       headers: { first: "first", shared: "first" },
-                      models: {
-                        chat: {
-                          name: "First",
-                          compatibility: { reasoningField: "vendor_reasoning" },
-                          capabilities: { tools: true, input: ["text"], output: ["text"] },
-                          disabled: true,
-                          limit: { context: 100, output: 50 },
-                          cost: { input: 1, output: 2 },
-                          settings: { retained: true },
+                      variants: [
+                        {
+                          id: "fast",
                           headers: { first: "first", shared: "first" },
-                          variants: [
-                            {
-                              id: "fast",
-                              headers: { first: "first", shared: "first" },
-                            },
-                          ],
                         },
-                      },
+                      ],
                     },
                   },
-                }),
-              }),
-              new Config.Document({
-                type: "document",
-                info: decode({
-                  model: "custom/default",
-                  providers: {
-                    custom: {
-                      package: "aisdk:custom-sdk",
-                      settings: { baseURL: "https://example.test" },
+                },
+              },
+            }),
+          }),
+          new Config.Document({
+            type: "document",
+            info: decode({
+              model: "custom/default",
+              providers: {
+                custom: {
+                  package: "aisdk:custom-sdk",
+                  settings: { baseURL: "https://example.test" },
+                  headers: { last: "last", shared: "last" },
+                  models: {
+                    default: {
+                      name: "Default",
+                    },
+                    chat: {
+                      modelID: "api-chat",
+                      name: "Last",
+                      limit: { output: 75 },
                       headers: { last: "last", shared: "last" },
-                      models: {
-                        default: {
-                          name: "Default",
-                        },
-                        chat: {
-                          modelID: "api-chat",
-                          name: "Last",
-                          limit: { output: 75 },
+                      variants: [
+                        {
+                          id: "fast",
                           headers: { last: "last", shared: "last" },
-                          variants: [
-                            {
-                              id: "fast",
-                              headers: { last: "last", shared: "last" },
-                            },
-                            {
-                              id: "slow",
-                              headers: { slow: "slow" },
-                            },
-                          ],
                         },
-                      },
+                        {
+                          id: "slow",
+                          headers: { slow: "slow" },
+                        },
+                      ],
                     },
                   },
-                }),
-              }),
-              new Config.Document({
-                type: "document",
-                info: decode({
-                  providers: {
-                    custom: { name: "Renamed" },
-                  },
-                }),
-              }),
-            ]),
-        })
+                },
+              },
+            }),
+          }),
+          new Config.Document({
+            type: "document",
+            info: decode({
+              providers: {
+                custom: { name: "Renamed" },
+              },
+            }),
+          }),
+        ]
 
-        yield* addPlugin(config)
+        yield* addPlugin(entries)
 
         const provider = required(yield* catalog.provider.get(providerID))
         const model = required(yield* catalog.model.get(providerID, modelID))

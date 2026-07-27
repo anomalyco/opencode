@@ -68,19 +68,14 @@ Review files`,
               event: { subscribe: () => Stream.fromPubSub(updates) },
             }),
           ).pipe(
-            Effect.provideService(
-              Config.Service,
-              Config.Service.of({
-                changes: () => Stream.empty,
-                entries: () =>
-                  Effect.succeed([
-                    new Config.Document({
-                      type: "document",
-                      info: decode({ commands: { review: { template: "Inline review" } } }),
-                    }),
-                    new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
-                  ]),
-              }),
+            Effect.provide(
+              Config.testLayer([
+                new Config.Document({
+                  type: "document",
+                  info: decode({ commands: { review: { template: "Inline review" } } }),
+                }),
+                new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+              ]),
             ),
           )
 
