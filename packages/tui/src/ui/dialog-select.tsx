@@ -36,6 +36,11 @@ export interface DialogSelectProps<T> {
   renderFilter?: boolean
   locked?: boolean
   preserveSelection?: boolean
+  // Full-page usages (routes, not dialogs) opt into growing with the
+  // terminal instead of the half-screen cap, and into a visible scrollbar
+  // so off-screen rows are discoverable.
+  fullHeight?: boolean
+  scrollbarVisible?: boolean
   actions?: {
     command: string
     title: string
@@ -618,10 +623,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <scrollbox
             paddingLeft={1}
             paddingRight={1}
-            scrollbarOptions={{ visible: false }}
+            verticalScrollbarOptions={{ visible: props.scrollbarVisible ?? false }}
             scrollAcceleration={scrollAcceleration()}
             ref={(r: ScrollBoxRenderable) => (scroll = r)}
-            maxHeight={height()}
+            maxHeight={props.fullHeight ? undefined : height()}
+            flexGrow={props.fullHeight ? 1 : undefined}
+            minHeight={props.fullHeight ? 0 : undefined}
           >
             <For each={grouped()}>
               {([category, options], index) => (

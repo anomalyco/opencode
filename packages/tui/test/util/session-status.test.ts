@@ -45,6 +45,7 @@ describe("resolveStatus", () => {
     expect(resolveStatus({ persisted: { status: "interrupted", time: { created: 0, updated: 0 } } })).toBe(
       "interrupted",
     )
+    expect(resolveStatus({ persisted: { status: "waiting", time: { created: 0, updated: 0 } } })).toBe("waiting")
   })
 
   test("shows nothing for idle or missing rows", () => {
@@ -54,31 +55,46 @@ describe("resolveStatus", () => {
 })
 
 describe("statusDisplay", () => {
-  test("needs input starts warning, fades, then mutes but never disappears", () => {
+  test("needs input starts warning, fades in the warm band, then mutes", () => {
     expect(statusDisplay("needs_input", boot, boot + 1 * MINUTE, theme)?.color).toBe(theme.warning)
-    const faded = statusDisplay("needs_input", boot, boot + 30 * MINUTE, theme)
-    expect(faded?.label).toBe("Needs input")
-    expect(faded?.color).not.toBe(theme.warning)
-    expect(faded?.color).not.toBe(theme.textMuted)
-    expect(statusDisplay("needs_input", boot, boot + 5 * 60 * MINUTE, theme)?.color).toBe(theme.textMuted)
+    const warm = statusDisplay("needs_input", boot, boot + 30 * MINUTE, theme)
+    expect(warm?.label).toBe("Needs input")
+    expect(warm?.icon).toBe("!")
+    expect(warm?.color).not.toBe(theme.warning)
+    expect(warm?.color).not.toBe(theme.textMuted)
+    expect(statusDisplay("needs_input", boot, boot + 90 * MINUTE, theme)?.color).toBe(theme.textMuted)
+  })
+
+  test("waiting ages like needs input but reads as a question", () => {
+    const fresh = statusDisplay("waiting", boot, boot + 1 * MINUTE, theme)
+    expect(fresh?.label).toBe("Waiting")
+    expect(fresh?.icon).toBe("?")
+    expect(fresh?.color).toBe(theme.warning)
+    expect(statusDisplay("waiting", boot, boot + 90 * MINUTE, theme)?.color).toBe(theme.textMuted)
   })
 
   test("retrying stays error regardless of age", () => {
-    expect(statusDisplay("retrying", boot, boot + 90 * MINUTE, theme)?.color).toBe(theme.error)
+    const display = statusDisplay("retrying", boot, boot + 90 * MINUTE, theme)
+    expect(display?.color).toBe(theme.error)
+    expect(display?.icon).toBe("⚠")
   })
 
-  test("working mutes after an hour", () => {
+  test("working mutes after an hour and keeps the spinner", () => {
     expect(statusDisplay("working", boot, boot + 30 * MINUTE, theme)?.color).toBe(theme.primary)
     expect(statusDisplay("working", boot, boot + 90 * MINUTE, theme)?.color).toBe(theme.textMuted)
+    expect(statusDisplay("working", boot, boot + 1 * MINUTE, theme)?.icon).toBeUndefined()
   })
 
   test("done starts success, fades, then expires", () => {
     expect(statusDisplay("done", boot, boot + 1 * MINUTE, theme)?.color).toBe(theme.success)
+    expect(statusDisplay("done", boot, boot + 1 * MINUTE, theme)?.icon).toBe("✓")
     expect(statusDisplay("done", boot, boot + 10 * MINUTE, theme)?.color).not.toBe(theme.success)
     expect(statusDisplay("done", boot, boot + 31 * MINUTE, theme)).toBeUndefined()
   })
 
   test("interrupted is always muted", () => {
-    expect(statusDisplay("interrupted", boot, boot, theme)?.color).toBe(theme.textMuted)
+    const display = statusDisplay("interrupted", boot, boot, theme)
+    expect(display?.color).toBe(theme.textMuted)
+    expect(display?.icon).toBe("✕")
   })
 })

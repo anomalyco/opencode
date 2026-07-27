@@ -239,7 +239,9 @@ export function Sessions() {
           ) : (
             dateLabel
           ),
-          gutter: status === "working" || status === "retrying" ? () => <Spinner /> : undefined,
+          gutter: display
+            ? () => (display.icon ? <text fg={display.color}>{display.icon}</text> : <Spinner />)
+            : undefined,
           value: session.id,
           category: session.directory,
         }
@@ -496,6 +498,8 @@ export function Sessions() {
         options={options()}
         skipFilter={true}
         preserveSelection={true}
+        fullHeight={true}
+        scrollbarVisible={true}
         ref={(ref) => (selectRef = ref)}
         onFilter={setSearch}
         onMove={() => setToDelete(undefined)}
