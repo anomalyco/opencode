@@ -338,6 +338,7 @@ export function Session() {
 
   let seeded = false
   let scroll: ScrollBoxRenderable
+  let planScroll: ScrollBoxRenderable | undefined
   let prompt: PromptRef | undefined
   const bind = (r: PromptRef | undefined) => {
     prompt = r
@@ -463,11 +464,29 @@ export function Session() {
     </Switch>
   )
 
+  // Helper: Get active scrollbox in split or normal mode
+  const getActiveScrollbox = (): ScrollBoxRenderable => {
+    if (!isSplitView() || !planScroll) return scroll
+    const focused = renderer.currentFocusedRenderable
+    if (!focused) return scroll
+    function hasFocus(item: any): boolean {
+      if (!item) return false
+      if (item === focused) return true
+      for (const child of item.getChildren?.() ?? []) {
+        if (hasFocus(child)) return true
+      }
+      return false
+    }
+    if (hasFocus(planScroll)) return planScroll
+    return scroll
+  }
+
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
-    const children = scroll.getChildren()
+    const activeScroll = getActiveScrollbox()
+    const children = activeScroll.getChildren()
     const messagesList = messages()
-    const scrollTop = scroll.y
+    const scrollTop = activeScroll.y
 
     // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
@@ -494,25 +513,36 @@ export function Session() {
     return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
   }
 
+  // Helper: Find which scrollbox contains a message by ID
+  const scrollForMessage = (messageID: string): { scroll: ScrollBoxRenderable; child: any } | undefined => {
+    const search = (sb: ScrollBoxRenderable | undefined) => {
+      if (!sb || sb.isDestroyed) return
+      const child = sb.getChildren().find((c) => c.id === messageID)
+      if (child) return { scroll: sb, child }
+    }
+    return search(scroll) ?? (isSplitView() ? search(planScroll) : undefined)
+  }
+
   // Helper: Scroll to message in direction or fallback to page scroll
   const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
+    const activeScroll = getActiveScrollbox()
     const targetID = findNextVisibleMessage(direction)
 
     if (!targetID) {
-      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
+      activeScroll.scrollBy(direction === "next" ? activeScroll.height : -activeScroll.height)
       dialog.clear()
       return
     }
 
-    const child = scroll.getChildren().find((c) => c.id === targetID)
-    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    const found = scrollForMessage(targetID)
+    if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
     dialog.clear()
   }
 
   function toBottom() {
     setTimeout(() => {
-      if (!scroll || scroll.isDestroyed) return
-      scroll.scrollTo(scroll.scrollHeight)
+      if (scroll && !scroll.isDestroyed) scroll.scrollTo(scroll.scrollHeight)
+      if (planScroll && !planScroll.isDestroyed) planScroll.scrollTo(planScroll.scrollHeight)
     }, 50)
   }
 
@@ -614,10 +644,8 @@ export function Session() {
         dialog.replace(() => (
           <DialogTimeline
             onMove={(messageID) => {
-              const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              const found = scrollForMessage(messageID)
+              if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
@@ -637,10 +665,8 @@ export function Session() {
           <DialogForkFromTimeline
             onMove={(messageID) => {
               if (!messageID) return
-              const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              const found = scrollForMessage(messageID)
+              if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
             }}
             sessionID={route.sessionID}
           />
@@ -853,7 +879,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 2)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(-activeScroll.height / 2)
         dialog.clear()
       },
     },
@@ -863,7 +890,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 2)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(activeScroll.height / 2)
         dialog.clear()
       },
     },
@@ -873,7 +901,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-1)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(-1)
         dialog.clear()
       },
     },
@@ -883,7 +912,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(1)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(1)
         dialog.clear()
       },
     },
@@ -893,7 +923,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 4)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(-activeScroll.height / 4)
         dialog.clear()
       },
     },
@@ -903,7 +934,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 4)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(activeScroll.height / 4)
         dialog.clear()
       },
     },
@@ -913,7 +945,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(0)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollTo(0)
         dialog.clear()
       },
     },
@@ -923,7 +956,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(scroll.scrollHeight)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollTo(activeScroll.scrollHeight)
         dialog.clear()
       },
     },
@@ -949,10 +983,8 @@ export function Session() {
           )
 
           if (hasValidTextPart) {
-            const child = scroll.getChildren().find((child) => {
-              return child.id === message.id
-            })
-            if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            const found = scrollForMessage(message.id)
+            if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
             break
           }
         }
@@ -1342,6 +1374,7 @@ export function Session() {
                 sessionID={route.sessionID}
                 messages={messages()}
                 scrollRef={(r) => (scroll = r)}
+                planScrollRef={(r) => (planScroll = r)}
                 promptRef={bind}
                 disabled={disabled()}
                 visible={visible()}

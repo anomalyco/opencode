@@ -11,6 +11,7 @@ export function SessionSplitView(props: {
   sessionID: string
   messages: any[]
   scrollRef?: (r: any) => void
+  planScrollRef?: (r: any) => void
   promptRef?: (r: PromptRef | undefined) => void
   disabled?: boolean
   visible?: boolean
@@ -81,7 +82,7 @@ export function SessionSplitView(props: {
           title=" Plan "
           overflow="hidden"
         >
-          <scrollbox flexGrow={1} minHeight={0} stickyScroll={true} stickyStart="bottom">
+          <scrollbox ref={props.planScrollRef} flexGrow={1} minHeight={0} stickyScroll={true} stickyStart="bottom">
             <box height={1} />
             <For each={split().planMessages}>
               {(message, index) => props.renderMessage(message, index)}
