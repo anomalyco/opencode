@@ -540,6 +540,35 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("returns PDFs as native media", () =>
+    Effect.gen(function* () {
+      const pdf = "JVBERi0xLjcK"
+      readResult = {
+        type: "file",
+        uri: "file:///document.pdf",
+        name: "document.pdf",
+        content: pdf,
+        encoding: "base64",
+        mime: "application/pdf",
+      }
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-pdf", name: "read", input: { path: "document.pdf" } },
+        }),
+      ).toMatchObject({
+        status: "completed",
+        content: [
+          { type: "text", text: "PDF read successfully" },
+          { type: "file", uri: `data:application/pdf;base64,${pdf}`, mime: "application/pdf", name: "document.pdf" },
+        ],
+      })
+    }),
+  )
+
   it.effect("returns expected filesystem failures to the model", () =>
     Effect.gen(function* () {
       readFailure = new ReadToolFileSystem.BinaryFileError({ resource: "archive.dat" })
@@ -560,6 +589,32 @@ describe("ReadTool", () => {
       expect(readCalls).toEqual([
         { input: AbsolutePath.make(path.join(process.cwd(), "archive.dat")), page: { offset: 2, limit: 1 } },
       ])
+    }),
+  )
+
+  it.effect("preserves actionable read failure messages", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      for (const [error, message] of [
+        [
+          new ReadToolFileSystem.MalformedUtf8Error({ resource: "invalid.txt" }),
+          "File is not valid UTF-8: invalid.txt",
+        ],
+        [new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10 }), "Offset 10 is out of range"],
+        [
+          new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
+          "Path is not a file: socket",
+        ],
+      ] as const) {
+        readFailure = error
+        expect(
+          yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: `call-${error._tag}`, name: "read", input: { path: "target" } },
+          }),
+        ).toEqual({ status: "error", error: { type: "unknown", message } })
+      }
     }),
   )
 

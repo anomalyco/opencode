@@ -14,7 +14,7 @@ import { ReadToolFileSystem } from "../read-filesystem"
 
 export const name = "read"
 const FILENAME = "AGENTS.md"
-const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+const SUPPORTED_MEDIA_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"])
 const LocationInput = Schema.Struct({
   path: Schema.String,
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
@@ -110,7 +110,7 @@ export const Plugin = {
                   Effect.catch(() => Effect.void),
                   Effect.catchDefect(() => Effect.void),
                 )
-                if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_IMAGE_MIMES.has(content.mime))
+                if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_MEDIA_MIMES.has(content.mime))
                   return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
                 return content
               }).pipe(
@@ -119,9 +119,13 @@ export const Plugin = {
                   // unresized copy in model text.
                   const content =
                     output.type === "file" && output.encoding === "base64"
-                      ? SUPPORTED_IMAGE_MIMES.has(output.mime)
+                      ? SUPPORTED_MEDIA_MIMES.has(output.mime)
                         ? ([
-                            { type: "text", text: "Image read successfully" },
+                            {
+                              type: "text",
+                              text:
+                                output.mime === "application/pdf" ? "PDF read successfully" : "Image read successfully",
+                            },
                             {
                               type: "file",
                               uri: `data:${output.mime};base64,${output.content}`,
@@ -136,7 +140,10 @@ export const Plugin = {
                 Effect.mapError((error) => {
                   const message =
                     error instanceof ReadToolFileSystem.BinaryFileError ||
-                    error instanceof ReadToolFileSystem.MediaIngestLimitError
+                    error instanceof ReadToolFileSystem.MediaIngestLimitError ||
+                    error instanceof ReadToolFileSystem.MalformedUtf8Error ||
+                    error instanceof ReadToolFileSystem.OffsetOutOfRangeError ||
+                    error instanceof ReadToolFileSystem.PathKindError
                       ? error.message
                       : `Unable to read ${input.path}`
                   return new ToolFailure({ message, error })
