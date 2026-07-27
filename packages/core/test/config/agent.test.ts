@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Fiber, Schema, Stream } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
+import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -12,11 +13,12 @@ import { Global } from "@opencode-ai/util/global"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
+import { advance, drain } from "../lib/clock"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { agentHost, host } from "../plugin/host"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Agent.node, FSUtil.node, Global.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, FSUtil.node, Global.node])))
 const decode = Schema.decodeUnknownSync(Config.Info)
 const defaultPermissions = [
   { action: "*", resource: "*", effect: "allow" },
@@ -272,7 +274,7 @@ Use native v2 fields.`,
               type: "document",
               info: decode({ agents: { reviewer: { description: "JSON description" } } }),
             }),
-            new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+            directoryEntry(tmp.path),
           ]
 
           yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
@@ -298,7 +300,214 @@ Use native v2 fields.`,
       ),
     ),
   )
+
+  for (const testCase of sourceCases()) {
+    it.effect(`rebuilds agents when a source file is ${testCase.name}`, () =>
+      Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const directory = path.join(tmp.path, testCase.source)
+            yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+            yield* testCase.prepare(directory)
+
+            const agents = yield* Agent.Service
+            const bus = yield* Bus.Service
+            const configTest = yield* Config.Test
+            yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) }))
+
+            // Verify inside the subscription so the update event is a read barrier:
+            // committed state must be visible at event delivery time.
+            let received = 0
+            const changed = yield* bus.subscribe(Agent.Event.Updated).pipe(
+              Stream.take(1),
+              Stream.tap(() => Effect.sync(() => received++)),
+              Stream.mapEffect(() => testCase.verify(agents)),
+              Stream.runDrain,
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            yield* Effect.yieldNow
+
+            const updates = yield* testCase.mutate(directory)
+            yield* Effect.forEach(updates, (update) => configTest.emitChange(update), { discard: true })
+            yield* advance(() => received === 1)
+            yield* Fiber.join(changed)
+          }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
+        ),
+      ),
+    )
+  }
+
+  it.effect("coalesces updates inside the debounce window into one rebuild", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "agents")
+          yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+
+          const agents = yield* Agent.Service
+          const configTest = yield* Config.Test
+          let reloads = 0
+          yield* ConfigAgentPlugin.Plugin.effect(
+            host({
+              agent: {
+                ...agentHost(agents),
+                reload: () => agents.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review once"))
+          yield* configTest.emitChange({ type: "create", path: path.join(directory, "reviewer.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "reviewer.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "reviewer.md") })
+          yield* advance(() => reloads >= 1)
+          expect(reloads).toBe(1)
+
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review twice"))
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "reviewer.md") })
+          yield* advance(() => reloads >= 2)
+          expect(reloads).toBe(2)
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Review twice" })
+        }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
+      ),
+    ),
+  )
+
+  it.effect("ignores updates outside agent source directories", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "agents")
+          yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+
+          const agents = yield* Agent.Service
+          const configTest = yield* Config.Test
+          let reloads = 0
+          yield* ConfigAgentPlugin.Plugin.effect(
+            host({
+              agent: {
+                ...agentHost(agents),
+                reload: () => agents.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+
+          yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "commands", "review.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
+          yield* drain
+          expect(reloads).toBe(0)
+
+          // The feed stays live after unrelated updates.
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review related"))
+          yield* configTest.emitChange({ type: "create", path: path.join(directory, "reviewer.md") })
+          yield* advance(() => reloads >= 1)
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Review related" })
+        }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
+      ),
+    ),
+  )
 })
+
+function directoryEntry(directory: string) {
+  return new Config.Directory({ type: "directory", path: AbsolutePath.make(directory) })
+}
+
+function sourceCases() {
+  return [
+    {
+      name: "created",
+      source: "agents",
+      prepare: () => Effect.void,
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const file = path.join(directory, "reviewer.md")
+          await fs.writeFile(file, "Review changes")
+          return [{ type: "create" as const, path: file }]
+        }),
+      verify: (agents: Agent.Interface) =>
+        Effect.gen(function* () {
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Review changes" })
+        }),
+    },
+    {
+      name: "created in a legacy modes directory",
+      source: "modes",
+      prepare: () => Effect.void,
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const file = path.join(directory, "plan.md")
+          await fs.writeFile(file, "Make a plan")
+          return [{ type: "create" as const, path: file }]
+        }),
+      verify: (agents: Agent.Interface) =>
+        Effect.gen(function* () {
+          expect(yield* agents.get(Agent.ID.make("plan"))).toMatchObject({ system: "Make a plan", mode: "primary" })
+        }),
+    },
+    {
+      name: "updated",
+      source: "agents",
+      prepare: (directory: string) =>
+        Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review first")),
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const file = path.join(directory, "reviewer.md")
+          await fs.writeFile(file, "Review updated")
+          return [{ type: "update" as const, path: file }]
+        }),
+      verify: (agents: Agent.Interface) =>
+        Effect.gen(function* () {
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Review updated" })
+        }),
+    },
+    {
+      name: "renamed",
+      source: "agents",
+      prepare: (directory: string) =>
+        Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review renamed")),
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const previous = path.join(directory, "reviewer.md")
+          const next = path.join(directory, "release.md")
+          await fs.rename(previous, next)
+          return [
+            { type: "delete" as const, path: previous },
+            { type: "create" as const, path: next },
+          ]
+        }),
+      verify: (agents: Agent.Interface) =>
+        Effect.gen(function* () {
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make("release"))).toMatchObject({ system: "Review renamed" })
+        }),
+    },
+    {
+      name: "deleted",
+      source: "agents",
+      prepare: (directory: string) =>
+        Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review deleted")),
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const file = path.join(directory, "reviewer.md")
+          await fs.unlink(file)
+          return [{ type: "delete" as const, path: file }]
+        }),
+      verify: (agents: Agent.Interface) =>
+        Effect.gen(function* () {
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toBeUndefined()
+        }),
+    },
+  ] as const
+}
 
 function loadHomePermissions(home: string) {
   return Effect.gen(function* () {

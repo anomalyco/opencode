@@ -20,6 +20,8 @@ const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
   { pattern: "{mode,modes}/*.md", primary: true },
 ] as const
+// Keep in sync with the legacySources patterns and the name-strip regex in decode.
+const sourceDirectories = ["agent", "agents", "mode", "modes"] as const
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
 const decodeConfig = Schema.decodeUnknownOption(Config.Info)
@@ -67,7 +69,26 @@ export const Plugin = define({
         })
       }).pipe(Effect.map((documents) => documents.flat()))
     })
-    const loaded = { documents: yield* load() }
+    const loaded = { documents: [] as Config.Document[] }
+    const reload = load().pipe(
+      Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
+      Effect.andThen(ctx.agent.reload()),
+    )
+    // One merged trigger stream serializes reloads and shares one debounce
+    // window; subscribing before the initial scan means updates racing the
+    // scan still trigger a rebuild.
+    const sourceChanges = config
+      .changes()
+      .pipe(
+        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path))),
+      )
+    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
+    yield* Stream.merge(sourceChanges, configUpdates).pipe(
+      Stream.debounce("100 millis"),
+      Stream.runForEach(() => reload),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    loaded.documents = yield* load()
     yield* ctx.agent.transform((draft) => {
       const permissions = expandPermissions(
         loaded.documents.flatMap((document) => document.info.permissions ?? []),
@@ -113,18 +134,18 @@ export const Plugin = define({
         }
       }
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() =>
-        load().pipe(
-          Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
-          Effect.andThen(ctx.agent.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
 })
+
+// Matches anything at or under <root>/{agent,agents,mode,modes}. No file-suffix
+// check: directory-level events such as renames carry no per-file paths.
+function isAgentSource(entries: Config.Entry[], file: string) {
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
+  )
+}
 
 function expandPermissions(rules: Permission.Ruleset, home: string): Permission.Ruleset {
   // Expand only resources tools resolve as filesystem paths. Bash resources are raw shell text:
