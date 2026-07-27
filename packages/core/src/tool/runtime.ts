@@ -58,7 +58,8 @@ const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
 
 const isStandardSchema = (
   schema: Tool.ValueSchema<any>,
-): schema is StandardSchemaV1<any, any> & StandardJSONSchemaV1<any, any> => "~standard" in schema
+): schema is StandardSchemaV1<any, any> & StandardJSONSchemaV1<any, any> =>
+  typeof schema === "object" && schema !== null && "~standard" in schema
 
 const validateStandard = (
   schema: StandardSchemaV1<any, any> & StandardJSONSchemaV1<any, any>,
@@ -85,6 +86,7 @@ const standardFailure = (prefix: string, error: unknown) =>
   new Tool.Error({ message: `${prefix}: ${error instanceof Error ? error.message : String(error)}` })
 
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
+  if (schema === undefined || schema === null) return {}
   if (isStandardSchema(schema))
     return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }) as JsonSchema.JsonSchema
   return Schema.isSchema(schema) ? toJsonSchema(schema) : (schema as JsonSchema.JsonSchema)
