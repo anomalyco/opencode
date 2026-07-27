@@ -208,7 +208,12 @@ test("Mistral preserves native reasoning metadata while streaming", async () => 
     prompt: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
   })
   const events = []
-  for await (const event of result.stream) events.push(event)
+  const reader = result.stream.getReader()
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    events.push(value)
+  }
 
   expect(events.find((event) => event.type === "reasoning-end")?.providerMetadata).toEqual({
     mistral: {
