@@ -74,6 +74,48 @@ index ea5e4bc..a2e2d59 100644
    }
    if (Transition && Transition.running) node.tState = 0;else node.state = 0;
    delete node.sourceMap;
+diff --git a/dist/server.cjs b/dist/server.cjs
+index e715309..188ba81 100644
+--- a/dist/server.cjs
++++ b/dist/server.cjs
+@@ -127,12 +127,14 @@ function onCleanup(fn) {
+ }
+ function cleanNode(node) {
+   if (node.owned) {
+-    for (let i = 0; i < node.owned.length; i++) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (let i = 0; i < owned.length; i++) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (let i = 0; i < node.cleanups.length; i++) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (let i = 0; i < cleanups.length; i++) cleanups[i]();
+   }
+ }
+ function catchError(fn, handler) {
+diff --git a/dist/server.js b/dist/server.js
+index d5f8803..320d9af 100644
+--- a/dist/server.js
++++ b/dist/server.js
+@@ -125,12 +125,14 @@ function onCleanup(fn) {
+ }
+ function cleanNode(node) {
+   if (node.owned) {
+-    for (let i = 0; i < node.owned.length; i++) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (let i = 0; i < owned.length; i++) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (let i = 0; i < node.cleanups.length; i++) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (let i = 0; i < cleanups.length; i++) cleanups[i]();
+   }
+ }
+ function catchError(fn, handler) {
 diff --git a/dist/solid.cjs b/dist/solid.cjs
 index 7c133a2..5ef1501 100644
 --- a/dist/solid.cjs
