@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Location } from "@opencode-ai/core/location"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Tool } from "@opencode-ai/core/tool"
 import { Effect, Schema } from "effect"
 import { it } from "../lib/effect"
@@ -79,7 +81,9 @@ describe("CodeModeInstructions", () => {
       output: Schema.String,
       execute: () => Effect.succeed({ output: "zeta" }),
     })
-    const layer = AppNodeBuilder.build(Tool.node)
+    const layer = AppNodeBuilder.build(Tool.node, [
+      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+    ])
 
     return Effect.gen(function* () {
       const tools = yield* Tool.Service

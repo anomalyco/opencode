@@ -1,5 +1,7 @@
 import { describe, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Location } from "@opencode-ai/core/location"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Tool } from "@opencode-ai/core/tool"
 import { Effect, Schema } from "effect"
 import { it } from "./lib/effect"
@@ -27,6 +29,13 @@ describe("CodeMode", () => {
           signature: "tools.echo(input: {\n  text: string,\n}): Promise<string>",
         },
       ])
-    }).pipe(Effect.scoped, Effect.provide(AppNodeBuilder.build(Tool.node))),
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        AppNodeBuilder.build(Tool.node, [
+          [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+        ]),
+      ),
+    ),
   )
 })

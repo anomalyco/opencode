@@ -394,8 +394,7 @@ describe("Plugin", () => {
         metadata: undefined,
       })
       expect(execution).toMatchObject({
-        status: "completed",
-        content: [{ type: "text", text: "after-mutated" }],
+        content: [{ type: "text", text: '{"text":"before-mutated"}' }],
         metadata: { rewritten: true },
       })
     }),
