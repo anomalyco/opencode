@@ -48,6 +48,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
+import { SessionSplitView } from "./split-view"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -123,6 +124,7 @@ const sessionBindingCommands = [
   "session.undo",
   "session.redo",
   "session.sidebar.toggle",
+  "session.split.toggle",
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
@@ -248,6 +250,7 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [isSplitView, setIsSplitView] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
@@ -673,6 +676,15 @@ export function Session() {
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: isSplitView() ? "Disable split-screen view" : "Enable split-screen view",
+      value: "session.split.toggle",
+      category: "Session",
+      run: () => {
+        setIsSplitView((prev) => !prev)
         dialog.clear()
       },
     },
@@ -1162,7 +1174,189 @@ export function Session() {
           tui: tuiConfig,
         }}
       >
-        <box flexDirection="row" flexGrow={1} minHeight={0}>
+        <Show
+          when={isSplitView()}
+          fallback={
+            <box flexDirection="row" flexGrow={1} minHeight={0}>
+              <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+                <Show when={session()}>
+                  <scrollbox
+                    ref={(r) => (scroll = r)}
+                    viewportOptions={{
+                      paddingRight: showScrollbar() ? 1 : 0,
+                    }}
+                    verticalScrollbarOptions={{
+                      paddingLeft: 1,
+                      visible: showScrollbar(),
+                      trackOptions: {
+                        backgroundColor: theme.backgroundElement,
+                        foregroundColor: theme.border,
+                      },
+                    }}
+                    stickyScroll={true}
+                    stickyStart="bottom"
+                    flexGrow={1}
+                    scrollAcceleration={scrollAcceleration()}
+                  >
+                    <box height={1} />
+                    <For each={messages()}>
+                      {(message, index) => renderMessageItem(message, index)}
+                    </For>
+                  </scrollbox>
+                  <box flexShrink={0}>
+                    <Show when={permissions().length > 0}>
+                      <PermissionPrompt
+                        request={permissions()[0]}
+                        directory={sync.session.get(permissions()[0].sessionID)?.directory}
+                      />
+                    </Show>
+                    <Show when={permissions().length === 0 && questions().length > 0}>
+                      <QuestionPrompt
+                        request={questions()[0]}
+                        directory={sync.session.get(questions()[0].sessionID)?.directory}
+                      />
+                    </Show>
+                    <Show when={session()?.parentID}>
+                      <SubagentFooter />
+                    </Show>
+                    <Show when={visible()}>
+                      <pluginRuntime.Slot
+                        name="session_prompt"
+                        mode="replace"
+                        session_id={route.sessionID}
+                        visible={visible()}
+                        disabled={disabled()}
+                        on_submit={toBottom}
+                        ref={bind}
+                      >
+                        <Prompt
+                          visible={visible()}
+                          ref={bind}
+                          disabled={disabled()}
+                          onSubmit={() => {
+                            toBottom()
+                          }}
+                          sessionID={route.sessionID}
+                          right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                        />
+                      </pluginRuntime.Slot>
+                    </Show>
+                  </box>
+                </Show>
+                <Toast />
+              </box>
+            </box>
+          }
+        >
+          <SessionSplitView
+            sessionID={route.sessionID}
+            messages={messages()}
+            scrollRef={(r) => (scroll = r)}
+            promptRef={bind}
+            disabled={disabled()}
+            visible={visible()}
+            onPromptSubmit={toBottom}
+            permissions={permissions()}
+            questions={questions()}
+            renderMessage={(message, index) => renderMessageItem(message, index)}
+          />
+        </Show>
+        {(() => {
+          const renderMessageItem = (message: any, index: () => number) => (
+            <Switch>
+              <Match when={message.id === revert()?.messageID}>
+                {(function () {
+                  const redoShortcut = useCommandShortcut("session.redo")
+                  const [hover, setHover] = createSignal(false)
+                  const dialog = useDialog()
+
+                  const handleUnrevert = async () => {
+                    const confirmed = await DialogConfirm.show(
+                      dialog,
+                      "Confirm Redo",
+                      "Are you sure you want to restore the reverted messages?",
+                    )
+                    if (confirmed) {
+                      keymap.dispatchCommand("session.redo")
+                    }
+                  }
+
+                  return (
+                    <box
+                      onMouseOver={() => setHover(true)}
+                      onMouseOut={() => setHover(false)}
+                      onMouseUp={handleUnrevert}
+                      marginTop={1}
+                      flexShrink={0}
+                      border={["left"]}
+                      customBorderChars={SplitBorder.customBorderChars}
+                      borderColor={theme.backgroundPanel}
+                    >
+                      <box
+                        paddingTop={1}
+                        paddingBottom={1}
+                        paddingLeft={2}
+                        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                      >
+                        <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                        <text fg={theme.textMuted}>
+                          <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
+                        </text>
+                        <Show when={revert()!.diffFiles?.length}>
+                          <box marginTop={1}>
+                            <For each={revert()!.diffFiles}>
+                              {(file) => (
+                                <text fg={theme.text}>
+                                  {file.filename}
+                                  <Show when={file.additions > 0}>
+                                    <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                  </Show>
+                                  <Show when={file.deletions > 0}>
+                                    <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                  </Show>
+                                </text>
+                              )}
+                            </For>
+                          </box>
+                        </Show>
+                      </box>
+                    </box>
+                  )
+                })()}
+              </Match>
+              <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                <></>
+              </Match>
+              <Match when={message.role === "user"}>
+                <UserMessage
+                  index={index()}
+                  onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    dialog.replace(() => (
+                      <DialogMessage
+                        messageID={message.id}
+                        sessionID={route.sessionID}
+                        setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                      />
+                    ))
+                  }}
+                  message={message as UserMessage}
+                  parts={sync.data.part[message.id] ?? []}
+                  pending={pending()}
+                />
+              </Match>
+              <Match when={message.role === "assistant"}>
+                <AssistantMessage
+                  last={lastAssistant()?.id === message.id}
+                  message={message as AssistantMessage}
+                  parts={sync.data.part[message.id] ?? []}
+                />
+              </Match>
+            </Switch>
+          )
+          return null
+        })()}
+        <box flexDirection="row" flexGrow={1} minHeight={0} display="none">
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
               <scrollbox

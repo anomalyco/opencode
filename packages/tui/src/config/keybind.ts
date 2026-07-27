@@ -94,6 +94,7 @@ export const Definitions = {
   session_delete: keybind("ctrl+d", "Delete session"),
   session_share: keybind("none", "Share current session"),
   session_unshare: keybind("none", "Unshare current session"),
+  session_split_toggle: keybind("ctrl+shift+s", "Toggle split-screen session view"),
   session_interrupt: keybind("escape", "Interrupt current session"),
   session_background: keybind("ctrl+b", "Background synchronous subagents"),
   session_compact: keybind("<leader>c", "Compact the session"),
