@@ -14,6 +14,7 @@ import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Bus } from "../bus"
 import { FileMutation } from "../file-mutation"
 import { FileSystem } from "../filesystem"
+import { Watcher } from "../filesystem/watcher"
 import { Form } from "../form"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
@@ -45,9 +46,9 @@ const PluginModule = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-    effect: Schema.declare<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>(
-      (input): input is import("@opencode-ai/plugin/effect/plugin").Plugin["effect"] => typeof input === "function",
-    ),
+      effect: Schema.declare<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>(
+        (input): input is import("@opencode-ai/plugin/effect/plugin").Plugin["effect"] => typeof input === "function",
+      ),
     }),
     Schema.Struct({
       id: Schema.String,
@@ -202,6 +203,33 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   })
 }
 
+const sourceDirectories = ["plugin", "plugins"] as const
+
+// Matches anything at or under <root>/{plugin,plugins}. No file-suffix check:
+// directory-level events such as renames carry no per-file paths.
+function isPluginSource(entries: readonly Config.Entry[], file: string) {
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
+  )
+}
+
+function externalPluginTargets(entries: readonly Config.Entry[]) {
+  const roots = entries.filter((entry): entry is Config.Directory => entry.type === "directory")
+  return Array.from(
+    new Set(
+      entries
+        .filter((entry): entry is Config.Document => entry.type === "document")
+        .flatMap((entry) => entry.info.plugins ?? [])
+        .map((plugin) => (typeof plugin === "string" ? plugin : plugin.package))
+        .filter((target) => target.startsWith("file://"))
+        .map((target) => fileURLToPath(target))
+        .filter((file) => !roots.some((root) => FSUtil.contains(root.path, file))),
+    ),
+  )
+}
+
 export interface Interface {
   /** Wait for the initial plugin generation and startup updates to settle. */
   readonly flush: Effect.Effect<void>
@@ -216,6 +244,7 @@ const layer = Layer.effect(
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
     const bus = yield* Bus.Service
+    const watcher = yield* Watcher.Service
     const lock = Semaphore.makeUnsafe(1)
     const ready = yield* Deferred.make<void>()
     let observed = 0
@@ -239,9 +268,28 @@ const layer = Layer.effect(
         }),
       )
     })
-    const updates = yield* bus
-      .subscribe([Event.Updated, SdkPlugins.Updated])
-      .pipe(Stream.toQueue({ capacity: 1, strategy: "sliding" }))
+    const sourceChanges = config
+      .changes()
+      .pipe(
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
+        ),
+      )
+    const externalChanges = Stream.concat(
+      Stream.fromEffect(config.entries()),
+      bus.subscribe(Event.Updated).pipe(Stream.mapEffect(() => config.entries())),
+    ).pipe(
+      Stream.switchMap((entries) =>
+        Stream.mergeAll(
+          externalPluginTargets(entries).map((file) => watcher.subscribe({ path: file, type: "file" })),
+          { concurrency: "unbounded" },
+        ),
+      ),
+    )
+    const fileChanges = Stream.merge(sourceChanges, externalChanges).pipe(Stream.debounce("100 millis"))
+    const updates = yield* Stream.merge(bus.subscribe([Event.Updated, SdkPlugins.Updated]), fileChanges).pipe(
+      Stream.toQueue({ capacity: 1, strategy: "sliding" }),
+    )
     const signals = yield* Stream.concat(
       Stream.succeed(0),
       Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
@@ -286,6 +334,7 @@ export const node = makeLocationNode({
     Bus.node,
     FileMutation.node,
     FileSystem.node,
+    Watcher.node,
     FSUtil.node,
     Global.node,
     httpClient,

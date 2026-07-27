@@ -3,7 +3,6 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
-import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -17,7 +16,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Effect, Logger } from "effect"
+import { Effect, Fiber, Logger, Stream } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -173,24 +172,203 @@ describe("PluginSupervisor config", () => {
         expect(first).toBeDefined()
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("first")
 
+        const changed = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
         yield* Effect.promise(async () => {
           await fs.writeFile(file, mutablePlugin("second"))
           const modified = new Date(Date.now() + 5_000)
           await fs.utimes(file, modified, modified)
         })
-        yield* bus.publish(ConfigSchema.Event.Updated, {})
-        yield* waitUntil(
-          Effect.gen(function* () {
-            const current = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
-            return current === first && (yield* agents.get(Agent.ID.make("mutable")))?.description === "second"
-          }),
-        )
+        yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+
+        const current = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
+        expect(current).toBe(first)
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
       }),
       false,
       async (directory) => {
         const plugin = path.join(directory, ".opencode", "plugin")
         await fs.mkdir(plugin, { recursive: true })
         await fs.writeFile(path.join(plugin, "mutable.ts"), mutablePlugin("first"))
+      },
+    ),
+  )
+
+  it.live("reloads the auto-discovered plugin lifecycle", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const agents = yield* Agent.Service
+        const bus = yield* Bus.Service
+        const location = yield* Location.Service
+        const plugins = yield* Plugin.Service
+        const directory = path.join(location.directory, ".opencode", "plugin")
+        const mutable = path.join(directory, "mutable.ts")
+        const renamed = path.join(directory, "renamed.ts")
+        const nextUpdate = () =>
+          bus
+            .subscribe(Plugin.Event.Updated)
+            .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+
+        const created = yield* nextUpdate()
+        yield* Effect.promise(() => fs.writeFile(mutable, mutablePlugin("created")))
+        yield* Fiber.join(created).pipe(Effect.timeout("5 seconds"))
+        expect((yield* plugins.list()).some((plugin) => plugin.id === "mutable-plugin")).toBe(true)
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("created")
+
+        const moved = yield* nextUpdate()
+        yield* Effect.promise(() => fs.rename(mutable, renamed))
+        yield* Fiber.join(moved).pipe(Effect.timeout("5 seconds"))
+        expect((yield* plugins.list()).some((plugin) => plugin.id === "mutable-plugin")).toBe(true)
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("created")
+
+        const deleted = yield* nextUpdate()
+        yield* Effect.promise(() => fs.unlink(renamed))
+        yield* Fiber.join(deleted).pipe(Effect.timeout("5 seconds"))
+        expect((yield* plugins.list()).some((plugin) => plugin.id === "mutable-plugin")).toBe(false)
+        expect(yield* agents.get(Agent.ID.make("mutable"))).toBeUndefined()
+      }),
+      false,
+      async (directory) => {
+        await fs.mkdir(path.join(directory, ".opencode", "plugin"), { recursive: true })
+      },
+    ),
+  )
+
+  it.live("reloads a configured file plugin outside config roots", () =>
+    withLocation(
+      (directory: string) => ({
+        plugins: [pathToFileURL(path.join(directory, "external", "mutable.ts")).href],
+      }),
+      Effect.gen(function* () {
+        yield* ready()
+        const agents = yield* Agent.Service
+        const bus = yield* Bus.Service
+        const location = yield* Location.Service
+        const plugins = yield* Plugin.Service
+        const file = path.join(location.directory, "external", "mutable.ts")
+        const first = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
+
+        expect(first).toBeDefined()
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("first")
+
+        const changed = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.promise(async () => {
+          await fs.writeFile(file, mutablePlugin("second"))
+          const modified = new Date(Date.now() + 5_000)
+          await fs.utimes(file, modified, modified)
+        })
+        yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+
+        const current = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
+        expect(current).toBe(first)
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
+      }),
+      false,
+      async (directory) => {
+        const external = path.join(directory, "external")
+        await fs.mkdir(external, { recursive: true })
+        await fs.writeFile(path.join(external, "mutable.ts"), mutablePlugin("first"))
+      },
+    ),
+  )
+
+  it.live("moves the configured file watcher when config changes", () =>
+    withLocation(
+      (directory) => ({
+        plugins: [pathToFileURL(path.join(directory, "external", "first.ts")).href],
+      }),
+      Effect.gen(function* () {
+        yield* ready()
+        const agents = yield* Agent.Service
+        const bus = yield* Bus.Service
+        const location = yield* Location.Service
+        const config = path.join(location.directory, "opencode.json")
+        const first = path.join(location.directory, "external", "first.ts")
+        const second = path.join(location.directory, "external", "second.ts")
+        let updates = 0
+        yield* bus.subscribe(Plugin.Event.Updated).pipe(
+          Stream.runForEach(() => Effect.sync(() => updates++)),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+        const moved = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.promise(() => fs.writeFile(config, JSON.stringify({ plugins: [pathToFileURL(second).href] })))
+        yield* Fiber.join(moved).pipe(Effect.timeout("5 seconds"))
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
+        yield* Effect.sleep("100 millis")
+
+        yield* Effect.promise(async () => {
+          await fs.writeFile(first, mutablePlugin("stale"))
+          const modified = new Date(Date.now() + 5_000)
+          await fs.utimes(first, modified, modified)
+        })
+        yield* Effect.sleep("300 millis")
+        expect(updates).toBe(1)
+
+        const changed = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.promise(async () => {
+          await fs.writeFile(second, mutablePlugin("updated"))
+          const modified = new Date(Date.now() + 5_000)
+          await fs.utimes(second, modified, modified)
+        })
+        yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+        expect(updates).toBe(2)
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("updated")
+      }),
+      false,
+      async (directory) => {
+        const external = path.join(directory, "external")
+        await fs.mkdir(external, { recursive: true })
+        await fs.writeFile(path.join(external, "first.ts"), mutablePlugin("first"))
+        await fs.writeFile(path.join(external, "second.ts"), mutablePlugin("second"))
+      },
+    ),
+  )
+
+  it.live("ignores changes outside plugin source directories", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const bus = yield* Bus.Service
+        const location = yield* Location.Service
+        let updates = 0
+        yield* bus.subscribe(Plugin.Event.Updated).pipe(
+          Stream.runForEach(() => Effect.sync(() => updates++)),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+        const notes = path.join(location.directory, ".opencode", "notes")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(notes, { recursive: true })
+          await fs.writeFile(path.join(notes, "todo.md"), "unrelated")
+        })
+        yield* Effect.sleep("300 millis")
+        expect(updates).toBe(0)
+
+        const changed = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        const plugins = path.join(location.directory, ".opencode", "plugin")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(plugins, { recursive: true })
+          await fs.writeFile(path.join(plugins, "mutable.ts"), mutablePlugin("related"))
+        })
+        yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+        expect(updates).toBe(1)
+      }),
+      false,
+      async (directory) => {
+        await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
       },
     ),
   )
@@ -251,9 +429,9 @@ describe("PluginSupervisor config", () => {
         expect((yield* registry.list()).map((plugin) => String(plugin.id))).not.toContain("opencode.variant")
 
         const catalog = yield* Catalog.Service
-        expect(
-          (yield* catalog.model.get(Provider.ID.make("configured"), Model.ID.make("glm-5.2")))?.variants,
-        ).toEqual([expect.objectContaining({ id: "high", headers: { custom: "true" } })])
+        expect((yield* catalog.model.get(Provider.ID.make("configured"), Model.ID.make("glm-5.2")))?.variants).toEqual([
+          expect.objectContaining({ id: "high", headers: { custom: "true" } }),
+        ])
       }),
     ),
   )
@@ -264,8 +442,10 @@ const ready = Effect.fnUntraced(function* () {
   yield* supervisor.flush
 })
 
+type LocationConfig = Record<string, unknown> | undefined
+
 function withLocation<A, E, R>(
-  config: unknown,
+  config: LocationConfig | ((directory: string) => LocationConfig),
   effect: Effect.Effect<A, E, R>,
   fixtures = false,
   prepare?: (directory: string) => Promise<void>,
@@ -286,10 +466,11 @@ function withLocation<A, E, R>(
             ),
           )
         }
-        if (config !== undefined) {
+        const value = typeof config === "function" ? config(tmp.path) : config
+        if (value !== undefined) {
           const directory = fixtures ? path.join(tmp.path, ".opencode") : tmp.path
           await fs.mkdir(directory, { recursive: true })
-          await fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify(config))
+          await fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify(value))
         }
       }),
     ),
@@ -320,11 +501,3 @@ export default Plugin.define({
 })
 `
 }
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for plugin reload")
-})
