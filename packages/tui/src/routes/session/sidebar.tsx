@@ -1,101 +1,77 @@
-import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
-import { useTuiConfig } from "../../config"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { usePluginRuntime } from "../../plugin/runtime"
+import { useTuiPaths } from "../../context/runtime"
+import { InstallationVersion, InstallationChannel } from "@opencode-ai/core/installation/version"
+import { abbreviateHome } from "../../runtime"
+import { useCommandShortcut } from "../../keymap"
+import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 
-import { getScrollAcceleration } from "../../util/scroll"
-import { WorkspaceLabel } from "../../component/workspace-label"
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+})
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
-  const pluginRuntime = usePluginRuntime()
-  const project = useProject()
+export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
+  const paths = useTuiPaths()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
   const session = createMemo(() => sync.session.get(props.sessionID))
-  const workspace = () => {
-    const workspaceID = session()?.workspaceID
-    if (!workspaceID) return
-    return project.workspace.get(workspaceID)
-  }
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const paletteShortcut = useCommandShortcut("command.palette.show")
+
+  const lastAssistant = createMemo(() => {
+    return (sync.data.message[props.sessionID] ?? []).findLast(
+      (msg): msg is AssistantMessage => msg.role === "assistant" && msg.tokens.output > 0,
+    )
+  })
+
+  const contextInfo = createMemo(() => {
+    const last = lastAssistant()
+    if (!last) return null
+    const tokens = last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const model = sync.data.provider.find((p) => p.id === last.providerID)?.models[last.modelID]
+    const percent = model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null
+    return { tokens, percent }
+  })
+
+  const cost = createMemo(() => session()?.cost ?? 0)
+
+  const pathInfo = createMemo(() => {
+    const sessionDir = session()?.directory
+    const dir = sessionDir || paths.cwd
+    const out = abbreviateHome(dir, paths.home)
+    const branch = sessionDir === paths.cwd ? sync.data.vcs?.branch : undefined
+    return branch ? out + ":" + branch : out
+  })
 
   return (
     <Show when={session()}>
-      <box
-        backgroundColor={theme.backgroundPanel}
-        width={42}
-        height="100%"
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        paddingRight={2}
-        position={props.overlay ? "absolute" : "relative"}
-      >
-        <scrollbox
-          flexGrow={1}
-          scrollAcceleration={scrollAcceleration()}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.background,
-              foregroundColor: theme.borderActive,
-            },
-          }}
-        >
-          <box flexShrink={0} gap={1} paddingRight={1}>
-            <pluginRuntime.Slot
-              name="sidebar_title"
-              mode="single_winner"
-              session_id={props.sessionID}
-              title={session()!.title}
-              share_url={session()!.share?.url}
-            >
-              <box paddingRight={1}>
-                <text fg={theme.text}>
-                  <b>{session()!.title}</b>
-                </text>
-                <Show when={InstallationChannel !== "latest"}>
-                  <text fg={theme.textMuted}>{props.sessionID}</text>
-                </Show>
-                <Show when={session()!.workspaceID}>
-                  <text fg={theme.textMuted}>
-                    <Show
-                      when={workspace()}
-                      fallback={<WorkspaceLabel type="unknown" name={session()!.workspaceID!} status="error" icon />}
-                    >
-                      {(item) => (
-                        <WorkspaceLabel
-                          type={item().type}
-                          name={item().name}
-                          status={project.workspace.status(item().id) ?? "error"}
-                          icon
-                        />
-                      )}
-                    </Show>
-                  </text>
-                </Show>
-                <Show when={session()!.share?.url}>
-                  <text fg={theme.textMuted}>{session()!.share!.url}</text>
-                </Show>
-              </box>
-            </pluginRuntime.Slot>
-            <pluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
-          </box>
-        </scrollbox>
-
-        <box flexShrink={0} gap={1} paddingTop={1}>
-          <pluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
-            <text fg={theme.textMuted}>
-              <span style={{ fg: theme.success }}>•</span> <b>Open</b>
-              <span style={{ fg: theme.text }}>
-                <b>Code</b>
-              </span>{" "}
-              <span>{InstallationVersion}</span>
+      <box backgroundColor={theme.backgroundPanel} width="100%" flexShrink={0} paddingLeft={2} paddingRight={2} gap={1}>
+        <box flexDirection="row" gap={2}>
+          <text fg={theme.text}>
+            <b>{session()!.title}</b>
+          </text>
+          <text fg={theme.textMuted}>·</text>
+          <Show when={contextInfo()} fallback={<text fg={theme.textMuted}>0 tokens</text>}>
+            {(info) => (
+              <text fg={theme.textMuted}>
+                {info().tokens.toLocaleString()} tokens ({info().percent ?? 0}%) · {money.format(cost())}
+              </text>
+            )}
+          </Show>
+          <text fg={theme.textMuted}>·</text>
+          <text fg={theme.textMuted}>{pathInfo()}</text>
+        </box>
+        <box flexDirection="row" gap={2}>
+          <text fg={theme.textMuted}>
+            <span style={{ fg: theme.success }}>•</span> OpenCode {InstallationVersion}
+            <Show when={InstallationChannel !== "latest"}> ({InstallationChannel})</Show>
+          </text>
+          <Show when={paletteShortcut()}>
+            <text fg={theme.text}>
+              {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
             </text>
-          </pluginRuntime.Slot>
+          </Show>
         </box>
       </box>
     </Show>

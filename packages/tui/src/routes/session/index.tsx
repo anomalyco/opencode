@@ -263,15 +263,14 @@ export function Session() {
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
-  const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
+    if (sidebar() === "auto") return true
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => dimensions().width - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -761,7 +760,7 @@ export function Session() {
       },
     },
     {
-      title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
+      title: sidebarVisible() ? "Hide status bar" : "Show status bar",
       value: "session.sidebar.toggle",
       category: "Session",
       run: () => {
@@ -1353,27 +1352,10 @@ export function Session() {
               />
             </Show>
             <Toast />
+            <Show when={sidebarVisible()}>
+              <Sidebar sessionID={route.sessionID} />
+            </Show>
           </box>
-          <Show when={sidebarVisible()}>
-            <Switch>
-              <Match when={wide()}>
-                <Sidebar sessionID={route.sessionID} />
-              </Match>
-              <Match when={!wide()}>
-                <box
-                  position="absolute"
-                  top={0}
-                  left={0}
-                  right={0}
-                  bottom={0}
-                  alignItems="flex-end"
-                  backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
-                >
-                  <Sidebar sessionID={route.sessionID} />
-                </box>
-              </Match>
-            </Switch>
-          </Show>
         </box>
       </context.Provider>
     </LocationProvider>
