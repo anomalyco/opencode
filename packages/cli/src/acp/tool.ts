@@ -44,7 +44,7 @@ export function toLocations(toolName: string, input: ToolInput, cwd?: string): T
       return workdir ? [{ path: workdir }] : []
     }
     case "read":
-      return locationFrom(input.path ?? input.filePath ?? input.filepath)
+      return locationFrom(input.path)
     case "edit":
     case "write":
     case "patch":
