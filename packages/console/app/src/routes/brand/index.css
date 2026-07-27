@@ -376,9 +376,6 @@
       align-items: center;
       gap: 16px;
       opacity: 0;
-      transition: opacity 0.2s ease;
-      /* Prevent Safari from repainting child SVGs mid-transition. */
-      backface-visibility: hidden;
 
       @media (max-width: 40rem) {
         position: static;
