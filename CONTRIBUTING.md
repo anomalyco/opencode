@@ -64,6 +64,20 @@ Then run it with:
 
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
+### Running Tests
+
+Tests live inside individual packages (e.g., `packages/opencode/test/`). Run `bun test` from within a package directory — NOT from the repo root (root-level `bun test` is a no-op):
+
+```bash
+cd packages/opencode && bun test
+```
+
+To run a specific test file:
+
+```bash
+cd packages/opencode && bun test test/session/prompt.test.ts
+```
+
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
   - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)

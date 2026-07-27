@@ -1,5 +1,7 @@
 ## Style Guide
 
+> See also: [CONTRIBUTING.md § Style Preferences](./CONTRIBUTING.md#style-preferences) for expanded guidance with examples.
+
 - Try to keep things in one function unless composable or reusable
 - DO NOT do unnecessary destructuring of variables
 - DO NOT use `else` statements unless necessary
