@@ -101,6 +101,23 @@ describe("formatServerError", () => {
     )
   })
 
+  test("returns the message of unrecognized server error payloads", () => {
+    expect(formatServerError({ name: "ProviderAuthError", data: { message: "  token expired  " } }, language.t)).toBe(
+      "token expired",
+    )
+    expect(formatServerError({ message: "Connection refused" }, language.t)).toBe("Connection refused")
+  })
+
+  test("prefers a payload message over the generic fallback", () => {
+    expect(
+      formatServerError({ name: "APIError", data: { message: "Sidecar unavailable" } }, language.t, "Falhou"),
+    ).toBe("Sidecar unavailable")
+  })
+
+  test("ignores blank payload messages", () => {
+    expect(formatServerError({ name: "APIError", data: { message: "   " } }, language.t)).toBe("Erro desconhecido")
+  })
+
   test("formats provider model errors using provider/model", () => {
     const error = {
       name: "ProviderModelNotFoundError",
@@ -141,6 +158,14 @@ describe("formatServerError", () => {
     const wrapped = new Error("ConfigInvalidError", { cause: { body, status: 400 } })
 
     expect(formatServerError(wrapped, language.t)).toBe("Arquivo de config em config invalido: Missing host")
+  })
+
+  test("keeps preferring the error message over an unrecognized cause.body", () => {
+    const wrapped = new Error("Request failed with status 401", {
+      cause: { body: { name: "ProviderAuthError", data: { message: "token expired" } }, status: 401 },
+    })
+
+    expect(formatServerError(wrapped, language.t)).toBe("Request failed with status 401")
   })
 })
 
