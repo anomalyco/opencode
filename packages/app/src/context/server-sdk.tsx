@@ -322,9 +322,19 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     attempt?.abort()
   }
 
+  const restart = () => {
+    started = false
+    generation++
+    attempt?.abort()
+    return start()
+  }
+
   onMount(() => {
     makeEventListener(window, "pagehide", stop)
     makeEventListener(window, "pageshow", (event) => resumeStreamAfterPageShow(event, start))
+    makeEventListener(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible") restart()
+    })
   })
 
   onCleanup(() => {
