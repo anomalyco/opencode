@@ -46,6 +46,24 @@ function normalize(value: unknown, options: { stripNull?: boolean } = {}): unkno
     ]),
   )
 
+  // Convert tuple-style items (array) to prefixItems for JSON Schema 2020-12 compliance.
+  // Effect's Schema.toJsonSchemaDocument can produce items as an array (Draft 4/7 tuple
+  // format), but 2020-12 requires items to be a single schema or boolean.  Convert to
+  // prefixItems + items: false to preserve tuple semantics.
+  if (Array.isArray(schema.items)) {
+    const prefixItems = schema.items
+    schema.prefixItems = prefixItems
+    schema.items = false
+  }
+
+  // Filter boolean exclusiveMinimum/exclusiveMaximum values produced by Effect's JSON
+  // Schema generation.  Boolean constraints are invalid in 2020-12; only numeric
+  // exclusiveMinimum/exclusiveMaximum are allowed.  (Zod-sourced schemas are already
+  // handled in registry.ts normalizeZodJsonSchema.)
+  for (const key of ["exclusiveMinimum", "exclusiveMaximum"] as const) {
+    if (typeof schema[key] === "boolean") delete schema[key]
+  }
+
   if (schema.additionalProperties === true) delete schema.additionalProperties
 
   if (options.stripNull && Array.isArray(schema.anyOf)) {
