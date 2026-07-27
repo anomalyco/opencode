@@ -4,7 +4,6 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin
 import { dirname } from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
-import { FileSystem } from "../../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
@@ -26,7 +25,11 @@ const LocationInput = Schema.Struct({
   }),
 })
 const Input = LocationInput
-const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
+const Output = Schema.Union([
+  ReadToolFileSystem.FileContent,
+  ReadToolFileSystem.TextPage,
+  ReadToolFileSystem.ListPage,
+])
 
 export const Plugin = {
   id: "opencode.tool.read",
@@ -107,7 +110,7 @@ export const Plugin = {
                   Effect.catch(() => Effect.void),
                   Effect.catchDefect(() => Effect.void),
                 )
-                if ("encoding" in content && content.encoding === "base64" && !SUPPORTED_IMAGE_MIMES.has(content.mime))
+                if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_IMAGE_MIMES.has(content.mime))
                   return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
                 return content
               }).pipe(
@@ -115,7 +118,7 @@ export const Plugin = {
                   // Image base64 reaches the model through content items; avoid a second
                   // unresized copy in model text.
                   const content =
-                    "encoding" in output && output.encoding === "base64"
+                    output.type === "file" && output.encoding === "base64"
                       ? SUPPORTED_IMAGE_MIMES.has(output.mime)
                         ? ([
                             { type: "text", text: "Image read successfully" },

@@ -5,7 +5,6 @@ import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { Image } from "@opencode-ai/core/image"
@@ -48,7 +47,8 @@ const readCalls: {
 const listCalls: ReadToolFileSystem.PageInput[] = []
 let resolvedType: "file" | "directory" = "file"
 let resolveFailure: unknown
-let readResult: FileSystem.Content | ReadToolFileSystem.TextPage = {
+let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage = {
+  type: "file",
   uri: "file:///README.md",
   name: "README.md",
   content: "hello",
@@ -69,7 +69,7 @@ const reader = Layer.succeed(
     list: (_path, input = {}) =>
       Effect.sync(() => {
         listCalls.push(input)
-        return new ReadToolFileSystem.ListPage({ entries: [], truncated: false })
+        return new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
       }),
   }),
 )
@@ -181,6 +181,7 @@ describe("ReadTool", () => {
     resolvedType = "file"
     resolveFailure = undefined
     readResult = {
+      type: "file",
       uri: "file:///README.md",
       name: "README.md",
       content: "hello",
@@ -209,6 +210,7 @@ describe("ReadTool", () => {
       expect(execution.status).toBe("completed")
       if (execution.status !== "completed") return
       expect(execution.output).toEqual({
+        type: "file",
         uri: "file:///README.md",
         name: "README.md",
         content: "hello",
@@ -253,6 +255,7 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
       readResult = {
+        type: "file",
         uri: "file:///pixel.png",
         name: "pixel.png",
         content: png,
@@ -305,6 +308,7 @@ describe("ReadTool", () => {
       source.free()
       expect(Buffer.byteLength(png)).toBeGreaterThan(50 * 1024)
       readResult = {
+        type: "file",
         uri: "file:///large.png",
         name: "large.png",
         content: png,
@@ -338,6 +342,7 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
       readResult = {
+        type: "file",
         uri: "file:///pixel.png",
         name: "pixel.png",
         content: png,
@@ -362,6 +367,7 @@ describe("ReadTool", () => {
   it.effect("drops undecodable image data from the outcome", () =>
     Effect.gen(function* () {
       readResult = {
+        type: "file",
         uri: "file:///truncated.png",
         name: "truncated.png",
         content: "iVBORw0KGgo=",
@@ -393,6 +399,7 @@ describe("ReadTool", () => {
       const base64 = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
       readResult = {
+        type: "file",
         uri: "file:///wide.png",
         name: "wide.png",
         content: base64,
@@ -434,6 +441,7 @@ describe("ReadTool", () => {
       const base64 = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
       readResult = {
+        type: "file",
         uri: "file:///wide.png",
         name: "wide.png",
         content: base64,
@@ -471,6 +479,7 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
       readResult = {
+        type: "file",
         uri: "file:///pixel.png",
         name: "pixel.png",
         content: png,
@@ -509,6 +518,7 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
       readResult = {
+        type: "file",
         uri: "file:///pixel.bin",
         name: "pixel.bin",
         content: png,
@@ -698,6 +708,7 @@ describe("ReadTool", () => {
   it.effect("rejects unsupported binary discovered by a direct read", () =>
     Effect.gen(function* () {
       readResult = {
+        type: "file",
         uri: "file:///late-binary",
         name: "late-binary",
         content: "AAECAw==",

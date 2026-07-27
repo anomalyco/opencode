@@ -75,6 +75,12 @@ export const PageInput = Schema.Struct({
 })
 export type PageInput = typeof PageInput.Type
 
+export const FileContent = Schema.Struct({
+  type: Schema.Literal("file"),
+  ...FileSystem.Content.fields,
+}).annotate({ identifier: "ReadTool.FileContent" })
+export type FileContent = typeof FileContent.Type
+
 export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   type: Schema.Literal("text-page"),
   content: Schema.String,
@@ -85,6 +91,7 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
 }) {}
 
 export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
+  type: Schema.Literal("list-page"),
   entries: Schema.Array(FileSystem.Entry),
   truncated: Schema.Boolean,
   next: PositiveInt.pipe(Schema.optional),
@@ -96,7 +103,7 @@ export interface Interface {
     path: AbsolutePath,
     resource: string,
     page?: PageInput,
-  ) => Effect.Effect<FileSystem.Content | TextPage, ReadError>
+  ) => Effect.Effect<FileContent | TextPage, ReadError>
   readonly list: (path: AbsolutePath, page?: PageInput) => Effect.Effect<ListPage, FSUtil.Error>
 }
 
@@ -199,6 +206,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         if (total > MAX_MEDIA_INGEST_BYTES)
           return yield* Effect.fail(new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES }))
         return {
+          type: "file" as const,
           uri: pathToFileURL(real).href,
           name: path.basename(real),
           content: Buffer.concat(
@@ -223,6 +231,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         }
         text.push(yield* decodeUtf8(resource, decoder))
         return {
+          type: "file" as const,
           uri: pathToFileURL(real).href,
           name: path.basename(real),
           content: text.join(""),
@@ -348,7 +357,12 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
     .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
   const selected = visible.slice(offset - 1, offset - 1 + limit)
   const truncated = offset - 1 + selected.length < visible.length
-  return new ListPage({ entries: selected, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
+  return new ListPage({
+    type: "list-page",
+    entries: selected,
+    truncated,
+    ...(truncated ? { next: offset + selected.length } : {}),
+  })
 })
 
 const layer = Layer.effect(
