@@ -5,12 +5,13 @@ import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { Image } from "@opencode-ai/core/image"
 import { Permission } from "@opencode-ai/core/permission"
 import { Session } from "@opencode-ai/core/session"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { location } from "./fixture/location"
@@ -45,6 +46,7 @@ const readCalls: {
   page: ReadToolFileSystem.PageInput
 }[] = []
 const listCalls: ReadToolFileSystem.PageInput[] = []
+let listResult = new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
 let resolvedType: "file" | "directory" = "file"
 let resolveFailure: unknown
 let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage = {
@@ -69,7 +71,7 @@ const reader = Layer.succeed(
     list: (_path, input = {}) =>
       Effect.sync(() => {
         listCalls.push(input)
-        return new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
+        return listResult
       }),
   }),
 )
@@ -189,6 +191,7 @@ describe("ReadTool", () => {
       mime: "text/plain",
     }
     readFailure = undefined
+    listResult = new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
     configEntries = []
   })
 
@@ -217,6 +220,7 @@ describe("ReadTool", () => {
         encoding: "utf8",
         mime: "text/plain",
       })
+      expect(execution.content).toEqual([{ type: "text", text: "Read file README.md, lines 1-1\n1: hello" }])
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
       expect(readCalls).toEqual([
         {
@@ -672,10 +676,18 @@ describe("ReadTool", () => {
   it.effect("lists a bounded directory page through read", () =>
     Effect.gen(function* () {
       resolvedType = "directory"
+      listResult = new ReadToolFileSystem.ListPage({
+        type: "list-page",
+        entries: [
+          FileSystem.Entry.make({ path: RelativePath.make("components/"), type: "directory" }),
+          FileSystem.Entry.make({ path: RelativePath.make("index.ts"), type: "file" }),
+        ],
+        truncated: true,
+        next: 4,
+      })
       const registry = yield* Tool.Service
 
-      expect(
-        yield* executeTool(registry, {
+      const result = yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
           call: {
@@ -684,8 +696,15 @@ describe("ReadTool", () => {
             name: "read",
             input: { path: "src", offset: 2, limit: 10 },
           },
-        }),
-      ).toMatchObject({ status: "completed", output: { entries: [], truncated: false } })
+        })
+      expect(result).toMatchObject({ status: "completed", output: { entries: listResult.entries, truncated: true, next: 4 } })
+      if (result.status !== "completed") return
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "Read directory src, entries 2-3\ncomponents/\nindex.ts\n[Output truncated. Continue reading with offset: 4]",
+        },
+      ])
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["src"], save: ["*"] }])
       expect(listCalls).toEqual([{ offset: 2, limit: 10 }])
     }),
@@ -739,21 +758,27 @@ describe("ReadTool", () => {
       })
       const registry = yield* Tool.Service
 
-      expect(
-        yield* executeTool(registry, {
-          sessionID,
-          ...toolIdentity,
-          call: {
-            type: "tool-call",
-            id: "call-large",
-            name: "read",
-            input: { path: "large.txt", offset: 2, limit: 1 },
-          },
-        }),
-      ).toMatchObject({
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-large",
+          name: "read",
+          input: { path: "large.txt", offset: 2, limit: 1 },
+        },
+      })
+      expect(result).toMatchObject({
         status: "completed",
         output: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
       })
+      if (result.status !== "completed") return
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "Read file large.txt, lines 2-2\n2: hello\n[Output truncated. Continue reading with offset: 3]",
+        },
+      ])
       expect(readCalls).toEqual([
         { input: AbsolutePath.make(path.join(process.cwd(), "large.txt")), page: { offset: 2, limit: 1 } },
       ])
