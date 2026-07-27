@@ -1523,7 +1523,7 @@ const layer = Layer.effect(
           if (!apiKey) continue
           mergeProvider(providerID, {
             source: "env",
-            key: provider.env.length === 1 ? apiKey : undefined,
+            key: provider.env.length === 1 ? apiKey.trim() : undefined,
           })
         }
 
@@ -1535,7 +1535,7 @@ const layer = Layer.effect(
           if (provider.type === "api") {
             mergeProvider(providerID, {
               source: "api",
-              key: provider.key,
+              key: provider.key.trim(),
             })
           }
         }
