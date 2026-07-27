@@ -39,6 +39,7 @@
     "@opentelemetry/context-async-hooks": "2.6.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
     "@opentelemetry/sdk-trace-base": "2.6.1",
+    "@opentelemetry/sdk-trace-node": "2.6.1",
     "cross-spawn": "catalog:",
     "effect": "catalog:",
     "glob": "13.0.5",
