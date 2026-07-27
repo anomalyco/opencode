@@ -7,8 +7,10 @@ import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
 import customizeOpencodeContent from "./skill/customize-opencode.md" with { type: "text" }
+import schedulingContent from "./skill/scheduling.md" with { type: "text" }
 
 export const CustomizeOpencodeContent = customizeOpencodeContent
+export const SchedulingContent = schedulingContent
 
 export const Plugin = define({
   id: "skill",
@@ -23,6 +25,18 @@ export const Plugin = define({
               "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, commands, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself.",
             location: AbsolutePath.make("/builtin/customize-opencode.md"),
             content: CustomizeOpencodeContent,
+          }),
+        }),
+      )
+      draft.source(
+        SkillV2.EmbeddedSource.make({
+          type: "embedded",
+          skill: SkillV2.Info.make({
+            name: "scheduling",
+            description:
+              "Schedule recurring prompts with cron_add, cron_list, cron_delete. Use when the user asks for periodic reminders, scheduled checks, or automated recurring actions.",
+            location: AbsolutePath.make("/builtin/scheduling.md"),
+            content: schedulingContent,
           }),
         }),
       )
