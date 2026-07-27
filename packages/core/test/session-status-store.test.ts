@@ -142,6 +142,32 @@ describe("SessionStatusStore", () => {
     }),
   )
 
+  it.effect("a caller verdict wins over the trailing-? heuristic", () =>
+    Effect.gen(function* () {
+      yield* seed
+      yield* addMessage({ role: "assistant", time: { created: 1, completed: 2 } })
+      yield* addTextPart("I can also offer alternatives. Here is the summary.")
+      const store = yield* SessionStatusStore.Service
+
+      yield* store.setIdle(sessionID, { verdict: "waiting" })
+      expect((yield* store.list())[0].status).toBe("waiting")
+
+      yield* store.setIdle(sessionID, { verdict: "done" })
+      expect((yield* store.list())[0].status).toBe("done")
+    }),
+  )
+
+  it.effect("ignores the verdict when the turn was not completed", () =>
+    Effect.gen(function* () {
+      yield* seed
+      yield* addMessage({ role: "assistant", time: { created: 1 } })
+      const store = yield* SessionStatusStore.Service
+
+      yield* store.setIdle(sessionID, { verdict: "waiting" })
+      expect((yield* store.list())[0].status).toBe("idle")
+    }),
+  )
+
   it.effect("marks plain idle when the turn was not completed", () =>
     Effect.gen(function* () {
       yield* seed

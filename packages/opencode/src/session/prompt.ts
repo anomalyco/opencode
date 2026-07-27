@@ -190,6 +190,65 @@ const layer = Layer.effect(
       return parts
     })
 
+    const generateTitle = Effect.fn("SessionPrompt.generateTitle")(function* (input: {
+      sessionID: SessionID
+      providerID: ProviderV2.ID
+      modelID: ModelV2.ID
+      user: SessionV1.User
+      context: SessionV1.WithParts[]
+      instruction: string
+      subtasksOnly?: boolean
+    }) {
+      const ag = yield* agents.get("title")
+      if (!ag) return undefined
+      const mdl = ag.model
+        ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
+        : ((yield* provider.getSmallModel(input.providerID)) ??
+          (yield* provider.getModel(input.providerID, input.modelID)))
+      const msgs = input.subtasksOnly
+        ? [
+            {
+              role: "user" as const,
+              content: input.context
+                .flatMap((m) => m.parts.filter((p): p is SessionV1.SubtaskPart => p.type === "subtask"))
+                .map((p) => p.prompt)
+                .join("\n"),
+            },
+          ]
+        : yield* MessageV2.toModelMessagesEffect(input.context, mdl)
+      const text = yield* llm
+        .stream({
+          agent: ag,
+          user: input.user,
+          system: [],
+          small: true,
+          tools: {},
+          model: mdl,
+          sessionID: input.sessionID,
+          retries: 2,
+          messages: [{ role: "user", content: input.instruction }, ...msgs],
+        })
+        .pipe(
+          Stream.filter(LLMEvent.is.textDelta),
+          Stream.map((e) => e.text),
+          Stream.mkString,
+          Effect.orDie,
+        )
+      const cleaned = text
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (!cleaned) return undefined
+      return cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+    })
+
+    // Sessions whose current title was machine-generated in this process, so
+    // the end-of-turn retitle may replace it but never a user-chosen one.
+    const autoTitles = yield* InstanceState.make(
+      Effect.fn("SessionPrompt.autoTitles")(() => Effect.succeed(new Set<SessionID>())),
+    )
+
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
       session: Session.Info
       history: SessionV1.WithParts[]
@@ -208,49 +267,116 @@ const layer = Layer.effect(
       const context = input.history.slice(0, idx + 1)
       const firstUser = context[idx]
       if (!firstUser || firstUser.info.role !== "user") return
-      const firstInfo = firstUser.info
 
       const subtasks = firstUser.parts.filter((p): p is SessionV1.SubtaskPart => p.type === "subtask")
       const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
 
-      const ag = yield* agents.get("title")
-      if (!ag) return
-      const mdl = ag.model
-        ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
-        : ((yield* provider.getSmallModel(input.providerID)) ??
-          (yield* provider.getModel(input.providerID, input.modelID)))
-      const msgs = onlySubtasks
-        ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
-        : yield* MessageV2.toModelMessagesEffect(context, mdl)
-      const text = yield* llm
-        .stream({
-          agent: ag,
-          user: firstInfo,
-          system: [],
-          small: true,
-          tools: {},
-          model: mdl,
-          sessionID: input.session.id,
-          retries: 2,
-          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
-        })
-        .pipe(
-          Stream.filter(LLMEvent.is.textDelta),
-          Stream.map((e) => e.text),
-          Stream.mkString,
-          Effect.orDie,
-        )
-      const cleaned = text
-        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
-      if (!cleaned) return
-      const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      const t = yield* generateTitle({
+        sessionID: input.session.id,
+        providerID: input.providerID,
+        modelID: input.modelID,
+        user: firstUser.info,
+        context,
+        instruction: "Generate a title for this conversation:\n",
+        subtasksOnly: onlySubtasks,
+      })
+      if (!t) return
+      const auto = yield* InstanceState.get(autoTitles)
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
+        .pipe(Effect.tap(() => Effect.sync(() => auto.add(input.session.id))))
         .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
     })
+
+    // The first-turn title is generated from the user's opening message only
+    // and often reads generic. Once the first turn completes, regenerate it
+    // from the whole conversation — but only if the current title is still
+    // the default or the one this process generated, never a renamed one.
+    const retitle = Effect.fn("SessionPrompt.retitle")(function* (input: {
+      session: Session.Info
+      history: SessionV1.WithParts[]
+      providerID: ProviderV2.ID
+      modelID: ModelV2.ID
+      user: SessionV1.User
+    }) {
+      if (input.session.parentID) return
+      const fresh = yield* sessions.get(input.session.id).pipe(Effect.option)
+      const current = Option.getOrUndefined(fresh)
+      if (!current) return
+      const auto = yield* InstanceState.get(autoTitles)
+      if (!Session.isDefaultTitle(current.title) && !auto.has(current.id)) return
+      const real = (m: SessionV1.WithParts) =>
+        m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
+      if (input.history.filter(real).length !== 1) return
+
+      const t = yield* generateTitle({
+        sessionID: current.id,
+        providerID: input.providerID,
+        modelID: input.modelID,
+        user: input.user,
+        context: input.history,
+        instruction:
+          "Generate a title for this conversation. Consider the whole conversation so far, including what the assistant actually did:\n",
+      })
+      if (!t) return
+      yield* sessions
+        .setTitle({ sessionID: current.id, title: t })
+        .pipe(Effect.tap(() => Effect.sync(() => auto.delete(current.id))))
+        .pipe(
+          Effect.catchCause((cause) => Effect.logError("failed to regenerate title", { error: Cause.squash(cause) })),
+        )
+    })
+
+    // LLM turn classifier: label the completed turn as waiting (the assistant
+    // asked the user something) or done, feeding the sessions list status.
+    // Runs inline before the loop exits so the verdict is registered before
+    // the runner reports idle; any failure just keeps the "?" heuristic.
+    const classifyTurn = (input: {
+      sessionID: SessionID
+      user: SessionV1.User
+      assistant?: SessionV1.WithParts
+      providerID: ProviderV2.ID
+      modelID: ModelV2.ID
+    }) =>
+      Effect.gen(function* () {
+        if (!flags.experimentalStatusClassifier) return
+        const text = input.assistant?.parts
+          .flatMap((part) => (part.type === "text" ? [part.text] : []))
+          .join("\n")
+          .trim()
+        if (!text) return
+        const ag = yield* agents.get("status-classifier")
+        if (!ag) return
+        const mdl = ag.model
+          ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
+          : ((yield* provider.getSmallModel(input.providerID)) ??
+            (yield* provider.getModel(input.providerID, input.modelID)))
+        const answer = yield* llm
+          .stream({
+            agent: ag,
+            user: input.user,
+            system: [],
+            small: true,
+            tools: {},
+            model: mdl,
+            sessionID: input.sessionID,
+            retries: 1,
+            messages: [{ role: "user", content: text.slice(-4000) }],
+          })
+          .pipe(
+            Stream.filter(LLMEvent.is.textDelta),
+            Stream.map((e) => e.text),
+            Stream.mkString,
+            Effect.orDie,
+            Effect.timeout(15_000),
+          )
+        const verdict = SessionStatus.parseIdleVerdict(answer)
+        if (!verdict) return
+        yield* status.noteIdleVerdict(input.sessionID, verdict)
+      }).pipe(
+        Effect.withSpan("SessionPrompt.classifyTurn"),
+        Effect.catchCause((cause) => Effect.logWarning("turn classification failed", { cause: Cause.pretty(cause) })),
+      )
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
       task: SessionV1.SubtaskPart
@@ -1126,6 +1252,20 @@ const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            yield* classifyTurn({
+              sessionID,
+              user: lastUser,
+              assistant: lastAssistantMsg,
+              providerID: lastUser.model.providerID,
+              modelID: lastUser.model.modelID,
+            })
+            yield* retitle({
+              session,
+              history: msgs,
+              providerID: lastUser.model.providerID,
+              modelID: lastUser.model.modelID,
+              user: lastUser,
+            }).pipe(Effect.ignore, Effect.forkIn(scope))
             break
           }
 

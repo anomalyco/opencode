@@ -14,6 +14,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_STATUS_CLASSIFIER from "./prompt/status-classifier.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -246,6 +247,22 @@ const layer = Layer.effect(
               user,
             ),
             prompt: PROMPT_TITLE,
+          },
+          "status-classifier": {
+            name: "status-classifier",
+            mode: "primary",
+            options: {},
+            native: true,
+            hidden: true,
+            temperature: 0,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+              }),
+              user,
+            ),
+            prompt: PROMPT_STATUS_CLASSIFIER,
           },
           summary: {
             name: "summary",

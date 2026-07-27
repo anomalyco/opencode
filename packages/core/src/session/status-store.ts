@@ -30,7 +30,10 @@ export interface Row extends Info {
 
 export interface Interface {
   readonly set: (sessionID: SessionSchema.ID, status: Status, detail?: string) => Effect.Effect<void>
-  readonly setIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly setIdle: (
+    sessionID: SessionSchema.ID,
+    options?: { readonly verdict?: "waiting" | "done" },
+  ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Row[]>
 }
 
@@ -65,9 +68,10 @@ const layer = Layer.effect(
     // A session that goes idle after a completed assistant message counts as
     // "done" and carries the first line of its last text as the detail — or
     // "waiting" when the turn ended asking the user something, carrying the
-    // question itself. Anything else (abort, error, user message last) is a
-    // plain idle.
-    const setIdle: Interface["setIdle"] = Effect.fn("SessionStatusStore.setIdle")(function* (sessionID) {
+    // question itself. A verdict pre-classified by the caller (e.g. an LLM
+    // turn classifier) wins over the trailing-"?" heuristic. Anything else
+    // (abort, error, user message last) is a plain idle.
+    const setIdle: Interface["setIdle"] = Effect.fn("SessionStatusStore.setIdle")(function* (sessionID, options) {
       const message = yield* db
         .select()
         .from(MessageTable)
@@ -98,7 +102,8 @@ const layer = Layer.effect(
           .map((line) => line.trim())
           .filter((line) => line.length > 0) ?? []
       const last = lines.at(-1)
-      if (last?.endsWith("?")) return yield* set(sessionID, "waiting", last.slice(0, 120))
+      const verdict = options?.verdict ?? (last?.endsWith("?") ? ("waiting" as const) : ("done" as const))
+      if (verdict === "waiting") return yield* set(sessionID, "waiting", last?.slice(0, 120))
       return yield* set(sessionID, "done", lines[0]?.slice(0, 120))
     })
 

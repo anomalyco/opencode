@@ -11,6 +11,19 @@ export type Info = SessionStatusEvent.Info
 
 export const Event = SessionStatusEvent
 
+// Parse the one-word answer of the turn classifier agent into an idle
+// verdict. Anything unexpected (reasoning blocks, extra prose, refusals)
+// degrades to undefined so callers fall back to the trailing-"?" heuristic.
+export function parseIdleVerdict(text: string): "waiting" | "done" | undefined {
+  const cleaned = text
+    .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+    .trim()
+    .toUpperCase()
+  if (cleaned.includes("WAITING")) return "waiting"
+  if (cleaned.includes("DONE")) return "done"
+  return undefined
+}
+
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Map<SessionID, Info>>
@@ -21,6 +34,9 @@ export interface Interface {
   // "done" write could land after a newer "working" and show stale state.
   readonly setNeedsInput: (sessionID: SessionID, detail: string) => Effect.Effect<void>
   readonly syncPersisted: (sessionID: SessionID) => Effect.Effect<void>
+  // Register the verdict of the LLM turn classifier for the turn that just
+  // completed; the next idle write consumes it instead of the heuristic.
+  readonly noteIdleVerdict: (sessionID: SessionID, verdict: "waiting" | "done") => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStatus") {}
@@ -59,12 +75,18 @@ const layer = Layer.effect(
       return new Map(yield* InstanceState.get(state))
     })
 
-    const write = (sessionID: SessionID, status: Info) =>
-      status.type === "busy"
-        ? store.set(sessionID, "working")
-        : status.type === "retry"
-          ? store.set(sessionID, "retrying", `${status.message} · attempt #${status.attempt}`.slice(0, 120))
-          : store.setIdle(sessionID)
+    // Verdicts from the LLM turn classifier, keyed by session. Consumed by
+    // the next idle write, so a stale verdict can never outlive its turn.
+    const idleVerdicts = new Map<SessionID, "waiting" | "done">()
+
+    const write = (sessionID: SessionID, status: Info) => {
+      if (status.type === "busy") return store.set(sessionID, "working")
+      if (status.type === "retry")
+        return store.set(sessionID, "retrying", `${status.message} · attempt #${status.attempt}`.slice(0, 120))
+      const verdict = idleVerdicts.get(sessionID)
+      idleVerdicts.delete(sessionID)
+      return store.setIdle(sessionID, { verdict })
+    }
 
     const persist = (sessionID: SessionID, status: Info) => Queue.offer(writes, write(sessionID, status))
 
@@ -92,7 +114,13 @@ const layer = Layer.effect(
       yield* persist(sessionID, yield* get(sessionID))
     })
 
-    return Service.of({ get, list, set, setNeedsInput, syncPersisted })
+    const noteIdleVerdict: Interface["noteIdleVerdict"] = Effect.fn("SessionStatus.noteIdleVerdict")(
+      function* (sessionID, verdict) {
+        idleVerdicts.set(sessionID, verdict)
+      },
+    )
+
+    return Service.of({ get, list, set, setNeedsInput, syncPersisted, noteIdleVerdict })
   }),
 )
 
