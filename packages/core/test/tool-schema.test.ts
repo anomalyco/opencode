@@ -143,3 +143,18 @@ test("raw JSON schemas are render-only and omitted output means model-only", asy
     content: [{ type: "text", text: '{"value":1}' }],
   })
 })
+
+test("missing external input schemas fall back to an empty schema", () => {
+  const tool = {
+    name: "external",
+    description: "External tool",
+    input: undefined,
+    execute: () => Effect.succeed({ content: "unused" }),
+  } as unknown as Info
+
+  expect(definition(tool)).toEqual({
+    name: "external",
+    description: "External tool",
+    inputSchema: {},
+  })
+})
