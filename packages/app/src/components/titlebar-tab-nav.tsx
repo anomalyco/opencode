@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { useGlobal } from "@/context/global"
@@ -35,8 +36,8 @@ export function TabNavItem(props: {
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
   let tabRoot!: HTMLDivElement
   let titleEl!: HTMLSpanElement
-  let committing = false
   let measureFrame: number | undefined
+  const rename = createMutation(() => ({ mutationFn: props.onRename }))
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -113,8 +114,7 @@ export function TabNavItem(props: {
   }
 
   const closeRename = async (save: boolean) => {
-    if (committing || !editing()) return
-    committing = true
+    if (rename.isPending || !editing()) return
 
     const original = props.session()?.title ?? ""
     const next = (titleEl.textContent ?? "").trim()
@@ -123,13 +123,10 @@ export function TabNavItem(props: {
     setEditing(false)
 
     if (!save || !next || next === original) {
-      committing = false
       return
     }
 
-    await props.onRename(next)
-
-    committing = false
+    await rename.mutateAsync(next)
   }
 
   createEffect(() => {
@@ -143,7 +140,7 @@ export function TabNavItem(props: {
   const openRename = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    if (!canOpenTabRename(props.dragging, editing(), committing)) return
+    if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
     const session = props.session()
     if (!session) return
     titleEl.textContent = session.title
