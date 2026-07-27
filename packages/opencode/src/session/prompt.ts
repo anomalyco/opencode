@@ -281,6 +281,10 @@ const layer = Layer.effect(
         subtasksOnly: onlySubtasks,
       })
       if (!t) return
+      // The end-of-turn retitle (or a manual rename) may have landed while
+      // this title was being generated; only write over the provisional one.
+      const fresh = yield* sessions.get(input.session.id).pipe(Effect.option)
+      if (!Session.isDefaultTitle(Option.getOrUndefined(fresh)?.title ?? input.session.title)) return
       const auto = yield* InstanceState.get(autoTitles)
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
