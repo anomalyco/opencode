@@ -36,6 +36,7 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
 import { BasicTool, GenericTool } from "./basic-tool"
+import { formatDuration } from "./duration"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
@@ -1481,6 +1482,7 @@ export interface ToolProps {
   sessionID?: string
   output?: string
   status?: string
+  time?: { start: number; end?: number }
   hideDetails?: boolean
   defaultOpen?: boolean
   open?: boolean
@@ -1584,6 +1586,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return taskId()
   })
 
+  const stateTime = () => {
+    const state = part().state
+    if (state.status === "pending") return undefined
+    return state.time
+  }
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
   const handleToolOpenChange = (open: boolean) => props.onToolOpenChange?.(open)
@@ -1628,6 +1635,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               // @ts-expect-error
               output={part().state.output}
               status={part().state.status}
+              time={stateTime()}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
               open={controlledOpen()}
@@ -1665,7 +1673,6 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
-  const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
   const part = () => props.part as TextPart
   const interrupted = createMemo(
     () =>
@@ -1690,14 +1697,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
           ? completed - message.time.created
           : -1
     if (!(ms >= 0)) return ""
-    const total = Math.round(ms / 1000)
-    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })
-    const minutes = Math.floor(total / 60)
-    const seconds = total % 60
-    return i18n.t("ui.message.duration.minutesSeconds", {
-      minutes: numfmt().format(minutes),
-      seconds: numfmt().format(seconds),
-    })
+    return formatDuration(ms)
   })
 
   const meta = createMemo(() => {
@@ -1748,15 +1748,17 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
           </Show>
         </div>
         <Show when={showCopy()}>
-          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <MessageActionButton
-              icon={copied() ? "check" : "copy"}
-              label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              useV2={props.useV2Actions}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleCopy}
-              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-            />
+          <div data-slot="text-part-footer" data-interrupted={interrupted() ? "" : undefined}>
+            <div data-slot="text-part-copy-wrapper">
+              <MessageActionButton
+                icon={copied() ? "check" : "copy"}
+                label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                useV2={props.useV2Actions}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              />
+            </div>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}
@@ -2090,6 +2092,7 @@ ToolRegistry.register({
       <BasicTool
         icon="task"
         status={props.status}
+        time={props.time}
         trigger={trigger()}
         hideDetails
         triggerAsLink
@@ -2657,6 +2660,6 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
+    return <BasicTool icon="brain" status={props.status} time={props.time} trigger={trigger()} hideDetails />
   },
 })

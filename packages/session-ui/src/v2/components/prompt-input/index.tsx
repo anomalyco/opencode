@@ -39,6 +39,7 @@ export type PromptInputV2Props = {
   borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
+  submitTrailing?: JSX.Element
   attachKeybind?: string[]
   attachShortcut?: string
 }
@@ -244,6 +245,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
               )}
             </Show>
           </div>
+          {props.submitTrailing}
           <PromptInputV2SubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}

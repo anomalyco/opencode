@@ -1,10 +1,24 @@
-import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import type { IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { formatDuration } from "./duration"
 
 export type TriggerTitle = {
   title: string
@@ -27,6 +41,7 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element | ((open: Accessor<boolean>) => JSX.Element)
   children?: JSX.Element
   status?: string
+  time?: { start: number; end?: number }
   hideDetails?: boolean
   defaultOpen?: boolean
   open?: boolean
@@ -91,6 +106,23 @@ export function BasicTool(props: BasicToolProps) {
   const open = () => props.open ?? state.open
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
+
+  const [now, setNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (!props.time) return
+    if (typeof props.time.end === "number") return
+    if (!pending()) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const duration = createMemo(() => {
+    const time = props.time
+    if (!time) return ""
+    const end = typeof time.end === "number" ? time.end : pending() ? now() : undefined
+    if (typeof end !== "number") return ""
+    return formatDuration(Math.max(0, end - time.start))
+  })
   const hasChildren = () => (props.defer ? "children" in props : props.children)
   const dynamicTrigger = typeof props.trigger === "function" ? props.trigger(open) : undefined
 
@@ -248,6 +280,9 @@ export function BasicTool(props: BasicToolProps) {
           </Switch>
         </div>
       </div>
+      <Show when={duration()}>
+        <span data-slot="basic-tool-tool-duration">{duration()}</span>
+      </Show>
       <Show when={hasChildren() && !props.hideDetails && !props.locked && (!pending() || props.allowOpenWhilePending)}>
         <Collapsible.Arrow />
       </Show>
@@ -323,6 +358,7 @@ function args(input: Record<string, unknown> | undefined) {
 export function GenericTool(props: {
   tool: string
   status?: string
+  time?: { start: number; end?: number }
   hideDetails?: boolean
   input?: Record<string, unknown>
 }) {
@@ -332,6 +368,7 @@ export function GenericTool(props: {
     <BasicTool
       icon="mcp"
       status={props.status}
+      time={props.time}
       trigger={{
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),

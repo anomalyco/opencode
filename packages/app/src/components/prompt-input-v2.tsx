@@ -6,7 +6,7 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { Prompt, ReferenceInfo } from "@opencode-ai/sdk/v2/client"
-import { createEffect, createMemo, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import type { PromptInputProps } from "@/components/prompt-input/contracts"
@@ -44,6 +44,7 @@ export type PromptInputV2ComposerProps = {
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "edit" | "onEditLoaded" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
+  readonly elapsed: Accessor<string>
 }
 
 export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
@@ -62,6 +63,13 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         class={props.class}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
+        submitTrailing={
+          <Show when={props.controller.elapsed()}>
+            <span class="shrink-0 select-none whitespace-nowrap px-1 text-[12px] leading-5 text-v2-text-text-faint">
+              {props.controller.elapsed()}
+            </span>
+          </Show>
+        }
         modelControl={
           <PromptInputV2ModelControl
             loading={props.controller.model.loading}
@@ -196,6 +204,24 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
   })
   const stopping = createMemo(() => working() && blank())
+
+  const [now, setNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (!working()) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const elapsed = createMemo(() => {
+    if (!working()) return ""
+    const messages = sync().data.message[props.controls.session.id ?? ""]
+    const start = messages?.findLast((m) => m.role === "user")?.time.created
+    if (typeof start !== "number") return ""
+    const total = Math.max(0, Math.round((now() - start) / 1000))
+    if (total < 60) return language.t("ui.message.duration.seconds", { count: total })
+    return language.t("ui.message.duration.minutesSeconds", { minutes: Math.floor(total / 60), seconds: total % 60 })
+  })
+
   const placeholder = createMemo(() =>
     promptPlaceholder({
       mode: mode(),
@@ -472,6 +498,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
   })
   Object.defineProperty(controller, "model", { get: () => props.controls.model })
+  Object.defineProperty(controller, "elapsed", { get: () => elapsed })
   return controller as PromptInputV2ComposerController
 }
 

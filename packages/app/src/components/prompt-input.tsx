@@ -284,6 +284,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
   })
   const stopping = createMemo(() => working() && blank())
+
+  const [now, setNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (!working()) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const elapsed = createMemo(() => {
+    if (!working()) return ""
+    const messages = sync().data.message[props.controls.session.id ?? ""]
+    const start = messages?.findLast((m) => m.role === "user")?.time.created
+    if (typeof start !== "number") return ""
+    const total = Math.max(0, Math.round((now() - start) / 1000))
+    if (total < 60) return language.t("ui.message.duration.seconds", { count: total })
+    return language.t("ui.message.duration.minutesSeconds", { minutes: Math.floor(total / 60), seconds: total % 60 })
+  })
+
   const tip = () => {
     if (stopping()) {
       return (
@@ -1574,6 +1592,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
+              <Show when={elapsed()}>
+                <span class="text-12-regular text-text-weak cursor-default select-none whitespace-nowrap px-1">
+                  {elapsed()}
+                </span>
+              </Show>
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"
