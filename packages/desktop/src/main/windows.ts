@@ -219,6 +219,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   state.manage(win)
   registerWindow(win, id)
+  wireFullscreen(win)
   loadWindow(win, "index.html")
   wireZoom(win)
 
@@ -470,6 +471,16 @@ function wireZoom(win: BrowserWindow) {
     if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
     updateZoom(win)
   })
+}
+
+function wireFullscreen(win: BrowserWindow) {
+  const send = (fullscreen: boolean) => {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) return
+    win.webContents.send("window-fullscreen-changed", fullscreen)
+  }
+
+  win.on("enter-full-screen", () => send(true))
+  win.on("leave-full-screen", () => send(false))
 }
 
 function clampZoom(value: number) {

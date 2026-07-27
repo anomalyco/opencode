@@ -573,19 +573,13 @@ export const Terminal = (props: TerminalProps) => {
             throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
           throw new Error(`PTY connect ticket failed with ${result.response.status}`)
         }
-        return sdk()
-          .api.pty.connectToken({
-            ptyID: id,
-            location: { directory },
-            "x-opencode-ticket": "1",
-          })
-          .then((result) => result.data.ticket)
-          .catch((err: unknown) => {
-            if (err && typeof err === "object" && "_tag" in err && err._tag === "ForbiddenError") {
-              throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
-            }
-            throw err
-          })
+        // return sdk()
+        //   .api.pty.connectToken({
+        //     ptyID: id,
+        //     location: { directory },
+        //     "x-opencode-ticket": "1",
+        //   })
+        //   .then((result) => result.data.ticket)
       }
 
       const retry = (err: unknown) => {
@@ -616,7 +610,7 @@ export const Terminal = (props: TerminalProps) => {
           return undefined
         })
         const protocol = await sdk().protocol
-        if (protocol === "v2" && !ticket) return
+        // if (protocol === "v2" && !ticket) return
         if (once.value) return
         if (disposed) return
 
