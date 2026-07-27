@@ -1,4 +1,3 @@
-import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
@@ -7,6 +6,7 @@ import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
@@ -18,11 +18,12 @@ import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Effect, Fiber, Logger, Stream } from "effect"
 import { Database } from "../../src/database/database"
-import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node])),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, FSUtil.node, SdkPlugins.node, LocationServiceMap.node]),
+  ),
 )
 
 describe("PluginSupervisor config", () => {
@@ -164,6 +165,7 @@ describe("PluginSupervisor config", () => {
         yield* ready()
         const agents = yield* Agent.Service
         const bus = yield* Bus.Service
+        const filesystem = yield* FSUtil.Service
         const location = yield* Location.Service
         const plugins = yield* Plugin.Service
         const file = path.join(location.directory, ".opencode", "plugin", "mutable.ts")
@@ -175,11 +177,9 @@ describe("PluginSupervisor config", () => {
         const changed = yield* bus
           .subscribe(Plugin.Event.Updated)
           .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
-        yield* Effect.promise(async () => {
-          await fs.writeFile(file, mutablePlugin("second"))
-          const modified = new Date(Date.now() + 5_000)
-          await fs.utimes(file, modified, modified)
-        })
+        yield* filesystem.writeFileString(file, mutablePlugin("second"))
+        const modified = new Date(Date.now() + 5_000)
+        yield* filesystem.utimes(file, modified, modified)
         yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
 
         const current = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
@@ -187,11 +187,12 @@ describe("PluginSupervisor config", () => {
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
       }),
       false,
-      async (directory) => {
-        const plugin = path.join(directory, ".opencode", "plugin")
-        await fs.mkdir(plugin, { recursive: true })
-        await fs.writeFile(path.join(plugin, "mutable.ts"), mutablePlugin("first"))
-      },
+      (directory, filesystem) =>
+        Effect.gen(function* () {
+          const plugin = path.join(directory, ".opencode", "plugin")
+          yield* filesystem.makeDirectory(plugin, { recursive: true })
+          yield* filesystem.writeFileString(path.join(plugin, "mutable.ts"), mutablePlugin("first"))
+        }),
     ),
   )
 
@@ -202,6 +203,7 @@ describe("PluginSupervisor config", () => {
         yield* ready()
         const agents = yield* Agent.Service
         const bus = yield* Bus.Service
+        const filesystem = yield* FSUtil.Service
         const location = yield* Location.Service
         const plugins = yield* Plugin.Service
         const directory = path.join(location.directory, ".opencode", "plugin")
@@ -213,27 +215,26 @@ describe("PluginSupervisor config", () => {
             .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
 
         const created = yield* nextUpdate()
-        yield* Effect.promise(() => fs.writeFile(mutable, mutablePlugin("created")))
+        yield* filesystem.writeFileString(mutable, mutablePlugin("created"))
         yield* Fiber.join(created).pipe(Effect.timeout("5 seconds"))
         expect((yield* plugins.list()).some((plugin) => plugin.id === "mutable-plugin")).toBe(true)
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("created")
 
         const moved = yield* nextUpdate()
-        yield* Effect.promise(() => fs.rename(mutable, renamed))
+        yield* filesystem.rename(mutable, renamed)
         yield* Fiber.join(moved).pipe(Effect.timeout("5 seconds"))
         expect((yield* plugins.list()).some((plugin) => plugin.id === "mutable-plugin")).toBe(true)
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("created")
 
         const deleted = yield* nextUpdate()
-        yield* Effect.promise(() => fs.unlink(renamed))
+        yield* filesystem.remove(renamed)
         yield* Fiber.join(deleted).pipe(Effect.timeout("5 seconds"))
         expect((yield* plugins.list()).some((plugin) => plugin.id === "mutable-plugin")).toBe(false)
         expect(yield* agents.get(Agent.ID.make("mutable"))).toBeUndefined()
       }),
       false,
-      async (directory) => {
-        await fs.mkdir(path.join(directory, ".opencode", "plugin"), { recursive: true })
-      },
+      (directory, filesystem) =>
+        filesystem.makeDirectory(path.join(directory, ".opencode", "plugin"), { recursive: true }),
     ),
   )
 
@@ -246,6 +247,7 @@ describe("PluginSupervisor config", () => {
         yield* ready()
         const agents = yield* Agent.Service
         const bus = yield* Bus.Service
+        const filesystem = yield* FSUtil.Service
         const location = yield* Location.Service
         const plugins = yield* Plugin.Service
         const file = path.join(location.directory, "external", "mutable.ts")
@@ -257,11 +259,9 @@ describe("PluginSupervisor config", () => {
         const changed = yield* bus
           .subscribe(Plugin.Event.Updated)
           .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
-        yield* Effect.promise(async () => {
-          await fs.writeFile(file, mutablePlugin("second"))
-          const modified = new Date(Date.now() + 5_000)
-          await fs.utimes(file, modified, modified)
-        })
+        yield* filesystem.writeFileString(file, mutablePlugin("second"))
+        const modified = new Date(Date.now() + 5_000)
+        yield* filesystem.utimes(file, modified, modified)
         yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
 
         const current = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
@@ -269,11 +269,12 @@ describe("PluginSupervisor config", () => {
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
       }),
       false,
-      async (directory) => {
-        const external = path.join(directory, "external")
-        await fs.mkdir(external, { recursive: true })
-        await fs.writeFile(path.join(external, "mutable.ts"), mutablePlugin("first"))
-      },
+      (directory, filesystem) =>
+        Effect.gen(function* () {
+          const external = path.join(directory, "external")
+          yield* filesystem.makeDirectory(external, { recursive: true })
+          yield* filesystem.writeFileString(path.join(external, "mutable.ts"), mutablePlugin("first"))
+        }),
     ),
   )
 
@@ -286,6 +287,7 @@ describe("PluginSupervisor config", () => {
         yield* ready()
         const agents = yield* Agent.Service
         const bus = yield* Bus.Service
+        const filesystem = yield* FSUtil.Service
         const location = yield* Location.Service
         const config = path.join(location.directory, "opencode.json")
         const first = path.join(location.directory, "external", "first.ts")
@@ -299,38 +301,35 @@ describe("PluginSupervisor config", () => {
         const moved = yield* bus
           .subscribe(Plugin.Event.Updated)
           .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
-        yield* Effect.promise(() => fs.writeFile(config, JSON.stringify({ plugins: [pathToFileURL(second).href] })))
+        yield* filesystem.writeFileString(config, JSON.stringify({ plugins: [pathToFileURL(second).href] }))
         yield* Fiber.join(moved).pipe(Effect.timeout("5 seconds"))
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
         yield* Effect.sleep("100 millis")
 
-        yield* Effect.promise(async () => {
-          await fs.writeFile(first, mutablePlugin("stale"))
-          const modified = new Date(Date.now() + 5_000)
-          await fs.utimes(first, modified, modified)
-        })
+        yield* filesystem.writeFileString(first, mutablePlugin("stale"))
+        const staleMtime = new Date(Date.now() + 5_000)
+        yield* filesystem.utimes(first, staleMtime, staleMtime)
         yield* Effect.sleep("300 millis")
         expect(updates).toBe(1)
 
         const changed = yield* bus
           .subscribe(Plugin.Event.Updated)
           .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
-        yield* Effect.promise(async () => {
-          await fs.writeFile(second, mutablePlugin("updated"))
-          const modified = new Date(Date.now() + 5_000)
-          await fs.utimes(second, modified, modified)
-        })
+        yield* filesystem.writeFileString(second, mutablePlugin("updated"))
+        const updatedMtime = new Date(Date.now() + 5_000)
+        yield* filesystem.utimes(second, updatedMtime, updatedMtime)
         yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
         expect(updates).toBe(2)
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("updated")
       }),
       false,
-      async (directory) => {
-        const external = path.join(directory, "external")
-        await fs.mkdir(external, { recursive: true })
-        await fs.writeFile(path.join(external, "first.ts"), mutablePlugin("first"))
-        await fs.writeFile(path.join(external, "second.ts"), mutablePlugin("second"))
-      },
+      (directory, filesystem) =>
+        Effect.gen(function* () {
+          const external = path.join(directory, "external")
+          yield* filesystem.makeDirectory(external, { recursive: true })
+          yield* filesystem.writeFileString(path.join(external, "first.ts"), mutablePlugin("first"))
+          yield* filesystem.writeFileString(path.join(external, "second.ts"), mutablePlugin("second"))
+        }),
     ),
   )
 
@@ -340,6 +339,7 @@ describe("PluginSupervisor config", () => {
       Effect.gen(function* () {
         yield* ready()
         const bus = yield* Bus.Service
+        const filesystem = yield* FSUtil.Service
         const location = yield* Location.Service
         let updates = 0
         yield* bus.subscribe(Plugin.Event.Updated).pipe(
@@ -348,10 +348,8 @@ describe("PluginSupervisor config", () => {
         )
 
         const notes = path.join(location.directory, ".opencode", "notes")
-        yield* Effect.promise(async () => {
-          await fs.mkdir(notes, { recursive: true })
-          await fs.writeFile(path.join(notes, "todo.md"), "unrelated")
-        })
+        yield* filesystem.makeDirectory(notes, { recursive: true })
+        yield* filesystem.writeFileString(path.join(notes, "todo.md"), "unrelated")
         yield* Effect.sleep("300 millis")
         expect(updates).toBe(0)
 
@@ -359,17 +357,13 @@ describe("PluginSupervisor config", () => {
           .subscribe(Plugin.Event.Updated)
           .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
         const plugins = path.join(location.directory, ".opencode", "plugin")
-        yield* Effect.promise(async () => {
-          await fs.mkdir(plugins, { recursive: true })
-          await fs.writeFile(path.join(plugins, "mutable.ts"), mutablePlugin("related"))
-        })
+        yield* filesystem.makeDirectory(plugins, { recursive: true })
+        yield* filesystem.writeFileString(path.join(plugins, "mutable.ts"), mutablePlugin("related"))
         yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
         expect(updates).toBe(1)
       }),
       false,
-      async (directory) => {
-        await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
-      },
+      (directory, filesystem) => filesystem.makeDirectory(path.join(directory, ".opencode"), { recursive: true }),
     ),
   )
 
@@ -444,43 +438,37 @@ const ready = Effect.fnUntraced(function* () {
 
 type LocationConfig = Record<string, unknown> | undefined
 
-function withLocation<A, E, R>(
+function withLocation<A, E, R, E2>(
   config: LocationConfig | ((directory: string) => LocationConfig),
   effect: Effect.Effect<A, E, R>,
   fixtures = false,
-  prepare?: (directory: string) => Promise<void>,
+  prepare?: (directory: string, fs: FSUtil.Interface) => Effect.Effect<void, E2>,
 ) {
-  return Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(
-    Effect.tap((tmp) =>
-      Effect.promise(async () => {
-        await prepare?.(tmp.path)
-        if (fixtures) {
-          const directory = path.join(tmp.path, ".opencode")
-          await fs.mkdir(directory, { recursive: true })
-          await Promise.all(
-            ["plugin", "plugins"].map((name) =>
-              fs.symlink(path.join(import.meta.dir, "fixtures", name), path.join(directory, name), "dir"),
-            ),
-          )
-        }
-        const value = typeof config === "function" ? config(tmp.path) : config
-        if (value !== undefined) {
-          const directory = fixtures ? path.join(tmp.path, ".opencode") : tmp.path
-          await fs.mkdir(directory, { recursive: true })
-          await fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify(value))
-        }
-      }),
-    ),
-    Effect.flatMap((tmp) =>
-      effect.pipe(
-        Effect.scoped,
-        Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }))),
-      ),
-    ),
-  )
+  return Effect.gen(function* () {
+    const fs = yield* FSUtil.Service
+    const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-core-test-" })
+    const directory = yield* fs.realPath(temporary)
+    if (prepare) yield* prepare(directory, fs)
+    if (fixtures) {
+      const configDirectory = path.join(directory, ".opencode")
+      yield* fs.makeDirectory(configDirectory, { recursive: true })
+      yield* Effect.forEach(
+        ["plugin", "plugins"],
+        (name) => fs.symlink(path.join(import.meta.dir, "fixtures", name), path.join(configDirectory, name)),
+        { discard: true },
+      )
+    }
+    const value = typeof config === "function" ? config(directory) : config
+    if (value !== undefined) {
+      const configDirectory = fixtures ? path.join(directory, ".opencode") : directory
+      yield* fs.makeDirectory(configDirectory, { recursive: true })
+      yield* fs.writeFileString(path.join(configDirectory, "opencode.json"), JSON.stringify(value))
+    }
+    return yield* effect.pipe(
+      Effect.scoped,
+      Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+    )
+  })
 }
 
 function mutablePlugin(description: string) {
