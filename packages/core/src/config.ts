@@ -156,13 +156,6 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
     .findLast((entry) => entry.info[key] !== undefined)?.info[key]
 }
 
-export function isSourcePath(entries: readonly Entry[], file: string, directories: readonly string[]) {
-  return entries.some(
-    (entry) =>
-      entry.type === "directory" && directories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
-  )
-}
-
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>

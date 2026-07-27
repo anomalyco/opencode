@@ -1,7 +1,7 @@
 export * as PluginSupervisor from "./supervisor"
 
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Agent } from "../agent"
@@ -14,7 +14,6 @@ import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Bus } from "../bus"
 import { FileMutation } from "../file-mutation"
 import { FileSystem } from "../filesystem"
-import { Watcher } from "../filesystem/watcher"
 import { Form } from "../form"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
@@ -46,9 +45,9 @@ const PluginModule = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-      effect: Schema.declare<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>(
-        (input): input is import("@opencode-ai/plugin/effect/plugin").Plugin["effect"] => typeof input === "function",
-      ),
+    effect: Schema.declare<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>(
+      (input): input is import("@opencode-ai/plugin/effect/plugin").Plugin["effect"] => typeof input === "function",
+    ),
     }),
     Schema.Struct({
       id: Schema.String,
@@ -80,35 +79,6 @@ function parse(input: ConfigPlugin.Plugin): Operation {
   return { type: "remove", target: input.slice(1) }
 }
 
-const configuredOperations = Effect.fn("PluginSupervisor.configuredOperations")(function* (
-  entries: readonly Config.Entry[],
-  location: string,
-) {
-  const configured = entries
-    .filter((entry): entry is Config.Document => entry.type === "document")
-    .flatMap((entry) => {
-      const directory = entry.path ? path.dirname(entry.path) : location
-      return (entry.info.plugins ?? []).map((input) => ({ directory, input }))
-    })
-  const operations = yield* Effect.forEach(configured, ({ directory, input }) =>
-    Effect.sync(() => {
-      const operation = parse(input)
-      if (operation.type === "remove") return operation
-      const target = operation.target.startsWith("file://")
-        ? fileURLToPath(operation.target)
-        : operation.target.startsWith("./") || operation.target.startsWith("../")
-          ? path.resolve(directory, operation.target)
-          : operation.target
-      return { ...operation, target }
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("invalid configured plugin target", { input, cause }).pipe(Effect.as(undefined)),
-      ),
-    ),
-  )
-  return operations.filter((operation): operation is Operation => operation !== undefined)
-})
-
 const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Config.Entry[]) {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
@@ -116,7 +86,20 @@ const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Con
     entries.filter((entry): entry is Config.Directory => entry.type === "directory"),
     (entry) => discoverDirectory(fs, entry.path),
   ).pipe(Effect.map((items) => items.flat()))
-  const configured = yield* configuredOperations(entries, location.directory)
+  const configured = entries
+    .filter((entry): entry is Config.Document => entry.type === "document")
+    .flatMap((entry) =>
+      (entry.info.plugins ?? []).map(parse).map((operation) => {
+        if (operation.type === "remove") return operation
+        const directory = entry.path ? path.dirname(entry.path) : location.directory
+        const target = operation.target.startsWith("file://")
+          ? fileURLToPath(operation.target)
+          : operation.target.startsWith("./") || operation.target.startsWith("../")
+            ? path.resolve(directory, operation.target)
+            : operation.target
+        return { ...operation, target }
+      }),
+    )
   // Explicit config is applied last so it can remove auto-discovered packages.
   return yield* Effect.forEach([...discovered, ...configured], (operation) => {
     if (operation.type === "remove" || !path.isAbsolute(operation.target)) return Effect.succeed(operation)
@@ -221,70 +204,13 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
 
 const sourceDirectories = ["plugin", "plugins"] as const
 
-// Matches anything at or under <root>/{plugin,plugins}. No file-suffix check:
-// directory-level events such as renames carry no per-file paths.
 function isPluginSource(entries: readonly Config.Entry[], file: string) {
-  return Config.isSourcePath(entries, file, sourceDirectories)
-}
-
-const externalPluginTargets = Effect.fn("PluginSupervisor.externalPluginTargets")(function* (
-  entries: readonly Config.Entry[],
-  location: string,
-) {
-  return Array.from(
-    new Set(
-      (yield* configuredOperations(entries, location))
-        .filter((operation): operation is Extract<Operation, { type: "add" }> => operation.type === "add")
-        .map((operation) => operation.target)
-        .filter((target) => path.isAbsolute(target) && !isPluginSource(entries, target)),
-    ),
-  ).toSorted()
-})
-
-/**
- * Emits one signal per plugin-relevant change. Structured config and SDK
- * updates pass through immediately; filesystem changes from auto-discovered
- * sources and directly watched configured files share a 100ms debounce.
- */
-const changes = Effect.fn("PluginSupervisor.changes")(function* () {
-  const bus = yield* Bus.Service
-  const config = yield* Config.Service
-  const location = yield* Location.Service
-  const watcher = yield* Watcher.Service
-  const fileUpdates = yield* PubSub.unbounded<void>()
-
-  // Direct watchers for configured plugin files outside auto-discovery
-  // directories; sources under config roots reuse config.changes() instead.
-  const external = new Map<string, Fiber.Fiber<void>>()
-  const reconcile = Effect.fn("PluginSupervisor.reconcileExternal")(function* () {
-    const targets = new Set(yield* externalPluginTargets(yield* config.entries(), location.directory))
-    // Drop removed targets and finished watcher fibers; failed targets retry below.
-    for (const [file, fiber] of external) {
-      if (targets.has(file) && fiber.pollUnsafe() === undefined) continue
-      external.delete(file)
-      yield* Fiber.interrupt(fiber)
-    }
-    for (const file of targets) {
-      if (external.has(file)) continue
-      const fiber = yield* watcher.subscribe({ path: file, type: "file" }).pipe(
-        Stream.runForEach(() => PubSub.publish(fileUpdates, undefined)),
-        Effect.catchCause((cause) => Effect.logWarning("failed to watch plugin", { target: file, cause })),
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      external.set(file, fiber)
-    }
-  })
-  yield* reconcile()
-
-  const sourceChanges = config.changes().pipe(
-    Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((directory) => FSUtil.contains(path.join(entry.path, directory), file)),
   )
-  // Reconcile direct watchers before the update enters the generation queue so
-  // new targets are observable as soon as their generation publishes.
-  const configUpdates = bus.subscribe(Event.Updated).pipe(Stream.tap(() => reconcile()))
-  const fileChanges = Stream.merge(sourceChanges, Stream.fromPubSub(fileUpdates)).pipe(Stream.debounce("100 millis"))
-  return Stream.merge(Stream.merge(configUpdates, bus.subscribe(SdkPlugins.Updated)), fileChanges)
-})
+}
 
 export interface Interface {
   /** Wait for the initial plugin generation and startup updates to settle. */
@@ -299,6 +225,7 @@ const layer = Layer.effect(
     const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
+    const bus = yield* Bus.Service
     const lock = Semaphore.makeUnsafe(1)
     const ready = yield* Deferred.make<void>()
     let observed = 0
@@ -322,11 +249,25 @@ const layer = Layer.effect(
         }),
       )
     })
-    const changeStream = yield* changes()
-    const updates = yield* changeStream.pipe(Stream.toQueue({ capacity: 1, strategy: "sliding" }))
+    const sourceChanges = config
+      .changes()
+      .pipe(
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
+        ),
+        // Make accepted filesystem work visible to flush before coalescing the burst.
+        Stream.mapEffect(() => Effect.sync(() => ++observed)),
+        Stream.debounce("100 millis"),
+      )
+    const busUpdates = bus
+      .subscribe([Event.Updated, SdkPlugins.Updated])
+      .pipe(Stream.mapEffect(() => Effect.sync(() => ++observed)))
+    const updates = yield* Stream.merge(busUpdates, sourceChanges).pipe(
+      Stream.toQueue({ capacity: 1, strategy: "sliding" }),
+    )
     const signals = yield* Stream.concat(
       Stream.succeed(0),
-      Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
+      Stream.fromQueue(updates),
     ).pipe(Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }))
     const attempt = (target: number) =>
       activate(target).pipe(
@@ -368,7 +309,6 @@ export const node = makeLocationNode({
     Bus.node,
     FileMutation.node,
     FileSystem.node,
-    Watcher.node,
     FSUtil.node,
     Global.node,
     httpClient,
