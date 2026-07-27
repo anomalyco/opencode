@@ -256,7 +256,7 @@ export function ModelSelectorPopoverV2(props: {
       groups={controller.groups}
       current={controller.current}
       select={controller.select}
-      manage={controller.manage}
+      openManageModelsDialog={controller.openManageModelsDialog}
       labels={controller.labels}
       onClose={() => props.onClose?.()}
     />
@@ -301,7 +301,7 @@ function createModelSelectorController(input: {
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
       input.onSelect()
     },
-    manage: () => {
+    openManageModelsDialog: () => {
       void import("./dialog-manage-models").then((module) => {
         void dialog.show(() => <module.DialogManageModelsV2 />)
       })
@@ -325,7 +325,7 @@ function ModelSelectorPopoverV2View(props: {
   groups: (models: ModelItem[]) => { category: string; items: ModelItem[] }[]
   current: () => string | undefined
   select: (item: ModelItem) => void
-  manage: () => void
+  openManageModelsDialog: () => void
   labels: {
     search: () => string
     empty: () => string
@@ -384,7 +384,7 @@ function ModelSelectorPopoverV2View(props: {
   const manage = () => {
     restoreTrigger = false
     setOpen(false)
-    afterClose(props.manage)
+    afterClose(props.openManageModelsDialog)
   }
   const selectActive = () => {
     const item = models().find((item) => modelKey(item) === store.active)
