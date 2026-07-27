@@ -11,7 +11,7 @@ import type { SessionSchema } from "./schema"
 // runtime SessionStatus map this survives process restarts; writers converge
 // last-writer-wins on the session_id row. "interrupted" is never stored — it
 // is derived at read time for active rows whose writer process is gone.
-export const Status = Schema.Literals(["working", "retrying", "needs_input", "done", "idle", "interrupted"])
+export const Status = Schema.Literals(["working", "retrying", "needs_input", "waiting", "done", "idle", "interrupted"])
 export type Status = typeof Status.Type
 
 export const Info = Schema.Struct({
@@ -63,8 +63,10 @@ const layer = Layer.effect(
     })
 
     // A session that goes idle after a completed assistant message counts as
-    // "done" and carries the first line of its last text as the detail;
-    // anything else (abort, error, user message last) is a plain idle.
+    // "done" and carries the first line of its last text as the detail — or
+    // "waiting" when the turn ended asking the user something, carrying the
+    // question itself. Anything else (abort, error, user message last) is a
+    // plain idle.
     const setIdle: Interface["setIdle"] = Effect.fn("SessionStatusStore.setIdle")(function* (sessionID) {
       const message = yield* db
         .select()
@@ -90,12 +92,14 @@ const layer = Layer.effect(
         const data = part.data as { type?: string; text?: string }
         return data.type === "text" && data.text ? [data.text] : []
       })[0]
-      const detail = text
-        ?.split("\n")
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
-        ?.slice(0, 120)
-      return yield* set(sessionID, "done", detail)
+      const lines =
+        text
+          ?.split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0) ?? []
+      const last = lines.at(-1)
+      if (last?.endsWith("?")) return yield* set(sessionID, "waiting", last.slice(0, 120))
+      return yield* set(sessionID, "done", lines[0]?.slice(0, 120))
     })
 
     const list: Interface["list"] = Effect.fn("SessionStatusStore.list")(function* () {

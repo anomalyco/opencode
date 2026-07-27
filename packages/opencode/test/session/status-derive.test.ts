@@ -47,5 +47,11 @@ describe("deriveWriterStatus", () => {
       time,
     })
     expect(deriveWriterStatus(row("idle", null)).status).toBe("idle")
+    expect(deriveWriterStatus(row("waiting", DEAD_PID, "Ship it?"))).toEqual({
+      sessionID: "ses_test",
+      status: "waiting",
+      detail: "Ship it?",
+      time,
+    })
   })
 })

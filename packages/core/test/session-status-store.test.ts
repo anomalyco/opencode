@@ -116,6 +116,32 @@ describe("SessionStatusStore", () => {
     }),
   )
 
+  it.effect("marks waiting when the completed turn ends with a question", () =>
+    Effect.gen(function* () {
+      yield* seed
+      yield* addMessage({ role: "assistant", time: { created: 1, completed: 2 } })
+      yield* addTextPart("Here is my analysis.\n\nShould I proceed with the refactor?")
+      const store = yield* SessionStatusStore.Service
+
+      yield* store.setIdle(sessionID)
+      const row = (yield* store.list())[0]
+      expect(row.status).toBe("waiting")
+      expect(row.detail).toBe("Should I proceed with the refactor?")
+    }),
+  )
+
+  it.effect("marks done when a mid-text question is not the last line", () =>
+    Effect.gen(function* () {
+      yield* seed
+      yield* addMessage({ role: "assistant", time: { created: 1, completed: 2 } })
+      yield* addTextPart("Is this clear? Here is the full summary.")
+      const store = yield* SessionStatusStore.Service
+
+      yield* store.setIdle(sessionID)
+      expect((yield* store.list())[0].status).toBe("done")
+    }),
+  )
+
   it.effect("marks plain idle when the turn was not completed", () =>
     Effect.gen(function* () {
       yield* seed
