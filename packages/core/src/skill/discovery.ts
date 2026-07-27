@@ -172,11 +172,11 @@ const layer = Layer.effect(
                     (file) => download(file.url, path.resolve(staging, file.file)),
                     { concurrency: fileConcurrency },
                   )
-                  if (!downloaded.every(Boolean)) return
+                  if (!downloaded.every(Boolean)) return yield* Effect.fail("download failed")
                   const exists =
                     (yield* fs.exists(path.join(staging, "SKILL.md")).pipe(Effect.orDie)) ||
                     (yield* fs.exists(path.join(staging, `${skill.name}.md`)).pipe(Effect.orDie))
-                  if (!exists) return
+                  if (!exists) return yield* Effect.fail("skill entry point not found")
                   yield* fs.writeFileString(path.join(staging, ".opencode-version"), version)
                   yield* Effect.uninterruptible(
                     Effect.gen(function* () {
