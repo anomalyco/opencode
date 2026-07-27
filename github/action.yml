@@ -38,14 +38,28 @@ inputs:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
 
+  version:
+    description: "opencode CLI version to install (e.g. '1.18.7'). Defaults to the latest release."
+    required: false
+
 runs:
   using: "composite"
   steps:
     - name: Get opencode version
       id: version
       shell: bash
+      env:
+        REQUESTED_VERSION: ${{ inputs.version }}
       run: |
-        VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$REQUESTED_VERSION" ]; then
+          VERSION="$REQUESTED_VERSION"
+        else
+          VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        fi
+        # `resolved` is handed to the installer; empty means "let the installer pick
+        # the latest release itself", preserving prior behaviour when the API lookup
+        # fails. `version` is the cache key only, hence the `latest` placeholder.
+        echo "resolved=${VERSION}" >> $GITHUB_OUTPUT
         echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
 
     - name: Cache opencode
@@ -58,7 +72,13 @@ runs:
     - name: Install opencode
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: curl -fsSL https://opencode.ai/install | bash
+      # Run the installer bundled at the *pinned* action ref rather than fetching it
+      # from opencode.ai at run time, so a SHA-pinned `uses:` also pins the installer.
+      # `bash` (not `sh`) is required: ./install is `#!/usr/bin/env bash` and uses
+      # `[[ ]]` throughout.
+      run: bash "$GITHUB_ACTION_PATH/../install"
+      env:
+        VERSION: ${{ steps.version.outputs.resolved }}
 
     - name: Add opencode to PATH
       shell: bash
