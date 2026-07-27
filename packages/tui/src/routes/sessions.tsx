@@ -341,8 +341,9 @@ export function Sessions() {
       return
     }
 
-    // Agent and model choices belong to the current project; a session
-    // created in another directory falls back to that project's own defaults.
+    // Agents belong to the project, so a session created in another
+    // directory falls back to that project's default agent. Providers and
+    // models are global: the last-used model/variant always carries over.
     const current = directory === path.normalize(paths.cwd)
     const agent = local.agent.current()
     if (current && !agent) {
@@ -351,14 +352,10 @@ export function Sessions() {
     }
     const model = local.model.current()
     const variant = local.model.variant.current()
-    if (current && parsed.prompt && !model) {
-      toast.show({ message: "No model selected. Pick one before sending a prompt.", variant: "error" })
-      return
-    }
     const res = await sdk.client.session.create({
       directory,
       ...(current && agent ? { agent: agent.name } : {}),
-      ...(current && model ? { model: { providerID: model.providerID, id: model.modelID, variant } } : {}),
+      ...(model ? { model: { providerID: model.providerID, id: model.modelID, variant } } : {}),
     })
     if (res.error || !res.data) {
       toast.show({ message: "Creating a session failed. Open console for more details.", variant: "error" })
@@ -371,9 +368,8 @@ export function Sessions() {
       sdk.client.session
         .prompt({
           sessionID,
-          ...(current && model
-            ? { model: { providerID: model.providerID, modelID: model.modelID }, agent: agent?.name, variant }
-            : {}),
+          ...(model ? { model: { providerID: model.providerID, modelID: model.modelID }, variant } : {}),
+          ...(current && agent ? { agent: agent.name } : {}),
           parts: [{ type: "text", text: parsed.prompt }],
         })
         .catch((error) => {
