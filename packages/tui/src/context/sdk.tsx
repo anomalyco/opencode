@@ -90,40 +90,42 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       flush()
     }
 
-    async function startSSE() {
+    function startSSE() {
       sse?.abort()
       const ctrl = new AbortController()
       sse = ctrl
-      let attempt = 0
-      while (true) {
-        if (abort.signal.aborted || ctrl.signal.aborted) break
+      ;(async () => {
+        let attempt = 0
+        while (true) {
+          if (abort.signal.aborted || ctrl.signal.aborted) break
 
-        const events = await sdk.global.event({
-          signal: ctrl.signal,
-          sseMaxRetryAttempts: 0,
-        })
-        resolveTransport()
+          const events = await sdk.global.event({
+            signal: ctrl.signal,
+            sseMaxRetryAttempts: 0,
+          })
+          resolveTransport()
 
-        if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-          // Start syncing workspaces, it's important to do this after
-          // we've started listening to events
-          await sdk.sync.start().catch(() => {})
+          if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+            // Start syncing workspaces, it's important to do this after
+            // we've started listening to events
+            await sdk.sync.start().catch(() => {})
+          }
+
+          for await (const event of events.stream) {
+            if (ctrl.signal.aborted) break
+            handleEvent(event)
+          }
+
+          if (timer) clearTimeout(timer)
+          if (queue.length > 0) flush()
+          attempt += 1
+          if (abort.signal.aborted || ctrl.signal.aborted) break
+
+          // Exponential backoff
+          const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
+          await new Promise((resolve) => setTimeout(resolve, backoff))
         }
-
-        for await (const event of events.stream) {
-          if (ctrl.signal.aborted) break
-          handleEvent(event)
-        }
-
-        if (timer) clearTimeout(timer)
-        if (queue.length > 0) flush()
-        attempt += 1
-        if (abort.signal.aborted || ctrl.signal.aborted) break
-
-        // Exponential backoff
-        const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
-        await new Promise((resolve) => setTimeout(resolve, backoff))
-      }
+      })().catch(resolveTransport)
     }
 
     onMount(async () => {
@@ -138,7 +140,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           await sdk.sync.start().catch(() => {})
         }
       } else {
-        void startSSE().catch(resolveTransport)
+        startSSE()
       }
     })
 
