@@ -338,6 +338,30 @@ describe("run runtime queue", () => {
     expect(admissionHit).toBe(true)
   })
 
+  test.each([
+    ["session", undefined, false],
+    ["shell", "shell", true],
+  ] as const)("close handles an active %s turn", async (_name, mode, aborted) => {
+    const ui = createFooterApiFixture()
+    const started = Promise.withResolvers<AbortSignal>()
+    const active = Promise.withResolvers<void>()
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (_input, signal) => {
+        started.resolve(signal)
+        await active.promise
+      },
+    })
+
+    ui.submit("one", mode)
+    const signal = await started.promise
+    ui.api.close()
+    await task
+
+    expect(signal.aborted).toBe(aborted)
+    active.resolve()
+  })
+
   test("propagates run errors", async () => {
     const ui = createFooterApiFixture()
 
