@@ -18,6 +18,28 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`cron_job\` (
+          \`id\` text PRIMARY KEY,
+          \`name\` text,
+          \`prompt\` text NOT NULL,
+          \`schedule_kind\` text NOT NULL,
+          \`schedule_expr\` text NOT NULL,
+          \`enabled\` integer DEFAULT 1 NOT NULL,
+          \`state\` text DEFAULT 'scheduled' NOT NULL,
+          \`next_run_at\` integer,
+          \`last_run_at\` integer,
+          \`last_status\` text,
+          \`last_error\` text,
+          \`model\` text,
+          \`skills\` text,
+          \`workdir\` text,
+          \`repeat_times\` integer,
+          \`repeat_done\` integer DEFAULT 0 NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`data_migration\` (
           \`name\` text PRIMARY KEY,
           \`time_completed\` integer NOT NULL
@@ -61,7 +83,7 @@ export default {
           \`userId\` text PRIMARY KEY,
           \`balance\` integer DEFAULT 0 NOT NULL,
           \`lifetimeUsed\` integer DEFAULT 0 NOT NULL,
-          \`lastAllowanceMonth\` text DEFAULT '' NOT NULL,
+          \`lastAllowanceMonth\` text,
           \`updatedAt\` integer NOT NULL,
           CONSTRAINT \`fk_token_balance_userId_user_identity_id_fk\` FOREIGN KEY (\`userId\`) REFERENCES \`user_identity\`(\`id\`) ON DELETE CASCADE
         );
