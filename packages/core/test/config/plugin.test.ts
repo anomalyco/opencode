@@ -303,7 +303,7 @@ function withLocation<A, E, R>(
 }
 
 function mutablePlugin(description: string) {
-  const plugin = pathToFileURL(path.join(import.meta.dir, "../../../plugin/src/index.ts")).href
+  const plugin = pathToFileURL(path.join(import.meta.dir, "../../../plugin/src/promise/index.ts")).href
   return `
 import { Plugin } from ${JSON.stringify(plugin)}
 
