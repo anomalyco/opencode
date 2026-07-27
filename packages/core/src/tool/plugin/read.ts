@@ -1,7 +1,7 @@
 export * as ReadTool from "./read"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { dirname } from "path"
+import { basename, dirname, join } from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -69,7 +69,6 @@ export const Plugin = {
                   })
                 const resource = target.resource
                 const absolute = AbsolutePath.make(target.canonical)
-                const type = yield* reader.inspect(absolute)
                 yield* permission.assert({
                   action: name,
                   resources: [resource],
@@ -78,6 +77,9 @@ export const Plugin = {
                   agent: context.agent,
                   source,
                 })
+                const type = yield* reader.inspect(absolute).pipe(
+                  Effect.catchReason("PlatformError", "NotFound", () => missing(input.path, target.canonical)),
+                )
                 const content =
                   type === "directory"
                     ? yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
@@ -119,6 +121,7 @@ export const Plugin = {
                   content: toModelContent(input.path, input.offset, output),
                 })),
                 Effect.mapError((error) => {
+                  if (error instanceof ToolFailure) return error
                   const message =
                     error instanceof ReadToolFileSystem.BinaryFileError ||
                     error instanceof ReadToolFileSystem.MediaIngestLimitError ||
@@ -135,6 +138,27 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
+
+    const missing = Effect.fn("ReadTool.missing")(function* (input: string, canonical: string) {
+      const base = basename(input).toLowerCase()
+      const suggestions = yield* fs.readDirectory(dirname(canonical)).pipe(
+        Effect.map((entries) =>
+          entries
+            .filter((entry) => {
+              const candidate = entry.toLowerCase()
+              return candidate.includes(base) || base.includes(candidate)
+            })
+            .map((entry) => join(dirname(input), entry))
+            .slice(0, 3),
+        ),
+        Effect.catch(() => Effect.succeed([] as string[])),
+      )
+      const message =
+        suggestions.length === 0
+          ? `File not found: ${input}`
+          : `File not found: ${input}\n\nDid you mean one of these?\n${suggestions.join("\n")}`
+      return yield* new ToolFailure({ message })
+    })
   }),
 }
 

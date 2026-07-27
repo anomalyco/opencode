@@ -41,6 +41,13 @@ const readToolNode = makeLocationNode({
 const assertions: Permission.AssertInput[] = []
 const missingPath = "__missing_read_target__.txt"
 const missingAbsolutePath = path.join(process.cwd(), missingPath)
+const notFound = (target: string) =>
+  PlatformError.systemError({
+    _tag: "NotFound",
+    module: "FileSystem",
+    method: "stat",
+    pathOrDescriptor: target,
+  })
 const readCalls: {
   input: AbsolutePath
   page: ReadToolFileSystem.PageInput
@@ -49,6 +56,8 @@ const listCalls: ReadToolFileSystem.PageInput[] = []
 let listResult = new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
 let resolvedType: "file" | "directory" = "file"
 let resolveFailure: unknown
+let inspectFailure: ReadToolFileSystem.InspectError | undefined
+let directoryEntries: string[] = []
 let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage = {
   type: "file",
   uri: "file:///README.md",
@@ -62,7 +71,12 @@ let configEntries: Config.Entry[] = []
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
   ReadToolFileSystem.Service.of({
-    inspect: () => (resolveFailure === undefined ? Effect.succeed(resolvedType) : Effect.die(resolveFailure)),
+    inspect: () =>
+      resolveFailure !== undefined
+        ? Effect.die(resolveFailure)
+        : inspectFailure !== undefined
+          ? Effect.fail(inspectFailure)
+          : Effect.succeed(resolvedType),
     read: (input, _resource, page = {}) => {
       readCalls.push({ input, page })
       if (readFailure !== undefined) return Effect.fail(readFailure)
@@ -110,6 +124,7 @@ const testFileSystem = Layer.effect(
     Effect.succeed(
       FSUtil.Service.of({
         ...fs,
+        readDirectory: () => Effect.succeed(directoryEntries),
         realPath: (path) =>
           path === missingAbsolutePath
             ? Effect.fail(
@@ -133,8 +148,6 @@ const mutation = Layer.succeed(
   LocationMutation.Service,
   LocationMutation.Service.of({
     resolve: (input) => {
-      if (input.path === missingPath)
-        return Effect.fail(new LocationMutation.PathError({ path: input.path, reason: "non_directory_ancestor" }))
       const canonical = path.resolve(process.cwd(), input.path)
       const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), canonical)
       const resource = external ? canonical.replaceAll("\\", "/") : path.relative(process.cwd(), canonical) || "."
@@ -182,6 +195,8 @@ describe("ReadTool", () => {
     allow = true
     resolvedType = "file"
     resolveFailure = undefined
+    inspectFailure = undefined
+    directoryEntries = []
     readResult = {
       type: "file",
       uri: "file:///README.md",
@@ -657,6 +672,14 @@ describe("ReadTool", () => {
 
   it.effect("returns missing paths as model-visible tool failures", () =>
     Effect.gen(function* () {
+      inspectFailure = notFound(missingAbsolutePath)
+      directoryEntries = [
+        "__missing_read_target__.txt.bak",
+        "copy___missing_read_target__.txt",
+        "old___missing_read_target__.txt",
+        "other___missing_read_target__.txt",
+        "unrelated.txt",
+      ]
       const registry = yield* Tool.Service
 
       expect(
@@ -665,10 +688,14 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-missing-path", name: "read", input: { path: missingPath } },
         }),
-        // The message-less PathError cause must not erase the tool's curated
-        // failure message; the canonical error is the sole authority.
-      ).toEqual({ status: "error", error: { type: "tool.execution", message: `Unable to read ${missingPath}` } })
-      expect(assertions).toEqual([])
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: `File not found: ${missingPath}\n\nDid you mean one of these?\n__missing_read_target__.txt.bak\ncopy___missing_read_target__.txt\nold___missing_read_target__.txt`,
+        },
+      })
+      expect(assertions).toMatchObject([{ sessionID, action: "read", resources: [missingPath], save: ["*"] }])
       expect(readCalls).toEqual([])
     }),
   )
