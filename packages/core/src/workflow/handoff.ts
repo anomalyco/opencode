@@ -6,6 +6,7 @@ import { WorkflowReport } from "./report"
 type HeavyOutput = typeof WorkflowSchema.HeavyOutput.Encoded
 type CouncilOutput = typeof WorkflowSchema.CouncilOutput.Encoded
 type ResearchOutput = typeof WorkflowSchema.ResearchOutput.Encoded
+type StudioOutput = typeof WorkflowSchema.StudioOutput.Encoded
 
 export type Session = {
   readonly session_id: string
@@ -14,7 +15,7 @@ export type Session = {
   readonly parent_run_id?: string
   readonly status: string
   readonly activity?: string
-  readonly workflow?: "heavy" | "council" | "research"
+  readonly workflow?: "heavy" | "council" | "research" | "studio"
   readonly agent?: string
   readonly title?: string
   readonly stage?: string
@@ -643,6 +644,137 @@ export function research(output: ResearchOutput, sessions: ReadonlyArray<Session
       })),
       delegation_manifest: minimalManifest(output.delegations, 16),
       session_manifest: minimalManifest(sessionManifest, 48),
+      handoff_compacted: true,
+    },
+  ])
+}
+
+export function studio(output: StudioOutput, sessions: ReadonlyArray<Session> = []): string {
+  const reportLink = output.report_path ? `[Full Studio document](${output.report_path})` : undefined
+  const sessionManifest =
+    sessions.length > 0
+      ? sessions
+      : (output.session_manifest ?? []).map((session) => ({
+          session_id: session.session_id,
+          parent_session_id: session.parent_session_id,
+          run_id: session.run_id,
+          parent_run_id: session.parent_run_id,
+          status: session.status,
+          activity: session.activity,
+          workflow: session.workflow,
+          agent: session.agent,
+          title: session.title,
+          stage: session.stage,
+          workflow_depth: session.workflow_depth,
+          error: session.error,
+          usage: session.usage,
+        }))
+  const base = {
+    workflow: output.workflow,
+    status: output.status,
+    execution_status: output.execution_status,
+    artifact_status: output.artifact_status,
+    summary: output.summary,
+    final_response: withReportLink(output.final_response, reportLink),
+    final_response_instruction:
+      "Use final_response as the answer body with only minimal formatting repair. It is the standalone user-facing Studio document and already contains the exact immutable report link; preserve that link verbatim. Preserve the developed alternatives, their concrete content, consequential differences, tradeoffs, and conditional direction. Do not append child report paths or an orchestration diary.",
+    usage: output.usage,
+    timing: output.timing,
+    root_session_id: output.root_session_id,
+    report_path: output.report_path,
+    trace_path: output.trace_path,
+    report_link: reportLink,
+    evaluation: output.evaluation,
+    coverage_diagnostics: coverageDiagnostics(output.synthesis.coverage),
+    archive_note: ARCHIVE_NOTE,
+  }
+  const concepts = output.concepts.map((concept) => ({
+    concept_id: concept.concept_id,
+    title: concept.title,
+    status: concept.status,
+    pitch: clip(concept.pitch, 1_500),
+    deliverables: concept.deliverables.map((deliverable) => ({
+      deliverable: deliverable.deliverable,
+      content: clip(deliverable.content, 1_000),
+    })),
+    differentiators: clipStrings(concept.differentiators, 6, 400),
+    tradeoffs: clipStrings(concept.tradeoffs, 6, 400),
+    risks: clipStrings(concept.risks, 6, 400),
+    open_choices: clipStrings(concept.open_choices, 6, 400),
+  }))
+  return fit([
+    {
+      ...base,
+      creative_contract: output.plan,
+      concepts,
+      comparative_critique: {
+        status: output.critique.status,
+        summary: output.critique.summary,
+        assessments: output.critique.assessments,
+        cross_concept_patterns: output.critique.cross_concept_patterns,
+        missing_requirements: output.critique.missing_requirements,
+        recommendations: output.critique.recommendations,
+      },
+      direction: {
+        status: output.synthesis.status,
+        summary: output.synthesis.summary,
+        recommended_concept_ids: output.synthesis.recommended_concept_ids,
+        preserved_concept_ids: output.synthesis.preserved_concept_ids,
+        deliverable_coverage: output.synthesis.deliverable_coverage,
+        decisions: output.synthesis.decisions,
+        tradeoffs: output.synthesis.tradeoffs,
+        next_choices: output.synthesis.next_choices,
+      },
+      delegation_manifest: compactDelegations(output.delegations),
+      session_manifest: sessionManifest,
+    },
+    {
+      ...base,
+      creative_contract: {
+        objective: output.plan.objective,
+        deliverables: output.plan.deliverables,
+        constraints: output.plan.constraints,
+        assumptions: output.plan.assumptions,
+        choice_points: output.plan.choice_points,
+      },
+      concepts,
+      comparative_critique: {
+        status: output.critique.status,
+        summary: clip(output.critique.summary, 2_000),
+        assessments: output.critique.assessments,
+      },
+      direction: {
+        status: output.synthesis.status,
+        summary: clip(output.synthesis.summary, 2_000),
+        recommended_concept_ids: output.synthesis.recommended_concept_ids,
+        preserved_concept_ids: output.synthesis.preserved_concept_ids,
+        deliverable_coverage: output.synthesis.deliverable_coverage,
+        decisions: clipStrings(output.synthesis.decisions, 10, 500),
+        tradeoffs: clipStrings(output.synthesis.tradeoffs, 10, 500),
+        next_choices: clipStrings(output.synthesis.next_choices, 10, 500),
+      },
+      delegation_manifest: minimalManifest(output.delegations, 4),
+      session_manifest: minimalManifest(sessionManifest, 16),
+      handoff_compacted: true,
+    },
+    {
+      ...base,
+      concepts: concepts.map((concept) => ({
+        concept_id: concept.concept_id,
+        title: concept.title,
+        status: concept.status,
+        pitch: clip(concept.pitch, 600),
+        differentiators: concept.differentiators,
+        tradeoffs: concept.tradeoffs,
+      })),
+      direction: {
+        status: output.synthesis.status,
+        summary: clip(output.synthesis.summary, 1_500),
+        recommended_concept_ids: output.synthesis.recommended_concept_ids,
+        preserved_concept_ids: output.synthesis.preserved_concept_ids,
+        next_choices: clipStrings(output.synthesis.next_choices, 6, 300),
+      },
+      session_manifest: minimalManifest(sessionManifest, 12),
       handoff_compacted: true,
     },
   ])

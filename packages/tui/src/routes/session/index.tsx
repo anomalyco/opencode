@@ -222,7 +222,10 @@ export function Session() {
       (sync.data.part[message.id] ?? []).flatMap((part) => {
         if (
           part.type !== "tool" ||
-          (part.tool !== "heavy_run" && part.tool !== "council_run" && part.tool !== "research_run")
+          (part.tool !== "heavy_run" &&
+            part.tool !== "council_run" &&
+            part.tool !== "research_run" &&
+            part.tool !== "studio_run")
         )
           return []
         if (part.state.status === "pending") return []
@@ -242,7 +245,10 @@ export function Session() {
         (sync.data.part[message.id] ?? []).flatMap((part) => {
           if (
             part.type !== "tool" ||
-            (part.tool !== "heavy_run" && part.tool !== "council_run" && part.tool !== "research_run")
+            (part.tool !== "heavy_run" &&
+              part.tool !== "council_run" &&
+              part.tool !== "research_run" &&
+              part.tool !== "studio_run")
           )
             return []
           if (part.state.status === "pending") return []
@@ -2653,9 +2659,21 @@ function Workflow(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   const childShortcut = useCommandShortcut("session.child.first")
   const name = createMemo(() =>
-    props.tool === "heavy_run" ? "Heavy" : props.tool === "council_run" ? "Council" : "Research",
+    props.tool === "heavy_run"
+      ? "Heavy"
+      : props.tool === "council_run"
+        ? "Council"
+        : props.tool === "research_run"
+          ? "Research"
+          : "Studio",
   )
-  const objective = createMemo(() => stringValue(props.input.task) ?? stringValue(props.input.question) ?? "Workflow")
+  const objective = createMemo(
+    () =>
+      stringValue(props.input.task) ??
+      stringValue(props.input.question) ??
+      stringValue(props.input.brief) ??
+      "Workflow",
+  )
   const status = createMemo(() => stringValue(props.metadata.status))
   const running = createMemo(
     () => props.part.state.status === "pending" || props.part.state.status === "running" || status() === "running",
@@ -2728,7 +2746,7 @@ function Workflow(props: ToolProps) {
           reportCount(),
           props.metadata.councilUsed === true,
         ),
-        formatWorkflowTree(props.metadata.childSessions, (value) => pathFormatter.format(value)),
+        formatWorkflowTree(props.metadata.childSessions),
         [props.metadata.executionStatus, props.metadata.artifactStatus, props.metadata.evidenceStatus].some(
           (value) => typeof value === "string",
         )
@@ -2767,7 +2785,7 @@ export function formatWorkflowSummary(
   return lines.join("\n")
 }
 
-export function formatWorkflowTree(value: unknown, formatPath: (value: string) => string = (item) => item) {
+export function formatWorkflowTree(value: unknown) {
   if (!Array.isArray(value)) return undefined
   const sessions = value.flatMap((item) => {
     const current = recordValue(item)
@@ -2820,14 +2838,12 @@ export function formatWorkflowTree(value: unknown, formatPath: (value: string) =
     const dependencies = Array.isArray(item.current.dependsOn)
       ? item.current.dependsOn.filter((entry): entry is string => typeof entry === "string")
       : []
-    const report = stringValue(item.current.reportPath)
     const detail = [
       stage,
       activity?.replaceAll("_", " "),
       nodeDepth === undefined ? undefined : `depth ${nodeDepth}`,
       dependencies.length > 0 ? `after ${dependencies.join(", ")}` : undefined,
       elapsed === undefined ? undefined : Locale.duration(elapsed),
-      report ? `report ${formatPath(report)}` : undefined,
     ]
       .filter((entry): entry is string => !!entry)
       .join(" · ")
@@ -2845,7 +2861,7 @@ export function formatWorkflowTree(value: unknown, formatPath: (value: string) =
                 : item.status === "timed_out"
                   ? "◷"
                   : "×"
-    return `${"  ".repeat(depth(item.sessionID) + 1)}↳ ${icon} ${workflow === "council" ? "Council" : "Heavy"}: ${title}${detail ? ` · ${detail}` : ""}`
+    return `${"  ".repeat(depth(item.sessionID) + 1)}↳ ${icon} ${Locale.titlecase(workflow ?? "heavy")}: ${title}${detail ? ` · ${detail}` : ""}`
   })
   if (sessions.length > selected.length) lines.push(`  ↳ … ${sessions.length - selected.length} earlier sessions`)
   return ["↳ Workflow tree", ...lines].join("\n")
@@ -3213,7 +3229,8 @@ const toolDisplays = new Set([
 ])
 
 export function toolDisplay(tool: string) {
-  if (tool === "heavy_run" || tool === "council_run" || tool === "research_run") return "workflow"
+  if (tool === "heavy_run" || tool === "council_run" || tool === "research_run" || tool === "studio_run")
+    return "workflow"
   return toolDisplays.has(tool) ? tool : "generic"
 }
 

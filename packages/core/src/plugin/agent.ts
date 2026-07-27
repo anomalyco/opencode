@@ -115,6 +115,12 @@ After research_run returns, do not call it again. Its bounded handoff contains f
 
 Use final_response nearly verbatim. It already ends with the exact immutable report link; preserve that Markdown link character-for-character and never reconstruct its path. The report is designed to stand alone: do not replace it with a child-report index or a process diary. Preserve material evidence, reasoning, estimates, contradictions, minority positions, uncertainty, limitations, and recommendations. Honor source verification and claim confidence. End with a compact Research artifacts section linking the report, trace, canonical graph, and raw evidence ledger, then disclose failed or timed-out children.`
 
+const PROMPT_STUDIO = `You are the Studio workflow entrypoint. For every user request, call studio_run exactly once with the complete creative brief. Studio infers the requested deliverables, develops several materially distinct concepts, compares them without prematurely collapsing them, and authors one standalone direction document.
+
+After studio_run returns, do not call it again. Use final_response nearly verbatim. It already ends with the exact immutable Studio document link; preserve that Markdown link character-for-character and never reconstruct its path. Preserve the concrete alternatives, consequential differences, honest tradeoffs, open choices, and any conditional recommendation.
+
+Do not append a workflow diary, child-report index, session IDs, intermediate report paths, or evidence apparatus. If the workflow is partial, briefly disclose only the material limitation that affects the creative result.`
+
 const PROMPT_WORKFLOW_RESULT = `You are an internal workflow stage. Perform the assigned role thoroughly and preserve concrete evidence and caveats. Prefer primary and authoritative sources. Preserve the exact URL near each supported claim, and explicitly label a URL unverified when it was not returned by a successful lookup or inspected directly. Record failed searches instead of silently replacing them with unsupported certainty. Use workflow_report for the complete analysis, then finish by calling workflow_result with a compact structured index. Coverage and audit metadata belong only in workflow_result, never in workflow_report. Do not repeat the full report in a terminal field, and do not substitute a prose-only final answer for workflow_result.
 
 You may delegate genuinely broad or disputed subproblems with heavy_run or council_run. Heavy is appropriate when a strict subproblem itself needs multiple independent tasks. Council is appropriate when a strict subproblem contains a consequential disputed judgment with credible competing positions and minority views worth preserving. Never pass the root objective or your complete assigned objective unchanged to a delegated workflow. Keep branch-local disputes local and leave whole-objective disputes for the root synthesis. A recursive Council must debate a materially narrower issue than every ancestor Council; equivalent ancestor disputes are rejected by the engine. When calling council_run recursively, provide a stable issue_key and the exact artifact_paths whose evidence frames the dispute so equivalent sibling requests can share one deliberation safely. Delegated calls inherit a shared depth and run budget, so use them only when they materially improve the result. Recursive Heavy writers are serialized through inherited writer leases. Integrate delegated conclusions, evidence, report paths, disagreements, and failures into your report and workflow_result.`
@@ -138,6 +144,20 @@ Use only the authorized reports and structured ledgers supplied by the engine. D
 const PROMPT_RESEARCH_PLANNER = `You are a structured planning or assessment stage in an adaptive Research workflow. The engine owns recursion, wave selection, reporting, and Council routing; do not call heavy_run, council_run, or research_run yourself.
 
 Do not inspect the workspace, search the web, answer the objective, or write a report. Read all authorized upstream workflow artifacts with workflow_read_reports({ all: true }) when the prompt supplies them; never transcribe opaque artifact IDs. Create only bounded, novel evidence questions with high expected information gain, then call workflow_result exactly once. Do not create a report-writing task.`
+
+const PROMPT_STUDIO_PLANNER = `You are the brief planner in a bounded, domain-general Studio workflow. Infer the user's deliverables, constraints, assumptions, choice points, and materially distinct concept mandates. Do not answer the brief, inspect the workspace, browse, research, delegate, or import a stock domain template. Call workflow_result exactly once with the requested compact contract.`
+
+const PROMPT_STUDIO_CREATOR = `You are a concept author in a bounded, domain-general Studio workflow. Develop only the assigned concept, but develop it completely against every supplied deliverable. Make structural, causal, experiential, or value differences concrete; surface tradeoffs and open choices instead of claiming universal superiority.
+
+Do not search the web, call Heavy, Council, Research, or Studio, or delegate creative judgment. You may inspect ordinary workspace material only when the brief explicitly depends on it; never discover or read .opencode/reports through filesystem tools. Preserve the self-contained concept dossier with workflow_report, then call workflow_result exactly once with the requested compact index.`
+
+const PROMPT_STUDIO_CRITIC = `You are the comparative critic in a bounded, domain-general Studio workflow. Read every authorized concept report with workflow_read_reports({ all: true }). Test brief fit, completeness, internal coherence, meaningful distinctness, hidden convergence, and honest tradeoffs. Preserve the strongest exclusive contribution of each route; do not choose a winner or rewrite the concepts.
+
+Do not browse or conduct general research. You may call research_run at most once only for a strict external factual, legal, scientific, or cultural uncertainty that could materially invalidate the comparison and only when the workflow configuration permits it. Never send Research the creative brief or a creative choice. Never call Heavy, Council, or Studio. Write the comparative critique with workflow_report, then call workflow_result exactly once with every concept assessment and substantive artifact coverage.`
+
+const PROMPT_STUDIO_DIRECTOR = `You are the final director in a bounded, domain-general Studio workflow. Read every authorized concept and critique report with workflow_read_reports({ all: true }), then author one coherent standalone document for the user. Preserve every materially developed alternative, reconstruct its concrete content, compare consequential differences and tradeoffs, and make any recommendation conditional.
+
+The document must never mention agents, sessions, tools, reports, paths, artifact IDs, or orchestration. Do not browse, inspect the workspace, research, or delegate. Use workflow_report once for the complete document, then call workflow_result exactly once with the requested compact direction ledger and substantive artifact coverage.`
 
 export const Plugin = define({
   id: "agent",
@@ -164,6 +184,7 @@ export const Plugin = define({
       { action: "heavy_run", resource: "*", effect: "deny" },
       { action: "council_run", resource: "*", effect: "deny" },
       { action: "research_run", resource: "*", effect: "deny" },
+      { action: "studio_run", resource: "*", effect: "deny" },
     ]
     const isolatedReportReads: PermissionV2.Ruleset = [
       { action: "read", resource: path.join(worktree, ".opencode", "reports", "*"), effect: "deny" },
@@ -306,6 +327,19 @@ export const Plugin = define({
         )
       })
 
+      draft.update(AgentV2.ID.make("studio"), (item) => {
+        item.description =
+          "Bounded creative development with distinct concepts, comparative critique, and a standalone direction document."
+        item.system = PROMPT_STUDIO
+        item.mode = "primary"
+        item.color = "info"
+        item.steps = 3
+        item.permissions.push(
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "studio_run", resource: "*", effect: "allow" },
+        )
+      })
+
       for (const id of [
         "heavy-reader",
         "heavy-synthesizer",
@@ -371,6 +405,68 @@ export const Plugin = define({
           )
         })
       }
+
+      draft.update(AgentV2.ID.make("studio-planner"), (item) => {
+        item.mode = "subagent"
+        item.hidden = true
+        item.system = PROMPT_STUDIO_PLANNER
+        item.steps = 8
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "*", resource: "*", effect: "deny" },
+            { action: "workflow_result", resource: "*", effect: "allow" },
+          ]),
+        )
+      })
+
+      draft.update(AgentV2.ID.make("studio-creator"), (item) => {
+        item.mode = "subagent"
+        item.hidden = true
+        item.system = PROMPT_STUDIO_CREATOR
+        item.steps = 16
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "*", resource: "*", effect: "deny" },
+            { action: "grep", resource: "*", effect: "allow" },
+            { action: "glob", resource: "*", effect: "allow" },
+            { action: "read", resource: "*", effect: "allow" },
+            { action: "workflow_report", resource: "*", effect: "allow" },
+            { action: "workflow_result", resource: "*", effect: "allow" },
+            ...isolatedReportReads,
+          ]),
+        )
+      })
+
+      draft.update(AgentV2.ID.make("studio-critic"), (item) => {
+        item.mode = "subagent"
+        item.hidden = true
+        item.system = PROMPT_STUDIO_CRITIC
+        item.steps = 16
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "*", resource: "*", effect: "deny" },
+            { action: "research_run", resource: "*", effect: "allow" },
+            { action: "workflow_read_reports", resource: "*", effect: "allow" },
+            { action: "workflow_report", resource: "*", effect: "allow" },
+            { action: "workflow_result", resource: "*", effect: "allow" },
+          ]),
+        )
+      })
+
+      draft.update(AgentV2.ID.make("studio-director"), (item) => {
+        item.mode = "subagent"
+        item.hidden = true
+        item.system = PROMPT_STUDIO_DIRECTOR
+        item.steps = 24
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "*", resource: "*", effect: "deny" },
+            { action: "workflow_read_reports", resource: "*", effect: "allow" },
+            { action: "workflow_report", resource: "*", effect: "allow" },
+            { action: "workflow_result", resource: "*", effect: "allow" },
+          ]),
+        )
+      })
 
       draft.update(AgentV2.ID.make("heavy-writer"), (item) => {
         item.mode = "subagent"

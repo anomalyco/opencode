@@ -15,6 +15,7 @@ import PROMPT_COUNCIL from "./prompt/council.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_HEAVY from "./prompt/heavy.txt"
 import PROMPT_RESEARCH from "./prompt/research.txt"
+import PROMPT_STUDIO from "./prompt/studio.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -139,6 +140,7 @@ const layer = Layer.effect(
           heavy_run: "deny",
           council_run: "deny",
           research_run: "deny",
+          studio_run: "deny",
         })
 
         const user = Permission.fromConfig(cfg.permission ?? {})
@@ -276,6 +278,25 @@ const layer = Layer.effect(
             color: "success",
             steps: 3,
           },
+          studio: {
+            name: "studio",
+            description:
+              "Bounded creative development with distinct concepts, comparative critique, and a standalone direction document.",
+            prompt: PROMPT_STUDIO,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                studio_run: "allow",
+              }),
+              user,
+            ),
+            options: {},
+            mode: "primary",
+            native: true,
+            color: "info",
+            steps: 3,
+          },
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -368,6 +389,11 @@ const layer = Layer.effect(
           (typeof cfg.workflows?.research === "object" && cfg.workflows.research.enabled === false)
         )
           delete agents.research
+        if (
+          cfg.workflows?.studio === false ||
+          (typeof cfg.workflows?.studio === "object" && cfg.workflows.studio.enabled === false)
+        )
+          delete agents.studio
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
         for (const name in agents) {

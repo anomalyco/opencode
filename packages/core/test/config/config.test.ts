@@ -98,6 +98,12 @@ describe("Config", () => {
             freshness_days: 30,
             models: { planner: "openai/research-planner" },
           },
+          studio: {
+            concepts: 4,
+            concurrency: 3,
+            minimum_report_words: 1_000,
+            models: { planner: "openai/studio-planner" },
+          },
         }),
         Schema.decodeUnknownSync(ConfigWorkflows.Info)({
           recursion: {
@@ -125,6 +131,11 @@ describe("Config", () => {
             debate_sensitivity: "high",
             minimum_report_words: 2_000,
             models: { assessor: "openai/research-assessor" },
+          },
+          studio: {
+            delegates: ["research"],
+            concurrency: 4,
+            models: { director: "openai/studio-director" },
           },
         }),
       ])
@@ -159,6 +170,16 @@ describe("Config", () => {
             assessor: "openai/research-assessor",
           },
         },
+        studio: {
+          delegates: ["research"],
+          concepts: 4,
+          concurrency: 4,
+          minimum_report_words: 1_000,
+          models: {
+            planner: "openai/studio-planner",
+            director: "openai/studio-director",
+          },
+        },
         heavy: {
           council: "synthesis",
           delegates: ["heavy", "council"],
@@ -179,6 +200,31 @@ describe("Config", () => {
           models: { debater: "openai/debater" },
         },
       })
+    }),
+  )
+
+  it.effect("rejects workflow delegation edges that no runtime can execute", () =>
+    Effect.sync(() => {
+      expect(() =>
+        Schema.decodeUnknownSync(ConfigWorkflows.Info)({
+          heavy: { delegates: ["research"] },
+        }),
+      ).toThrow()
+      expect(() =>
+        Schema.decodeUnknownSync(ConfigWorkflows.Info)({
+          council: { delegates: ["research"] },
+        }),
+      ).toThrow()
+      expect(() =>
+        Schema.decodeUnknownSync(ConfigWorkflows.Info)({
+          research: { delegates: ["heavy"] },
+        }),
+      ).toThrow()
+      expect(() =>
+        Schema.decodeUnknownSync(ConfigWorkflows.Info)({
+          studio: { delegates: ["council"] },
+        }),
+      ).toThrow()
     }),
   )
 

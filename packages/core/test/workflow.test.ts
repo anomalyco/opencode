@@ -19,6 +19,7 @@ import { ResearchWorkflow } from "@opencode-ai/core/workflow/research"
 import { WorkflowReport } from "@opencode-ai/core/workflow/report"
 import { WorkflowRuntime } from "@opencode-ai/core/workflow/runtime"
 import { WorkflowSchema } from "@opencode-ai/core/workflow/schema"
+import { StudioWorkflow } from "@opencode-ai/core/workflow/studio"
 import { DateTime, Deferred, Effect, Fiber, Layer, Ref, Result, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { mkdir } from "node:fs/promises"
@@ -59,6 +60,373 @@ const nodeResult = {
 }
 
 describe("workflows", () => {
+  it.effect("runs a bounded Studio brief, concepts, critique, and direction", () =>
+    Effect.gen(function* () {
+      const agents: string[] = []
+      const runtime = makeRuntime((input) => {
+        agents.push(input.agent)
+        if (input.agent === "studio-planner") {
+          expect(input.report).toBe(false)
+          return {
+            rationale: "The brief needs complete but structurally different options.",
+            objective: "Design a new public program",
+            deliverables: ["A coherent premise", "A practical next step"],
+            constraints: ["Keep the program accessible"],
+            assumptions: ["The audience is mixed"],
+            choice_points: ["How much participation to require"],
+            concepts: [
+              {
+                title: "Civic ritual",
+                mandate: "Organize the program around a shared recurring ritual.",
+                differentiators: ["collective cadence"],
+                exclusions: ["passive spectatorship"],
+              },
+              {
+                title: "Open toolkit",
+                mandate: "Organize the program as adaptable tools owned by participants.",
+                differentiators: ["local authorship"],
+                exclusions: ["one fixed sequence"],
+              },
+              {
+                title: "Living exchange",
+                mandate: "Organize the program around reciprocal exchanges that change over time.",
+                differentiators: ["reciprocity"],
+                exclusions: ["one-way delivery"],
+              },
+            ],
+          }
+        }
+        if (input.agent === "studio-creator") {
+          const conceptID = input.prompt.match(/"id": "(concept-[1-3])"/)?.[1] ?? "concept"
+          return {
+            status: "completed",
+            concept_id: conceptID,
+            title: conceptID,
+            pitch: `A complete pitch for ${conceptID}`,
+            deliverables: [
+              { deliverable: "A coherent premise", content: `Premise for ${conceptID}` },
+              { deliverable: "A practical next step", content: `Next step for ${conceptID}` },
+            ],
+            differentiators: [`Distinctive logic for ${conceptID}`],
+            tradeoffs: [`Tradeoff for ${conceptID}`],
+            risks: [],
+            open_choices: [],
+          }
+        }
+        if (input.agent === "studio-critic") {
+          expect(input.reportReadMode).toBe("artifacts")
+          return {
+            status: "completed",
+            summary: "All three routes satisfy the brief through different operating logics.",
+            assessments: [1, 2, 3].map((index) => ({
+              concept_id: `concept-${index}`,
+              disposition: index === 2 ? "advance" : "hold",
+              strengths: [`Strength ${index}`],
+              weaknesses: [],
+              missing_deliverables: [],
+              overlaps: [],
+              distinctive_elements: [`Distinctive element ${index}`],
+            })),
+            cross_concept_patterns: [],
+            missing_requirements: [],
+            recommendations: ["Preserve all three routes through direction."],
+          }
+        }
+        if (input.agent === "studio-director") {
+          expect(input.reportMode).toBe("document")
+          expect(input.prompt).not.toContain("fantasy")
+          return {
+            status: "completed",
+            summary: "The open toolkit is the strongest default, with two viable alternatives.",
+            recommended_concept_ids: ["concept-2"],
+            preserved_concept_ids: ["concept-1", "concept-2", "concept-3"],
+            deliverable_coverage: [
+              {
+                deliverable: "A coherent premise",
+                status: "complete",
+                report_section: "Three complete concepts",
+                concept_ids: ["concept-1", "concept-2", "concept-3"],
+                limitations: [],
+              },
+              {
+                deliverable: "A practical next step",
+                status: "complete",
+                report_section: "How to proceed",
+                concept_ids: ["concept-1", "concept-2", "concept-3"],
+                limitations: [],
+              },
+            ],
+            decisions: ["Use the open toolkit as the default route."],
+            tradeoffs: ["Local authorship requires facilitation."],
+            next_choices: ["Choose the initial participant cohort."],
+          }
+        }
+        return new Tool.Failure({ message: `Unexpected Studio agent: ${input.agent}` })
+      })
+
+      const output = yield* StudioWorkflow.run(
+        "Design a new public program",
+        parent,
+        context,
+        {
+          concepts: 3,
+          concurrency: 3,
+          childTimeoutMs: 60_000,
+          minimumReportWords: 1_200,
+          models: {},
+        },
+        runtime,
+      )
+
+      expect(output.status).toBe("completed")
+      expect(output.plan.deliverables).toEqual(["A coherent premise", "A practical next step"])
+      expect(output.concepts.map((concept) => concept.concept_id)).toEqual(["concept-1", "concept-2", "concept-3"])
+      expect(output.critique.assessments).toHaveLength(3)
+      expect(output.synthesis.recommended_concept_ids).toEqual(["concept-2"])
+      expect(output.synthesis.preserved_concept_ids).toEqual(["concept-1", "concept-2", "concept-3"])
+      expect(output.evaluation).toMatchObject({
+        concepts_planned: 3,
+        concepts_completed: 3,
+        concepts_preserved: 3,
+        concepts_distinct: 3,
+        deliverables_complete: 2,
+      })
+      expect(agents).toEqual([
+        "studio-planner",
+        "studio-creator",
+        "studio-creator",
+        "studio-creator",
+        "studio-critic",
+        "studio-director",
+      ])
+      expect(agents.some((agent) => agent.startsWith("council-") || agent.startsWith("research-"))).toBe(false)
+    }),
+  )
+
+  it.effect("preserves all completed Studio concepts when final direction drops one", () =>
+    Effect.gen(function* () {
+      const runtime = makeRuntime((input) => {
+        if (input.agent === "studio-planner")
+          return {
+            objective: "Create alternatives",
+            deliverables: ["Complete proposal"],
+            concepts: ["Route one", "Route two", "Route three"],
+          }
+        if (input.agent === "studio-creator") {
+          const conceptID = input.prompt.match(/"id": "(concept-[1-3])"/)?.[1] ?? "concept"
+          return {
+            status: "completed",
+            concept_id: conceptID,
+            title: conceptID,
+            pitch: conceptID,
+            deliverables: [{ deliverable: "Complete proposal", content: conceptID }],
+          }
+        }
+        if (input.agent === "studio-critic")
+          return {
+            status: "completed",
+            summary: "The routes remain distinct.",
+            assessments: [1, 2, 3].map((index) => ({
+              concept_id: `concept-${index}`,
+              disposition: "hold",
+              distinctive_elements: [`Difference ${index}`],
+            })),
+          }
+        if (input.agent === "studio-director")
+          return {
+            status: "completed",
+            summary: "An incomplete direction",
+            recommended_concept_ids: ["concept-1"],
+            preserved_concept_ids: ["concept-1", "concept-2"],
+            deliverable_coverage: [
+              {
+                deliverable: "Complete proposal",
+                status: "complete",
+                concept_ids: ["concept-1", "concept-2"],
+              },
+            ],
+          }
+        return new Tool.Failure({ message: `Unexpected Studio agent: ${input.agent}` })
+      })
+
+      const output = yield* StudioWorkflow.run(
+        "Create alternatives",
+        parent,
+        context,
+        {
+          concepts: 3,
+          concurrency: 3,
+          childTimeoutMs: 60_000,
+          minimumReportWords: 1_200,
+          models: {},
+        },
+        runtime,
+      )
+
+      expect(output.status).toBe("partial")
+      expect(output.synthesis.preserved_concept_ids).toEqual(["concept-1", "concept-2", "concept-3"])
+      expect(output.summary).toContain("Final direction failed")
+    }),
+  )
+
+  it.live("preserves the director-authored Studio document and keeps audit paths in the trace", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const reportPath = path.join(tmp.path, "STUDIO_REPORT.md")
+          const conceptPath = path.join(tmp.path, "stages", "concept.md")
+          const document =
+            "# A Native Creative Document\n\n## First route\n\nConcrete user-facing material.\n\n## Direction\n\nKeep both viable choices visible."
+          const output = WorkflowSchema.StudioOutput.make({
+            workflow: "studio",
+            status: "completed",
+            summary: "Keep both viable choices visible.",
+            final_response: document,
+            root_session_id: SessionV2.ID.make("ses_studio_plan"),
+            critique_session_id: SessionV2.ID.make("ses_studio_critique"),
+            synthesis_session_id: SessionV2.ID.make("ses_studio_director"),
+            synthesis_report_path: reportPath,
+            report_path: reportPath,
+            plan: {
+              rationale: "Develop alternatives.",
+              objective: "Create a direction",
+              deliverables: ["Complete direction"],
+              constraints: [],
+              assumptions: [],
+              choice_points: [],
+              concepts: [
+                {
+                  id: "concept-1",
+                  title: "First route",
+                  mandate: "Develop the first route.",
+                  differentiators: ["Distinct structure"],
+                  exclusions: [],
+                },
+              ],
+            },
+            concepts: [
+              {
+                status: "completed",
+                concept_id: "concept-1",
+                title: "First route",
+                pitch: "A concrete route.",
+                deliverables: [{ deliverable: "Complete direction", content: "Concrete user-facing material." }],
+                differentiators: ["Distinct structure"],
+                tradeoffs: [],
+                risks: [],
+                open_choices: [],
+                session_id: SessionV2.ID.make("ses_studio_concept"),
+                report_path: conceptPath,
+              },
+            ],
+            critique: {
+              status: "completed",
+              summary: "The route is coherent.",
+              assessments: [
+                {
+                  concept_id: "concept-1",
+                  disposition: "advance",
+                  strengths: ["Coherent"],
+                  weaknesses: [],
+                  missing_deliverables: [],
+                  overlaps: [],
+                  distinctive_elements: ["Distinct structure"],
+                },
+              ],
+              cross_concept_patterns: [],
+              missing_requirements: [],
+              recommendations: [],
+              session_id: SessionV2.ID.make("ses_studio_critique"),
+            },
+            synthesis: {
+              status: "completed",
+              summary: "Keep both viable choices visible.",
+              recommended_concept_ids: ["concept-1"],
+              preserved_concept_ids: ["concept-1"],
+              deliverable_coverage: [
+                {
+                  deliverable: "Complete direction",
+                  status: "complete",
+                  report_section: "Direction",
+                  concept_ids: ["concept-1"],
+                  limitations: [],
+                },
+              ],
+              decisions: [],
+              tradeoffs: [],
+              next_choices: [],
+              coverage: [],
+            },
+            evaluation: {
+              report_words: 16,
+              report_sections: 3,
+              standalone_pass: true,
+              concepts_planned: 1,
+              concepts_completed: 1,
+              concepts_preserved: 1,
+              concepts_distinct: 1,
+              deliverables_total: 1,
+              deliverables_complete: 1,
+              deliverables_partial: 0,
+              deliverables_missing: 0,
+              coverage_complete: true,
+            },
+          })
+
+          yield* Effect.promise(() => Bun.write(reportPath, document))
+          yield* Effect.promise(() => WorkflowReport.writeStudio("Create a direction", output, reportPath))
+
+          expect(yield* Effect.promise(() => Bun.file(reportPath).text())).toBe(document)
+          const trace = yield* Effect.promise(() => Bun.file(WorkflowReport.studioTracePath(reportPath)).text())
+          expect(trace).toContain("# Studio Trace")
+          expect(trace).toContain(conceptPath)
+          const handoff = JSON.parse(WorkflowHandoff.studio(output))
+          expect(JSON.stringify(handoff.concepts)).not.toContain(conceptPath)
+        }),
+      ),
+    ),
+  )
+
+  it.effect("allows Studio only one narrow Research delegation", () =>
+    Effect.gen(function* () {
+      const execution = yield* WorkflowExecution.make({
+        workflow: "studio",
+        access: "read",
+        objective: "Develop several concepts",
+        sessionID: parent.id,
+        toolCallID: "call-studio",
+        directory: "/project",
+        reportDirectory: ".opencode/reports",
+        maxDepth: 3,
+        maxWorkflows: 8,
+        delegates: {
+          studio: new Set(["research"]),
+        },
+      })
+      yield* WorkflowExecution.delegate(execution, {
+        workflow: "research",
+        objective: "Verify one legal constraint",
+        sessionID: SessionV2.ID.make("ses_studio_critic"),
+        toolCallID: "call-studio-research-1",
+      })
+      const repeated = yield* Effect.result(
+        WorkflowExecution.delegate(execution, {
+          workflow: "research",
+          objective: "Verify one scientific constraint",
+          sessionID: SessionV2.ID.make("ses_studio_critic"),
+          toolCallID: "call-studio-research-2",
+        }),
+      )
+
+      expect(Result.isFailure(repeated)).toBe(true)
+      if (Result.isFailure(repeated))
+        expect(repeated.failure.message).toBe("Studio may delegate at most one narrow uncertainty to Research")
+    }),
+  )
+
   it.effect("normalizes Research contracts and evidence ledgers", () =>
     Effect.sync(() => {
       expect(
@@ -697,6 +1065,137 @@ describe("workflows", () => {
         synthesis_only_branches: 0,
         root_budget_slots: 12,
         root_unused_slots: 0,
+      })
+    }),
+  )
+
+  it.effect("preserves surplus root budget for evidence-directed follow-up", () =>
+    Effect.gen(function* () {
+      let planners = 0
+      let readers = 0
+      let rootAssessments = 0
+      const remaining: number[] = []
+      const runtime = makeRuntime((input) => {
+        if (input.agent === "research-planner") {
+          planners++
+          if (planners === 1)
+            return {
+              rationale: "Partition the root while preserving room to reconcile the domains.",
+              objective: "Root",
+              deliverables: [],
+              assumptions: [],
+              unknowns: [],
+              falsifiers: [],
+              tasks: ["Client", "Server", "Network", "Storage"].map((title, index) => ({
+                id: `domain-${index}`,
+                title,
+                question: `Investigate the ${title.toLowerCase()} domain`,
+                priority: "critical",
+                role: "recursive",
+                depends_on: [],
+                rationale: "The domain needs local evidence.",
+                expected_evidence: [],
+              })),
+            }
+          const domain = input.prompt.match(/Current branch:\n([^\n]+)/)?.[1] ?? "domain"
+          return {
+            rationale: "Use the minimum productive branch budget.",
+            objective: "Domain",
+            deliverables: [],
+            assumptions: [],
+            unknowns: [],
+            falsifiers: [],
+            tasks: ["baseline", "limit"].map((id) => ({
+              id,
+              title: `Question ${id}`,
+              question: `What ${id} evidence governs ${domain}?`,
+              priority: "critical",
+              role: "evidence",
+              depends_on: [],
+              rationale: "Collect bounded evidence.",
+              expected_evidence: [],
+            })),
+          }
+        }
+        if (input.agent === "research-reader") {
+          readers++
+          return researchBranch(`Evidence ${readers}`)
+        }
+        if (input.agent === "research-assessor") {
+          if (input.prompt.includes("Current branch:\nInvestigate the"))
+            return {
+              decision: "stop",
+              stop_reason: "evidence_saturated",
+              rationale: "The bounded branch is covered.",
+              information_gain: "low",
+              coverage: "adequate",
+              addressed_gap_ids: [],
+              tasks: [],
+              disputes: [],
+              deliverable_coverage: coveredDeliverables(input),
+            }
+          rootAssessments++
+          remaining.push(Number(input.prompt.match(/Remaining task slots after this wave: (\d+)/)?.[1] ?? -1))
+          if (rootAssessments === 1)
+            return {
+              decision: "continue",
+              rationale: "One cross-domain check can still change the synthesis.",
+              information_gain: "high",
+              coverage: "incomplete",
+              addressed_gap_ids: [],
+              tasks: [
+                {
+                  id: "cross-domain",
+                  title: "Cross-domain capacity check",
+                  question: "Do the domain constraints produce a new shared bottleneck?",
+                  priority: "critical",
+                  role: "evidence",
+                  depends_on: [],
+                  rationale: "Reconcile the completed domains before synthesis.",
+                  expected_evidence: [],
+                },
+              ],
+              disputes: [],
+              deliverable_coverage: coveredDeliverables(input),
+            }
+          return {
+            decision: "stop",
+            stop_reason: "evidence_saturated",
+            rationale: "The cross-domain check closes the remaining question.",
+            information_gain: "low",
+            coverage: "adequate",
+            addressed_gap_ids: [],
+            tasks: [],
+            disputes: [],
+            deliverable_coverage: coveredDeliverables(input),
+          }
+        }
+        return researchBranch("Bounded synthesis")
+      })
+
+      const output = yield* ResearchWorkflow.run(
+        "Investigate four domains and reconcile their constraints",
+        parent,
+        { ...context, agent: AgentV2.ID.make("research") },
+        {
+          ...researchSettings(),
+          maxDepth: 3,
+          maxNodes: 16,
+          minEvidencePerBranch: 2,
+        },
+        runtime,
+      )
+
+      expect(output.nodes.filter((node) => node.depth === 1).map((node) => node.budget_allocated)).toEqual([2, 2, 2, 2])
+      expect(output.nodes[0]?.waves).toHaveLength(2)
+      expect(output.nodes[0]?.waves[1]?.tasks).toHaveLength(1)
+      expect(remaining).toEqual([3, 2])
+      expect(readers).toBe(9)
+      expect(output.evaluation).toMatchObject({
+        evidence_tasks: 13,
+        evidence_leaves: 9,
+        root_budget_slots: 15,
+        root_unused_slots: 2,
       })
     }),
   )
@@ -1468,6 +1967,169 @@ describe("workflows", () => {
       expect(output.councils).toHaveLength(1)
       expect(output.councils[0]?.profile).toBe("compact")
       expect(output.councils[0]?.dispute_ids).toHaveLength(2)
+    }),
+  )
+
+  it.effect("reuses a nested Council decision for an equivalent root dispute", () =>
+    Effect.gen(function* () {
+      let planners = 0
+      let councilPlans = 0
+      let rootSynthesisPrompt = ""
+      const runtime = makeRuntime((input) => {
+        if (input.agent === "research-planner") {
+          planners++
+          if (planners === 1)
+            return {
+              rationale: "Delegate the capacity question to a bounded systems branch.",
+              objective: "Assess production capacity",
+              deliverables: [],
+              assumptions: [],
+              unknowns: [],
+              falsifiers: [],
+              tasks: [
+                {
+                  id: "topology",
+                  title: "Topology and capacity",
+                  question: "Can the authoritative topology sustain the target workload?",
+                  priority: "critical",
+                  role: "recursive",
+                  depends_on: [],
+                  rationale: "The systems branch needs local evidence and synthesis.",
+                  expected_evidence: [],
+                },
+              ],
+            }
+          return {
+            rationale: "Collect one bounded capacity evidence report.",
+            objective: "Topology capacity",
+            deliverables: [],
+            assumptions: [],
+            unknowns: [],
+            falsifiers: [],
+            tasks: [
+              {
+                id: "capacity",
+                title: "Capacity evidence",
+                question: "What does the available capacity evidence establish?",
+                priority: "critical",
+                role: "evidence",
+                depends_on: [],
+                rationale: "Establish the workload-specific evidence boundary.",
+                expected_evidence: [],
+              },
+            ],
+          }
+        }
+        if (input.agent === "research-reader")
+          return researchBranch("The topology is plausible, but production capacity is not demonstrated.")
+        if (input.agent === "research-assessor") {
+          if (input.prompt.includes("Current branch:\nCan the authoritative topology"))
+            return {
+              decision: "stop",
+              stop_reason: "evidence_saturated",
+              rationale: "The evidence is complete and the capacity interpretation needs judgment.",
+              information_gain: "low",
+              coverage: "adequate",
+              addressed_gap_ids: [],
+              tasks: [],
+              disputes: [
+                {
+                  id: "capacity-status",
+                  question:
+                    "Does the evidence establish 1,000-player authoritative capacity, or only a plausible prototype architecture?",
+                  claim_ids: ["capacity-supported", "capacity-unproven"],
+                  priority: "critical",
+                  consequential: true,
+                  reason: "The answer controls the production claim.",
+                  status: "open",
+                  debate_profile: "compact",
+                },
+              ],
+              deliverable_coverage: coveredDeliverables(input),
+            }
+          return {
+            decision: "stop",
+            stop_reason: "evidence_saturated",
+            rationale: "The branch evidence is complete.",
+            information_gain: "low",
+            coverage: "adequate",
+            addressed_gap_ids: [],
+            tasks: [],
+            disputes: [
+              {
+                id: "production-capacity",
+                question: "Does the evidence establish production capacity for 1,000 concurrent voxel players?",
+                claim_ids: ["root-capacity"],
+                priority: "critical",
+                consequential: true,
+                reason: "The production claim must remain bounded by the evidence.",
+                status: "open",
+                debate_profile: "compact",
+              },
+            ],
+            deliverable_coverage: coveredDeliverables(input),
+          }
+        }
+        if (input.agent === "council-planner") {
+          councilPlans++
+          return {
+            rationale: "Resolve whether the evidence supports a prototype or production claim.",
+            issues: [{ id: "capacity", question: "What capacity claim does the evidence support?" }],
+            perspectives: [
+              { id: "support", title: "Support", instructions: "Test the strongest supportable claim." },
+              { id: "challenge", title: "Challenge", instructions: "Identify the missing production evidence." },
+            ],
+          }
+        }
+        if (input.agent === "council-perspective")
+          return {
+            perspective_id: "position",
+            summary: "The architecture is plausible, but the workload has not been measured.",
+            issues: [],
+            recommendations: [],
+            risks: [],
+          }
+        if (input.agent === "council-synthesizer")
+          return {
+            status: "completed",
+            summary:
+              "Treat 1,000 concurrent voxel players as a prototype target, not demonstrated production capacity.",
+            consensus: ["The evidence supports a plausible prototype architecture, not production capacity."],
+            disagreements: [],
+            recommendations: ["Run the integrated workload benchmark before making a production claim."],
+            risks: [],
+          }
+        if (input.agent === "research-synthesizer" && input.prompt.includes("sole author"))
+          rootSynthesisPrompt = input.prompt
+        return researchBranch("The existing Council capacity ruling is integrated.")
+      })
+
+      const output = yield* ResearchWorkflow.run(
+        "Assess production capacity for 1,000 concurrent voxel players",
+        parent,
+        { ...context, agent: AgentV2.ID.make("research") },
+        {
+          ...researchSettings(),
+          maxDepth: 3,
+          council: {
+            perspectives: 2,
+            concurrency: 2,
+            childTimeoutMs: 60_000,
+            debate: { mode: "off", topics: 1, participants: 2, rounds: 1 },
+            models: {},
+          },
+        },
+        runtime,
+      )
+
+      expect(councilPlans).toBe(1)
+      expect(output.councils).toHaveLength(1)
+      expect(
+        output.graph.disputes.find((dispute) => dispute.question.includes("production capacity for 1,000"))?.status,
+      ).toBe("resolved")
+      expect(rootSynthesisPrompt).toContain(
+        "The evidence supports a plausible prototype architecture, not production capacity.",
+      )
     }),
   )
 
@@ -3854,6 +4516,78 @@ describe("workflows", () => {
         }),
       ])
     }),
+  )
+
+  it.effect("prevents a read-only Research root from reaching Heavy through Council", () =>
+    Effect.gen(function* () {
+      const root = yield* WorkflowExecution.make({
+        workflow: "research",
+        access: "read",
+        objective: "Investigate launch risks",
+        sessionID: parent.id,
+        toolCallID: "call-read-research",
+        directory: "/project",
+        reportDirectory: ".opencode/reports",
+        maxDepth: 2,
+        maxWorkflows: 3,
+        delegates: {
+          research: new Set(["research", "council"]),
+          council: new Set(["heavy", "council"]),
+        },
+      })
+      const council = yield* WorkflowExecution.delegate(root, {
+        workflow: "council",
+        objective: "Assess disputed storage tradeoffs",
+        sessionID: SessionV2.ID.make("ses_research_council"),
+        toolCallID: "call-research-council",
+      })
+      const failure = yield* WorkflowExecution.delegate(council, {
+        workflow: "heavy",
+        objective: "Implement a storage experiment",
+        sessionID: SessionV2.ID.make("ses_research_heavy"),
+        toolCallID: "call-research-heavy",
+      }).pipe(Effect.flip)
+
+      expect(WorkflowExecution.access(root)).toBe("read")
+      expect(failure.message).toBe("Read-only workflow roots cannot delegate to Heavy")
+    }),
+  )
+
+  it.effect("allows location readers to overlap while keeping writers exclusive", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const coordinator = yield* WorkflowExecution.makeAccessCoordinator()
+        const firstStarted = yield* Deferred.make<void>()
+        const releaseFirst = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        const writeStarted = yield* Deferred.make<void>()
+        const first = yield* coordinator
+          .withAccess(
+            parent.location,
+            "read",
+            Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+          )
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(firstStarted)
+        const second = yield* coordinator
+          .withAccess(parent.location, "read", Deferred.succeed(secondStarted, undefined))
+          .pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        expect(yield* Deferred.isDone(secondStarted)).toBe(true)
+
+        const writer = yield* coordinator
+          .withAccess(parent.location, "write", Deferred.succeed(writeStarted, undefined))
+          .pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        expect(yield* Deferred.isDone(writeStarted)).toBe(false)
+
+        yield* Deferred.succeed(releaseFirst, undefined)
+        yield* Fiber.join(first)
+        yield* Fiber.join(second)
+        yield* Fiber.join(writer)
+        expect(yield* Deferred.isDone(writeStarted)).toBe(true)
+      }),
+    ),
   )
 
   it.effect("propagates nested progress and preserves rich terminal session records at the root", () =>

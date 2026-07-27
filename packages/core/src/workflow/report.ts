@@ -156,8 +156,60 @@ export async function writeResearch(objective: string, output: WorkflowSchema.Re
   if (output.raw_graph) await writeJSON(researchRawGraphPath(reportPath), output.raw_graph)
 }
 
+export async function writeStudio(objective: string, output: WorkflowSchema.StudioOutput, reportPath: string) {
+  const direct = (await Bun.file(reportPath).exists()) ? await Bun.file(reportPath).text() : undefined
+  if (!direct?.trim())
+    await write(
+      reportPath,
+      [
+        "# Studio Direction",
+        "",
+        "## Creative Brief",
+        "",
+        objective,
+        "",
+        "## Developed Concepts",
+        "",
+        ...output.concepts.flatMap((concept) => [
+          `### ${concept.title}`,
+          "",
+          concept.pitch,
+          "",
+          ...concept.deliverables.flatMap((deliverable) => [
+            `#### ${deliverable.deliverable}`,
+            "",
+            deliverable.content,
+            "",
+          ]),
+          ...section("Differentiators", concept.differentiators, 4),
+          ...section("Tradeoffs", concept.tradeoffs, 4),
+          ...section("Open Choices", concept.open_choices, 4),
+        ]),
+        "## Comparative Critique",
+        "",
+        output.critique.summary,
+        "",
+        ...output.critique.assessments.flatMap((assessment) => [
+          `### ${output.concepts.find((concept) => concept.concept_id === assessment.concept_id)?.title ?? assessment.concept_id}`,
+          "",
+          ...section("Strengths", assessment.strengths, 4),
+          ...section("Weaknesses", assessment.weaknesses, 4),
+          ...section("Distinctive Elements", assessment.distinctive_elements, 4),
+        ]),
+        "## Direction",
+        "",
+        output.synthesis.summary,
+        "",
+        ...section("Decisions", output.synthesis.decisions),
+        ...section("Tradeoffs", output.synthesis.tradeoffs),
+        ...section("Next Choices", output.synthesis.next_choices),
+      ].join("\n"),
+    )
+  await write(studioTracePath(reportPath), studioTrace(objective, output))
+}
+
 export async function writeFailure(
-  workflow: "heavy" | "council" | "research",
+  workflow: "heavy" | "council" | "research" | "studio",
   objective: string,
   error: string,
   reportPath: string,
@@ -1048,6 +1100,73 @@ export function researchRawGraphPath(reportPath: string) {
   return path.join(path.dirname(reportPath), "RESEARCH_RAW_GRAPH.json")
 }
 
+export function studioTracePath(reportPath: string) {
+  return path.join(path.dirname(reportPath), "STUDIO_TRACE.md")
+}
+
+function studioTrace(objective: string, output: WorkflowSchema.StudioOutput) {
+  return [
+    "# Studio Trace",
+    "",
+    "## Objective",
+    "",
+    objective,
+    "",
+    "## Run",
+    "",
+    `- Status: **${output.status}**`,
+    `- Root session: \`${output.root_session_id}\``,
+    `- Critique session: \`${output.critique_session_id}\``,
+    `- Direction session: \`${output.synthesis_session_id}\``,
+    ...timingSection(output.timing),
+    ...usageSection(output.usage),
+    "",
+    "## Creative Contract",
+    "",
+    "```json",
+    JSON.stringify(output.plan, undefined, 2),
+    "```",
+    "",
+    "## Concept Index",
+    "",
+    "```json",
+    JSON.stringify(output.concepts, undefined, 2),
+    "```",
+    "",
+    "## Comparative Critique",
+    "",
+    "```json",
+    JSON.stringify(output.critique, undefined, 2),
+    "```",
+    "",
+    "## Direction Ledger",
+    "",
+    "```json",
+    JSON.stringify(output.synthesis, undefined, 2),
+    "```",
+    "",
+    "## Evaluation",
+    "",
+    "```json",
+    JSON.stringify(output.evaluation, undefined, 2),
+    "```",
+    "",
+    "## Session Manifest",
+    "",
+    "```json",
+    JSON.stringify(output.session_manifest ?? [], undefined, 2),
+    "```",
+    "",
+    "## Source Provenance",
+    "",
+    "```json",
+    JSON.stringify(output.source_provenance ?? [], undefined, 2),
+    "```",
+    "",
+    ...delegations(output.delegations ?? [], output.report_path ?? ""),
+  ].join("\n")
+}
+
 function coverageSection(values: ReadonlyArray<WorkflowSchema.ArtifactCoverage>) {
   if (values.length === 0) return []
   const unaccounted = unaccountedCoverage(values)
@@ -1153,7 +1272,13 @@ function markdownHeadings(value: string) {
   })
 }
 
-function sources(output: WorkflowSchema.HeavyOutput | WorkflowSchema.CouncilOutput | WorkflowSchema.ResearchOutput) {
+function sources(
+  output:
+    | WorkflowSchema.HeavyOutput
+    | WorkflowSchema.CouncilOutput
+    | WorkflowSchema.ResearchOutput
+    | WorkflowSchema.StudioOutput,
+) {
   const references =
     output.source_provenance ??
     extractSources(output).map((url) =>
@@ -1267,10 +1392,11 @@ function researchDisputes(values: ReadonlyArray<WorkflowSchema.ResearchDispute>,
   ]
 }
 
-function workflowName(workflow: "heavy" | "council" | "research") {
+function workflowName(workflow: "heavy" | "council" | "research" | "studio") {
   if (workflow === "heavy") return "Heavy"
   if (workflow === "council") return "Council"
-  return "Research"
+  if (workflow === "research") return "Research"
+  return "Studio"
 }
 
 function relative(from: string, to: string) {

@@ -11,6 +11,8 @@ import { WorkflowReport } from "./report"
 import { WorkflowRuntime } from "./runtime"
 import { WorkflowSchema } from "./schema"
 
+const ROOT_FOLLOW_UP_RESERVE_RATIO = 0.2
+
 export interface Settings {
   readonly effort: "standard" | "deep" | "frontier"
   readonly capability: WorkflowSchema.Capability
@@ -332,6 +334,7 @@ const executeNode = Effect.fn("ResearchWorkflow.executeNode")(function* (input: 
       planningSessionID,
       explored.waves.flatMap((wave) => wave.assessment.disputes),
       explored.completed,
+      explored.councils,
     )),
   ])
   const reviewed = { ...explored, councils } satisfies WaveState
@@ -526,7 +529,7 @@ const runWaves = Effect.fn("ResearchWorkflow.runWaves")(function* (
     return state
   }
   const reserved = yield* Ref.modify(input.remaining, (remaining) => {
-    const allocation = scheduleWaveTasks(proposed, remaining, input)
+    const allocation = scheduleWaveTasks(proposed, remaining, input, number)
     return [allocation, remaining - allocation.consumed] as const
   })
   const capped = reserved.capped
@@ -760,6 +763,7 @@ function scheduleWaveTasks(
   proposed: ReadonlyArray<WorkflowSchema.ResearchTask>,
   remaining: number,
   input: ExecuteNodeInput,
+  wave: number,
 ) {
   const selected = proposed.slice(0, remaining)
   const recursive = selected
@@ -769,7 +773,15 @@ function scheduleWaveTasks(
         researchPriority(right.priority) - researchPriority(left.priority) ||
         proposed.indexOf(left) - proposed.indexOf(right),
     )
-  const availableForSubtrees = Math.max(0, remaining - selected.length)
+  const minimumBranchBudget = selected.length + recursive.length * input.settings.minEvidencePerBranch
+  const followUpReserve =
+    input.depth === 0 && wave === 1 && input.settings.maxWaves > 1
+      ? Math.min(
+          Math.ceil(input.budgetAllocated * ROOT_FOLLOW_UP_RESERVE_RATIO),
+          Math.max(0, remaining - minimumBranchBudget),
+        )
+      : 0
+  const availableForSubtrees = Math.max(0, remaining - selected.length - followUpReserve)
   const admitted = recursive.slice(0, Math.floor(availableForSubtrees / input.settings.minEvidencePerBranch))
   const minimumReserved = admitted.length * input.settings.minEvidencePerBranch
   const bonus = availableForSubtrees - minimumReserved
@@ -1061,6 +1073,7 @@ const reviewDisputes = Effect.fn("ResearchWorkflow.reviewDisputes")(function* (
   parentID: SessionSchema.ID,
   disputes: ReadonlyArray<WorkflowSchema.ResearchDispute>,
   completed: ReadonlyMap<string, CompletedTask>,
+  existingReviews: ReadonlyArray<WorkflowSchema.ResearchCouncilReview>,
 ) {
   if (!input.settings.council || input.settings.debateSensitivity === "off") return []
   const selected = clusterDisputes(
@@ -1069,6 +1082,7 @@ const reviewDisputes = Effect.fn("ResearchWorkflow.reviewDisputes")(function* (
       (dispute) => dispute.id,
     ),
   )
+    .filter((cluster) => !existingReviews.some((review) => councilReviewCovers(review, cluster)))
     .sort((left, right) => disputeClusterRank(right) - disputeClusterRank(left))
     .slice(0, input.settings.maxDebatesPerNode)
   return yield* Effect.forEach(
@@ -1547,7 +1561,7 @@ export function canonicalGraphFrom(
       const review = councils.find(
         (candidate) =>
           (candidate.dispute_ids ?? [candidate.dispute_id]).includes(dispute.id) ||
-          equivalentQuestion(candidate.question, dispute.question),
+          councilReviewCovers(candidate, [dispute]),
       )
       if (!review) return dispute
       const resolution = [...review.output.consensus, ...review.output.recommendations].join(" ")
@@ -1849,6 +1863,33 @@ function mergeCouncilReviews(reviews: ReadonlyArray<WorkflowSchema.ResearchCounc
 
 function relatedDisputes(left: WorkflowSchema.ResearchDispute, right: WorkflowSchema.ResearchDispute) {
   if (left.claim_ids.some((claimID) => right.claim_ids.includes(claimID))) return true
+  const overlap = questionOverlap(left.question, right.question)
+  return overlap.shared >= 2 && overlap.coverage >= 0.35
+}
+
+function councilReviewCovers(
+  review: WorkflowSchema.ResearchCouncilReview,
+  disputes: ReadonlyArray<WorkflowSchema.ResearchDispute>,
+) {
+  if (review.output.status !== "completed") return false
+  if (disputes.some((dispute) => dispute.debate_profile === "full")) return false
+  const numbered = review.question.split(/\r?\n/).flatMap((line) => line.match(/^\d+\.\s+(.+)$/)?.[1] ?? [])
+  const decisions = [
+    ...(numbered.length > 0 ? numbered : [review.question]),
+    review.output.summary,
+    ...review.output.consensus,
+    ...review.output.recommendations,
+  ]
+  return disputes.every((dispute) =>
+    decisions.some((decision) => {
+      if (equivalentQuestion(decision, dispute.question)) return true
+      const overlap = questionOverlap(decision, dispute.question)
+      return overlap.shared >= 4 && overlap.coverage >= 0.5
+    }),
+  )
+}
+
+function questionOverlap(left: string, right: string) {
   const words = (value: string) =>
     new Set(
       value
@@ -1876,12 +1917,17 @@ function relatedDisputes(left: WorkflowSchema.ResearchDispute, right: WorkflowSc
               "whether",
               "with",
             ].includes(word),
-        ),
+        )
+        .map((word) => (word.length > 4 && word.endsWith("s") ? word.slice(0, -1) : word)),
     )
-  const leftWords = words(left.question)
-  const rightWords = words(right.question)
+  const leftWords = words(left)
+  const rightWords = words(right)
+  if (leftWords.size === 0 || rightWords.size === 0) return { shared: 0, coverage: 0 }
   const shared = Array.from(leftWords).filter((word) => rightWords.has(word)).length
-  return shared >= 2 && shared / Math.min(leftWords.size, rightWords.size) >= 0.35
+  return {
+    shared,
+    coverage: shared / Math.min(leftWords.size, rightWords.size),
+  }
 }
 
 function councilQuestion(disputes: ReadonlyArray<WorkflowSchema.ResearchDispute>) {
@@ -1936,6 +1982,11 @@ Maximum recursive branches at this node: ${input.settings.maxBranchesPerNode}
 Allocated evidence-task slots for this subtree: ${input.budgetAllocated}
 Minimum child evidence slots required to recurse: ${input.settings.minEvidencePerBranch}
 Maximum tasks in this wave: ${input.settings.tasksPerWave}
+${
+  input.depth === 0 && input.settings.maxWaves > 1
+    ? "The engine preserves up to 20% of surplus root slots beyond minimum branch budgets for evidence-directed follow-up waves."
+    : ""
+}
 Requested source freshness: ${input.settings.freshnessDays ? `${input.settings.freshnessDays} days when fresher evidence exists` : "no fixed age; assess freshness explicitly"}
 Capability: ${input.settings.capability}
 
@@ -2114,7 +2165,7 @@ Deepen selectively. Separate unresolved gaps into:
 
 Do not stop with requires_empirical_work while a consequential desk-researchable gap still has medium or high expected information gain. For every proposed follow-up, provide the same bounded-task fields used by the planner and assign role evidence, critic, or recursive. Use recursive only when the completed wave reveals a compound gap with independently consumable subquestions. Use critic plus depends_on with the exact completed task IDs shown above whenever the follow-up compares, verifies, challenges, or integrates earlier reports. Multiple evidence methods inside one bounded claim do not justify recursion.
 
-Emit explicit disputes only when there are credible competing claims or assumptions. Mark whether each dispute is consequential and its priority. Select debate_profile "full" only for genuinely conflicting evidence with identifiable competing claim IDs; use "compact" for consequential interpretation, semantics, or judgment. Council is selected later by policy; do not call it yourself.
+Emit explicit disputes only when there are credible competing claims or assumptions. A question asking whether evidence exists, whether an unmeasured target is proven, or what an experiment would establish is a gap or deferred validation—not a dispute. Before emitting a dispute, honor any completed Council ruling in the supplied reports unless new evidence materially challenges it. Mark whether each dispute is consequential and its priority. Select debate_profile "full" only for genuinely conflicting evidence with identifiable competing claim IDs; use "compact" for consequential interpretation, semantics, or judgment. Council is selected later by policy; do not call it yourself.
 
 Evaluate every contract deliverable in deliverable_coverage using exactly one status: covered, partial, missing, or empirical_only, with a concrete reason. A desk-researchable partial or missing deliverable requires decision "continue" and at least one targeted task. Only empirical_only deliverables may remain uncovered when stopping.
 
@@ -2186,12 +2237,13 @@ ${JSON.stringify(
 Council reviews:
 ${JSON.stringify(
   state.councils
-    .filter((review) => review.node_id === input.id)
+    .filter((review) => input.depth === 0 || review.node_id === input.id)
     .map((review) => ({
       dispute_id: review.dispute_id,
       dispute_ids: review.dispute_ids,
       question: review.question,
       status: review.output.status,
+      summary: review.output.summary,
       consensus: review.output.consensus,
       disagreements: review.output.disagreements,
       recommendations: review.output.recommendations,

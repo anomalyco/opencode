@@ -138,6 +138,11 @@ describe("AgentV2", () => {
         "research-reader",
         "research-synthesizer",
         "research-writer",
+        "studio",
+        "studio-creator",
+        "studio-critic",
+        "studio-director",
+        "studio-planner",
         "summary",
         "title",
       ])
@@ -156,6 +161,11 @@ describe("AgentV2", () => {
         { action: "research_run", resource: "*", effect: "allow" },
       ])
       expect((yield* agent.get(AgentV2.ID.make("research")))?.steps).toBe(3)
+      expect((yield* agent.get(AgentV2.ID.make("studio")))?.permissions).toEqual([
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "studio_run", resource: "*", effect: "allow" },
+      ])
+      expect((yield* agent.get(AgentV2.ID.make("studio")))?.steps).toBe(3)
       const planner = yield* agent.get(AgentV2.ID.make("heavy-planner"))
       const perspective = yield* agent.get(AgentV2.ID.make("council-perspective"))
       const synthesizer = yield* agent.get(AgentV2.ID.make("heavy-synthesizer"))
@@ -188,6 +198,10 @@ describe("AgentV2", () => {
       const researchAssessor = yield* agent.get(AgentV2.ID.make("research-assessor"))
       const researchSynthesizer = yield* agent.get(AgentV2.ID.make("research-synthesizer"))
       const researchWriter = yield* agent.get(AgentV2.ID.make("research-writer"))
+      const studioPlanner = yield* agent.get(AgentV2.ID.make("studio-planner"))
+      const studioCreator = yield* agent.get(AgentV2.ID.make("studio-creator"))
+      const studioCritic = yield* agent.get(AgentV2.ID.make("studio-critic"))
+      const studioDirector = yield* agent.get(AgentV2.ID.make("studio-director"))
       expect(PermissionV2.evaluate("research_run", "*", researchReader?.permissions ?? []).effect).toBe("deny")
       expect(PermissionV2.evaluate("council_run", "*", researchReader?.permissions ?? []).effect).toBe("deny")
       expect(PermissionV2.evaluate("websearch", "*", researchReader?.permissions ?? []).effect).toBe("allow")
@@ -222,6 +236,16 @@ describe("AgentV2", () => {
           researchWriter?.permissions ?? [],
         ).effect,
       ).toBe("deny")
+      expect(PermissionV2.evaluate("workflow_result", "*", studioPlanner?.permissions ?? []).effect).toBe("allow")
+      expect(PermissionV2.evaluate("read", "*", studioPlanner?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("websearch", "*", studioCreator?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("read", "/project/brief.md", studioCreator?.permissions ?? []).effect).toBe("allow")
+      expect(PermissionV2.evaluate("research_run", "*", studioCritic?.permissions ?? []).effect).toBe("allow")
+      expect(PermissionV2.evaluate("council_run", "*", studioCritic?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("workflow_read_reports", "*", studioDirector?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(PermissionV2.evaluate("research_run", "*", studioDirector?.permissions ?? []).effect).toBe("deny")
     }),
   )
 })

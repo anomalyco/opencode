@@ -11,15 +11,17 @@ const Models = Schema.Struct({
   synthesizer: Schema.String.pipe(Schema.optional),
 })
 
-const Workflow = Schema.Literals(["heavy", "council", "research"])
+const RecursiveWorkflow = Schema.Literals(["heavy", "council"])
+const ResearchWorkflow = Schema.Literals(["research", "council"])
+const StudioWorkflow = Schema.Literal("research")
 const CouncilMode = Schema.Literals(["auto", "synthesis", "required", "always", "off"])
 
 export class Recursion extends Schema.Class<Recursion>("ConfigV2.Workflows.Recursion")({
   max_depth: PositiveInt.pipe(Schema.optional).annotate({
-    description: "Maximum Heavy/Council delegation depth across one root workflow",
+    description: "Maximum cross-workflow delegation depth across one root workflow",
   }),
   max_workflows: PositiveInt.pipe(Schema.optional).annotate({
-    description: "Maximum Heavy/Council invocations across one root workflow",
+    description: "Maximum workflow invocations across one root workflow",
   }),
   max_concurrency: PositiveInt.pipe(Schema.optional).annotate({
     description: "Maximum active workflow child sessions shared by the complete recursive workflow tree",
@@ -53,8 +55,8 @@ export class Heavy extends Schema.Class<Heavy>("ConfigV2.Workflows.Heavy")({
     description:
       "Council routing policy: auto reviews planner- or worker-identified disputes, synthesis reviews every Heavy synthesis, required guarantees a root review, and off disables Heavy-to-Council delegation; always remains an alias for required",
   }),
-  delegates: Schema.Array(Workflow).pipe(Schema.optional).annotate({
-    description: "Workflow types that Heavy stages may recursively spawn; defaults to Heavy and Council",
+  delegates: Schema.Array(RecursiveWorkflow).pipe(Schema.optional).annotate({
+    description: "Heavy or Council workflows that Heavy stages may recursively spawn; defaults to both",
   }),
   max_depth: PositiveInt.pipe(Schema.optional).annotate({
     description: "Maximum internal Heavy planning depth; separate from cross-workflow recursion.max_depth",
@@ -79,8 +81,8 @@ export class Debate extends Schema.Class<Debate>("ConfigV2.Workflows.Debate")({
 
 export class Council extends Schema.Class<Council>("ConfigV2.Workflows.Council")({
   enabled: Schema.Boolean.pipe(Schema.optional),
-  delegates: Schema.Array(Workflow).pipe(Schema.optional).annotate({
-    description: "Workflow types that Council stages may recursively spawn; defaults to Heavy and Council",
+  delegates: Schema.Array(RecursiveWorkflow).pipe(Schema.optional).annotate({
+    description: "Heavy or Council workflows that Council stages may recursively spawn; defaults to both",
   }),
   perspectives: PositiveInt.pipe(Schema.optional),
   concurrency: PositiveInt.pipe(Schema.optional),
@@ -104,8 +106,8 @@ export class Research extends Schema.Class<Research>("ConfigV2.Workflows.Researc
   capability: Schema.Literals(["read", "write"]).pipe(Schema.optional).annotate({
     description: "Whether Research branches are read-only or may mutate and validate the workspace",
   }),
-  delegates: Schema.Array(Workflow).pipe(Schema.optional).annotate({
-    description: "Workflow types Research may spawn; defaults to Research and Council",
+  delegates: Schema.Array(ResearchWorkflow).pipe(Schema.optional).annotate({
+    description: "Research or Council workflows that Research may spawn; defaults to both",
   }),
   max_depth: PositiveInt.pipe(Schema.optional).annotate({
     description: "Maximum hierarchical Research branch depth",
@@ -155,12 +157,37 @@ export class Research extends Schema.Class<Research>("ConfigV2.Workflows.Researc
   models: Models.pipe(Schema.optional),
 }) {}
 
+export class Studio extends Schema.Class<Studio>("ConfigV2.Workflows.Studio")({
+  enabled: Schema.Boolean.pipe(Schema.optional),
+  delegates: Schema.Array(StudioWorkflow).pipe(Schema.optional).annotate({
+    description:
+      "Optional narrow Research delegation from the Studio critic; disabled by default and never enables Council or Heavy",
+  }),
+  concepts: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Number of materially distinct concepts to develop; clamped between three and five",
+  }),
+  concurrency: PositiveInt.pipe(Schema.optional),
+  child_timeout: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Maximum runtime in milliseconds for one Studio child session",
+  }),
+  minimum_report_words: PositiveInt.pipe(Schema.optional).annotate({
+    description: "Minimum word count for the standalone Studio document's deterministic completeness check",
+  }),
+  models: Schema.Struct({
+    planner: Schema.String.pipe(Schema.optional),
+    creator: Schema.String.pipe(Schema.optional),
+    critic: Schema.String.pipe(Schema.optional),
+    director: Schema.String.pipe(Schema.optional),
+  }).pipe(Schema.optional),
+}) {}
+
 export class Info extends Schema.Class<Info>("ConfigV2.Workflows")({
   recursion: Recursion.pipe(Schema.optional),
   reports: Reports.pipe(Schema.optional),
   heavy: Schema.Union([Schema.Boolean, Heavy]).pipe(Schema.optional),
   council: Schema.Union([Schema.Boolean, Council]).pipe(Schema.optional),
   research: Schema.Union([Schema.Boolean, Research]).pipe(Schema.optional),
+  studio: Schema.Union([Schema.Boolean, Studio]).pipe(Schema.optional),
 }) {}
 
 export function merge(inputs: ReadonlyArray<Info | undefined>): Info | undefined {
@@ -185,6 +212,10 @@ export function merge(inputs: ReadonlyArray<Info | undefined>): Info | undefined
     ),
     research: configured.reduce<boolean | Research | undefined>(
       (previous, input) => mergeResearch(previous, input.research),
+      undefined,
+    ),
+    studio: configured.reduce<boolean | Studio | undefined>(
+      (previous, input) => mergeStudio(previous, input.studio),
       undefined,
     ),
   })
@@ -253,6 +284,20 @@ function mergeResearch(previous: boolean | Research | undefined, next: boolean |
     freshness_days: next.freshness_days ?? previous.freshness_days,
     minimum_report_words: next.minimum_report_words ?? previous.minimum_report_words,
     on_failure: next.on_failure ?? previous.on_failure,
+    models: next.models ? { ...previous.models, ...next.models } : previous.models,
+  })
+}
+
+function mergeStudio(previous: boolean | Studio | undefined, next: boolean | Studio | undefined) {
+  if (next === undefined) return previous
+  if (typeof next === "boolean" || typeof previous !== "object") return next
+  return Studio.make({
+    enabled: next.enabled ?? previous.enabled,
+    delegates: next.delegates ?? previous.delegates,
+    concepts: next.concepts ?? previous.concepts,
+    concurrency: next.concurrency ?? previous.concurrency,
+    child_timeout: next.child_timeout ?? previous.child_timeout,
+    minimum_report_words: next.minimum_report_words ?? previous.minimum_report_words,
     models: next.models ? { ...previous.models, ...next.models } : previous.models,
   })
 }

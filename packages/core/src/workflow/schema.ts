@@ -102,7 +102,7 @@ export const Delegation = Schema.Struct({
   id: Schema.String,
   parent_id: Schema.String.pipe(Schema.optional),
   parent_session_id: SessionSchema.ID,
-  workflow: Schema.Literals(["heavy", "council", "research"]),
+  workflow: Schema.Literals(["heavy", "council", "research", "studio"]),
   depth: PositiveInt,
   objective: Schema.String,
   status: Status,
@@ -129,7 +129,7 @@ export const SessionStage = Schema.Struct({
   parent_session_id: SessionSchema.ID.pipe(Schema.optional),
   run_id: Schema.String,
   parent_run_id: Schema.String.pipe(Schema.optional),
-  workflow: Schema.Literals(["heavy", "council", "research"]),
+  workflow: Schema.Literals(["heavy", "council", "research", "studio"]),
   workflow_depth: NonNegativeInt,
   status: Schema.Literals(["queued", "running", "completed", "failed", "timed_out"]),
   activity: Schema.Literals(["queued", "provider_active", "waiting_on_delegation", "recovering"]).pipe(Schema.optional),
@@ -715,6 +715,350 @@ export const HeavyOutput = Schema.Struct({
 })
 export type HeavyOutput = typeof HeavyOutput.Type
 
+export const StudioConceptSpec = Schema.Struct({
+  id: Schema.String,
+  title: Detail,
+  mandate: Summary,
+  differentiators: Details,
+  exclusions: Details,
+})
+export type StudioConceptSpec = typeof StudioConceptSpec.Type
+
+const StudioDeliverables = Schema.Array(Detail).check(Schema.isMaxLength(12))
+const StudioDeliverablesInput = Schema.Union([DetailInput, Schema.Array(DetailInput)]).pipe(
+  Schema.decodeTo(StudioDeliverables, {
+    decode: SchemaGetter.transform((value) => (Array.isArray(value) ? value : [value]).slice(0, 12)),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+
+export const StudioPlan = Schema.Struct({
+  rationale: Summary,
+  objective: Schema.String,
+  deliverables: StudioDeliverables,
+  constraints: Details,
+  assumptions: Details,
+  choice_points: Details,
+  concepts: Schema.Array(StudioConceptSpec).check(Schema.isMaxLength(5)),
+})
+export type StudioPlan = typeof StudioPlan.Type
+
+const StudioConceptSpecInput = Schema.Union([
+  Schema.Struct({
+    id: Schema.String.pipe(Schema.optional),
+    title: DetailInput.pipe(Schema.optional),
+    mandate: SummaryInput.pipe(Schema.optional),
+    differentiators: OptionalDetailsInput,
+    exclusions: OptionalDetailsInput,
+  }),
+  DetailInput,
+])
+
+export const StudioPlanSubmission = Schema.Struct({
+  rationale: SummaryInput.pipe(Schema.optional),
+  objective: SummaryInput.pipe(Schema.optional),
+  deliverables: StudioDeliverablesInput.pipe(Schema.optional),
+  constraints: OptionalDetailsInput,
+  assumptions: OptionalDetailsInput,
+  choice_points: OptionalDetailsInput,
+  concepts: Schema.Union([StudioConceptSpecInput, Schema.Array(StudioConceptSpecInput)]).pipe(Schema.optional),
+}).pipe(
+  Schema.decodeTo(StudioPlan, {
+    decode: SchemaGetter.transform((value) => ({
+      rationale: value.rationale ?? "The planner submitted no rationale.",
+      objective: value.objective ?? "Develop compelling possibilities for the supplied brief.",
+      deliverables: value.deliverables ?? [],
+      constraints: value.constraints ?? [],
+      assumptions: value.assumptions ?? [],
+      choice_points: value.choice_points ?? [],
+      concepts: normalizeArray(value.concepts)
+        .slice(0, 5)
+        .map((concept, index) =>
+          typeof concept === "string"
+            ? {
+                id: `concept-${index + 1}`,
+                title: concept,
+                mandate: `Develop a complete interpretation centered on ${concept}.`,
+                differentiators: [],
+                exclusions: [],
+              }
+            : {
+                id: concept.id?.trim() || `concept-${index + 1}`,
+                title: concept.title ?? `Concept ${index + 1}`,
+                mandate: concept.mandate ?? `Develop a complete and materially distinct concept ${index + 1}.`,
+                differentiators: concept.differentiators ?? [],
+                exclusions: concept.exclusions ?? [],
+              },
+        ),
+    })),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+export type StudioPlanSubmission = typeof StudioPlanSubmission.Type
+
+export const StudioDeliverable = Schema.Struct({
+  deliverable: Schema.String,
+  content: Schema.String,
+})
+export type StudioDeliverable = typeof StudioDeliverable.Type
+
+const StudioDeliverableInput = Schema.Struct({
+  deliverable: DetailInput.pipe(Schema.optional),
+  content: SummaryInput.pipe(Schema.optional),
+})
+
+const StudioConceptFields = {
+  status: Status,
+  concept_id: Schema.String,
+  title: Schema.String,
+  pitch: Schema.String,
+  deliverables: Schema.Array(StudioDeliverable),
+  differentiators: Schema.Array(Schema.String),
+  tradeoffs: Schema.Array(Schema.String),
+  risks: Schema.Array(Schema.String),
+  open_choices: Schema.Array(Schema.String),
+}
+
+export const StudioConceptResult = Schema.Struct(StudioConceptFields)
+export type StudioConceptResult = typeof StudioConceptResult.Type
+
+export const StudioConceptSubmission = Schema.Struct({
+  status: Schema.String.pipe(Schema.optional),
+  concept_id: Schema.String.pipe(Schema.optional),
+  title: DetailInput.pipe(Schema.optional),
+  pitch: SummaryInput.pipe(Schema.optional),
+  deliverables: Schema.Union([StudioDeliverableInput, Schema.Array(StudioDeliverableInput)]).pipe(Schema.optional),
+  differentiators: OptionalDetailsInput,
+  tradeoffs: OptionalDetailsInput,
+  risks: OptionalDetailsInput,
+  open_choices: OptionalDetailsInput,
+}).pipe(
+  Schema.decodeTo(StudioConceptResult, {
+    decode: SchemaGetter.transform((value) => ({
+      status: normalizeStatus(value.status),
+      concept_id: value.concept_id ?? "concept",
+      title: value.title ?? "Untitled concept",
+      pitch: value.pitch ?? "No pitch was submitted.",
+      deliverables: normalizeArray(value.deliverables).map((deliverable, index) => ({
+        deliverable: deliverable.deliverable ?? `Deliverable ${index + 1}`,
+        content: deliverable.content ?? "No compact content summary was submitted.",
+      })),
+      differentiators: value.differentiators ?? [],
+      tradeoffs: value.tradeoffs ?? [],
+      risks: value.risks ?? [],
+      open_choices: value.open_choices ?? [],
+    })),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+export type StudioConceptSubmission = typeof StudioConceptSubmission.Type
+
+export const StudioConcept = Schema.Struct({
+  ...StudioConceptFields,
+  session_id: SessionSchema.ID,
+  report_path: Schema.String.pipe(Schema.optional),
+})
+export type StudioConcept = typeof StudioConcept.Type
+
+export const StudioConceptAssessment = Schema.Struct({
+  concept_id: Schema.String,
+  disposition: Schema.Literals(["advance", "combine", "hold"]),
+  strengths: Schema.Array(Schema.String),
+  weaknesses: Schema.Array(Schema.String),
+  missing_deliverables: Schema.Array(Schema.String),
+  overlaps: Schema.Array(Schema.String),
+  distinctive_elements: Schema.Array(Schema.String),
+})
+export type StudioConceptAssessment = typeof StudioConceptAssessment.Type
+
+const StudioConceptAssessmentInput = Schema.Struct({
+  concept_id: Schema.String.pipe(Schema.optional),
+  disposition: Schema.String.pipe(Schema.optional),
+  strengths: OptionalDetailsInput,
+  weaknesses: OptionalDetailsInput,
+  missing_deliverables: OptionalDetailsInput,
+  overlaps: OptionalDetailsInput,
+  distinctive_elements: OptionalDetailsInput,
+})
+
+const StudioCritiqueFields = {
+  status: Status,
+  summary: Schema.String,
+  assessments: Schema.Array(StudioConceptAssessment),
+  cross_concept_patterns: Schema.Array(Schema.String),
+  missing_requirements: Schema.Array(Schema.String),
+  recommendations: Schema.Array(Schema.String),
+  coverage: Schema.Array(ArtifactCoverage).pipe(Schema.optional),
+}
+
+export const StudioCritiqueResult = Schema.Struct(StudioCritiqueFields)
+export type StudioCritiqueResult = typeof StudioCritiqueResult.Type
+
+export const StudioCritiqueSubmission = Schema.Struct({
+  status: Schema.String.pipe(Schema.optional),
+  summary: SummaryInput.pipe(Schema.optional),
+  assessments: Schema.Union([StudioConceptAssessmentInput, Schema.Array(StudioConceptAssessmentInput)]).pipe(
+    Schema.optional,
+  ),
+  cross_concept_patterns: OptionalDetailsInput,
+  missing_requirements: OptionalDetailsInput,
+  recommendations: OptionalDetailsInput,
+  coverage: Schema.Array(ArtifactCoverageInput).pipe(Schema.optional),
+}).pipe(
+  Schema.decodeTo(StudioCritiqueResult, {
+    decode: SchemaGetter.transform((value) => ({
+      status: normalizeStatus(value.status),
+      summary: value.summary ?? "The critic submitted no comparison summary.",
+      assessments: normalizeArray(value.assessments)
+        .slice(0, 5)
+        .map((assessment, index) => ({
+          concept_id: assessment.concept_id ?? `concept-${index + 1}`,
+          disposition:
+            assessment.disposition === "advance" || assessment.disposition === "combine"
+              ? assessment.disposition
+              : "hold",
+          strengths: assessment.strengths ?? [],
+          weaknesses: assessment.weaknesses ?? [],
+          missing_deliverables: assessment.missing_deliverables ?? [],
+          overlaps: assessment.overlaps ?? [],
+          distinctive_elements: assessment.distinctive_elements ?? [],
+        })),
+      cross_concept_patterns: value.cross_concept_patterns ?? [],
+      missing_requirements: value.missing_requirements ?? [],
+      recommendations: value.recommendations ?? [],
+      ...(value.coverage ? { coverage: value.coverage.map(normalizeArtifactCoverage) } : {}),
+    })),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+export type StudioCritiqueSubmission = typeof StudioCritiqueSubmission.Type
+
+export const StudioCritique = Schema.Struct({
+  ...StudioCritiqueFields,
+  session_id: SessionSchema.ID,
+  report_path: Schema.String.pipe(Schema.optional),
+})
+export type StudioCritique = typeof StudioCritique.Type
+
+export const StudioDeliverableCoverage = Schema.Struct({
+  deliverable: Schema.String,
+  status: Schema.Literals(["complete", "partial", "missing"]),
+  report_section: Schema.String.pipe(Schema.optional),
+  concept_ids: Schema.Array(Schema.String),
+  limitations: Schema.Array(Schema.String),
+})
+export type StudioDeliverableCoverage = typeof StudioDeliverableCoverage.Type
+
+const StudioDeliverableCoverageInput = Schema.Struct({
+  deliverable: DetailInput.pipe(Schema.optional),
+  status: Schema.String.pipe(Schema.optional),
+  report_section: DetailInput.pipe(Schema.optional),
+  concept_ids: OptionalDetailsInput,
+  limitations: OptionalDetailsInput,
+})
+
+export const StudioSynthesis = Schema.Struct({
+  status: Status,
+  summary: Schema.String,
+  recommended_concept_ids: Schema.Array(Schema.String),
+  preserved_concept_ids: Schema.Array(Schema.String),
+  deliverable_coverage: Schema.Array(StudioDeliverableCoverage),
+  decisions: Schema.Array(Schema.String),
+  tradeoffs: Schema.Array(Schema.String),
+  next_choices: Schema.Array(Schema.String),
+  coverage: Schema.Array(ArtifactCoverage).pipe(Schema.optional),
+})
+export type StudioSynthesis = typeof StudioSynthesis.Type
+
+export const StudioSynthesisSubmission = Schema.Struct({
+  status: Schema.String.pipe(Schema.optional),
+  summary: SummaryInput.pipe(Schema.optional),
+  recommended_concept_ids: OptionalDetailsInput,
+  preserved_concept_ids: OptionalDetailsInput,
+  deliverable_coverage: Schema.Union([
+    StudioDeliverableCoverageInput,
+    Schema.Array(StudioDeliverableCoverageInput),
+  ]).pipe(Schema.optional),
+  decisions: OptionalDetailsInput,
+  tradeoffs: OptionalDetailsInput,
+  next_choices: OptionalDetailsInput,
+  coverage: Schema.Array(ArtifactCoverageInput).pipe(Schema.optional),
+}).pipe(
+  Schema.decodeTo(StudioSynthesis, {
+    decode: SchemaGetter.transform((value) => ({
+      status: normalizeStatus(value.status),
+      summary: value.summary ?? "The director submitted no synthesis summary.",
+      recommended_concept_ids: value.recommended_concept_ids ?? [],
+      preserved_concept_ids: value.preserved_concept_ids ?? [],
+      deliverable_coverage: normalizeArray(value.deliverable_coverage).map((coverage, index) => ({
+        deliverable: coverage.deliverable ?? `Deliverable ${index + 1}`,
+        status:
+          coverage.status === "complete" || coverage.status === "partial" ? coverage.status : ("missing" as const),
+        report_section: coverage.report_section,
+        concept_ids: coverage.concept_ids ?? [],
+        limitations: coverage.limitations ?? [],
+      })),
+      decisions: value.decisions ?? [],
+      tradeoffs: value.tradeoffs ?? [],
+      next_choices: value.next_choices ?? [],
+      ...(value.coverage ? { coverage: value.coverage.map(normalizeArtifactCoverage) } : {}),
+    })),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+export type StudioSynthesisSubmission = typeof StudioSynthesisSubmission.Type
+
+export const StudioEvaluation = Schema.Struct({
+  report_words: NonNegativeInt,
+  report_sections: NonNegativeInt,
+  standalone_pass: Schema.Boolean,
+  concepts_planned: NonNegativeInt,
+  concepts_completed: NonNegativeInt,
+  concepts_preserved: NonNegativeInt,
+  concepts_distinct: NonNegativeInt,
+  deliverables_total: NonNegativeInt,
+  deliverables_complete: NonNegativeInt,
+  deliverables_partial: NonNegativeInt,
+  deliverables_missing: NonNegativeInt,
+  coverage_complete: Schema.Boolean,
+  total_sessions: NonNegativeInt.pipe(Schema.optional),
+  failed_sessions: NonNegativeInt.pipe(Schema.optional),
+  delegated_workflows: NonNegativeInt.pipe(Schema.optional),
+  research_invocations: NonNegativeInt.pipe(Schema.optional),
+  tool_calls: NonNegativeInt.pipe(Schema.optional),
+  tool_errors: NonNegativeInt.pipe(Schema.optional),
+  usage: Usage.pipe(Schema.optional),
+})
+export type StudioEvaluation = typeof StudioEvaluation.Type
+
+export const StudioOutput = Schema.Struct({
+  workflow: Schema.Literal("studio"),
+  status: Status,
+  execution_status: ExecutionStatus.pipe(Schema.optional),
+  artifact_status: ArtifactStatus.pipe(Schema.optional),
+  evidence_status: Status.pipe(Schema.optional),
+  summary: Schema.String,
+  final_response: Schema.String.pipe(Schema.optional),
+  usage: Usage.pipe(Schema.optional),
+  timing: RunTiming.pipe(Schema.optional),
+  root_session_id: SessionSchema.ID,
+  critique_session_id: SessionSchema.ID,
+  synthesis_session_id: SessionSchema.ID,
+  synthesis_report_path: Schema.String.pipe(Schema.optional),
+  report_path: Schema.String.pipe(Schema.optional),
+  trace_path: Schema.String.pipe(Schema.optional),
+  source_manifest: Schema.Array(Schema.String).pipe(Schema.optional),
+  source_provenance: Schema.Array(SourceReference).pipe(Schema.optional),
+  session_manifest: Schema.Array(SessionStage).pipe(Schema.optional),
+  delegations: Schema.Array(Delegation).pipe(Schema.optional),
+  plan: StudioPlan,
+  concepts: Schema.Array(StudioConcept),
+  critique: StudioCritique,
+  synthesis: StudioSynthesis,
+  evaluation: StudioEvaluation,
+})
+export type StudioOutput = typeof StudioOutput.Type
+
 export const ResearchPriority = Schema.Literals(["critical", "material", "background"])
 export type ResearchPriority = typeof ResearchPriority.Type
 
@@ -1295,6 +1639,18 @@ export const ResearchOutput = Schema.Struct({
   councils: Schema.Array(ResearchCouncilReview),
 })
 export type ResearchOutput = typeof ResearchOutput.Type
+
+function normalizeArtifactCoverage(entry: typeof ArtifactCoverageInput.Type): ArtifactCoverage {
+  return {
+    artifact_id: entry.artifact_id,
+    title: entry.title ?? entry.artifact_id ?? entry.report_path ?? "Unidentified artifact",
+    report_path: entry.report_path,
+    received: true,
+    used: entry.used ?? [],
+    rejected: entry.rejected ?? [],
+    unresolved: entry.unresolved ?? [],
+  }
+}
 
 function normalizeText(value: string | Readonly<Record<string, unknown>>, maxLength: number) {
   if (typeof value === "string") return clip(value, maxLength)

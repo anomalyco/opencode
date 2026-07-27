@@ -232,6 +232,7 @@ describe("TUI inline tool wrapping", () => {
     expect(toolDisplay("heavy_run")).toBe("workflow")
     expect(toolDisplay("council_run")).toBe("workflow")
     expect(toolDisplay("research_run")).toBe("workflow")
+    expect(toolDisplay("studio_run")).toBe("workflow")
     expect(toolDisplay("plugin_tool")).toBe("generic")
   })
 
@@ -250,51 +251,70 @@ describe("TUI inline tool wrapping", () => {
     ).toBe("Heavy — Assess the architecture\n↳ Completed · 21 reports · 26 subagent sessions · Council reviewed")
   })
 
-  test("renders live Heavy and Council lineage, dependencies, timing, and reports", () => {
+  test("renders live workflow lineage without intermediate report paths", () => {
     expect(
-      formatWorkflowTree(
-        [
-          {
-            sessionID: "ses_plan",
-            parentSessionID: "ses_user",
-            status: "completed",
-            workflow: "heavy",
-            title: "Heavy plan",
-            stage: "planning",
-            depth: 0,
-            elapsedMs: 1_000,
-          },
-          {
-            sessionID: "ses_reader",
-            parentSessionID: "ses_plan",
-            status: "completed",
-            workflow: "heavy",
-            title: "Storage research",
-            stage: "execution",
-            depth: 1,
-            elapsedMs: 2_000,
-            reportPath: "/project/.opencode/reports/storage.md",
-          },
-          {
-            sessionID: "ses_council",
-            parentSessionID: "ses_plan",
-            status: "running",
-            workflow: "council",
-            title: "Council debate",
-            stage: "debate",
-            depth: 1,
-            dependsOn: ["storage"],
-            elapsedMs: 500,
-          },
-        ],
-        (value) => value.replace("/project/", ""),
-      ),
+      formatWorkflowTree([
+        {
+          sessionID: "ses_plan",
+          parentSessionID: "ses_user",
+          status: "completed",
+          workflow: "heavy",
+          title: "Heavy plan",
+          stage: "planning",
+          depth: 0,
+          elapsedMs: 1_000,
+        },
+        {
+          sessionID: "ses_reader",
+          parentSessionID: "ses_plan",
+          status: "completed",
+          workflow: "heavy",
+          title: "Storage research",
+          stage: "execution",
+          depth: 1,
+          elapsedMs: 2_000,
+          reportPath: "/project/.opencode/reports/storage.md",
+        },
+        {
+          sessionID: "ses_council",
+          parentSessionID: "ses_plan",
+          status: "running",
+          workflow: "council",
+          title: "Council debate",
+          stage: "debate",
+          depth: 1,
+          dependsOn: ["storage"],
+          elapsedMs: 500,
+        },
+        {
+          sessionID: "ses_research",
+          parentSessionID: "ses_plan",
+          status: "completed",
+          workflow: "research",
+          title: "Research evidence",
+          stage: "evidence",
+          depth: 1,
+          elapsedMs: 750,
+        },
+        {
+          sessionID: "ses_studio",
+          parentSessionID: "ses_plan",
+          status: "completed",
+          workflow: "studio",
+          title: "Studio concept",
+          stage: "concept",
+          depth: 1,
+          elapsedMs: 900,
+        },
+      ]),
     ).toBe(
       [
         "↳ Workflow tree",
         "  ↳ ✓ Heavy: Heavy plan · planning · depth 0 · 1.0s",
-        "    ↳ ✓ Heavy: Storage research · execution · depth 1 · 2.0s · report .opencode/reports/storage.md",
+        "    ↳ ✓ Heavy: Storage research · execution · depth 1 · 2.0s",
         "    ↳ ● Council: Council debate · debate · depth 1 · after storage · 500ms",
+        "    ↳ ✓ Research: Research evidence · evidence · depth 1 · 750ms",
+        "    ↳ ✓ Studio: Studio concept · concept · depth 1 · 900ms",
       ].join("\n"),
     )
   })

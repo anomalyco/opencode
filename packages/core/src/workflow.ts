@@ -1,6 +1,6 @@
 export * as Workflow from "./workflow"
 
-import { Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { Config } from "./config"
 import { ConfigWorkflows } from "./config/workflows"
 import { makeGlobalNode } from "./effect/app-node"
@@ -18,6 +18,7 @@ import { ResearchWorkflow } from "./workflow/research"
 import { WorkflowReport } from "./workflow/report"
 import { WorkflowRuntime } from "./workflow/runtime"
 import { WorkflowSchema } from "./workflow/schema"
+import { StudioWorkflow } from "./workflow/studio"
 
 const DEFAULT_CHILD_TIMEOUT_MS = 10 * 60_000
 const MAX_CHILD_TIMEOUT_MS = 60 * 60_000
@@ -39,6 +40,10 @@ type ResearchInput = {
   readonly capability?: WorkflowSchema.Capability
 }
 
+type StudioInput = {
+  readonly brief: string
+}
+
 export interface Interface {
   readonly heavy: (
     input: { readonly task: string },
@@ -52,6 +57,10 @@ export interface Interface {
     input: ResearchInput,
     context: WorkflowRuntime.RunContext,
   ) => Effect.Effect<WorkflowSchema.ResearchOutput, Tool.Failure>
+  readonly studio: (
+    input: StudioInput,
+    context: WorkflowRuntime.RunContext,
+  ) => Effect.Effect<WorkflowSchema.StudioOutput, Tool.Failure>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workflow") {}
@@ -63,15 +72,7 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const runtime = yield* WorkflowRuntime.Service
     const sessions = yield* SessionV2.Service
-    const workflowLeases = new Map<string, ReturnType<typeof Semaphore.makeUnsafe>>()
-    const workflowLease = (session: SessionV2.Info) => {
-      const key = `${session.location.directory}\0${session.location.workspaceID ?? ""}`
-      const current = workflowLeases.get(key)
-      if (current) return current
-      const created = Semaphore.makeUnsafe(1)
-      workflowLeases.set(key, created)
-      return created
-    }
+    const accessCoordinator = yield* WorkflowExecution.makeAccessCoordinator()
 
     const configuration = Effect.fn("Workflow.configuration")(function* (sessionID) {
       const session = yield* sessions.get(sessionID)
@@ -97,6 +98,7 @@ const layer = Layer.effect(
 
     const execution = Effect.fn("Workflow.execution")(function* (
       workflow: WorkflowExecution.Kind,
+      access: WorkflowExecution.Access,
       objective: string,
       context: WorkflowRuntime.RunContext,
       configured: Configuration,
@@ -116,6 +118,7 @@ const layer = Layer.effect(
       return {
         current: yield* WorkflowExecution.make({
           workflow,
+          access,
           objective,
           sessionID: context.sessionID,
           toolCallID: context.toolCallID,
@@ -145,7 +148,7 @@ const layer = Layer.effect(
       )
       if (!settings)
         return yield* Effect.fail(new Tool.Failure({ message: "Heavy is disabled by workflows.heavy configuration" }))
-      const run = yield* execution("heavy", input.task, context, configured)
+      const run = yield* execution("heavy", "write", input.task, context, configured)
       const effect = HeavyWorkflow.run(
         input.task,
         configured.session,
@@ -215,7 +218,9 @@ const layer = Layer.effect(
           recordInterruption("heavy", input.task, run.current, "Heavy workflow was interrupted"),
         ),
       )
-      return yield* run.root ? workflowLease(configured.session).withPermit(effect) : effect
+      return yield* run.root
+        ? accessCoordinator.withAccess(configured.session.location, WorkflowExecution.access(run.current), effect)
+        : effect
     })
 
     const council = Effect.fn("Workflow.council")(function* (input: CouncilInput, context: WorkflowRuntime.RunContext) {
@@ -235,7 +240,7 @@ const layer = Layer.effect(
         : undefined
       if (current && coordination && !coordination.owner)
         return yield* WorkflowExecution.awaitCouncil(current, coordination.claim)
-      const run = yield* execution("council", input.question, context, configured).pipe(
+      const run = yield* execution("council", "write", input.question, context, configured).pipe(
         Effect.tapError((error) =>
           current && coordination
             ? WorkflowExecution.failCouncil(current, coordination.claim, workflowFailure(error))
@@ -315,7 +320,9 @@ const layer = Layer.effect(
           recordInterruption("council", input.question, run.current, "Council workflow was interrupted"),
         ),
       )
-      const executed = run.root ? workflowLease(configured.session).withPermit(effect) : effect
+      const executed = run.root
+        ? accessCoordinator.withAccess(configured.session.location, WorkflowExecution.access(run.current), effect)
+        : effect
       return yield* coordination
         ? executed.pipe(
             Effect.tap((output) => WorkflowExecution.completeCouncil(coordination.claim, output)),
@@ -338,17 +345,36 @@ const layer = Layer.effect(
       context: WorkflowRuntime.RunContext,
     ) {
       const configured = yield* configuration(context.sessionID).pipe(Effect.mapError(workflowFailure))
-      const settings = researchSettings(
+      const parentExecution = context.execution ?? runtime.execution(context.sessionID)
+      const configuredSettings = researchSettings(
         configured.workflows?.research,
         configured.workflows?.council,
         configured.workflows?.reports,
         input,
       )
-      if (!settings)
+      if (!configuredSettings)
         return yield* Effect.fail(
           new Tool.Failure({ message: "Research is disabled by workflows.research configuration" }),
         )
-      const run = yield* execution("research", input.question, context, configured)
+      const settings =
+        parentExecution?.workflow === "studio"
+          ? {
+              ...configuredSettings,
+              effort: "standard" as const,
+              capability: "read" as const,
+              minDepth: 1,
+              maxDepth: 1,
+              maxBranchesPerNode: 1,
+              tasksPerWave: Math.min(configuredSettings.tasksPerWave, 2),
+              maxWaves: 1,
+              maxNodes: Math.min(configuredSettings.maxNodes, 3),
+              debateSensitivity: "off" as const,
+              maxDebatesPerNode: 0,
+              minimumReportWords: Math.min(configuredSettings.minimumReportWords, 800),
+              council: undefined,
+            }
+          : configuredSettings
+      const run = yield* execution("research", settings.capability, input.question, context, configured)
       const effect = ResearchWorkflow.run(
         input.question,
         configured.session,
@@ -446,7 +472,110 @@ const layer = Layer.effect(
           recordInterruption("research", input.question, run.current, "Research workflow was interrupted"),
         ),
       )
-      return yield* run.root ? workflowLease(configured.session).withPermit(effect) : effect
+      return yield* run.root
+        ? accessCoordinator.withAccess(configured.session.location, WorkflowExecution.access(run.current), effect)
+        : effect
+    })
+
+    const studio = Effect.fn("Workflow.studio")(function* (input: StudioInput, context: WorkflowRuntime.RunContext) {
+      const configured = yield* configuration(context.sessionID).pipe(Effect.mapError(workflowFailure))
+      const settings = studioSettings(configured.workflows?.studio, configured.workflows?.reports)
+      if (!settings)
+        return yield* Effect.fail(new Tool.Failure({ message: "Studio is disabled by workflows.studio configuration" }))
+      const run = yield* execution("studio", "read", input.brief, context, configured)
+      const effect = StudioWorkflow.run(
+        input.brief,
+        configured.session,
+        { ...context, execution: run.current },
+        settings,
+        runtime,
+      ).pipe(
+        Effect.flatMap((result) =>
+          Effect.gen(function* () {
+            const delegations = yield* WorkflowExecution.manifest(run.current)
+            const sessionManifest = yield* WorkflowExecution.sessions(run.current)
+            const sourceProvenance = yield* Effect.promise(() =>
+              WorkflowReport.collectSourceProvenance(
+                { delegations },
+                delegations.map((delegation) => delegation.report_path),
+                sessionManifest,
+              ),
+            )
+            const usage = WorkflowReport.aggregateUsage(sessionManifest)
+            const initial = WorkflowSchema.StudioOutput.make({
+              ...result,
+              ...WorkflowReport.health(
+                result.status,
+                sessionManifest,
+                result.synthesis.coverage ?? [],
+                sourceProvenance,
+              ),
+              usage,
+              timing: WorkflowExecution.timing(run.current),
+              report_path: run.current.reportPath,
+              synthesis_report_path: run.current.reportPath,
+              trace_path: WorkflowReport.studioTracePath(run.current.reportPath),
+              source_manifest: sourceProvenance.map((source) => source.url),
+              source_provenance: sourceProvenance,
+              session_manifest: sessionManifest,
+              delegations,
+            })
+            yield* Effect.tryPromise({
+              try: () => WorkflowReport.writeStudio(input.brief, initial, run.current.reportPath),
+              catch: (error) =>
+                new Tool.Failure({ message: `Failed to write Studio report: ${failureMessage(error)}` }),
+            })
+            const output = WorkflowSchema.StudioOutput.make({
+              ...initial,
+              final_response: yield* Effect.promise(() => WorkflowReport.readArtifact(run.current.reportPath)),
+              evaluation: yield* Effect.promise(() =>
+                StudioWorkflow.evaluate(
+                  result.plan,
+                  result.concepts,
+                  result.critique,
+                  result.synthesis,
+                  run.current.reportPath,
+                  settings.minimumReportWords,
+                  { sessions: sessionManifest, delegations, usage },
+                ),
+              ),
+            })
+            yield* Effect.tryPromise({
+              try: () => WorkflowReport.writeStudio(input.brief, output, run.current.reportPath),
+              catch: (error) =>
+                new Tool.Failure({ message: `Failed to finalize Studio trace: ${failureMessage(error)}` }),
+            })
+            yield* WorkflowExecution.complete(run.current, {
+              status: output.status,
+              executionStatus: output.execution_status,
+              artifactStatus: output.artifact_status,
+              evidenceStatus: output.evidence_status,
+              summary: output.summary,
+              rootSessionID: output.root_session_id,
+            })
+            return output
+          }),
+        ),
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            const message = failureMessage(error)
+            yield* WorkflowExecution.fail(run.current, message)
+            const delegations = yield* WorkflowExecution.manifest(run.current)
+            yield* Effect.promise(() =>
+              WorkflowReport.writeFailure("studio", input.brief, message, run.current.reportPath, delegations).catch(
+                () => undefined,
+              ),
+            )
+            return yield* new Tool.Failure({ message: `${message}\nReport: ${run.current.reportPath}` })
+          }),
+        ),
+        Effect.onInterrupt(() =>
+          recordInterruption("studio", input.brief, run.current, "Studio workflow was interrupted"),
+        ),
+      )
+      return yield* run.root
+        ? accessCoordinator.withAccess(configured.session.location, WorkflowExecution.access(run.current), effect)
+        : effect
     })
 
     yield* applications.register({
@@ -482,9 +611,17 @@ const layer = Layer.effect(
         execute: research,
         toModelOutput: ({ output }) => [{ type: "text", text: WorkflowHandoff.research(output) }],
       }),
+      studio_run: Tool.make({
+        description:
+          "Develop several materially distinct creative concepts, compare them against an inferred brief, and author a standalone direction document.",
+        input: Schema.Struct({ brief: Schema.String }),
+        output: WorkflowSchema.StudioOutput,
+        execute: studio,
+        toModelOutput: ({ output }) => [{ type: "text", text: WorkflowHandoff.studio(output) }],
+      }),
     })
 
-    return Service.of({ heavy, council, research })
+    return Service.of({ heavy, council, research, studio })
   }),
 )
 
@@ -636,6 +773,23 @@ function researchSettings(
   }
 }
 
+function studioSettings(
+  input: boolean | ConfigWorkflows.Studio | undefined,
+  reports: ConfigWorkflows.Reports | undefined,
+): StudioWorkflow.Settings | undefined {
+  if (input === false || (typeof input === "object" && input.enabled === false)) return undefined
+  const config = typeof input === "object" ? input : undefined
+  return {
+    concepts: Math.max(3, Math.min(config?.concepts ?? 4, 5)),
+    concurrency: Math.min(config?.concurrency ?? 4, 5),
+    childTimeoutMs: Math.min(config?.child_timeout ?? DEFAULT_CHILD_TIMEOUT_MS, MAX_CHILD_TIMEOUT_MS),
+    minimumReportWords: config?.minimum_report_words ?? 400,
+    finalizationRetries: Math.min(reports?.finalization_retries ?? 1, 3),
+    maxPromptBytes: Math.min(reports?.max_prompt_bytes ?? 512 * 1024, 16 * 1024 * 1024),
+    models: config?.models ?? {},
+  }
+}
+
 function recursionSettings(input: ConfigWorkflows.Info | undefined) {
   return {
     maxDepth: Math.min(input?.recursion?.max_depth ?? 3, 8),
@@ -650,7 +804,9 @@ function delegationSettings(input: ConfigWorkflows.Info | undefined) {
   const heavy = typeof input?.heavy === "object" ? input.heavy : undefined
   const council = typeof input?.council === "object" ? input.council : undefined
   const research = typeof input?.research === "object" ? input.research : undefined
+  const studio = typeof input?.studio === "object" ? input.studio : undefined
   const councilDisabled = input?.council === false || council?.enabled === false
+  const researchDisabled = input?.research === false || research?.enabled === false
   const heavyCouncilDisabled = councilDisabled || heavy?.council === false || heavy?.council === "off"
   const heavyDelegates = (heavy?.delegates ?? (["heavy", "council"] as const)).filter(
     (workflow) => workflow !== "council" || !heavyCouncilDisabled,
@@ -663,6 +819,7 @@ function delegationSettings(input: ConfigWorkflows.Info | undefined) {
         (workflow) => workflow !== "council" || !councilDisabled,
       ),
     ),
+    studio: new Set((studio?.delegates ?? []).filter((workflow) => workflow !== "research" || !researchDisabled)),
   }
 }
 

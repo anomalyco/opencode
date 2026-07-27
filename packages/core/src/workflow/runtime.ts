@@ -95,7 +95,7 @@ export interface ChildInput<Result extends Tool.SchemaType<any>> {
   readonly reportReadMode?: "paths" | "artifacts"
   readonly progress?: {
     readonly context: RunContext
-    readonly workflow: "heavy" | "council" | "research"
+    readonly workflow: "heavy" | "council" | "research" | "studio"
     readonly phase: string
     readonly stage: string
     readonly details?: Readonly<Record<string, unknown>>

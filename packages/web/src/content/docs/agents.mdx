@@ -27,7 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-OpenCode comes with five built-in primary agents, **Build**, **Plan**, **Heavy**, **Council**, and **Research**. We'll
+OpenCode comes with six built-in primary agents, **Build**, **Plan**, **Heavy**, **Council**, **Research**, and **Studio**. We'll
 look at these below.
 
 ---
@@ -89,6 +89,14 @@ Council gathers independent perspectives, debates disagreements over stable issu
 _Mode_: `primary`
 
 Research turns a question into an explicit contract, runs adaptive evidence waves, recursively synthesizes compound branches, and sends only consequential contradictions to Council. Its root synthesizer writes the standalone `RESEARCH_REPORT.md` directly. `RESEARCH_TRACE.md`, the canonical `RESEARCH_GRAPH.json`, and the append-only `RESEARCH_RAW_GRAPH.json` preserve the execution and evidence audit trail.
+
+---
+
+### Use Studio
+
+_Mode_: `primary`
+
+Studio develops creative briefs rather than evidence questions. It produces several materially distinct complete concepts, compares their brief fit and tradeoffs, preserves viable alternatives, and writes a standalone `STUDIO_REPORT.md`. Its compact fixed workflow avoids adaptive Research and Council orchestration by default.
 
 ---
 
@@ -169,7 +177,7 @@ You can customize the built-in agents or create your own through configuration. 
 
 ---
 
-### Heavy, Council, and Research
+### Heavy, Council, Research, and Studio
 
 Configure recursive workflow behavior under `workflows`:
 
@@ -232,6 +240,16 @@ Configure recursive workflow behavior under `workflows`:
       "freshness_days": 30,
       "minimum_report_words": 2500,
       "on_failure": "keep"
+    },
+    "studio": {
+      "enabled": true,
+      "delegates": [],
+      "concepts": 4,
+      "concurrency": 4,
+      "minimum_report_words": 1200,
+      "models": {
+        "director": "anthropic/claude-sonnet-4-5"
+      }
     }
   }
 }
@@ -244,7 +262,13 @@ The Heavy `council` policy supports:
 - `required`: Guarantee one Council review before the root synthesis.
 - `synthesis`: Review every recursive Heavy synthesis.
 
-Research effort presets are `standard`, `deep`, and `frontier`. Their target useful evidence depths are 1, 2, and 3; their maximum depths are 2, 3, and 4. Explicit `min_depth`, `max_depth`, `max_branches_per_node`, `min_evidence_per_branch`, `tasks_per_wave`, `max_waves`, and `max_nodes` values override the preset. After every wave, an assessor continues only when a novel task has medium or high expected information gain. Nested contracts begin with direct evidence and criticism; another recursive level must be earned from gaps found in the completed wave. The optional `max_time` and `max_tokens` values are soft run budgets: active work is preserved, but no new wave starts after a budget is exhausted.
+Delegation sets are workflow-specific. Heavy and Council accept only `heavy` and `council`; Research accepts only `research` and `council`; Studio accepts only `research`. Unsupported cross-family edges fail configuration validation instead of being accepted without a runnable path.
+
+Studio is a domain-general creative workflow. It does not contain fantasy, product, narrative, branding, or other domain-specific templates. A brief planner infers the requested deliverables, three to five parallel creators develop materially distinct complete concepts, a critic checks brief fit, completeness, and convergence, and one director authors the standalone document while preserving viable alternatives and tradeoffs. The fixed shape uses seven sessions with the default four concepts, so creative prompts do not trigger an adaptive research tree or a Council.
+
+Studio stages cannot browse or convene Council. Its `delegates` list is empty by default. Set `delegates` to `["research"]` only when the critic should be allowed to send one strict, decision-changing external uncertainty to Research; that edge is limited to one shallow Research run, cannot open Council, and receives the uncertainty rather than the creative brief or a creative choice. `minimum_report_words` is a configurable deterministic thin-document check and defaults to 400; the trace also records deliverable coverage, concepts completed and preserved, concepts with critic-identified distinctive elements, child failures, and usage.
+
+Research effort presets are `standard`, `deep`, and `frontier`. Their target useful evidence depths are 1, 2, and 3; their maximum depths are 2, 3, and 4. Explicit `min_depth`, `max_depth`, `max_branches_per_node`, `min_evidence_per_branch`, `tasks_per_wave`, `max_waves`, and `max_nodes` values override the preset. The first root wave preserves up to 20% of surplus slots beyond minimum recursive-branch budgets for evidence-directed follow-up. After every wave, an assessor continues only when a novel task has medium or high expected information gain. Nested contracts begin with direct evidence and criticism; another recursive level must be earned from gaps found in the completed wave. The optional `max_time` and `max_tokens` values are soft run budgets: active work is preserved, but no new wave starts after a budget is exhausted.
 
 The preset report targets are 1,200 words for `standard`, 2,500 for `deep`, and 4,000 for `frontier`. Planners classify tasks as `evidence`, `critic`, or `recursive` and declare their subquestions, evidence methods, exclusions, and decision relevance. Evidence tasks own one bounded claim family but may triangulate it with several methods. Critics consume declared upstream reports without performing new source discovery. Recursive tasks are reserved for independently consumable subquestions that need a local contract and synthesis.
 
@@ -252,9 +276,9 @@ The preset report targets are 1,200 words for `standard`, 2,500 for `deep`, and 
 
 Task dependencies are preserved within and across adaptive waves. Economic, integration, verification, and adversarial tasks can use `depends_on` to wait for upstream branch reports and receive those reports as authorized artifacts. Assessors distinguish desk-researchable gaps from empirical-only gaps, recursively deepen consequential researchable gaps, and reserve `requires_empirical_work` for validation the configured capability cannot actually perform.
 
-`debate_sensitivity` controls evidence-directed Council routing. `off` disables it, `low` accepts only consequential critical disputes, `balanced` accepts consequential critical or material disputes, and `high` also reviews material contradictions before they become conclusions. Research workers do not call Council directly; the assessor first records competing claims and the engine supplies their reports to Council. Interpretation and judgment disputes use a compact two-perspective, one-round review; genuine conflicting evidence uses the configured full Council.
+`debate_sensitivity` controls evidence-directed Council routing. `off` disables it, `low` accepts only consequential critical disputes, `balanced` accepts consequential critical or material disputes, and `high` also reviews material contradictions before they become conclusions. Research workers do not call Council directly; the assessor first records competing claims and the engine supplies their reports to Council. Missing evidence and empirical validation needs remain gaps rather than debates. Interpretation and judgment disputes use a compact two-perspective, one-round review; genuine conflicting evidence uses the configured full Council. A completed nested Council decision is reused when it already covers a later equivalent dispute.
 
-Research defaults to read-only. Set `capability` to `write` when experiments or implementation are part of the requested research; writer sessions remain serialized. `freshness_days` tells workers and assessors how recent evidence should be when newer sources exist.
+Research defaults to read-only. Independent read-only Research roots in the same Location may overlap; Heavy, Council, and write-capable Research roots retain exclusive workspace access. A read-only root also rejects indirect Heavy delegation through a nested Council. Set `capability` to `write` when experiments or implementation are part of the requested research; writer sessions remain serialized. `freshness_days` tells workers and assessors how recent evidence should be when newer sources exist.
 
 `minimum_report_words` is a deterministic publication check, not another model pass. A shorter root synthesis is preserved rather than rewritten. Before synthesis, every contract deliverable must be covered, explicitly empirical-only, or receive a targeted follow-up wave. The final evaluation records each deliverable as complete, partial, or missing, with its report section, canonical claim IDs, and limitations.
 
@@ -262,11 +286,11 @@ Exact completed leaf questions become content-addressed artifacts within the run
 
 Every run also emits a deterministic evaluation scorecard in the trace and structured output: report length and section count, contract-deliverable coverage, supported claims with valid evidence links, verified-source count, open critical gaps, consequential disputes, Council usage, artifact reuse, direct evidence leaves, artifact-bound critics, productive and synthesis-only recursive branches, structural branch depth, direct-evidence depth, subtree budget use, dependency-aware tasks, coverage completeness, child failures, tool calls and errors, token usage, source verification, and per-role operations. These metrics are domain-neutral, so the same harness can compare engineering, scientific, policy, market, and other research prompts without imposing one report outline.
 
-The shared recursion limits bound delegated Heavy and Council invocations. Research's internal evidence tree is bounded separately by `workflows.research.max_depth`, `max_nodes`, `max_waves`, and `tasks_per_wave`; any Council it opens still consumes the shared Council budget. Full durable reports are injected without truncation. If a stage would exceed `max_prompt_bytes`, it fails visibly and keeps the source reports intact.
+The shared recursion limits bound delegated workflow invocations, including Studio's optional Research edge. Research's internal evidence tree is bounded separately by `workflows.research.max_depth`, `max_nodes`, `max_waves`, and `tasks_per_wave`; any Council it opens still consumes the shared Council budget. Full durable reports are injected without truncation. If a stage would exceed `max_prompt_bytes`, it fails visibly and keeps the source reports intact.
 
 `debate_deduplication` controls root-scoped Council coordination and defaults to `semantic`. `exact` reuses the same canonical issue only when its evidence paths match, `semantic` also reuses strongly overlapping questions when their evidence overlaps or one side has not produced evidence yet, and `off` runs every request independently. A recursive Council must address a materially narrower dispute than its ancestor; equivalent ancestor debates are rejected instead of multiplying sessions.
 
-`finalization_retries` retries transient provider failures without repeating the admitted workflow prompt. If a stage has already written a durable report, Heavy, Council, and Research then make one deterministic recovery turn from that report. The report remains indexed even if structured finalization still fails.
+`finalization_retries` retries transient provider failures without repeating the admitted workflow prompt. If a stage has already written a durable report, Heavy, Council, Research, and Studio then make one deterministic recovery turn from that report. The report remains indexed even if structured finalization still fails.
 
 Workflow results expose separate execution, artifact, and evidence statuses. Evidence becomes partial when cited sources remain unverified or synthesized artifacts retain unresolved questions. Successful direct fetches are verified from tool execution records; search-only discoveries remain unverified, and failed direct checks remain visible.
 

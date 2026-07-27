@@ -1,13 +1,15 @@
 export * as WorkflowExecution from "./execution"
 
 import path from "node:path"
-import { DateTime, Deferred, Effect, Ref, Semaphore } from "effect"
+import { DateTime, Deferred, Effect, RcMap, Ref, Semaphore, TxReentrantLock } from "effect"
+import type { Location } from "../location"
 import { SessionSchema } from "../session/schema"
 import { Tool } from "../tool/tool"
 import { Hash } from "../util/hash"
 import { WorkflowSchema } from "./schema"
 
-export type Kind = "heavy" | "council" | "research"
+export type Kind = "heavy" | "council" | "research" | "studio"
+export type Access = WorkflowSchema.Capability
 
 type Invocation = {
   readonly id: string
@@ -65,6 +67,7 @@ type Root = {
   readonly id: string
   readonly rootSessionID: SessionSchema.ID
   readonly workflow: Kind
+  readonly access: Access
   readonly maxDepth: number
   readonly remaining: Ref.Ref<number>
   readonly maxCouncils: number
@@ -96,8 +99,34 @@ export type Context = {
   readonly startedAt: number
 }
 
+export function makeAccessCoordinator() {
+  return Effect.gen(function* () {
+    const locks = yield* RcMap.make({
+      lookup: () => TxReentrantLock.make(),
+      idleTimeToLive: 0,
+    })
+    return {
+      withAccess<A, E, R>(
+        location: Location.Ref,
+        access: Access,
+        effect: Effect.Effect<A, E, R>,
+      ): Effect.Effect<A, E, R> {
+        return Effect.scoped(
+          Effect.gen(function* () {
+            const lock = yield* RcMap.get(locks, `${location.directory}\0${location.workspaceID ?? ""}`)
+            return yield* access === "read"
+              ? TxReentrantLock.withReadLock(lock, effect)
+              : TxReentrantLock.withWriteLock(lock, effect)
+          }),
+        )
+      },
+    }
+  })
+}
+
 export function make(input: {
   readonly workflow: Kind
+  readonly access?: Access
   readonly objective: string
   readonly sessionID: SessionSchema.ID
   readonly toolCallID: string
@@ -120,6 +149,7 @@ export function make(input: {
       id,
       rootSessionID: input.sessionID,
       workflow: input.workflow,
+      access: input.access ?? "write",
       maxDepth: input.maxDepth,
       remaining: yield* Ref.make(Math.max(0, input.maxWorkflows - 1)),
       maxCouncils: input.maxCouncils ?? 8,
@@ -177,10 +207,21 @@ export function delegate(
       return yield* new Tool.Failure({
         message: `${parent.workflow} is not configured to delegate to ${input.workflow}`,
       })
+    if (parent.root.access === "read" && input.workflow === "heavy")
+      return yield* new Tool.Failure({
+        message: "Read-only workflow roots cannot delegate to Heavy",
+      })
     if (sameObjective(parent.objective, input.objective))
       return yield* new Tool.Failure({
         message: "Delegated workflows must receive a strict subproblem, not the current workflow objective",
       })
+    if (parent.workflow === "studio" && input.workflow === "research") {
+      const invocations = yield* Ref.get(parent.root.invocations)
+      if (invocations.some((invocation) => invocation.parentID === parent.id && invocation.workflow === "research"))
+        return yield* new Tool.Failure({
+          message: "Studio may delegate at most one narrow uncertainty to Research",
+        })
+    }
     const depth = parent.depth + 1
     if (depth > parent.root.maxDepth)
       return yield* new Tool.Failure({
@@ -227,6 +268,10 @@ export function delegate(
       startedAt,
     } satisfies Context
   })
+}
+
+export function access(context: Context) {
+  return context.root.access
 }
 
 export function forChild(context: Context, agent: string, sessionID?: SessionSchema.ID) {
@@ -490,7 +535,8 @@ export function timing(context: Context, completedAt = Date.now()) {
 function reportName(workflow: Kind) {
   if (workflow === "heavy") return "HEAVY_REPORT.md"
   if (workflow === "council") return "COUNCIL_REPORT.md"
-  return "RESEARCH_REPORT.md"
+  if (workflow === "research") return "RESEARCH_REPORT.md"
+  return "STUDIO_REPORT.md"
 }
 
 function sameObjective(parent: string, child: string) {

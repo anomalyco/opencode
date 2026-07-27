@@ -612,10 +612,12 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("registers Heavy, Council, and Research compatibility tools", () =>
+  it.instance("registers Heavy, Council, Research, and Studio compatibility tools", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
-      expect(yield* registry.ids()).toEqual(expect.arrayContaining(["heavy_run", "council_run", "research_run"]))
+      expect(yield* registry.ids()).toEqual(
+        expect.arrayContaining(["heavy_run", "council_run", "research_run", "studio_run"]),
+      )
     }),
   )
 

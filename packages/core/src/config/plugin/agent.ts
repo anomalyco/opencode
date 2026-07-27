@@ -107,6 +107,13 @@ export const Plugin = define({
           ])
             draft.remove(AgentV2.ID.make(id))
         }
+        if (
+          workflows?.studio === false ||
+          (typeof workflows?.studio === "object" && workflows.studio.enabled === false)
+        ) {
+          for (const id of ["studio", "studio-planner", "studio-creator", "studio-critic", "studio-director"])
+            draft.remove(AgentV2.ID.make(id))
+        }
         for (const current of draft.list()) {
           draft.update(current.id, (agent) => agent.permissions.push(...permissions))
         }

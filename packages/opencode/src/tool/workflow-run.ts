@@ -12,7 +12,7 @@ import { Tool } from "./tool"
 
 type Metadata = {
   [key: string]: unknown
-  workflow: "heavy" | "council" | "research"
+  workflow: "heavy" | "council" | "research" | "studio"
   status: WorkflowSchema.Status | "running"
   executionStatus?: WorkflowSchema.ExecutionStatus
   artifactStatus?: WorkflowSchema.ArtifactStatus
@@ -38,7 +38,7 @@ type ChildSession = {
   parentRunID?: string
   status: "queued" | "running" | "completed" | "failed" | "timed_out"
   activity?: "queued" | "provider_active" | "waiting_on_delegation" | "recovering"
-  workflow?: "heavy" | "council" | "research"
+  workflow?: "heavy" | "council" | "research" | "studio"
   agent?: string
   title?: string
   stage?: string
@@ -83,6 +83,7 @@ const ResearchParameters = Schema.Struct({
   effort: Schema.Literals(["standard", "deep", "frontier"]).pipe(Schema.optional),
   capability: WorkflowSchema.Capability.pipe(Schema.optional),
 })
+const StudioParameters = Schema.Struct({ brief: Schema.String })
 
 export const HeavyRunTool = Tool.define<
   typeof HeavyParameters,
@@ -264,6 +265,63 @@ export const ResearchRunTool = Tool.define<
         )
       },
     } satisfies Tool.DefWithoutID<typeof ResearchParameters, Metadata>
+  }),
+)
+
+export const StudioRunTool = Tool.define<
+  typeof StudioParameters,
+  Metadata,
+  Workflow.Service | AuthCredentialBridge.Service,
+  "studio_run"
+>(
+  "studio_run",
+  Effect.gen(function* () {
+    const workflow = yield* Workflow.Service
+    const credentials = yield* AuthCredentialBridge.Service
+    return {
+      description:
+        "Develop materially distinct creative concepts, compare them against an inferred brief, and author a standalone direction document.",
+      parameters: StudioParameters,
+      execute: (input, context: Tool.Context<Metadata>) => {
+        const progress = workflowProgress("studio", context)
+        return Effect.gen(function* () {
+          yield* credentials.sync()
+          return yield* workflow.studio(input, {
+            sessionID: SessionSchema.ID.make(context.sessionID),
+            agent: AgentV2.ID.make("studio"),
+            assistantMessageID: SessionMessage.ID.make(context.messageID),
+            toolCallID: context.callID || `${context.messageID}:studio_run`,
+            onProgress: progress.update,
+          })
+        }).pipe(
+          Effect.raceFirst(waitForAbort(context.abort)),
+          Effect.map((output) => {
+            progress.hydrate(output.session_manifest)
+            const reports = studioReports(output)
+            const metadata = {
+              ...progress.metadata(output.status, output.root_session_id, studioSessionIDs(output), undefined, reports),
+              executionStatus: output.execution_status,
+              artifactStatus: output.artifact_status,
+              evidenceStatus: output.evidence_status,
+              usage: output.usage,
+              timing: output.timing,
+            }
+            return {
+              title: `Studio ${output.status}`,
+              metadata,
+              output: WorkflowHandoff.studio(output, reportSessions(metadata.childSessions)),
+            }
+          }),
+          Effect.catch((error) =>
+            Effect.succeed({
+              title: "Studio failed",
+              metadata: progress.metadata("failed", undefined, [], failureMessage(error)),
+              output: `Studio workflow failed: ${failureMessage(error)}`,
+            }),
+          ),
+        )
+      },
+    } satisfies Tool.DefWithoutID<typeof StudioParameters, Metadata>
   }),
 )
 
@@ -598,6 +656,57 @@ function researchSessionIDs(output: WorkflowSchema.ResearchOutput): ReadonlyArra
   ]
 }
 
+function studioReports(output: WorkflowSchema.StudioOutput): ReadonlyArray<WorkflowReport> {
+  return [
+    {
+      sessionID: output.synthesis_session_id,
+      status: output.status,
+      title: "Studio direction",
+      stage: "final",
+      reportPath: output.report_path,
+    },
+    ...output.concepts.map((concept) => ({
+      sessionID: concept.session_id,
+      status: concept.status,
+      title: `Studio: ${concept.title}`,
+      stage: "studio-concept",
+      id: concept.concept_id,
+      reportPath: concept.report_path,
+    })),
+    {
+      sessionID: output.critique_session_id,
+      status: output.critique.status,
+      title: "Studio critique",
+      stage: "studio-critique",
+      reportPath: output.critique.report_path,
+    },
+    ...(output.delegations ?? []).map((delegation) => ({
+      sessionID: delegation.root_session_id,
+      status: delegation.status,
+      title: `${workflowName(delegation.workflow)}: ${delegation.objective}`,
+      stage: `${delegation.workflow}-delegation`,
+      id: delegation.id,
+      reportPath: delegation.report_path,
+    })),
+  ]
+}
+
+function studioSessionIDs(output: WorkflowSchema.StudioOutput): ReadonlyArray<SessionSchema.ID> {
+  return [
+    ...new Set([
+      output.root_session_id,
+      ...(output.session_manifest?.map((session) => session.session_id) ?? []),
+      ...output.concepts.map((concept) => concept.session_id),
+      output.critique_session_id,
+      output.synthesis_session_id,
+      ...(output.delegations ?? []).flatMap((delegation) => [
+        delegation.root_session_id,
+        ...(delegation.session_ids ?? []),
+      ]),
+    ]),
+  ]
+}
+
 function sessionID(value: unknown) {
   return typeof value === "string" && value ? SessionSchema.ID.make(value) : undefined
 }
@@ -623,7 +732,7 @@ function numberValue(value: unknown) {
 }
 
 function workflowValue(value: unknown): ChildSession["workflow"] | undefined {
-  if (value === "heavy" || value === "council" || value === "research") return value
+  if (value === "heavy" || value === "council" || value === "research" || value === "studio") return value
   return undefined
 }
 
@@ -631,13 +740,15 @@ function reportWorkflow(report: WorkflowReport | undefined, fallback: Metadata["
   if (report?.stage.startsWith("heavy")) return "heavy"
   if (report?.stage.startsWith("council")) return "council"
   if (report?.stage.startsWith("research")) return "research"
+  if (report?.stage.startsWith("studio")) return "studio"
   return fallback
 }
 
 function workflowName(workflow: Metadata["workflow"]) {
   if (workflow === "heavy") return "Heavy"
   if (workflow === "council") return "Council"
-  return "Research"
+  if (workflow === "research") return "Research"
+  return "Studio"
 }
 
 function stringArray(value: unknown) {
