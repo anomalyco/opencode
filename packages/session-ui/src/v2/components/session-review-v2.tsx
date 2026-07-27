@@ -214,7 +214,6 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
       </Show>
       <div class="flex items-center">
         <TooltipV2
-          openDelay={2000}
           inactive={!prev()}
           value={
             <>
@@ -234,7 +233,6 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           />
         </TooltipV2>
         <TooltipV2
-          openDelay={2000}
           inactive={!next()}
           value={
             <>
@@ -268,12 +266,12 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
         class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
         aria-label={i18n.t("ui.sessionReviewV2.expandMode")}
       >
-        <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.showAllLines")}>
+        <TooltipV2 value={i18n.t("ui.sessionReviewV2.showAllLines")}>
           <SegmentedControlItemV2 value="expand" aria-label={i18n.t("ui.sessionReviewV2.showAllLines")}>
             <Icon name="expand" />
           </SegmentedControlItemV2>
         </TooltipV2>
-        <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
+        <TooltipV2 value={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
           <SegmentedControlItemV2 value="collapse" aria-label={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
             <Icon name="collapse" />
           </SegmentedControlItemV2>
@@ -289,12 +287,12 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
           aria-label={i18n.t("ui.sessionReviewV2.diffView")}
         >
-          <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
+          <TooltipV2 value={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
             <SegmentedControlItemV2 value="unified" aria-label={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
               <Icon name="unified" />
             </SegmentedControlItemV2>
           </TooltipV2>
-          <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.splitDiff")}>
+          <TooltipV2 value={i18n.t("ui.sessionReviewV2.splitDiff")}>
             <SegmentedControlItemV2 value="split" aria-label={i18n.t("ui.sessionReviewV2.splitDiff")}>
               <Icon name="split" />
             </SegmentedControlItemV2>

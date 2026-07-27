@@ -32,7 +32,6 @@ export function CommentCardV2(props: {
   return (
     <TooltipV2
       placement="top"
-      openDelay={1000}
       value={props.title ?? props.comment}
       disabled={!props.tooltip || !truncated()}
       class={props.wide ? "w-full" : undefined}

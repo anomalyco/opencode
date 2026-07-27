@@ -385,12 +385,7 @@ export function PromptInputV2Attachments(props: {
           <For each={props.comments ?? []}>
             {(comment) => (
               <div class="relative group shrink-0">
-                <TooltipV2
-                  value={comment.comment}
-                  placement="top"
-                  openDelay={800}
-                  contentClass="max-w-[300px] break-words"
-                >
+                <TooltipV2 value={comment.comment} placement="top" contentClass="max-w-[300px] break-words">
                   <CommentCardV2
                     comment={comment.comment ?? ""}
                     path={comment.path}

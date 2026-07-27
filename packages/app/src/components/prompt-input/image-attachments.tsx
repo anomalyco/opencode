@@ -52,12 +52,7 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
             <For each={props.comments ?? []}>
               {(item) => (
                 <div class="relative group shrink-0">
-                  <TooltipV2
-                    value={item.comment}
-                    placement="top"
-                    openDelay={800}
-                    contentClass="max-w-[300px] break-words"
-                  >
+                  <TooltipV2 value={item.comment} placement="top" contentClass="max-w-[300px] break-words">
                     <CommentCardV2
                       comment={item.comment ?? ""}
                       path={item.path}

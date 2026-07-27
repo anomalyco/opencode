@@ -47,7 +47,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                   </span>
                 }
                 placement="top"
-                openDelay={800}
+                {...(!props.newLayoutDesigns ? { openDelay: 800 } : {})}
               >
                 <div
                   classList={{
