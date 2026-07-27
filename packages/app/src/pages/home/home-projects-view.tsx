@@ -360,9 +360,11 @@ function HomeProjectSlot(
     index: () => number
   },
 ) {
-  const initial = props.items.find((item) => item.worktree === props.worktree)!
+  const initial = props.items.find((item) => item.worktree === props.worktree)
+  if (!initial) return
   const project = createMemo<LocalProject>(
-    (previous = initial) => props.items.find((item) => item.worktree === props.worktree) ?? previous,
+    (previous) => props.items.find((item) => item.worktree === props.worktree) ?? previous,
+    initial,
   )
 
   return (
