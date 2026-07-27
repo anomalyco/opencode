@@ -73,6 +73,18 @@ function currentReasoningID(state: ReturnType<typeof adapterState>, id: string |
   return state.currentReasoningID
 }
 
+// The AI SDK enqueues a non-fatal in-band error part
+//   { type: "error", error: `${"reasoning" | "text"} part ${id} not found` }
+// when a reasoning/text delta (or its end) arrives with no preceding *-start
+// block. This is common with OpenAI-compatible and Anthropic proxies that omit
+// the start events. The SDK returns and keeps streaming, so this must not be
+// promoted to a fatal turn failure. Verified against vercel/ai@6 stream-text.ts
+// (text part: L1171/L1190, reasoning part: L1220/L1239).
+function isOrphanStreamStateError(error: unknown) {
+  const message = errorMessage(error).trim()
+  return message.endsWith(" not found") && (message.startsWith("reasoning part ") || message.startsWith("text part "))
+}
+
 export function toLLMEvents(
   state: ReturnType<typeof adapterState>,
   event: AISDKEvent,
@@ -262,6 +274,10 @@ export function toLLMEvents(
       })
 
     case "error":
+      if (isOrphanStreamStateError(event.error))
+        return Effect.logDebug("dropping orphan reasoning/text stream part", {
+          detail: errorMessage(event.error),
+        }).pipe(Effect.as<LLMEvent[]>([]))
       return Effect.fail(event.error)
 
     case "abort":
