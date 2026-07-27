@@ -84,31 +84,29 @@ const configuredOperations = Effect.fn("PluginSupervisor.configuredOperations")(
   entries: readonly Config.Entry[],
   location: string,
 ) {
-  return yield* Effect.forEach(
-    entries.filter((entry): entry is Config.Document => entry.type === "document"),
-    (entry) =>
-      Effect.forEach(entry.info.plugins ?? [], (input) =>
-        Effect.sync(() => {
-          const operation = parse(input)
-          if (operation.type === "remove") return operation
-          const directory = entry.path ? path.dirname(entry.path) : location
-          const target = operation.target.startsWith("file://")
-            ? fileURLToPath(operation.target)
-            : operation.target.startsWith("./") || operation.target.startsWith("../")
-              ? path.resolve(directory, operation.target)
-              : operation.target
-          return { ...operation, target }
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("invalid configured plugin target", { input, cause }).pipe(Effect.as(undefined)),
-          ),
-        ),
+  const configured = entries
+    .filter((entry): entry is Config.Document => entry.type === "document")
+    .flatMap((entry) => {
+      const directory = entry.path ? path.dirname(entry.path) : location
+      return (entry.info.plugins ?? []).map((input) => ({ directory, input }))
+    })
+  const operations = yield* Effect.forEach(configured, ({ directory, input }) =>
+    Effect.sync(() => {
+      const operation = parse(input)
+      if (operation.type === "remove") return operation
+      const target = operation.target.startsWith("file://")
+        ? fileURLToPath(operation.target)
+        : operation.target.startsWith("./") || operation.target.startsWith("../")
+          ? path.resolve(directory, operation.target)
+          : operation.target
+      return { ...operation, target }
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("invalid configured plugin target", { input, cause }).pipe(Effect.as(undefined)),
       ),
-  ).pipe(
-    Effect.map((operations) =>
-      operations.flat().filter((operation): operation is Operation => operation !== undefined),
     ),
   )
+  return operations.filter((operation): operation is Operation => operation !== undefined)
 })
 
 const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Config.Entry[]) {
@@ -243,6 +241,51 @@ const externalPluginTargets = Effect.fn("PluginSupervisor.externalPluginTargets"
   ).toSorted()
 })
 
+/**
+ * Emits one signal per plugin-relevant change. Structured config and SDK
+ * updates pass through immediately; filesystem changes from auto-discovered
+ * sources and directly watched configured files share a 100ms debounce.
+ */
+const changes = Effect.fn("PluginSupervisor.changes")(function* () {
+  const bus = yield* Bus.Service
+  const config = yield* Config.Service
+  const location = yield* Location.Service
+  const watcher = yield* Watcher.Service
+  const fileUpdates = yield* PubSub.unbounded<void>()
+
+  // Direct watchers for configured plugin files outside auto-discovery
+  // directories; sources under config roots reuse config.changes() instead.
+  const external = new Map<string, Fiber.Fiber<void>>()
+  const reconcile = Effect.fn("PluginSupervisor.reconcileExternal")(function* () {
+    const targets = new Set(yield* externalPluginTargets(yield* config.entries(), location.directory))
+    // Drop removed targets and finished watcher fibers; failed targets retry below.
+    for (const [file, fiber] of external) {
+      if (targets.has(file) && fiber.pollUnsafe() === undefined) continue
+      external.delete(file)
+      yield* Fiber.interrupt(fiber)
+    }
+    for (const file of targets) {
+      if (external.has(file)) continue
+      const fiber = yield* watcher.subscribe({ path: file, type: "file" }).pipe(
+        Stream.runForEach(() => PubSub.publish(fileUpdates, undefined)),
+        Effect.catchCause((cause) => Effect.logWarning("failed to watch plugin", { target: file, cause })),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      external.set(file, fiber)
+    }
+  })
+  yield* reconcile()
+
+  const sourceChanges = config.changes().pipe(
+    Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+  )
+  // Reconcile direct watchers before the update enters the generation queue so
+  // new targets are observable as soon as their generation publishes.
+  const configUpdates = bus.subscribe(Event.Updated).pipe(Stream.tap(() => reconcile()))
+  const fileChanges = Stream.merge(sourceChanges, Stream.fromPubSub(fileUpdates)).pipe(Stream.debounce("100 millis"))
+  return Stream.merge(Stream.merge(configUpdates, bus.subscribe(SdkPlugins.Updated)), fileChanges)
+})
+
 export interface Interface {
   /** Wait for the initial plugin generation and startup updates to settle. */
   readonly flush: Effect.Effect<void>
@@ -256,11 +299,6 @@ const layer = Layer.effect(
     const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
-    const bus = yield* Bus.Service
-    const location = yield* Location.Service
-    const watcher = yield* Watcher.Service
-    const fileUpdates = yield* PubSub.unbounded<void>()
-    const external = new Map<string, { readonly token: object; stop?: Effect.Effect<void> }>()
     const lock = Semaphore.makeUnsafe(1)
     const ready = yield* Deferred.make<void>()
     let observed = 0
@@ -284,45 +322,8 @@ const layer = Layer.effect(
         }),
       )
     })
-    const reconcileExternal = Effect.fn("PluginSupervisor.reconcileExternal")(function* () {
-      const targets = new Set(yield* externalPluginTargets(yield* config.entries(), location.directory))
-      for (const [file, entry] of external) {
-        if (targets.has(file)) continue
-        external.delete(file)
-        if (entry.stop) yield* entry.stop
-      }
-      for (const file of targets) {
-        if (external.has(file)) continue
-        const token = {}
-        external.set(file, { token })
-        const fiber = yield* watcher.subscribe({ path: file, type: "file" }).pipe(
-          Stream.runForEach(() => PubSub.publish(fileUpdates, undefined)),
-          Effect.catchCause((cause) => Effect.logWarning("failed to watch plugin", { target: file, cause })),
-          Effect.ensuring(
-            Effect.sync(() => {
-              if (external.get(file)?.token === token) external.delete(file)
-            }),
-          ),
-          Effect.forkScoped({ startImmediately: true }),
-        )
-        const current = external.get(file)
-        if (current?.token === token) current.stop = Fiber.interrupt(fiber)
-      }
-    })
-    yield* reconcileExternal()
-    const sourceChanges = config
-      .changes()
-      .pipe(
-        Stream.filterEffect((update) =>
-          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
-        ),
-      )
-    const configUpdates = bus.subscribe(Event.Updated).pipe(Stream.tap(() => reconcileExternal()))
-    const busUpdates = Stream.merge(configUpdates, bus.subscribe(SdkPlugins.Updated))
-    const fileChanges = Stream.merge(sourceChanges, Stream.fromPubSub(fileUpdates)).pipe(Stream.debounce("100 millis"))
-    const updates = yield* Stream.merge(busUpdates, fileChanges).pipe(
-      Stream.toQueue({ capacity: 1, strategy: "sliding" }),
-    )
+    const changeStream = yield* changes()
+    const updates = yield* changeStream.pipe(Stream.toQueue({ capacity: 1, strategy: "sliding" }))
     const signals = yield* Stream.concat(
       Stream.succeed(0),
       Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
