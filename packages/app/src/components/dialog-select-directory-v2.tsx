@@ -329,6 +329,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
                 {(suggestion, index) => (
                   <button
                     id={`directory-picker-v2-suggestion-${index()}`}
+                    data-directory-path={suggestion.absolute}
                     role="option"
                     aria-selected={index() === activeSuggestion()}
                     data-active={index() === activeSuggestion() ? "" : undefined}
