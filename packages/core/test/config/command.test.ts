@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, PubSub, Schema, Stream } from "effect"
-import * as TestClock from "effect/testing/TestClock"
+import { advance, drain } from "../lib/clock"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Command } from "@opencode-ai/core/command"
 import { Agent } from "@opencode-ai/core/agent"
@@ -124,7 +124,7 @@ Review files`,
 
             const command = yield* Command.Service
             const bus = yield* Bus.Service
-            const test = yield* Config.Test
+            const configTest = yield* Config.Test
             yield* ConfigCommandPlugin.Plugin.effect(
               host({
                 command: {
@@ -148,8 +148,8 @@ Review files`,
             yield* Effect.yieldNow
 
             const updates = yield* testCase.mutate(directory)
-            yield* Effect.forEach(updates, (update) => test.emitChange(update), { discard: true })
-            yield* advance(Effect.sync(() => received === 1))
+            yield* Effect.forEach(updates, (update) => configTest.emitChange(update), { discard: true })
+            yield* advance(() => received === 1)
             yield* Fiber.join(changed)
           }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
         ),
@@ -168,7 +168,7 @@ Review files`,
           yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
 
           const command = yield* Command.Service
-          const test = yield* Config.Test
+          const configTest = yield* Config.Test
           let reloads = 0
           yield* ConfigCommandPlugin.Plugin.effect(
             host({
@@ -180,15 +180,15 @@ Review files`,
             }),
           )
           yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review once"))
-          yield* test.emitChange({ type: "create", path: path.join(directory, "review.md") })
-          yield* test.emitChange({ type: "update", path: path.join(directory, "review.md") })
-          yield* test.emitChange({ type: "update", path: path.join(directory, "review.md") })
-          yield* advance(Effect.sync(() => reloads >= 1))
+          yield* configTest.emitChange({ type: "create", path: path.join(directory, "review.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })
+          yield* advance(() => reloads >= 1)
           expect(reloads).toBe(1)
 
           yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review twice"))
-          yield* test.emitChange({ type: "update", path: path.join(directory, "review.md") })
-          yield* advance(Effect.sync(() => reloads >= 2))
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })
+          yield* advance(() => reloads >= 2)
           expect(reloads).toBe(2)
           expect((yield* command.get("review"))?.template).toBe("Review twice")
         }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
@@ -207,7 +207,7 @@ Review files`,
           yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
 
           const command = yield* Command.Service
-          const test = yield* Config.Test
+          const configTest = yield* Config.Test
           let reloads = 0
           yield* ConfigCommandPlugin.Plugin.effect(
             host({
@@ -219,15 +219,15 @@ Review files`,
             }),
           )
 
-          yield* test.emitChange({ type: "create", path: path.join(tmp.path, "notes", "todo.md") })
-          yield* test.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
+          yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "notes", "todo.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
           yield* drain
           expect(reloads).toBe(0)
 
           // The feed stays live after unrelated updates.
           yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review related"))
-          yield* test.emitChange({ type: "create", path: path.join(directory, "review.md") })
-          yield* advance(Effect.sync(() => reloads >= 1))
+          yield* configTest.emitChange({ type: "create", path: path.join(directory, "review.md") })
+          yield* advance(() => reloads >= 1)
           expect((yield* command.get("review"))?.template).toBe("Review related")
         }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
       ),
@@ -238,34 +238,6 @@ Review files`,
 function directoryEntry(directory: string) {
   return new Config.Directory({ type: "directory", path: AbsolutePath.make(directory) })
 }
-
-// Defers on a real macrotask so pubsub delivery, fiber hops, and filesystem
-// work can complete between TestClock advances.
-const settle = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 1)))
-
-// Drives every pending TestClock timer to completion: the plugin's 100ms
-// stream debounce and State's 500ms reload debounce both register their sleeps
-// from separate fiber hops that a single adjust can miss, so the loop
-// alternates real-macrotask settles with adjusts until the condition holds.
-// Extra adjusts are harmless when nothing is pending.
-const advance = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (yield* condition) return
-    yield* settle
-    yield* TestClock.adjust("500 millis")
-  }
-  throw new Error("condition never became true")
-})
-
-// Advances far enough that any matching update would have rebuilt, so a
-// zero-rebuild assertion afterwards is meaningful.
-const drain = Effect.gen(function* () {
-  for (let round = 0; round < 4; round++) {
-    yield* settle
-    yield* TestClock.adjust("500 millis")
-  }
-  yield* settle
-})
 
 function sourceCases() {
   return [
