@@ -181,9 +181,9 @@ describe("plugin.codex", () => {
 
     expect(models["gpt-5.4"]?.limit).toEqual(limit)
     expect(models["gpt-5.5"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
-    expect(models["gpt-5.6-sol"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
-    expect(models["gpt-5.6-terra"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
-    expect(models["gpt-5.6-luna"]?.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
+    expect(models["gpt-5.6-sol"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(models["gpt-5.6-terra"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(models["gpt-5.6-luna"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
     expect(models["gpt-5.4-pro"]).toBeUndefined()
     expect(models["gpt-5.7-pro"]).toBeDefined()
     expect(models["gpt-5.6-sol-high"]).toBeDefined()
