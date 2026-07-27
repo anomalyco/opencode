@@ -358,6 +358,7 @@ const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
+    changes: () => Stream.empty,
     entries: () =>
       Effect.succeed([
         new Config.Document({

@@ -215,6 +215,45 @@ describe("Config", () => {
     ),
   )
 
+  it.live("exposes filesystem updates under config roots through changes", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(global, "commands"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+          })
+          const updates = yield* PubSub.unbounded<Watcher.Update>()
+          const watcher = Layer.succeed(
+            Watcher.Service,
+            Watcher.Service.of({
+              subscribe: () => Stream.fromPubSub(updates),
+            }),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const received = yield* config
+              .changes()
+              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* Effect.sleep("10 millis")
+
+            const file = path.join(global, "commands", "review.md")
+            yield* PubSub.publish(updates, { type: "update", path: file } satisfies Watcher.Update)
+
+            const collected = yield* Fiber.join(received).pipe(Effect.timeout("1 second"))
+            expect(Array.from(collected)).toEqual([{ type: "update", path: file }])
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, watcher)))
+        }),
+      ),
+    ),
+  )
+
   it.effect("returns the latest defined scalar from priority-ordered documents", () =>
     Effect.sync(() => {
       const entries = [

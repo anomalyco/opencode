@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
@@ -67,6 +67,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       )
 
       const config = Config.Service.of({
+        changes: () => Stream.empty,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -152,6 +153,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const config = Config.Service.of({
+        changes: () => Stream.empty,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -220,6 +222,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* agents.transform((editor) => editor.update(build, () => {}))
 
       const config = Config.Service.of({
+        changes: () => Stream.empty,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -279,6 +282,7 @@ Use native v2 fields.`,
           })
           const agents = yield* Agent.Service
           const config = Config.Service.of({
+            changes: () => Stream.empty,
             entries: () =>
               Effect.succeed([
                 new Config.Document({
@@ -320,6 +324,7 @@ function loadHomePermissions(home: string) {
     const build = Agent.ID.make("build")
     yield* agents.transform((editor) => editor.update(build, () => {}))
     const config = Config.Service.of({
+      changes: () => Stream.empty,
       entries: () =>
         Effect.succeed([
           new Config.Document({

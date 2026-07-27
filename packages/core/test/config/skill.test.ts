@@ -1,6 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
 import { Global } from "@opencode-ai/util/global"
@@ -44,6 +44,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
         Effect.provideService(
           Config.Service,
           Config.Service.of({
+            changes: () => Stream.empty,
             entries: () =>
               Effect.succeed([
                 new Config.ClaudeDirectory({ type: "claude", path: AbsolutePath.make("/repo/.claude") }),

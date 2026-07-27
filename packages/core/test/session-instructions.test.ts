@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { DateTime, Effect, Layer } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import { Message } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -70,7 +70,10 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+const config = Layer.succeed(
+  Config.Service,
+  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
+)
 const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 
 const testLayer = AppNodeBuilder.build(

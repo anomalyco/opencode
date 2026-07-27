@@ -17,7 +17,7 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Provider } from "@opencode-ai/core/provider"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -37,7 +37,7 @@ describe("config plugin reloads", () => {
       const skills = yield* Skill.Service
       const host = yield* PluginHost.make(plugins)
       let entries: Config.Entry[] = [config("first")]
-      const service = Config.Service.of({ entries: () => Effect.sync(() => entries) })
+      const service = Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.sync(() => entries) })
       const setup = <R>(effect: Effect.Effect<void, never, R>) =>
         effect.pipe(Effect.provideService(Config.Service, service))
 

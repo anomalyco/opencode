@@ -163,6 +163,7 @@ function resourceMcpLayer(
         Layer.succeed(
           Config.Service,
           Config.Service.of({
+            changes: () => Stream.empty,
             entries: () =>
               Effect.succeed([
                 new Config.Document({

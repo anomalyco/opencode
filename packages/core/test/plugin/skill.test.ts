@@ -4,7 +4,7 @@ import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
@@ -28,7 +28,10 @@ describe("SkillPlugin.Plugin", () => {
           },
         }),
       ).pipe(
-        Effect.provideService(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) })),
+        Effect.provideService(
+          Config.Service,
+          Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
+        ),
         Effect.provideService(
           Location.Service,
           Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),

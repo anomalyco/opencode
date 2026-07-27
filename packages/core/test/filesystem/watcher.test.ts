@@ -25,9 +25,7 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.nod
 
 const configLayer = Layer.succeed(
   Config.Service,
-  Config.Service.of({
-    entries: () => Effect.succeed([]),
-  }),
+  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
 )
 
 function provide(directory: string, vcs?: Location.Interface["vcs"]) {

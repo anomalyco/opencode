@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
@@ -23,7 +23,10 @@ export const emptyMcpLayer = Layer.succeed(
   }),
 )
 
-export const emptyConfigLayer = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+export const emptyConfigLayer = Layer.succeed(
+  Config.Service,
+  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
+)
 
 export const testLocationLayer = Layer.succeed(
   Location.Service,

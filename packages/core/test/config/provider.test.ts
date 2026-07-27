@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode-ai/schema/money"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
@@ -55,6 +55,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("custom")
       const modelID = Model.ID.make("chat")
       const config = Config.Service.of({
+        changes: () => Stream.empty,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -93,6 +94,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         })
       })
       const config = Config.Service.of({
+        changes: () => Stream.empty,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -135,6 +137,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.opencode
       const modelID = Model.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
+        changes: () => Stream.empty,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -187,6 +190,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.opencode
       const modelID = Model.ID.make("alpha-gpt-next")
       const config = Config.Service.of({
+        changes: () => Stream.empty,
         entries: () =>
           Effect.succeed([
             new Config.Document({
@@ -235,6 +239,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         const providerID = Provider.ID.make("custom")
         const modelID = Model.ID.make("chat")
         const config = Config.Service.of({
+          changes: () => Stream.empty,
           entries: () =>
             Effect.succeed([
               new Config.Document({

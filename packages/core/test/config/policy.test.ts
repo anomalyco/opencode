@@ -7,7 +7,7 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Provider } from "@opencode-ai/core/provider"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -28,7 +28,10 @@ const addPlugin = Effect.fn(function* (entries: () => Config.Entry[]) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
   yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(
-    Effect.provideService(Config.Service, Config.Service.of({ entries: () => Effect.sync(entries) })),
+    Effect.provideService(
+      Config.Service,
+      Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.sync(entries) }),
+    ),
   )
 })
 

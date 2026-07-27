@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Exit, Layer, PlatformError } from "effect"
+import { Effect, Exit, Layer, PlatformError, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -100,7 +100,10 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
+const config = Layer.succeed(
+  Config.Service,
+  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed(configEntries) }),
+)
 const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 const testFileSystem = Layer.effect(
   FSUtil.Service,

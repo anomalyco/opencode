@@ -40,7 +40,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 import { agentHost, catalogHost, host } from "./plugin/host"
@@ -88,7 +88,10 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
   load: () => Effect.succeed(Instructions.empty),
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+const config = Layer.succeed(
+  Config.Service,
+  Config.Service.of({ changes: () => Stream.empty, entries: () => Effect.succeed([]) }),
+)
 const pluginSupervisor = Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void }))
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {

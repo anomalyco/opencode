@@ -159,6 +159,12 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
+  /**
+   * Streams raw filesystem updates under config roots. Config owns root
+   * topology and watch reconciliation; domain owners filter this feed for the
+   * source files they parse and rebuild their own state.
+   */
+  readonly changes: () => Stream.Stream<Watcher.Update>
 }
 
 export const Options = Schema.Struct({
@@ -430,6 +436,7 @@ export const layer = (options?: Options) => Layer.effect(
       entries: Effect.fn("Config.entries")(function* () {
         return configs
       }),
+      changes: () => Stream.fromPubSub(updates),
     })
   }),
 )
