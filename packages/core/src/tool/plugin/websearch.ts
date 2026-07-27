@@ -58,13 +58,13 @@ export const Plugin = {
                       if (providers.length === 0) return yield* new WebSearch.ProviderRequiredError()
                       const response = yield* forms.ask({
                         sessionID: context.sessionID,
-                        title: "The agent wants to search the web",
+                        title: "Choose a provider so the agent can search the web",
                         metadata: { kind: "websearch.provider" },
                         fields: [
                           {
                             key: "provider",
                             title: "Provider",
-                            description: "Choose a provider. OpenCode will use it for future searches.",
+                            description: "OpenCode will use your choice for future searches.",
                             type: "string",
                             required: true,
                             custom: false,
