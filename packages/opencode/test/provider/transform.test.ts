@@ -305,7 +305,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
   }
 
-  test("should keep OpenRouter sticky routing but not caching for non-Anthropic models", () => {
+  test("should leave non-Anthropic OpenRouter models untouched", () => {
     const result = ProviderTransform.options({
       model: {
         ...mockModel,
@@ -315,9 +315,23 @@ describe("ProviderTransform.options - setCacheKey", () => {
       sessionID,
       providerOptions: {},
     })
-    expect(result.session_id).toBe(sessionID)
     expect(result.cache_control).toBeUndefined()
+    expect(result.session_id).toBeUndefined()
     expect(result.prompt_cache_key).toBeUndefined()
+  })
+
+  test("should disable the OpenRouter session key but keep caching when opted out", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "openrouter",
+        api: { ...mockModel.api, id: "anthropic/claude-opus-4.8", npm: "@openrouter/ai-sdk-provider" },
+      },
+      sessionID,
+      providerOptions: { setCacheKey: false },
+    })
+    expect(result.cache_control).toEqual({ type: "ephemeral" })
+    expect(result.session_id).toBeUndefined()
   })
 })
 
