@@ -3,7 +3,7 @@ import { TestClock } from "effect/testing"
 
 // Defers on a real macrotask so pubsub delivery, fiber hops, and filesystem
 // work can complete between TestClock advances.
-const settle = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 1)))
+const settle = Effect.sleep("1 millis").pipe(TestClock.withLive)
 
 // One advance step: let pending real work finish, then fire due TestClock timers.
 const tick = Effect.gen(function* () {
