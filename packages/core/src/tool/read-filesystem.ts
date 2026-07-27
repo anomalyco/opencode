@@ -6,7 +6,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { AbsolutePath, PositiveInt, RelativePath } from "../schema"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema"
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
@@ -70,8 +70,8 @@ export type ReadError =
   | PathKindError
 
 export const PageInput = Schema.Struct({
-  offset: PositiveInt.pipe(Schema.optional),
-  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES)).pipe(Schema.optional),
+  offset: Schema.optionalKey(NonNegativeInt),
+  limit: Schema.optionalKey(NonNegativeInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES))),
 })
 export type PageInput = typeof PageInput.Type
 
@@ -87,14 +87,14 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   mime: Schema.String,
   offset: PositiveInt,
   truncated: Schema.Boolean,
-  next: PositiveInt.pipe(Schema.optional),
+  next: Schema.optionalKey(PositiveInt),
 }) {}
 
 export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
   type: Schema.Literal("list-page"),
   entries: Schema.Array(FileSystem.Entry),
   truncated: Schema.Boolean,
-  next: PositiveInt.pipe(Schema.optional),
+  next: Schema.optionalKey(PositiveInt),
 }) {}
 
 export interface Interface {
@@ -240,8 +240,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
           mime: FSUtil.mimeType(real),
         }
       }
-      const offset = page.offset ?? 1
-      const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
+      const offset = page.offset || 1
+      const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
       const lines: string[] = []
       const decoder = new TextDecoder("utf-8", { fatal: true })
       let pending = ""
@@ -334,8 +334,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
 export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, input: string, page: PageInput = {}) {
   const real = yield* fs.realPath(input)
   const items = yield* fs.readDirectoryEntries(real)
-  const offset = page.offset ?? 1
-  const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
+  const offset = page.offset || 1
+  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const entries = yield* Effect.forEach(
     items,
     (item) =>

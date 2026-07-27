@@ -100,8 +100,83 @@ const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema 
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   const document = Schema.toJsonSchemaDocument(schema)
-  if (Object.keys(document.definitions).length === 0) return document.schema
-  return { ...document.schema, $defs: document.definitions }
+  const normalized = flattenAllOf(
+    Object.keys(document.definitions).length === 0
+      ? document.schema
+      : { ...document.schema, $defs: document.definitions },
+  )
+  return dropDefinitionsIfResolved(inlineLocalReferences(normalized)) as JsonSchema.JsonSchema
+}
+
+const flattenAllOf = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(flattenAllOf)
+  if (typeof value !== "object" || value === null) return value
+
+  const schema = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, flattenAllOf(item)]))
+  if (!Array.isArray(schema.allOf) || !schema.allOf.every(isRecord) || !canFlattenAllOf(schema.allOf, schema))
+    return schema
+  const { allOf, ...rest } = schema
+  return flattenAllOf({ ...Object.assign({}, ...allOf), ...rest })
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const canFlattenAllOf = (allOf: ReadonlyArray<Record<string, unknown>>, parent: Record<string, unknown>) => {
+  const keys = new Set(Object.keys(parent).filter((key) => key !== "allOf"))
+  return allOf.every((item) =>
+    Object.keys(item).every((key) => {
+      if (keys.has(key)) return false
+      keys.add(key)
+      return true
+    }),
+  )
+}
+
+const inlineLocalReferences = (
+  value: unknown,
+  definitions?: Record<string, unknown>,
+  seen = new Set<string>(),
+): unknown => {
+  if (Array.isArray(value)) return value.map((item) => inlineLocalReferences(item, definitions, seen))
+  if (!isRecord(value)) return value
+
+  const localDefinitions = definitions ?? (isRecord(value.$defs) ? value.$defs : undefined)
+  if (typeof value.$ref === "string" && localDefinitions) {
+    const segment = value.$ref.match(/^#\/\$defs\/([^/]+)$/)?.[1]
+    const name = segment?.replaceAll("~1", "/").replaceAll("~0", "~")
+    if (name && !seen.has(name)) {
+      const target = localDefinitions[name]
+      if (target) {
+        const { $ref: _, ...rest } = value
+        const resolvedTarget = inlineLocalReferences(target, localDefinitions, new Set(seen).add(name))
+        const resolvedSiblings = inlineLocalReferences(rest, localDefinitions, seen)
+        if (!isRecord(resolvedTarget) || !isRecord(resolvedSiblings)) return resolvedTarget
+        if (canMergeRecords(resolvedTarget, resolvedSiblings)) return { ...resolvedTarget, ...resolvedSiblings }
+        return { allOf: [resolvedTarget, resolvedSiblings] }
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, inlineLocalReferences(item, localDefinitions, seen)]),
+  )
+}
+
+const canMergeRecords = (left: Record<string, unknown>, right: Record<string, unknown>) =>
+  Object.keys(left).every((key) => !(key in right))
+
+const dropDefinitionsIfResolved = (value: unknown): unknown => {
+  if (!isRecord(value) || hasLocalReference(value)) return value
+  const { $defs: _, ...rest } = value
+  return rest
+}
+
+const hasLocalReference = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(hasLocalReference)
+  if (!isRecord(value)) return false
+  if (typeof value.$ref === "string" && value.$ref.startsWith("#/$defs/")) return true
+  return Object.values(value).some(hasLocalReference)
 }
 
 export const normalizeContent = (value: string | ReadonlyArray<Tool.Content> | undefined, output?: unknown) => {

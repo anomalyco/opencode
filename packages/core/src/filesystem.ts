@@ -35,15 +35,15 @@ export const DEFAULT_SEARCH_LIMIT = 100
 
 export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,
-  path: RelativePath.pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
+  path: Schema.optionalKey(RelativePath),
+  limit: Schema.optionalKey(PositiveInt),
 }) {}
 
 export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
   pattern: Schema.String,
-  path: RelativePath.pipe(Schema.optional),
-  include: Schema.String.pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
+  path: Schema.optionalKey(RelativePath),
+  include: Schema.optionalKey(Schema.String),
+  limit: Schema.optionalKey(PositiveInt),
 }) {}
 
 export const Event = FileSystem.Event

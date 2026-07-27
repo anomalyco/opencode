@@ -24,7 +24,7 @@ const LocationInput = Schema.Struct({
     description: "The maximum number of lines or directory entries to read (defaults to 2000)",
   }),
 })
-const Input = LocationInput
+export const Input = LocationInput
 const Output = Schema.Union([
   ReadToolFileSystem.FileContent,
   ReadToolFileSystem.TextPage,

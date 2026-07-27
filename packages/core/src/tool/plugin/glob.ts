@@ -16,7 +16,7 @@ export const name = "glob"
 
 export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
-  path: RelativePath.pipe(Schema.optional).annotate({
+  path: Schema.optionalKey(RelativePath).annotate({
     description: "Directory to search. Defaults to the current working directory.",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({

@@ -19,7 +19,7 @@ export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The configured agent to run as the subagent" }),
   description: Schema.String.annotate({ description: "A short description of the subagent's task" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
-  background: Schema.Boolean.pipe(Schema.optional).annotate({
+  background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
   }),

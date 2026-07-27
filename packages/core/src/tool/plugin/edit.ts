@@ -25,7 +25,7 @@ export const Input = Schema.Struct({
   }),
   oldString: Schema.String.annotate({ description: "Exact text to replace" }),
   newString: Schema.String.annotate({ description: "Replacement text, which must differ from oldString" }),
-  replaceAll: Schema.Boolean.pipe(Schema.optional).annotate({
+  replaceAll: Schema.optionalKey(Schema.Boolean).annotate({
     description: "Replace all exact occurrences of oldString (default false)",
   }),
 })
