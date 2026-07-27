@@ -6,6 +6,7 @@ import {
   extractAccountId,
   renderOAuthError,
   resolveCodexApiEndpoint,
+  rewriteCodexRequestBody,
   type IdTokenClaims,
 } from "../../src/plugin/openai/codex"
 
@@ -293,10 +294,7 @@ describe("plugin.codex", () => {
   describe("resolveCodexApiEndpoint", () => {
     test("returns provider.options.codexApiEndpoint when set", () => {
       expect(
-        resolveCodexApiEndpoint(
-          { options: { codexApiEndpoint: "https://gw.example/codex/responses" } },
-          undefined,
-        ),
+        resolveCodexApiEndpoint({ options: { codexApiEndpoint: "https://gw.example/codex/responses" } }, undefined),
       ).toBe("https://gw.example/codex/responses")
     })
 
@@ -337,9 +335,47 @@ describe("plugin.codex", () => {
       expect(resolveCodexApiEndpoint({ options: {} }, undefined)).toBe(
         "https://chatgpt.com/backend-api/codex/responses",
       )
-      expect(resolveCodexApiEndpoint(undefined, undefined)).toBe(
-        "https://chatgpt.com/backend-api/codex/responses",
+      expect(resolveCodexApiEndpoint(undefined, undefined)).toBe("https://chatgpt.com/backend-api/codex/responses")
+    })
+  })
+
+  describe("codex body rewrite", () => {
+    test("sets store=false, stream=true and strips max_output_tokens", () => {
+      const rewritten = rewriteCodexRequestBody(
+        JSON.stringify({ model: "gpt-5.6-sol", max_output_tokens: 1024, input: "hi", stream: false }),
       )
+      const parsed = JSON.parse(rewritten as string)
+      expect(parsed.store).toBe(false)
+      expect(parsed.stream).toBe(true)
+      expect(parsed.max_output_tokens).toBeUndefined()
+      expect(parsed.model).toBe("gpt-5.6-sol")
+      expect(parsed.input).toBe("hi")
+    })
+
+    test("forces store=false even when caller set store=true", () => {
+      const rewritten = rewriteCodexRequestBody(JSON.stringify({ store: true, stream: true }))
+      const parsed = JSON.parse(rewritten as string)
+      expect(parsed.store).toBe(false)
+    })
+
+    test("returns undefined for undefined/null body without throwing", () => {
+      expect(rewriteCodexRequestBody(undefined)).toBeUndefined()
+      expect(rewriteCodexRequestBody(null)).toBeUndefined()
+    })
+
+    test("returns non-JSON string bodies unchanged", () => {
+      const body = "not json at all"
+      expect(rewriteCodexRequestBody(body)).toBe(body)
+    })
+
+    test("returns non-object JSON unchanged", () => {
+      const body = JSON.stringify([1, 2, 3])
+      expect(rewriteCodexRequestBody(body)).toBe(body)
+    })
+
+    test("leaves Blob/FormSearchParams/stream bodies untouched (not a string/ArrayBuffer)", () => {
+      const body = new Blob(["x"])
+      expect(rewriteCodexRequestBody(body)).toBe(body)
     })
   })
 
@@ -372,10 +408,9 @@ describe("plugin.codex", () => {
 
       const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
       const hooks = await CodexAuthPlugin(createPluginInput())
-      const loaded = await hooks.auth!.loader!(
-        async () => nonExpiringAuth as never,
-        { options: { codexApiEndpoint } } as never,
-      )
+      const loaded = await hooks.auth!.loader!(async () => nonExpiringAuth as never, {
+        options: { codexApiEndpoint },
+      } as never)
 
       await loaded.fetch!("https://api.openai.com/v1/responses")
 
@@ -403,28 +438,72 @@ describe("plugin.codex", () => {
       })
 
       const hooks = await CodexAuthPlugin(createPluginInput())
-      const loaded = await hooks.auth!.loader!(
-        async () => nonExpiringAuth as never,
-        { options: { baseURL: new URL("/codex", server.url).toString() } } as never,
-      )
+      const loaded = await hooks.auth!.loader!(async () => nonExpiringAuth as never, {
+        options: { baseURL: new URL("/codex", server.url).toString() },
+      } as never)
 
       await loaded.fetch!("https://api.openai.com/v1/responses")
 
       expect(requests).toEqual(["/codex/responses"])
     })
 
-    test("routes codexApiEndpoint through the websocket fetch when WebSockets are enabled", async () => {
-      let upgradePath: string | undefined
-      let upgradeHost: string | undefined
-      let wsSawMessage = false
+    test("routes codexApiEndpoint over HTTP (not websocket upgrade) when WebSockets are enabled", async () => {
+      let upgradeAttempted = false
+      const httpRequests: Array<{ pathname: string; body: string | null }> = []
       using server = Bun.serve({
         port: 0,
         async fetch(request, ctx) {
           const url = new URL(request.url)
           if (url.pathname === "/backend-api/codex/responses") {
+            // The codex path must NOT be upgraded; it must be a plain HTTP POST
+            // with the rewritten body so the SSE stream flows over HTTP.
+            if (request.headers.get("upgrade") !== null) upgradeAttempted = true
+            httpRequests.push({ pathname: url.pathname, body: await request.text() })
+            return new Response('event: response.created\ndata: {}\n', {
+              status: 200,
+              headers: { "content-type": "text/event-stream" },
+            })
+          }
+          return new Response("unexpected request", { status: 500 })
+        },
+        websocket: {
+          open() {},
+          message() {},
+          close() {},
+        },
+      })
+
+      const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
+      const hooks = await CodexAuthPlugin(createPluginInput(), { experimentalWebSockets: true })
+      const loaded = await hooks.auth!.loader!(async () => ({ ...nonExpiringAuth }) as never, {
+        options: { codexApiEndpoint },
+      } as never)
+
+      await loaded.fetch!("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { "session-id": "session-ws" },
+        body: JSON.stringify({ stream: true, input: "hi", max_output_tokens: 100 }),
+      })
+
+      expect(upgradeAttempted).toBe(false)
+      expect(httpRequests).toHaveLength(1)
+      const body = JSON.parse(httpRequests[0]!.body!)
+      expect(body.store).toBe(false)
+      expect(body.stream).toBe(true)
+      expect(body.max_output_tokens).toBeUndefined()
+      await hooks.dispose?.()
+    })
+
+    test("still uses websocket transport for non-codex /responses requests when WebSockets are enabled", async () => {
+      let upgradePath: string | undefined
+      let wsSawMessage = false
+      using server = Bun.serve({
+        port: 0,
+        async fetch(request, ctx) {
+          const url = new URL(request.url)
+          if (url.pathname === "/responses") {
             upgradePath = url.pathname
-            upgradeHost = request.headers.get("host") ?? undefined
-            if (ctx.upgrade(request)) return
+            if (ctx.upgrade(request)) return undefined
             return new Response("upgrade failed", { status: 500 })
           }
           return new Response("unexpected request", { status: 500 })
@@ -440,24 +519,65 @@ describe("plugin.codex", () => {
         },
       })
 
-      const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
-      const serverHostPort = new URL(server.url).host
       const hooks = await CodexAuthPlugin(createPluginInput(), { experimentalWebSockets: true })
-      const loaded = await hooks.auth!.loader!(
-        async () => ({ ...nonExpiringAuth } as never),
-        { options: { codexApiEndpoint } } as never,
-      )
+      const loaded = await hooks.auth!.loader!(async () => ({ ...nonExpiringAuth }) as never, {} as never)
 
-      await loaded.fetch!("https://api.openai.com/v1/responses", {
+      await loaded.fetch!(new URL("/responses", server.url).toString(), {
         method: "POST",
         headers: { "session-id": "session-ws" },
         body: JSON.stringify({ stream: true, input: "hi" }),
       })
 
-      expect(upgradePath).toBe("/backend-api/codex/responses")
-      expect(upgradeHost).toBe(serverHostPort)
+      expect(upgradePath).toBe("/responses")
       expect(wsSawMessage).toBe(true)
       await hooks.dispose?.()
+    })
+
+    test("rewrites the body only on the codex path, leaving non-codex requests unchanged", async () => {
+      const receivedBodies: Array<{ pathname: string; body: string | null }> = []
+      using server = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const url = new URL(request.url)
+          receivedBodies.push({ pathname: url.pathname, body: await request.text() })
+          return Response.json({})
+        },
+      })
+
+      const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
+      const hooks = await CodexAuthPlugin(createPluginInput())
+      const loaded = await hooks.auth!.loader!(async () => nonExpiringAuth as never, {
+        options: { codexApiEndpoint },
+      } as never)
+
+      const codexBody = JSON.stringify({
+        model: "gpt-5.6-sol",
+        max_output_tokens: 2048,
+        stream: false,
+        input: "hi",
+      })
+      await loaded.fetch!("https://api.openai.com/v1/responses", {
+        method: "POST",
+        body: codexBody,
+      })
+
+      const nonCodexBody = JSON.stringify({ model: "gpt-4o", max_output_tokens: 512, stream: false })
+      await loaded.fetch!(new URL("/v1/embeddings", server.url).toString(), {
+        method: "POST",
+        body: nonCodexBody,
+      })
+
+      expect(receivedBodies).toHaveLength(2)
+
+      const codex = JSON.parse(receivedBodies[0]!.body!)
+      expect(codex.store).toBe(false)
+      expect(codex.stream).toBe(true)
+      expect(codex.max_output_tokens).toBeUndefined()
+
+      const nonCodex = JSON.parse(receivedBodies[1]!.body!)
+      expect(nonCodex.max_output_tokens).toBe(512)
+      expect(nonCodex.stream).toBe(false)
+      expect(nonCodex.store).toBeUndefined()
     })
   })
 })
