@@ -55,7 +55,7 @@ export function createPromptProjectController(input: {
   const [store, setStore] = createStore({ open: false, search: "", active: "" })
   let searchRef: HTMLInputElement | undefined
 
-  const selected = () => {
+  const current = () => {
     const key = pathKey(input.controls().directory)
     return input
       .controls()
@@ -65,6 +65,7 @@ export function createPromptProjectController(input: {
           (pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key)),
       )
   }
+  const selected = () => current() ?? input.controls().available[0]
   const projects = () => {
     const search = store.search.trim().toLowerCase()
     if (!search) return input.controls().available
@@ -100,8 +101,8 @@ export function createPromptProjectController(input: {
   }
   const select = (project: PromptProject) => {
     if (
-      pathKey(project.worktree) !== pathKey(selected()?.worktree ?? "") ||
-      project.server?.key !== selected()?.server?.key
+      pathKey(project.worktree) !== pathKey(current()?.worktree ?? "") ||
+      project.server?.key !== current()?.server?.key
     ) {
       input.controls().select(project.worktree, project.server?.key)
     }
@@ -124,6 +125,7 @@ export function createPromptProjectController(input: {
 
   return {
     selected,
+    empty: () => input.controls().available.length === 0,
     projects,
     servers,
     projectKey,
@@ -362,41 +364,45 @@ export function PromptProjectSelector(props: {
                 </button>
               </Show>
             </div>
-            <Show
-              when={props.controller.servers().length > 1}
-              fallback={
-                <DropdownMenu.RadioGroup value={selectedValue()}>
-                  <For each={props.controller.projects()}>
-                    {(project) => (
-                      <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                    )}
-                  </For>
-                </DropdownMenu.RadioGroup>
-              }
-            >
-              <For
-                each={props.controller
-                  .servers()
-                  .filter((server) =>
-                    props.controller.projects().some((project) => project.server?.key === server!.key),
-                  )}
+            <div class="max-h-[224px] overflow-y-auto">
+              <Show
+                when={props.controller.servers().length > 1}
+                fallback={
+                  <DropdownMenu.RadioGroup value={selectedValue()}>
+                    <For each={props.controller.projects()}>
+                      {(project) => (
+                        <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
+                      )}
+                    </For>
+                  </DropdownMenu.RadioGroup>
+                }
               >
-                {(server) => (
-                  <div>
-                    <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
-                      {server!.name}
+                <For
+                  each={props.controller
+                    .servers()
+                    .filter((server) =>
+                      props.controller.projects().some((project) => project.server?.key === server!.key),
+                    )}
+                >
+                  {(server) => (
+                    <div>
+                      <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
+                        {server!.name}
+                      </div>
+                      <DropdownMenu.RadioGroup value={selectedValue()}>
+                        <For
+                          each={props.controller.projects().filter((project) => project.server?.key === server!.key)}
+                        >
+                          {(project) => (
+                            <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
+                          )}
+                        </For>
+                      </DropdownMenu.RadioGroup>
                     </div>
-                    <DropdownMenu.RadioGroup value={selectedValue()}>
-                      <For each={props.controller.projects().filter((project) => project.server?.key === server!.key)}>
-                        {(project) => (
-                          <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                        )}
-                      </For>
-                    </DropdownMenu.RadioGroup>
-                  </div>
-                )}
-              </For>
-            </Show>
+                  )}
+                </For>
+              </Show>
+            </div>
           </div>
           <div class="h-px bg-v2-border-border-muted" />
           <div class="flex flex-col p-0.5">

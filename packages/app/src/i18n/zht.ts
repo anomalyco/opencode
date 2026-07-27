@@ -663,6 +663,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "本機",
   "session.new.workspace.local": "本機儲存庫",
   "session.new.workspace.existing": "工作區…",
+  "session.new.git.none": "無 Git",
   "session.new.lastModified": "最後修改",
 
   "session.header.search.placeholder": "搜尋 {{project}}",

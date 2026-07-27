@@ -100,6 +100,12 @@ const api: ElectronAPI = {
   readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),
   showNotification: (title, body) => ipcRenderer.send("show-notification", title, body),
   getWindowFocused: () => ipcRenderer.invoke("get-window-focused"),
+  getWindowFullscreen: () => ipcRenderer.invoke("get-window-fullscreen"),
+  onWindowFullscreenChanged: (cb) => {
+    const handler = (_: unknown, fullscreen: boolean) => cb(fullscreen)
+    ipcRenderer.on("window-fullscreen-changed", handler)
+    return () => ipcRenderer.removeListener("window-fullscreen-changed", handler)
+  },
   setWindowFocus: () => ipcRenderer.invoke("set-window-focus"),
   showWindow: () => ipcRenderer.invoke("show-window"),
   relaunch: () => ipcRenderer.send("relaunch"),
@@ -121,6 +127,7 @@ const api: ElectronAPI = {
   runDesktopMenuAction: (action) => ipcRenderer.invoke("run-desktop-menu-action", action),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
+  setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
 }
 
