@@ -1546,25 +1546,27 @@ export function MessageTimeline(props: {
                     <SessionContextUsage
                       placement="bottom"
                       buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}
-                    />
-                    <TooltipV2 value={language.t("session.tab.agents")} placement="bottom" shift={-8}>
-                      <div class="relative inline-flex">
-                        <IconButtonV2
-                          type="button"
-                          variant="ghost-muted"
-                          size="large"
-                          icon={<Icon name="terminal" size="small" />}
-                          onClick={openAgents}
-                          aria-label={language.t("session.tab.agents")}
-                        />
-                        <span
-                          classList={{
-                            "absolute top-0.5 right-0.5 size-1.5 rounded-full bg-syntax-success": hasBusyChildren(),
-                            hidden: !hasBusyChildren(),
-                          }}
-                        />
-                      </div>
-                    </TooltipV2>
+                    />                    
+                    <Show when={params.id}>
+                      <TooltipV2 value={language.t("session.tab.agents")} placement="bottom" shift={-8}>
+                        <div class="relative inline-flex">
+                          <IconButtonV2
+                            type="button"
+                            variant="ghost-muted"
+                            size="large"
+                            icon={<Icon name="terminal" size="small" />}
+                            onClick={openAgents}
+                            aria-label={language.t("session.tab.agents")}
+                          />
+                          <span
+                            classList={{
+                              "absolute top-0.5 right-0.5 size-1.5 rounded-full bg-syntax-success": hasBusyChildren(),
+                              hidden: !hasBusyChildren(),
+                            }}
+                          />
+                        </div>
+                      </TooltipV2>
+                    </Show>
                     <Show when={!parentID()}>
                       <Show
                         when={settings.general.newLayoutDesigns()}

@@ -95,15 +95,6 @@ export function closeSessionTab(current: SessionTabState, tab: string): SessionT
     }
   }
 
-  if (tab === "agents") {
-    const all = current.tabs.all.filter((item) => item !== tab)
-    if (current.tabs.active !== tab) return { tabs: { ...current.tabs, all }, preview: current.preview }
-    return {
-      tabs: { all, active: all[0] },
-      preview: current.preview,
-    }
-  }
-
   const all = current.tabs.all.filter((item) => item !== tab)
   const preview = current.preview === tab ? undefined : current.preview
   if (current.tabs.active !== tab) return { tabs: { ...current.tabs, all }, preview }
