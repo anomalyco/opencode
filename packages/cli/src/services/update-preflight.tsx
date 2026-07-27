@@ -329,7 +329,6 @@ const createFade = () =>
   })
 
 const smoothstep = (value: number) => value * value * (3 - 2 * value)
-const frameDone = Promise.resolve()
 
 function UpdateFooter(props: {
   from?: string
@@ -427,8 +426,8 @@ function UpdateFooter(props: {
     let value = 0
     let velocity = 0
     let phase = 0
-    const frame = (deltaTime: number) => {
-      if (!props.animating()) return frameDone
+    const frame = async (deltaTime: number) => {
+      if (!props.animating()) return
       const elapsed = Math.min(0.032, deltaTime / 1_000)
       const stiffness = 110
       const damping = 2 * Math.sqrt(stiffness)
@@ -442,7 +441,7 @@ function UpdateFooter(props: {
       })
       headerFade.tick(deltaTime)
       statusSweep.tick(deltaTime)
-      return frameDone
+      await new Promise(resolve => queueMicrotask(resolve))
     }
     props.renderer.setFrameCallback(frame)
     onCleanup(() => props.renderer.removeFrameCallback(frame))
