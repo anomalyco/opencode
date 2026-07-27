@@ -4,7 +4,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Component, For, Show } from "solid-js"
+import { createMemo, type Accessor, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
@@ -29,18 +29,21 @@ const PROVIDER_NOTES = [
 
 const PROVIDER_ICON_SIZE = 16
 
-export const SettingsProvidersV2: Component<{ onBack?: () => void }> = (props) => {
+export const SettingsProvidersV2: Component<{
+  directory: Accessor<string | undefined>
+  onBack?: () => void
+}> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const protocol = useServerProtocol()
   const serverSync = useServerSync()
-  const providers = useProviders()
+  const providers = useProviders(props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
 
   const connect = (provider?: string) => {
     providerConnect.select(provider)
-    void dialog.show(() => <DialogConnectProvider controller={providerConnect} />)
+    void dialog.show(() => <DialogConnectProvider directory={props.directory} controller={providerConnect} />)
   }
 
   const connected = createMemo(() => {
