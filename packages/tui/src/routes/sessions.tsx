@@ -128,6 +128,10 @@ function cachedReaddir() {
   }
 }
 
+// Survives the route remount when coming back from a session, so the list can
+// put the cursor back on the session the user just left.
+let lastOpenedSessionID: string | undefined
+
 export function Sessions() {
   const route = useRoute()
   const sdk = useSDK()
@@ -267,7 +271,19 @@ export function Sessions() {
     }),
   )
 
+  // Coming back from a session remounts this route; once the list first
+  // loads, put the cursor back on the session the user just left.
+  const [restored, setRestored] = createSignal(false)
+  createEffect(() => {
+    if (restored()) return
+    if (!lastOpenedSessionID) return
+    if (!sessions()?.length) return
+    selectRef?.moveTo(lastOpenedSessionID)
+    setRestored(true)
+  })
+
   function open(sessionID: string) {
+    lastOpenedSessionID = sessionID
     route.navigate({ type: "session", sessionID })
   }
 
@@ -348,6 +364,7 @@ export function Sessions() {
     }
 
     const sessionID = res.data.id
+    lastOpenedSessionID = sessionID
     if (parsed.prompt) {
       sdk.client.session
         .prompt({
