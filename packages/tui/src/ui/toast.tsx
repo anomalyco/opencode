@@ -20,7 +20,7 @@ export function Toast() {
   const dimensions = useTerminalDimensions()
 
   onMount(() => {
-    void sdk.transport.then(sdk.markReady)
+    void sdk.transport.then(sdk.markToastMount)
   })
 
   return (

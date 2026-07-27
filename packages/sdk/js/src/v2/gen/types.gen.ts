@@ -10906,33 +10906,33 @@ export type TuiShowToastResponses = {
 
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
-export type TuiReadyData = {
+export type TuiToastMountData = {
   body?: never
   path?: never
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/tui/ready"
+  url: "/tui/toast-mount"
 }
 
-export type TuiReadyErrors = {
+export type TuiToastMountErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type TuiReadyError = TuiReadyErrors[keyof TuiReadyErrors]
+export type TuiToastMountError = TuiToastMountErrors[keyof TuiToastMountErrors]
 
-export type TuiReadyResponses = {
+export type TuiToastMountResponses = {
   /**
    * TUI startup notifications delivered successfully
    */
   200: boolean
 }
 
-export type TuiReadyResponse = TuiReadyResponses[keyof TuiReadyResponses]
+export type TuiToastMountResponse = TuiToastMountResponses[keyof TuiToastMountResponses]
 
 export type TuiPublishData = {
   body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect

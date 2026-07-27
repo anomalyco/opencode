@@ -35,12 +35,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const transport = new Promise<void>((resolve) => {
       resolveTransport = resolve
     })
-    let isReady = false
+    let isToastMounted = false
 
-    function markReady() {
-      if (isReady) return
-      isReady = true
-      void sdk.tui.ready().catch(() => {})
+    function markToastMount() {
+      if (isToastMounted) return
+      isToastMounted = true
+      void sdk.tui.toastMount().catch(() => {})
     }
 
     const handlers = new Set<(event: GlobalEvent) => void>()
@@ -156,7 +156,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       directory: props.directory,
       ready: true,
       transport,
-      markReady,
+      markToastMount,
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,

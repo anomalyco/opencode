@@ -83,7 +83,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       return true
     })
 
-    const ready = Effect.fn("TuiHttpApi.ready")(function* () {
+    const toastMount = Effect.fn("TuiHttpApi.toastMount")(function* () {
       yield* events.publish(TuiEvent.ToastMount, {})
       return true
     })
@@ -128,7 +128,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       .handle("clearPrompt", clearPrompt)
       .handle("executeCommand", executeCommand)
       .handle("showToast", showToast)
-      .handle("ready", ready)
+      .handle("toastMount", toastMount)
       .handle("publish", publish)
       .handle("selectSession", selectSession)
       .handle("controlNext", controlNext)

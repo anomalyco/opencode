@@ -43,7 +43,7 @@ export const TuiPaths = {
   clearPrompt: `${root}/clear-prompt`,
   executeCommand: `${root}/execute-command`,
   showToast: `${root}/show-toast`,
-  ready: `${root}/ready`,
+  toastMount: `${root}/toast-mount`,
   publish: `${root}/publish`,
   selectSession: `${root}/select-session`,
   controlNext: `${root}/control/next`,
@@ -149,13 +149,13 @@ export const TuiApi = HttpApi.make("tui")
             description: "Show a toast notification in the TUI.",
           }),
         ),
-        HttpApiEndpoint.post("ready", TuiPaths.ready, {
+        HttpApiEndpoint.post("toastMount", TuiPaths.toastMount, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "TUI startup notifications delivered successfully"),
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "tui.ready",
-            summary: "Mark TUI ready",
+            identifier: "tui.toastMount",
+            summary: "Mark TUI toast mounted",
             description: "Publish a TUI toast-mount event after the toast renderer is mounted.",
           }),
         ),

@@ -257,14 +257,14 @@ import type {
   TuiOpenThemesResponses,
   TuiPublishErrors,
   TuiPublishResponses,
-  TuiReadyErrors,
-  TuiReadyResponses,
   TuiSelectSessionErrors,
   TuiSelectSessionResponses,
   TuiShowToastErrors,
   TuiShowToastResponses,
   TuiSubmitPromptErrors,
   TuiSubmitPromptResponses,
+  TuiToastMountErrors,
+  TuiToastMountResponses,
   V2AgentListErrors,
   V2AgentListResponses,
   V2CommandListErrors,
@@ -4944,11 +4944,11 @@ export class Tui extends HeyApiClient {
   }
 
   /**
-   * Mark TUI ready
+   * Mark TUI toast mounted
    *
    * Publish a TUI toast-mount event after the toast renderer is mounted.
    */
-  public ready<ThrowOnError extends boolean = false>(
+  public toastMount<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
@@ -4966,8 +4966,8 @@ export class Tui extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).post<TuiReadyResponses, TuiReadyErrors, ThrowOnError>({
-      url: "/tui/ready",
+    return (options?.client ?? this.client).post<TuiToastMountResponses, TuiToastMountErrors, ThrowOnError>({
+      url: "/tui/toast-mount",
       ...options,
       ...params,
     })
