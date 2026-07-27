@@ -16,7 +16,11 @@ const sessionID = "ses_test" as never
 
 const seed = Effect.gen(function* () {
   const db = (yield* Database.Service).db
-  yield* db.insert(ProjectTable).values({ id: projectID, worktree: "/project", sandboxes: [] }).run().pipe(Effect.orDie)
+  yield* db
+    .insert(ProjectTable)
+    .values({ id: projectID, worktree: "/project" as never, sandboxes: [] })
+    .run()
+    .pipe(Effect.orDie)
   yield* db
     .insert(SessionTable)
     .values({
@@ -36,7 +40,7 @@ function addMessage(data: Record<string, unknown>) {
     const db = (yield* Database.Service).db
     yield* db
       .insert(MessageTable)
-      .values({ id: `msg_${Date.now()}` as never, session_id: sessionID, data })
+      .values({ id: `msg_${Date.now()}` as never, session_id: sessionID, data: data as never })
       .run()
       .pipe(Effect.orDie)
   })
@@ -57,7 +61,7 @@ function addTextPart(text: string) {
         id: `prt_${Date.now()}` as never,
         message_id: message!.id,
         session_id: sessionID,
-        data: { type: "text", text },
+        data: { type: "text", text } as never,
       })
       .run()
       .pipe(Effect.orDie)
@@ -82,6 +86,19 @@ describe("SessionStatusStore", () => {
       const updated = (yield* store.list())[0]
       expect(updated.status).toBe("needs_input")
       expect(updated.detail).toBe("Approve?")
+    }),
+  )
+
+  it.effect("stamps the writer pid on every write", () =>
+    Effect.gen(function* () {
+      yield* seed
+      const store = yield* SessionStatusStore.Service
+
+      yield* store.set(sessionID, "working")
+      expect((yield* store.list())[0].pid).toBe(process.pid)
+
+      yield* store.set(sessionID, "done")
+      expect((yield* store.list())[0].pid).toBe(process.pid)
     }),
   )
 

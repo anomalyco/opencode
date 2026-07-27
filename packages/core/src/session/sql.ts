@@ -87,6 +87,10 @@ export const SessionStatusTable = sqliteTable("session_status", {
     .references(() => SessionTable.id, { onDelete: "cascade" }),
   status: text().$type<SessionStatusStore.Status>().notNull(),
   detail: text(),
+  // PID of the process that last wrote the row; readers treat active rows
+  // from dead processes as interrupted. Null on rows written before this
+  // column existed.
+  pid: integer(),
   ...Timestamps,
 })
 

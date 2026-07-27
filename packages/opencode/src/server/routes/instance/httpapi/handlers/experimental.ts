@@ -7,6 +7,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
+import { deriveWriterStatus } from "@/session/status-derive"
 import type { SessionID } from "@/session/schema"
 import { SessionStatusStore } from "@opencode-ai/core/session/status-store"
 import { ToolJsonSchema } from "@/tool/json-schema"
@@ -159,9 +160,8 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     })
 
     const sessionStatus = Effect.fn("ExperimentalHttpApi.sessionStatus")(function* () {
-      return yield* sessionStatusStore.list()
+      return (yield* sessionStatusStore.list()).map(deriveWriterStatus)
     })
-
     const sessionBackground = Effect.fn("ExperimentalHttpApi.sessionBackground")(function* (ctx: {
       params: { sessionID: SessionID }
     }) {

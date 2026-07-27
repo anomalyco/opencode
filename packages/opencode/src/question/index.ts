@@ -75,10 +75,17 @@ const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
+            // Persist the runtime status for every affected session so the
+            // cross-project list does not keep showing "needs input" for
+            // requests this instance just dropped.
+            const sessionIDs = new Set([...state.pending.values()].map((item) => item.info.sessionID))
             for (const item of state.pending.values()) {
               yield* Deferred.fail(item.deferred, new RejectedError())
             }
             state.pending.clear()
+            yield* Effect.forEach(sessionIDs, (sessionID) => sessionStatus.syncPersisted(sessionID), {
+              discard: true,
+            })
           }),
         )
 

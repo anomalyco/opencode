@@ -183,6 +183,7 @@ export default {
           \`session_id\` text PRIMARY KEY,
           \`status\` text NOT NULL,
           \`detail\` text,
+          \`pid\` integer,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           CONSTRAINT \`fk_session_status_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE

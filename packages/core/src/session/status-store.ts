@@ -9,8 +9,9 @@ import type { SessionSchema } from "./schema"
 
 // Persisted per-session status for the cross-project sessions list. Unlike the
 // runtime SessionStatus map this survives process restarts; writers converge
-// last-writer-wins on the session_id row.
-export const Status = Schema.Literals(["working", "retrying", "needs_input", "done", "idle"])
+// last-writer-wins on the session_id row. "interrupted" is never stored — it
+// is derived at read time for active rows whose writer process is gone.
+export const Status = Schema.Literals(["working", "retrying", "needs_input", "done", "idle", "interrupted"])
 export type Status = typeof Status.Type
 
 export const Info = Schema.Struct({
@@ -21,10 +22,16 @@ export const Info = Schema.Struct({
 })
 export type Info = typeof Info.Type
 
+// Internal row shape: list() also exposes the writer PID so readers can tell
+// whether the process behind an active status is still alive.
+export interface Row extends Info {
+  readonly pid: number | null
+}
+
 export interface Interface {
   readonly set: (sessionID: SessionSchema.ID, status: Status, detail?: string) => Effect.Effect<void>
   readonly setIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
-  readonly list: () => Effect.Effect<Info[]>
+  readonly list: () => Effect.Effect<Row[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/session/SessionStatusStore") {}
@@ -46,10 +53,10 @@ const layer = Layer.effect(
       if (existing && existing.status === status && (existing.detail ?? undefined) === detail) return
       yield* db
         .insert(SessionStatusTable)
-        .values({ session_id: sessionID, status, detail })
+        .values({ session_id: sessionID, status, detail, pid: process.pid })
         .onConflictDoUpdate({
           target: SessionStatusTable.session_id,
-          set: { status, detail: detail ?? null, time_updated: Date.now() },
+          set: { status, detail: detail ?? null, pid: process.pid, time_updated: Date.now() },
         })
         .run()
         .pipe(Effect.orDie)
@@ -92,11 +99,20 @@ const layer = Layer.effect(
     })
 
     const list: Interface["list"] = Effect.fn("SessionStatusStore.list")(function* () {
-      const rows = yield* db.select().from(SessionStatusTable).all().pipe(Effect.orDie)
+      // Bounded so the sessions list never downloads the full history; only
+      // recently touched sessions have a status worth showing anyway.
+      const rows = yield* db
+        .select()
+        .from(SessionStatusTable)
+        .orderBy(desc(SessionStatusTable.time_updated))
+        .limit(1000)
+        .all()
+        .pipe(Effect.orDie)
       return rows.map((row) => ({
         sessionID: row.session_id,
         status: row.status,
         detail: row.detail ?? undefined,
+        pid: row.pid,
         time: { created: row.time_created, updated: row.time_updated },
       }))
     })
