@@ -74,7 +74,7 @@ export type Event =
   | EventTuiPromptAppend2
   | EventTuiCommandExecute2
   | EventTuiToastShow2
-  | EventTuiReady
+  | EventTuiToastMount
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
@@ -1444,7 +1444,7 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "tui.ready"
+        type: "tui.toast.mount"
         properties: {
           [key: string]: unknown
         }
@@ -2926,7 +2926,7 @@ export type V2Event =
   | TuiPromptAppend
   | TuiCommandExecute
   | TuiToastShow
-  | TuiReady
+  | TuiToastMount
   | TuiSessionSelect
   | McpToolsChanged
   | McpBrowserOpenFailed
@@ -5816,12 +5816,12 @@ export type TuiToastShow = {
   }
 }
 
-export type TuiReady = {
+export type TuiToastMount = {
   id: string
   metadata?: {
     [key: string]: unknown
   }
-  type: "tui.ready"
+  type: "tui.toast.mount"
   durable?: {
     aggregateID: string
     seq: number
@@ -6907,9 +6907,9 @@ export type EventPermissionReplied = {
   }
 }
 
-export type EventTuiReady = {
+export type EventTuiToastMount = {
   id: string
-  type: "tui.ready"
+  type: "tui.toast.mount"
   properties: {
     [key: string]: unknown
   }

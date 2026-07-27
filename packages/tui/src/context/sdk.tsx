@@ -31,17 +31,16 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     let sdk = createSDK()
-    let resolveReady: () => void
-    const ready = new Promise<void>((resolve) => {
-      resolveReady = resolve
+    let resolveTransport: () => void
+    const transport = new Promise<void>((resolve) => {
+      resolveTransport = resolve
     })
     let isReady = false
 
-    async function markReady() {
+    function markReady() {
       if (isReady) return
       isReady = true
-      await sdk.tui.ready().catch(() => {})
-      resolveReady()
+      void sdk.tui.ready().catch(() => {})
     }
 
     const handlers = new Set<(event: GlobalEvent) => void>()
@@ -103,7 +102,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           signal: ctrl.signal,
           sseMaxRetryAttempts: 0,
         })
-        await markReady()
+        resolveTransport()
 
         if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // Start syncing workspaces, it's important to do this after
@@ -131,7 +130,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (props.events) {
         const unsub = await props.events.subscribe(handleEvent)
         onCleanup(unsub)
-        await markReady()
+        resolveTransport()
 
         if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // Start syncing workspaces, it's important to do this after
@@ -139,7 +138,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           await sdk.sync.start().catch(() => {})
         }
       } else {
-        void startSSE().catch(() => markReady())
+        void startSSE().catch(resolveTransport)
       }
     })
 
@@ -155,7 +154,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         return sdk
       },
       directory: props.directory,
-      ready,
+      ready: true,
+      transport,
+      markReady,
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,

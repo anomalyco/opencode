@@ -889,12 +889,12 @@ describe("HttpApi SDK", () => {
     ),
   )
 
-  serverPathParity("publishes a TUI-ready event", (serverPath) =>
+  serverPathParity("publishes a TUI toast-mount event", (serverPath) =>
     withStandardProject(serverPath, ({ sdk, directory }) =>
       Effect.gen(function* () {
         const events: GlobalEvent[] = []
         const on = (event: GlobalEvent) => {
-          if (event.directory !== directory || event.payload.type !== "tui.ready") return
+          if (event.directory !== directory || event.payload.type !== "tui.toast.mount") return
           events.push(event)
         }
         GlobalBus.on("event", on)

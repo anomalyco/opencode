@@ -84,7 +84,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
     })
 
     const ready = Effect.fn("TuiHttpApi.ready")(function* () {
-      yield* events.publish(TuiEvent.Ready, {})
+      yield* events.publish(TuiEvent.ToastMount, {})
       return true
     })
 

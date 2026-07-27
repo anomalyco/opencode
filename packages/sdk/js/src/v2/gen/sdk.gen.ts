@@ -4946,7 +4946,7 @@ export class Tui extends HeyApiClient {
   /**
    * Mark TUI ready
    *
-   * Publish a TUI-ready event after the TUI event stream is subscribed.
+   * Publish a TUI toast-mount event after the toast renderer is mounted.
    */
   public ready<ThrowOnError extends boolean = false>(
     parameters?: {

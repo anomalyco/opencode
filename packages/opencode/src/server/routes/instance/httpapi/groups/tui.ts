@@ -156,7 +156,7 @@ export const TuiApi = HttpApi.make("tui")
           OpenApi.annotations({
             identifier: "tui.ready",
             summary: "Mark TUI ready",
-            description: "Publish a TUI-ready event after the TUI event stream is subscribed.",
+            description: "Publish a TUI toast-mount event after the toast renderer is mounted.",
           }),
         ),
         HttpApiEndpoint.post("publish", TuiPaths.publish, {
