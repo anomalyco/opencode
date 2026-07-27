@@ -5,8 +5,7 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Cause, Context, Effect, Layer, PubSub, Schema, Scope, Stream } from "effect"
-import { KeyedMutex } from "../effect/keyed-mutex"
+import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "effect"
 import { lazy } from "../util/lazy"
 import { watch as watchFileSystem } from "node:fs"
 import path from "path"
@@ -45,6 +44,22 @@ export type WatchInput =
   | { readonly path: string; readonly type: "file" }
   | { readonly path: string; readonly type: "directory"; readonly ignore?: readonly string[] }
 
+export type Subscription = {
+  readonly unsubscribe: () => Promise<void>
+  /** Backend name for logging, e.g. "node" or "fs-events". */
+  readonly backend?: string
+}
+
+/** Native acquisition seam: the real layer wires node/parcel backends, tests substitute controllable ones. */
+export interface Backend {
+  readonly subscribe: (input: {
+    readonly type: WatchInput["type"]
+    readonly target: string
+    readonly ignore: readonly string[]
+    readonly publish: (update: Update) => void
+  }) => Effect.Effect<Subscription | undefined>
+}
+
 export interface Interface {
   readonly subscribe: (input: WatchInput) => Stream.Stream<Update>
 }
@@ -82,93 +97,97 @@ export const testLayer = Layer.effectContext(
   }),
 )
 
-export const layer = (options?: Options) => Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const backend = getBackend()
-    const native = watcher()
-    if (options?.enabled === false) {
-      return Service.of({ subscribe: () => Stream.empty })
-    }
+function makeLayer(options: Options | undefined, makeBackend: () => Backend) {
+  return Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      if (options?.enabled === false) {
+        return Service.of({ subscribe: () => Stream.empty })
+      }
+      const backend = makeBackend()
 
-    type Entry = {
-      readonly pubsub: PubSub.PubSub<Update>
-      readonly subscription: { readonly unsubscribe: () => Promise<void> }
-      refs: number
-    }
-    const entries = new Map<string, Entry>()
-    const locks = KeyedMutex.makeUnsafe<string>()
-
-    const acquire = Effect.fn("Watcher.acquire")(function* (input: WatchInput) {
-      const scope = yield* Scope.Scope
-      const target = path.resolve(input.path)
-      const directory = input.type === "file" ? path.dirname(target) : target
-      const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
-      const id = JSON.stringify([input.type, target, ignore])
-      const pubsub = yield* locks.withLock(id)(
-        Effect.gen(function* () {
-          const existing = entries.get(id)
-          if (existing) {
-            existing.refs++
-            return existing.pubsub
-          }
-          const pubsub = yield* PubSub.unbounded<Update>()
-          const subscription = yield* input.type === "file"
-            ? Effect.sync(() => {
-                const subscription = watchFileSystem(directory, { recursive: false }, (_event, file) => {
-                  if (file && path.resolve(directory, file.toString()) !== target) return
-                  PubSub.publishUnsafe(pubsub, {
-                    path: target,
-                    type: "update",
-                  } satisfies Update)
-                })
-                if ("on" in subscription && typeof subscription.on === "function") {
-                  subscription.on("error", (error: unknown) =>
-                    Effect.runFork(Effect.logError("watcher callback failed", { path: target, error })),
-                  )
-                }
-                return { unsubscribe: () => Promise.resolve(subscription.close()) }
-              })
-            : subscribeDirectory(native, backend, directory, ignore, pubsub)
-          if (subscription) {
-            entries.set(id, { pubsub, subscription, refs: 1 })
+      // Keys compare structurally, so equivalent watches share one native
+      // subscription; RcMap owns the refcounts and interrupts an in-flight
+      // acquisition when its last waiter goes away.
+      type Key = { readonly type: WatchInput["type"]; readonly target: string; readonly ignore: readonly string[] }
+      const watchers = yield* RcMap.make({
+        lookup: (key: Key) =>
+          Effect.gen(function* () {
+            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) =>
+              PubSub.shutdown(pubsub),
+            )
+            const subscription = yield* Effect.acquireRelease(
+              backend.subscribe({
+                type: key.type,
+                target: key.target,
+                ignore: key.ignore,
+                publish: (update) => PubSub.publishUnsafe(pubsub, update),
+              }),
+              (subscription) =>
+                subscription
+                  ? Effect.promise(() => subscription.unsubscribe()).pipe(
+                      Effect.ignoreCause,
+                      Effect.andThen(Effect.logInfo("watcher stopped", { path: key.target, type: key.type })),
+                    )
+                  : Effect.void,
+              // Native subscription may stay pending up to SUBSCRIBE_TIMEOUT_MS;
+              // scope shutdown must not wait behind an uninterruptible acquisition.
+              { interruptible: true },
+            )
+            if (!subscription) {
+              // Unsupported backend: end subscriber streams instead of hanging them.
+              yield* PubSub.shutdown(pubsub)
+              return pubsub
+            }
             yield* Effect.logInfo("watcher started", {
-              path: target,
-              type: input.type,
-              backend: input.type === "file" ? "node" : backend,
-              ignores: ignore.length,
+              path: key.target,
+              type: key.type,
+              backend: subscription.backend,
+              ignores: key.ignore.length,
             })
             return pubsub
-          }
-          yield* PubSub.shutdown(pubsub)
-          return pubsub
-        }),
-      )
-
-      yield* Scope.addFinalizer(
-        scope,
-        locks.withLock(id)(
-          Effect.gen(function* () {
-            const entry = entries.get(id)
-            if (!entry) return
-            entry.refs--
-            if (entry.refs > 0) return
-            entries.delete(id)
-            yield* Effect.promise(() => entry.subscription.unsubscribe()).pipe(Effect.ignore)
-            yield* PubSub.shutdown(entry.pubsub)
-            yield* Effect.logInfo("watcher stopped", { path: target, type: input.type })
           }),
-        ),
-      )
-      return pubsub
-    })
+      })
 
-    const subscribe = (input: WatchInput) =>
-      Stream.unwrap(acquire(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub))))
+      const subscribe = (input: WatchInput) => {
+        const target = path.resolve(input.path)
+        const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
+        return Stream.unwrap(
+          RcMap.get(watchers, { type: input.type, target, ignore }).pipe(
+            Effect.map((pubsub) => Stream.fromPubSub(pubsub)),
+          ),
+        )
+      }
 
-    return Service.of({ subscribe })
-  }),
-)
+      return Service.of({ subscribe })
+    }),
+  )
+}
+
+export const layer = (options?: Options) =>
+  makeLayer(options, () => ({
+    subscribe: (input) => {
+      if (input.type === "file") {
+        return Effect.sync(() => {
+          const directory = path.dirname(input.target)
+          const subscription = watchFileSystem(directory, { recursive: false }, (_event, file) => {
+            if (file && path.resolve(directory, file.toString()) !== input.target) return
+            input.publish({ path: input.target, type: "update" } satisfies Update)
+          })
+          if ("on" in subscription && typeof subscription.on === "function") {
+            subscription.on("error", (error: unknown) =>
+              Effect.runFork(Effect.logError("watcher callback failed", { path: input.target, error })),
+            )
+          }
+          return { unsubscribe: () => Promise.resolve(subscription.close()), backend: "node" }
+        })
+      }
+      return subscribeDirectory(watcher(), getBackend(), input.target, input.ignore, input.publish)
+    },
+  }))
+
+/** Watcher layer with controllable native acquisition for resource lifecycle tests. */
+export const backendLayer = (backend: Backend) => makeLayer(undefined, () => backend)
 
 export function configured(options?: Options) {
   return makeGlobalNode({ service: Service, layer: layer(options), deps: [] })
@@ -180,9 +199,9 @@ function subscribeDirectory(
   native: typeof import("@parcel/watcher") | undefined,
   backend: ParcelWatcher.BackendType | undefined,
   directory: string,
-  ignore: string[],
-  pubsub: PubSub.PubSub<Update>,
-) {
+  ignore: readonly string[],
+  publish: (update: Update) => void,
+): Effect.Effect<Subscription | undefined> {
   if (!native || !backend) {
     return Effect.logError("watcher backend not supported", { directory, platform: process.platform }).pipe(
       Effect.as(undefined),
@@ -190,17 +209,26 @@ function subscribeDirectory(
   }
   const callback: ParcelWatcher.SubscribeCallback = (error, updates) => {
     if (error) Effect.runFork(Effect.logError("watcher callback failed", { error }))
-    for (const update of updates) PubSub.publishUnsafe(pubsub, update)
+    for (const update of updates) publish(update)
   }
-  const pending = native.subscribe(directory, callback, { ignore, backend })
+  // Copy `ignore`: it aliases the RcMap key, whose structural hash is cached,
+  // so the array handed to native code must never be the mutable original.
+  const pending = native.subscribe(directory, callback, { ignore: [...ignore], backend })
   return Effect.promise(() => pending).pipe(
+    Effect.map((subscription) => ({ unsubscribe: () => subscription.unsubscribe(), backend })),
+    // Interruption (including the timeout below) abandons the pending native
+    // subscription, so close it once it eventually resolves.
+    Effect.onInterrupt(() =>
+      Effect.sync(() => {
+        pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
+      }),
+    ),
     Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
-    Effect.catchCause((cause) => {
-      pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
-      return Effect.logError("failed to subscribe", {
+    Effect.catchCause((cause) =>
+      Effect.logError("failed to subscribe", {
         directory,
         cause: Cause.pretty(cause),
-      }).pipe(Effect.as(undefined))
-    }),
+      }).pipe(Effect.as(undefined)),
+    ),
   )
 }

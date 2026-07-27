@@ -43,6 +43,94 @@ describe("Watcher.testLayer", () => {
   )
 })
 
+function countingBackend() {
+  const counts = { subscribes: 0, unsubscribes: 0 }
+  const backend: Watcher.Backend = {
+    subscribe: () =>
+      Effect.sync(() => {
+        counts.subscribes++
+        return {
+          unsubscribe: () => {
+            counts.unsubscribes++
+            return Promise.resolve()
+          },
+        }
+      }),
+  }
+  return { backend, counts }
+}
+
+describe("Watcher lifecycle", () => {
+  it.effect("interrupting a consumer interrupts a pending acquisition", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const interrupted = yield* Deferred.make<void>()
+      yield* Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const consumer = yield* watcher
+          .subscribe({ path: "/pending", type: "directory" })
+          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Deferred.await(started)
+        yield* Fiber.interrupt(consumer)
+        expect(yield* Deferred.isDone(interrupted)).toBe(true)
+      }).pipe(
+        Effect.provide(
+          Watcher.backendLayer({
+            subscribe: () =>
+              Deferred.succeed(started, undefined).pipe(
+                Effect.andThen(Effect.never),
+                Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+              ),
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.effect("shares one subscription and releases exactly once after the final consumer", () => {
+    const { backend, counts } = countingBackend()
+    return Effect.gen(function* () {
+      const watcher = yield* Watcher.Service
+      const consume = () =>
+        watcher
+          .subscribe({ path: "/shared", type: "directory" })
+          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+      const first = yield* consume()
+      const second = yield* consume()
+      yield* Effect.yieldNow
+      expect(counts.subscribes).toBe(1)
+
+      yield* Fiber.interrupt(first)
+      expect(counts.unsubscribes).toBe(0)
+
+      yield* Fiber.interrupt(second)
+      expect(counts.subscribes).toBe(1)
+      expect(counts.unsubscribes).toBe(1)
+    }).pipe(Effect.provide(Watcher.backendLayer(backend)))
+  })
+
+  it.effect("scope shutdown releases an active subscription exactly once", () => {
+    const { backend, counts } = countingBackend()
+    return Effect.gen(function* () {
+      const consumer = yield* Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const consumer = yield* watcher
+          .subscribe({ path: "/active", type: "directory" })
+          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.yieldNow
+        expect(counts.subscribes).toBe(1)
+        expect(counts.unsubscribes).toBe(0)
+        return consumer
+      }).pipe(Effect.provide(Watcher.backendLayer(backend)))
+      // Closing the layer scope tears the native subscription down while the
+      // consumer still holds a reference; the consumer's own release as its
+      // stream ends must not tear it down a second time.
+      yield* Fiber.join(consumer)
+      expect(counts.unsubscribes).toBe(1)
+    })
+  })
+})
+
 function provide(directory: string, vcs?: Location.Interface["vcs"]) {
   const locationLayer = Layer.succeed(
     Location.Service,
