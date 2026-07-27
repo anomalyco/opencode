@@ -155,7 +155,16 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
       get: () => Effect.die("unused catalog.provider.get"),
     },
     model: {
-      list: () => Effect.die("unused catalog.model.list"),
+      list: () =>
+        catalog.model.available().pipe(
+          Effect.map((data) => ({
+            location: new Location.Info({
+              directory: AbsolutePath.make("/"),
+              project: { id: Project.ID.make("test"), directory: AbsolutePath.make("/") },
+            }),
+            data: data.map(modelInfo),
+          })),
+        ),
       default: () => Effect.die("unused catalog.model.default"),
     },
     reload: catalog.reload,
