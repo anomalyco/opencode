@@ -521,6 +521,7 @@ function PromptInputV2ModelControl(props: {
           fallback={
             <ButtonV2
               data-action="prompt-model"
+              data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
               class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
@@ -542,6 +543,7 @@ function PromptInputV2ModelControl(props: {
               class: "min-w-0 max-w-[220px] justify-start ![font-weight:440] group",
               classList: { "animate-in fade-in": shouldAnimate() },
               "data-action": "prompt-model",
+              "data-control-type": "popover",
             }}
             onClose={props.onClose}
           >

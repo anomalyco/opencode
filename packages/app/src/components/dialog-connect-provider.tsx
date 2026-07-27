@@ -857,6 +857,7 @@ function ProviderConnection(props: {
                 ref={apiKey}
                 class="!w-full"
                 name="apiKey"
+                data-input="provider-api-key"
                 placeholder={language.t("provider.connect.apiKey.placeholder")}
                 value={formStore.value}
                 invalid={formStore.error !== undefined}
@@ -873,7 +874,7 @@ function ProviderConnection(props: {
                 </div>
               )}
             </Show>
-            <ButtonV2 type="submit" variant="contrast">
+            <ButtonV2 type="submit" variant="contrast" data-action="provider-connect-submit">
               {language.t("common.continue")}
             </ButtonV2>
           </form>
