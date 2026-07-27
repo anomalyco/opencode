@@ -46,7 +46,7 @@ const response = yield * LLMClient.generate(request)
 
 `LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` reads the executable route carried by `request.model.route`, builds the provider-native body, asks the route's transport for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Body>(request)` to compile a request through the route pipeline without sending it — the optional `Body` type argument narrows `.body` to the route's native shape (e.g. `prepare<OpenAIChatBody>(...)` returns a `PreparedRequestOf<OpenAIChatBody>`). The runtime body is identical; the generic is a type-level assertion.
+Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`.
 
 Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g. `events.filter(LLMEvent.is.toolCall)`). The kebab-case `LLMEvent.guards["tool-call"]` form also works but prefer `is.*` in new code.
 
@@ -138,13 +138,13 @@ packages/ai/src/
     ids.ts                  branded IDs, literal types, ProviderMetadata
     options.ts              Generation/Provider/Http options, Limits, Model, cache policy
     messages.ts             content parts, Message, ToolDefinition, LLMRequest
-    events.ts               Usage, individual events, LLMEvent, PreparedRequest, LLMResponse
+    events.ts               Usage, individual events, LLMEvent, LLMResponse
     errors.ts               error reasons, LLMError, ToolFailure
     index.ts                barrel
   llm.ts                    request constructors and convenience helpers
   route/
     index.ts                @opencode-ai/ai/route advanced barrel
-    client.ts               Route.make + LLMClient.prepare/stream/generate
+    client.ts               Route.make + LLMClient.stream/generate
     executor.ts             RequestExecutor service + transport error mapping
     protocol.ts             Protocol type + Protocol.make
     endpoint.ts             Endpoint type + Endpoint.path

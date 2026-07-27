@@ -196,7 +196,6 @@ The hosted result is represented as a provider-executed tool call and tool resul
 - **`LLM.generate` / `LLM.stream`** — re-exported from `LLMClient` for one-import use.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`Model.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
-- **`LLMClient.prepare(request)`** — compile a request through protocol body construction, validation, and HTTP preparation without sending. Useful for inspection and testing.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 - **`Image.generate({...})`** — generate images through a provider-neutral image request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.

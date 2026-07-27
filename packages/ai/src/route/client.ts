@@ -10,7 +10,7 @@ import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
-import type { LLMError, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
+import type { LLMError, ProtocolID, ProviderOptions } from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
@@ -20,7 +20,6 @@ import {
   ModelLimits,
   LLMError as LLMErrorClass,
   LLMEvent,
-  PreparedRequest,
   ProviderID,
   mergeGenerationOptions,
   mergeHttpOptions,
@@ -142,17 +141,6 @@ export const httpOptions = (input: HttpOptionsInput | undefined) => {
 }
 
 export interface Interface {
-  /**
-   * Compile a request through protocol body construction, validation, and HTTP
-   * preparation without sending it. Returns the prepared request including the
-   * provider-native body.
-   *
-   * Pass a `Body` type argument to statically expose the route's body
-   * shape (e.g. `prepare<OpenAIChatBody>(...)`) — the runtime body is
-   * identical, so this is a type-level assertion the caller makes about which
-   * route the request will resolve to.
-   */
-  readonly prepare: <Body = unknown>(request: LLMRequest) => Effect.Effect<PreparedRequestOf<Body>, LLMError>
   readonly stream: StreamMethod
   readonly generate: GenerateMethod
 }
@@ -370,9 +358,6 @@ export function make<Body, Prepared, Frame, Event, State>(
   })
 }
 
-// `compile` is the important boundary: it turns a common `LLMRequest` into a
-// validated provider body plus transport-private prepared data, but does not
-// execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const resolved = applyCachePolicy(resolveRequestOptions(request))
   const route = resolved.model.route
@@ -390,17 +375,17 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   }
 })
 
-const prepareWith = Effect.fn("LLMClient.prepare")(function* (request: LLMRequest) {
+/** @internal Test-only projection of the execution compiler; not exported from package barrels. */
+export const compileRequest = Effect.fn("LLM.compileRequest")(function* (request: LLMRequest) {
   const compiled = yield* compile(request)
-
-  return new PreparedRequest({
+  return {
     id: compiled.request.id ?? "request",
     route: compiled.route.id,
     protocol: compiled.route.protocol,
     model: compiled.request.model,
     body: compiled.body,
     metadata: { transport: compiled.route.transport.id },
-  })
+  }
 })
 
 const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =>
@@ -421,9 +406,6 @@ const generateWith = (stream: Interface["stream"]) =>
       "Provider stream ended without a terminal finish event",
     )
   })
-
-export const prepare = <Body = unknown>(request: LLMRequest) =>
-  prepareWith(request) as Effect.Effect<PreparedRequestOf<Body>, LLMError>
 
 export function stream(request: LLMRequest): Stream.Stream<LLMEvent, LLMError> {
   return Stream.unwrap(
@@ -453,7 +435,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
       http: yield* RequestExecutor.Service,
       webSocket: Option.getOrUndefined(yield* Effect.serviceOption(WebSocketExecutor.Service)),
     })
-    return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
+    return Service.of({ stream, generate: generateWith(stream) })
   }),
 )
 
@@ -462,7 +444,6 @@ export const Route = { make } as const
 export const LLMClient = {
   Service,
   layer,
-  prepare,
   stream,
   generate,
 } as const

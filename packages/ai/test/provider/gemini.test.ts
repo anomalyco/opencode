@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import * as Gemini from "../../src/protocols/gemini"
 import { ProviderShared } from "../../src/protocols/shared"
 import { it } from "../lib/effect"
@@ -26,7 +27,7 @@ const request = LLM.request({
 describe("Gemini route", () => {
   it.effect("prepares Gemini target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(request)
+      const prepared = yield* compileRequest(request)
 
       expect(prepared.body).toEqual({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
@@ -38,12 +39,12 @@ describe("Gemini route", () => {
 
   it.effect("normalizes Gemini thinking options", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } } },
         }),
       )
-      const filtered = yield* LLMClient.prepare<Gemini.GeminiBody>(
+      const filtered = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } } },
         }),
@@ -59,7 +60,7 @@ describe("Gemini route", () => {
 
   it.effect("lowers chronological system updates to wrapped user text in order", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
@@ -75,7 +76,7 @@ describe("Gemini route", () => {
 
   it.effect("prepares multimodal user input and tool history", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -143,7 +144,7 @@ describe("Gemini route", () => {
 
   it.effect("continues media tool results as inline model input without base64 text", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -188,7 +189,7 @@ describe("Gemini route", () => {
 
   it.effect("strips matching data URLs to raw base64 inlineData", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -229,7 +230,7 @@ describe("Gemini route", () => {
   ] as const)
     it.effect(`rejects ${name}`, () =>
       Effect.gen(function* () {
-        const error = yield* LLMClient.prepare(
+        const error = yield* compileRequest(
           LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
         ).pipe(Effect.flip)
         expect(error.message).toMatch(/does not support|does not match|valid base64/)
@@ -238,7 +239,7 @@ describe("Gemini route", () => {
 
   it.effect("rejects oversized image input", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -256,7 +257,7 @@ describe("Gemini route", () => {
 
   it.effect("keeps tools and sends function calling mode NONE", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_choice_none",
           model,
@@ -276,7 +277,7 @@ describe("Gemini route", () => {
 
   it.effect("sanitizes integer enums, dangling required, untyped arrays, and scalar object keys", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_schema_patch",
           model,
@@ -457,7 +458,7 @@ describe("Gemini route", () => {
         response.events.findIndex((event) => event.type === "tool-call"),
       )
 
-      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -691,7 +692,7 @@ describe("Gemini route", () => {
 
   it.effect("rejects unsupported assistant media content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           id: "req_media",
           model,

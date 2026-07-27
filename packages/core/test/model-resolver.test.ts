@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { LLM, Model } from "@opencode-ai/ai"
-import { LLMClient } from "@opencode-ai/ai/route"
+import { compileRequest } from "@opencode-ai/ai/route/client"
 import { Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
@@ -69,7 +69,7 @@ describe("ModelResolver", () => {
           settings: { apiKey: "secret", baseURL: "https://openai.example/v1" },
         }),
       )
-      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
 
       expect(JSON.stringify(prepared.body)).not.toContain("apiKey")
       expect(JSON.stringify(prepared.body)).not.toContain("secret")

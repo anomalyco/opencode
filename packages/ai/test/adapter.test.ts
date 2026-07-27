@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMRequest, LLMResponse } from "../src"
 import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
+import { compileRequest } from "../src/route/client"
 import { Model } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
@@ -139,8 +140,7 @@ describe("llm route", () => {
 
   it.effect("selects routes by model route value", () =>
     Effect.gen(function* () {
-      const llm = yield* LLMClient.Service
-      const prepared = yield* llm.prepare(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, { model: updateModel(request.model, { route: configuredGemini }) }),
       )
 
@@ -173,7 +173,7 @@ describe("llm route", () => {
         framing: fakeFraming,
       })
 
-      const prepared = yield* (yield* LLMClient.Service).prepare(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, { model: updateModel(request.model, { route: duplicate }) }),
       )
 

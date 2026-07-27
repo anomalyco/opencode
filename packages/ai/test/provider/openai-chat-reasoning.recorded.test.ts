@@ -5,6 +5,7 @@ import { OpenAIChat } from "../../src/protocols/openai-chat"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenRouter from "../../src/providers/openrouter"
 import { LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import { recordedTests } from "../recorded-test"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios"
 
@@ -84,9 +85,7 @@ for (const item of cases) {
             ),
           ).toBe(true)
 
-          const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-            LLM.request({ model: item.model, messages: [response.message] }),
-          )
+          const replay = yield* compileRequest(LLM.request({ model: item.model, messages: [response.message] }))
           expect(replay.body.messages).toMatchObject([
             { role: "assistant", content: response.text, reasoning: response.reasoning },
           ])

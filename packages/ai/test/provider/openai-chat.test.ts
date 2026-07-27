@@ -18,6 +18,7 @@ import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { ProviderShared } from "../../src/protocols/shared"
 import { Auth, LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import { it } from "../lib/effect"
 import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
 import { deltaChunk, usageChunk } from "../lib/openai-chunks"
@@ -42,11 +43,7 @@ const request = LLM.request({
 describe("OpenAI Chat route", () => {
   it.effect("prepares OpenAI Chat payload", () =>
     Effect.gen(function* () {
-      // Pass the OpenAIChat payload type so `prepared.body` is statically
-      // typed to the route's native shape — the assertions below read field
-      // names without `unknown` casts.
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(request)
-      const _typed: { readonly model: string; readonly stream: true } = prepared.body
+      const prepared = yield* compileRequest(request)
 
       expect(prepared.body).toEqual({
         model: "gpt-4o-mini",
@@ -64,7 +61,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -87,7 +84,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("replays canonical reasoning as OpenAI-compatible reasoning_content", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -105,7 +102,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("writes reasoning to a configured custom field on every assistant message", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: Model.update(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
           messages: [
@@ -131,7 +128,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("rejects reasoning fields that conflict with assistant message fields", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model: Model.update(model, { compatibility: { reasoningField: "content" } }),
           messages: [Message.assistant([{ type: "reasoning", text: "thinking" }])],
@@ -144,7 +141,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("maps OpenAI provider options to Chat options", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
           prompt: "think",
@@ -159,7 +156,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("passes through custom OpenAI-compatible reasoning effort strings", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "think",
@@ -253,7 +250,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("prepares assistant tool-call and tool-result messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -291,7 +288,7 @@ describe("OpenAI Chat route", () => {
   it.effect("preserves structured tool errors for the model", () =>
     Effect.gen(function* () {
       const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -311,7 +308,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("continues image tool results as vision input without base64 text", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -355,7 +352,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("orders parallel tool responses before one aggregated vision message", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -405,7 +402,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("aggregates consecutive tool images with a following system update", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -446,7 +443,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("appends system updates without replacing multipart user content", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -474,7 +471,7 @@ describe("OpenAI Chat route", () => {
   ] as const)
     it.effect(`rejects ${name}`, () =>
       Effect.gen(function* () {
-        const error = yield* LLMClient.prepare(
+        const error = yield* compileRequest(
           LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
         ).pipe(Effect.flip)
         expect(error.message).toMatch(/does not support|does not match|valid base64/)
@@ -483,7 +480,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("rejects oversized image input", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -501,7 +498,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("prepares raw and data URL image media as vision input", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_media",
           model,
@@ -528,7 +525,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("lowers reasoning-only assistant history", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_reasoning",
           model,
@@ -619,9 +616,7 @@ describe("OpenAI Chat route", () => {
           openai: { reasoningField: field },
         })
 
-        const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-          LLM.request({ model, messages: [response.message] }),
-        )
+        const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
         expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", [field]: "thinking" }])
       }
     }),
@@ -647,9 +642,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningField: "vendor_reasoning" },
       })
 
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model: custom, messages: [response.message] }),
-      )
+      const replay = yield* compileRequest(LLM.request({ model: custom, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", vendor_reasoning: "thinking" }])
     }),
   )
@@ -692,9 +685,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
 
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model, messages: [response.message] }),
-      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         {
           role: "assistant",
@@ -737,9 +728,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningDetails: details },
       })
 
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model, messages: [response.message] }),
-      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: details }])
     }),
   )
@@ -764,9 +753,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
 
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model, messages: [response.message] }),
-      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
       ])
@@ -839,9 +826,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningDetails: [] },
       })
 
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model, messages: [response.message] }),
-      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: [] }])
     }),
   )
@@ -889,9 +874,7 @@ describe("OpenAI Chat route", () => {
         response.events.findIndex(LLMEvent.is.textStart),
       )
 
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model, messages: [response.message] }),
-      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: merged },
       ])
@@ -918,9 +901,7 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
 
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({ model, messages: [response.message] }),
-      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: null, reasoning_details: details }])
     }),
   )
@@ -950,7 +931,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const first = { type: "reasoning.text", text: "first", signature: "signed-0", index: 0 }
       const second = { type: "reasoning.text", text: "second", signature: "signed-1", index: 1 }
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const replay = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -979,7 +960,7 @@ describe("OpenAI Chat route", () => {
   it.effect("retains scalar replay for mixed structured reasoning parts", () =>
     Effect.gen(function* () {
       const detail = { type: "reasoning.encrypted", data: "opaque", index: 0 }
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const replay = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -1004,7 +985,7 @@ describe("OpenAI Chat route", () => {
   it.effect("replays native scalar reasoning alongside native details", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.encrypted", data: "opaque", index: 0 }]
-      const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const replay = yield* compileRequest(
         LLM.request({
           model,
           messages: [

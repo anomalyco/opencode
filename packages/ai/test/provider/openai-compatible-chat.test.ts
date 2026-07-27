@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
@@ -52,7 +53,7 @@ const providerFamilies = [
 describe("OpenAI-compatible Chat route", () => {
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
           toolChoice: ToolChoice.make({ type: "required" }),
@@ -127,7 +128,7 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("matches AI SDK compatible basic request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(request)
+      const prepared = yield* compileRequest(request)
 
       expect(prepared.body).toEqual({
         model: "deepseek-chat",
@@ -145,7 +146,7 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_parity",
           model,

@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { CacheHint, LLM, LLMError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios"
 import { it } from "../lib/effect"
@@ -44,7 +45,7 @@ const expectToolResult = (body: AnthropicMessages.AnthropicMessagesBody): Anthro
 describe("Anthropic Messages route", () => {
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(request)
+      const prepared = yield* compileRequest(request)
 
       expect(prepared.body).toEqual({
         model: "claude-sonnet-4-5",
@@ -59,7 +60,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lowers adaptive thinking settings with effort", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: {
             anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
@@ -76,17 +77,17 @@ describe("Anthropic Messages route", () => {
 
   it.effect("normalizes enabled and disabled thinking settings", () =>
     Effect.gen(function* () {
-      const enabled = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const enabled = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 } } },
         }),
       )
-      const legacy = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const legacy = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: { anthropic: { thinking: { type: "enabled", budget_tokens: 2_048 } } },
         }),
       )
-      const disabled = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const disabled = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: { anthropic: { thinking: { type: "disabled" } } },
         }),
@@ -100,7 +101,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("rejects enabled thinking without a budget", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLMRequest.update(request, {
           providerOptions: { anthropic: { thinking: { type: "enabled" } } },
         }),
@@ -112,7 +113,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lowers chronological system updates natively for Claude Opus 4.8 with cache hints", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: opus48,
           messages: [
@@ -137,7 +138,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lowers chronological system updates to wrapped user text for unsupported Anthropic models", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -164,7 +165,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("rejects non-text chronological system update content before send", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model: opus48,
           messages: [
@@ -181,7 +182,7 @@ describe("Anthropic Messages route", () => {
   it.effect("falls back for unsupported native chronological system update placement", () =>
     Effect.gen(function* () {
       expect(
-        (yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        (yield* compileRequest(
           LLM.request({
             model: opus48,
             messages: [Message.assistant("Plain."), Message.system("After plain assistant.")],
@@ -196,12 +197,11 @@ describe("Anthropic Messages route", () => {
         },
       ])
       expect(
-        (yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
-          LLM.request({ model: opus48, messages: [Message.system("First.")], cache: "none" }),
-        )).body.messages,
+        (yield* compileRequest(LLM.request({ model: opus48, messages: [Message.system("First.")], cache: "none" })))
+          .body.messages,
       ).toEqual([{ role: "user", content: [{ type: "text", text: "<system-update>\nFirst.\n</system-update>" }] }])
       expect(
-        (yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        (yield* compileRequest(
           LLM.request({
             model: opus48,
             messages: [Message.user("Before."), Message.system("One."), Message.system("Two.")],
@@ -223,7 +223,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("rejects a system update between a local tool call and its result", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model: opus48,
           messages: [
@@ -242,7 +242,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("prepares tool call and tool result messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -273,7 +273,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("keeps tools and sends tool_choice none", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_choice_none",
           model,
@@ -303,7 +303,7 @@ describe("Anthropic Messages route", () => {
   // not JSON-stringified into `tool_result.content`.
   it.effect("lowers media tool-result content as structured blocks", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_image",
           model,
@@ -335,7 +335,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lowers single-image tool-result content as a structured image block", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_image_only",
           model,
@@ -360,7 +360,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("rejects unsupported media in tool-result content with a clear error", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_unsupported_media",
           model,
@@ -384,7 +384,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         continuationRequest({
           id: "req_native_continuation_anthropic",
           model,
@@ -428,7 +428,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lowers preserved Anthropic reasoning signature metadata", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -447,7 +447,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("round-trips redacted thinking as redacted_thinking blocks", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -628,9 +628,7 @@ describe("Anthropic Messages route", () => {
         { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
       ])
 
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
-        LLM.request({ model, messages: [response.message], cache: "none" }),
-      )
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message], cache: "none" }))
       expect(prepared.body.messages).toEqual([
         { role: "assistant", content: [{ type: "thinking", thinking: "", signature: "sig_1" }] },
       ])
@@ -773,7 +771,7 @@ describe("Anthropic Messages route", () => {
           ),
         ),
       )
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -1133,7 +1131,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("round-trips provider-executed assistant content into server tool blocks", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_round_trip",
           model,
@@ -1184,7 +1182,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("rejects round-trip for unknown server tool names", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           id: "req_unknown_server_tool",
           model,
@@ -1261,7 +1259,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("maps ttlSeconds >= 3600 to cache_control ttl: '1h'", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
@@ -1277,7 +1275,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("emits cache_control on tool definitions and tool-result blocks", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           tools: [
@@ -1318,7 +1316,7 @@ describe("Anthropic Messages route", () => {
   it.effect("drops cache_control breakpoints past the 4-per-request cap", () =>
     Effect.gen(function* () {
       const hint = new CacheHint({ type: "ephemeral" })
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           system: [
@@ -1344,7 +1342,7 @@ describe("Anthropic Messages route", () => {
   it.effect("spends breakpoint budget on tools before system before messages", () =>
     Effect.gen(function* () {
       const hint = new CacheHint({ type: "ephemeral" })
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           tools: [

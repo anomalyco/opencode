@@ -4,6 +4,7 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, mergeProviderOptions } from "../src"
 import { AnthropicMessages, OpenAIChat } from "../src/protocols"
 import { Auth, LLMClient } from "../src/route"
+import { compileRequest } from "../src/route/client"
 import { it } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 import { deltaChunk } from "./lib/openai-chunks"
@@ -44,7 +45,7 @@ describe("request option precedence", () => {
     })
   })
 
-  it.effect("prepares bodies with route defaults, model defaults, and call options in order", () =>
+  it.effect("compiles bodies with route defaults, model defaults, and call options in order", () =>
     Effect.gen(function* () {
       const route = OpenAIChat.route.with({
         endpoint: { baseURL: "https://api.openai.test/v1/" },
@@ -59,7 +60,7 @@ describe("request option precedence", () => {
           providerOptions: { openai: { reasoningEffort: "medium" } },
         },
       })
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "Say hello.",
@@ -141,7 +142,7 @@ describe("request option precedence", () => {
       const model = OpenAIChat.route
         .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
         .model({ id: "gpt-4o-mini" })
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model,
           prompt: "Say hello.",
@@ -164,10 +165,8 @@ describe("request option precedence", () => {
         limits: { output: 128 },
       })
       const model = route.model({ id: "claude-sonnet-4-5", defaults: { limits: { output: 64 } } })
-      const withoutMaxTokens = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
-        LLM.request({ model, prompt: "Say hello.", cache: "none" }),
-      )
-      const withMaxTokens = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+      const withoutMaxTokens = yield* compileRequest(LLM.request({ model, prompt: "Say hello.", cache: "none" }))
+      const withMaxTokens = yield* compileRequest(
         LLM.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 32 } }),
       )
 

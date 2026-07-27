@@ -568,7 +568,7 @@ App boundary = explicit durable-config -> typed-provider call
       calling `.model(...)`.
 - [x] Remove request-shaping defaults from `Model`; selected models now carry only
       id, provider, and configured route while defaults live on routes or requests.
-- [x] Rework `LLMClient.prepare` / `stream` / `generate` to read
+- [x] Rework `LLMClient.stream` / `generate` to read
       `request.model.route` directly instead of calling `registeredRoute(...)`.
 - [x] Remove `Route.make(...)` global registration from the normal execution
       path; keep route ids only as diagnostics/provider API labels.

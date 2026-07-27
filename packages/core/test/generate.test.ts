@@ -65,7 +65,6 @@ const aisdk = Layer.mock(AISDK.Service, {
   model: () => Effect.succeed(runtime),
 })
 const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die("unused"),
   stream: () => Stream.die("unused"),
   generate: () =>
     Effect.sync(() => {
