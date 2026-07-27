@@ -3,7 +3,7 @@ export * as SessionModelRequest from "./model-request"
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Context, Effect, Layer, Result } from "effect"
+import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { Model } from "../model"
@@ -110,8 +110,9 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     const app = yield* App.Metadata
-    const diagnostics = ["1", "true"].includes(
-      process.env["OPENCODE_PROMPT_CACHE_DIAGNOSTICS"]?.toLowerCase() ?? "",
+    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
+      Config.withDefault(false),
+      Effect.orDie,
     )
     const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
 
