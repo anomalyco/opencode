@@ -302,6 +302,7 @@ export const CommandMap = {
   session_delete: "session.delete",
   session_share: "session.share",
   session_unshare: "session.unshare",
+  session_split_toggle: "session.split.toggle",
   session_interrupt: "session.interrupt",
   session_background: "session.background",
   session_compact: "session.compact",

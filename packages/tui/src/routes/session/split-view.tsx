@@ -1,8 +1,11 @@
-import { createSignal, onMount, onCleanup, For, Show } from "solid-js"
-import path from "node:path"
+import { createMemo, For, Show } from "solid-js"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { Prompt, type PromptRef } from "../../component/prompt"
+import { PermissionPrompt } from "./permission"
+import { QuestionPrompt } from "./question"
+import { SubagentFooter } from "./subagent-footer"
+import { usePluginRuntime } from "../../plugin/runtime"
 
 export function SessionSplitView(props: {
   sessionID: string
@@ -14,35 +17,53 @@ export function SessionSplitView(props: {
   onPromptSubmit?: () => void
   permissions?: any[]
   questions?: any[]
-  renderMessage: (message: any, index: number) => any
+  renderMessage: (message: any, index: () => number) => any
 }) {
   const sync = useSync()
   const { theme } = useTheme()
-  const [planContent, setPlanContent] = createSignal("Loading plan...")
+  const pluginRuntime = usePluginRuntime()
 
   const session = () => sync.session.get(props.sessionID)
 
-  onMount(async () => {
-    const s = session()
-    const dir = s?.directory ?? process.cwd()
-    const planPath = path.join(dir, "PLAN.md")
-    try {
-      const content = await Bun.file(planPath).text()
-      setPlanContent(content || "PLAN.md is empty.")
-    } catch {
-      setPlanContent("No PLAN.md found in session directory.")
+  const split = createMemo(() => {
+    let currentAgent = "build"
+    const plan: any[] = []
+    const build: any[] = []
+
+    for (const msg of props.messages) {
+      const type = msg.type ?? msg.role
+      const agent = msg.agent ?? msg.agents?.[0]?.name
+
+      if (type === "agent-switched") {
+        currentAgent = agent
+        if (currentAgent === "plan") plan.push(msg)
+        else build.push(msg)
+      } else if (type === "assistant") {
+        if (agent === "plan") {
+          plan.push(msg)
+          currentAgent = "plan"
+        } else {
+          build.push(msg)
+          currentAgent = "build"
+        }
+      } else if (type === "user") {
+        if (agent) {
+          if (agent === "plan") {
+            plan.push(msg)
+            currentAgent = "plan"
+          } else {
+            build.push(msg)
+            currentAgent = "build"
+          }
+        } else if (currentAgent === "plan") plan.push(msg)
+        else build.push(msg)
+      } else {
+        if (currentAgent === "plan") plan.push(msg)
+        else build.push(msg)
+      }
     }
 
-    const interval = setInterval(async () => {
-      try {
-        const content = await Bun.file(planPath).text()
-        if (content) setPlanContent(content)
-      } catch {
-        // ignore
-      }
-    }, 2000)
-
-    onCleanup(() => clearInterval(interval))
+    return { planMessages: plan, buildMessages: build }
   })
 
   return (
@@ -60,10 +81,15 @@ export function SessionSplitView(props: {
           title=" Plan "
           overflow="hidden"
         >
-          <markdown content={planContent()} />
+          <scrollbox flexGrow={1} minHeight={0} stickyScroll={true} stickyStart="bottom">
+            <box height={1} />
+            <For each={split().planMessages}>
+              {(message, index) => props.renderMessage(message, index)}
+            </For>
+          </scrollbox>
         </box>
 
-        {/* Right Pane: Build Session Transcript */}
+        {/* Right Pane: Build Session */}
         <box
           flexGrow={1}
           minHeight={0}
@@ -82,23 +108,59 @@ export function SessionSplitView(props: {
             stickyStart="bottom"
           >
             <box height={1} />
-            <For each={props.messages}>
-              {(message, index) => props.renderMessage(message, index())}
+            <For each={split().buildMessages}>
+              {(message, index) => props.renderMessage(message, index)}
             </For>
           </scrollbox>
         </box>
       </box>
 
-      {/* Bottom Prompt Area */}
+      {/* Bottom Prompt & Footer Area */}
       <box flexShrink={0}>
+        <Show when={props.permissions && props.permissions.length > 0}>
+          {(() => {
+            const p = props.permissions?.[0]
+            return p ? (
+              <PermissionPrompt
+                request={p}
+                directory={sync.session.get(p.sessionID)?.directory}
+              />
+            ) : null
+          })()}
+        </Show>
+        <Show when={props.permissions && props.permissions.length === 0 && props.questions && props.questions.length > 0}>
+          {(() => {
+            const q = props.questions?.[0]
+            return q ? (
+              <QuestionPrompt
+                request={q}
+                directory={sync.session.get(q.sessionID)?.directory}
+              />
+            ) : null
+          })()}
+        </Show>
+        <Show when={session()?.parentID}>
+          <SubagentFooter />
+        </Show>
         <Show when={props.visible}>
-          <Prompt
+          <pluginRuntime.Slot
+            name="session_prompt"
+            mode="replace"
+            session_id={props.sessionID}
             visible={props.visible}
-            ref={props.promptRef}
             disabled={props.disabled}
-            onSubmit={props.onPromptSubmit}
-            sessionID={props.sessionID}
-          />
+            on_submit={props.onPromptSubmit}
+            ref={props.promptRef}
+          >
+            <Prompt
+              visible={props.visible}
+              ref={props.promptRef}
+              disabled={props.disabled}
+              onSubmit={props.onPromptSubmit}
+              sessionID={props.sessionID}
+              right={<pluginRuntime.Slot name="session_prompt_right" session_id={props.sessionID} />}
+            />
+          </pluginRuntime.Slot>
         </Show>
       </box>
     </box>
