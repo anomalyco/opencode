@@ -1,4 +1,4 @@
-import { createMemo, createResource, createSignal, onCleanup, onMount, Show, For } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, Show, For } from "solid-js"
 import path from "path"
 import { existsSync, statSync, readdirSync } from "node:fs"
 import type { TextareaRenderable } from "@opentui/core"
@@ -13,7 +13,7 @@ import { useLocal } from "../context/local"
 import { useTuiPaths } from "../context/runtime"
 import { useToast } from "../ui/toast"
 import { useTuiConfig } from "../config"
-import { useBindings, useCommandShortcut } from "../keymap"
+import { useBindings, useCommandShortcut, OPENCODE_BASE_MODE } from "../keymap"
 import { createDebouncedSignal } from "../util/signal"
 import { errorMessage } from "../util/error"
 import { Locale } from "../util/locale"
@@ -31,18 +31,19 @@ export function createSessionsListQuery(input: { search?: string }) {
 
 // A leading @path token picks the directory the new session is started in;
 // anything after it becomes the first prompt. Mirrors how the home prompt
-// creates sessions in the current directory when no @path is given.
+// creates sessions in the current directory when no @path is given. Paths
+// with spaces must be quoted: @"/my dir" do the thing.
 export function parseNewSessionInput(input: string, paths: { cwd: string; home: string }) {
   const text = input.trim()
-  const match = /^@(\S+)(?:\s+([\s\S]*))?$/.exec(text)
+  const match = /^@(?:"([^"]+)"|(\S+))(?:\s+([\s\S]*))?$/.exec(text)
   if (!match) return { directory: undefined, prompt: text }
-  const raw = match[1]
+  const raw = match[1] ?? match[2]
   const resolved = path.isAbsolute(raw)
     ? raw
     : raw.startsWith("~")
       ? path.join(paths.home, raw.slice(1))
       : path.resolve(paths.cwd, raw)
-  return { directory: path.normalize(resolved), prompt: (match[2] ?? "").trim() }
+  return { directory: path.normalize(resolved), prompt: (match[3] ?? "").trim() }
 }
 
 // Directory completion for the new session input: only fires while the input
@@ -113,9 +114,19 @@ function readdirDirectories(dir: string): string[] {
   }
 }
 
-// Approximates the server boot (same launch): persisted active statuses older
-// than this had their writer die, so they render as interrupted.
-const bootTime = Date.now()
+// The completion walks the tree on every keystroke; caching the raw readdir
+// for a few seconds keeps each keystroke to in-memory work while still
+// picking up directories created moments ago.
+function cachedReaddir() {
+  const cache = new Map<string, { at: number; names: string[] }>()
+  return (dir: string) => {
+    const hit = cache.get(dir)
+    if (hit && Date.now() - hit.at < 10_000) return hit.names
+    const names = readdirDirectories(dir)
+    cache.set(dir, { at: Date.now(), names })
+    return names
+  }
+}
 
 export function Sessions() {
   const route = useRoute()
@@ -140,6 +151,8 @@ export function Sessions() {
   let selectRef: DialogSelectRef<string> | undefined
   let textarea: TextareaRenderable
   let statusTimer: ReturnType<typeof setTimeout> | undefined
+  let navigateTimer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
 
   const [sessions, { refetch }] = createResource(
     () => search(),
@@ -153,7 +166,7 @@ export function Sessions() {
   // is a hint to pull them again; debounced because transitions come in bursts.
   async function refetchStatuses() {
     const result = await sdk.globalClient.experimental.session.status.list()
-    if (!result.data) return
+    if (disposed || !result.data) return
     setPersisted(
       new Map(
         result.data.map((row) => [
@@ -177,8 +190,10 @@ export function Sessions() {
     void refetchStatuses()
     const ticker = setInterval(() => setNow(Date.now()), 30_000)
     onCleanup(() => {
+      disposed = true
       clearInterval(ticker)
       clearTimeout(statusTimer)
+      clearTimeout(navigateTimer)
     })
   })
 
@@ -204,10 +219,9 @@ export function Sessions() {
           runtime: sync.data.session_status[session.id]?.type,
           pendingInput:
             (sync.data.permission[session.id]?.length ?? 0) > 0 || (sync.data.question[session.id]?.length ?? 0) > 0,
-          bootTime,
         })
         const display = status ? statusDisplay(status, row?.time.updated ?? at, at, theme) : undefined
-        const detail = status === "interrupted" ? "stopped while running" : row?.detail
+        const detail = status === "interrupted" ? "stopped while running" : display ? row?.detail : undefined
         const dateLabel = updated === today ? "Today" : updated.slice(4, 10)
         return {
           title: isDeleting ? `Press ${deleteHint()} again to confirm` : session.title,
@@ -235,15 +249,23 @@ export function Sessions() {
   // so reading it lazily at compute time is enough.
   const anchor = () => selectRef?.selected()?.category ?? paths.cwd
 
+  const readdir = cachedReaddir()
   const suggestions = createMemo(() => {
     if (dismissed()) return []
-    return directorySuggestions(inputText(), { cwd: anchor(), home: paths.home }, readdirDirectories)
+    return directorySuggestions(inputText(), { cwd: anchor(), home: paths.home }, readdir)
   })
 
   const highlighted = createMemo(() => {
     if (suggestions().length === 0) return 0
     return suggestionIndex() % suggestions().length
   })
+
+  // The list can shrink between keystrokes; keep the highlight inside it.
+  createEffect(
+    on(suggestions, (list) => {
+      if (suggestionIndex() >= list.length) setSuggestionIndex(Math.max(0, list.length - 1))
+    }),
+  )
 
   function open(sessionID: string) {
     route.navigate({ type: "session", sessionID })
@@ -272,7 +294,13 @@ export function Sessions() {
     // Relative completions must resolve against the same anchor at submit
     // time, even if the list selection changes before Enter.
     setCompletionAnchor(anchor())
-    textarea.setText("@" + picked + "/")
+    // Quoted paths cannot be completed further (the single-token completion
+    // no longer matches), so a spaced pick is final and gets no trailing /.
+    if (picked.includes(" ")) {
+      textarea.setText(`@"${picked}" `)
+    } else {
+      textarea.setText("@" + picked + "/")
+    }
     textarea.gotoBufferEnd()
     setSuggestionIndex(0)
   }
@@ -295,17 +323,24 @@ export function Sessions() {
       return
     }
 
+    // Agent and model choices belong to the current project; a session
+    // created in another directory falls back to that project's own defaults.
+    const current = directory === path.normalize(paths.cwd)
     const agent = local.agent.current()
-    if (!agent) {
+    if (current && !agent) {
       toast.show({ message: "No agent selected.", variant: "error" })
       return
     }
     const model = local.model.current()
     const variant = local.model.variant.current()
+    if (current && parsed.prompt && !model) {
+      toast.show({ message: "No model selected. Pick one before sending a prompt.", variant: "error" })
+      return
+    }
     const res = await sdk.client.session.create({
       directory,
-      agent: agent.name,
-      ...(model ? { model: { providerID: model.providerID, id: model.modelID, variant } } : {}),
+      ...(current && agent ? { agent: agent.name } : {}),
+      ...(current && model ? { model: { providerID: model.providerID, id: model.modelID, variant } } : {}),
     })
     if (res.error || !res.data) {
       toast.show({ message: "Creating a session failed. Open console for more details.", variant: "error" })
@@ -313,13 +348,13 @@ export function Sessions() {
     }
 
     const sessionID = res.data.id
-    if (parsed.prompt && model) {
+    if (parsed.prompt) {
       sdk.client.session
         .prompt({
           sessionID,
-          model: { providerID: model.providerID, modelID: model.modelID },
-          agent: agent.name,
-          variant,
+          ...(current && model
+            ? { model: { providerID: model.providerID, modelID: model.modelID }, agent: agent?.name, variant }
+            : {}),
           parts: [{ type: "text", text: parsed.prompt }],
         })
         .catch((error) => {
@@ -327,10 +362,11 @@ export function Sessions() {
         })
     }
     // Give the prompt request a head start, mirroring the home submit flow
-    setTimeout(() => route.navigate({ type: "session", sessionID }), 50)
+    navigateTimer = setTimeout(() => route.navigate({ type: "session", sessionID }), 50)
   }
 
   useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
     commands: [
       {
         name: "sessions.open",
@@ -354,7 +390,15 @@ export function Sessions() {
     bindings: [
       ...tuiConfig.keybinds.gather("sessions.open", ["sessions.open"]),
       ...tuiConfig.keybinds.gather("sessions.new", ["sessions.new"]),
-      { key: "tab", desc: "Focus new session input", group: "Session", cmd: () => textarea.focus() },
+      {
+        key: "tab",
+        desc: "Focus new session input",
+        group: "Session",
+        cmd: () => {
+          if (textarea.isDestroyed) return
+          textarea.focus()
+        },
+      },
     ],
   }))
 
@@ -417,6 +461,12 @@ export function Sessions() {
         desc: "Next directory",
         group: "Session",
         cmd: () => setSuggestionIndex((index) => index + 1),
+      },
+      {
+        key: "return",
+        desc: "Complete directory",
+        group: "Session",
+        cmd: () => acceptSuggestion(),
       },
     ],
   }))

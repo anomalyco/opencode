@@ -7,7 +7,7 @@ import { tint } from "../theme"
 export type StatusType = "needs_input" | "retrying" | "working" | "done" | "interrupted"
 
 export interface PersistedStatus {
-  status: "working" | "retrying" | "needs_input" | "done" | "idle"
+  status: "working" | "retrying" | "needs_input" | "done" | "idle" | "interrupted"
   detail?: string
   time: { created: number; updated: number }
 }
@@ -29,13 +29,13 @@ const DONE_EXPIRY = 30 * MINUTE
 const LONG_WORK = 60 * MINUTE
 
 // Runtime signals win over the persisted row: they are live for the whole
-// process thanks to the global event stream. A persisted active status older
-// than this process means its writer died with it — drains are process-local.
+// process thanks to the global event stream. The server already derived
+// "interrupted" for persisted active rows whose writer process died, so the
+// persisted row can be trusted as-is here.
 export function resolveStatus(input: {
   persisted?: PersistedStatus
   runtime?: "idle" | "busy" | "retry"
   pendingInput?: boolean
-  bootTime: number
 }): StatusType | undefined {
   if (input.pendingInput) return "needs_input"
   if (input.runtime === "retry") return "retrying"
@@ -44,9 +44,8 @@ export function resolveStatus(input: {
   if (!persisted) return undefined
   if (persisted.status === "needs_input") return "needs_input"
   if (persisted.status === "done") return "done"
-  if (persisted.status === "working" || persisted.status === "retrying") {
-    return persisted.time.updated < input.bootTime ? "interrupted" : persisted.status
-  }
+  if (persisted.status === "interrupted") return "interrupted"
+  if (persisted.status === "working" || persisted.status === "retrying") return persisted.status
   return undefined
 }
 

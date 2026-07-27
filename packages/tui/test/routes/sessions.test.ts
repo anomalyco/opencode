@@ -42,7 +42,10 @@ describe("parseNewSessionInput", () => {
   })
 
   test("expands ~ against the home directory", () => {
-    expect(parseNewSessionInput("@~/proj x", paths)).toEqual({ directory: path.join("/home/user", "proj"), prompt: "x" })
+    expect(parseNewSessionInput("@~/proj x", paths)).toEqual({
+      directory: path.join("/home/user", "proj"),
+      prompt: "x",
+    })
   })
 
   test("resolves a relative @path against the cwd", () => {
@@ -54,6 +57,20 @@ describe("parseNewSessionInput", () => {
 
   test("a lone @ is kept as prompt text", () => {
     expect(parseNewSessionInput("@ not-a-path", paths)).toEqual({ directory: undefined, prompt: "@ not-a-path" })
+  })
+
+  test("parses a quoted @path containing spaces", () => {
+    expect(parseNewSessionInput('@"/repos/my dir" run the tests', paths)).toEqual({
+      directory: "/repos/my dir",
+      prompt: "run the tests",
+    })
+  })
+
+  test("parses a quoted relative @path without a prompt", () => {
+    expect(parseNewSessionInput('@"packages/my dir"', paths)).toEqual({
+      directory: path.resolve("/work/current", "packages/my dir"),
+      prompt: "",
+    })
   })
 })
 

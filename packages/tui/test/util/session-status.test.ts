@@ -21,40 +21,35 @@ describe("resolveStatus", () => {
         pendingInput: true,
         runtime: "busy",
         persisted: { status: "done", time: { created: 0, updated: 0 } },
-        bootTime: boot,
       }),
     ).toBe("needs_input")
     expect(
       resolveStatus({
         runtime: "retry",
         persisted: { status: "done", time: { created: 0, updated: 0 } },
-        bootTime: boot,
       }),
     ).toBe("retrying")
-    expect(resolveStatus({ runtime: "busy", bootTime: boot })).toBe("working")
+    expect(resolveStatus({ runtime: "busy" })).toBe("working")
   })
 
   test("reads needs_input and done from the persisted row", () => {
-    expect(
-      resolveStatus({ persisted: { status: "needs_input", time: { created: 0, updated: 0 } }, bootTime: boot }),
-    ).toBe("needs_input")
-    expect(resolveStatus({ persisted: { status: "done", time: { created: 0, updated: 0 } }, bootTime: boot })).toBe(
-      "done",
+    expect(resolveStatus({ persisted: { status: "needs_input", time: { created: 0, updated: 0 } } })).toBe(
+      "needs_input",
+    )
+    expect(resolveStatus({ persisted: { status: "done", time: { created: 0, updated: 0 } } })).toBe("done")
+  })
+
+  test("trusts the persisted row, including server-derived interrupted", () => {
+    expect(resolveStatus({ persisted: { status: "working", time: { created: 0, updated: 0 } } })).toBe("working")
+    expect(resolveStatus({ persisted: { status: "retrying", time: { created: 0, updated: 0 } } })).toBe("retrying")
+    expect(resolveStatus({ persisted: { status: "interrupted", time: { created: 0, updated: 0 } } })).toBe(
+      "interrupted",
     )
   })
 
-  test("derives interrupted for active statuses older than this process", () => {
-    const stale = { status: "working" as const, time: { created: 0, updated: boot - 1000 } }
-    expect(resolveStatus({ persisted: stale, bootTime: boot })).toBe("interrupted")
-    const fresh = { status: "working" as const, time: { created: 0, updated: boot + 1000 } }
-    expect(resolveStatus({ persisted: fresh, bootTime: boot })).toBe("working")
-  })
-
   test("shows nothing for idle or missing rows", () => {
-    expect(resolveStatus({ bootTime: boot })).toBeUndefined()
-    expect(
-      resolveStatus({ persisted: { status: "idle", time: { created: 0, updated: 0 } }, bootTime: boot }),
-    ).toBeUndefined()
+    expect(resolveStatus({})).toBeUndefined()
+    expect(resolveStatus({ persisted: { status: "idle", time: { created: 0, updated: 0 } } })).toBeUndefined()
   })
 })
 

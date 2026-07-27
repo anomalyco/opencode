@@ -454,10 +454,11 @@ opencode sessions [project]
 
 Opens the TUI directly on a screen listing sessions from every project stored in the global database, grouped by the full path each session was started in. Use the arrow keys to navigate, `enter` or `right` to open the selected session, and `left` (with an empty prompt) inside a session to return to the list. Opening a session switches the TUI working context to the directory the session was started in.
 
-A `new session` input sits at the bottom of the list (focus it with `ctrl+o` or `tab`). Type a prompt to start a session in the current directory, or start with `@path` to choose the working directory of the new session — the text after the path becomes the first prompt. Typing `@` offers directory completion from the current directory (navigate with `up`/`down`, complete with `tab` or `enter`):
+A `new session` input sits at the bottom of the list (focus it with `ctrl+o` or `tab`). Type a prompt to start a session in the current directory, or start with `@path` to choose the working directory of the new session — the text after the path becomes the first prompt. Typing `@` offers directory completion from the current directory (navigate with `up`/`down`, complete with `tab` or `enter`), and paths with spaces can be quoted:
 
 ```text
 @~/projects/api fix the failing tests
+@"/mnt/my dir" run the build
 ```
 
 ---

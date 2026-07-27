@@ -1096,9 +1096,9 @@ export function Session() {
       enabled: () => {
         if (session()?.parentID) return false
         if (dialog.stack.length > 0) return false
-        const current = promptRef.current
-        if (!current?.focused) return true
-        return current.current.input === ""
+        // Only with an empty prompt, focused or not: leaving mid-draft would
+        // surprise anyone who scrolled up with text typed.
+        return (promptRef.current?.current.input ?? "") === ""
       },
       run: () => {
         navigate({ type: "sessions" })
