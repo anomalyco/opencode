@@ -20,13 +20,13 @@ export const name = "edit"
 
 export const Input = Schema.Struct({
   path: Schema.String.annotate({
-    description:
-      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
+    description: "File to edit",
   }),
-  oldString: Schema.String.annotate({ description: "Exact text to replace" }),
-  newString: Schema.String.annotate({ description: "Replacement text, which must differ from oldString" }),
+  oldString: Schema.String.annotate({ description: "Exact text to find and replace" }),
+  newString: Schema.String.annotate({ description: "Text to replace oldString with (must differ from oldString)" }),
   replaceAll: Schema.optionalKey(Schema.Boolean).annotate({
-    description: "Replace all exact occurrences of oldString (default false)",
+    description:
+      "Whether to replace every occurrence of oldString. When false, oldString must match exactly once. Defaults to false.",
   }),
 })
 
@@ -99,20 +99,13 @@ export const Plugin = {
               name,
               options: { codemode: false, permission: "edit" },
               description:
-                "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
+                "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
               input: Input,
               output: Output,
               execute: (input, context) => {
                 const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
                   effect.pipe(
-                    Effect.mapError((error) =>
-                      error instanceof FileMutation.StaleContentError
-                        ? new ToolFailure({
-                            message: "File changed after permission approval. Read it again before editing.",
-                            error,
-                          })
-                        : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
-                    ),
+                    Effect.mapError((error) => new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
                   )
 
                 return Effect.gen(function* () {
@@ -186,9 +179,8 @@ export const Plugin = {
                   )
                   const next = splitBom(replaced)
                   const result = yield* unableToEdit(
-                    files.writeIfUnchanged({
+                    files.write({
                       target,
-                      expected: source.content,
                       content: joinBom(next.text, source.bom || next.bom),
                     }),
                   )

@@ -455,7 +455,7 @@ describe("EditTool", () => {
     ),
   )
 
-  it.live("rejects an in-place content change after matching but before conditional commit", () =>
+  it.live("applies the edit when content changes after matching", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -470,17 +470,9 @@ describe("EditTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.gen(function* () {
-              // The message-less StaleContentError cause must not erase the tool's
-              // curated failure message; the canonical error is the sole authority.
-              expect(result).toEqual({
-                status: "error",
-                error: {
-                  type: "tool.execution",
-                  message: "File changed after permission approval. Read it again before editing.",
-                },
-              })
-              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
-              expect(writes).toEqual([])
+              expect(result).toMatchObject({ status: "completed", output: { replacements: 1 } })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
+              expect(writes).toEqual([target])
             }),
           ),
         )
