@@ -5,7 +5,7 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Cause, Context, Effect, Layer, PubSub, Schema, Scope, Stream } from "effect"
+import { Cause, Context, Effect, Layer, PubSub, Schema, Stream } from "effect"
 import { KeyedMutex } from "../effect/keyed-mutex"
 import { lazy } from "../util/lazy"
 import { watch as watchFileSystem } from "node:fs"
@@ -100,67 +100,64 @@ export const layer = (options?: Options) => Layer.effect(
     const locks = KeyedMutex.makeUnsafe<string>()
 
     const acquire = Effect.fn("Watcher.acquire")(function* (input: WatchInput) {
-      const scope = yield* Scope.Scope
       const target = path.resolve(input.path)
       const directory = input.type === "file" ? path.dirname(target) : target
       const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
       const id = JSON.stringify([input.type, target, ignore])
-      const pubsub = yield* locks.withLock(id)(
-        Effect.gen(function* () {
-          const existing = entries.get(id)
-          if (existing) {
-            existing.refs++
-            return existing.pubsub
-          }
-          const pubsub = yield* PubSub.unbounded<Update>()
-          const subscription = yield* input.type === "file"
-            ? Effect.sync(() => {
-                const subscription = watchFileSystem(directory, { recursive: false }, (_event, file) => {
-                  if (file && path.resolve(directory, file.toString()) !== target) return
-                  PubSub.publishUnsafe(pubsub, {
-                    path: target,
-                    type: "update",
-                  } satisfies Update)
-                })
-                if ("on" in subscription && typeof subscription.on === "function") {
-                  subscription.on("error", (error: unknown) =>
-                    Effect.runFork(Effect.logError("watcher callback failed", { path: target, error })),
-                  )
-                }
-                return { unsubscribe: () => Promise.resolve(subscription.close()) }
-              })
-            : subscribeDirectory(native, backend, directory, ignore, pubsub)
-          if (subscription) {
-            entries.set(id, { pubsub, subscription, refs: 1 })
-            yield* Effect.logInfo("watcher started", {
-              path: target,
-              type: input.type,
-              backend: input.type === "file" ? "node" : backend,
-              ignores: ignore.length,
-            })
-            return pubsub
-          }
-          yield* PubSub.shutdown(pubsub)
-          return pubsub
-        }),
-      )
-
-      yield* Scope.addFinalizer(
-        scope,
+      return yield* Effect.acquireRelease(
         locks.withLock(id)(
           Effect.gen(function* () {
-            const entry = entries.get(id)
-            if (!entry) return
-            entry.refs--
-            if (entry.refs > 0) return
-            entries.delete(id)
-            yield* Effect.promise(() => entry.subscription.unsubscribe()).pipe(Effect.ignore)
-            yield* PubSub.shutdown(entry.pubsub)
-            yield* Effect.logInfo("watcher stopped", { path: target, type: input.type })
+            const existing = entries.get(id)
+            if (existing) {
+              existing.refs++
+              return existing.pubsub
+            }
+            const pubsub = yield* PubSub.unbounded<Update>()
+            const subscription = yield* input.type === "file"
+              ? Effect.sync(() => {
+                  const subscription = watchFileSystem(directory, { recursive: false }, (_event, file) => {
+                    if (file && path.resolve(directory, file.toString()) !== target) return
+                    PubSub.publishUnsafe(pubsub, {
+                      path: target,
+                      type: "update",
+                    } satisfies Update)
+                  })
+                  if ("on" in subscription && typeof subscription.on === "function") {
+                    subscription.on("error", (error: unknown) =>
+                      Effect.runFork(Effect.logError("watcher callback failed", { path: target, error })),
+                    )
+                  }
+                  return { unsubscribe: () => Promise.resolve(subscription.close()) }
+                })
+              : subscribeDirectory(native, backend, directory, ignore, pubsub)
+            if (subscription) {
+              entries.set(id, { pubsub, subscription, refs: 1 })
+              yield* Effect.logInfo("watcher started", {
+                path: target,
+                type: input.type,
+                backend: input.type === "file" ? "node" : backend,
+                ignores: ignore.length,
+              })
+              return pubsub
+            }
+            yield* PubSub.shutdown(pubsub)
+            return pubsub
           }),
         ),
+        () =>
+          locks.withLock(id)(
+            Effect.gen(function* () {
+              const entry = entries.get(id)
+              if (!entry) return
+              entry.refs--
+              if (entry.refs > 0) return
+              entries.delete(id)
+              yield* Effect.promise(() => entry.subscription.unsubscribe()).pipe(Effect.ignore)
+              yield* PubSub.shutdown(entry.pubsub)
+              yield* Effect.logInfo("watcher stopped", { path: target, type: input.type })
+            }),
+          ),
       )
-      return pubsub
     })
 
     const subscribe = (input: WatchInput) =>

@@ -1,7 +1,7 @@
 export * as PluginSupervisor from "./supervisor"
 
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Deferred, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Agent } from "../agent"
@@ -80,6 +80,37 @@ function parse(input: ConfigPlugin.Plugin): Operation {
   return { type: "remove", target: input.slice(1) }
 }
 
+const configuredOperations = Effect.fn("PluginSupervisor.configuredOperations")(function* (
+  entries: readonly Config.Entry[],
+  location: string,
+) {
+  return yield* Effect.forEach(
+    entries.filter((entry): entry is Config.Document => entry.type === "document"),
+    (entry) =>
+      Effect.forEach(entry.info.plugins ?? [], (input) =>
+        Effect.sync(() => {
+          const operation = parse(input)
+          if (operation.type === "remove") return operation
+          const directory = entry.path ? path.dirname(entry.path) : location
+          const target = operation.target.startsWith("file://")
+            ? fileURLToPath(operation.target)
+            : operation.target.startsWith("./") || operation.target.startsWith("../")
+              ? path.resolve(directory, operation.target)
+              : operation.target
+          return { ...operation, target }
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("invalid configured plugin target", { input, cause }).pipe(Effect.as(undefined)),
+          ),
+        ),
+      ),
+  ).pipe(
+    Effect.map((operations) =>
+      operations.flat().filter((operation): operation is Operation => operation !== undefined),
+    ),
+  )
+})
+
 const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Config.Entry[]) {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
@@ -87,20 +118,7 @@ const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Con
     entries.filter((entry): entry is Config.Directory => entry.type === "directory"),
     (entry) => discoverDirectory(fs, entry.path),
   ).pipe(Effect.map((items) => items.flat()))
-  const configured = entries
-    .filter((entry): entry is Config.Document => entry.type === "document")
-    .flatMap((entry) =>
-      (entry.info.plugins ?? []).map(parse).map((operation) => {
-        if (operation.type === "remove") return operation
-        const directory = entry.path ? path.dirname(entry.path) : location.directory
-        const target = operation.target.startsWith("file://")
-          ? fileURLToPath(operation.target)
-          : operation.target.startsWith("./") || operation.target.startsWith("../")
-            ? path.resolve(directory, operation.target)
-            : operation.target
-        return { ...operation, target }
-      }),
-    )
+  const configured = yield* configuredOperations(entries, location.directory)
   // Explicit config is applied last so it can remove auto-discovered packages.
   return yield* Effect.forEach([...discovered, ...configured], (operation) => {
     if (operation.type === "remove" || !path.isAbsolute(operation.target)) return Effect.succeed(operation)
@@ -208,27 +226,22 @@ const sourceDirectories = ["plugin", "plugins"] as const
 // Matches anything at or under <root>/{plugin,plugins}. No file-suffix check:
 // directory-level events such as renames carry no per-file paths.
 function isPluginSource(entries: readonly Config.Entry[], file: string) {
-  return entries.some(
-    (entry) =>
-      entry.type === "directory" &&
-      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
-  )
+  return Config.isSourcePath(entries, file, sourceDirectories)
 }
 
-function externalPluginTargets(entries: readonly Config.Entry[]) {
-  const roots = entries.filter((entry): entry is Config.Directory => entry.type === "directory")
+const externalPluginTargets = Effect.fn("PluginSupervisor.externalPluginTargets")(function* (
+  entries: readonly Config.Entry[],
+  location: string,
+) {
   return Array.from(
     new Set(
-      entries
-        .filter((entry): entry is Config.Document => entry.type === "document")
-        .flatMap((entry) => entry.info.plugins ?? [])
-        .map((plugin) => (typeof plugin === "string" ? plugin : plugin.package))
-        .filter((target) => target.startsWith("file://"))
-        .map((target) => fileURLToPath(target))
-        .filter((file) => !roots.some((root) => FSUtil.contains(root.path, file))),
+      (yield* configuredOperations(entries, location))
+        .filter((operation): operation is Extract<Operation, { type: "add" }> => operation.type === "add")
+        .map((operation) => operation.target)
+        .filter((target) => path.isAbsolute(target) && !isPluginSource(entries, target)),
     ),
-  )
-}
+  ).toSorted()
+})
 
 export interface Interface {
   /** Wait for the initial plugin generation and startup updates to settle. */
@@ -244,7 +257,10 @@ const layer = Layer.effect(
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
     const bus = yield* Bus.Service
+    const location = yield* Location.Service
     const watcher = yield* Watcher.Service
+    const fileUpdates = yield* PubSub.unbounded<void>()
+    const external = new Map<string, { readonly token: object; stop?: Effect.Effect<void> }>()
     const lock = Semaphore.makeUnsafe(1)
     const ready = yield* Deferred.make<void>()
     let observed = 0
@@ -268,6 +284,32 @@ const layer = Layer.effect(
         }),
       )
     })
+    const reconcileExternal = Effect.fn("PluginSupervisor.reconcileExternal")(function* () {
+      const targets = new Set(yield* externalPluginTargets(yield* config.entries(), location.directory))
+      for (const [file, entry] of external) {
+        if (targets.has(file)) continue
+        external.delete(file)
+        if (entry.stop) yield* entry.stop
+      }
+      for (const file of targets) {
+        if (external.has(file)) continue
+        const token = {}
+        external.set(file, { token })
+        const fiber = yield* watcher.subscribe({ path: file, type: "file" }).pipe(
+          Stream.runForEach(() => PubSub.publish(fileUpdates, undefined)),
+          Effect.catchCause((cause) => Effect.logWarning("failed to watch plugin", { target: file, cause })),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (external.get(file)?.token === token) external.delete(file)
+            }),
+          ),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        const current = external.get(file)
+        if (current?.token === token) current.stop = Fiber.interrupt(fiber)
+      }
+    })
+    yield* reconcileExternal()
     const sourceChanges = config
       .changes()
       .pipe(
@@ -275,19 +317,10 @@ const layer = Layer.effect(
           Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
         ),
       )
-    const externalChanges = Stream.concat(
-      Stream.fromEffect(config.entries()),
-      bus.subscribe(Event.Updated).pipe(Stream.mapEffect(() => config.entries())),
-    ).pipe(
-      Stream.switchMap((entries) =>
-        Stream.mergeAll(
-          externalPluginTargets(entries).map((file) => watcher.subscribe({ path: file, type: "file" })),
-          { concurrency: "unbounded" },
-        ),
-      ),
-    )
-    const fileChanges = Stream.merge(sourceChanges, externalChanges).pipe(Stream.debounce("100 millis"))
-    const updates = yield* Stream.merge(bus.subscribe([Event.Updated, SdkPlugins.Updated]), fileChanges).pipe(
+    const configUpdates = bus.subscribe(Event.Updated).pipe(Stream.tap(() => reconcileExternal()))
+    const busUpdates = Stream.merge(configUpdates, bus.subscribe(SdkPlugins.Updated))
+    const fileChanges = Stream.merge(sourceChanges, Stream.fromPubSub(fileUpdates)).pipe(Stream.debounce("100 millis"))
+    const updates = yield* Stream.merge(busUpdates, fileChanges).pipe(
       Stream.toQueue({ capacity: 1, strategy: "sliding" }),
     )
     const signals = yield* Stream.concat(

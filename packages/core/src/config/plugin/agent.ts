@@ -140,11 +140,7 @@ export const Plugin = define({
 // Matches anything at or under <root>/{agent,agents,mode,modes}. No file-suffix
 // check: directory-level events such as renames carry no per-file paths.
 function isAgentSource(entries: Config.Entry[], file: string) {
-  return entries.some(
-    (entry) =>
-      entry.type === "directory" &&
-      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
-  )
+  return Config.isSourcePath(entries, file, sourceDirectories)
 }
 
 function expandPermissions(rules: Permission.Ruleset, home: string): Permission.Ruleset {

@@ -1,6 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, PubSub, Schema, Stream } from "effect"
+import { Effect, Fiber, Option, PubSub, Schema, Stream } from "effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Command } from "@opencode-ai/core/command"
 import { Agent } from "@opencode-ai/core/agent"
@@ -191,21 +191,27 @@ Review files`,
         const command = yield* Command.Service
         const bus = yield* Bus.Service
         const configTest = yield* Config.Test
-        let reloads = 0
         yield* ConfigCommandPlugin.Plugin.effect(
           host({
             command: {
               list: () => Effect.die("unused command.list"),
               transform: command.transform,
-              reload: () => Effect.sync(() => reloads++).pipe(Effect.andThen(command.reload())),
+              reload: command.reload,
             },
           }),
         )
 
+        const unchanged = yield* bus
+          .subscribe(Command.Event.Updated)
+          .pipe(
+            Stream.take(1),
+            Stream.runDrain,
+            Effect.timeoutOption("700 millis"),
+            Effect.forkScoped({ startImmediately: true }),
+          )
         yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "notes", "todo.md") })
         yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
-        yield* Effect.sleep("700 millis")
-        expect(reloads).toBe(0)
+        expect(yield* Fiber.join(unchanged)).toEqual(Option.none())
 
         const changed = yield* bus
           .subscribe(Command.Event.Updated)

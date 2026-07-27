@@ -76,11 +76,7 @@ const sourceDirectories = ["command", "commands"] as const
 // Matches anything at or under <root>/{command,commands}. No file-suffix check:
 // directory-level events such as renames carry no per-file paths.
 function isCommandSource(entries: Config.Entry[], file: string) {
-  return entries.some(
-    (entry) =>
-      entry.type === "directory" &&
-      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
-  )
+  return Config.isSourcePath(entries, file, sourceDirectories)
 }
 
 function loadDirectory(fs: FSUtil.Interface, directory: string) {

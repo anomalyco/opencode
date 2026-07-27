@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Effect, Fiber, Schema, Stream } from "effect"
+import { Effect, Fiber, Option, Schema, Stream } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
@@ -373,20 +373,26 @@ Use native v2 fields.`,
         const agents = yield* Agent.Service
         const bus = yield* Bus.Service
         const configTest = yield* Config.Test
-        let reloads = 0
         yield* ConfigAgentPlugin.Plugin.effect(
           host({
             agent: {
               ...agentHost(agents),
-              reload: () => Effect.sync(() => reloads++).pipe(Effect.andThen(agents.reload())),
+              reload: agents.reload,
             },
           }),
         )
 
+        const unchanged = yield* bus
+          .subscribe(Agent.Event.Updated)
+          .pipe(
+            Stream.take(1),
+            Stream.runDrain,
+            Effect.timeoutOption("700 millis"),
+            Effect.forkScoped({ startImmediately: true }),
+          )
         yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "commands", "review.md") })
         yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
-        yield* Effect.sleep("700 millis")
-        expect(reloads).toBe(0)
+        expect(yield* Fiber.join(unchanged)).toEqual(Option.none())
 
         const changed = yield* bus
           .subscribe(Agent.Event.Updated)
