@@ -299,6 +299,10 @@ Vos MCP sont disponibles sous forme d'outils dans OpenCode, aux côtés des outi
 
 Cela signifie que vous pouvez les activer ou les désactiver globalement.
 
+:::note
+`tools` est **obsolète**. Préférez le champ [`permission`](/docs/permissions) pour les nouvelles configurations, les mises à jour et un contrôle plus fines.
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ Cela signifie que vous pouvez les activer ou les désactiver globalement.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ Nous pouvons également utiliser un modèle global pour désactiver tous les MCP
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ Ici, nous utilisons le modèle global `my-mcp*` pour désactiver tous les MCP.
 Si vous disposez d'un grand nombre de serveurs MCP, vous souhaiterez peut-être les activer uniquement par agent et les désactiver globalement. Pour ce faire :
 
 1. Désactivez-le en tant qu'outil à l'échelle mondiale.
-2. Dans votre [agent config](/docs/agents#tools), activez le serveur MCP en tant qu'outil.
+2. Dans votre [agent config](/docs/agents#permissions), activez le serveur MCP en tant qu'outil.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ Si vous disposez d'un grand nombre de serveurs MCP, vous souhaiterez peut-être 
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

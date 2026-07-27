@@ -299,6 +299,10 @@ MCP-ene dine er tilgjengelige som verktøy i OpenCode, sammen med innebygde verk
 
 Dette betyr at du kan aktivere eller deaktivere dem globalt.
 
+:::note
+`tools` er **foreldet**. Foretrekk feltet [`permission`](/docs/permissions) for nye konfigurasjoner, oppdateringer og mer finjustert kontroll.
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ Dette betyr at du kan aktivere eller deaktivere dem globalt.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ Vi kan også bruke et globmønster for å deaktivere alle matchende MCP-er.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ Her bruker vi globmønsteret `my-mcp*` for å deaktivere alle MCP-er.
 Hvis du har et stort antall MCP-servere, vil du kanskje bare aktivere dem per agent og deaktivere dem globalt. Slik gjør du dette:
 
 1. Deaktiver det som et verktøy globalt.
-2. Aktiver MCP-serveren som et verktøy i [agent config](/docs/agents#tools).
+2. Aktiver MCP-serveren som et verktøy i [agent config](/docs/agents#permissions).
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ Hvis du har et stort antall MCP-servere, vil du kanskje bare aktivere dem per ag
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

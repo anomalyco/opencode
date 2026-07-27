@@ -208,19 +208,23 @@ Mevcut seçenekler:
 
 ---
 
-### Araçlar
+### İzinler
 
-Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yönetebilirsiniz.
+Bir LLM'nin kullanabileceği araçları `permission` seçeneği aracılığıyla yönetebilirsiniz.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` **eski**. Yeni yapılandırmalar, güncellemeler ve daha hassas kontrol için [`permission`](/docs/permissions) alanını tercih edin.
+:::
 
 [Araçlar hakkında daha fazla bilgi](/docs/tools).
 
@@ -326,11 +330,11 @@ opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
-        "bash": true,
+        "write": "deny",
+        "edit": "deny",
+        "bash": "allow",
       },
     },
   },

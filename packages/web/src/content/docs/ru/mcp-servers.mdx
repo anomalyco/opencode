@@ -299,6 +299,10 @@ opencode mcp debug my-oauth-server
 
 Это означает, что вы можете включать или отключать их глобально.
 
+:::note
+`tools` устарел. Используйте поле [`permission`](/docs/permissions) для новых конфигураций, обновлений и более точного контроля.
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ opencode mcp debug my-oauth-server
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ opencode mcp debug my-oauth-server
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ opencode mcp debug my-oauth-server
 Если у вас большое количество серверов MCP, вы можете включить их только для каждого агента и отключить глобально. Для этого:
 
 1. Отключите его как инструмент глобально.
-2. В вашей [конфигурации агента](/docs/agents#tools) включите сервер MCP в качестве инструмента.
+2. В вашей [конфигурации агента](/docs/agents#permissions) включите сервер MCP в качестве инструмента.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ opencode mcp debug my-oauth-server
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

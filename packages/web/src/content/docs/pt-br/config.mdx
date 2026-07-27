@@ -208,19 +208,23 @@ Opções disponíveis:
 
 ---
 
-### Ferramentas
+### Permissões
 
-Você pode gerenciar as ferramentas que um LLM pode usar através da opção `tools`.
+Você pode gerenciar as ferramentas que um LLM pode usar através da opção `permission`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` está **obsoleto**. Prefira o campo [`permission`](/docs/permissions) para novas configurações, atualizações e controle mais refinado.
+:::
 
 [Saiba mais sobre ferramentas aqui](/docs/tools).
 
@@ -326,10 +330,10 @@ Você pode configurar agentes especializados para tarefas específicas através 
       "description": "Revisa código para melhores práticas e potenciais problemas",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "Você é um revisor de código. Foque em segurança, performance e manutenibilidade.",
-      "tools": {
+      "permission": {
         // Desabilitar ferramentas de modificação de arquivo para agente de apenas revisão
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

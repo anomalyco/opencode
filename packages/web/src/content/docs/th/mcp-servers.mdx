@@ -299,6 +299,10 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 
 ซึ่งหมายความว่าคุณสามารถเปิดหรือปิดใช้งานได้ทั่วโลก
 
+:::note
+`tools` ล้าสมัยแล้ว ควรใช้ฟิลด์ [`permission`](/docs/permissions) สำหรับการกำหนดค่าใหม่ การอัปเดต และการควบคุมที่ละเอียดยิ่งขึ้น
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -312,8 +316,8 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -333,8 +337,8 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -348,7 +352,7 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 หากคุณมีเซิร์ฟเวอร์ MCP จำนวนมาก คุณอาจต้องการเปิดใช้งานเซิร์ฟเวอร์เหล่านี้ต่อตัวแทนเท่านั้น และปิดใช้งานเซิร์ฟเวอร์เหล่านั้นทั่วโลก เมื่อต้องการทำสิ่งนี้:
 
 1. ปิดการใช้งานเป็นเครื่องมือทั่วโลก
-2. ใน [agent config](/docs/agents#tools) ให้เปิดใช้งานเซิร์ฟเวอร์ MCP เป็นเครื่องมือ
+2. ใน [agent config](/docs/agents#permissions) ให้เปิดใช้งานเซิร์ฟเวอร์ MCP เป็นเครื่องมือ
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -365,8 +369,8 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

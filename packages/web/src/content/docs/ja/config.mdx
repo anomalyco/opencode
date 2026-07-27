@@ -210,19 +210,23 @@ TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファ�
 
 ---
 
-### ツール
+### 権限
 
-LLM が使用できるツールは、`tools` オプションを通じて管理できます。
+LLM が使用できるツールは、`permission` オプションを通じて管理できます。
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` は **非推奨** です。新しい構成、更新、より細かい制御には [`permission`](/docs/permissions) フィールドを使用してください。
+:::
 
 [ツールの詳細については、こちらをご覧ください](/docs/tools)。
 
@@ -328,10 +332,10 @@ UI テーマを `tui.json` で設定します。
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

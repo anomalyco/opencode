@@ -211,19 +211,23 @@ opencode run "Hello world"
 
 ---
 
-### เครื่องมือ
+### สิทธิ์
 
-คุณสามารถจัดการเครื่องมือที่ LLM สามารถใช้ได้ผ่านตัวเลือก `tools`
+คุณสามารถจัดการเครื่องมือที่ LLM สามารถใช้ได้ผ่านตัวเลือก `permission`
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` ล้าสมัยแล้ว ควรใช้ฟิลด์ [`permission`](/docs/permissions) สำหรับการกำหนดค่าใหม่ การอัปเดต และการควบคุมที่ละเอียดยิ่งขึ้น
+:::
 
 [เรียนรู้เพิ่มเติมเกี่ยวกับเครื่องมือที่นี่](/docs/tools)
 
@@ -329,10 +333,10 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

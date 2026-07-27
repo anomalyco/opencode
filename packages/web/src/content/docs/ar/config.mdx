@@ -207,19 +207,23 @@ opencode run "Hello world"
 
 ---
 
-### الأدوات
+### الأذونات
 
-يمكنك إدارة الأدوات التي يمكن لـ LLM استخدامها عبر الخيار `tools`.
+يمكنك إدارة الأدوات التي يمكن لـ LLM استخدامها عبر الخيار `permission`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` مُهمَّل. منفضل استخدام حقل [`permission`](/docs/permissions) للإعدادات الجديدة والتحديثات والتحكم الدقيق.
+:::
 
 [تعرف على المزيد حول الأدوات هنا](/docs/tools).
 
@@ -325,10 +329,10 @@ opencode run "Hello world"
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // تعطيل أدوات تعديل الملفات لوكيل المراجعة فقط
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

@@ -189,8 +189,8 @@ Potpuno iskljucite skills za agente koji ih ne bi trebali koristiti:
 
 ```yaml
 ---
-tools:
-  skill: false
+permission:
+  skill: deny
 ---
 ```
 
@@ -200,8 +200,8 @@ tools:
 {
   "agent": {
     "plan": {
-      "tools": {
-        "skill": false
+      "permission": {
+        "skill": "deny"
       }
     }
   }

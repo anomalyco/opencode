@@ -189,8 +189,8 @@ Deshabilite completamente las habilidades para los agentes que no deberían usar
 
 ```yaml
 ---
-tools:
-  skill: false
+permission:
+  skill: deny
 ---
 ```
 
@@ -200,8 +200,8 @@ tools:
 {
   "agent": {
     "plan": {
-      "tools": {
-        "skill": false
+      "permission": {
+        "skill": "deny"
       }
     }
   }

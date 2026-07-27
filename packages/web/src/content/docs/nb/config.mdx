@@ -209,19 +209,23 @@ Tilgjengelige alternativer:
 
 ---
 
-### Verktøy
+### Tillatelser
 
-Du kan administrere verktøyene en LLM kan bruke gjennom alternativet `tools`.
+Du kan administrere verktøyene en LLM kan bruke gjennom alternativet `permission`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` er **foreldet**. Foretrekk feltet [`permission`](/docs/permissions) for nye konfigurasjoner, oppdateringer og mer finjustert kontroll.
+:::
 
 [Les mer om verktøy her](/docs/tools).
 
@@ -327,10 +331,10 @@ Du kan konfigurere spesialiserte agenter for spesifikke oppgaver gjennom alterna
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },

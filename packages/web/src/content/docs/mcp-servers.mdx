@@ -300,6 +300,10 @@ Your MCPs are available as tools in OpenCode, alongside built-in tools. So you c
 
 This means that you can enable or disable them globally.
 
+:::note
+`tools` is **deprecated**. Prefer the [`permission`](/docs/permissions) field for new configs, updates and more fine-grained control.
+:::
+
 ```json title="opencode.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -313,8 +317,8 @@ This means that you can enable or disable them globally.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp-foo": false
+  "permission": {
+    "my-mcp-foo": "deny"
   }
 }
 ```
@@ -334,8 +338,8 @@ We can also use a glob pattern to disable all matching MCPs.
       "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   }
 }
 ```
@@ -349,7 +353,7 @@ Here we are using the glob pattern `my-mcp*` to disable all MCPs.
 If you have a large number of MCP servers you may want to only enable them per agent and disable them globally. To do this:
 
 1. Disable it as a tool globally.
-2. In your [agent config](/docs/agents#tools), enable the MCP server as a tool.
+2. In your [agent config](/docs/agents#permissions), enable the MCP server as a tool.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -361,13 +365,13 @@ If you have a large number of MCP servers you may want to only enable them per a
       "enabled": true
     }
   },
-  "tools": {
-    "my-mcp*": false
+  "permission": {
+    "my-mcp*": "deny"
   },
   "agent": {
     "my-agent": {
-      "tools": {
-        "my-mcp*": true
+      "permission": {
+        "my-mcp*": "allow"
       }
     }
   }

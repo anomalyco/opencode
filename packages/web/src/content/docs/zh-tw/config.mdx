@@ -209,19 +209,23 @@ opencode run "Hello world"
 
 ---
 
-### 工具
+### 權限
 
-您可以透過 `tools` 選項管理 LLM 可以使用的工具。
+您可以透過 `permission` 選項管理 LLM 可以使用的工具。
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false
+  "permission": {
+    "write": "deny",
+    "bash": "deny"
   }
 }
 ```
+
+:::note
+`tools` 已被**棄用**。對於新設定、更新和更細粒度的控制，請優先使用 [`permission`](/docs/permissions) 欄位。
+:::
 
 [在此了解更多關於工具的資訊](/docs/tools)。
 
@@ -327,10 +331,10 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
       "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
+      "permission": {
         // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
+        "write": "deny",
+        "edit": "deny",
       },
     },
   },
