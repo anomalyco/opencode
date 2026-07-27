@@ -54,6 +54,7 @@ it.instance("returns default native agents when no config", () =>
     expect(names).toContain("explore")
     expect(names).toContain("heavy")
     expect(names).toContain("council")
+    expect(names).toContain("research")
     expect(names).toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
@@ -64,6 +65,7 @@ it.instance("workflow agents expose only their matching orchestration tool", () 
   Effect.gen(function* () {
     const heavy = yield* load((svc) => svc.get("heavy"))
     const council = yield* load((svc) => svc.get("council"))
+    const research = yield* load((svc) => svc.get("research"))
     expect(heavy?.mode).toBe("primary")
     expect(heavy?.steps).toBe(3)
     expect(evalPerm(heavy, "heavy_run")).toBe("allow")
@@ -74,6 +76,12 @@ it.instance("workflow agents expose only their matching orchestration tool", () 
     expect(evalPerm(council, "council_run")).toBe("allow")
     expect(evalPerm(council, "heavy_run")).toBe("deny")
     expect(evalPerm(council, "read")).toBe("deny")
+    expect(research?.mode).toBe("primary")
+    expect(research?.steps).toBe(3)
+    expect(evalPerm(research, "research_run")).toBe("allow")
+    expect(evalPerm(research, "heavy_run")).toBe("deny")
+    expect(evalPerm(research, "council_run")).toBe("deny")
+    expect(evalPerm(research, "read")).toBe("deny")
   }),
 )
 
@@ -84,12 +92,14 @@ it.instance(
       const agents = yield* load((svc) => svc.list())
       expect(agents.map((agent) => agent.name)).not.toContain("heavy")
       expect(agents.map((agent) => agent.name)).not.toContain("council")
+      expect(agents.map((agent) => agent.name)).not.toContain("research")
     }),
   {
     config: {
       workflows: {
         heavy: false,
         council: { enabled: false },
+        research: false,
       },
     },
   },
@@ -790,6 +800,7 @@ it.instance(
       workflows: {
         heavy: false,
         council: false,
+        research: false,
       },
     },
   },

@@ -25,6 +25,7 @@ import { Workflow } from "@opencode-ai/core/workflow"
 import { TestWorkflow } from "../fixture/workflow"
 import { WorkflowSchema } from "@opencode-ai/core/workflow/schema"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { Truncate } from "@/tool/truncate"
 
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
@@ -80,9 +81,17 @@ const withWorkflow = testEffect(
                   stage: "execution",
                   root_session_id: "ses_heavy_root",
                   session_id: "ses_heavy_worker",
+                  parent_session_id: "ses_heavy_root",
                   child_status: "running",
+                  child_activity: "provider_active",
                   child_agent: "heavy-writer",
                   child_title: "Heavy worker",
+                  node_id: "heavy-child",
+                  parent_node_id: "heavy-root",
+                  node_depth: 1,
+                  depends_on: [],
+                  report_path: "/project/.opencode/reports/heavy/stages/ses_heavy_worker.md",
+                  prompt_bytes: 4096,
                   started_at: 100,
                   updated_at: 100,
                   elapsed_ms: 0,
@@ -96,9 +105,16 @@ const withWorkflow = testEffect(
                   stage: "execution",
                   root_session_id: "ses_heavy_root",
                   session_id: "ses_heavy_worker",
+                  parent_session_id: "ses_heavy_root",
                   child_status: "completed",
                   child_agent: "heavy-writer",
                   child_title: "Heavy worker",
+                  node_id: "heavy-child",
+                  parent_node_id: "heavy-root",
+                  node_depth: 1,
+                  depends_on: [],
+                  report_path: "/project/.opencode/reports/heavy/stages/ses_heavy_worker.md",
+                  prompt_bytes: 4096,
                   started_at: 100,
                   updated_at: 500,
                   elapsed_ms: 400,
@@ -112,9 +128,15 @@ const withWorkflow = testEffect(
                   stage: "perspective",
                   root_session_id: "ses_heavy_council_root",
                   session_id: "ses_heavy_council_risk",
+                  parent_session_id: "ses_heavy_council_root",
                   child_status: "completed",
                   child_agent: "council-perspective",
                   child_title: "Council: risk",
+                  node_id: "risk",
+                  parent_node_id: "council-root",
+                  node_depth: 1,
+                  report_path: "/project/.opencode/reports/heavy/stages/ses_heavy_council_risk.md",
+                  prompt_bytes: 2048,
                   started_at: 600,
                   updated_at: 900,
                   elapsed_ms: 300,
@@ -128,8 +150,64 @@ const withWorkflow = testEffect(
               WorkflowSchema.HeavyOutput.make({
                 workflow: "heavy",
                 status: "completed",
+                execution_status: "partial",
+                artifact_status: "available",
+                evidence_status: "completed",
                 summary: "Recursive work completed",
+                final_response: "The durable Heavy synthesis is authoritative.",
+                usage: {
+                  input: 100,
+                  output: 20,
+                  reasoning: 5,
+                  cache_read: 50,
+                  cache_write: 0,
+                  cost: 0,
+                  cost_status: "unavailable",
+                },
                 root_session_id: SessionSchema.ID.make("ses_heavy_root"),
+                report_path: "/project/.opencode/reports/heavy/HEAVY_REPORT.md",
+                source_provenance: [
+                  {
+                    url: "https://example.com/workflow",
+                    report_paths: ["/project/.opencode/reports/heavy/stages/ses_heavy_worker.md"],
+                  },
+                ],
+                session_manifest: [
+                  {
+                    session_id: SessionSchema.ID.make("ses_nested_council_debater"),
+                    parent_session_id: SessionSchema.ID.make("ses_nested_council_plan"),
+                    run_id: "run-heavy-council",
+                    parent_run_id: "run-heavy-root",
+                    workflow: "council",
+                    workflow_depth: 1,
+                    status: "completed",
+                    agent: "council-debater",
+                    title: "Nested Council debate",
+                    stage: "debate",
+                    issue: "issue-1",
+                    round: 1,
+                    report_path: "/project/.opencode/reports/heavy/stages/ses_nested_council_debater.md",
+                    prompt_bytes: 8192,
+                    started_at: 1_000,
+                    updated_at: 1_500,
+                    elapsed_ms: 500,
+                  },
+                ],
+                delegations: [
+                  {
+                    id: "run-heavy-council",
+                    parent_id: "run-heavy-root",
+                    parent_session_id: SessionSchema.ID.make("ses_heavy_worker"),
+                    workflow: "council",
+                    depth: 1,
+                    objective: "Challenge the recursive implementation",
+                    status: "completed",
+                    summary: "Nested Council preserved a minority position",
+                    root_session_id: SessionSchema.ID.make("ses_nested_council"),
+                    session_ids: [SessionSchema.ID.make("ses_nested_council_debater")],
+                    report_path: "/project/.opencode/reports/heavy/runs/run-heavy-council/COUNCIL_REPORT.md",
+                  },
+                ],
                 nodes: [
                   {
                     id: "heavy-root",
@@ -257,6 +335,21 @@ const withWorkflow = testEffect(
                 summary: "Debate completed",
                 root_session_id: SessionSchema.ID.make("ses_council_root"),
                 synthesis_session_id: SessionSchema.ID.make("ses_council_synthesis"),
+                report_path: "/project/.opencode/reports/council/COUNCIL_REPORT.md",
+                delegations: [
+                  {
+                    id: "run-council-heavy",
+                    parent_id: "run-council-root",
+                    parent_session_id: SessionSchema.ID.make("ses_council_perspective"),
+                    workflow: "heavy",
+                    depth: 1,
+                    objective: "Validate the disputed implementation detail",
+                    status: "completed",
+                    summary: "Nested Heavy validated the implementation",
+                    root_session_id: SessionSchema.ID.make("ses_nested_heavy"),
+                    report_path: "/project/.opencode/reports/council/runs/run-council-heavy/HEAVY_REPORT.md",
+                  },
+                ],
                 perspectives: [
                   {
                     perspective_id: "safety",
@@ -296,6 +389,171 @@ const withWorkflow = testEffect(
             ),
           )
         },
+      }),
+    ],
+  ]),
+)
+const withResearch = testEffect(
+  LayerNode.compile(root, [
+    [Config.node, configLayer],
+    [RuntimeFlags.node, RuntimeFlags.layer()],
+    [
+      Workflow.node,
+      TestWorkflow.layer({
+        research: (_input, context) =>
+          (
+            context.onProgress?.({
+              structured: {
+                workflow: "research",
+                phase: "investigating",
+                stage: "evidence",
+                root_session_id: "ses_research_plan",
+                session_id: "ses_research_evidence",
+                parent_session_id: "ses_research_plan",
+                child_status: "completed",
+                child_agent: "research-reader",
+                child_title: "Research evidence",
+                node_id: "evidence-1",
+                parent_node_id: "research-root",
+                node_depth: 1,
+                report_path: "/project/.opencode/reports/research/stages/ses_research_evidence.md",
+                started_at: 100,
+                updated_at: 500,
+                elapsed_ms: 400,
+              },
+              text: "Research evidence completed",
+            }) ?? Effect.void
+          ).pipe(
+            Effect.as(
+              WorkflowSchema.ResearchOutput.make({
+                workflow: "research",
+                status: "completed",
+                execution_status: "completed",
+                artifact_status: "available",
+                evidence_status: "completed",
+                summary: "Adaptive research completed",
+                final_response: "The standalone Research synthesis is authoritative.",
+                root_session_id: SessionSchema.ID.make("ses_research_plan"),
+                report_path: "/project/.opencode/reports/research/RESEARCH_REPORT.md",
+                trace_path: "/project/.opencode/reports/research/RESEARCH_TRACE.md",
+                graph_path: "/project/.opencode/reports/research/RESEARCH_GRAPH.json",
+                nodes: [
+                  {
+                    id: "research-root",
+                    depth: 0,
+                    title: "Research root",
+                    objective: "Investigate the decision",
+                    planning_session_id: SessionSchema.ID.make("ses_research_plan"),
+                    synthesis_session_id: SessionSchema.ID.make("ses_research_synthesis"),
+                    contract: {
+                      rationale: "Test the governing claim.",
+                      objective: "Investigate the decision",
+                      deliverables: ["Standalone report"],
+                      assumptions: [],
+                      unknowns: [],
+                      falsifiers: [],
+                      tasks: [],
+                    },
+                    waves: [
+                      {
+                        number: 1,
+                        rationale: "Initial contract",
+                        tasks: [
+                          {
+                            id: "evidence-1",
+                            title: "Research evidence",
+                            question: "What does the evidence show?",
+                            priority: "critical",
+                            role: "evidence",
+                            mode: "leaf",
+                            status: "completed",
+                            session_id: SessionSchema.ID.make("ses_research_evidence"),
+                            report_path: "/project/.opencode/reports/research/stages/ses_research_evidence.md",
+                            reused: false,
+                          },
+                        ],
+                        assessment_session_id: SessionSchema.ID.make("ses_research_assessment"),
+                        assessment: {
+                          decision: "stop",
+                          rationale: "Coverage is complete.",
+                          information_gain: "low",
+                          coverage: "complete",
+                          addressed_gap_ids: [],
+                          tasks: [],
+                          disputes: [],
+                          deliverable_coverage: [
+                            {
+                              deliverable: "Standalone report",
+                              status: "covered",
+                              reason: "The completed evidence covers the requested report.",
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                    result: {
+                      status: "completed",
+                      summary: "Adaptive research completed",
+                      claims: [
+                        {
+                          id: "research-root:claim",
+                          statement: "The evidence supports the decision",
+                          kind: "fact",
+                          status: "supported",
+                          confidence: "high",
+                          evidence_ids: [],
+                          contradicts: [],
+                          assumptions: [],
+                        },
+                      ],
+                      evidence: [],
+                      gaps: [],
+                      disputes: [],
+                      assumptions: [],
+                      conclusions: ["Proceed"],
+                      recommendations: [],
+                      limitations: [],
+                    },
+                  },
+                ],
+                graph: {
+                  claims: [
+                    {
+                      id: "research-root:claim",
+                      statement: "The evidence supports the decision",
+                      kind: "fact",
+                      status: "supported",
+                      confidence: "high",
+                      evidence_ids: [],
+                      contradicts: [],
+                      assumptions: [],
+                    },
+                  ],
+                  evidence: [],
+                  gaps: [],
+                  disputes: [],
+                  assumptions: [],
+                },
+                evaluation: {
+                  report_words: 1_500,
+                  report_sections: 6,
+                  standalone_pass: true,
+                  claims: 1,
+                  supported_claims: 1,
+                  traceable_supported_claims: 0,
+                  evidence_records: 0,
+                  verified_sources: 0,
+                  open_critical_gaps: 0,
+                  consequential_disputes: 0,
+                  council_reviews: 0,
+                  evidence_tasks: 1,
+                  reused_artifacts: 0,
+                  coverage_complete: true,
+                },
+                councils: [],
+              }),
+            ),
+          ),
       }),
     ],
   ]),
@@ -354,10 +612,47 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("registers Heavy and Council compatibility tools", () =>
+  it.instance("registers Heavy, Council, and Research compatibility tools", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
-      expect(yield* registry.ids()).toEqual(expect.arrayContaining(["heavy_run", "council_run"]))
+      expect(yield* registry.ids()).toEqual(expect.arrayContaining(["heavy_run", "council_run", "research_run"]))
+    }),
+  )
+
+  withResearch.instance("Research bridge preserves the claim graph and child session metadata", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const research = yield* agents.get("research")
+      if (!research) throw new Error("Research agent not found")
+      const tool = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: research,
+      })).find((item) => item.id === "research_run")
+      if (!tool) throw new Error("Research tool not found")
+      const result = yield* tool.execute(
+        { question: "Investigate the decision", effort: "deep" },
+        {
+          sessionID: SessionID.make("ses_parent"),
+          messageID: MessageID.make("msg_parent"),
+          callID: "call_research",
+          agent: "research",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const handoff = JSON.parse(result.output)
+      expect(result.metadata.workflow).toBe("research")
+      expect(result.metadata.rootSessionID).toBe("ses_research_plan")
+      expect(result.metadata.reportPath).toBe("/project/.opencode/reports/research/RESEARCH_REPORT.md")
+      expect(result.metadata.childSessionIDs).toContain("ses_research_evidence")
+      expect(handoff.graph_path).toBe("/project/.opencode/reports/research/RESEARCH_GRAPH.json")
+      expect(handoff.claim_graph.claims).toEqual([
+        expect.objectContaining({ id: "research-root:claim", status: "supported" }),
+      ])
     }),
   )
 
@@ -393,13 +688,16 @@ describe("tool.registry", () => {
       )
 
       expect(result.metadata.rootSessionID).toBe("ses_heavy_root")
+      expect(result.metadata.reportPath).toBe("/project/.opencode/reports/heavy/HEAVY_REPORT.md")
       expect(result.metadata.childSessionIDs).toEqual([
         "ses_heavy_root",
         "ses_heavy_worker",
         "ses_heavy_council_risk",
+        "ses_nested_council_debater",
         "ses_heavy_synthesis",
         "ses_heavy_council_root",
         "ses_heavy_council_synthesis",
+        "ses_nested_council",
       ])
       expect(updates[0]?.title).toBe("Heavy is executing a worker")
       expect(updates[0]?.metadata).toMatchObject({
@@ -413,10 +711,18 @@ describe("tool.registry", () => {
         childSessions: [
           {
             sessionID: "ses_heavy_worker",
+            parentSessionID: "ses_heavy_root",
             status: "running",
+            workflow: "heavy",
             agent: "heavy-writer",
             title: "Heavy worker",
             stage: "execution",
+            nodeID: "heavy-child",
+            parentNodeID: "heavy-root",
+            depth: 1,
+            dependsOn: [],
+            reportPath: "/project/.opencode/reports/heavy/stages/ses_heavy_worker.md",
+            promptBytes: 4096,
             elapsedMs: 0,
           },
         ],
@@ -428,13 +734,28 @@ describe("tool.registry", () => {
         activeSessionID: "ses_heavy_council_risk",
         councilUsed: true,
       })
-      expect(result.metadata.childSessions).toEqual([
+      expect(
+        result.metadata.childSessions.filter((session: { sessionID: string }) =>
+          ["ses_heavy_worker", "ses_heavy_council_risk", "ses_nested_council_debater"].includes(session.sessionID),
+        ),
+      ).toEqual([
         {
           sessionID: "ses_heavy_worker",
+          parentSessionID: "ses_heavy_root",
           status: "completed",
+          workflow: "heavy",
           agent: "heavy-writer",
           title: "Heavy worker",
           stage: "execution",
+          nodeID: "heavy-child",
+          parentNodeID: "heavy-root",
+          depth: 1,
+          capability: undefined,
+          dependsOn: [],
+          issue: undefined,
+          round: undefined,
+          reportPath: "/project/.opencode/reports/heavy/stages/ses_heavy_worker.md",
+          promptBytes: 4096,
           startedAt: 100,
           updatedAt: 500,
           elapsedMs: 400,
@@ -442,16 +763,54 @@ describe("tool.registry", () => {
         },
         {
           sessionID: "ses_heavy_council_risk",
+          parentSessionID: "ses_heavy_council_root",
           status: "completed",
+          workflow: "council",
           agent: "council-perspective",
           title: "Council: risk",
           stage: "perspective",
+          nodeID: "risk",
+          parentNodeID: "council-root",
+          depth: 1,
+          capability: undefined,
+          dependsOn: undefined,
+          issue: undefined,
+          round: undefined,
+          reportPath: "/project/.opencode/reports/heavy/stages/ses_heavy_council_risk.md",
+          promptBytes: 2048,
           startedAt: 600,
           updatedAt: 900,
           elapsedMs: 300,
           error: undefined,
         },
+        {
+          sessionID: "ses_nested_council_debater",
+          parentSessionID: "ses_nested_council_plan",
+          runID: "run-heavy-council",
+          parentRunID: "run-heavy-root",
+          status: "completed",
+          workflow: "council",
+          agent: "council-debater",
+          title: "Nested Council debate",
+          stage: "debate",
+          nodeID: undefined,
+          parentNodeID: undefined,
+          depth: 1,
+          capability: undefined,
+          dependsOn: undefined,
+          issue: "issue-1",
+          round: 1,
+          reportPath: "/project/.opencode/reports/heavy/stages/ses_nested_council_debater.md",
+          promptBytes: 8192,
+          startedAt: 1000,
+          updatedAt: 1500,
+          elapsedMs: 500,
+          error: undefined,
+        },
       ])
+      expect(new Set(result.metadata.childSessions.map((session: { sessionID: string }) => session.sessionID))).toEqual(
+        new Set(result.metadata.childSessionIDs),
+      )
       expect(result.metadata).toMatchObject({
         status: "completed",
         phase: "completed",
@@ -471,6 +830,13 @@ describe("tool.registry", () => {
             stage: "execution",
           },
           {
+            sessionID: "ses_nested_council",
+            status: "completed",
+            title: "Council: Challenge the recursive implementation",
+            stage: "council-delegation",
+            reportPath: "/project/.opencode/reports/heavy/runs/run-heavy-council/COUNCIL_REPORT.md",
+          },
+          {
             sessionID: "ses_heavy_council_synthesis",
             status: "completed",
             title: "Council synthesis",
@@ -484,39 +850,55 @@ describe("tool.registry", () => {
           },
         ],
       })
-      expect(result.output).toContain("Nested evidence survives")
-      expect(result.output).toContain("src/workflow.ts")
-      expect(result.metadata.truncated).toBe(true)
+      expect(Buffer.byteLength(result.output, "utf8")).toBeLessThanOrEqual(Truncate.MAX_BYTES)
+      expect(result.metadata.truncated).toBe(false)
+      expect(result.metadata.outputPath).toBeUndefined()
       const handoff = JSON.parse(result.output.split("\n", 1)[0] ?? "{}")
       expect(handoff.handoff_compacted).toBe(true)
       expect(handoff.final_report.summary).toBe("Recursive work completed")
       expect(handoff.final_report.session_id).toBe("ses_heavy_synthesis")
+      expect(handoff.final_response).toBe(
+        "The durable Heavy synthesis is authoritative.\n\n[Full Heavy report](/project/.opencode/reports/heavy/HEAVY_REPORT.md)",
+      )
+      expect(handoff.report_link).toBe("[Full Heavy report](/project/.opencode/reports/heavy/HEAVY_REPORT.md)")
+      expect(handoff.execution_status).toBe("partial")
+      expect(handoff.artifact_status).toBe("available")
+      expect(handoff.evidence_status).toBe("completed")
+      expect(handoff.usage.input).toBe(100)
       expect(handoff.source_manifest).toEqual(["https://example.com/workflow"])
+      expect(handoff.source_provenance).toEqual([
+        expect.objectContaining({
+          url: "https://example.com/workflow",
+        }),
+      ])
+      expect(handoff.coverage_diagnostics).toEqual({
+        coverage_complete: true,
+        unaccounted_artifacts: [],
+      })
       expect(handoff.council_review.summary).toBe("Independent review supports the result")
       expect(handoff.council_report_manifest[0]).toMatchObject({
         kind: "synthesis",
         session_id: "ses_heavy_council_synthesis",
       })
+      expect(handoff.delegation_manifest).toEqual([
+        expect.objectContaining({
+          workflow: "council",
+          root_session_id: "ses_nested_council",
+          report_path: "/project/.opencode/reports/heavy/runs/run-heavy-council/COUNCIL_REPORT.md",
+        }),
+      ])
       expect(handoff.report_manifest).toEqual([
         expect.objectContaining({
           title: "Inspect the recursive implementation",
           status: "completed",
           session_id: "ses_heavy_worker",
-          summary: "The worker submitted its durable report",
         }),
       ])
-      expect(handoff.session_manifest).toEqual([
-        expect.objectContaining({
-          session_id: "ses_heavy_worker",
-          status: "completed",
-          agent: "heavy-writer",
-        }),
-        expect.objectContaining({
-          session_id: "ses_heavy_council_risk",
-          status: "completed",
-          agent: "council-perspective",
-        }),
-      ])
+      expect(
+        handoff.session_manifest.filter(
+          (session: { status?: string }) => session.status === "failed" || session.status === "timed_out",
+        ),
+      ).toEqual([])
     }),
   )
 
@@ -552,11 +934,13 @@ describe("tool.registry", () => {
       )
 
       expect(result.metadata.rootSessionID).toBe("ses_council_root")
+      expect(result.metadata.reportPath).toBe("/project/.opencode/reports/council/COUNCIL_REPORT.md")
       expect(result.metadata.childSessionIDs).toEqual([
         "ses_council_root",
         "ses_council_perspective",
         "ses_council_synthesis",
         "ses_council_debate",
+        "ses_nested_heavy",
       ])
       expect(updates[0]?.metadata).toMatchObject({
         workflow: "council",
@@ -588,16 +972,25 @@ describe("tool.registry", () => {
         status: "partial",
         title: "Council synthesis",
         stage: "final",
+        reportPath: "/project/.opencode/reports/council/COUNCIL_REPORT.md",
       })
-      expect(result.metadata.childSessions).toMatchObject([
+      expect(
+        result.metadata.childSessions.filter((session: { sessionID: string }) =>
+          ["ses_council_perspective", "ses_council_synthesis"].includes(session.sessionID),
+        ),
+      ).toMatchObject([
         { sessionID: "ses_council_perspective", status: "timed_out" },
         { sessionID: "ses_council_synthesis", status: "completed" },
       ])
+      expect(new Set(result.metadata.childSessions.map((session: { sessionID: string }) => session.sessionID))).toEqual(
+        new Set(result.metadata.childSessionIDs),
+      )
       expect(result.output).toContain("Speed alone is insufficient")
       expect(result.output).toContain("Validation is required")
       const handoff = JSON.parse(result.output.split("\n", 1)[0] ?? "{}")
       expect(handoff.final_report.consensus).toEqual(["Validation is required"])
       expect(handoff.final_report.session_id).toBe("ses_council_synthesis")
+      expect(handoff.final_response).toBe("[Full Council report](/project/.opencode/reports/council/COUNCIL_REPORT.md)")
       expect(handoff.perspective_reports).toEqual([
         expect.objectContaining({
           perspective_id: "safety",
@@ -609,6 +1002,13 @@ describe("tool.registry", () => {
           issue_id: "issue-1",
           perspective_id: "safety",
           session_id: "ses_council_debate",
+        }),
+      ])
+      expect(handoff.delegation_manifest).toEqual([
+        expect.objectContaining({
+          workflow: "heavy",
+          root_session_id: "ses_nested_heavy",
+          report_path: "/project/.opencode/reports/council/runs/run-council-heavy/HEAVY_REPORT.md",
         }),
       ])
     }),

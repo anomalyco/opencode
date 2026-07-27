@@ -220,7 +220,11 @@ export function Session() {
   const workflowChildren = createMemo(() =>
     messages().flatMap((message) =>
       (sync.data.part[message.id] ?? []).flatMap((part) => {
-        if (part.type !== "tool" || (part.tool !== "heavy_run" && part.tool !== "council_run")) return []
+        if (
+          part.type !== "tool" ||
+          (part.tool !== "heavy_run" && part.tool !== "council_run" && part.tool !== "research_run")
+        )
+          return []
         if (part.state.status === "pending") return []
         const metadata = part.state.metadata ?? {}
         const active = stringValue(metadata.activeSessionID)
@@ -236,7 +240,11 @@ export function Session() {
     messages()
       .flatMap((message) =>
         (sync.data.part[message.id] ?? []).flatMap((part) => {
-          if (part.type !== "tool" || (part.tool !== "heavy_run" && part.tool !== "council_run")) return []
+          if (
+            part.type !== "tool" ||
+            (part.tool !== "heavy_run" && part.tool !== "council_run" && part.tool !== "research_run")
+          )
+            return []
           if (part.state.status === "pending") return []
           const target = workflowSessionTarget(part.state.metadata ?? {})
           return target ? [target] : []
@@ -2642,8 +2650,11 @@ function Task(props: ToolProps) {
 function Workflow(props: ToolProps) {
   const { theme } = useTheme()
   const route = useRoute()
+  const pathFormatter = usePathFormatter()
   const childShortcut = useCommandShortcut("session.child.first")
-  const name = createMemo(() => (props.tool === "heavy_run" ? "Heavy" : "Council"))
+  const name = createMemo(() =>
+    props.tool === "heavy_run" ? "Heavy" : props.tool === "council_run" ? "Council" : "Research",
+  )
   const objective = createMemo(() => stringValue(props.input.task) ?? stringValue(props.input.question) ?? "Workflow")
   const status = createMemo(() => stringValue(props.metadata.status))
   const running = createMemo(
@@ -2663,6 +2674,7 @@ function Workflow(props: ToolProps) {
     ).size
   })
   const sessionID = createMemo(() => workflowSessionTarget(props.metadata))
+  const reportPath = createMemo(() => stringValue(props.metadata.reportPath))
   const failures = createMemo(() => {
     if (!Array.isArray(props.metadata.childSessions)) return undefined
     const counts = props.metadata.childSessions.reduce(
@@ -2716,6 +2728,13 @@ function Workflow(props: ToolProps) {
           reportCount(),
           props.metadata.councilUsed === true,
         ),
+        formatWorkflowTree(props.metadata.childSessions, (value) => pathFormatter.format(value)),
+        [props.metadata.executionStatus, props.metadata.artifactStatus, props.metadata.evidenceStatus].some(
+          (value) => typeof value === "string",
+        )
+          ? `↳ Execution: ${stringValue(props.metadata.executionStatus) ?? "unknown"} · artifacts: ${stringValue(props.metadata.artifactStatus) ?? "unknown"} · evidence: ${stringValue(props.metadata.evidenceStatus) ?? "unknown"}`
+          : undefined,
+        reportPath() ? `↳ Report: ${pathFormatter.format(reportPath())}` : undefined,
         sessionID() ? `↳ Click or ${childShortcut()} to inspect subagents` : undefined,
       ]
         .filter((value): value is string => !!value)
@@ -2748,9 +2767,96 @@ export function formatWorkflowSummary(
   return lines.join("\n")
 }
 
+export function formatWorkflowTree(value: unknown, formatPath: (value: string) => string = (item) => item) {
+  if (!Array.isArray(value)) return undefined
+  const sessions = value.flatMap((item) => {
+    const current = recordValue(item)
+    const sessionID = stringValue(current?.sessionID)
+    const status = stringValue(current?.status)
+    if (!current || !sessionID || !status) return []
+    return [{ current, sessionID, status }]
+  })
+  if (sessions.length === 0) return undefined
+  const selected =
+    sessions.length <= 12
+      ? sessions
+      : [
+          ...sessions.filter((item) => item.status === "running" || item.status === "queued"),
+          ...sessions
+            .filter((item) => item.status !== "running" && item.status !== "queued")
+            .slice(
+              -Math.max(
+                0,
+                12 - sessions.filter((item) => item.status === "running" || item.status === "queued").length,
+              ),
+            ),
+        ].slice(0, 12)
+  const byID = new Map(sessions.map((item) => [item.sessionID, item]))
+  const depth = (sessionID: string) => {
+    const seen = new Set<string>()
+    let current = byID.get(sessionID)
+    let result = 0
+    while (current) {
+      const parent = stringValue(current.current.parentSessionID)
+      if (!parent || seen.has(parent) || !byID.has(parent)) return result
+      seen.add(parent)
+      result++
+      current = byID.get(parent)
+    }
+    return result
+  }
+  const lines = selected.map((item) => {
+    const workflow = stringValue(item.current.workflow)
+    const title = stringValue(item.current.title) ?? stringValue(item.current.agent) ?? item.sessionID
+    const stage = stringValue(item.current.stage)
+    const activity = stringValue(item.current.activity)
+    const nodeDepth = numberValue(item.current.depth)
+    const elapsed =
+      activity === "waiting_on_delegation"
+        ? numberValue(item.current.waitingMs)
+        : activity === "queued"
+          ? numberValue(item.current.queueMs)
+          : (numberValue(item.current.activeMs) ?? numberValue(item.current.elapsedMs))
+    const dependencies = Array.isArray(item.current.dependsOn)
+      ? item.current.dependsOn.filter((entry): entry is string => typeof entry === "string")
+      : []
+    const report = stringValue(item.current.reportPath)
+    const detail = [
+      stage,
+      activity?.replaceAll("_", " "),
+      nodeDepth === undefined ? undefined : `depth ${nodeDepth}`,
+      dependencies.length > 0 ? `after ${dependencies.join(", ")}` : undefined,
+      elapsed === undefined ? undefined : Locale.duration(elapsed),
+      report ? `report ${formatPath(report)}` : undefined,
+    ]
+      .filter((entry): entry is string => !!entry)
+      .join(" · ")
+    const icon =
+      item.status === "queued"
+        ? "○"
+        : activity === "waiting_on_delegation"
+          ? "◌"
+          : activity === "recovering"
+            ? "↻"
+            : item.status === "running"
+              ? "●"
+              : item.status === "completed"
+                ? "✓"
+                : item.status === "timed_out"
+                  ? "◷"
+                  : "×"
+    return `${"  ".repeat(depth(item.sessionID) + 1)}↳ ${icon} ${workflow === "council" ? "Council" : "Heavy"}: ${title}${detail ? ` · ${detail}` : ""}`
+  })
+  if (sessions.length > selected.length) lines.push(`  ↳ … ${sessions.length - selected.length} earlier sessions`)
+  return ["↳ Workflow tree", ...lines].join("\n")
+}
+
 export function workflowSessionTarget(metadata: Record<string, unknown>) {
   if (Array.isArray(metadata.childSessions)) {
-    const running = metadata.childSessions.find((child) => stringValue(recordValue(child)?.status) === "running")
+    const running = metadata.childSessions.find((child) => {
+      const status = stringValue(recordValue(child)?.status)
+      return status === "running" || status === "queued"
+    })
     const id = stringValue(recordValue(running)?.sessionID)
     if (id) return id
   }
@@ -3107,7 +3213,7 @@ const toolDisplays = new Set([
 ])
 
 export function toolDisplay(tool: string) {
-  if (tool === "heavy_run" || tool === "council_run") return "workflow"
+  if (tool === "heavy_run" || tool === "council_run" || tool === "research_run") return "workflow"
   return toolDisplays.has(tool) ? tool : "generic"
 }
 

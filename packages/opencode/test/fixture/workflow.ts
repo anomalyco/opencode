@@ -7,6 +7,7 @@ export function layer(overrides: Partial<Workflow.Interface> = {}) {
     Workflow.Service.of({
       heavy: () => Effect.die("Unexpected Heavy workflow execution"),
       council: () => Effect.die("Unexpected Council workflow execution"),
+      research: () => Effect.die("Unexpected Research workflow execution"),
       ...overrides,
     }),
   )

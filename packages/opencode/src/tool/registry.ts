@@ -56,7 +56,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 import { Workflow } from "@opencode-ai/core/workflow"
 import { AuthCredentialBridge } from "@/auth/credential-bridge"
-import { CouncilRunTool, HeavyRunTool } from "./workflow-run"
+import { CouncilRunTool, HeavyRunTool, ResearchRunTool } from "./workflow-run"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -114,6 +114,7 @@ const layer = Layer.effect(
     const skilltool = yield* SkillTool
     const heavy = yield* HeavyRunTool
     const council = yield* CouncilRunTool
+    const research = yield* ResearchRunTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -221,6 +222,7 @@ const layer = Layer.effect(
           skill: Tool.init(skilltool),
           heavy: Tool.init(heavy),
           council: Tool.init(council),
+          research: Tool.init(research),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -246,6 +248,7 @@ const layer = Layer.effect(
             tool.skill,
             tool.heavy,
             tool.council,
+            tool.research,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),

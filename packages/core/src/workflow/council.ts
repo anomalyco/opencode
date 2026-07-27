@@ -4,6 +4,8 @@ import { Effect } from "effect"
 import { AgentV2 } from "../agent"
 import { SessionSchema } from "../session/schema"
 import { Hash } from "../util/hash"
+import { WorkflowExecution } from "./execution"
+import { WorkflowReport } from "./report"
 import { WorkflowRuntime } from "./runtime"
 import { WorkflowSchema } from "./schema"
 
@@ -11,6 +13,8 @@ export interface Settings {
   readonly perspectives: number
   readonly concurrency: number
   readonly childTimeoutMs: number
+  readonly finalizationRetries?: number
+  readonly maxPromptBytes?: number
   readonly debate: {
     readonly mode: "auto" | "always" | "off"
     readonly topics: number
@@ -31,9 +35,10 @@ export function run(
   context: WorkflowRuntime.RunContext,
   settings: Settings,
   runtime: WorkflowRuntime.Interface,
+  evidenceArtifacts: ReadonlyArray<WorkflowReport.Artifact> = [],
 ) {
   return Effect.gen(function* () {
-    const runID = `council:${Hash.fast(context.toolCallID).slice(0, 12)}`
+    const runID = `council:${Hash.fast(`${context.execution?.id ?? context.toolCallID}:${question}`).slice(0, 12)}`
     const planID = `${runID}:plan`
     const rootSessionID = runtime.childID(parent.id, planID)
     yield* runtime.progress(
@@ -46,24 +51,38 @@ export function run(
       },
       "Council is selecting perspectives and stable issues",
     )
-    const planned = yield* runtime
-      .runChild({
-        id: planID,
-        parentID: parent.id,
-        location: parent.location,
-        title: "Council plan",
-        agent: AgentV2.ID.make("council-planner"),
-        model: WorkflowRuntime.resolveModel(parent.model, settings.models.planner),
-        timeoutMs: settings.childTimeoutMs,
-        result: WorkflowSchema.CouncilPlan,
-        prompt: planPrompt(question, settings),
-        progress: {
-          context,
-          workflow: "council",
-          phase: "planning",
-          stage: "planning",
-        },
-      })
+    const planned = yield* WorkflowReport.prompt(
+      "Council planner",
+      planPrompt(question, settings),
+      settings.maxPromptBytes,
+    )
+      .pipe(
+        Effect.flatMap((prompt) =>
+          runtime.runChild({
+            id: planID,
+            parentID: parent.id,
+            location: parent.location,
+            title: "Council plan",
+            agent: AgentV2.ID.make("council-planner"),
+            model: WorkflowRuntime.resolveModel(parent.model, settings.models.planner),
+            timeoutMs: settings.childTimeoutMs,
+            finalizationRetries: settings.finalizationRetries,
+            maxPromptBytes: settings.maxPromptBytes,
+            result: WorkflowSchema.CouncilPlanSubmission,
+            prompt,
+            progress: {
+              context,
+              workflow: "council",
+              phase: "planning",
+              stage: "planning",
+              details: {
+                node_id: runID,
+                node_depth: 0,
+              },
+            },
+          }),
+        ),
+      )
       .pipe(
         Effect.map((plan) => ({ plan, failure: undefined as string | undefined })),
         Effect.catch((error) =>
@@ -113,28 +132,55 @@ export function run(
       (perspective) => {
         const id = `${runID}:perspective:${perspective.id}`
         const sessionID = runtime.childID(rootSessionID, id)
-        return runtime
-          .runChild({
-            id,
-            parentID: rootSessionID,
-            location: parent.location,
-            title: `Council: ${perspective.title}`,
-            agent: AgentV2.ID.make("council-perspective"),
-            model: WorkflowRuntime.resolveModel(parent.model, settings.models.perspective),
-            timeoutMs: settings.childTimeoutMs,
-            result: WorkflowSchema.CouncilPerspectiveResult,
-            prompt: perspectivePrompt(question, normalized.issues, perspective),
-            progress: {
-              context,
-              workflow: "council",
-              phase: "perspectives",
-              stage: "perspective",
-            },
-          })
+        return WorkflowReport.prompt(
+          `Council perspective ${perspective.title}`,
+          perspectivePrompt(question, normalized.issues, perspective, evidenceArtifacts),
+          settings.maxPromptBytes,
+        )
+          .pipe(
+            Effect.flatMap((prompt) =>
+              runtime.runChild({
+                id,
+                parentID: rootSessionID,
+                location: parent.location,
+                title: `Council: ${perspective.title}`,
+                agent: AgentV2.ID.make("council-perspective"),
+                model: WorkflowRuntime.resolveModel(parent.model, settings.models.perspective),
+                timeoutMs: settings.childTimeoutMs,
+                finalizationRetries: settings.finalizationRetries,
+                maxPromptBytes: settings.maxPromptBytes,
+                result: WorkflowSchema.CouncilPerspectiveSubmission,
+                reportSources: evidenceArtifacts.flatMap((artifact) =>
+                  artifact.reportPath
+                    ? [{ id: artifact.id, title: artifact.title, reportPath: artifact.reportPath }]
+                    : [],
+                ),
+                reportReadMode: "artifacts",
+                prompt,
+                progress: {
+                  context,
+                  workflow: "council",
+                  phase: "perspectives",
+                  stage: "perspective",
+                  details: {
+                    node_id: perspective.id,
+                    parent_node_id: runID,
+                    node_depth: 1,
+                  },
+                },
+              }),
+            ),
+          )
           .pipe(
             Effect.map((result) => ({
               perspective,
-              result: normalizePerspective(result, perspective, normalized.issues, sessionID),
+              result: normalizePerspective(
+                result,
+                perspective,
+                normalized.issues,
+                sessionID,
+                context.execution ? WorkflowExecution.stageReportPath(context.execution, sessionID) : undefined,
+              ),
             })),
             Effect.catch((error) => {
               const message = error instanceof Error ? error.message : String(error)
@@ -176,6 +222,27 @@ export function run(
     const debate = yield* Effect.forEach(topics, (topic) =>
       debateTopic(question, topic, perspectives, runID, rootSessionID, parent, context, settings, runtime),
     ).pipe(Effect.map((rounds) => rounds.flat()))
+    const artifacts = [
+      ...perspectives.map((perspective) => ({
+        id: `perspective-${perspective.session_id}`,
+        title: `Perspective: ${perspective.perspective_id}`,
+        reportPath: perspective.report_path,
+      })),
+      ...debate.map((contribution) => ({
+        id: `debate-${contribution.session_id}`,
+        title: `Debate: ${contribution.issue_id}, ${contribution.perspective_id}, round ${contribution.round}`,
+        reportPath: contribution.report_path,
+      })),
+    ]
+    const reports = yield* Effect.promise(() => WorkflowReport.readArtifacts(artifacts))
+    const evidenceSessions = context.execution ? yield* WorkflowExecution.sessions(context.execution) : []
+    const evidence = yield* Effect.promise(() =>
+      WorkflowReport.collectSourceProvenance(
+        { perspectives, debate },
+        artifacts.map((artifact) => artifact.reportPath),
+        evidenceSessions,
+      ),
+    )
     const synthesisID = runtime.childID(rootSessionID, `${runID}:synthesis`)
     yield* runtime.progress(
       context,
@@ -187,24 +254,54 @@ export function run(
       },
       "Council is synthesizing the deliberation",
     )
-    const synthesized = yield* runtime
-      .runChild({
-        id: `${runID}:synthesis`,
-        parentID: rootSessionID,
-        location: parent.location,
-        title: "Council synthesis",
-        agent: AgentV2.ID.make("council-synthesizer"),
-        model: WorkflowRuntime.resolveModel(parent.model, settings.models.synthesizer),
-        timeoutMs: settings.childTimeoutMs,
-        result: WorkflowSchema.CouncilSynthesis,
-        prompt: synthesisPrompt(question, planned.plan.rationale, perspectives, perspectiveFailures, debate),
-        progress: {
-          context,
-          workflow: "council",
-          phase: "synthesizing",
-          stage: "synthesis",
-        },
-      })
+    const synthesized = yield* WorkflowReport.prompt(
+      "Council synthesis",
+      synthesisPrompt(
+        question,
+        planned.plan.rationale,
+        perspectives,
+        perspectiveFailures,
+        debate,
+        artifacts,
+        reports,
+        evidence,
+      ),
+      settings.maxPromptBytes,
+    )
+      .pipe(
+        Effect.flatMap((prompt) =>
+          runtime.runChild({
+            id: `${runID}:synthesis`,
+            parentID: rootSessionID,
+            location: parent.location,
+            title: "Council synthesis",
+            agent: AgentV2.ID.make("council-synthesizer"),
+            model: WorkflowRuntime.resolveModel(parent.model, settings.models.synthesizer),
+            timeoutMs: settings.childTimeoutMs,
+            finalizationRetries: settings.finalizationRetries,
+            maxPromptBytes: settings.maxPromptBytes,
+            result: WorkflowSchema.CouncilSynthesisSubmission,
+            validateResult: (result) => validateSynthesisCoverage(artifacts, result.coverage ?? []),
+            reportSources: artifacts.flatMap((artifact) =>
+              artifact.reportPath ? [{ id: artifact.id, title: artifact.title, reportPath: artifact.reportPath }] : [],
+            ),
+            prompt,
+            reportContentFirst: false,
+            reportReadMode: "artifacts",
+            progress: {
+              context,
+              workflow: "council",
+              phase: "synthesizing",
+              stage: "synthesis",
+              details: {
+                node_id: `${runID}:synthesis`,
+                parent_node_id: runID,
+                node_depth: 1,
+              },
+            },
+          }),
+        ),
+      )
       .pipe(
         Effect.map((result) => ({ result, failure: undefined as string | undefined })),
         Effect.catch((error) =>
@@ -231,10 +328,29 @@ export function run(
       )
     const debateFailures = debate.filter((item) => item.argument.startsWith("Debate stage failed:")).length
     const normalizedSynthesis = normalizeSynthesis(synthesized.result, normalized.issues)
+    const recordedCoverage = runtime.reportCoverage?.(synthesisID) ?? []
+    const coverage = yield* Effect.promise(() =>
+      WorkflowReport.coverage(artifacts, [
+        ...(normalizedSynthesis.coverage ?? []),
+        ...recordedCoverage.map((item) => ({
+          title: artifacts.find((artifact) => artifact.reportPath === item.reportPath)?.title ?? item.reportPath,
+          report_path: item.reportPath,
+          received: true,
+          used: item.disposition === "used" ? [item.detail] : [],
+          rejected: item.disposition === "rejected" ? [item.detail] : [],
+          unresolved: item.disposition === "unresolved" ? [item.detail] : [],
+        })),
+      ]),
+    )
+    const missingCoverage = context.execution ? WorkflowReport.unaccountedCoverage(coverage).length : 0
     const status =
       perspectives.length === 0
         ? "failed"
-        : planned.failure || synthesized.failure || perspectiveFailures.length > 0 || debateFailures > 0
+        : planned.failure ||
+            synthesized.failure ||
+            perspectiveFailures.length > 0 ||
+            debateFailures > 0 ||
+            missingCoverage > 0
           ? synthesized.result.status === "failed"
             ? "failed"
             : "partial"
@@ -245,12 +361,16 @@ export function run(
       summary: normalizedSynthesis.summary,
       root_session_id: rootSessionID,
       synthesis_session_id: synthesisID,
+      synthesis_report_path: context.execution
+        ? WorkflowExecution.stageReportPath(context.execution, synthesisID)
+        : undefined,
       perspectives,
       debate,
       consensus: normalizedSynthesis.consensus,
       disagreements: normalizedSynthesis.disagreements,
       recommendations: normalizedSynthesis.recommendations,
       risks: normalizedSynthesis.risks,
+      coverage,
     })
   })
 }
@@ -274,47 +394,77 @@ const debateTopic = Effect.fn("CouncilWorkflow.debateTopic")(function* (
   const runRound = (
     round: number,
     previous: ReadonlyArray<WorkflowSchema.DebateContribution>,
-  ): Effect.Effect<ReadonlyArray<WorkflowSchema.DebateContribution>> => {
-    if (round > settings.debate.rounds) return Effect.succeed(previous)
-    const snapshot = JSON.stringify(previous, undefined, 2)
-    return Effect.forEach(
-      participants,
-      (perspective) => {
-        const id = `${runID}:debate:${topic.id}:${round}:${perspective.perspective_id}`
-        const sessionID = runtime.childID(parentID, id)
-        return runtime
-          .progress(
-            context,
-            {
-              workflow: "council",
-              phase: "debating",
-              session_id: sessionID,
-              root_session_id: parentID,
-              issue: topic.id,
-              perspective: perspective.perspective_id,
-              round,
-            },
-            `Council is debating ${topic.question} in round ${round}`,
-          )
-          .pipe(
-            Effect.andThen(
-              runtime.runChild({
-                id,
-                parentID,
-                location: parent.location,
-                title: `Council debate: ${topic.question}`,
-                agent: AgentV2.ID.make("council-debater"),
-                model: WorkflowRuntime.resolveModel(parent.model, settings.models.debater),
-                timeoutMs: settings.childTimeoutMs,
-                result: WorkflowSchema.DebateResult,
-                prompt: debatePrompt(question, topic, perspective, perspectives, round, snapshot),
-                progress: {
+  ): Effect.Effect<ReadonlyArray<WorkflowSchema.DebateContribution>> =>
+    Effect.gen(function* () {
+      if (round > settings.debate.rounds) return previous
+      const snapshot = JSON.stringify(previous, undefined, 2)
+      const reports = yield* Effect.promise(() =>
+        WorkflowReport.readArtifacts([
+          ...perspectives.map((perspective) => ({
+            title: `Perspective: ${perspective.perspective_id}`,
+            reportPath: perspective.report_path,
+          })),
+          ...previous.map((contribution) => ({
+            title: `Prior debate: ${contribution.issue_id}, ${contribution.perspective_id}, round ${contribution.round}`,
+            reportPath: contribution.report_path,
+          })),
+        ]),
+      )
+      const current = yield* Effect.forEach(
+        participants,
+        (perspective) => {
+          const id = `${runID}:debate:${topic.id}:${round}:${perspective.perspective_id}`
+          const sessionID = runtime.childID(parentID, id)
+          return WorkflowReport.prompt(
+            `Council debate ${topic.id}, round ${round}`,
+            debatePrompt(question, topic, perspective, perspectives, round, snapshot, reports),
+            settings.maxPromptBytes,
+          ).pipe(
+            Effect.flatMap((prompt) =>
+              runtime
+                .progress(
                   context,
-                  workflow: "council",
-                  phase: "debating",
-                  stage: "debate",
-                },
-              }),
+                  {
+                    workflow: "council",
+                    phase: "debating",
+                    session_id: sessionID,
+                    root_session_id: parentID,
+                    issue: topic.id,
+                    perspective: perspective.perspective_id,
+                    round,
+                  },
+                  `Council is debating ${topic.question} in round ${round}`,
+                )
+                .pipe(
+                  Effect.andThen(
+                    runtime.runChild({
+                      id,
+                      parentID,
+                      location: parent.location,
+                      title: `Council debate: ${topic.question}`,
+                      agent: AgentV2.ID.make("council-debater"),
+                      model: WorkflowRuntime.resolveModel(parent.model, settings.models.debater),
+                      timeoutMs: settings.childTimeoutMs,
+                      finalizationRetries: settings.finalizationRetries,
+                      maxPromptBytes: settings.maxPromptBytes,
+                      result: WorkflowSchema.DebateSubmission,
+                      prompt,
+                      progress: {
+                        context,
+                        workflow: "council",
+                        phase: "debating",
+                        stage: "debate",
+                        details: {
+                          node_id: `${topic.id}:${perspective.perspective_id}:${round}`,
+                          parent_node_id: perspective.perspective_id,
+                          node_depth: 2,
+                          issue: topic.id,
+                          round,
+                        },
+                      },
+                    }),
+                  ),
+                ),
             ),
             Effect.map((result) =>
               WorkflowSchema.DebateContribution.make({
@@ -323,6 +473,9 @@ const debateTopic = Effect.fn("CouncilWorkflow.debateTopic")(function* (
                 perspective_id: perspective.perspective_id,
                 round,
                 session_id: sessionID,
+                report_path: context.execution
+                  ? WorkflowExecution.stageReportPath(context.execution, sessionID)
+                  : undefined,
               }),
             ),
             Effect.catch((error) => {
@@ -350,6 +503,9 @@ const debateTopic = Effect.fn("CouncilWorkflow.debateTopic")(function* (
                       perspective_id: perspective.perspective_id,
                       round,
                       session_id: sessionID,
+                      report_path: context.execution
+                        ? WorkflowExecution.stageReportPath(context.execution, sessionID)
+                        : undefined,
                       stance: issueFor(perspective, topic.id)?.stance ?? "uncertain",
                       argument: `Debate stage failed: ${message}`,
                       concessions: [],
@@ -360,10 +516,11 @@ const debateTopic = Effect.fn("CouncilWorkflow.debateTopic")(function* (
                 )
             }),
           )
-      },
-      { concurrency: settings.concurrency },
-    ).pipe(Effect.flatMap((current) => runRound(round + 1, [...previous, ...current])))
-  }
+        },
+        { concurrency: settings.concurrency },
+      )
+      return yield* runRound(round + 1, [...previous, ...current])
+    })
   return yield* runRound(1, [])
 })
 
@@ -412,11 +569,13 @@ function normalizePerspective(
   perspective: WorkflowSchema.CouncilPerspectiveSpec,
   issues: ReadonlyArray<WorkflowSchema.CouncilTopic>,
   sessionID: SessionSchema.ID,
+  reportPath: string | undefined,
 ) {
   return WorkflowSchema.CouncilPerspective.make({
     ...result,
     perspective_id: perspective.id,
     session_id: sessionID,
+    report_path: reportPath,
     issues: issues.map((issue) => {
       const reported = result.issues.find((candidate) => candidate.id === issue.id)
       return WorkflowSchema.CouncilIssue.make({
@@ -523,13 +682,14 @@ function planPrompt(question: string, settings: Settings) {
 
 ${question}
 
-Define stable issues that every perspective will address, then select ${settings.perspectives} genuinely distinct perspectives. Perspectives should expose meaningful tradeoffs rather than merely restating roles. Submit the complete structured plan through workflow_result.`
+Define stable issues that every perspective will address, then select ${settings.perspectives} genuinely distinct perspectives. Perspectives should expose meaningful tradeoffs rather than merely restating roles. Do not research or answer the question while planning. If you delegate, pass only a strict subproblem and never the complete Council question. Preserve extended rationale in workflow_report and submit a compact structured plan through workflow_result.`
 }
 
 function perspectivePrompt(
   question: string,
   issues: ReadonlyArray<WorkflowSchema.CouncilTopic>,
   perspective: WorkflowSchema.CouncilPerspectiveSpec,
+  evidenceArtifacts: ReadonlyArray<WorkflowReport.Artifact>,
 ) {
   return `Analyze this question from one Council perspective.
 
@@ -542,7 +702,22 @@ ${perspective.title}: ${perspective.instructions}
 Stable issues:
 ${JSON.stringify(issues, undefined, 2)}
 
-Inspect the workspace when useful. Address every stable issue using its exact ID and choose one structured stance: support, oppose, conditional, or uncertain. Ground claims in evidence, preserve source URLs in the evidence that depends on them, preserve caveats, and provide recommendations and risks. Submit the complete structured result through workflow_result.`
+Authorized evidence artifacts:
+${JSON.stringify(
+  evidenceArtifacts.map((artifact) => ({
+    artifact_id: artifact.id,
+    title: artifact.title,
+    available: artifact.reportPath !== undefined,
+  })),
+  undefined,
+  2,
+)}
+
+${evidenceArtifacts.length > 0 ? "Read all authorized evidence artifacts with workflow_read_reports({ all: true }) before reaching conclusions." : ""}
+
+Inspect the workspace when useful. Address every stable issue using its exact ID and choose one structured stance: support, oppose, conditional, or uncertain. Ground claims in evidence, preserve source URLs in the evidence that depends on them, preserve caveats, and provide recommendations and risks.
+
+Delegate only a strict subproblem: use Heavy when one evidence question needs multi-step decomposition, or another Council when a narrower branch-local disputed premise needs its own debate. Never delegate the complete Council question unchanged, and leave whole-question disputes for this Council's synthesis. When recursively calling Council, supply a stable issue_key and the exact artifact_paths framing the dispute. Preserve the full analysis in workflow_report, then submit a compact structured index through workflow_result.`
 }
 
 function debatePrompt(
@@ -552,6 +727,7 @@ function debatePrompt(
   perspectives: ReadonlyArray<WorkflowSchema.CouncilPerspective>,
   round: number,
   previous: string,
+  reports: string,
 ) {
   return `Participate in Council debate round ${round}.
 
@@ -565,10 +741,22 @@ Your perspective:
 ${JSON.stringify(perspective, undefined, 2)}
 
 All initial positions:
-${JSON.stringify(perspectives, undefined, 2)}
+${JSON.stringify(
+  perspectives.map((item) => ({
+    perspective_id: item.perspective_id,
+    summary: item.summary,
+    issues: item.issues,
+    report_path: item.report_path,
+  })),
+  undefined,
+  2,
+)}
 
 Prior-round snapshot shared identically with every participant:
 ${previous || "[]"}
+
+Durable perspective and prior-round reports, loaded deterministically:
+${reports}
 
 ${
   topic.adversarial
@@ -576,7 +764,7 @@ ${
     : "Engage the actual disagreement. Respond to opposing evidence, make explicit concessions, and update your stance when warranted."
 }
 
-Use the exact issue and perspective IDs. Submit one complete structured contribution through workflow_result.`
+Use the exact issue and perspective IDs. Preserve the complete argument and evidence in workflow_report, then submit one compact structured contribution through workflow_result.`
 }
 
 function synthesisPrompt(
@@ -585,6 +773,9 @@ function synthesisPrompt(
   perspectives: ReadonlyArray<WorkflowSchema.CouncilPerspective>,
   failures: ReadonlyArray<string>,
   debate: ReadonlyArray<WorkflowSchema.DebateContribution>,
+  artifacts: ReadonlyArray<WorkflowReport.Artifact>,
+  reports: string,
+  evidence: ReadonlyArray<WorkflowSchema.SourceReference>,
 ) {
   return `Synthesize a Council deliberation.
 
@@ -595,13 +786,77 @@ Council rationale:
 ${rationale}
 
 Perspectives:
-${JSON.stringify(perspectives, undefined, 2)}
+${JSON.stringify(
+  perspectives.map((perspective) => ({
+    perspective_id: perspective.perspective_id,
+    summary: perspective.summary,
+    issues: perspective.issues,
+    recommendations: perspective.recommendations,
+    risks: perspective.risks,
+    report_path: perspective.report_path,
+  })),
+  undefined,
+  2,
+)}
 
 Perspective failures:
 ${JSON.stringify(failures, undefined, 2)}
 
 Debate:
-${JSON.stringify(debate, undefined, 2)}
+${JSON.stringify(
+  debate.map((contribution) => ({
+    issue_id: contribution.issue_id,
+    perspective_id: contribution.perspective_id,
+    round: contribution.round,
+    stance: contribution.stance,
+    argument: contribution.argument,
+    report_path: contribution.report_path,
+  })),
+  undefined,
+  2,
+)}
 
-Do not erase minority positions, source URLs, or unresolved uncertainty. Separate consensus from disagreement, cite stable issue IDs, recommend a course of action with conditions, and preserve risks. Mark the synthesis partial when failures materially limit it. Submit the complete structured synthesis through workflow_result.`
+Direct synthesis artifact inventory:
+${JSON.stringify(
+  artifacts.map((artifact) => ({
+    artifact_id: artifact.id,
+    title: artifact.title,
+    report_path: artifact.reportPath,
+  })),
+  undefined,
+  2,
+)}
+
+Durable perspective and debate reports, loaded deterministically:
+${reports}
+
+Evidence ledger derived from tool execution:
+${JSON.stringify(evidence, undefined, 2)}
+
+The evidence ledger is authoritative for verification status. Never present an unverified or failed source as directly verified, and explicitly qualify conclusions that depend on partial evidence. Failed direct checks remain relevant provenance even when a participant omitted the URL from prose.
+
+The durable reports above are canonical and must be incorporated, including material omitted from bounded indexes. In each workflow_report section, record coverage dispositions for the durable reports that materially informed that section. Also include one consolidated entry for every durable report in workflow_result.coverage using its exact title and report_path. Briefly record findings used, conclusions explicitly rejected, and unresolved contradictions; never claim receipt of a missing artifact. The engine merges both coverage channels deterministically. Do not erase minority positions, source URLs, or unresolved uncertainty. Separate consensus from disagreement, cite stable issue IDs, recommend a course of action with conditions, and preserve risks. Mark the synthesis partial when failures materially limit it.
+
+The workflow_report is the authored Council document, not an executive recap or navigation page. Choose its outline from the question and the deliberation itself; do not impose a domain-specific stock template. Reconstruct the reasoning and preserve the material detail, competing positions, concessions, uncertainty, and conclusions needed for a standalone treatment. Treat every coverage entry as a content obligation: explain the important information used from it instead of merely recording that it was reviewed. Never use "see the perspective report" or "see the debate report" as a substitute for incorporating information, and never paste whole participant reports together. Use workflow_report repeatedly, normally one call per major section, when that is needed to author a complete document.
+
+Put the complete subject-adaptive standalone document in workflow_report, then submit a compact structured synthesis through workflow_result.`
+}
+
+function validateSynthesisCoverage(
+  artifacts: ReadonlyArray<WorkflowReport.Artifact>,
+  coverage: ReadonlyArray<WorkflowSchema.ArtifactCoverage>,
+) {
+  const missing = artifacts.filter(
+    (artifact) =>
+      artifact.reportPath &&
+      !coverage.some(
+        (entry) =>
+          entry.report_path === artifact.reportPath &&
+          entry.used.length + entry.rejected.length + entry.unresolved.length > 0,
+      ),
+  )
+  if (missing.length === 0) return
+  return `Council synthesis coverage must include one substantive disposition for every direct perspective and debate report. Missing: ${missing
+    .map((artifact) => `${artifact.title} (${artifact.reportPath})`)
+    .join(", ")}`
 }

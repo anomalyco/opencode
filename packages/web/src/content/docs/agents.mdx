@@ -27,7 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-OpenCode comes with two built-in primary agents, **Build** and **Plan**. We'll
+OpenCode comes with five built-in primary agents, **Build**, **Plan**, **Heavy**, **Council**, and **Research**. We'll
 look at these below.
 
 ---
@@ -42,7 +42,7 @@ OpenCode comes with three built-in subagents, **General**, **Explore**, and **Sc
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and three built-in subagents.
+OpenCode comes with five built-in primary agents and three built-in subagents.
 
 ---
 
@@ -65,6 +65,30 @@ By default, all of the following are set to `ask`:
 - `bash`: All bash commands
 
 This agent is useful when you want the LLM to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
+
+---
+
+### Use Heavy
+
+_Mode_: `primary`
+
+Heavy recursively plans and executes broad objectives through durable child sessions. Its workers can inspect or change the workspace, run validation, delegate bounded subproblems to Heavy or Council, and write a final `HEAVY_REPORT.md`.
+
+---
+
+### Use Council
+
+_Mode_: `primary`
+
+Council gathers independent perspectives, debates disagreements over stable issues, preserves minority positions, and writes a final `COUNCIL_REPORT.md`. Council participants may delegate bounded evidence questions to Heavy or narrower disputes to another Council.
+
+---
+
+### Use Research
+
+_Mode_: `primary`
+
+Research turns a question into an explicit contract, runs adaptive evidence waves, recursively synthesizes compound branches, and sends only consequential contradictions to Council. Its root synthesizer writes the standalone `RESEARCH_REPORT.md` directly. `RESEARCH_TRACE.md`, the canonical `RESEARCH_GRAPH.json`, and the append-only `RESEARCH_RAW_GRAPH.json` preserve the execution and evidence audit trail.
 
 ---
 
@@ -142,6 +166,123 @@ Hidden system agent that creates session summaries. It runs automatically and is
 ## Configure
 
 You can customize the built-in agents or create your own through configuration. Agents can be configured in two ways:
+
+---
+
+### Heavy, Council, and Research
+
+Configure recursive workflow behavior under `workflows`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "workflows": {
+    "recursion": {
+      "max_depth": 3,
+      "max_workflows": 16,
+      "max_concurrency": 8,
+      "max_councils": 8,
+      "debate_deduplication": "semantic"
+    },
+    "reports": {
+      "directory": ".opencode/reports",
+      "max_prompt_bytes": 524288,
+      "finalization_retries": 1
+    },
+    "heavy": {
+      "enabled": true,
+      "council": "synthesis",
+      "delegates": ["heavy", "council"],
+      "max_depth": 2,
+      "tasks_per_node": 4,
+      "max_nodes": 24,
+      "concurrency": 4,
+      "models": {
+        "synthesizer": "anthropic/claude-sonnet-4-5"
+      },
+      "on_failure": "keep"
+    },
+    "council": {
+      "enabled": true,
+      "delegates": ["heavy", "council"],
+      "perspectives": 3,
+      "concurrency": 4,
+      "debate": {
+        "mode": "auto",
+        "topics": 1,
+        "participants": 3,
+        "rounds": 2
+      }
+    },
+    "research": {
+      "enabled": true,
+      "effort": "deep",
+      "capability": "read",
+      "delegates": ["research", "council"],
+      "min_depth": 2,
+      "max_depth": 3,
+      "max_branches_per_node": 4,
+      "min_evidence_per_branch": 2,
+      "tasks_per_wave": 5,
+      "max_waves": 3,
+      "max_nodes": 32,
+      "concurrency": 4,
+      "debate_sensitivity": "balanced",
+      "max_debates_per_node": 1,
+      "freshness_days": 30,
+      "minimum_report_words": 2500,
+      "on_failure": "keep"
+    }
+  }
+}
+```
+
+The Heavy `council` policy supports:
+
+- `off`: Disable Heavy-to-Council delegation.
+- `auto`: Run Council when the planner or a completed worker identifies competing objectives, high uncertainty, conflicting evidence, a consequential decision, assumption-sensitive conclusions, or multiple defensible interpretations. The report records why Council did or did not run.
+- `required`: Guarantee one Council review before the root synthesis.
+- `synthesis`: Review every recursive Heavy synthesis.
+
+Research effort presets are `standard`, `deep`, and `frontier`. Their target useful evidence depths are 1, 2, and 3; their maximum depths are 2, 3, and 4. Explicit `min_depth`, `max_depth`, `max_branches_per_node`, `min_evidence_per_branch`, `tasks_per_wave`, `max_waves`, and `max_nodes` values override the preset. After every wave, an assessor continues only when a novel task has medium or high expected information gain. Nested contracts begin with direct evidence and criticism; another recursive level must be earned from gaps found in the completed wave. The optional `max_time` and `max_tokens` values are soft run budgets: active work is preserved, but no new wave starts after a budget is exhausted.
+
+The preset report targets are 1,200 words for `standard`, 2,500 for `deep`, and 4,000 for `frontier`. Planners classify tasks as `evidence`, `critic`, or `recursive` and declare their subquestions, evidence methods, exclusions, and decision relevance. Evidence tasks own one bounded claim family but may triangulate it with several methods. Critics consume declared upstream reports without performing new source discovery. Recursive tasks are reserved for independently consumable subquestions that need a local contract and synthesis.
+
+`max_nodes` is allocated hierarchically rather than through a first-come global counter. Before a recursive child planner starts, its parent reserves at least `min_evidence_per_branch` local evidence-task slots and distributes remaining capacity fairly among admitted sibling subtrees. A task that cannot receive the minimum is executed directly as evidence or criticism. Unused child capacity returns to the parent for later adaptive waves.
+
+Task dependencies are preserved within and across adaptive waves. Economic, integration, verification, and adversarial tasks can use `depends_on` to wait for upstream branch reports and receive those reports as authorized artifacts. Assessors distinguish desk-researchable gaps from empirical-only gaps, recursively deepen consequential researchable gaps, and reserve `requires_empirical_work` for validation the configured capability cannot actually perform.
+
+`debate_sensitivity` controls evidence-directed Council routing. `off` disables it, `low` accepts only consequential critical disputes, `balanced` accepts consequential critical or material disputes, and `high` also reviews material contradictions before they become conclusions. Research workers do not call Council directly; the assessor first records competing claims and the engine supplies their reports to Council. Interpretation and judgment disputes use a compact two-perspective, one-round review; genuine conflicting evidence uses the configured full Council.
+
+Research defaults to read-only. Set `capability` to `write` when experiments or implementation are part of the requested research; writer sessions remain serialized. `freshness_days` tells workers and assessors how recent evidence should be when newer sources exist.
+
+`minimum_report_words` is a deterministic publication check, not another model pass. A shorter root synthesis is preserved rather than rewritten. Before synthesis, every contract deliverable must be covered, explicitly empirical-only, or receive a targeted follow-up wave. The final evaluation records each deliverable as complete, partial, or missing, with its report section, canonical claim IDs, and limitations.
+
+Exact completed leaf questions become content-addressed artifacts within the run. Later hierarchical branches can reuse the structured ledger and durable report instead of paying for the same evidence twice; the wave trace records the artifact ID and whether it was reused. Cross-run persistence is intentionally excluded until workspace and source invalidation can be made trustworthy.
+
+Every run also emits a deterministic evaluation scorecard in the trace and structured output: report length and section count, contract-deliverable coverage, supported claims with valid evidence links, verified-source count, open critical gaps, consequential disputes, Council usage, artifact reuse, direct evidence leaves, artifact-bound critics, productive and synthesis-only recursive branches, structural branch depth, direct-evidence depth, subtree budget use, dependency-aware tasks, coverage completeness, child failures, tool calls and errors, token usage, source verification, and per-role operations. These metrics are domain-neutral, so the same harness can compare engineering, scientific, policy, market, and other research prompts without imposing one report outline.
+
+The shared recursion limits bound delegated Heavy and Council invocations. Research's internal evidence tree is bounded separately by `workflows.research.max_depth`, `max_nodes`, `max_waves`, and `tasks_per_wave`; any Council it opens still consumes the shared Council budget. Full durable reports are injected without truncation. If a stage would exceed `max_prompt_bytes`, it fails visibly and keeps the source reports intact.
+
+`debate_deduplication` controls root-scoped Council coordination and defaults to `semantic`. `exact` reuses the same canonical issue only when its evidence paths match, `semantic` also reuses strongly overlapping questions when their evidence overlaps or one side has not produced evidence yet, and `off` runs every request independently. A recursive Council must address a materially narrower dispute than its ancestor; equivalent ancestor debates are rejected instead of multiplying sessions.
+
+`finalization_retries` retries transient provider failures without repeating the admitted workflow prompt. If a stage has already written a durable report, Heavy, Council, and Research then make one deterministic recovery turn from that report. The report remains indexed even if structured finalization still fails.
+
+Workflow results expose separate execution, artifact, and evidence statuses. Evidence becomes partial when cited sources remain unverified or synthesized artifacts retain unresolved questions. Successful direct fetches are verified from tool execution records; search-only discoveries remain unverified, and failed direct checks remain visible.
+
+Heavy records every planned task as executed, replaced by automatic synthesis, capped, or blocked. Capped and blocked tasks make coverage partial instead of disappearing from the report. Usage aggregates child workflow sessions and excludes the parent Heavy or Council entrypoint turns; cost is marked unavailable when the provider supplies usage without usable pricing. The model-facing handoff is bounded below the normal tool-output limit.
+
+Every Heavy task declares whether it partitions, corroborates, challenges, or integrates another scope, together with its unique contribution and exclusions. Recursive planners receive the ancestor and sibling scope ledger. When two partition tasks still overlap strongly, Heavy runs a bounded scope-review planning turn before execution instead of silently duplicating the work.
+
+The root synthesis is the final Markdown artifact. It reads the direct child and Council reports after each recursive branch has already synthesized its own children, then writes one subject-adaptive, self-contained document with the material reasoning, evidence, disagreements, uncertainty, and conclusions. There is no separate author, reviewer, or revision chain after root synthesis.
+
+Research uses the same hierarchical fan-in rule but makes it evidence-directed: evidence stages emit linked claims and evidence, artifact-bound critics challenge completed reports, compound branch syntheses compress their descendants, and the root reads every direct artifact before authoring the final document. Planning and assessment are structured-only stages. Synthesizers can read authorized reports but cannot search the web or inspect the workspace, keeping evidence acquisition downstream of dedicated workers. Report text is persisted before coverage metadata is validated, and the root writes `RESEARCH_REPORT.md` directly; the deterministic publisher only adds audit links and emits trace/graph files. Child links remain available for audit, but the report must be readable without following them.
+
+Heavy and Council still use the deterministic compiler to normalize their root syntheses. Research preserves the root-authored document as written and appends only a supporting-artifact index. Execution status, explicit stop codes, deferred validations, coverage diagnostics, routing, manifests, and source-discovery telemetry remain in the separate trace file.
+
+Research keeps two evidence products. `RESEARCH_RAW_GRAPH.json` is the append-only union of branch ledgers. `RESEARCH_GRAPH.json` is the root-authored canonical graph used by evaluation and the final answer; canonical claims can identify the raw claims they derive from or supersede, Council resolutions propagate into disputes, and unresolved dispute edges make affected claims contested without inflating claim counts.
+
+Source verification comes from recorded tool execution rather than prose alone. Successful and failed direct fetches remain in provenance even when a stage does not repeat the URL, while unreferenced search-result URLs are not added indiscriminately. Reports distinguish direct checks, search discovery, and the number of reports that cite a source. Partial evidence is carried into synthesis and the final handoff. Workflow output also includes immutable start, completion, and elapsed timing for the complete run.
 
 ---
 

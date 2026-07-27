@@ -2106,7 +2106,9 @@ const WorkflowTool: ToolComponent = (props) => {
   const running = createMemo(
     () => props.status === "pending" || props.status === "running" || props.metadata.status === "running",
   )
-  const title = createMemo(() => (props.tool === "heavy_run" ? "Heavy" : "Council"))
+  const title = createMemo(() =>
+    props.tool === "heavy_run" ? "Heavy" : props.tool === "council_run" ? "Council" : "Research",
+  )
   const objective = createMemo(() => {
     const value = props.tool === "heavy_run" ? props.input.task : props.input.question
     return typeof value === "string" ? value : ""
@@ -2126,6 +2128,9 @@ const WorkflowTool: ToolComponent = (props) => {
       }),
     ).size
   })
+  const reportPath = createMemo(() =>
+    typeof props.metadata.reportPath === "string" ? props.metadata.reportPath : undefined,
+  )
   const failedChildren = createMemo(() => {
     const value = props.metadata.childSessions
     if (!Array.isArray(value)) return { failed: 0, timedOut: 0 }
@@ -2142,9 +2147,10 @@ const WorkflowTool: ToolComponent = (props) => {
   const childSessionID = createMemo(() => {
     const children = props.metadata.childSessions
     if (Array.isArray(children)) {
-      const running = children.find(
-        (child) => child && typeof child === "object" && "status" in child && child.status === "running",
-      )
+      const running = children.find((child) => {
+        if (!child || typeof child !== "object" || !("status" in child)) return false
+        return child.status === "running" || child.status === "queued"
+      })
       if (running && typeof running === "object" && "sessionID" in running && typeof running.sessionID === "string")
         return running.sessionID
     }
@@ -2175,6 +2181,13 @@ const WorkflowTool: ToolComponent = (props) => {
       sessionCount() > 0 ? `${sessionCount()} subagent session${sessionCount() === 1 ? "" : "s"}` : undefined
     const reports = reportCount() > 0 ? `${reportCount()} report${reportCount() === 1 ? "" : "s"}` : undefined
     const council = props.metadata.councilUsed === true ? "Council reviewed" : undefined
+    const health = [
+      typeof props.metadata.executionStatus === "string" ? `execution ${props.metadata.executionStatus}` : undefined,
+      typeof props.metadata.artifactStatus === "string" ? `artifacts ${props.metadata.artifactStatus}` : undefined,
+      typeof props.metadata.evidenceStatus === "string" ? `evidence ${props.metadata.evidenceStatus}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ")
     const failures = [
       failedChildren().timedOut > 0 ? `${failedChildren().timedOut} timed out` : undefined,
       failedChildren().failed > 0 ? `${failedChildren().failed} failed` : undefined,
@@ -2187,7 +2200,9 @@ const WorkflowTool: ToolComponent = (props) => {
       reports,
       sessions,
       council,
+      health || undefined,
       failures || undefined,
+      reportPath() ? `Report: ${reportPath()}` : undefined,
     ]
       .filter(Boolean)
       .join(" · ")
@@ -2270,6 +2285,7 @@ const WorkflowTool: ToolComponent = (props) => {
 
 ToolRegistry.register({ name: "heavy_run", render: WorkflowTool })
 ToolRegistry.register({ name: "council_run", render: WorkflowTool })
+ToolRegistry.register({ name: "research_run", render: WorkflowTool })
 
 ToolRegistry.register({
   name: "bash",

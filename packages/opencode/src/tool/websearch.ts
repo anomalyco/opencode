@@ -51,6 +51,10 @@ export function webSearchModelName(extra: Tool.Context["extra"]) {
   return (apiID ?? id)?.slice(0, 100)
 }
 
+export function simplifyWebSearchQuery(query: string) {
+  return query.trim().replaceAll(/\s+/g, " ").replaceAll(/["'`]/g, "").split(" ").slice(0, 32).join(" ").slice(0, 400)
+}
+
 function parallelAuthHeaders() {
   const headers = { "User-Agent": `opencode/${InstallationVersion}` }
   if (!process.env.PARALLEL_API_KEY) return headers
@@ -96,6 +100,20 @@ function callProvider(
   )
 }
 
+export function webSearchWithRetry<E, R>(
+  params: Schema.Schema.Type<typeof Parameters>,
+  search: (input: Schema.Schema.Type<typeof Parameters>) => Effect.Effect<string | undefined, E, R>,
+) {
+  return search(params).pipe(
+    Effect.map((result) => ({ result, retried: false })),
+    Effect.catch(() =>
+      search({ ...params, query: simplifyWebSearchQuery(params.query) }).pipe(
+        Effect.map((result) => ({ result, retried: true })),
+      ),
+    ),
+  )
+}
+
 export const WebSearchTool = Tool.define(
   "websearch",
   Effect.gen(function* () {
@@ -130,12 +148,21 @@ export const WebSearchTool = Tool.define(
             },
           })
 
-          const result = yield* callProvider(http, provider, params, ctx)
+          const attempted = yield* webSearchWithRetry(params, (input) => callProvider(http, provider, input, ctx))
+          if (attempted.retried)
+            yield* ctx.metadata({
+              title: `${title} retry "${simplifyWebSearchQuery(params.query)}"`,
+              metadata: {
+                provider,
+                retried: true,
+                retryQuery: simplifyWebSearchQuery(params.query),
+              },
+            })
 
           return {
-            output: result ?? "No search results found. Please try a different query.",
+            output: attempted.result ?? "No search results found. Please try a different query.",
             title: `${title}: ${params.query}`,
-            metadata: { provider },
+            metadata: { provider, retried: attempted.retried },
           }
         }).pipe(Effect.orDie),
     }

@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Ref } from "effect"
 import { parseResponse } from "../../src/tool/mcp-websearch"
-import { selectWebSearchProvider, webSearchModelName, webSearchProviderLabel } from "../../src/tool/websearch"
+import {
+  selectWebSearchProvider,
+  simplifyWebSearchQuery,
+  webSearchWithRetry,
+  webSearchModelName,
+  webSearchProviderLabel,
+} from "../../src/tool/websearch"
 
 import { webSearchEnabled } from "../../src/tool/registry"
 import { it } from "../lib/effect"
@@ -49,6 +55,30 @@ describe("websearch provider", () => {
     expect(webSearchProviderLabel("exa")).toBe("Exa Web Search")
     expect(webSearchProviderLabel(undefined)).toBe("Web Search")
   })
+
+  test("simplifies retry queries without changing their key terms", () => {
+    expect(simplifyWebSearchQuery(`  "authoritative"   WebGPU \`limits\`  `)).toBe("authoritative WebGPU limits")
+  })
+
+  it.effect("retries one failed search with the simplified query", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make<ReadonlyArray<string>>([])
+      const result = yield* webSearchWithRetry({ query: `  "authoritative"   WebGPU \`limits\`  ` }, (input) =>
+        Effect.gen(function* () {
+          const seen = yield* Ref.get(attempts)
+          yield* Ref.set(attempts, [...seen, input.query])
+          if (seen.length === 0) return yield* Effect.fail("transient")
+          return "search results"
+        }),
+      )
+
+      expect(result).toEqual({ result: "search results", retried: true })
+      expect(yield* Ref.get(attempts)).toEqual([
+        `  "authoritative"   WebGPU \`limits\`  `,
+        "authoritative WebGPU limits",
+      ])
+    }),
+  )
 
   test("uses the provider API model id for Parallel analytics", () => {
     expect(

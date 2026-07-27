@@ -10,7 +10,6 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
 import { Policy } from "@opencode-ai/core/policy"
@@ -71,33 +70,109 @@ describe("Config", () => {
     Effect.sync(() => {
       const workflows = ConfigWorkflows.merge([
         Schema.decodeUnknownSync(ConfigWorkflows.Info)({
+          recursion: { max_depth: 3 },
+          reports: {
+            directory: ".opencode/custom-reports",
+            max_prompt_bytes: 262_144,
+            finalization_retries: 2,
+          },
           heavy: {
             council: false,
+            delegates: ["heavy"],
             max_depth: 3,
             child_timeout: 120_000,
-            models: { planner: "openai/planner", worker: "openai/worker" },
+            models: {
+              planner: "openai/planner",
+              worker: "openai/worker",
+            },
           },
           council: { perspectives: 4, child_timeout: 90_000, debate: { rounds: 2 } },
+          research: {
+            effort: "deep",
+            capability: "read",
+            max_depth: 3,
+            min_depth: 2,
+            max_branches_per_node: 3,
+            min_evidence_per_branch: 2,
+            tasks_per_wave: 4,
+            freshness_days: 30,
+            models: { planner: "openai/research-planner" },
+          },
         }),
         Schema.decodeUnknownSync(ConfigWorkflows.Info)({
-          heavy: { council: true, concurrency: 2, child_timeout: 30_000, models: { writer: "openai/writer" } },
+          recursion: {
+            max_workflows: 20,
+            max_concurrency: 6,
+            max_councils: 5,
+            debate_deduplication: "semantic",
+          },
+          heavy: {
+            council: "synthesis",
+            delegates: ["heavy", "council"],
+            concurrency: 2,
+            child_timeout: 30_000,
+            models: { writer: "openai/writer" },
+          },
           council: {
+            delegates: ["council", "heavy"],
             child_timeout: 45_000,
             debate: { topics: 2 },
             models: { debater: "openai/debater" },
+          },
+          research: {
+            effort: "frontier",
+            max_waves: 5,
+            debate_sensitivity: "high",
+            minimum_report_words: 2_000,
+            models: { assessor: "openai/research-assessor" },
           },
         }),
       ])
 
       expect(workflows).toMatchObject({
+        recursion: {
+          max_depth: 3,
+          max_workflows: 20,
+          max_concurrency: 6,
+          max_councils: 5,
+          debate_deduplication: "semantic",
+        },
+        reports: {
+          directory: ".opencode/custom-reports",
+          max_prompt_bytes: 262_144,
+          finalization_retries: 2,
+        },
+        research: {
+          effort: "frontier",
+          capability: "read",
+          max_depth: 3,
+          min_depth: 2,
+          max_branches_per_node: 3,
+          min_evidence_per_branch: 2,
+          tasks_per_wave: 4,
+          max_waves: 5,
+          debate_sensitivity: "high",
+          freshness_days: 30,
+          minimum_report_words: 2_000,
+          models: {
+            planner: "openai/research-planner",
+            assessor: "openai/research-assessor",
+          },
+        },
         heavy: {
-          council: true,
+          council: "synthesis",
+          delegates: ["heavy", "council"],
           max_depth: 3,
           concurrency: 2,
           child_timeout: 30_000,
-          models: { planner: "openai/planner", worker: "openai/worker", writer: "openai/writer" },
+          models: {
+            planner: "openai/planner",
+            worker: "openai/worker",
+            writer: "openai/writer",
+          },
         },
         council: {
+          delegates: ["council", "heavy"],
           perspectives: 4,
           child_timeout: 45_000,
           debate: { rounds: 2, topics: 2 },

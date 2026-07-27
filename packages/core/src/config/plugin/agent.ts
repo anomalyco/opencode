@@ -92,6 +92,21 @@ export const Plugin = define({
           ])
             draft.remove(AgentV2.ID.make(id))
         }
+        if (
+          workflows?.research === false ||
+          (typeof workflows?.research === "object" && workflows.research.enabled === false)
+        ) {
+          for (const id of [
+            "research",
+            "research-planner",
+            "research-reader",
+            "research-critic",
+            "research-writer",
+            "research-assessor",
+            "research-synthesizer",
+          ])
+            draft.remove(AgentV2.ID.make(id))
+        }
         for (const current of draft.list()) {
           draft.update(current.id, (agent) => agent.permissions.push(...permissions))
         }

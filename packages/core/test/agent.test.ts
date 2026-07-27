@@ -3,6 +3,7 @@ import { Effect, Exit, Scope } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
+import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -130,6 +131,13 @@ describe("AgentV2", () => {
         "heavy-synthesizer",
         "heavy-writer",
         "plan",
+        "research",
+        "research-assessor",
+        "research-critic",
+        "research-planner",
+        "research-reader",
+        "research-synthesizer",
+        "research-writer",
         "summary",
         "title",
       ])
@@ -143,7 +151,77 @@ describe("AgentV2", () => {
         { action: "council_run", resource: "*", effect: "allow" },
       ])
       expect((yield* agent.get(AgentV2.ID.make("council")))?.steps).toBe(3)
-      expect((yield* agent.get(AgentV2.ID.make("heavy-writer")))?.hidden).toBe(true)
+      expect((yield* agent.get(AgentV2.ID.make("research")))?.permissions).toEqual([
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "research_run", resource: "*", effect: "allow" },
+      ])
+      expect((yield* agent.get(AgentV2.ID.make("research")))?.steps).toBe(3)
+      const planner = yield* agent.get(AgentV2.ID.make("heavy-planner"))
+      const perspective = yield* agent.get(AgentV2.ID.make("council-perspective"))
+      const synthesizer = yield* agent.get(AgentV2.ID.make("heavy-synthesizer"))
+      const writer = yield* agent.get(AgentV2.ID.make("heavy-writer"))
+      expect(writer?.hidden).toBe(true)
+      const workflows = ["heavy_run", "council_run", "workflow_report"]
+      workflows.forEach((workflow) => {
+        expect(PermissionV2.evaluate(workflow, "*", planner?.permissions ?? []).effect).toBe("allow")
+        expect(PermissionV2.evaluate(workflow, "*", perspective?.permissions ?? []).effect).toBe("allow")
+        expect(PermissionV2.evaluate(workflow, "*", writer?.permissions ?? []).effect).toBe("allow")
+      })
+      expect(PermissionV2.evaluate("workflow_read_reports", "*", planner?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("workflow_read_reports", "*", perspective?.permissions ?? []).effect).toBe("allow")
+      expect(PermissionV2.evaluate("read", "/project/src/index.ts", perspective?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(
+        PermissionV2.evaluate(
+          "read",
+          "/project/.opencode/reports/old-run/stages/evidence.md",
+          perspective?.permissions ?? [],
+        ).effect,
+      ).toBe("deny")
+      expect(synthesizer?.steps).toBe(32)
+      expect(PermissionV2.evaluate("websearch", "*", planner?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("read", "*", planner?.permissions ?? []).effect).toBe("deny")
+      const researchPlanner = yield* agent.get(AgentV2.ID.make("research-planner"))
+      const researchReader = yield* agent.get(AgentV2.ID.make("research-reader"))
+      const researchCritic = yield* agent.get(AgentV2.ID.make("research-critic"))
+      const researchAssessor = yield* agent.get(AgentV2.ID.make("research-assessor"))
+      const researchSynthesizer = yield* agent.get(AgentV2.ID.make("research-synthesizer"))
+      const researchWriter = yield* agent.get(AgentV2.ID.make("research-writer"))
+      expect(PermissionV2.evaluate("research_run", "*", researchReader?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("council_run", "*", researchReader?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("websearch", "*", researchReader?.permissions ?? []).effect).toBe("allow")
+      expect(
+        PermissionV2.evaluate(
+          "read",
+          "/project/.opencode/reports/old-run/stages/evidence.md",
+          researchReader?.permissions ?? [],
+        ).effect,
+      ).toBe("deny")
+      expect(PermissionV2.evaluate("websearch", "*", researchCritic?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("webfetch", "*", researchSynthesizer?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("read", "*", researchSynthesizer?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("workflow_read_reports", "*", researchCritic?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(PermissionV2.evaluate("workflow_read_reports", "*", researchSynthesizer?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(PermissionV2.evaluate("websearch", "*", researchPlanner?.permissions ?? []).effect).toBe("deny")
+      expect(PermissionV2.evaluate("workflow_read_reports", "*", researchPlanner?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(PermissionV2.evaluate("workflow_read_reports", "*", researchAssessor?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(PermissionV2.evaluate("research_run", "*", researchWriter?.permissions ?? []).effect).toBe("deny")
+      expect(
+        PermissionV2.evaluate(
+          "read",
+          "/project/.opencode/reports/old-run/stages/evidence.md",
+          researchWriter?.permissions ?? [],
+        ).effect,
+      ).toBe("deny")
     }),
   )
 })

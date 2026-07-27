@@ -8,6 +8,7 @@ import {
   formatSubagentTitle,
   formatSubagentToolcalls,
   formatWorkflowSummary,
+  formatWorkflowTree,
   InlineToolRow,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -230,6 +231,7 @@ describe("TUI inline tool wrapping", () => {
     expect(toolDisplay("bash")).toBe("bash")
     expect(toolDisplay("heavy_run")).toBe("workflow")
     expect(toolDisplay("council_run")).toBe("workflow")
+    expect(toolDisplay("research_run")).toBe("workflow")
     expect(toolDisplay("plugin_tool")).toBe("generic")
   })
 
@@ -246,6 +248,55 @@ describe("TUI inline tool wrapping", () => {
     expect(
       formatWorkflowSummary("Heavy", "Assess the architecture", undefined, "completed", 26, false, undefined, 21, true),
     ).toBe("Heavy — Assess the architecture\n↳ Completed · 21 reports · 26 subagent sessions · Council reviewed")
+  })
+
+  test("renders live Heavy and Council lineage, dependencies, timing, and reports", () => {
+    expect(
+      formatWorkflowTree(
+        [
+          {
+            sessionID: "ses_plan",
+            parentSessionID: "ses_user",
+            status: "completed",
+            workflow: "heavy",
+            title: "Heavy plan",
+            stage: "planning",
+            depth: 0,
+            elapsedMs: 1_000,
+          },
+          {
+            sessionID: "ses_reader",
+            parentSessionID: "ses_plan",
+            status: "completed",
+            workflow: "heavy",
+            title: "Storage research",
+            stage: "execution",
+            depth: 1,
+            elapsedMs: 2_000,
+            reportPath: "/project/.opencode/reports/storage.md",
+          },
+          {
+            sessionID: "ses_council",
+            parentSessionID: "ses_plan",
+            status: "running",
+            workflow: "council",
+            title: "Council debate",
+            stage: "debate",
+            depth: 1,
+            dependsOn: ["storage"],
+            elapsedMs: 500,
+          },
+        ],
+        (value) => value.replace("/project/", ""),
+      ),
+    ).toBe(
+      [
+        "↳ Workflow tree",
+        "  ↳ ✓ Heavy: Heavy plan · planning · depth 0 · 1.0s",
+        "    ↳ ✓ Heavy: Storage research · execution · depth 1 · 2.0s · report .opencode/reports/storage.md",
+        "    ↳ ● Council: Council debate · debate · depth 1 · after storage · 500ms",
+      ].join("\n"),
+    )
   })
 
   test("keeps workflow child prompts focused on the assigned task", () => {
