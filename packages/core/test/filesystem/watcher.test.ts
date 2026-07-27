@@ -43,9 +43,13 @@ describe("Watcher.testLayer", () => {
   )
 })
 
-function countingBackend() {
+function withNative(native: Watcher.NativeInterface) {
+  return Effect.provide(Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native))))
+}
+
+function countingNative() {
   const counts = { subscribes: 0, unsubscribes: 0 }
-  const backend: Watcher.Backend = {
+  const native: Watcher.NativeInterface = {
     subscribe: () =>
       Effect.sync(() => {
         counts.subscribes++
@@ -57,7 +61,7 @@ function countingBackend() {
         }
       }),
   }
-  return { backend, counts }
+  return { native, counts }
 }
 
 describe("Watcher lifecycle", () => {
@@ -74,21 +78,19 @@ describe("Watcher lifecycle", () => {
         yield* Fiber.interrupt(consumer)
         expect(yield* Deferred.isDone(interrupted)).toBe(true)
       }).pipe(
-        Effect.provide(
-          Watcher.backendLayer({
-            subscribe: () =>
-              Deferred.succeed(started, undefined).pipe(
-                Effect.andThen(Effect.never),
-                Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
-              ),
-          }),
-        ),
+        withNative({
+          subscribe: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+            ),
+        }),
       )
     }),
   )
 
   it.effect("shares one subscription and releases exactly once after the final consumer", () => {
-    const { backend, counts } = countingBackend()
+    const { native, counts } = countingNative()
     return Effect.gen(function* () {
       const watcher = yield* Watcher.Service
       const consume = () =>
@@ -106,11 +108,11 @@ describe("Watcher lifecycle", () => {
       yield* Fiber.interrupt(second)
       expect(counts.subscribes).toBe(1)
       expect(counts.unsubscribes).toBe(1)
-    }).pipe(Effect.provide(Watcher.backendLayer(backend)))
+    }).pipe(withNative(native))
   })
 
   it.effect("scope shutdown releases an active subscription exactly once", () => {
-    const { backend, counts } = countingBackend()
+    const { native, counts } = countingNative()
     return Effect.gen(function* () {
       const consumer = yield* Effect.gen(function* () {
         const watcher = yield* Watcher.Service
@@ -121,7 +123,7 @@ describe("Watcher lifecycle", () => {
         expect(counts.subscribes).toBe(1)
         expect(counts.unsubscribes).toBe(0)
         return consumer
-      }).pipe(Effect.provide(Watcher.backendLayer(backend)))
+      }).pipe(withNative(native))
       // Closing the layer scope tears the native subscription down while the
       // consumer still holds a reference; the consumer's own release as its
       // stream ends must not tear it down a second time.

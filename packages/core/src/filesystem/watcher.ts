@@ -50,8 +50,8 @@ export type Subscription = {
   readonly backend?: string
 }
 
-/** Native acquisition seam: the real layer wires node/parcel backends, tests substitute controllable ones. */
-export interface Backend {
+export interface NativeInterface {
+  /** Starts one OS-level watch, reporting events through `publish` until unsubscribed. */
   readonly subscribe: (input: {
     readonly type: WatchInput["type"]
     readonly target: string
@@ -59,6 +59,13 @@ export interface Backend {
     readonly publish: (update: Update) => void
   }) => Effect.Effect<Subscription | undefined>
 }
+
+/**
+ * The OS-level watch implementation behind the Watcher service. The default
+ * layer uses `node:fs.watch` for files and `@parcel/watcher` for directories;
+ * tests provide implementations they can control.
+ */
+export class Native extends Context.Service<Native, NativeInterface>()("@opencode/Watcher/Native") {}
 
 export interface Interface {
   readonly subscribe: (input: WatchInput) => Stream.Stream<Update>
@@ -97,18 +104,16 @@ export const testLayer = Layer.effectContext(
   }),
 )
 
-function makeLayer(options: Options | undefined, makeBackend: () => Backend) {
-  return Layer.effect(
+export const layer = (options?: Options) =>
+  Layer.effect(
     Service,
     Effect.gen(function* () {
       if (options?.enabled === false) {
         return Service.of({ subscribe: () => Stream.empty })
       }
-      const backend = makeBackend()
+      const native = yield* Native
 
-      // Keys compare structurally, so equivalent watches share one native
-      // subscription; RcMap owns the refcounts and interrupts an in-flight
-      // acquisition when its last waiter goes away.
+      // Keys compare structurally (effect Equal), so equivalent watches share one entry.
       type Key = { readonly type: WatchInput["type"]; readonly target: string; readonly ignore: readonly string[] }
       const watchers = yield* RcMap.make({
         lookup: (key: Key) =>
@@ -117,7 +122,7 @@ function makeLayer(options: Options | undefined, makeBackend: () => Backend) {
               PubSub.shutdown(pubsub),
             )
             const subscription = yield* Effect.acquireRelease(
-              backend.subscribe({
+              native.subscribe({
                 type: key.type,
                 target: key.target,
                 ignore: key.ignore,
@@ -162,10 +167,10 @@ function makeLayer(options: Options | undefined, makeBackend: () => Backend) {
       return Service.of({ subscribe })
     }),
   )
-}
 
-export const layer = (options?: Options) =>
-  makeLayer(options, () => ({
+export const nativeLayer = Layer.succeed(
+  Native,
+  Native.of({
     subscribe: (input) => {
       if (input.type === "file") {
         return Effect.sync(() => {
@@ -184,13 +189,13 @@ export const layer = (options?: Options) =>
       }
       return subscribeDirectory(watcher(), getBackend(), input.target, input.ignore, input.publish)
     },
-  }))
+  }),
+)
 
-/** Watcher layer with controllable native acquisition for resource lifecycle tests. */
-export const backendLayer = (backend: Backend) => makeLayer(undefined, () => backend)
+export const nativeNode = makeGlobalNode({ service: Native, layer: nativeLayer, deps: [] })
 
 export function configured(options?: Options) {
-  return makeGlobalNode({ service: Service, layer: layer(options), deps: [] })
+  return makeGlobalNode({ service: Service, layer: layer(options), deps: [nativeNode] })
 }
 
 export const node = configured()
