@@ -100,6 +100,8 @@ const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema 
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   const document = Schema.toJsonSchemaDocument(schema)
+  // Effect emits valid but provider-hostile wrappers. Simplify only losslessly:
+  // flatten non-conflicting allOf fields and inline acyclic local references.
   const normalized = flattenAllOf(
     Object.keys(document.definitions).length === 0
       ? document.schema
