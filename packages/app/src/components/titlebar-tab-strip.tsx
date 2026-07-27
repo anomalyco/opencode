@@ -15,6 +15,7 @@ import { useCommand } from "@/context/command"
 import { useTabs } from "@/context/tabs"
 import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { showToast } from "@/utils/toast"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 
 function SessionTabSlot(props: {
@@ -51,6 +52,25 @@ function SessionTabSlot(props: {
   const session = createMemo(() => cachedSession() ?? loadedSession())
   const missingSession = createMemo(() => !!props.serverCtx() && !loadedSession.loading && !session())
   let prefetched = false
+
+  const rename = async (title: string) => {
+    const value = session()
+    const ctx = props.serverCtx()
+    if (!value || !ctx) return
+
+    ctx.sync.session.remember({ ...value, title })
+    try {
+      await ctx.sdk.api.session.rename({ sessionID: value.id, title })
+    } catch (err) {
+      const current = session()
+      const currentCtx = props.serverCtx()
+      if (current && currentCtx) currentCtx.sync.session.remember({ ...current, title: value.title })
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : undefined,
+      })
+    }
+  }
 
   createEffect(() => {
     const ctx = props.serverCtx()
@@ -99,16 +119,7 @@ function SessionTabSlot(props: {
         server={props.tab.server}
         session={session}
         fallbackTitle={persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined)}
-        onTitleChange={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
-        onTitleChangeFailed={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
+        onRename={rename}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active()}
