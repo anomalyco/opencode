@@ -100,6 +100,12 @@ const api: ElectronAPI = {
   readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),
   showNotification: (title, body) => ipcRenderer.send("show-notification", title, body),
   getWindowFocused: () => ipcRenderer.invoke("get-window-focused"),
+  getWindowFullscreen: () => ipcRenderer.invoke("get-window-fullscreen"),
+  onWindowFullscreenChanged: (cb) => {
+    const handler = (_: unknown, fullscreen: boolean) => cb(fullscreen)
+    ipcRenderer.on("window-fullscreen-changed", handler)
+    return () => ipcRenderer.removeListener("window-fullscreen-changed", handler)
+  },
   setWindowFocus: () => ipcRenderer.invoke("set-window-focus"),
   showWindow: () => ipcRenderer.invoke("show-window"),
   relaunch: () => ipcRenderer.send("relaunch"),
