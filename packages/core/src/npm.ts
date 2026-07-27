@@ -127,7 +127,7 @@ const layer = Layer.effect(
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
-      const first = tree.edgesOut.values().next().value?.to
+      const first = tree.edgesOut.get(name)?.to
       if (!first) {
         const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
         if (result.entrypoint) return result
