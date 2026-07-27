@@ -4,11 +4,9 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { useGlobal } from "@/context/global"
-import { useLanguage } from "@/context/language"
 import { ServerConnection, serverName } from "@/context/server"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
-import { showToast } from "@/utils/toast"
 import type { Session } from "@opencode-ai/sdk/v2"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import { TabPreviewPopover } from "./titlebar-tab-popover"
@@ -23,8 +21,7 @@ export function TabNavItem(props: {
   server: ServerConnection.Key
   session: () => Session | undefined
   fallbackTitle?: string
-  onTitleChange?: (title: string) => void
-  onTitleChangeFailed?: (title: string) => void
+  onRename: (title: string) => Promise<void>
   onClose: () => void
   onNavigate: () => void
   active?: boolean
@@ -34,7 +31,6 @@ export function TabNavItem(props: {
   pressed?: boolean
   hidden?: boolean
 }) {
-  const language = useLanguage()
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
   let tabRoot!: HTMLDivElement
@@ -116,13 +112,6 @@ export function TabNavItem(props: {
     selection?.addRange(range)
   }
 
-  const rename = async (title: string) => {
-    const ctx = serverCtx()
-    const session = props.session()
-    if (!ctx || !session) return
-    await ctx.sdk.api.session.rename({ sessionID: session.id, title })
-  }
-
   const closeRename = async (save: boolean) => {
     if (committing || !editing()) return
     committing = true
@@ -131,7 +120,6 @@ export function TabNavItem(props: {
     const next = (titleEl.textContent ?? "").trim()
 
     titleEl.scrollLeft = 0
-    if (save && next && next !== original) props.onTitleChange?.(next)
     setEditing(false)
 
     if (!save || !next || next === original) {
@@ -139,15 +127,7 @@ export function TabNavItem(props: {
       return
     }
 
-    try {
-      await rename(next)
-    } catch (err) {
-      props.onTitleChangeFailed?.(original)
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : undefined,
-      })
-    }
+    await props.onRename(next)
 
     committing = false
   }
