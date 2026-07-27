@@ -43,6 +43,37 @@ test("session settings use the remote server context", async ({ page }) => {
   await expect(dialog.getByRole("switch", { name: "Server A Model" })).toHaveCount(0)
 })
 
+test("mutable settings selects reopen after changing their value", async ({ page }) => {
+  const permissionRequests: string[] = []
+  const configUpdates: Record<string, unknown>[] = []
+  await mockServers(page, permissionRequests, [], configUpdates)
+  await configureServers(page)
+
+  await page.goto(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
+  await expect(page.getByText(sessionB.title).first()).toBeVisible()
+  await page.keyboard.press("Control+,")
+
+  const content = page.locator('[data-slot="select-v2-content"]')
+  const theme = page.locator('[data-action="settings-theme"]')
+  await theme.click()
+  await expect(content).toBeVisible()
+  await content.locator('[data-component="menu-v2-item"]:not([data-selected])').first().click()
+  await theme.click()
+  await expect(content).toBeVisible()
+  await theme.click()
+  await expect(content).toHaveCount(0)
+
+  const shell = page.locator('[data-action="settings-shell"]')
+  await shell.click()
+  await expect(content).toBeVisible()
+  await content.getByText("PowerShell").click()
+  await expect.poll(() => configUpdates).toEqual([{ shell: "powershell" }])
+  await shell.click()
+  await expect(content).toBeVisible()
+  await shell.click()
+  await expect(content).toHaveCount(0)
+})
+
 test("auto-accept responds for an unfocused server session", async ({ page }) => {
   const permissionRequests: string[] = []
   const permissionResponses: PermissionResponse[] = []
@@ -161,7 +192,13 @@ async function configureServers(page: Page, tabs: { type: "session"; server: str
   )
 }
 
-async function mockServers(page: Page, permissionRequests: string[], permissionResponses: PermissionResponse[] = []) {
+async function mockServers(
+  page: Page,
+  permissionRequests: string[],
+  permissionResponses: PermissionResponse[] = [],
+  configUpdates: Record<string, unknown>[] = [],
+) {
+  let config: Record<string, unknown> = {}
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
@@ -220,9 +257,20 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       permissionRequests.push(url.toString())
       return json(route, [])
     }
-    if (["/skill", "/command", "/lsp", "/formatter", "/question", "/vcs/diff", "/pty/shells"].includes(url.pathname))
+    if (url.pathname === "/pty/shells")
+      return json(route, [
+        { path: "C:/Program Files/PowerShell/7/pwsh.exe", name: "powershell", acceptable: true },
+        { path: "C:/Windows/System32/cmd.exe", name: "cmd", acceptable: true },
+      ])
+    if (["/skill", "/command", "/lsp", "/formatter", "/question", "/vcs/diff"].includes(url.pathname))
       return json(route, [])
-    if (["/global/config", "/config", "/provider/auth", "/mcp"].includes(url.pathname)) return json(route, {})
+    if (url.pathname === "/global/config" || url.pathname === "/config") {
+      if (route.request().method() !== "PATCH") return json(route, config)
+      config = { ...config, ...(route.request().postDataJSON() as Record<string, unknown>) }
+      configUpdates.push(config)
+      return json(route, config)
+    }
+    if (["/provider/auth", "/mcp"].includes(url.pathname)) return json(route, {})
     if (url.pathname === "/provider") return json(route, provider(remote ? "server-b" : "server-a"))
     if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
     if (url.pathname === "/project" || url.pathname === "/project/current") {
