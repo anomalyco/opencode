@@ -6,7 +6,6 @@ import {
   createMemo,
   For,
   JSX,
-  onCleanup,
   Show,
   ValidComponent,
 } from "solid-js"
@@ -242,42 +241,111 @@ export function ModelSelectorPopoverV2(props: {
   triggerProps?: ModelSelectorTriggerProps
   onClose?: () => void
 }) {
-  const model = props.model ?? useLocal().model
-  const language = useLanguage()
+  const controller = createModelSelectorController({
+    model: props.model,
+    provider: () => props.provider,
+    onSelect: () => props.onClose?.(),
+  })
+
+  return (
+    <ModelSelectorPopoverV2View
+      children={props.children}
+      triggerAs={props.triggerAs}
+      triggerProps={props.triggerProps}
+      models={controller.models}
+      groups={controller.groups}
+      current={controller.current}
+      select={controller.select}
+      manage={controller.manage}
+      labels={controller.labels}
+      onClose={() => props.onClose?.()}
+    />
+  )
+}
+
+function createModelSelectorController(input: {
+  provider: () => string | undefined
+  model?: ModelState
+  onSelect: () => void
+}) {
+  const model = input.model ?? useLocal().model
   const dialog = useDialog()
+  const language = useLanguage()
+  const allModels = createMemo(() =>
+    model
+      .list()
+      .filter((item) => model.visible({ modelID: item.id, providerID: item.provider.id }))
+      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
+  )
+
+  return {
+    models: (search: string) => {
+      const query = search.trim()
+      const filtered = query
+        ? allModels().filter((item) => matchesModelSearch(query, [item.name, item.id, item.provider.name]))
+        : allModels()
+      return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
+    },
+    groups: (models: ModelItem[]) => {
+      const byProvider = new Map<string, ModelItem[]>()
+      for (const item of models) {
+        byProvider.set(item.provider.id, [...(byProvider.get(item.provider.id) ?? []), item])
+      }
+      return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
+    },
+    current: () => {
+      const value = model.current()
+      return value ? modelKey(value) : undefined
+    },
+    select: (item: ModelItem) => {
+      model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
+      input.onSelect()
+    },
+    manage: () => {
+      void import("./dialog-manage-models").then((module) => {
+        void dialog.show(() => <module.DialogManageModelsV2 />)
+      })
+    },
+    labels: {
+      search: () => language.t("dialog.model.search.placeholder"),
+      empty: () => language.t("dialog.model.empty"),
+      clear: () => language.t("common.clear"),
+      free: () => language.t("model.tag.free"),
+      latest: () => language.t("model.tag.latest"),
+      manage: () => language.t("dialog.model.manage"),
+    },
+  }
+}
+
+function ModelSelectorPopoverV2View(props: {
+  children?: JSX.Element
+  triggerAs?: ValidComponent
+  triggerProps?: ModelSelectorTriggerProps
+  models: (search: string) => ModelItem[]
+  groups: (models: ModelItem[]) => { category: string; items: ModelItem[] }[]
+  current: () => string | undefined
+  select: (item: ModelItem) => void
+  manage: () => void
+  labels: {
+    search: () => string
+    empty: () => string
+    clear: () => string
+    free: () => string
+    latest: () => string
+    manage: () => string
+  }
+  onClose: () => void
+}) {
   const [store, setStore] = createStore({ open: false, search: "", active: "" })
   let searchRef: HTMLInputElement | undefined
   let contentRef: HTMLDivElement | undefined
   let restoreTrigger = true
 
-  const allModels = createMemo(() =>
-    model
-      .list()
-      .filter((item) => model.visible({ modelID: item.id, providerID: item.provider.id }))
-      .filter((item) => (props.provider ? item.provider.id === props.provider : true)),
-  )
-  const models = createMemo(() => {
-    const search = store.search.trim()
-    const filtered = search
-      ? allModels().filter((item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]))
-      : allModels()
-
-    return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
-  })
-  const groups = createMemo(() => {
-    const byProvider = new Map<string, ModelItem[]>()
-    for (const item of models()) {
-      byProvider.set(item.provider.id, [...(byProvider.get(item.provider.id) ?? []), item])
-    }
-    return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
-  })
+  const models = createMemo(() => props.models(store.search))
+  const groups = createMemo(() => props.groups(models()))
   const keys = () => [...models().map(modelKey), manageKey]
-  const current = () => {
-    const value = model.current()
-    return value ? `${value.provider.id}:${value.id}` : undefined
-  }
   const initialActive = () => {
-    const selected = current()
+    const selected = props.current()
     const options = keys()
     if (selected && options.includes(selected)) return selected
     return options[0] ?? ""
@@ -308,23 +376,15 @@ export function ModelSelectorPopoverV2(props: {
     }
     setStore({ open: false, search: "", active: "" })
   }
-  const select = (item: ModelItem) => {
-    model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
-    props.onClose?.()
-  }
   const selectModel = (item: ModelItem) => {
     restoreTrigger = false
     setOpen(false)
-    afterClose(() => select(item))
+    afterClose(() => props.select(item))
   }
   const manage = () => {
     restoreTrigger = false
     setOpen(false)
-    afterClose(() => {
-      void import("./dialog-manage-models").then((x) => {
-        dialog.show(() => <x.DialogManageModelsV2 />)
-      })
-    })
+    afterClose(props.manage)
   }
   const selectActive = () => {
     const item = models().find((item) => modelKey(item) === store.active)
@@ -343,10 +403,7 @@ export function ModelSelectorPopoverV2(props: {
     queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
   }
   const setSearch = (value: string) => {
-    const search = value.trim()
-    const first = [...allModels()]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .find((item) => matchesModelSearch(search, [item.name, item.id, item.provider.name]))
+    const first = props.models(value)[0]
     setStore({ search: value, active: first ? modelKey(first) : manageKey })
   }
 
@@ -381,7 +438,7 @@ export function ModelSelectorPopoverV2(props: {
               <input
                 ref={(el) => (searchRef = el)}
                 value={store.search}
-                placeholder={language.t("dialog.model.search.placeholder")}
+                placeholder={props.labels.search()}
                 class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
                 spellcheck={false}
                 autocorrect="off"
@@ -395,7 +452,7 @@ export function ModelSelectorPopoverV2(props: {
                     event.preventDefault()
                     restoreTrigger = false
                     setOpen(false)
-                    afterClose(() => props.onClose?.())
+                    afterClose(props.onClose)
                     return
                   }
                   if (event.altKey || event.metaKey) return
@@ -421,7 +478,7 @@ export function ModelSelectorPopoverV2(props: {
                   class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => setSearch("")}
-                  aria-label={language.t("common.clear")}
+                  aria-label={props.labels.clear()}
                 >
                   <Icon name="close" size="small" />
                 </button>
@@ -435,7 +492,7 @@ export function ModelSelectorPopoverV2(props: {
                 when={models().length > 0}
                 fallback={
                   <div class="flex h-12 items-center px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
-                    {language.t("dialog.model.empty")}
+                    {props.labels.empty()}
                   </div>
                 }
               >
@@ -445,7 +502,7 @@ export function ModelSelectorPopoverV2(props: {
                       <MenuV2.GroupLabel class="gap-2 px-3">
                         <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
                       </MenuV2.GroupLabel>
-                      <MenuV2.RadioGroup value={current()}>
+                      <MenuV2.RadioGroup value={props.current()}>
                         <For each={group.items}>
                           {(item) => (
                             <TooltipV2
@@ -465,7 +522,7 @@ export function ModelSelectorPopoverV2(props: {
                               <MenuV2.RadioItem
                                 value={modelKey(item)}
                                 data-option-key={modelKey(item)}
-                                data-selected-model={current() === modelKey(item) ? true : undefined}
+                                data-selected-model={props.current() === modelKey(item) ? true : undefined}
                                 class="scroll-my-6 w-full"
                                 classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
                                 onMouseEnter={() => {
@@ -476,10 +533,10 @@ export function ModelSelectorPopoverV2(props: {
                               >
                                 <span class="min-w-0 truncate leading-5">{item.name}</span>
                                 <Show when={isFree(item.provider.id, item.cost)}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
+                                  <TagV2 class="shrink-0">{props.labels.free()}</TagV2>
                                 </Show>
                                 <Show when={item.latest}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
+                                  <TagV2 class="shrink-0">{props.labels.latest()}</TagV2>
                                 </Show>
                               </MenuV2.RadioItem>
                             </TooltipV2>
@@ -504,7 +561,7 @@ export function ModelSelectorPopoverV2(props: {
               onSelect={manage}
             >
               <Icon name="outline-sliders" size="small" />
-              <span class="min-w-0 flex-1 truncate leading-5">{language.t("dialog.model.manage")}</span>
+              <span class="min-w-0 flex-1 truncate leading-5">{props.labels.manage()}</span>
             </MenuV2.Item>
           </div>
         </MenuV2.Content>
