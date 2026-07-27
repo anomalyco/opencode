@@ -2217,6 +2217,10 @@ export default function Page() {
                         comments.clear()
                         resumeScroll()
                       },
+                      get edit() {
+                        return editingFollowup()
+                      },
+                      onEditLoaded: clearFollowupEdit,
                       shouldQueue: queueEnabled,
                       onQueue: queueFollowup,
                       onAbort: () => {
@@ -2226,12 +2230,7 @@ export default function Page() {
                       },
                     })
                     return (
-                      <PromptInputV2Composer
-                        controller={controller}
-                        borderUnderlay
-                        edit={editingFollowup()}
-                        onEditLoaded={clearFollowupEdit}
-                      />
+                      <PromptInputV2Composer controller={controller} borderUnderlay />
                     )
                   }}
                 </Show>
