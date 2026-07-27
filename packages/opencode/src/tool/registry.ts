@@ -17,7 +17,6 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import { CronAddTool, CronListTool, CronDeleteTool } from "./cron"
-import { CronNode } from "../cron/node"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -443,7 +442,7 @@ export const node = LayerNode.make({
     Session.node,
     BackgroundJob.node,
     Provider.node,
-    CronNode.node,
+
     LSP.node,
     Instruction.node,
     FSUtil.node,

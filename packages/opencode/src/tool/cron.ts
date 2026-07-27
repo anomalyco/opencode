@@ -22,11 +22,11 @@ const DeleteParameters = Schema.Struct({
 
 type Metadata = { [key: string]: any }
 
-const renderError = (e: unknown) => ({
+const renderError = (e: unknown) => Effect.succeed({
   title: "cron error",
   output: JSON.stringify({ error: String(e) }),
   metadata: {},
-})
+} satisfies Tool.ExecuteResult)
 
 export const CronAddTool = Tool.define<typeof AddParameters, Metadata, CronService>(
   "cron_add",
@@ -35,7 +35,7 @@ export const CronAddTool = Tool.define<typeof AddParameters, Metadata, CronServi
     return {
       description: "Schedule a prompt to re-run on a recurring interval in this session.",
       parameters: AddParameters,
-      execute: (params, _ctx) =>
+      execute: (params: Schema.Schema.Type<typeof AddParameters>, _ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const intervalMs = yield* parseDuration(params.interval)
           const job = yield* cron.add({
@@ -50,7 +50,7 @@ export const CronAddTool = Tool.define<typeof AddParameters, Metadata, CronServi
             output: JSON.stringify(job),
             metadata: {},
           }
-        }).pipe(Effect.catchAll(renderError)),
+        }).pipe(Effect.catch(renderError)),
     } satisfies Tool.DefWithoutID<typeof AddParameters, Metadata>
   }),
 )
@@ -62,7 +62,7 @@ export const CronListTool = Tool.define<typeof ListParameters, Metadata, CronSer
     return {
       description: "List scheduled cron jobs for this session.",
       parameters: ListParameters,
-      execute: (_params, ctx) =>
+      execute: (_params: Schema.Schema.Type<typeof ListParameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const jobs = yield* cron.list(ctx.sessionID)
           return {
@@ -70,7 +70,7 @@ export const CronListTool = Tool.define<typeof ListParameters, Metadata, CronSer
             output: JSON.stringify(jobs),
             metadata: {},
           }
-        }).pipe(Effect.catchAll(renderError)),
+        }).pipe(Effect.catch(renderError)),
     } satisfies Tool.DefWithoutID<typeof ListParameters, Metadata>
   }),
 )
@@ -82,7 +82,7 @@ export const CronDeleteTool = Tool.define<typeof DeleteParameters, Metadata, Cro
     return {
       description: 'Cancel a scheduled cron job (or "all") for this session.',
       parameters: DeleteParameters,
-      execute: (params, ctx) =>
+      execute: (params: Schema.Schema.Type<typeof DeleteParameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const removed = yield* cron.remove(ctx.sessionID, params.id)
           return {
@@ -90,7 +90,7 @@ export const CronDeleteTool = Tool.define<typeof DeleteParameters, Metadata, Cro
             output: JSON.stringify({ removed }),
             metadata: {},
           }
-        }).pipe(Effect.catchAll(renderError)),
+        }).pipe(Effect.catch(renderError)),
     } satisfies Tool.DefWithoutID<typeof DeleteParameters, Metadata>
   }),
 )

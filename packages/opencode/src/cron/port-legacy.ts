@@ -20,24 +20,24 @@ export const CronDeliveryPortLive = Layer.effect(
 
     return CronDeliveryPort.of({
       isBusy: (sessionID) =>
-        runState.assertNotBusy(sessionID).pipe(
+        runState.assertNotBusy(sessionID as any).pipe(
           Effect.as(false),
           Effect.catchTag("SessionBusyError", () => Effect.succeed(true)),
         ),
       deliver: (sessionID, prompt, opts) =>
         promptSvc
           .prompt({
-            sessionID,
+            sessionID: sessionID as any,
             parts: [{ type: "text", text: prompt }],
             agent: opts?.agent,
-            model: parseModel(opts?.model),
+            model: parseModel(opts?.model) as any,
           })
           .pipe(
             Effect.asVoid,
             Effect.mapError((e) => new CronDeliveryError({ message: String(e) })),
           ),
       exists: (sessionID) =>
-        sessionSvc.get(sessionID).pipe(
+        sessionSvc.get(sessionID as any).pipe(
           Effect.as(true),
           Effect.orElseSucceed(() => false),
         ),
