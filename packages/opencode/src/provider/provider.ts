@@ -136,13 +136,48 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
 type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
 type CustomDiscoverModels = () => Promise<Record<string, Model>>
+type CustomDiscoveryMode = "merge" | "replace"
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
   getModel?: CustomModelLoader
   vars?: CustomVarsLoader
   options?: Record<string, any>
   discoverModels?: CustomDiscoverModels
+  discoveryMode?: CustomDiscoveryMode
 }>
+
+const ModalModelsResponse = Schema.Struct({
+  data: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      base_model_id: Schema.optional(Schema.String),
+      api_proxy_model_id: Schema.optional(Schema.String),
+      hugging_face_id: Schema.optional(Schema.String),
+      name: Schema.optional(Schema.String),
+      created: Schema.optional(Schema.Number),
+      input_modalities: Schema.optional(Schema.Array(Schema.String)),
+      output_modalities: Schema.optional(Schema.Array(Schema.String)),
+      context_length: Schema.optional(Schema.Number),
+      max_output_length: Schema.optional(Schema.Number),
+      pricing: Schema.optional(
+        Schema.Struct({
+          prompt: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+          completion: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+          input_cache_read: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+        }),
+      ),
+      supported_sampling_parameters: Schema.optional(Schema.Array(Schema.String)),
+      supported_features: Schema.optional(Schema.Array(Schema.String)),
+    }),
+  ),
+})
+const decodeModalModelsResponse = Schema.decodeUnknownSync(ModalModelsResponse)
+
+function modalPrice(value: string | number | undefined, fallback: number) {
+  if (value === undefined) return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed * 1_000_000 : fallback
+}
 
 type CustomDep = {
   auth: (id: string) => Effect.Effect<Auth.Info | undefined>
@@ -474,6 +509,113 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    modal: Effect.fnUntraced(function* (input: Info) {
+      const auth = yield* dep.auth(input.id)
+      const providerConfig = (yield* dep.config()).provider?.["modal"]
+      const apiKey =
+        (typeof input.options.apiKey === "string" ? input.options.apiKey : undefined) ??
+        (auth?.type === "api" ? auth.key : undefined) ??
+        (yield* dep.get("MODAL_PROXY_TOKEN"))
+      const baseURL =
+        typeof input.options.baseURL === "string" ? input.options.baseURL : Object.values(input.models)[0]?.api.url
+
+      return {
+        autoload: !!apiKey,
+        discoveryMode: "replace",
+        async discoverModels() {
+          if (!apiKey || !baseURL) return {}
+
+          try {
+            const headers = new Headers(isRecord(input.options.headers) ? (input.options.headers as HeadersInit) : {})
+            headers.set("Authorization", `Bearer ${apiKey}`)
+            const fetcher = typeof input.options.fetch === "function" ? (input.options.fetch as typeof fetch) : fetch
+            const response = await fetcher(`${baseURL.replace(/\/+$/, "")}/models`, {
+              headers,
+              signal: AbortSignal.timeout(3_000),
+            })
+            if (!response.ok) return {}
+
+            const result = decodeModalModelsResponse(await response.json())
+            const models: Record<string, Model> = {}
+            for (const item of result.data) {
+              const templateID = item.base_model_id ?? item.api_proxy_model_id ?? item.hugging_face_id ?? item.id
+              const template = input.models[templateID]
+              const created = item.created === undefined ? undefined : new Date(item.created * 1_000)
+              const releaseDate =
+                created && Number.isFinite(created.getTime())
+                  ? created.toISOString().slice(0, 10)
+                  : (template?.release_date ?? "")
+
+              models[item.id] = {
+                id: ModelV2.ID.make(item.id),
+                providerID: input.id,
+                name: item.name ?? template?.name ?? item.id,
+                family: template?.family ?? "",
+                api: {
+                  id: item.id,
+                  url: baseURL,
+                  npm: template?.api.npm ?? "@ai-sdk/openai-compatible",
+                },
+                status: template?.status ?? "active",
+                headers: { ...template?.headers },
+                options: { ...template?.options },
+                cost: {
+                  ...template?.cost,
+                  input: modalPrice(item.pricing?.prompt, template?.cost.input ?? 0),
+                  output: modalPrice(item.pricing?.completion, template?.cost.output ?? 0),
+                  cache: {
+                    read: modalPrice(item.pricing?.input_cache_read, template?.cost.cache.read ?? 0),
+                    write: template?.cost.cache.write ?? 0,
+                  },
+                },
+                limit: {
+                  context: item.context_length ?? template?.limit.context ?? 0,
+                  input: template?.limit.input,
+                  output: item.max_output_length ?? template?.limit.output ?? 0,
+                },
+                capabilities: {
+                  temperature:
+                    item.supported_sampling_parameters?.includes("temperature") ??
+                    template?.capabilities.temperature ??
+                    false,
+                  reasoning:
+                    item.supported_features?.includes("reasoning") ?? template?.capabilities.reasoning ?? false,
+                  attachment:
+                    item.input_modalities?.some((modality) => modality !== "text") ??
+                    template?.capabilities.attachment ??
+                    false,
+                  toolcall: item.supported_features?.includes("tools") ?? template?.capabilities.toolcall ?? true,
+                  input: {
+                    text: item.input_modalities?.includes("text") ?? template?.capabilities.input.text ?? true,
+                    audio: item.input_modalities?.includes("audio") ?? template?.capabilities.input.audio ?? false,
+                    image: item.input_modalities?.includes("image") ?? template?.capabilities.input.image ?? false,
+                    video: item.input_modalities?.includes("video") ?? template?.capabilities.input.video ?? false,
+                    pdf: item.input_modalities?.includes("pdf") ?? template?.capabilities.input.pdf ?? false,
+                  },
+                  output: {
+                    text: item.output_modalities?.includes("text") ?? template?.capabilities.output.text ?? true,
+                    audio: item.output_modalities?.includes("audio") ?? template?.capabilities.output.audio ?? false,
+                    image: item.output_modalities?.includes("image") ?? template?.capabilities.output.image ?? false,
+                    video: item.output_modalities?.includes("video") ?? template?.capabilities.output.video ?? false,
+                    pdf: item.output_modalities?.includes("pdf") ?? template?.capabilities.output.pdf ?? false,
+                  },
+                  interleaved: template?.capabilities.interleaved ?? false,
+                },
+                release_date: releaseDate,
+                variants: template?.variants,
+              }
+            }
+
+            for (const id of Object.keys(providerConfig?.models ?? {})) {
+              if (input.models[id]) models[id] = input.models[id]
+            }
+            return models
+          } catch {
+            return {}
+          }
+        },
+      }
+    }),
     nvidia: (provider) =>
       Effect.succeed({
         autoload: provider.source === "config",
@@ -1353,7 +1495,10 @@ const layer = Layer.effect(
         } = {}
         const sdk = new Map<string, BundledSDK>()
         const discoveryLoaders: {
-          [providerID: string]: CustomDiscoverModels
+          [providerID: string]: {
+            load: CustomDiscoverModels
+            mode: CustomDiscoveryMode
+          }
         } = {}
         const dep = {
           auth: (id: string) => auth.get(id).pipe(Effect.orDie),
@@ -1572,7 +1717,12 @@ const layer = Layer.effect(
           if (result && (result.autoload || providers[providerID])) {
             if (result.getModel) modelLoaders[providerID] = result.getModel
             if (result.vars) varsLoaders[providerID] = result.vars
-            if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
+            if (result.discoverModels) {
+              discoveryLoaders[providerID] = {
+                load: result.discoverModels,
+                mode: result.discoveryMode ?? "merge",
+              }
+            }
             const opts = result.options ?? {}
             const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
             mergeProvider(providerID, patch)
@@ -1589,19 +1739,28 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+        yield* Effect.promise(() =>
+          Promise.all(
+            Object.entries(discoveryLoaders).map(async ([id, discovery]) => {
+              const providerID = ProviderV2.ID.make(id)
+              const provider = providers[providerID]
+              if (!provider || !isProviderAllowed(providerID)) return
+
+              try {
+                const discovered = await discovery.load()
+                if (discovery.mode === "replace") {
+                  provider.models = discovered
+                  return
                 }
-              }
-            } catch (e) {}
-          })
-        }
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!provider.models[modelID]) {
+                    provider.models[modelID] = model
+                  }
+                }
+              } catch {}
+            }),
+          ),
+        )
 
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)

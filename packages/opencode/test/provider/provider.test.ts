@@ -74,6 +74,57 @@ const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
 
+const modalProviderLayer = LayerNode.compile(
+  LayerNode.group([
+    Provider.node,
+    FSUtil.node,
+    Env.node,
+    Config.node,
+    Auth.node,
+    Plugin.node,
+    ModelsDev.node,
+    RuntimeFlags.node,
+  ]),
+  [
+    [
+      ModelsDev.node,
+      Layer.succeed(
+        ModelsDev.Service,
+        ModelsDev.Service.of({
+          get: () =>
+            Effect.succeed({
+              modal: {
+                id: "modal",
+                name: "Modal",
+                env: ["MODAL_PROXY_TOKEN"],
+                npm: "@ai-sdk/openai-compatible",
+                api: "https://inference.us-west.modal.direct/v1",
+                models: {
+                  "thinkingmachines/Inkling-NVFP4": {
+                    id: "thinkingmachines/Inkling-NVFP4",
+                    name: "Inkling",
+                    family: "ling",
+                    release_date: "2026-07-15",
+                    attachment: true,
+                    reasoning: true,
+                    temperature: true,
+                    tool_call: true,
+                    interleaved: { field: "reasoning_content" },
+                    cost: { input: 1.2, output: 5, cache_read: 0.27 },
+                    limit: { context: 1_048_576, output: 262_144 },
+                    modalities: { input: ["text", "image", "audio"], output: ["text"] },
+                  },
+                },
+              },
+            }),
+          refresh: () => Effect.void,
+        }),
+      ),
+    ],
+    [RuntimeFlags.node, RuntimeFlags.layer({})],
+  ],
+)
+
 const list = Provider.use.list()
 
 const paid = (providers: Record<string, { models: Record<string, { cost: { input: number } }> }>) => {
@@ -86,6 +137,7 @@ const languageBaseURL = (language: unknown) => (language as { config: { baseURL:
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Provider.node, Env.node, Plugin.node])))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
+const modal = testEffect(modalProviderLayer)
 
 const alphaProviderConfig = {
   provider: {
@@ -224,6 +276,89 @@ it.instance(
     },
   },
 )
+
+modal.instance("discovers workspace models from Modal", () => {
+  const seen = { authorization: "", path: "" }
+  const runtimeID = "workspace--inkling.us-west.modal.direct"
+  const unknownID = "workspace--new-model.us-west.modal.direct"
+
+  return Effect.acquireUseRelease(
+    Effect.sync(() =>
+      Bun.serve({
+        port: 0,
+        fetch(request) {
+          seen.authorization = request.headers.get("authorization") ?? ""
+          seen.path = new URL(request.url).pathname
+          return Response.json({
+            data: [
+              {
+                id: runtimeID,
+                hugging_face_id: "thinkingmachines/Inkling-NVFP4",
+                name: "Thinking Machines: Inkling",
+                created: 1_784_325_956,
+                input_modalities: ["text", "image", "audio"],
+                output_modalities: ["text"],
+                context_length: 1_048_576,
+                max_output_length: 262_144,
+                pricing: {
+                  prompt: "0.0000012",
+                  completion: "0.000005",
+                  input_cache_read: "0.00000027",
+                },
+                supported_sampling_parameters: ["temperature"],
+                supported_features: ["tools", "reasoning"],
+              },
+              {
+                id: unknownID,
+                name: "New Model",
+                input_modalities: ["text"],
+                output_modalities: ["text"],
+                context_length: 32_768,
+                max_output_length: 4_096,
+              },
+            ],
+          })
+        },
+      }),
+    ),
+    (server) =>
+      Effect.gen(function* () {
+        yield* set("MODAL_PROXY_TOKEN", "test-token")
+        yield* Config.use.update({
+          provider: {
+            modal: {
+              options: {
+                baseURL: `${server.url}v1`,
+              },
+            },
+          },
+        })
+
+        const provider = (yield* list)[ProviderV2.ID.make("modal")]
+        expect(Object.keys(provider.models)).toEqual([runtimeID, unknownID])
+        expect(seen.authorization).toBe("Bearer test-token")
+        expect(seen.path).toBe("/v1/models")
+
+        const inkling = provider.models[runtimeID]
+        expect(inkling.api.id).toBe(runtimeID)
+        expect(inkling.api.url).toBe(`${server.url}v1`)
+        expect(inkling.family).toBe("ling")
+        expect(inkling.capabilities.interleaved).toEqual({ field: "reasoning_content" })
+        expect(inkling.capabilities.input).toMatchObject({ text: true, image: true, audio: true })
+        expect(inkling.cost).toMatchObject({
+          input: 1.2,
+          output: 5,
+          cache: { read: 0.27 },
+        })
+        expect(inkling.limit).toEqual({ context: 1_048_576, output: 262_144 })
+
+        const unknown = provider.models[unknownID]
+        expect(unknown.name).toBe("New Model")
+        expect(unknown.limit).toEqual({ context: 32_768, output: 4_096 })
+      }),
+    (server) => Effect.sync(() => server.stop(true)),
+  )
+})
 
 it.instance(
   "filters alpha provider models by default",
