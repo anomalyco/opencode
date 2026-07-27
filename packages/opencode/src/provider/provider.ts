@@ -526,10 +526,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           if (!apiKey || !baseURL) return {}
 
           try {
-            const headers = new Headers(isRecord(input.options.headers) ? (input.options.headers as HeadersInit) : {})
+            const headers = new Headers()
+            if (isRecord(input.options.headers)) {
+              for (const [key, value] of Object.entries(input.options.headers)) {
+                if (typeof value === "string") headers.set(key, value)
+              }
+            }
             headers.set("Authorization", `Bearer ${apiKey}`)
-            const fetcher = typeof input.options.fetch === "function" ? (input.options.fetch as typeof fetch) : fetch
-            const response = await fetcher(`${baseURL.replace(/\/+$/, "")}/models`, {
+            const response = await fetch(`${baseURL.replace(/\/+$/, "")}/models`, {
               headers,
               signal: AbortSignal.timeout(3_000),
             })
