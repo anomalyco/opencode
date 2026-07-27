@@ -12,6 +12,7 @@ import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
+import { nextTab, previousTab, rememberTab, type TabHistory } from "./tab-history"
 
 export type SessionTab = {
   type: "session"
@@ -79,6 +80,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const memory = createTabMemory(getOwner())
 
     const closing = new Set<string>()
+    let history: TabHistory = { stack: [], index: -1 }
     let recentWrite = 0
     let recentValue: string | undefined
 
@@ -150,8 +152,19 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const navigateTab = (tab: Tab) => {
       const href = tabHref(tab)
+      history = rememberTab(history, tabKey(tab))
       setRecentKey(tabKey(tab))
       navigate(href)
+    }
+
+    const moveHistory = (direction: "previous" | "next") => {
+      const available = new Set(store.map(tabKey))
+      const result = direction === "previous" ? previousTab(history, available) : nextTab(history, available)
+      if (!result) return
+      const tab = store.find((item) => tabKey(item) === result.key)
+      if (!tab) return
+      history = result.state
+      navigateTab(tab)
     }
 
     const removeTab = (index: number) => {
@@ -359,8 +372,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       select: navigateTab,
       remember(tab: Tab) {
         const key = tabKey(tab)
+        history = rememberTab(history, key)
         if (recentKey() !== key) setRecentKey(key)
       },
+      previous: () => moveHistory("previous"),
+      next: () => moveHistory("next"),
       toggleHome(input: { home: boolean; current?: Tab }) {
         if (input.home) {
           const tab = store.find((tab) => tabKey(tab) === recentKey())
