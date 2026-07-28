@@ -11,8 +11,6 @@ import { tint } from "../theme/color"
 
 const ADAPTIVE_SPRING = { visualDuration: 0.1, bounce: 0 } as const
 const NEW_SESSION_TAB_ID = "$new"
-const NEW_SESSION_BUTTON_ID = "$new-button"
-const NEW_SESSION_BUTTON_WIDTH = 7
 const spring = (value: number, velocity: number, target: number, frequency: number, delta: number) => {
   const offset = value - target
   const decay = Math.exp(-frequency * delta)
@@ -50,15 +48,9 @@ export function SessionTabs() {
   )
   const isNew = (sessionID: string) => sessionID === NEW_SESSION_TAB_ID
   const unread = (sessionID: string) => (isNew(sessionID) ? undefined : tabs.unread(sessionID))
-  const newButtonWidth = () => (route.data.type === "home" ? 0 : NEW_SESSION_BUTTON_WIDTH)
   let windowStart = 0
   const layout = createMemo(() => {
-    const next = adaptiveSessionTabLayout(
-      items(),
-      activeID(),
-      Math.max(1, dimensions().width - newButtonWidth()),
-      windowStart,
-    )
+    const next = adaptiveSessionTabLayout(items(), activeID(), dimensions().width, windowStart)
     windowStart = next.start
     return next
   })
@@ -280,19 +272,6 @@ export function SessionTabs() {
         <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
           {layout().after}›
         </text>
-      </Show>
-      <Show when={route.data.type !== "home"}>
-        <box
-          width={NEW_SESSION_BUTTON_WIDTH}
-          backgroundColor={
-            hovered() === NEW_SESSION_BUTTON_ID ? themeV2.background.action.primary.hovered : themeV2.background.default
-          }
-          onMouseOver={() => setHovered(NEW_SESSION_BUTTON_ID)}
-          onMouseOut={() => setHovered(undefined)}
-          onMouseUp={() => route.navigate({ type: "home" })}
-        >
-          <text fg={hovered() === NEW_SESSION_BUTTON_ID ? themeV2.text.default : themeV2.text.subdued}> + New</text>
-        </box>
       </Show>
     </box>
   )
