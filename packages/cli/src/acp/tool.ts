@@ -5,7 +5,7 @@ import { readDisplayText } from "@opencode-ai/tui/mini/tool"
 export type ToolInput = Record<string, unknown>
 export type ToolContent = ReadonlyArray<
   | { readonly type: "text"; readonly text: string }
-  | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string }
+  | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string | null }
 >
 
 export function toToolKind(toolName: string): ToolKind {
