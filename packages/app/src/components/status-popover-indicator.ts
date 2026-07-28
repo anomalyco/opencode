@@ -7,7 +7,7 @@ export function hasServiceNeedingAttention(input: { mcp: Array<McpServer["status
 export function serverStatusDotClass(input: { ready: boolean; serverHealth: boolean | undefined; issue: boolean }) {
   if (input.serverHealth === false) return "bg-icon-critical-base"
   if (!input.ready || input.serverHealth === undefined) return "bg-border-weak-base"
-  if (input.issue) return "bg-icon-warning-base"
+  if (input.issue) return "bg-v2-background-bg-accent"
   if (input.serverHealth === true) return "bg-icon-success-base"
   return "bg-border-weak-base"
 }

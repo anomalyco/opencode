@@ -6,8 +6,8 @@ describe("serverStatusDotClass", () => {
     expect(serverStatusDotClass({ ready: true, serverHealth: true, issue: false })).toBe("bg-icon-success-base")
   })
 
-  test("uses the warning token for non-blocking issues while the server is online", () => {
-    expect(serverStatusDotClass({ ready: true, serverHealth: true, issue: true })).toBe("bg-icon-warning-base")
+  test("uses the session attention token when a service needs attention", () => {
+    expect(serverStatusDotClass({ ready: true, serverHealth: true, issue: true })).toBe("bg-v2-background-bg-accent")
   })
 
   test("uses the critical token only after the server connection drops", () => {
