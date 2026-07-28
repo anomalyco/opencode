@@ -11,6 +11,10 @@ export interface Context {
   readonly agent: AgentV2.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly toolCallID: string
+  readonly progress?: (input: {
+    readonly structured: Record<string, unknown>
+    readonly content?: ReadonlyArray<{ readonly type: "text"; readonly text: string }>
+  }) => Effect.Effect<void, unknown>
 }
 
 export type SchemaType<A> = Schema.Codec<A, any, never, never>
