@@ -308,7 +308,7 @@ function ModelSelectorPopoverV2View(props: {
 
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
-  const keys = () => [...models().map(modelKey), manageKey]
+  const keys = () => [...groups().flatMap((g) => g.items.map(modelKey)), manageKey]
   const initialActive = () => {
     const selected = props.current()
     const options = keys()
