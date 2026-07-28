@@ -146,17 +146,11 @@ const layer = Layer.effect(
       // Catch-up summary gates the first validation after switching a session
       // to "auto"; bounded so a broken summarizer only means validating
       // without a summary, never a stuck ask.
-      yield* autoSummary
-        .ensure(input.sessionID)
-        .pipe(
-          Effect.timeout(SUMMARY_TIMEOUT),
-          Effect.catchCause((cause) =>
-            Effect.logWarning("auto summary ensure failed", { cause: Cause.pretty(cause) }),
-          ),
-        )
-      const summary = yield* summaries
-        .get(input.sessionID)
-        .pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      yield* autoSummary.ensure(input.sessionID).pipe(
+        Effect.timeout(SUMMARY_TIMEOUT),
+        Effect.catchCause((cause) => Effect.logWarning("auto summary ensure failed", { cause: Cause.pretty(cause) })),
+      )
+      const summary = yield* summaries.get(input.sessionID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
       const user = yield* MessageV2.filterCompactedEffect(input.sessionID).pipe(
         Effect.provideService(Database.Service, database),
         Effect.map((msgs) => MessageV2.latest(msgs).user),

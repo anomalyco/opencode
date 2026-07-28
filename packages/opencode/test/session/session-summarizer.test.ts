@@ -298,154 +298,164 @@ const waitForSummary = (sessionID: SessionID, text?: string) =>
     "5 seconds",
   )
 
-it.instance("updates the summary when an auto turn completes", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({})
+it.instance(
+  "updates the summary when an auto turn completes",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
 
-    yield* llm.text("world")
-    yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_ONE").stop())
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "auto",
-      parts: [{ type: "text", text: "hello" }],
-    })
+      yield* llm.text("world")
+      yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_ONE").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        parts: [{ type: "text", text: "hello" }],
+      })
 
-    const row = yield* waitForSummary(chat.id)
-    expect(row.summary).toBe("SUMMARY_ONE")
-    expect(row.model).toBe("test/test-model")
-    expect(row.turnCount).toBe(1)
-    expect(yield* summarizerHits).toHaveLength(1)
-  }),
+      const row = yield* waitForSummary(chat.id)
+      expect(row.summary).toBe("SUMMARY_ONE")
+      expect(row.model).toBe("test/test-model")
+      expect(row.turnCount).toBe(1)
+      expect(yield* summarizerHits).toHaveLength(1)
+    }),
   15_000,
 )
 
-it.instance("never calls the summarizer outside auto mode", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const store = yield* AutoSummaryStore.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({})
+it.instance(
+  "never calls the summarizer outside auto mode",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const store = yield* AutoSummaryStore.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
 
-    yield* llm.text("world")
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      parts: [{ type: "text", text: "hello" }],
-    })
-    // The summarizer fork runs after the loop exits; give it room to (not) fire.
-    yield* Effect.sleep("500 millis")
+      yield* llm.text("world")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        parts: [{ type: "text", text: "hello" }],
+      })
+      // The summarizer fork runs after the loop exits; give it room to (not) fire.
+      yield* Effect.sleep("500 millis")
 
-    expect(yield* summarizerHits).toHaveLength(0)
-    expect(yield* store.get(chat.id)).toBeUndefined()
-  }),
+      expect(yield* summarizerHits).toHaveLength(0)
+      expect(yield* store.get(chat.id)).toBeUndefined()
+    }),
   15_000,
 )
 
-it.instance("sends the previous summary plus the new turn on later turns", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const store = yield* AutoSummaryStore.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({})
+it.instance(
+  "sends the previous summary plus the new turn on later turns",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const store = yield* AutoSummaryStore.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
 
-    yield* llm.text("reply one")
-    yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_ONE").stop())
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "auto",
-      parts: [{ type: "text", text: "first question" }],
-    })
-    yield* waitForSummary(chat.id, "SUMMARY_ONE")
+      yield* llm.text("reply one")
+      yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_ONE").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        parts: [{ type: "text", text: "first question" }],
+      })
+      yield* waitForSummary(chat.id, "SUMMARY_ONE")
 
-    yield* llm.text("reply two")
-    yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_TWO").stop())
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "auto",
-      parts: [{ type: "text", text: "second question" }],
-    })
-    yield* waitForSummary(chat.id, "SUMMARY_TWO")
+      yield* llm.text("reply two")
+      yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_TWO").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        parts: [{ type: "text", text: "second question" }],
+      })
+      yield* waitForSummary(chat.id, "SUMMARY_TWO")
 
-    const hits = yield* summarizerHits
-    expect(hits).toHaveLength(2)
-    const body = JSON.stringify(hits[1]?.body)
-    expect(body).toContain("SUMMARY_ONE")
-    expect(body).toContain("second question")
-    // The assistant tail of the last summarized turn rides along for continuity.
-    expect(body).toContain("reply one")
-    expect(body).not.toContain("first question")
-    expect((yield* store.get(chat.id))?.turnCount).toBe(2)
-  }),
+      const hits = yield* summarizerHits
+      expect(hits).toHaveLength(2)
+      const body = JSON.stringify(hits[1]?.body)
+      expect(body).toContain("SUMMARY_ONE")
+      expect(body).toContain("second question")
+      // The assistant tail of the last summarized turn rides along for continuity.
+      expect(body).toContain("reply one")
+      expect(body).not.toContain("first question")
+      expect((yield* store.get(chat.id))?.turnCount).toBe(2)
+    }),
   15_000,
 )
 
-it.instance("catch-up summarizes the whole history of a session without a summary", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const auto = yield* SessionAutoSummary.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({})
-    yield* seedTurn(chat.id, "build", "first question", "reply one")
-    yield* seedTurn(chat.id, "build", "second question", "reply two")
+it.instance(
+  "catch-up summarizes the whole history of a session without a summary",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const auto = yield* SessionAutoSummary.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+      yield* seedTurn(chat.id, "build", "first question", "reply one")
+      yield* seedTurn(chat.id, "build", "second question", "reply two")
 
-    yield* llm.pushMatch(isSummarizer, reply().text("CATCH_UP").stop())
-    yield* auto.ensure(chat.id)
+      yield* llm.pushMatch(isSummarizer, reply().text("CATCH_UP").stop())
+      yield* auto.ensure(chat.id)
 
-    const row = yield* waitForSummary(chat.id)
-    expect(row.summary).toBe("CATCH_UP")
-    expect(row.model).toBe("test/test-model")
-    expect(row.turnCount).toBe(2)
-    const hits = yield* summarizerHits
-    expect(hits).toHaveLength(1)
-    const body = JSON.stringify(hits[0]?.body)
-    expect(body).toContain("first question")
-    expect(body).toContain("second question")
+      const row = yield* waitForSummary(chat.id)
+      expect(row.summary).toBe("CATCH_UP")
+      expect(row.model).toBe("test/test-model")
+      expect(row.turnCount).toBe(2)
+      const hits = yield* summarizerHits
+      expect(hits).toHaveLength(1)
+      const body = JSON.stringify(hits[0]?.body)
+      expect(body).toContain("first question")
+      expect(body).toContain("second question")
 
-    // ensure is a no-op once a summary exists
-    yield* auto.ensure(chat.id)
-    yield* Effect.sleep("300 millis")
-    expect(yield* summarizerHits).toHaveLength(1)
-  }),
+      // ensure is a no-op once a summary exists
+      yield* auto.ensure(chat.id)
+      yield* Effect.sleep("300 millis")
+      expect(yield* summarizerHits).toHaveLength(1)
+    }),
   15_000,
 )
 
-it.instance("keeps the previous summary when the summarizer fails", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const store = yield* AutoSummaryStore.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({})
+it.instance(
+  "keeps the previous summary when the summarizer fails",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const store = yield* AutoSummaryStore.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
 
-    yield* llm.text("reply one")
-    yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_ONE").stop())
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "auto",
-      parts: [{ type: "text", text: "first question" }],
-    })
-    yield* waitForSummary(chat.id, "SUMMARY_ONE")
+      yield* llm.text("reply one")
+      yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_ONE").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        parts: [{ type: "text", text: "first question" }],
+      })
+      yield* waitForSummary(chat.id, "SUMMARY_ONE")
 
-    // Two failures queued: covers a client-side retry if the SDK issues one.
-    yield* llm.text("reply two")
-    yield* llm.pushMatch(isSummarizer, reply().streamError("boom").item())
-    yield* llm.pushMatch(isSummarizer, reply().streamError("boom").item())
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "auto",
-      parts: [{ type: "text", text: "second question" }],
-    })
-    // Give the forked summarizer room to fail before asserting.
-    yield* Effect.sleep("500 millis")
+      // Two failures queued: covers a client-side retry if the SDK issues one.
+      yield* llm.text("reply two")
+      yield* llm.pushMatch(isSummarizer, reply().streamError("boom").item())
+      yield* llm.pushMatch(isSummarizer, reply().streamError("boom").item())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        parts: [{ type: "text", text: "second question" }],
+      })
+      // Give the forked summarizer room to fail before asserting.
+      yield* Effect.sleep("500 millis")
 
-    const row = yield* store.get(chat.id)
-    expect(row?.summary).toBe("SUMMARY_ONE")
-    expect(row?.turnCount).toBe(1)
-  }),
+      const row = yield* store.get(chat.id)
+      expect(row?.summary).toBe("SUMMARY_ONE")
+      expect(row?.turnCount).toBe(1)
+    }),
   15_000,
 )

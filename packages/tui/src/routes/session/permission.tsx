@@ -397,9 +397,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               <Show when={props.request.auto}>
                 {(auto) => (
                   <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
-                    <text fg={theme.textMuted}>
-                      {`auto (${auto().model}): ${auto().verdict} — ${auto().reason}`}
-                    </text>
+                    <text fg={theme.textMuted}>{`auto (${auto().model}): ${auto().verdict} — ${auto().reason}`}</text>
                   </box>
                 )}
               </Show>

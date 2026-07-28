@@ -273,150 +273,160 @@ const waitForTitle = (sessionID: SessionID, title: string) =>
     "5 seconds",
   )
 
-it.instance("writes the title once when the first turn completes", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const history = yield* TitleHistoryStore.Service
-    const chat = yield* sessions.create({})
+it.instance(
+  "writes the title once when the first turn completes",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const history = yield* TitleHistoryStore.Service
+      const chat = yield* sessions.create({})
 
-    yield* llm.text("world")
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      parts: [{ type: "text", text: "hello" }],
-    })
+      yield* llm.text("world")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        parts: [{ type: "text", text: "hello" }],
+      })
 
-    yield* waitForTitle(chat.id, "E2E Title")
-    const rows = yield* history.listBySession(chat.id)
-    expect(rows).toHaveLength(1)
-    const msgs = yield* sessions.messages({ sessionID: chat.id })
-    const userMsg = msgs.find((msg) => msg.info.role === "user")
-    expect(rows[0]).toMatchObject({
-      sessionID: chat.id,
-      title: "E2E Title",
-      source: "llm",
-      model: "test/test-model",
-      triggerMessageID: userMsg?.info.id,
-    })
-    expect(yield* titleHits).toHaveLength(1)
-  }),
+      yield* waitForTitle(chat.id, "E2E Title")
+      const rows = yield* history.listBySession(chat.id)
+      expect(rows).toHaveLength(1)
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const userMsg = msgs.find((msg) => msg.info.role === "user")
+      expect(rows[0]).toMatchObject({
+        sessionID: chat.id,
+        title: "E2E Title",
+        source: "llm",
+        model: "test/test-model",
+        triggerMessageID: userMsg?.info.id,
+      })
+      expect(yield* titleHits).toHaveLength(1)
+    }),
   15_000,
 )
 
-it.instance("keeps the title stable on later turns", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const history = yield* TitleHistoryStore.Service
-    const chat = yield* sessions.create({})
+it.instance(
+  "keeps the title stable on later turns",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const history = yield* TitleHistoryStore.Service
+      const chat = yield* sessions.create({})
 
-    yield* llm.text("world")
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      parts: [{ type: "text", text: "hello" }],
-    })
-    yield* waitForTitle(chat.id, "E2E Title")
+      yield* llm.text("world")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* waitForTitle(chat.id, "E2E Title")
 
-    yield* llm.text("again")
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      parts: [{ type: "text", text: "more" }],
-    })
-    // The retitle fork runs after the loop exits; give it room to (not) fire.
-    yield* Effect.sleep("500 millis")
+      yield* llm.text("again")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        parts: [{ type: "text", text: "more" }],
+      })
+      // The retitle fork runs after the loop exits; give it room to (not) fire.
+      yield* Effect.sleep("500 millis")
 
-    const session = yield* sessions.get(chat.id)
-    expect(session.title).toBe("E2E Title")
-    expect(yield* history.listBySession(chat.id)).toHaveLength(1)
-    expect(yield* titleHits).toHaveLength(1)
-  }),
+      const session = yield* sessions.get(chat.id)
+      expect(session.title).toBe("E2E Title")
+      expect(yield* history.listBySession(chat.id)).toHaveLength(1)
+      expect(yield* titleHits).toHaveLength(1)
+    }),
   15_000,
 )
 
-it.instance("titles the session on the next completed turn after an aborted first turn", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const history = yield* TitleHistoryStore.Service
-    const chat = yield* sessions.create({})
-    const second = yield* seedAbortedFirstTurn(chat.id)
+it.instance(
+  "titles the session on the next completed turn after an aborted first turn",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const history = yield* TitleHistoryStore.Service
+      const chat = yield* sessions.create({})
+      const second = yield* seedAbortedFirstTurn(chat.id)
 
-    yield* llm.text("done")
-    yield* prompt.loop({ sessionID: chat.id })
+      yield* llm.text("done")
+      yield* prompt.loop({ sessionID: chat.id })
 
-    yield* waitForTitle(chat.id, "E2E Title")
-    const rows = yield* history.listBySession(chat.id)
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({
-      source: "llm",
-      model: "test/test-model",
-      triggerMessageID: second.id,
-    })
-    expect(yield* titleHits).toHaveLength(1)
-  }),
+      yield* waitForTitle(chat.id, "E2E Title")
+      const rows = yield* history.listBySession(chat.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        source: "llm",
+        model: "test/test-model",
+        triggerMessageID: second.id,
+      })
+      expect(yield* titleHits).toHaveLength(1)
+    }),
   15_000,
 )
 
-it.instance("never overwrites a user-renamed title", () =>
-  Effect.gen(function* () {
-    const llm = yield* useServerConfig()
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const history = yield* TitleHistoryStore.Service
-    const chat = yield* sessions.create({})
-    yield* sessions.setTitle({ sessionID: chat.id, title: "User picked" })
+it.instance(
+  "never overwrites a user-renamed title",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const history = yield* TitleHistoryStore.Service
+      const chat = yield* sessions.create({})
+      yield* sessions.setTitle({ sessionID: chat.id, title: "User picked" })
 
-    yield* llm.text("world")
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      parts: [{ type: "text", text: "hello" }],
-    })
-    // The retitle fork runs after the loop exits; give it room to (not) fire.
-    yield* Effect.sleep("500 millis")
+      yield* llm.text("world")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        parts: [{ type: "text", text: "hello" }],
+      })
+      // The retitle fork runs after the loop exits; give it room to (not) fire.
+      yield* Effect.sleep("500 millis")
 
-    const session = yield* sessions.get(chat.id)
-    expect(session.title).toBe("User picked")
-    const rows = yield* history.listBySession(chat.id)
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ title: "User picked", source: "user" })
-    expect(yield* titleHits).toHaveLength(0)
-  }),
+      const session = yield* sessions.get(chat.id)
+      expect(session.title).toBe("User picked")
+      const rows = yield* history.listBySession(chat.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ title: "User picked", source: "user" })
+      expect(yield* titleHits).toHaveLength(0)
+    }),
   15_000,
 )
 
-it.instance("records the source of each title write", () =>
-  Effect.gen(function* () {
-    yield* useServerConfig()
-    const sessions = yield* Session.Service
-    const history = yield* TitleHistoryStore.Service
-    const chat = yield* sessions.create({})
+it.instance(
+  "records the source of each title write",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig()
+      const sessions = yield* Session.Service
+      const history = yield* TitleHistoryStore.Service
+      const chat = yield* sessions.create({})
 
-    yield* sessions.setTitle({ sessionID: chat.id, title: "Manual rename" })
-    yield* sessions.setTitle({
-      sessionID: chat.id,
-      title: "Generated",
-      source: "llm",
-      model: "openrouter/anthropic/claude-haiku-4.5",
-      triggerMessageId: MessageID.ascending(),
-    })
+      yield* sessions.setTitle({ sessionID: chat.id, title: "Manual rename" })
+      yield* sessions.setTitle({
+        sessionID: chat.id,
+        title: "Generated",
+        source: "llm",
+        model: "openrouter/anthropic/claude-haiku-4.5",
+        triggerMessageId: MessageID.ascending(),
+      })
 
-    const rows = yield* history.listBySession(chat.id)
-    expect(rows).toHaveLength(2)
-    expect(rows[0]).toMatchObject({ title: "Manual rename", source: "user", model: undefined })
-    expect(rows[1]).toMatchObject({
-      title: "Generated",
-      source: "llm",
-      model: "openrouter/anthropic/claude-haiku-4.5",
-    })
-    expect(rows[1]?.triggerMessageID).toBeDefined()
-    expect(rows[0]?.createdAt).toEqual(expect.any(Number))
-  }),
+      const rows = yield* history.listBySession(chat.id)
+      expect(rows).toHaveLength(2)
+      expect(rows[0]).toMatchObject({ title: "Manual rename", source: "user", model: undefined })
+      expect(rows[1]).toMatchObject({
+        title: "Generated",
+        source: "llm",
+        model: "openrouter/anthropic/claude-haiku-4.5",
+      })
+      expect(rows[1]?.triggerMessageID).toBeDefined()
+      expect(rows[0]?.createdAt).toEqual(expect.any(Number))
+    }),
   15_000,
 )

@@ -54,26 +54,26 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
     })
 
-    const listBySession: Interface["listBySession"] = Effect.fn("TitleHistoryStore.listBySession")(function* (
-      sessionID,
-    ) {
-      const rows = yield* db
-        .select()
-        .from(SessionTitleHistoryTable)
-        .where(eq(SessionTitleHistoryTable.session_id, sessionID))
-        .orderBy(asc(SessionTitleHistoryTable.created_at), asc(SessionTitleHistoryTable.id))
-        .all()
-        .pipe(Effect.orDie)
-      return rows.map((row) => ({
-        id: row.id,
-        sessionID: row.session_id,
-        title: row.title,
-        source: row.source,
-        model: row.model ?? undefined,
-        triggerMessageID: row.trigger_message_id ?? undefined,
-        createdAt: row.created_at,
-      }))
-    })
+    const listBySession: Interface["listBySession"] = Effect.fn("TitleHistoryStore.listBySession")(
+      function* (sessionID) {
+        const rows = yield* db
+          .select()
+          .from(SessionTitleHistoryTable)
+          .where(eq(SessionTitleHistoryTable.session_id, sessionID))
+          .orderBy(asc(SessionTitleHistoryTable.created_at), asc(SessionTitleHistoryTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        return rows.map((row) => ({
+          id: row.id,
+          sessionID: row.session_id,
+          title: row.title,
+          source: row.source,
+          model: row.model ?? undefined,
+          triggerMessageID: row.trigger_message_id ?? undefined,
+          createdAt: row.created_at,
+        }))
+      },
+    )
 
     return Service.of({ insert, listBySession })
   }),

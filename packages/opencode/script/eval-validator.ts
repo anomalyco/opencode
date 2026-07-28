@@ -146,7 +146,9 @@ for (const [index, item] of cases.entries()) {
 const matrix = Object.fromEntries(
   EXPECTS.map((expect) => [
     expect,
-    Object.fromEntries(VERDICTS.map((verdict) => [verdict, results.filter((r) => r.expect === expect && r.verdict === verdict).length])),
+    Object.fromEntries(
+      VERDICTS.map((verdict) => [verdict, results.filter((r) => r.expect === expect && r.verdict === verdict).length]),
+    ),
   ]),
 )
 
@@ -168,7 +170,9 @@ const misses = results.filter((r) => r.verdict !== r.expect)
 if (misses.length > 0) {
   console.log("\nMismatches:")
   for (const r of misses) {
-    console.log(`  ${r.id} [expect=${r.expect} got=${r.verdict}] ${r.patterns.join("; ")}${r.reason ? ` — ${r.reason}` : ""}`)
+    console.log(
+      `  ${r.id} [expect=${r.expect} got=${r.verdict}] ${r.patterns.join("; ")}${r.reason ? ` — ${r.reason}` : ""}`,
+    )
   }
 }
 

@@ -1461,10 +1461,7 @@ export function Prompt(props: PromptProps) {
                     <Show when={store.mode === "normal"}>
                       <box flexDirection="row" gap={1}>
                         <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                        <text
-                          flexShrink={0}
-                          fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
-                        >
+                        <text flexShrink={0} fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}>
                           {local.model.parsed().model}
                         </text>
                         <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>

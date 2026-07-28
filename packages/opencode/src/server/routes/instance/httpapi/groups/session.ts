@@ -188,8 +188,7 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "session.permission_decisions",
             summary: "List permission decisions",
-            description:
-              "Get the LLM permission validator audit trail for a session (auto mode), oldest first.",
+            description: "Get the LLM permission validator audit trail for a session (auto mode), oldest first.",
           }),
         ),
         HttpApiEndpoint.get("diff", SessionPaths.diff, {

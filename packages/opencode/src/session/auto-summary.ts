@@ -46,8 +46,7 @@ const real = (m: SessionV1.WithParts) =>
 
 // filterCompacted reorders messages for model consumption; the delta math
 // below expects chronological order (message ids are monotonic).
-const chronological = (msgs: SessionV1.WithParts[]) =>
-  msgs.slice().sort((a, b) => (a.info.id < b.info.id ? -1 : 1))
+const chronological = (msgs: SessionV1.WithParts[]) => msgs.slice().sort((a, b) => (a.info.id < b.info.id ? -1 : 1))
 
 // The new content since the stored summary: everything after the
 // turnCount-th real user message. The assistant tail of the last summarized

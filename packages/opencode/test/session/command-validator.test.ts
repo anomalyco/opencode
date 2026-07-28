@@ -112,9 +112,13 @@ function llmStub() {
 
 const llm = llmStub()
 
-const text = (value: string): Make => () => Stream.make(LLMEvent.textDelta({ id: "txt-0", text: value }))
+const text =
+  (value: string): Make =>
+  () =>
+    Stream.make(LLMEvent.textDelta({ id: "txt-0", text: value }))
 
-const gated = (gate: Deferred.Deferred<void>, onStart: () => void): Make =>
+const gated =
+  (gate: Deferred.Deferred<void>, onStart: () => void): Make =>
   (input) =>
     Stream.unwrap(
       Effect.gen(function* () {
@@ -232,7 +236,10 @@ describe("command-validator parseVerdict", () => {
     ["deny força destrutiva", { verdict: "deny", reason: "força destrutiva" }],
     ["UNCERTAIN comando ambíguo", { verdict: "uncertain", reason: "comando ambíguo" }],
     ["<think>some reasoning</think>\nALLOW", { verdict: "allow" }],
-    ["<think>multi\nline\nreasoning</think>\nUNCERTAIN preciso de contexto", { verdict: "uncertain", reason: "preciso de contexto" }],
+    [
+      "<think>multi\nline\nreasoning</think>\nUNCERTAIN preciso de contexto",
+      { verdict: "uncertain", reason: "preciso de contexto" },
+    ],
     ["UNCERTAIN dúvida\nALLOW", { verdict: "uncertain", reason: "dúvida" }],
     ["\n\nDENY perigoso\n", { verdict: "deny", reason: "perigoso" }],
     ["ALLOW now", undefined],

@@ -59,7 +59,7 @@ const layer = Layer.effect(
         .where(eq(SessionAutoSummaryTable.session_id, sessionID))
         .get()
         .pipe(Effect.orDie)
-      if (!row) return
+      if (!row) return undefined
       return {
         sessionID: row.session_id,
         summary: row.summary,

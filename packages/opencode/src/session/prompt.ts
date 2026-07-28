@@ -276,9 +276,7 @@ const layer = Layer.effect(
           model: t.model,
           triggerMessageId: trigger.info.id,
         })
-        .pipe(
-          Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })),
-        )
+        .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
     })
 
     // LLM turn classifier: label the completed turn as waiting (the assistant

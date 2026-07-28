@@ -60,29 +60,29 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
     })
 
-    const listBySession: Interface["listBySession"] = Effect.fn("PermissionDecisionsStore.listBySession")(function* (
-      sessionID,
-    ) {
-      const rows = yield* db
-        .select()
-        .from(PermissionDecisionsTable)
-        .where(eq(PermissionDecisionsTable.session_id, sessionID))
-        .orderBy(asc(PermissionDecisionsTable.created_at), asc(PermissionDecisionsTable.id))
-        .all()
-        .pipe(Effect.orDie)
-      return rows.map((row) => ({
-        id: row.id,
-        sessionID: row.session_id,
-        permission: row.permission,
-        patterns: row.patterns,
-        metadata: row.metadata ?? undefined,
-        verdict: row.verdict,
-        reason: row.reason ?? undefined,
-        model: row.model,
-        latencyMs: row.latency_ms,
-        createdAt: row.created_at,
-      }))
-    })
+    const listBySession: Interface["listBySession"] = Effect.fn("PermissionDecisionsStore.listBySession")(
+      function* (sessionID) {
+        const rows = yield* db
+          .select()
+          .from(PermissionDecisionsTable)
+          .where(eq(PermissionDecisionsTable.session_id, sessionID))
+          .orderBy(asc(PermissionDecisionsTable.created_at), asc(PermissionDecisionsTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        return rows.map((row) => ({
+          id: row.id,
+          sessionID: row.session_id,
+          permission: row.permission,
+          patterns: row.patterns,
+          metadata: row.metadata ?? undefined,
+          verdict: row.verdict,
+          reason: row.reason ?? undefined,
+          model: row.model,
+          latencyMs: row.latency_ms,
+          createdAt: row.created_at,
+        }))
+      },
+    )
 
     return Service.of({ insert, listBySession })
   }),

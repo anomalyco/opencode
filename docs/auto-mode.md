@@ -33,7 +33,7 @@ approved or why.
 
 Auto mode adds that middle ground. The `auto` agent is a native primary agent
 next to `build` and `plan`, with the same permission ruleset as `build`:
-everything that falls to `ask` today still falls to `ask` — only *who* answers
+everything that falls to `ask` today still falls to `ask` — only _who_ answers
 changes. A hidden `command-validator` agent reads the exact command/patterns,
 the tool metadata, and a running summary of the session, and replies `ALLOW`,
 `DENY <reason>`, or `UNCERTAIN <reason>`. A second hidden agent,
@@ -78,12 +78,12 @@ rows land in arrival order. Each validation:
 
 The verdict table:
 
-| Validator output        | Effect on the tool call                          | Audit row           | Agent feedback                     |
-| ----------------------- | ------------------------------------------------ | ------------------- | ---------------------------------- |
-| `ALLOW`                 | runs                                             | `verdict=allow`     | —                                  |
-| `DENY <reason>`         | fails with `CorrectedError(reason)`              | `verdict=deny`      | receives the reason as tool error  |
-| `UNCERTAIN <reason>`    | opens the human dialog with the reason visible   | `verdict=uncertain` | depends on the human reply         |
-| timeout / error / junk  | normal human flow                                | `verdict=fallback`  | depends on the human reply         |
+| Validator output       | Effect on the tool call                        | Audit row           | Agent feedback                    |
+| ---------------------- | ---------------------------------------------- | ------------------- | --------------------------------- |
+| `ALLOW`                | runs                                           | `verdict=allow`     | —                                 |
+| `DENY <reason>`        | fails with `CorrectedError(reason)`            | `verdict=deny`      | receives the reason as tool error |
+| `UNCERTAIN <reason>`   | opens the human dialog with the reason visible | `verdict=uncertain` | depends on the human reply        |
+| timeout / error / junk | normal human flow                              | `verdict=fallback`  | depends on the human reply        |
 
 `DENY` is not silent: the calling agent receives the reason as a tool error
 and can correct course, exactly like a human reject-with-message.
@@ -203,18 +203,18 @@ for validator evals (plain SQL extraction). The database is
 
 ### `permission_decisions` — one row per validator decision
 
-| Column       | Type         | Notes                                                        |
-| ------------ | ------------ | ------------------------------------------------------------ |
-| `id`         | text PK      | `decision`-prefixed ascending id                             |
-| `session_id` | text FK      | cascade delete; indexed (`permission_decisions_session_idx`) |
-| `permission` | text         | e.g. `bash`, `edit`, `external_directory`                    |
-| `patterns`   | text (JSON)  | the exact patterns evaluated (full command)                  |
-| `metadata`   | text (JSON)  | summarized tool metadata; values capped at 500 chars; carries the tool `callID` for transcript correlation |
-| `verdict`    | text         | `allow` \| `deny` \| `uncertain` \| `fallback`               |
-| `reason`     | text, null   | validator or fallback reason                                 |
-| `model`      | text         | `provider/model` that decided                                |
-| `latency_ms` | integer      | wall time of the validation call                             |
-| `created_at` | integer      | epoch ms                                                     |
+| Column       | Type        | Notes                                                                                                      |
+| ------------ | ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `id`         | text PK     | `decision`-prefixed ascending id                                                                           |
+| `session_id` | text FK     | cascade delete; indexed (`permission_decisions_session_idx`)                                               |
+| `permission` | text        | e.g. `bash`, `edit`, `external_directory`                                                                  |
+| `patterns`   | text (JSON) | the exact patterns evaluated (full command)                                                                |
+| `metadata`   | text (JSON) | summarized tool metadata; values capped at 500 chars; carries the tool `callID` for transcript correlation |
+| `verdict`    | text        | `allow` \| `deny` \| `uncertain` \| `fallback`                                                             |
+| `reason`     | text, null  | validator or fallback reason                                                                               |
+| `model`      | text        | `provider/model` that decided                                                                              |
+| `latency_ms` | integer     | wall time of the validation call                                                                           |
+| `created_at` | integer     | epoch ms                                                                                                   |
 
 ### `session_auto_summary` — one row per session
 
@@ -333,15 +333,15 @@ rows, and the fallbacks with a stubbed LLM.
 
 ## Failure modes
 
-| Failure                                   | Behavior                                                                                          | Audit/log                                   |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| Validator model offline / timeout (15s)   | ask falls to the normal human flow                                                               | `verdict=fallback`, `reason=timeout\|error`; `permission.validator.fallback` log |
-| Unparseable verdict                       | same                                                                                             | `verdict=fallback`, `reason=invalid`        |
-| `command-validator` agent or model missing | same                                                                                            | `verdict=fallback`, `reason=error`          |
-| Summarizer failure                        | turn unaffected (forked + caught); the previous summary stays and the validator reads it as-is   | `auto summary update failed` log            |
-| Catch-up summary broken on switch to auto | gate times out at 20s; validation proceeds without a summary                                     | `auto summary ensure failed` log            |
-| Health check fails on activation          | warning toast; the session behaves like `build` (asks go to the human)                            | `GET /permission/validator/health` → `{ ok: false, reason }` |
-| Audit write failure                       | logged, never breaks or blocks the ask                                                           | `permission decision audit write failed` log |
+| Failure                                    | Behavior                                                                                       | Audit/log                                                                        |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Validator model offline / timeout (15s)    | ask falls to the normal human flow                                                             | `verdict=fallback`, `reason=timeout\|error`; `permission.validator.fallback` log |
+| Unparseable verdict                        | same                                                                                           | `verdict=fallback`, `reason=invalid`                                             |
+| `command-validator` agent or model missing | same                                                                                           | `verdict=fallback`, `reason=error`                                               |
+| Summarizer failure                         | turn unaffected (forked + caught); the previous summary stays and the validator reads it as-is | `auto summary update failed` log                                                 |
+| Catch-up summary broken on switch to auto  | gate times out at 20s; validation proceeds without a summary                                   | `auto summary ensure failed` log                                                 |
+| Health check fails on activation           | warning toast; the session behaves like `build` (asks go to the human)                         | `GET /permission/validator/health` → `{ ok: false, reason }`                     |
+| Audit write failure                        | logged, never breaks or blocks the ask                                                         | `permission decision audit write failed` log                                     |
 
 The design is fail-closed towards the human: no failure path approves or
 rejects on its own — every degradation lands on the normal permission dialog.
