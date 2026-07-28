@@ -162,7 +162,12 @@ export interface ServerInstructions {
 }
 
 /** An MCP tool in its native shape; consumers adapt it to their own tool format. */
-export type McpTool = McpCatalog.McpTool
+export interface McpTool {
+  /** Shared cached definition; consumers must copy rather than mutate it. */
+  readonly def: MCPToolDef
+  readonly client: MCPClient
+  readonly timeout?: number
+}
 
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>

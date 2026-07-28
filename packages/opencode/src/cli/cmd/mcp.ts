@@ -737,7 +737,6 @@ export const McpDebugCommand = effectCmd({
           clientId: oauthConfig?.clientId,
           clientSecret: oauthConfig?.clientSecret,
           scope: oauthConfig?.scope,
-          callbackPort: oauthConfig?.callbackPort,
           redirectUri: oauthConfig?.redirectUri,
         },
         {
