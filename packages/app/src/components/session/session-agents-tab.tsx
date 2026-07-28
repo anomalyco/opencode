@@ -206,12 +206,10 @@ export function SessionAgentsTab() {
                               </Show>
                             </span>
                           </div>
-                          <Show when={session.cost != null ? session.cost : undefined}>
-                            {(cost) => (
-                              <span class="text-12-regular text-text-weak whitespace-nowrap">
-                                {formatter().cost(cost())}
-                              </span>
-                            )}
+                          <Show when={session.cost != null}>
+                            <span class="text-12-regular text-text-weak whitespace-nowrap">
+                              {formatter().cost(session.cost ?? 0)}
+                            </span>
                           </Show>
                         </div>
                       </div>

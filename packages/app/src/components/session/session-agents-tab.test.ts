@@ -11,7 +11,7 @@ let taskSessionID: typeof import("./session-agents-tab").taskSessionID
 let taskStatus: typeof import("./session-agents-tab").taskStatus
 
 beforeAll(async () => {
-  mock.module("@solidjs/router", () => ({
+  await mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => ({}),
     useLocation: () => ({}),

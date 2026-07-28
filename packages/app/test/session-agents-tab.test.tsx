@@ -117,6 +117,11 @@ test("token total updates in place when only session.tokens mutates", () => {
   expect(host.querySelectorAll("button")[0]).toBe(row)
 })
 
+test("cost of exactly 0 still renders the $0.00 span instead of hiding it", () => {
+  const row = host.querySelectorAll("button")[0]
+  expect(row.textContent).toContain("$0.00")
+})
+
 // NON-VACUITY (why these tests cannot pass against the pre-fix component)
 //
 // The argument is structural, not a revert-and-rerun: the fixture is seeded so that a frozen
