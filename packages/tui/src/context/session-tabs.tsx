@@ -13,8 +13,11 @@ import { isRecord } from "../util/record"
 import {
   closeSessionTab,
   cycleSessionTab,
+  moveSessionTabHistory,
   openSessionTab,
+  recordSessionTabHistory,
   type SessionTab,
+  type SessionTabHistory,
   type SessionTabUnread,
 } from "./session-tabs-model"
 
@@ -43,6 +46,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       tabs: [],
       unread: {},
     })
+    let history: SessionTabHistory = { entries: [], index: -1 }
 
     const root = (sessionID: string) => data.session.root(sessionID)
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
@@ -155,6 +159,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const routeSessionID = route.data.sessionID
       batch(() => {
         const opened = open(routeSessionID)
+        history = recordSessionTabHistory(history, opened.sessionID)
         const changed = clearUnread(opened.sessionID)
         if (opened.changed || changed) untrack(save)
       })
@@ -240,6 +245,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           direction,
         )
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
+      },
+      history(direction: 1 | -1) {
+        if (!enabled()) return
+        const next = moveSessionTabHistory(history, store.tabs, current(), direction)
+        history = next.history
+        if (next.sessionID) route.navigate({ type: "session", sessionID: next.sessionID })
       },
       selectIndex(index: number) {
         if (!enabled()) return

@@ -3,7 +3,9 @@ import {
   adaptiveSessionTabLayout,
   closeSessionTab,
   cycleSessionTab,
+  moveSessionTabHistory,
   openSessionTab,
+  recordSessionTabHistory,
   sessionTabComplete,
 } from "../../src/context/session-tabs-model"
 
@@ -30,6 +32,47 @@ describe("session tabs", () => {
     expect(cycleSessionTab(tabs, "c", -1)?.sessionID).toBe("a")
     expect(cycleSessionTab(tabs, "e", 1)?.sessionID).toBe("a")
     expect(cycleSessionTab(tabs, "b", 1)?.sessionID).toBe("a")
+  })
+
+  test("moves backward and forward through selection history", () => {
+    const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b", "c", "d"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+    const backToC = moveSessionTabHistory(history, tabs, "d", -1)
+    const backToB = moveSessionTabHistory(backToC.history, tabs, "c", -1)
+    const forwardToC = moveSessionTabHistory(backToB.history, tabs, "b", 1)
+    const forwardToD = moveSessionTabHistory(forwardToC.history, tabs, "c", 1)
+
+    expect([backToC.sessionID, backToB.sessionID, forwardToC.sessionID, forwardToD.sessionID]).toEqual([
+      "c",
+      "b",
+      "c",
+      "d",
+    ])
+  })
+
+  test("truncates forward history after a new selection", () => {
+    const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b", "c"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+    const back = moveSessionTabHistory(history, tabs, "c", -1)
+    const branched = recordSessionTabHistory(back.history, "d")
+
+    expect(branched).toEqual({ entries: ["a", "b", "d"], index: 2 })
+    expect(moveSessionTabHistory(branched, tabs, "d", 1).sessionID).toBeUndefined()
+  })
+
+  test("skips closed tabs and duplicate entries for the active tab", () => {
+    const tabs = ["a", "b"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b", "c", "b"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+
+    expect(moveSessionTabHistory(history, tabs, "b", -1).sessionID).toBe("a")
+    expect(recordSessionTabHistory(history, "b")).toBe(history)
+  })
+
+  test("returns to the latest history entry when no tab is active", () => {
+    const tabs = ["a", "b"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+
+    expect(moveSessionTabHistory(history, tabs, undefined, -1).sessionID).toBe("b")
   })
 
   test("reveals completion activity only after session work becomes idle", () => {

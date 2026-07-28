@@ -5,6 +5,11 @@ export type SessionTab = {
 
 export type SessionTabUnread = "activity" | "error"
 
+export type SessionTabHistory = {
+  entries: readonly string[]
+  index: number
+}
+
 export function sessionTabComplete(unread: SessionTabUnread | undefined, busy: boolean) {
   return unread === "activity" && !busy
 }
@@ -35,6 +40,31 @@ export function cycleSessionTab(tabs: readonly SessionTab[], active: string | un
   const index = tabs.findIndex((tab) => tab.sessionID === active)
   const start = index === -1 ? (direction === 1 ? -1 : 0) : index
   return tabs[(start + direction + tabs.length) % tabs.length]
+}
+
+export function recordSessionTabHistory(history: SessionTabHistory, sessionID: string): SessionTabHistory {
+  if (history.entries[history.index] === sessionID) return history
+  const entries = [...history.entries.slice(0, history.index + 1), sessionID]
+  return { entries, index: entries.length - 1 }
+}
+
+export function moveSessionTabHistory(
+  history: SessionTabHistory,
+  tabs: readonly SessionTab[],
+  active: string | undefined,
+  direction: 1 | -1,
+) {
+  if (!active) {
+    const sessionID = history.entries[history.index]
+    return tabs.some((tab) => tab.sessionID === sessionID) ? { history, sessionID } : { history, sessionID: undefined }
+  }
+  const entries = history.entries.map((sessionID, index) => ({ sessionID, index }))
+  const candidates = direction === -1 ? entries.slice(0, history.index).reverse() : entries.slice(history.index + 1)
+  const target = candidates.find(
+    (entry) => entry.sessionID !== active && tabs.some((tab) => tab.sessionID === entry.sessionID),
+  )
+  if (!target) return { history, sessionID: undefined }
+  return { history: { ...history, index: target.index }, sessionID: target.sessionID }
 }
 
 export function adaptiveSessionTabLayout(
