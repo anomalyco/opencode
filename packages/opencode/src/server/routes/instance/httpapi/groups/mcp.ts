@@ -20,6 +20,7 @@ export const AuthStartResponse = Schema.Struct({
 })
 export const AuthCallbackPayload = Schema.Struct({
   code: Schema.String,
+  iss: Schema.optional(Schema.String),
 })
 export const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
