@@ -67,20 +67,30 @@ export function truncate(str: string, len: number): string {
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
+export function graphemes(str: string) {
+  return Array.from(graphemeSegmenter.segment(str), (item) => item.segment)
+}
+
+export function takeWidth(str: string, width: number) {
+  if (width <= 0) return ""
+  if (stringWidth(str) <= width) return str
+
+  const result: string[] = []
+  let used = 0
+  for (const segment of graphemes(str)) {
+    const next = stringWidth(segment)
+    if (used + next > width) break
+    result.push(segment)
+    used += next
+  }
+  return result.join("")
+}
+
 export function truncateWidth(str: string, width: number): string {
   if (width <= 0) return ""
   if (stringWidth(str) <= width) return str
   if (width === 1) return "…"
-
-  const result: string[] = []
-  let used = 0
-  for (const item of graphemeSegmenter.segment(str)) {
-    const next = stringWidth(item.segment)
-    if (used + next > width - 1) break
-    result.push(item.segment)
-    used += next
-  }
-  return result.join("") + "…"
+  return takeWidth(str, width - 1) + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {

@@ -1,18 +1,15 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
-import { useTuiPaths } from "../../context/runtime"
-import { useTheme } from "../../context/theme"
-import { abbreviateHome } from "../../runtime"
 import { FilePath } from "../../ui/file-path"
 
 function View(props: { context: Plugin.Context }) {
-  const { themeV2 } = useTheme()
-  const paths = useTuiPaths()
   const directory = createMemo(() =>
-    props.context.location ? abbreviateHome(props.context.location.directory, paths.home) : undefined,
+    props.context.location ? props.context.ui.format.path(props.context.location.directory) : undefined,
   )
   return (
-    <Show when={directory()}>{(value) => <FilePath value={value()} maxWidth={38} fg={themeV2.text.subdued} />}</Show>
+    <Show when={directory()}>
+      {(value) => <FilePath value={value()} maxWidth={38} fg={props.context.theme.text.subdued} />}
+    </Show>
   )
 }
 

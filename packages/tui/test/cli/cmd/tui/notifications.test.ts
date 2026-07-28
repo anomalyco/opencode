@@ -1,27 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
 import type { OpenCodeEvent, PermissionAsked, QuestionAsked } from "@opencode-ai/client"
-import type { TuiAttentionNotifyInput, TuiPluginApi } from "@opencode-ai/plugin/v1/tui"
-import { createTuiPluginApi } from "../../../fixture/tui-plugin"
+import type { AttentionNotifyOptions, Context } from "@opencode-ai/plugin/tui/context"
 
-type Session = NonNullable<ReturnType<TuiPluginApi["state"]["session"]["get"]>>
+type Session = { id: string; title: string; parentID?: string }
 
 async function setup() {
-  const notifications: TuiAttentionNotifyInput[] = []
+  const notifications: AttentionNotifyOptions[] = []
   const handlers = new Map<OpenCodeEvent["type"], ((event: OpenCodeEvent) => void)[]>()
-  const session = (
-    id: string,
-    title: string,
-    parentID?: string,
-  ): Session => ({
+  const session = (id: string, title: string, parentID?: string): Session => ({
     id,
     title,
-    slug: id,
-    projectID: "project",
-    directory: "/workspace",
     ...(parentID && { parentID }),
-    version: "0.0.0-test",
-    time: { created: 0, updated: 0 },
   })
   const sessions: Record<string, Session> = {
     session: session("session", "Demo session"),
@@ -30,41 +20,35 @@ async function setup() {
     timeout: session("timeout", "Timeout session"),
   }
 
-  await Notifications.tui(
-    createTuiPluginApi({
-      attention: {
-        async notify(input) {
-          notifications.push(input)
-          return { ok: true, notification: true, sound: true }
-        },
+  await Notifications.setup({
+    attention: {
+      async notify(input: AttentionNotifyOptions) {
+        notifications.push(input)
+        return { ok: true, notification: true, sound: true }
       },
-      event: {
-        on: <Type extends OpenCodeEvent["type"]>(
-          type: Type,
-          handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
-        ) => {
-          const list = handlers.get(type) ?? []
-          const wrapped = handler as (event: OpenCodeEvent) => void
-          list.push(wrapped)
-          handlers.set(type, list)
-          return () => {
-            handlers.set(
-              type,
-              (handlers.get(type) ?? []).filter((item) => item !== wrapped),
-            )
-          }
-        },
+    },
+    data: {
+      on: <Type extends OpenCodeEvent["type"]>(
+        type: Type,
+        handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+      ) => {
+        const list = handlers.get(type) ?? []
+        const wrapped = handler as (event: OpenCodeEvent) => void
+        list.push(wrapped)
+        handlers.set(type, list)
+        return () => {
+          handlers.set(
+            type,
+            (handlers.get(type) ?? []).filter((item) => item !== wrapped),
+          )
+        }
       },
-      state: {
-        session: {
-          get: (sessionID: string) => sessions[sessionID],
-          status: () => ({ type: "busy" }),
-        },
+      session: {
+        get: (sessionID: string) => sessions[sessionID],
+        status: () => "running" as const,
       },
-    }),
-    undefined,
-    {} as never,
-  )
+    },
+  } as unknown as Context)
 
   return {
     notifications,
@@ -139,31 +123,31 @@ function executionFailed(id: string, sessionID = "session"): OpenCodeEvent {
   }
 }
 
-const questionNotification: TuiAttentionNotifyInput = {
+const questionNotification: AttentionNotifyOptions = {
   title: "Demo session",
   message: "Question needs input",
   notification: { when: "blurred" },
   sound: { name: "question", when: "always" },
 }
 
-const formNotification: TuiAttentionNotifyInput = {
+const formNotification: AttentionNotifyOptions = {
   title: "Input requested",
   message: "Input needs response",
   notification: { when: "blurred" },
   sound: { name: "question", when: "always" },
 }
 
-const titledFormNotification: TuiAttentionNotifyInput = {
+const titledFormNotification: AttentionNotifyOptions = {
   ...formNotification,
   title: "Confirm deployment",
 }
 
-const globalFormNotification: TuiAttentionNotifyInput = {
+const globalFormNotification: AttentionNotifyOptions = {
   ...formNotification,
   title: "demo-mcp is requesting input",
 }
 
-const permissionNotification: TuiAttentionNotifyInput = {
+const permissionNotification: AttentionNotifyOptions = {
   title: "Demo session",
   message: "Permission needs input",
   notification: { when: "blurred" },

@@ -1,9 +1,9 @@
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import type { Event, PermissionRequest } from "@opencode-ai/sdk/v2/client"
+import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
+import { type Accessor, batch, createMemo, createResource, onCleanup, onMount } from "solid-js"
 import { createApiForServer, createSdkForServer, type ServerApi } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
@@ -18,15 +18,7 @@ const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
-type PermissionEvent = {
-  id: string
-  type: "permission.v2.asked"
-  properties: PermissionRequest
-  current?: OpenCodeEvent
-}
-export type ServerEvent = (Event | PermissionEvent) & {
-  current?: OpenCodeEvent
-}
+export type ServerEvent = Event & { current?: OpenCodeEvent }
 type QueuedServerEvent = { directory: string; payload: ServerEvent }
 type CurrentDelta = Extract<
   OpenCodeEvent,
@@ -34,10 +26,10 @@ type CurrentDelta = Extract<
 >
 
 export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
-  if (event.type === "permission.v2.asked") {
+  if (event.type === "permission.asked") {
     return {
       id: event.id,
-      type: "permission.v2.asked",
+      type: "permission.asked",
       properties: {
         id: event.data.id,
         sessionID: event.data.sessionID,
@@ -51,16 +43,8 @@ export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
             : undefined,
       },
       current: event,
-    }
+    } as ServerEvent
   }
-  if (event.type === "permission.v2.replied")
-    return { id: event.id, type: "permission.v2.replied", properties: event.data, current: event } as ServerEvent
-  if (event.type === "question.v2.asked")
-    return { id: event.id, type: "question.v2.asked", properties: event.data, current: event } as ServerEvent
-  if (event.type === "question.v2.replied")
-    return { id: event.id, type: "question.v2.replied", properties: event.data, current: event } as ServerEvent
-  if (event.type === "question.v2.rejected")
-    return { id: event.id, type: "question.v2.rejected", properties: event.data, current: event } as ServerEvent
   return { id: event.id, type: event.type, properties: event.data, current: event } as ServerEvent
 }
 
@@ -177,6 +161,7 @@ type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
   protocol: Promise<ServerProtocol>
+  protocolKind: Accessor<ServerProtocol | undefined>
   url: string
   client: ReturnType<typeof createSdkForServer>
   api: CompatibleApi
@@ -213,6 +198,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     server: server.http,
   })
   const protocol = detectServerProtocol(server.http, platform.fetch ?? globalThis.fetch)
+  const [protocolKind] = createResource(
+    () => protocol,
+    (value) => value,
+  )
   const emitter = createGlobalEmitter<{
     [key: string]: ServerEvent
   }>()
@@ -355,6 +344,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     server,
     scope,
     protocol,
+    protocolKind,
     url: server.http.url,
     client: sdk,
     api,
@@ -402,6 +392,11 @@ export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleCo
   },
 })
 
+export function useServerProtocol() {
+  const serverSDK = useServerSDK()
+  return createMemo(() => serverSDK().protocolKind())
+}
+
 type SDKEventMap = {
   [key in Event["type"]]: Extract<ServerEvent, { type: key }>
 }
@@ -421,6 +416,7 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
 
   return {
     scope: serverSDK.scope,
+    protocol: serverSDK.protocol,
     directory,
     client,
     api: createCompatibleApi({

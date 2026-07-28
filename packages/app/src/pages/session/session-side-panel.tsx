@@ -23,8 +23,8 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
-import type { SessionDiff } from "@/utils/diffs"
+import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
@@ -56,20 +56,23 @@ import {
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
-import type { RenderDiff } from "@/pages/session/v2/review-diff-kinds"
+
+type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
+type RenderDiff = FileDiffInfo | (SnapshotFileDiff & { file: string }) | VcsFileDiff
+
+function renderDiff(value: ReviewDiff): value is RenderDiff {
+  return typeof value.file === "string"
+}
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
-  diffs: () => (SessionDiff | VcsFileDiff)[]
+  diffs: () => ReviewDiff[]
   diffsReady: () => boolean
   empty: () => string
   hasReview: () => boolean
   reviewHasFocusableContent: () => boolean
   reviewCount: () => number
   reviewPanel: () => JSX.Element
-  diffVersion?: number
-  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
-  expandUnchanged?: boolean
   reviewSidebarToggle?: (disabled: boolean) => JSX.Element
   fileBrowserState?: SessionFileBrowserState
   activeDiff?: string
@@ -87,11 +90,6 @@ export function SessionSidePanel(props: {
   const sdk = useSDK()
   const { sessionKey, tabs, view, params } = useSessionLayout()
   const projectDirectory = createMemo(() => sdk().directory)
-  const diffForTab = (tab: string) => {
-    const path = file.pathFromTab(tab)
-    if (!path) return
-    return props.diffs().find((diff) => diff.file === path)
-  }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const shown = settings.visibility.fileTree
@@ -114,7 +112,7 @@ export function SessionSidePanel(props: {
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
-  const diffs = createMemo(() => props.diffs())
+  const diffs = createMemo(() => props.diffs().filter(renderDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
@@ -743,10 +741,6 @@ export function SessionSidePanel(props: {
                               active={file.pathFromTab(browserTab() ?? activeFileTab() ?? "")}
                               kinds={kinds()}
                               state={props.fileBrowserState!}
-                              diff={diffForTab(browserTab() ?? activeFileTab() ?? "")}
-                              diffVersion={props.diffVersion}
-                              loadDiff={props.loadDiff}
-                              expandUnchanged={props.expandUnchanged}
                               onSelect={(path) => previewTab(file.tab(path))}
                               onSelectPermanent={(path) => openTab(file.tab(path))}
                               filterRef={(element) => (fileFilter = element)}

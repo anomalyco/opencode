@@ -2,7 +2,7 @@
 
 import { Schema, SchemaAST } from "effect"
 import { format } from "prettier"
-import { ThemeDefinition, ThemeDocument } from "../../tui/src/theme/v2/schema"
+import { ThemeDefinition, ThemeDocument } from "@opencode-ai/theme/tui"
 
 const target = import.meta.dir + "/../snippets/generated/theme-tokens.mdx"
 const root = requireObject(ThemeDefinition.ast)
@@ -64,7 +64,7 @@ ${JSON.stringify(example, null, 2)}
 ## Token reference
 
 This reference is generated from the Effect schema in
-\`packages/tui/src/theme/v2/schema.ts\`. Changes to the runtime schema update
+\`@opencode-ai/theme/tui\`. Changes to the runtime schema update
 this section through \`bun run generate\`.
 
 ### Hue tokens

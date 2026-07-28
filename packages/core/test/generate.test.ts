@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
-import { LLMClient, LLMEvent, LLMResponse, Model } from "@opencode-ai/ai"
+import { Model } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
+import { TestLLM } from "@opencode-ai/ai/testing"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Generate } from "@opencode-ai/core/generate"
@@ -9,7 +10,7 @@ import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { ID, Info, Ref } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { Npm } from "@opencode-ai/util/npm"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
@@ -64,21 +65,7 @@ const aisdk = Layer.mock(AISDK.Service, {
   },
   model: () => Effect.succeed(runtime),
 })
-const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die("unused"),
-  stream: () => Stream.die("unused"),
-  generate: () =>
-    Effect.sync(() => {
-      const response = LLMResponse.fromEvents([
-        LLMEvent.textStart({ id: "generate" }),
-        LLMEvent.textDelta({ id: "generate", text: "OK" }),
-        LLMEvent.textEnd({ id: "generate" }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
-      if (!response) throw new Error("Incomplete generate response")
-      return response
-    }),
-})
+const client = TestLLM.clientLayer.pipe(Layer.provide(TestLLM.layer({ fallback: TestLLM.text("OK", "generate") })))
 
 const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))

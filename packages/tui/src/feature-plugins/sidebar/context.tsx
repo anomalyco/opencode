@@ -1,6 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
-import { useTheme } from "../../context/theme"
 import { contextUsage } from "../../util/session"
 
 const money = new Intl.NumberFormat("en-US", {
@@ -9,7 +8,7 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 function View(props: { context: Plugin.Context; sessionID: string }) {
-  const { themeV2 } = useTheme()
+  const theme = props.context.theme
   const msg = createMemo(() => props.context.data.session.message.list(props.sessionID))
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const cost = createMemo(() => props.context.data.session.cost(props.sessionID))
@@ -20,20 +19,20 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
 
   return (
     <box>
-      <text fg={themeV2.text.default}>
+      <text fg={theme.text.default}>
         <b>Context</b>
       </text>
-      <Show when={state()} fallback={<text fg={themeV2.text.subdued}>Not measured</text>}>
+      <Show when={state()} fallback={<text fg={theme.text.subdued}>Not measured</text>}>
         {(value) => (
           <>
-            <text fg={themeV2.text.subdued}>{value().tokens.toLocaleString()} tokens</text>
+            <text fg={theme.text.subdued}>{value().tokens.toLocaleString()} tokens</text>
             <Show when={value().percent !== undefined}>
-              <text fg={themeV2.text.subdued}>{value().percent}% used</text>
+              <text fg={theme.text.subdued}>{value().percent}% used</text>
             </Show>
           </>
         )}
       </Show>
-      <text fg={themeV2.text.subdued}>{money.format(cost())} spent</text>
+      <text fg={theme.text.subdued}>{money.format(cost())} spent</text>
     </box>
   )
 }

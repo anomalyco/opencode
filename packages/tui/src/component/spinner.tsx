@@ -11,9 +11,9 @@ export { SPINNER_FRAMES } from "./spinner-frames"
 registerOpencodeSpinner()
 
 export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
-  const { themeV2 } = useTheme()
+  const theme = useTheme()
   const config = useConfig().data
-  const color = () => props.color ?? themeV2.text.subdued
+  const color = () => props.color ?? theme.text.subdued
   return (
     <Show
       when={config.animations ?? true}

@@ -85,11 +85,10 @@ export function Home() {
             />
           </pluginRuntime.Slot>
         </box>
-        <PluginSlot name="home.bottom" />
         <box flexGrow={1} minHeight={0} />
       </box>
       <box width="100%" flexShrink={0}>
-        <PluginSlot name="home.footer" />
+        <PluginSlot name="home.footer" input={{}} mode="replace" />
       </box>
       <Show when={forms()[0]?.id} keyed>
         {(_) => {

@@ -11,7 +11,7 @@ import type {
   Route,
   Slot,
 } from "@opencode-ai/plugin/tui/context"
-import { ThemeProvider } from "../../../src/context/theme"
+import { ThemeProvider, useTheme, useThemes } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
 import { Keymap } from "../../../src/context/keymap"
@@ -21,6 +21,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
+import { createPluginTheme } from "../../../src/plugin/context"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
@@ -157,12 +158,16 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
     })
   }, createEventStream())
   function Harness() {
+    let theme: ReturnType<typeof createPluginTheme>
     const context = {
       options: {},
       client: createApi(transport.fetch),
       data: {
         session: { get: () => session },
         location: { default: () => ({ directory: "/repo/default" }) },
+      },
+      get theme() {
+        return theme
       },
       keymap: {
         layer(input: () => KeymapLayer) {
@@ -171,19 +176,25 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
           })
         },
         dispatch() {},
-        shortcut: () => undefined,
+        shortcuts: () => [],
         mode: { current: () => "base", push: () => () => {} },
       },
       ui: {
+        dialog: {
+          show: () => () => {},
+          set() {},
+          clear() {},
+        },
         router: {
           register(page: Page) {
             if (page.name === "diff") renderDiff = page.render
-          return () => {}
+            return () => {}
           },
           navigate(destination: Destination) {
-            current = destination.type === "plugin" && !("id" in destination)
-              ? { ...destination, id: "diff-viewer" }
-              : destination
+            current =
+              destination.type === "plugin" && !("id" in destination)
+                ? { ...destination, id: "diff-viewer" }
+                : destination
           },
           current: () => current,
         },
@@ -196,6 +207,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
 
     void diffViewerPlugin.setup(context)
     function Content() {
+      theme = createPluginTheme(useTheme(), useThemes())
       const commandView = renderCommands?.({})
       if (current.type !== "plugin") commands.get("diff.open")?.run()
       return (

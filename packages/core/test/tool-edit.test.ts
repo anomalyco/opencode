@@ -471,6 +471,103 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("normalizes Unicode typography only after exact matching fails", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "unicode.txt")
+        return Effect.promise(() =>
+          fs.writeFile(target, "exact - match\ncurly “quotes”\nminus − one\nspace\u00A0here\nexact − match\n"),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const normalized = yield* executeTool(
+                  registry,
+                  call({
+                    path: "unicode.txt",
+                    oldString: 'curly "quotes"\nminus - one\nspace here',
+                    newString: "normalized",
+                  }),
+                )
+                expect(normalized.status).toBe("completed")
+
+                const exact = yield* executeTool(
+                  registry,
+                  call({ path: "unicode.txt", oldString: "exact - match", newString: "selected" }),
+                )
+                expect(exact.status).toBe("completed")
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
+                  "selected\nnormalized\nexact − match\n",
+                )
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("ignores trailing whitespace while preserving untouched lines", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "whitespace.txt")
+        return Effect.promise(() => fs.writeFile(target, "before  \nmatch  \nnext\t\nafter  \n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(registry, call({ path: "whitespace.txt", oldString: "match\nnext", newString: "changed" })),
+            ),
+          ),
+          Effect.tap((result) => Effect.sync(() => expect(result.status).toBe("completed"))),
+          Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
+          Effect.tap((content) => Effect.sync(() => expect(content).toBe("before  \nchanged\nafter  \n"))),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("uses non-overlapping trailing-whitespace matches and preserves CRLF", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const overlap = path.join(tmp.path, "overlap.txt")
+        const windows = path.join(tmp.path, "windows.txt")
+        return Effect.promise(() =>
+          Promise.all([fs.writeFile(overlap, "a  \na  \na  \n"), fs.writeFile(windows, "a  \r\nb\t\r\n")]),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const replaced = yield* executeTool(
+                  registry,
+                  call({ path: "overlap.txt", oldString: "a\na", newString: "x", replaceAll: true }),
+                )
+                expect(replaced).toMatchObject({ status: "completed", output: { replacements: 1 } })
+                yield* executeTool(registry, call({ path: "windows.txt", oldString: "a\nb", newString: "x" }))
+              }),
+            ),
+          ),
+          Effect.andThen(
+            Effect.promise(() => Promise.all([fs.readFile(overlap, "utf8"), fs.readFile(windows, "utf8")])),
+          ),
+          Effect.tap(([overlapContent, windowsContent]) =>
+            Effect.sync(() => {
+              expect(overlapContent).toBe("x\na  \n")
+              expect(windowsContent).toBe("x\r\n")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("preserves BOM and CRLF line endings", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

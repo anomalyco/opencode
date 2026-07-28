@@ -41,7 +41,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   const config = useConfig()
   const [rows, setRows] = createStore<SessionRow[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
-  const turnTokens = () => config.data.debug?.turn_tokens === true
+  const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
 
   function reduce() {
     const messages = data.session.message.list(sessionID())

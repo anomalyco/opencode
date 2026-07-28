@@ -19,7 +19,7 @@ import type {
   ShellInfo,
   SkillInfo,
 } from "@opencode-ai/client"
-import type { KeyEvent, Renderable } from "@opentui/core"
+import type { CliRenderer, KeyEvent, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 
 interface LocationCollection<Value> {
@@ -113,7 +113,134 @@ export interface Page {
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
 }
 
-export type Slot = (props: Record<string, any>) => JSX.Element
+export interface SlotMap {
+  readonly app: Readonly<Record<string, never>>
+  readonly "home.footer": Readonly<Record<string, never>>
+  readonly "sidebar.content": {
+    readonly sessionID: string
+  }
+  readonly "sidebar.footer": Readonly<Record<string, never>>
+}
+
+export type SlotName = keyof SlotMap
+export type Slot<Name extends SlotName = SlotName> = (props: SlotMap[Name]) => JSX.Element
+
+export interface App {
+  readonly version: string
+  readonly channel: string
+}
+
+export type ToastVariant = "info" | "success" | "warning" | "error"
+
+export interface ToastOptions {
+  readonly title?: string
+  readonly message: string
+  readonly variant?: ToastVariant
+  readonly duration?: number
+}
+
+export interface Toast {
+  show(options: ToastOptions): void
+}
+
+export type AttentionWhen = "always" | "focused" | "blurred"
+export type AttentionSoundName = "default" | "question" | "permission" | "error" | "done" | "subagent_done"
+
+export type AttentionNotification =
+  | boolean
+  | {
+      readonly when?: AttentionWhen
+    }
+
+export type AttentionSound =
+  | boolean
+  | {
+      readonly name?: AttentionSoundName
+      readonly volume?: number
+      readonly when?: AttentionWhen
+    }
+
+export interface AttentionNotifyOptions {
+  readonly title?: string
+  readonly message: string
+  readonly notification?: AttentionNotification
+  readonly sound?: AttentionSound
+}
+
+export type AttentionNotifySkipReason =
+  | "attention_disabled"
+  | "empty_message"
+  | "blurred"
+  | "focused"
+  | "focus_unknown"
+  | "renderer_destroyed"
+
+export interface AttentionNotifyResult {
+  readonly ok: boolean
+  readonly notification: boolean
+  readonly sound: boolean
+  readonly skipped?: AttentionNotifySkipReason
+}
+
+export interface Attention {
+  notify(options: AttentionNotifyOptions): Promise<AttentionNotifyResult>
+}
+
+export type DialogSize = "medium" | "large" | "xlarge"
+
+export interface DialogOptions {
+  readonly size?: DialogSize
+  readonly centered?: boolean
+}
+
+export interface DialogAlertOptions {
+  readonly title: string
+  readonly message: string
+}
+
+export interface DialogConfirmOptions {
+  readonly title: string
+  readonly message: string
+  readonly label?: {
+    readonly confirm?: string
+    readonly cancel?: string
+  }
+}
+
+export interface DialogPromptOptions {
+  readonly title: string
+  readonly description?: string
+  readonly placeholder?: string
+  readonly value?: string
+}
+
+export interface DialogSelectOption<Value> {
+  readonly title: string
+  readonly value: Value
+  readonly description?: string
+  readonly category?: string
+  readonly disabled?: boolean
+}
+
+export interface DialogSelectOptions<Value> {
+  readonly title: string
+  readonly placeholder?: string
+  readonly options: readonly DialogSelectOption<Value>[]
+  readonly current?: Value
+}
+
+export interface Dialog {
+  /** Shows a dialog and returns a function that closes it. */
+  show(render: () => JSX.Element, onClose?: () => void): () => void
+  /** Sets the presentation options for this plugin's active dialog. */
+  set(options: DialogOptions): void
+  /** Closes this plugin's active dialog. */
+  clear(): void
+  alert(options: DialogAlertOptions): Promise<void>
+  confirm(options: DialogConfirmOptions): Promise<boolean | undefined>
+  prompt(options: DialogPromptOptions): Promise<string | undefined>
+  select<Value>(options: DialogSelectOptions<Value>): Promise<Value | undefined>
+}
 
 export interface KeymapCommand {
   /** Stable command and config keybind identifier. Omit for an inline command. */
@@ -158,13 +285,32 @@ export interface KeymapLayer {
   readonly bindings?: readonly string[]
 }
 
+export interface KeymapPending {
+  readonly key: string
+  readonly token?: string
+}
+
+export interface KeymapActive {
+  readonly key: string
+  readonly title?: string
+  readonly description?: string
+  readonly group?: string
+  readonly continues: boolean
+}
+
 export interface Keymap {
   /** Creates a reactive keymap layer owned by the calling component. */
   layer(input: () => KeymapLayer): void
   /** Dispatches a reachable command by ID. */
   dispatch(id: string, input?: string): void
-  /** Returns the formatted shortcut for a registered command. */
-  shortcut(id: string): string | undefined
+  /** Returns every formatted shortcut for a registered command. */
+  shortcuts(id: string): readonly string[]
+  /** Returns the currently reachable commands. Reactive when read in a Solid computation. */
+  commands(): readonly KeymapCommand[]
+  /** Returns the pending key sequence. Reactive when read in a Solid computation. */
+  pending(): readonly KeymapPending[]
+  /** Returns bindings reachable from the pending key sequence. Reactive when read in a Solid computation. */
+  active(): readonly KeymapActive[]
   /** Controls mutually exclusive OpenCode input modes. */
   readonly mode: {
     /** Returns the active mode. */
@@ -175,19 +321,28 @@ export interface Keymap {
 }
 
 export interface UI {
+  readonly dialog: Dialog
+  readonly toast: Toast
+  readonly format: {
+    path(value: string): string
+  }
   readonly router: {
     register(page: Page): () => void
     navigate(destination: Destination): void
     current(): Route
   }
-  readonly slot: (name: string, render: Slot) => () => void
+  readonly slot: <Name extends SlotName>(name: Name, render: Slot<Name>) => () => void
 }
 
 export interface Context {
   readonly options: Readonly<Record<string, any>>
   readonly location: LocationRef | undefined
+  readonly app: App
+  readonly renderer: CliRenderer
   readonly client: OpenCodeClient
   readonly data: Data
+  readonly attention: Attention
+  readonly theme: any
   readonly keymap: Keymap
   readonly ui: UI
 }

@@ -58,6 +58,12 @@ describe("provider error classification", () => {
     ).toEqual(["ProviderInternal", "ProviderInternal"])
   })
 
+  test("classifies transient client statuses as provider internal", () => {
+    expect(
+      [408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag),
+    ).toEqual(["ProviderInternal", "ProviderInternal"])
+  })
+
   test("classifies nested provider codes when a top-level code is also present", () => {
     expect(
       [

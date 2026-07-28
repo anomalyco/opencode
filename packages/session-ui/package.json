@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/session-ui",
-  "version": "1.18.4",
+  "version": "1.18.8",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -39,9 +39,9 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/client": "file:../app/vendor/opencode-ai-client-1.17.13.tgz",
+    "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/sdk": "1.18.5",
+    "@opencode-ai/sdk": "file:../app/vendor/opencode-ai-sdk-1.18.8-dev.tgz",
     "@opencode-ai/ui": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/stream": "catalog:",

@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
@@ -13,7 +13,7 @@ export function DialogSessionDeleteFailed(props: {
   onDone?: () => void
 }) {
   const dialog = useDialog()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const [store, setStore] = createStore({
     active: "delete" as "delete" | "restore",
   })
@@ -64,17 +64,17 @@ export function DialogSessionDeleteFailed(props: {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           Failed to Delete Session
         </text>
-        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
-      <text fg={themeV2.text.subdued} wrapMode="word">
+      <text fg={theme.text.subdued} wrapMode="word">
         {`The session "${props.session}" could not be deleted because the workspace "${props.workspace}" is not available.`}
       </text>
-      <text fg={themeV2.text.subdued} wrapMode="word">
+      <text fg={theme.text.subdued} wrapMode="word">
         Choose how you want to recover this broken workspace session.
       </text>
       <box flexDirection="column" paddingBottom={1} gap={1}>
@@ -86,7 +86,7 @@ export function DialogSessionDeleteFailed(props: {
               paddingRight={1}
               paddingTop={1}
               paddingBottom={1}
-              backgroundColor={item.id === store.active ? themeV2.background.action.primary.focused : undefined}
+              backgroundColor={item.id === store.active ? theme.background.action.primary.focused : undefined}
               onMouseUp={() => {
                 setStore("active", item.id)
                 void confirm()
@@ -94,12 +94,12 @@ export function DialogSessionDeleteFailed(props: {
             >
               <text
                 attributes={TextAttributes.BOLD}
-                fg={item.id === store.active ? themeV2.text.action.primary.focused : themeV2.text.default}
+                fg={item.id === store.active ? theme.text.action.primary.focused : theme.text.default}
               >
                 {item.title}
               </text>
               <text
-                fg={item.id === store.active ? themeV2.text.action.primary.focused : themeV2.text.subdued}
+                fg={item.id === store.active ? theme.text.action.primary.focused : theme.text.subdued}
                 wrapMode="word"
               >
                 {item.description}

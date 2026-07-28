@@ -1,12 +1,8 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
-import { Keymap } from "../../context/keymap"
-import { useTheme } from "../../context/theme"
-import { useDialog } from "../../ui/dialog"
 
 function Commands(props: { context: Plugin.Context }) {
-  const dialog = useDialog()
-  Keymap.createLayer(() => ({
+  props.context.keymap.layer(() => ({
     mode: "global",
     commands: [
       {
@@ -16,7 +12,7 @@ function Commands(props: { context: Plugin.Context }) {
         palette: true,
         run() {
           props.context.ui.router.navigate({ type: "plugin", name: "scrap" })
-          dialog.clear()
+          props.context.ui.dialog.clear()
         },
       },
     ],
@@ -26,10 +22,10 @@ function Commands(props: { context: Plugin.Context }) {
 
 function Scrap(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const { themeV2 } = useTheme()
-  const { themeV2: elevatedTheme } = useTheme().contextual("elevated")
+  const theme = props.context.theme
+  const elevatedTheme = props.context.theme.contextual("elevated")
 
-  Keymap.createLayer(() => ({
+  props.context.keymap.layer(() => ({
     commands: [
       {
         bind: "escape",
@@ -43,7 +39,7 @@ function Scrap(props: { context: Plugin.Context }) {
   }))
 
   return (
-    <box width={dimensions().width} height={dimensions().height} backgroundColor={themeV2.background.default}>
+    <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background.default}>
       <box flexGrow={1} />
       <box
         height={1}

@@ -1,9 +1,12 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { currentSession } from "../utils/mock-server"
 
 const server = "http://127.0.0.1:4096"
 const sessionA = session("ses_tab_a", "Tab A session")
 const sessionB = session("ses_tab_b", "Tab B session")
+const sessionC = session("ses_tab_c", "Tab C session")
+const unresolvedSessionID = "ses_tab_unresolved"
 
 test("pressing mouse down on a tab navigates before mouse up", async ({ page }) => {
   await mockServer(page)
@@ -39,6 +42,34 @@ test("pressing mouse down on a tab navigates before mouse up", async ({ page }) 
   await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
 })
 
+test("keyboard navigation follows the visible tab order", async ({ page }) => {
+  await mockServer(page)
+  await page.addInitScript(
+    ({ server, sessionA, unresolved, sessionC }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify([
+          { type: "session", server, sessionId: sessionA },
+          { type: "session", server, sessionId: unresolved },
+          { type: "session", server, sessionId: sessionC },
+        ]),
+      )
+    },
+    { server, sessionA: sessionA.id, unresolved: unresolvedSessionID, sessionC: sessionC.id },
+  )
+
+  const hrefA = `/server/${base64Encode(server)}/session/${sessionA.id}`
+  const hrefC = `/server/${base64Encode(server)}/session/${sessionC.id}`
+  await page.goto(hrefA)
+  await expect(page.locator("[data-titlebar-tab-slot]:visible")).toHaveCount(2)
+  await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefC}"])`)).toBeVisible()
+
+  await page.keyboard.press("Control+Alt+ArrowRight")
+
+  await expect(page).toHaveURL(new RegExp(`${hrefC.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
+})
+
 function session(id: string, title: string) {
   return {
     id,
@@ -52,22 +83,29 @@ function session(id: string, title: string) {
 }
 
 async function mockServer(page: Page) {
-  const sessions = [sessionA, sessionB]
+  const sessions = [sessionA, sessionB, sessionC]
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== server) return route.fallback()
-    if (url.pathname === "/global/event" || url.pathname === "/event") return sse(route)
+    if ([`/api/session/${unresolvedSessionID}`, `/session/${unresolvedSessionID}`].includes(url.pathname))
+      return new Promise(() => {})
+    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event")
+      return sse(route)
     if (url.pathname === "/global/health") return json(route, { healthy: true })
-    if (url.pathname === "/session") return json(route, sessions)
+    if (url.pathname === "/api/session") return json(route, { data: sessions.map(currentSession), cursor: {} })
+    if (url.pathname === "/api/session/active") return json(route, { data: {} })
+    const currentSessionInfo = sessions.find((item) => url.pathname === `/api/session/${item.id}`)
+    if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
+    if (sessions.some((item) => url.pathname === `/api/session/${item.id}/message`))
+      return json(route, { data: [], cursor: {} })
     const byId = sessions.find((item) => url.pathname === `/session/${item.id}`)
     if (byId) return json(route, byId)
     if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
     if (/^\/session\/[^/]+\/message$/.test(url.pathname)) return json(route, [])
-    if (/^\/session\/[^/]+\/(children|diff)$/.test(url.pathname)) return json(route, [])
+    if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
     if (["/skill", "/command", "/lsp", "/formatter", "/permission", "/question", "/vcs/diff"].includes(url.pathname))
       return json(route, [])
-    if (["/global/config", "/config", "/provider/auth", "/mcp", "/session/status"].includes(url.pathname))
-      return json(route, {})
+    if (["/global/config", "/config", "/provider/auth", "/mcp"].includes(url.pathname)) return json(route, {})
     if (url.pathname === "/provider")
       return json(route, { all: [], connected: [], default: { providerID: "", modelID: "" } })
     if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
@@ -89,7 +127,20 @@ async function mockServer(page: Page) {
         directory: sessionA.directory,
         home: sessionA.directory,
       })
+    if (url.pathname === "/api/path")
+      return json(route, {
+        state: sessionA.directory,
+        config: sessionA.directory,
+        worktree: sessionA.directory,
+        directory: sessionA.directory,
+        home: sessionA.directory,
+      })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
+    if (url.pathname === "/api/vcs")
+      return json(route, {
+        location: { directory: sessionA.directory },
+        data: { branch: "main", defaultBranch: "main" },
+      })
     return json(route, {})
   })
 }

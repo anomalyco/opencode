@@ -1,6 +1,5 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/v1/tui"
 import type { PluginRuntime } from "../plugin/runtime"
-import Notifications from "./system/notifications"
 import PluginManager from "./system/plugins"
 import WhichKey from "./system/which-key"
 
@@ -11,7 +10,7 @@ export type BuiltinTuiPlugin = Omit<TuiPluginModule, "id"> & {
 }
 
 export function createBuiltinPlugins(): BuiltinTuiPlugin[] {
-  return [Notifications, PluginManager, WhichKey]
+  return [PluginManager, WhichKey]
 }
 
 export async function loadBuiltinPlugins(api: TuiPluginApi, runtime: PluginRuntime) {

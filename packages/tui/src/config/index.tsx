@@ -120,6 +120,9 @@ export const Info = Schema.Struct({
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
+      tabs: Schema.optional(Schema.Boolean).annotate({
+        description: "Use a persistent session tab strip instead of pinned quick-switch sessions",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   mini: Schema.optional(
@@ -159,7 +162,9 @@ export const Info = Schema.Struct({
     Schema.Struct({
       devtools: Schema.optional(Schema.Boolean).annotate({ description: "Show the DevTools debug bar" }),
       timing: Schema.optional(Schema.Boolean).annotate({ description: "Show time-to-first-draw diagnostics" }),
-      turn_tokens: Schema.optional(Schema.Boolean).annotate({ description: "Show per-turn token usage diagnostics" }),
+      turn_tokens: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("verbose")])).annotate({
+        description: "Show per-turn token usage diagnostics, optionally with tool call inputs",
+      }),
     }),
   ).annotate({ description: "Debugging settings" }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),

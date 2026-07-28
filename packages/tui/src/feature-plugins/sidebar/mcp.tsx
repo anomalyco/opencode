@@ -1,10 +1,9 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
-import { useTheme } from "../../context/theme"
 
 function View(props: { context: Plugin.Context; sessionID: string }) {
   const [open, setOpen] = createSignal(true)
-  const { themeV2 } = useTheme()
+  const theme = props.context.theme
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
   const on = createMemo(() => list().filter((item) => item.status.status === "connected").length)
@@ -19,12 +18,12 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
   )
 
   const dot = (status: string) => {
-    if (status === "connected") return themeV2.text.feedback.success.default
-    if (status === "failed") return themeV2.text.feedback.error.default
-    if (status === "disabled") return themeV2.text.subdued
-    if (status === "needs_auth") return themeV2.text.feedback.warning.default
-    if (status === "needs_client_registration") return themeV2.text.feedback.error.default
-    return themeV2.text.subdued
+    if (status === "connected") return theme.text.feedback.success.default
+    if (status === "failed") return theme.text.feedback.error.default
+    if (status === "disabled") return theme.text.subdued
+    if (status === "needs_auth") return theme.text.feedback.warning.default
+    if (status === "needs_client_registration") return theme.text.feedback.error.default
+    return theme.text.subdued
   }
 
   return (
@@ -32,12 +31,12 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
           <Show when={list().length > 2}>
-            <text fg={themeV2.text.default}>{open() ? "▼" : "▶"}</text>
+            <text fg={theme.text.default}>{open() ? "▼" : "▶"}</text>
           </Show>
-          <text fg={themeV2.text.default}>
+          <text fg={theme.text.default}>
             <b>MCP</b>
             <Show when={!open()}>
-              <span style={{ fg: themeV2.text.subdued }}>
+              <span style={{ fg: theme.text.subdued }}>
                 {" "}
                 ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
               </span>
@@ -56,9 +55,9 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
                 >
                   •
                 </text>
-                <text fg={themeV2.text.default} wrapMode="word">
+                <text fg={theme.text.default} wrapMode="word">
                   {item.name}{" "}
-                  <span style={{ fg: themeV2.text.subdued }}>
+                  <span style={{ fg: theme.text.subdued }}>
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>
                       <Match when={item.status.status === "failed"}>

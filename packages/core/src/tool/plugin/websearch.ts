@@ -32,85 +32,109 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          {
-            name,
-            options: { codemode: false },
-            description,
-            input: Input,
-            output: Output,
-            execute: (input, context) =>
-              Effect.gen(function* () {
-                yield* permission.assert({
-                  action: name,
-                  resources: [input.query],
-                  save: ["*"],
-                  metadata: input,
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: { type: "tool", messageID: context.messageID, callID: context.callID },
-                })
-                const result = yield* ctx.websearch.query(input).pipe(
-                  Effect.catch((error) => {
-                    if (!Schema.is(WebSearch.ProviderRequiredError)(error)) return Effect.fail(error)
-                    return Effect.gen(function* () {
-                      const providers = (yield* ctx.websearch.providers()).data
-                      if (providers.length === 0) return yield* new WebSearch.ProviderRequiredError()
-                      const response = yield* forms.ask({
-                        sessionID: context.sessionID,
-                        title: "Choose a provider so the agent can search the web",
-                        metadata: { kind: "websearch.provider" },
-                        fields: [
-                          {
-                            key: "provider",
-                            title: "Provider",
-                            description: "OpenCode will use your choice for future searches.",
-                            type: "string",
-                            required: true,
-                            custom: false,
-                            options: [
-                              ...providers.map((provider) => ({ value: provider.id, label: provider.name })),
-                              { value: "__disable__", label: "Disable web search" },
-                            ],
-                          },
-                        ],
-                      })
-                      if (response.status === "cancelled") return yield* Effect.fail(new Error("Web search cancelled"))
-                      const answer = response.answer.provider
-                      if (answer === "__disable__") {
-                        yield* kv.set("websearch:provider", false)
-                        return yield* new WebSearch.DisabledError()
-                      }
-                      if (typeof answer !== "string" || !providers.some((provider) => provider.id === answer))
-                        return yield* new WebSearch.ProviderRequiredError()
-                      yield* kv.set("websearch:provider", answer)
-                      return yield* ctx.websearch.query(input)
+        draft.add({
+          name,
+          options: { codemode: false },
+          description,
+          input: Input,
+          output: Output,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              yield* permission.assert({
+                action: name,
+                resources: [input.query],
+                save: ["*"],
+                metadata: input,
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, callID: context.callID },
+              })
+              const result = yield* ctx.websearch.query(input).pipe(
+                Effect.catch((error) => {
+                  if (!Schema.is(WebSearch.ProviderRequiredError)(error)) return Effect.fail(error)
+                  return Effect.gen(function* () {
+                    const providers = (yield* ctx.websearch.providers()).data
+                    const defaultProvider = providers[0]
+                    if (!defaultProvider) return yield* new WebSearch.ProviderRequiredError()
+                    const response = yield* forms.ask({
+                      sessionID: context.sessionID,
+                      title: "Web Search",
+                      metadata: { kind: "websearch.provider" },
+                      fields: [
+                        {
+                          key: "choice",
+                          description: "Allow OpenCode to search the web for up-to-date information?",
+                          type: "string",
+                          required: true,
+                          custom: false,
+                          options: [
+                            {
+                              value: "allow",
+                              label: `Allow web search via ${defaultProvider.name}`,
+                            },
+                            {
+                              value: "choose",
+                              label: "Choose another provider",
+                            },
+                            { value: "disable", label: "Disable web search" },
+                          ],
+                        },
+                      ],
                     })
-                  }),
-                )
-                const output = {
-                  provider: result.data.providerID,
-                  results: result.data.results,
-                }
-                const content = output.results.length
-                  ? output.results
-                      .map((result) => {
-                        const title = result.title ?? result.url
-                        const published = result.time.published
-                          ? `\nPublished: ${new Date(result.time.published).toISOString()}`
-                          : ""
-                        return `## [${title}](${result.url})${published}${result.content ? `\n\n${result.content}` : ""}`
-                      })
-                      .join("\n\n")
-                  : NO_RESULTS
-                return { output, content, metadata: { provider: output.provider } }
-              }).pipe(
-                Effect.mapError(
-                  (error) => new ToolFailure({ message: `Unable to search the web for ${input.query}`, error }),
-                ),
+                    if (response.status === "cancelled") return yield* Effect.fail(new Error("Web search cancelled"))
+                    if (response.answer.choice === "disable") {
+                      yield* kv.set("websearch:provider", false)
+                      return yield* new WebSearch.DisabledError()
+                    }
+                    const selection =
+                      response.answer.choice === "choose"
+                        ? yield* forms.ask({
+                            sessionID: context.sessionID,
+                            title: "Choose a web search provider",
+                            metadata: { kind: "websearch.provider" },
+                            fields: [
+                              {
+                                key: "provider",
+                                description: "Choose a provider for web search.",
+                                type: "string",
+                                required: true,
+                                custom: false,
+                                options: providers.map((provider) => ({ value: provider.id, label: provider.name })),
+                              },
+                            ],
+                          })
+                        : undefined
+                    if (selection?.status === "cancelled") return yield* Effect.fail(new Error("Web search cancelled"))
+                    const providerID = selection?.answer.provider ?? defaultProvider.id
+                    if (typeof providerID !== "string" || !providers.some((provider) => provider.id === providerID))
+                      return yield* new WebSearch.ProviderRequiredError()
+                    yield* kv.set("websearch:provider", providerID)
+                    return yield* ctx.websearch.query(input)
+                  })
+                }),
+              )
+              const output = {
+                provider: result.data.providerID,
+                results: result.data.results,
+              }
+              const content = output.results.length
+                ? output.results
+                    .map((result) => {
+                      const title = result.title ?? result.url
+                      const published = result.time.published
+                        ? `\nPublished: ${new Date(result.time.published).toISOString()}`
+                        : ""
+                      return `## [${title}](${result.url})${published}${result.content ? `\n\n${result.content}` : ""}`
+                    })
+                    .join("\n\n")
+                : NO_RESULTS
+              return { output, content, metadata: { provider: output.provider } }
+            }).pipe(
+              Effect.mapError(
+                (error) => new ToolFailure({ message: `Unable to search the web for ${input.query}`, error }),
               ),
-          },
-        ),
+            ),
+        }),
       )
       .pipe(Effect.orDie)
 

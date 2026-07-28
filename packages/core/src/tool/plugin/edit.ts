@@ -36,32 +36,69 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-const normalizeLineEndings = (text: string) => text.replaceAll("\r\n", "\n")
-const detectLineEnding = (text: string): "\n" | "\r\n" => (text.includes("\r\n") ? "\r\n" : "\n")
-const convertToLineEnding = (text: string, ending: "\n" | "\r\n") =>
-  ending === "\n" ? normalizeLineEndings(text) : normalizeLineEndings(text).replaceAll("\n", "\r\n")
+const crlf = "\r\n"
 
-const splitBom = (text: string) =>
-  text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }
-const joinBom = (text: string, bom: boolean) => (bom ? `\uFEFF${text}` : text)
-const decodeUtf8 = (content: Uint8Array) => {
-  const bom = content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
-  return { bom, content, text: new TextDecoder().decode(bom ? content.slice(3) : content) }
+interface Match {
+  readonly start: number
+  readonly end: number
 }
 
-const countOccurrences = (content: string, search: string) => {
-  if (search === "") return content.length + 1
-  let count = 0
+const normalizeForMatch = (value: string) =>
+  value
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[“”„‟]/g, '"')
+    .replace(/[‐‑‒–—―−]/g, "-")
+    .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
+
+const findOccurrences = (content: string, search: string) => {
+  const result: Match[] = []
   let offset = 0
   while ((offset = content.indexOf(search, offset)) !== -1) {
-    count++
+    result.push({ start: offset, end: offset + search.length })
     offset += search.length
   }
-  return count
+  return result
+}
+
+const findLineOccurrences = (content: string, search: string) => {
+  const trailingNewline = search.endsWith("\n")
+  const expected = search.split("\n")
+  if (trailingNewline) expected.pop()
+  const lines = [...content.matchAll(/[^\n]*(?:\n|$)/g)]
+    .filter((match) => match[0] !== "")
+    .map((match) => {
+      const newline = match[0].endsWith("\n")
+      const text = newline ? match[0].slice(0, -1) : match[0]
+      return {
+        start: match.index,
+        end: match.index + match[0].length,
+        text,
+        contentEnd: match.index + text.length - (text.endsWith("\r") ? 1 : 0),
+        newline,
+      }
+    })
+  const candidates = lines.flatMap((line, index) => {
+    const actual = lines.slice(index, index + expected.length)
+    if (actual.length !== expected.length) return []
+    if (
+      !actual.every(
+        (item, lineIndex) =>
+          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex]!.trimEnd()),
+      )
+    )
+      return []
+    const last = actual.at(-1)!
+    if (trailingNewline && !last.newline) return []
+    return [{ start: line.start, end: trailingNewline ? last.end : last.contentEnd }]
+  })
+  return candidates.reduce<Match[]>((result, candidate) => {
+    if (result.some((match) => match.end > candidate.start && match.start < candidate.end)) return result
+    result.push(candidate)
+    return result
+  }, [])
 }
 
 /** Deferred edit behavior and UX integrations remain visible at the model-facing seam. */
-// TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
 // TODO: Add formatter integration after formatter runtime exists.
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
@@ -130,11 +167,22 @@ export const Plugin = {
                   if (info.type === "Directory") {
                     return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
                   }
-                  const source = decodeUtf8(yield* fs.readFile(target.canonical))
-                  const ending = detectLineEnding(source.text)
-                  const oldString = convertToLineEnding(input.oldString, ending)
-                  const newString = convertToLineEnding(input.newString, ending)
-                  const replacements = countOccurrences(source.text, oldString)
+                  const bytes = yield* fs.readFile(target.canonical)
+                  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
+                  const source = new TextDecoder().decode(bom ? bytes.slice(3) : bytes)
+                  const ending = source.includes(crlf) ? crlf : "\n"
+                  const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+                  const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+                  const exact = findOccurrences(source, oldString)
+                  // These one-to-one mappings preserve offsets into the original source.
+                  const unicode =
+                    exact.length > 0 ? [] : findOccurrences(normalizeForMatch(source), normalizeForMatch(oldString))
+                  const trailing =
+                    exact.length > 0 || unicode.length > 0
+                      ? []
+                      : findLineOccurrences(source, oldString)
+                  const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
+                  const replacements = matches.length
                   if (replacements === 0) {
                     return yield* new ToolFailure({
                       message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
@@ -146,27 +194,30 @@ export const Plugin = {
                     })
                   }
 
-                  const replaced =
-                    input.replaceAll === true
-                      ? source.text.replaceAll(oldString, newString)
-                      : source.text.replace(oldString, newString)
-                  const counts = diffLines(source.text, replaced).reduce(
+                  const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
+                    .toReversed()
+                    .reduce(
+                      (content, match) =>
+                        `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
+                      source,
+                    )
+                  const counts = diffLines(source, replaced).reduce(
                     (result, item) => ({
                       additions: result.additions + (item.added ? (item.count ?? 0) : 0),
                       deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
                     }),
                     { additions: 0, deletions: 0 },
                   )
-                  const next = splitBom(replaced)
+                  const replacementBom = replaced.startsWith("\uFEFF")
                   const result = yield* files.write({
                     target,
-                    content: joinBom(next.text, source.bom || next.bom),
+                    content: `${bom || replacementBom ? "\uFEFF" : ""}${replacementBom ? replaced.slice(1) : replaced}`,
                   })
                   return {
                     files: [
                       {
                         file: result.resource,
-                        patch: createTwoFilesPatch(result.resource, result.resource, source.text, replaced),
+                        patch: createTwoFilesPatch(result.resource, result.resource, source, replaced),
                         status: "modified" as const,
                         ...counts,
                       },

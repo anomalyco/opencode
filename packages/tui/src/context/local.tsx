@@ -17,7 +17,7 @@ import {
   type ModelPreference,
   type ModelPreferenceModel,
 } from "../model-preference"
-import { useTheme } from "./theme"
+import { useTheme, useThemes } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { useData } from "./data"
@@ -50,7 +50,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const data = useData()
     const client = useClient()
     const toast = useToast()
-    const { themeV2, mode } = useTheme()
+    const theme = useTheme()
+    const { mode } = useThemes()
     const route = useRoute()
     const paths = useTuiPaths()
     const args = useArgs()
@@ -82,7 +83,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const colors = createMemo(() => {
         const step = mode() === "light" ? 800 : 200
         return dedupeWith(
-          themeV2.categorical.map((scale) => scale[step]),
+          theme.categorical.map((scale) => scale[step]),
           (first, second) => first.equals(second),
         )
       })

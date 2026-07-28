@@ -20,12 +20,12 @@ describe("adaptServerEvent", () => {
     const current = {
       id: "evt_1",
       created: 1,
-      type: "permission.v2.asked",
+      type: "permission.asked",
       data: { id: "perm_1", sessionID: "ses_1", action: "read", resources: ["src/**"] },
     } as OpenCodeEvent
 
     expect(adaptServerEvent(current)).toMatchObject({
-      type: "permission.v2.asked",
+      type: "permission.asked",
       properties: { id: "perm_1", sessionID: "ses_1", permission: "read", patterns: ["src/**"] },
       current,
     })
@@ -162,9 +162,8 @@ describe("enqueueServerEvent", () => {
 
     enqueue(partUpdated("old"))
     enqueue({
-      id: "event-delete",
       type: "session.deleted",
-      properties: { sessionID: "session" },
+      properties: { sessionID: "session", info: { id: "session" } },
     } as Event)
     enqueue(partUpdated("new"))
 

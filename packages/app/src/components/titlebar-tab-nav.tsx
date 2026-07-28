@@ -1,14 +1,13 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { useGlobal } from "@/context/global"
-import { useLanguage } from "@/context/language"
 import { ServerConnection, serverName } from "@/context/server"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
-import { showToast } from "@/utils/toast"
 import type { Session } from "@opencode-ai/sdk/v2"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import { TabPreviewPopover } from "./titlebar-tab-popover"
@@ -23,8 +22,7 @@ export function TabNavItem(props: {
   server: ServerConnection.Key
   session: () => Session | undefined
   fallbackTitle?: string
-  onTitleChange?: (title: string) => void
-  onTitleChangeFailed?: (title: string) => void
+  onRename: (title: string) => Promise<void>
   onClose: () => void
   onNavigate: () => void
   active?: boolean
@@ -34,13 +32,12 @@ export function TabNavItem(props: {
   pressed?: boolean
   hidden?: boolean
 }) {
-  const language = useLanguage()
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
   let tabRoot!: HTMLDivElement
   let titleEl!: HTMLSpanElement
-  let committing = false
   let measureFrame: number | undefined
+  const rename = createMutation(() => ({ mutationFn: props.onRename }))
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -116,41 +113,20 @@ export function TabNavItem(props: {
     selection?.addRange(range)
   }
 
-  const rename = async (title: string) => {
-    const ctx = serverCtx()
-    const session = props.session()
-    if (!ctx || !session) return
-    const client = ctx.sdk.createClient({ directory: session.directory, throwOnError: true })
-    await client.session.update({ sessionID: session.id, title })
-  }
-
   const closeRename = async (save: boolean) => {
-    if (committing || !editing()) return
-    committing = true
+    if (rename.isPending || !editing()) return
 
     const original = props.session()?.title ?? ""
     const next = (titleEl.textContent ?? "").trim()
 
     titleEl.scrollLeft = 0
-    if (save && next && next !== original) props.onTitleChange?.(next)
     setEditing(false)
 
     if (!save || !next || next === original) {
-      committing = false
       return
     }
 
-    try {
-      await rename(next)
-    } catch (err) {
-      props.onTitleChangeFailed?.(original)
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : undefined,
-      })
-    }
-
-    committing = false
+    await rename.mutateAsync(next)
   }
 
   createEffect(() => {
@@ -164,7 +140,7 @@ export function TabNavItem(props: {
   const openRename = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    if (!canOpenTabRename(props.dragging, editing(), committing)) return
+    if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
     const session = props.session()
     if (!session) return
     titleEl.textContent = session.title
@@ -219,88 +195,86 @@ export function TabNavItem(props: {
         closeTab(event)
       }}
     >
-      <Show when={title() !== undefined}>
-        <a
-          data-slot="tab-link"
-          data-titlebar-tab-link
-          href={props.href}
-          draggable={false}
-          onDragStart={(event) => {
+      <a
+        data-slot="tab-link"
+        data-titlebar-tab-link
+        href={props.href}
+        draggable={false}
+        onDragStart={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseDown={(event) => {
+          // Navigate on mousedown to shave the press-release delay off tab switches.
+          if (event.button !== 0) return
+          if (editing()) return
+          if (props.suppressNavigation?.()) return
+          props.onNavigate()
+        }}
+        onClick={(event) => {
+          event.preventDefault()
+          // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+          if (event.detail > 0) return
+          if (editing()) return
+          if (props.suppressNavigation?.()) return
+          props.onNavigate()
+        }}
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base group-data-[editing='true']:text-v2-text-text-base [-webkit-user-drag:none]"
+      >
+        <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
+          <Show
+            when={props.session()}
+            fallback={
+              <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
+            }
+          >
+            {(session) => (
+              <SessionTabAvatar
+                project={project()}
+                directory={session().directory}
+                sessionId={session().id}
+                server={props.server}
+              />
+            )}
+          </Show>
+        </span>
+        <span
+          ref={(el) => {
+            titleEl = el
+            titleEl.textContent = title() ?? ""
+          }}
+          data-slot="tab-title"
+          data-titlebar-tab-title
+          class="min-w-0 flex-1 outline-none leading-4"
+          classList={{
+            "overflow-hidden text-clip whitespace-nowrap": !editing(),
+            "select-text": editing(),
+          }}
+          contenteditable={editing() ? true : undefined}
+          onDblClick={openRename}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === "Enter") {
+              event.preventDefault()
+              void closeRename(true)
+              return
+            }
+            if (event.key !== "Escape") return
             event.preventDefault()
+            titleEl.textContent = props.session()?.title ?? ""
+            void closeRename(false)
+          }}
+          onBlur={() => void closeRename(true)}
+          onPointerDown={(event) => {
+            if (!editing()) return
             event.stopPropagation()
           }}
-          onMouseDown={(event) => {
-            // Navigate on mousedown to shave the press-release delay off tab switches.
-            if (event.button !== 0) return
-            if (editing()) return
-            if (props.suppressNavigation?.()) return
-            props.onNavigate()
-          }}
           onClick={(event) => {
+            if (!editing()) return
             event.preventDefault()
-            // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
-            if (event.detail > 0) return
-            if (editing()) return
-            if (props.suppressNavigation?.()) return
-            props.onNavigate()
           }}
-          class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base group-data-[editing='true']:text-v2-text-text-base [-webkit-user-drag:none]"
-        >
-          <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
-            <Show
-              when={props.session()}
-              fallback={
-                <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
-              }
-            >
-              {(session) => (
-                <SessionTabAvatar
-                  project={project()}
-                  directory={session().directory}
-                  sessionId={session().id}
-                  server={props.server}
-                />
-              )}
-            </Show>
-          </span>
-          <span
-            ref={(el) => {
-              titleEl = el
-              titleEl.textContent = title() ?? ""
-            }}
-            data-slot="tab-title"
-            data-titlebar-tab-title
-            class="min-w-0 flex-1 outline-none leading-4"
-            classList={{
-              "overflow-hidden text-clip whitespace-nowrap": !editing(),
-              "select-text": editing(),
-            }}
-            contenteditable={editing() ? true : undefined}
-            onDblClick={openRename}
-            onKeyDown={(event) => {
-              event.stopPropagation()
-              if (event.key === "Enter") {
-                event.preventDefault()
-                void closeRename(true)
-                return
-              }
-              if (event.key !== "Escape") return
-              event.preventDefault()
-              titleEl.textContent = props.session()?.title ?? ""
-              void closeRename(false)
-            }}
-            onBlur={() => void closeRename(true)}
-            onPointerDown={(event) => {
-              if (!editing()) return
-              event.stopPropagation()
-            }}
-            onClick={(event) => {
-              if (!editing()) return
-              event.preventDefault()
-            }}
-          />
-        </a>
-      </Show>
+        />
+      </a>
 
       <div data-slot="tab-close" class="group-hover:bg-[var(--tab-bg)] group-data-[active=true]:bg-[var(--tab-bg)]">
         <IconButtonV2

@@ -8,8 +8,9 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  Todo,
 } from "@opencode-ai/sdk/v2/client"
-import type { SessionDiff } from "@/utils/diffs"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
@@ -18,6 +19,7 @@ import { diffs as list, message as clean } from "@/utils/diffs"
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([
   "session.diff",
+  "todo.updated",
   "session.status",
   "message.updated",
   "message.removed",
@@ -60,8 +62,13 @@ export function applyGlobalEvent(input: {
   )
 }
 
-function cleanupSessionCaches(setStore: SetStoreFunction<State>, sessionID: string) {
+function cleanupSessionCaches(
+  setStore: SetStoreFunction<State>,
+  sessionID: string,
+  setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void,
+) {
   if (!sessionID) return
+  setSessionTodo?.(sessionID, undefined)
   setStore(
     produce((draft) => {
       dropSessionCaches(draft, [sessionID])
@@ -69,11 +76,17 @@ function cleanupSessionCaches(setStore: SetStoreFunction<State>, sessionID: stri
   )
 }
 
-export function cleanupDroppedSessionCaches(store: Store<State>, setStore: SetStoreFunction<State>, next: Session[]) {
+export function cleanupDroppedSessionCaches(
+  store: Store<State>,
+  setStore: SetStoreFunction<State>,
+  next: Session[],
+  setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void,
+) {
   const keep = new Set(next.map((item) => item.id))
   const stale = [
     ...Object.keys(store.message),
     ...Object.keys(store.session_diff),
+    ...Object.keys(store.todo),
     ...Object.keys(store.permission),
     ...Object.keys(store.question),
     ...Object.keys(store.session_status),
@@ -82,6 +95,9 @@ export function cleanupDroppedSessionCaches(store: Store<State>, setStore: SetSt
       .filter((sessionID): sessionID is string => !!sessionID),
   ].filter((sessionID, index, list) => !keep.has(sessionID) && list.indexOf(sessionID) === index)
   if (stale.length === 0) return
+  for (const sessionID of stale) {
+    setSessionTodo?.(sessionID, undefined)
+  }
   setStore(
     produce((draft) => {
       dropSessionCaches(draft, stale)
@@ -98,6 +114,7 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   loadReferences?: () => void
   vcsCache?: VcsCache
+  setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
   retainedLimit?: number
   sessionContent?: boolean
   permission?: State["permission"]
@@ -121,7 +138,7 @@ export function applyDirectoryEvent(input: {
       next.splice(result.index, 0, info)
       const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
-      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed)
+      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
       break
     }
@@ -129,16 +146,15 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
+        if (!result.found) break
         if (input.store.session[result.index]!.time.archived === info.time.archived) break
-        if (result.found) {
-          input.setStore(
-            "session",
-            produce((draft) => {
-              draft.splice(result.index, 1)
-            }),
-          )
-        }
-        cleanupSessionCaches(input.setStore, info.id)
+        input.setStore(
+          "session",
+          produce((draft) => {
+            draft.splice(result.index, 1)
+          }),
+        )
+        cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
@@ -151,12 +167,15 @@ export function applyDirectoryEvent(input: {
       next.splice(result.index, 0, info)
       const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
-      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed)
+      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       break
     }
     case "session.deleted": {
-      const info = (event.properties as { info: Session }).info
-      const result = Binary.search(input.store.session, info.id, (s) => s.id)
+      const properties = event.properties as { sessionID?: string; info?: Session }
+      const sessionID = properties.info?.id ?? properties.sessionID
+      if (!sessionID) break
+      const result = Binary.search(input.store.session, sessionID, (s) => s.id)
+      const info = properties.info ?? (result.found ? input.store.session[result.index] : undefined)
       if (result.found) {
         input.setStore(
           "session",
@@ -165,14 +184,83 @@ export function applyDirectoryEvent(input: {
           }),
         )
       }
-      cleanupSessionCaches(input.setStore, info.id)
-      if (info.parentID) break
+      cleanupSessionCaches(input.setStore, sessionID, input.setSessionTodo)
+      if (info?.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
     }
+    case "session.renamed": {
+      const properties = event.properties as { sessionID: string; title: string }
+      const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)
+      if (!result.found) break
+      input.setStore("session", result.index, (session) => ({
+        ...session,
+        title: properties.title,
+        time: { ...session.time, updated: Date.now() },
+      }))
+      break
+    }
+    case "session.usage.updated": {
+      const properties = event.properties as Pick<Session, "cost" | "tokens"> & { sessionID: string }
+      const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)
+      if (!result.found) break
+      input.setStore("session", result.index, (session) => ({
+        ...session,
+        cost: properties.cost,
+        tokens: properties.tokens,
+      }))
+      break
+    }
+    // case "session.archived": {
+    //   const properties = event.properties as { sessionID: string }
+    //   const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)
+    //   if (!result.found) break
+    //   const info = input.store.session[result.index]
+    //   input.setStore(
+    //     "session",
+    //     produce((draft) => void draft.splice(result.index, 1)),
+    //   )
+    //   cleanupSessionCaches(input.setStore, properties.sessionID)
+    //   if (!info?.parentID) input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
+    //   break
+    // }
+    case "session.moved": {
+      const properties = event.properties as {
+        sessionID: string
+        location: { directory: string; workspaceID?: string }
+        projectID?: string
+        subpath?: string
+      }
+      const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)
+      if (!result.found) break
+      if (properties.location.directory === input.directory) {
+        input.setStore("session", result.index, (session) => ({
+          ...session,
+          projectID: properties.projectID ?? session.projectID,
+          workspaceID: properties.location.workspaceID,
+          directory: properties.location.directory,
+          path: properties.subpath,
+          time: { ...session.time, updated: Date.now() },
+        }))
+        break
+      }
+      const info = input.store.session[result.index]
+      input.setStore(
+        "session",
+        produce((draft) => void draft.splice(result.index, 1)),
+      )
+      if (!info?.parentID) input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
+      break
+    }
     case "session.diff": {
-      const props = event.properties as { sessionID: string; diff: SessionDiff[] }
-      input.setStore("session_diff", props.sessionID, reconcile(list(props.diff), { key: "file" }))
+      const props = event.properties as { sessionID: string; diff: FileDiffInfo[] }
+      input.setStore("session_diff", props.sessionID, reconcile(list(props.diff) as FileDiffInfo[], { key: "file" }))
+      break
+    }
+    case "todo.updated": {
+      const props = event.properties as { sessionID: string; todos: Todo[] }
+      input.setStore("todo", props.sessionID, reconcile(props.todos, { key: "id" }))
+      input.setSessionTodo?.(props.sessionID, props.todos)
       break
     }
     case "session.status": {

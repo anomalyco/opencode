@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useData } from "../context/data"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
@@ -8,30 +8,30 @@ export type DialogStatusProps = {}
 
 export function DialogStatus() {
   const data = useData()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const dialog = useDialog()
 
   const mcp = createMemo(() => data.location.mcp.server.list() ?? [])
   const color = (status: string) => {
-    if (status === "connected") return themeV2.text.feedback.success.default
-    if (status === "failed") return themeV2.text.feedback.error.default
-    if (status === "needs_auth") return themeV2.text.feedback.warning.default
-    if (status === "needs_client_registration") return themeV2.text.feedback.error.default
-    return themeV2.text.subdued
+    if (status === "connected") return theme.text.feedback.success.default
+    if (status === "failed") return theme.text.feedback.error.default
+    if (status === "needs_auth") return theme.text.feedback.warning.default
+    if (status === "needs_client_registration") return theme.text.feedback.error.default
+    return theme.text.subdued
   }
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={themeV2.text.default} attributes={TextAttributes.BOLD}>
+        <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
           Status
         </text>
-        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
-      <Show when={mcp().length > 0} fallback={<text fg={themeV2.text.default}>No MCP servers</text>}>
+      <Show when={mcp().length > 0} fallback={<text fg={theme.text.default}>No MCP servers</text>}>
         <box>
-          <text fg={themeV2.text.default}>
+          <text fg={theme.text.default}>
             {mcp().length} MCP server{mcp().length === 1 ? "" : "s"}
           </text>
           <For each={mcp()}>
@@ -40,9 +40,9 @@ export function DialogStatus() {
                 <text flexShrink={0} style={{ fg: color(item.status.status) }}>
                   •
                 </text>
-                <text fg={themeV2.text.default} wrapMode="word">
+                <text fg={theme.text.default} wrapMode="word">
                   <b>{item.name}</b>{" "}
-                  <span style={{ fg: themeV2.text.subdued }}>
+                  <span style={{ fg: theme.text.subdued }}>
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>
                       <Match when={item.status.status === "failed" && item.status}>{(val) => val().error}</Match>

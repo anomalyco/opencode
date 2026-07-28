@@ -178,6 +178,17 @@ export function resolveServerList(input: {
   return [...deduped.values()]
 }
 
+export function canRemoveServer(input: {
+  key: ServerConnection.Key
+  provided?: Array<ServerConnection.Any>
+  stored: StoredServer[]
+}) {
+  if (input.provided?.some((server) => ServerConnection.key(server) === input.key)) return false
+  return input.stored.some((server) =>
+    typeof server === "string" ? server === input.key : ("type" in server ? server.http.url : server.url) === input.key,
+  )
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string; label?: string }
 
@@ -312,6 +323,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     }
 
+    function canRemove(key: ServerConnection.Key) {
+      return canRemoveServer({ key, provided: props.servers, stored: store.list })
+    }
+
     const isReady = Object.assign(
       createMemo(() => ready() && !!state.active),
       { promise: ready.promise },
@@ -350,6 +365,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       setActive,
       add,
       remove,
+      canRemove,
       scope,
       projects: {
         ...projects,
