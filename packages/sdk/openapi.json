@@ -3360,6 +3360,9 @@
                 "properties": {
                   "code": {
                     "type": "string"
+                  },
+                  "iss": {
+                    "type": "string"
                   }
                 },
                 "required": ["code"],

@@ -522,20 +522,22 @@ function PromptInputV2ModelControl(props: {
         >
           <ModelSelectorPopoverV2
             model={props.model}
-            triggerAs={ButtonV2}
-            triggerProps={{
-              variant: "ghost-muted",
-              size: "normal",
-              style: { height: "28px" },
-              class: "min-w-0 max-w-[220px] justify-start ![font-weight:440] group",
-              classList: { "animate-in fade-in": shouldAnimate() },
-              "data-action": "prompt-model",
-              "data-control-type": "popover",
-            }}
+            trigger={(triggerProps) => (
+              <ButtonV2
+                {...triggerProps}
+                variant="ghost-muted"
+                size="normal"
+                style={{ height: "28px" }}
+                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                classList={{ "animate-in fade-in": shouldAnimate() }}
+                data-action="prompt-model"
+                data-control-type="popover"
+              >
+                {content()}
+              </ButtonV2>
+            )}
             onClose={props.onClose}
-          >
-            {content()}
-          </ModelSelectorPopoverV2>
+          />
         </Show>
       </TooltipV2>
     </Show>

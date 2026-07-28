@@ -28,7 +28,6 @@ import {
   Switch,
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useQueryClient } from "@tanstack/solid-query"
 import { useParams } from "@solidjs/router"
 import { Link } from "@/components/link"
 import { useServerSDK } from "@/context/server-sdk"
@@ -38,7 +37,6 @@ import { useSettings } from "@/context/settings"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
-import { pathKey } from "@/utils/path-key"
 
 const CUSTOM_ID = "_custom"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
@@ -386,7 +384,6 @@ function ProviderConnection(props: {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
-  const queryClient = useQueryClient()
   const params = useParams()
   const language = useLanguage()
   const settings = useSettings()
@@ -707,9 +704,8 @@ function ProviderConnection(props: {
   })
 
   async function complete() {
-    const value = directory()
-    await queryClient
-      .refetchQueries(serverSync().queryOptions.providers(value ? pathKey(value) : null))
+    await serverSync()
+      .refreshProviders()
       .catch(() => undefined)
     dialog.close()
     showToast({
