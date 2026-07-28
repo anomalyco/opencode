@@ -131,6 +131,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/github-copilot": () =>
     import("@opencode-ai/core/github-copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
+  "ai-sdk-devin": () => import("ai-sdk-devin").then((m) => m.createDevin),
 }
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
@@ -859,6 +860,70 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    devin: Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+      const apiKey = env["DEVIN_API_KEY"] || (auth?.type === "api" ? auth.key : undefined)
+
+      if (!apiKey) {
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error("DEVIN_API_KEY is missing. Set it with: export DEVIN_API_KEY=<your-devin-api-key>")
+          },
+        }
+      }
+
+      return {
+        autoload: !input.env.length || input.env.some((item) => env[item]),
+        options: {
+          apiKey,
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          try {
+            // ponytail: ai-sdk-devin may not be installed at discovery time; catch handles it
+            const { createDevin } = await import("ai-sdk-devin")
+            const devin = createDevin({ apiKey })
+            const modelList = (await devin.models()) as any[]
+            const models: Record<string, Model> = {}
+
+            for (const m of modelList) {
+              const modelId = m.modelId || m.id
+              if (!modelId) continue
+              if (input.models[modelId]) continue
+
+              models[modelId] = {
+                id: ModelV2.ID.make(modelId),
+                providerID: ProviderV2.ID.make("devin"),
+                name: m.name || modelId,
+                family: "",
+                api: { id: modelId, url: "", npm: "ai-sdk-devin" },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 128_000, output: 8_192 },
+                capabilities: {
+                  temperature: false,
+                  reasoning: true,
+                  attachment: true,
+                  toolcall: true,
+                  input: { text: true, audio: false, image: false, video: false, pdf: true },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+
+            return models
+          } catch {
+            return {}
+          }
+        },
+      }
+    }),
     "snowflake-cortex": Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const auth = yield* dep.auth(input.id)
@@ -1516,6 +1581,19 @@ const layer = Layer.effect(
 
         // load env
         const envs = yield* env.all()
+
+        // Pre-populate Devin in database for env auto-activation when DEVIN_API_KEY is set
+        if (envs["DEVIN_API_KEY"] && !database["devin"]) {
+          database["devin"] = {
+            id: ProviderV2.ID.make("devin"),
+            name: "Devin (ai)",
+            env: ["DEVIN_API_KEY"],
+            source: "custom",
+            models: {},
+            options: {},
+          }
+        }
+
         for (const [id, provider] of Object.entries(database)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
@@ -1597,6 +1675,20 @@ const layer = Layer.effect(
               for (const [modelID, model] of Object.entries(discovered)) {
                 if (!providers[gitlab].models[modelID]) {
                   providers[gitlab].models[modelID] = model
+                }
+              }
+            } catch (e) {}
+          })
+        }
+
+        const devin = ProviderV2.ID.make("devin")
+        if (discoveryLoaders[devin] && providers[devin] && isProviderAllowed(devin)) {
+          yield* Effect.promise(async () => {
+            try {
+              const discovered = await discoveryLoaders[devin]()
+              for (const [modelID, model] of Object.entries(discovered)) {
+                if (!providers[devin].models[modelID]) {
+                  providers[devin].models[modelID] = model
                 }
               }
             } catch (e) {}
