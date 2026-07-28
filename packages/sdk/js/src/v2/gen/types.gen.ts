@@ -670,6 +670,12 @@ export type Todo = {
   priority: string
 }
 
+export type PermissionAuto = {
+  verdict: "uncertain" | "fallback"
+  reason: string
+  model: string
+}
+
 export type SessionStatus =
   | {
       type: "idle"
@@ -1389,6 +1395,7 @@ export type GlobalEvent = {
             messageID: string
             callID: string
           }
+          auto?: PermissionAuto
         }
       }
     | {
@@ -2474,6 +2481,13 @@ export type PermissionRequest = {
     messageID: string
     callID: string
   }
+  auto?: PermissionAuto
+}
+
+export type PermissionValidatorHealth = {
+  ok: boolean
+  model?: string
+  reason?: string
 }
 
 export type PermissionNotFoundError = {
@@ -2541,6 +2555,21 @@ export type NotFoundError = {
   data: {
     message: string
   }
+}
+
+export type PermissionDecision = {
+  id: string
+  session_id: string
+  permission: string
+  patterns: Array<string>
+  metadata?: {
+    [key: string]: unknown
+  }
+  verdict: "allow" | "deny" | "uncertain" | "fallback"
+  reason?: string
+  model: string
+  latency_ms: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  created_at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
 export type TextPartInput = {
@@ -5714,6 +5743,7 @@ export type PermissionAsked = {
       messageID: string
       callID: string
     }
+    auto?: PermissionAuto
   }
 }
 
@@ -6868,6 +6898,7 @@ export type EventPermissionAsked = {
       messageID: string
       callID: string
     }
+    auto?: PermissionAuto
   }
 }
 
@@ -7845,7 +7876,7 @@ export type ExperimentalSessionStatusListResponses = {
    */
   200: Array<{
     sessionID: string
-    status: "working" | "retrying" | "needs_input" | "done" | "idle"
+    status: "working" | "retrying" | "needs_input" | "waiting" | "done" | "idle" | "interrupted"
     detail?: string
     time: {
       created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -9292,6 +9323,35 @@ export type PermissionListResponses = {
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
 
+export type PermissionValidatorHealthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/validator/health"
+}
+
+export type PermissionValidatorHealthErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PermissionValidatorHealthError = PermissionValidatorHealthErrors[keyof PermissionValidatorHealthErrors]
+
+export type PermissionValidatorHealthResponses = {
+  /**
+   * Validator health
+   */
+  200: PermissionValidatorHealth
+}
+
+export type PermissionValidatorHealthResponse =
+  PermissionValidatorHealthResponses[keyof PermissionValidatorHealthResponses]
+
 export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"
@@ -9751,6 +9811,41 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+
+export type SessionPermissionDecisionsData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/permission_decisions"
+}
+
+export type SessionPermissionDecisionsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionPermissionDecisionsError = SessionPermissionDecisionsErrors[keyof SessionPermissionDecisionsErrors]
+
+export type SessionPermissionDecisionsResponses = {
+  /**
+   * Permission decisions
+   */
+  200: Array<PermissionDecision>
+}
+
+export type SessionPermissionDecisionsResponse =
+  SessionPermissionDecisionsResponses[keyof SessionPermissionDecisionsResponses]
 
 export type SessionDiffData = {
   body?: never

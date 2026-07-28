@@ -20,6 +20,7 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
+import { PermissionValidator } from "@/permission/validator"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
 import { InstanceStore } from "@/project/instance-store"
@@ -38,6 +39,7 @@ import { SessionRunState } from "@/session/run-state"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionStatusStore } from "@opencode-ai/core/session/status-store"
+import { PermissionDecisionsStore } from "@opencode-ai/core/session/permission-decisions-store"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
@@ -232,6 +234,8 @@ const app = LayerNode.group([
   Question.node,
   Permission.node,
   PermissionSaved.node,
+  PermissionValidator.node,
+  PermissionDecisionsStore.node,
   Todo.node,
   Session.node,
   SessionProjector.node,

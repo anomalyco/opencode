@@ -13,6 +13,11 @@ const ReplyPayload = Schema.Struct({
   reply: PermissionV1.Reply,
   message: Schema.optional(Schema.String),
 })
+const ValidatorHealth = Schema.Struct({
+  ok: Schema.Boolean,
+  model: Schema.optional(Schema.String),
+  reason: Schema.optional(Schema.String),
+}).annotate({ identifier: "PermissionValidatorHealth" })
 
 export const PermissionApi = HttpApi.make("permission")
   .add(
@@ -26,6 +31,17 @@ export const PermissionApi = HttpApi.make("permission")
             identifier: "permission.list",
             summary: "List pending permissions",
             description: "Get all pending permission requests across all sessions.",
+          }),
+        ),
+        HttpApiEndpoint.get("validatorHealth", `${root}/validator/health`, {
+          query: WorkspaceRoutingQuery,
+          success: described(ValidatorHealth, "Validator health"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "permission.validator.health",
+            summary: "Permission validator health",
+            description:
+              "Ping the LLM permission validator model used in auto mode. Intended for mode-switch checks, not per-request polling — there is no response cache.",
           }),
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {

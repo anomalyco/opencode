@@ -74,6 +74,19 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
+// Wire shape mirrors the permission_decisions audit table (snake_case).
+export const PermissionDecision = Schema.Struct({
+  id: Schema.String,
+  session_id: Schema.String,
+  permission: Schema.String,
+  patterns: Schema.Array(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  verdict: Schema.Literals(["allow", "deny", "uncertain", "fallback"]),
+  reason: Schema.optional(Schema.String),
+  model: Schema.String,
+  latency_ms: Schema.Number,
+  created_at: Schema.Number,
+}).annotate({ identifier: "PermissionDecision" })
 
 export const SessionPaths = {
   list: root,
@@ -99,6 +112,7 @@ export const SessionPaths = {
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
   permissions: `${root}/:sessionID/permissions/:permissionID`,
+  permissionDecisions: `${root}/:sessionID/permission_decisions`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -163,6 +177,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.todo",
             summary: "Get session todos",
             description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
+          }),
+        ),
+        HttpApiEndpoint.get("permissionDecisions", SessionPaths.permissionDecisions, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(PermissionDecision), "Permission decisions"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.permission_decisions",
+            summary: "List permission decisions",
+            description:
+              "Get the LLM permission validator audit trail for a session (auto mode), oldest first.",
           }),
         ),
         HttpApiEndpoint.get("diff", SessionPaths.diff, {

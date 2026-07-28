@@ -12,6 +12,7 @@ import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { PermissionDecisionsStore } from "@opencode-ai/core/session/permission-decisions-store"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
@@ -56,6 +57,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const agentSvc = yield* Agent.Service
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
+    const decisionsSvc = yield* PermissionDecisionsStore.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
@@ -94,6 +96,25 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* todoSvc.get(ctx.params.sessionID)
+    })
+
+    const permissionDecisions = Effect.fn("SessionHttpApi.permissionDecisions")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const rows = yield* decisionsSvc.listBySession(ctx.params.sessionID)
+      return rows.map((row) => ({
+        id: row.id,
+        session_id: row.sessionID,
+        permission: row.permission,
+        patterns: row.patterns,
+        ...(row.metadata ? { metadata: row.metadata } : {}),
+        verdict: row.verdict,
+        ...(row.reason ? { reason: row.reason } : {}),
+        model: row.model,
+        latency_ms: row.latencyMs,
+        created_at: row.createdAt,
+      }))
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
@@ -416,6 +437,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)
+      .handle("permissionDecisions", permissionDecisions)
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)

@@ -24,6 +24,16 @@ export type Rule = typeof Rule.Type
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionRuleset" })
 export type Ruleset = typeof Ruleset.Type
 
+// Verdict attached to a permission request that reached the human dialog
+// after the LLM validator ("auto" mode) declined to decide. `allow`/`deny`
+// never produce a request, so only the escalated verdicts appear here.
+export const Auto = Schema.Struct({
+  verdict: Schema.Literals(["uncertain", "fallback"]),
+  reason: Schema.String,
+  model: Schema.String,
+}).annotate({ identifier: "PermissionAuto" })
+export type Auto = typeof Auto.Type
+
 export const Request = Schema.Struct({
   id: ID,
   sessionID: SessionID,
@@ -32,6 +42,7 @@ export const Request = Schema.Struct({
   metadata: Schema.Record(Schema.String, Schema.Unknown),
   always: Schema.Array(Schema.String),
   tool: Schema.optional(Schema.Struct({ messageID: Schema.String, callID: Schema.String })),
+  auto: Schema.optional(Auto),
 }).annotate({ identifier: "PermissionRequest" })
 export type Request = typeof Request.Type
 
@@ -48,7 +59,12 @@ export const Approval = Schema.Struct({ projectID: Project.ID, patterns: Schema.
 })
 export type Approval = typeof Approval.Type
 
-export const AskInput = Schema.Struct({ ...Request.fields, id: Schema.optional(ID), ruleset: Ruleset }).annotate({
+export const AskInput = Schema.Struct({
+  ...Request.fields,
+  id: Schema.optional(ID),
+  agent: Schema.optional(Schema.String),
+  ruleset: Ruleset,
+}).annotate({
   identifier: "PermissionAskInput",
 })
 export type AskInput = typeof AskInput.Type

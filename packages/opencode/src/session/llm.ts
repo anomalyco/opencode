@@ -189,6 +189,7 @@ const live: Layer.Layer<
                 sessionID: SessionID.make(input.sessionID),
                 permission: "workflow_tool_approval",
                 patterns: uniquePatterns,
+                agent: input.agent.name,
                 metadata: { tools: approvalTools },
                 always: uniquePatterns,
                 ruleset: [],
