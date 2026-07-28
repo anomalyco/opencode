@@ -8,6 +8,8 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { SubagentFooter } from "./subagent-footer"
 import { usePluginRuntime } from "../../plugin/runtime"
+import { TodoItem } from "../../component/todo-item"
+import { useTerminalDimensions } from "@opentui/solid"
 
 export function SessionSplitView(props: {
   sessionID: string
@@ -21,6 +23,8 @@ export function SessionSplitView(props: {
   permissions?: any[]
   questions?: any[]
   renderMessage: (message: any, index: () => number) => any
+  todoOpen: boolean
+  onToggleTodo: () => void
 }) {
   const sync = useSync()
   const { theme } = useTheme()
@@ -28,7 +32,26 @@ export function SessionSplitView(props: {
   const tuiConfig = useTuiConfig()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
+  const dimensions = useTerminalDimensions()
+
+  // Calculate half of the available left-pane height (reserving ~6 lines for prompt & headers)
+  const maxTodoHeight = createMemo(() => {
+    const availableLeftHeight = Math.max(10, dimensions().height - 6)
+    return Math.floor(availableLeftHeight / 2)
+  })
+
   const session = () => sync.session.get(props.sessionID)
+
+  const todos = createMemo(() => sync.data.todo[props.sessionID] ?? [])
+  const total = createMemo(() => todos().length)
+  const done = createMemo(() => todos().filter((t: any) => t.status === "completed").length)
+  const active = createMemo(() => todos().find((t: any) => t.status === "in_progress") ?? todos()[0])
+
+  // Content height = total todo items + 2 lines border + 2 lines padding
+  const todoHeight = createMemo(() => {
+    const contentHeight = total() + 4
+    return Math.min(contentHeight, maxTodoHeight())
+  })
 
   const split = createMemo(() => {
     let currentAgent = "build"
@@ -75,41 +98,80 @@ export function SessionSplitView(props: {
     <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" height="100%">
       {/* Top Split Area */}
       <box flexDirection="row" flexGrow={1} minHeight={0} width="100%" gap={1}>
-        {/* Left Pane: Plan */}
-        <box
-          flexGrow={1}
-          minHeight={0}
-          padding={1}
-          border={["top", "bottom", "left", "right"]}
-          borderColor={theme.border}
-          backgroundColor={theme.backgroundPanel}
-          title=" Plan "
-          overflow="hidden"
-        >
-          <scrollbox
-            ref={props.planScrollRef}
-            viewportOptions={{
-              paddingRight: 1,
-            }}
-            verticalScrollbarOptions={{
-              paddingLeft: 1,
-              visible: true,
-              trackOptions: {
-                backgroundColor: theme.backgroundElement,
-                foregroundColor: theme.border,
-              },
-            }}
+        {/* Left Column: Todo + Plan */}
+        <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
+          {/* Collapsible Todo Status Header Bar (Above Plan Box) */}
+          <box
+            flexShrink={0}
+            height={1}
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={theme.backgroundElement}
+            border={["top", "bottom", "left", "right"]}
+            borderColor={theme.border}
+            onMouseDown={props.onToggleTodo}
+          >
+            <text fg={theme.text}>
+              📋 Todos: {done()}/{total()} {active() ? `• ${active()?.content}` : ""} {props.todoOpen ? "▼" : "▶"}
+            </text>
+          </box>
+
+          {/* When todoOpen is true, Todo list panel wraps content up to a 50% max-height cap */}
+          <Show when={props.todoOpen && total() > 0}>
+            <box
+              height={todoHeight()}
+              minHeight={0}
+              padding={1}
+              border={["top", "bottom", "left", "right"]}
+              borderColor={theme.border}
+              backgroundColor={theme.backgroundPanel}
+              title=" Todo List "
+              overflow="hidden"
+            >
+              <scrollbox flexGrow={1} minHeight={0}>
+                <For each={todos()}>
+                  {(item) => <TodoItem status={item.status} content={item.content} />}
+                </For>
+              </scrollbox>
+            </box>
+          </Show>
+
+          {/* Plan Box (takes remaining flexible height) */}
+          <box
             flexGrow={1}
             minHeight={0}
-            stickyScroll={true}
-            stickyStart="bottom"
-            scrollAcceleration={scrollAcceleration()}
+            padding={1}
+            border={["top", "bottom", "left", "right"]}
+            borderColor={theme.border}
+            backgroundColor={theme.backgroundPanel}
+            title=" Plan "
+            overflow="hidden"
           >
-            <box height={1} />
-            <For each={split().planMessages}>
-              {(message, index) => props.renderMessage(message, index)}
-            </For>
-          </scrollbox>
+            <scrollbox
+              ref={props.planScrollRef}
+              viewportOptions={{
+                paddingRight: 1,
+              }}
+              verticalScrollbarOptions={{
+                paddingLeft: 1,
+                visible: true,
+                trackOptions: {
+                  backgroundColor: theme.backgroundElement,
+                  foregroundColor: theme.border,
+                },
+              }}
+              flexGrow={1}
+              minHeight={0}
+              stickyScroll={true}
+              stickyStart="bottom"
+              scrollAcceleration={scrollAcceleration()}
+            >
+              <box height={1} />
+              <For each={split().planMessages}>
+                {(message, index) => props.renderMessage(message, index)}
+              </For>
+            </scrollbox>
+          </box>
         </box>
 
         {/* Right Pane: Build Session */}

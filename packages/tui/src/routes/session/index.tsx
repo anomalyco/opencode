@@ -125,6 +125,7 @@ const sessionBindingCommands = [
   "session.redo",
   "session.sidebar.toggle",
   "session.split.toggle",
+  "session.todo.toggle",
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
@@ -250,7 +251,8 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
-  const [isSplitView, setIsSplitView] = createSignal(false)
+  const [isSplitView, setIsSplitView] = createSignal(true)
+  const [todoOpen, setTodoOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
@@ -804,6 +806,15 @@ export function Session() {
       category: "Session",
       run: () => {
         setIsSplitView((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: todoOpen() ? "Hide session todo list" : "Show session todo list",
+      value: "session.todo.toggle",
+      category: "Session",
+      run: () => {
+        setTodoOpen((prev) => !prev)
         dialog.clear()
       },
     },
@@ -1382,6 +1393,8 @@ export function Session() {
                 permissions={permissions()}
                 questions={questions()}
                 renderMessage={(message, index) => renderMessageItem(message, index)}
+                todoOpen={todoOpen()}
+                onToggleTodo={() => setTodoOpen((o) => !o)}
               />
             </Show>
             <Toast />
