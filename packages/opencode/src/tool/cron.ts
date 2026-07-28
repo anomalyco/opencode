@@ -28,15 +28,15 @@ const renderError = (e: unknown) => Effect.succeed({
   metadata: {},
 } satisfies Tool.ExecuteResult)
 
-export const CronAddTool = Tool.define<typeof AddParameters, Metadata, CronService>(
+export const CronAddTool = Tool.define<typeof AddParameters, Metadata, never>(
   "cron_add",
   Effect.gen(function* () {
-    const cron = yield* CronService
     return {
       description: "Schedule a prompt to re-run on a recurring interval in this session.",
       parameters: AddParameters,
-      execute: (params: Schema.Schema.Type<typeof AddParameters>, _ctx: Tool.Context<Metadata>) =>
+      execute: ((params, _ctx) =>
         Effect.gen(function* () {
+          const cron = yield* CronService
           const intervalMs = yield* parseDuration(params.interval)
           const job = yield* cron.add({
             sessionID: _ctx.sessionID,
@@ -50,47 +50,47 @@ export const CronAddTool = Tool.define<typeof AddParameters, Metadata, CronServi
             output: JSON.stringify(job),
             metadata: {},
           }
-        }).pipe(Effect.catch(renderError)),
+        }).pipe(Effect.catch(renderError))) as (params: any, ctx: any) => any,
     } satisfies Tool.DefWithoutID<typeof AddParameters, Metadata>
   }),
 )
 
-export const CronListTool = Tool.define<typeof ListParameters, Metadata, CronService>(
+export const CronListTool = Tool.define<typeof ListParameters, Metadata, never>(
   "cron_list",
   Effect.gen(function* () {
-    const cron = yield* CronService
     return {
       description: "List scheduled cron jobs for this session.",
       parameters: ListParameters,
-      execute: (_params: Schema.Schema.Type<typeof ListParameters>, ctx: Tool.Context<Metadata>) =>
+      execute: ((_params, ctx) =>
         Effect.gen(function* () {
+          const cron = yield* CronService
           const jobs = yield* cron.list(ctx.sessionID)
           return {
             title: `${jobs.length} cron job(s)`,
             output: JSON.stringify(jobs),
             metadata: {},
           }
-        }).pipe(Effect.catch(renderError)),
+        }).pipe(Effect.catch(renderError))) as (params: any, ctx: any) => any,
     } satisfies Tool.DefWithoutID<typeof ListParameters, Metadata>
   }),
 )
 
-export const CronDeleteTool = Tool.define<typeof DeleteParameters, Metadata, CronService>(
+export const CronDeleteTool = Tool.define<typeof DeleteParameters, Metadata, never>(
   "cron_delete",
   Effect.gen(function* () {
-    const cron = yield* CronService
     return {
       description: 'Cancel a scheduled cron job (or "all") for this session.',
       parameters: DeleteParameters,
-      execute: (params: Schema.Schema.Type<typeof DeleteParameters>, ctx: Tool.Context<Metadata>) =>
+      execute: ((params, ctx) =>
         Effect.gen(function* () {
+          const cron = yield* CronService
           const removed = yield* cron.remove(ctx.sessionID, params.id)
           return {
             title: `removed ${removed} job(s)`,
             output: JSON.stringify({ removed }),
             metadata: {},
           }
-        }).pipe(Effect.catch(renderError)),
+        }).pipe(Effect.catch(renderError))) as (params: any, ctx: any) => any,
     } satisfies Tool.DefWithoutID<typeof DeleteParameters, Metadata>
   }),
 )
