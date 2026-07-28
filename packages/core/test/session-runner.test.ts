@@ -70,7 +70,7 @@ import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { ID } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -84,8 +84,9 @@ let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
 let responseStream: Stream.Stream<LLMEvent, LLMError> | undefined
 let responseStreams: Stream.Stream<LLMEvent, LLMError>[] | undefined
-let streamGate: Deferred.Deferred<void> | undefined
-let streamStarted: Deferred.Deferred<void> | undefined
+let streamGate:
+  | { readonly started: Queue.Queue<void>; readonly release: Deferred.Deferred<void> }
+  | undefined
 let streamFailure: LLMError | undefined
 let toolExecutionGate: Deferred.Deferred<void> | undefined
 let toolExecutionsStarted: Deferred.Deferred<void> | undefined
@@ -114,10 +115,11 @@ const client = Layer.succeed(
       const bus = streamFailure
         ? Stream.fail(streamFailure)
         : Stream.fromIterable(responses === undefined ? response : (responses.shift() ?? []))
-      if (!streamGate) return bus
+      const gate = streamGate
+      if (!gate) return bus
       return Stream.unwrap(
-        (streamStarted ? Deferred.succeed(streamStarted, undefined) : Effect.void).pipe(
-          Effect.andThen(Deferred.await(streamGate)),
+        Queue.offer(gate.started, undefined).pipe(
+          Effect.andThen(Deferred.await(gate.release)),
           Effect.as(bus),
         ),
       )
@@ -125,6 +127,22 @@ const client = Layer.succeed(
     generate: () => Effect.die("unused"),
   }),
 )
+const gateStream = Effect.gen(function* () {
+  const gate = {
+    started: yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown),
+    release: yield* Deferred.make<void>(),
+  }
+  streamGate = gate
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      if (streamGate === gate) streamGate = undefined
+    }),
+  )
+  return {
+    started: Queue.take(gate.started),
+    release: Deferred.succeed(gate.release, undefined),
+  }
+})
 const reply = {
   stop: () => [
     LLMEvent.stepStart({ index: 0 }),
@@ -523,7 +541,6 @@ const setup = Effect.gen(function* () {
   responseStream = undefined
   responseStreams = undefined
   streamGate = undefined
-  streamStarted = undefined
   toolExecutionGate = undefined
   toolExecutionsStarted = undefined
   toolExecutionsReady = 5
@@ -958,11 +975,10 @@ describe("SessionRunnerLLM", () => {
         ],
         [],
       ]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* Scope.close(scope, Exit.void)
       yield* transformTools(registry,
         {
@@ -977,7 +993,7 @@ describe("SessionRunnerLLM", () => {
         },
         { codemode: false },
       )
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(run)
 
       expect(executions).toEqual(["advertised"])
@@ -1772,8 +1788,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       currentModel = recoveryModel
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
       responses = [
         reply.tool("call-active", "echo", { text: "active" }),
         [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
@@ -1782,7 +1797,7 @@ describe("SessionRunnerLLM", () => {
       ]
       yield* admit(session, "Active work")
       const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
 
       const first = yield* session.compact({ sessionID })
       const second = yield* session.compact({ sessionID })
@@ -1802,7 +1817,7 @@ describe("SessionRunnerLLM", () => {
       })
       expect(yield* SessionPending.has((yield* Database.Service).db, sessionID, "steer")).toBe(false)
 
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(active)
 
       expect(requests).toHaveLength(4)
@@ -1823,8 +1838,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       currentModel = recoveryModel
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
       responses = [
         reply.text("Active complete", "text-active-failure"),
         [],
@@ -1832,7 +1846,7 @@ describe("SessionRunnerLLM", () => {
       ]
       yield* admit(session, "Active work")
       const active = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
 
       const compaction = yield* session.compact({ sessionID })
       yield* session.prompt({
@@ -1841,7 +1855,7 @@ describe("SessionRunnerLLM", () => {
         delivery: "queue",
         resume: false,
       })
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(active)
 
       expect(requests).toHaveLength(3)
@@ -2247,31 +2261,18 @@ describe("SessionRunnerLLM", () => {
         [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
         reply.text("## Objective\n- Interrupted", "text-summary"),
       ]
-      const firstGate = yield* Deferred.make<void>()
-      const summaryGate = yield* Deferred.make<void>()
-      const firstStarted = yield* Deferred.make<void>()
-      streamGate = firstGate
-      streamStarted = firstStarted
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          streamGate = undefined
-          streamStarted = undefined
-        }),
-      )
+      const first = yield* gateStream
       yield* admit(session, "Continue")
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(firstStarted)
+      yield* first.started
 
-      const summaryStarted = yield* Deferred.make<void>()
-      streamGate = summaryGate
-      streamStarted = summaryStarted
-      yield* Deferred.succeed(firstGate, undefined)
-      yield* Deferred.await(summaryStarted)
+      const summary = yield* gateStream
+      yield* first.release
+      yield* summary.started
 
       yield* session.interrupt(sessionID)
       const exit = yield* Fiber.await(run)
       expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
-      expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toContainEqual(
         expect.objectContaining({
           type: "compaction",
@@ -2777,20 +2778,17 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Run once")
 
       response = reply.text("Once", "text-once")
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       const second = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(1)
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(first)
       yield* Fiber.join(second)
-      streamGate = undefined
-      streamStarted = undefined
 
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
@@ -2806,16 +2804,13 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Start working")
 
       responses = [reply.stop(), reply.stop()]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({ sessionID, text: "Change direction" })
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(first)
-      streamGate = undefined
-      streamStarted = undefined
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(2)
@@ -2836,20 +2831,17 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Start working")
 
       responses = [reply.tool("call-echo", "echo", { text: "hello" }), reply.stop(), reply.stop()]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({
         sessionID,
         text: "Wait until continuation ends",
         delivery: "queue",
       })
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(first)
-      streamGate = undefined
-      streamStarted = undefined
 
       expect(requests).toHaveLength(3)
       expect(userTexts(requests[0]!)).toEqual(["Start working"])
@@ -2865,11 +2857,10 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Interrupt current work")
 
       responses = [[], reply.stop()]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({
         sessionID,
         text: "Run after interrupt",
@@ -2880,11 +2871,9 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* SessionPending.has(db, sessionID, "queue")).toBe(true)
       const resumed = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      while (requests.length < 2) yield* Effect.yieldNow
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.started
+      yield* stream.release
       yield* Fiber.join(resumed)
-      streamGate = undefined
-      streamStarted = undefined
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[0]!)).toEqual(["Interrupt current work"])
@@ -2899,11 +2888,10 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Interrupt current work")
 
       responses = [[], reply.stop()]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({
         sessionID,
         text: "Steer after interrupt",
@@ -2914,11 +2902,9 @@ describe("SessionRunnerLLM", () => {
       expect(yield* SessionPending.has(db, sessionID, "steer")).toBe(true)
 
       const resumed = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      while (requests.length < 2) yield* Effect.yieldNow
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.started
+      yield* stream.release
       yield* Fiber.join(resumed)
-      streamGate = undefined
-      streamStarted = undefined
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[0]!)).toEqual(["Interrupt current work"])
@@ -2932,17 +2918,14 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Start working")
 
       responses = [reply.stop(), reply.stop(), reply.stop()]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({ sessionID, text: "Queue first", delivery: "queue" })
       yield* session.prompt({ sessionID, text: "Queue second", delivery: "queue" })
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(first)
-      streamGate = undefined
-      streamStarted = undefined
 
       expect(requests).toHaveLength(3)
       expect(userTexts(requests[0]!)).toEqual(["Start working"])
@@ -2978,26 +2961,23 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Start working")
 
       responses = [reply.stop(), reply.stop(), reply.stop(), reply.stop()]
-      const firstGate = yield* Deferred.make<void>()
-      const secondGate = yield* Deferred.make<void>()
-      streamGate = firstGate
+      const firstStream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      while (requests.length < 1) yield* Effect.yieldNow
+      yield* firstStream.started
       yield* session.prompt({ sessionID, text: "Queue first", delivery: "queue" })
       yield* session.prompt({ sessionID, text: "Queue second", delivery: "queue" })
-      streamGate = secondGate
-      yield* Deferred.succeed(firstGate, undefined)
-      while (requests.length < 2) yield* Effect.yieldNow
+      const secondStream = yield* gateStream
+      yield* firstStream.release
+      yield* secondStream.started
       yield* session.prompt({ sessionID, text: "Steer before next queued input" })
       yield* session.prompt({
         sessionID,
         text: "Also steer before next queued input",
       })
       yield* session.synthetic({ sessionID, text: "Background completion before next queued input" })
-      yield* Deferred.succeed(secondGate, undefined)
+      yield* secondStream.release
       yield* Fiber.join(first)
-      streamGate = undefined
 
       expect(requests).toHaveLength(4)
       expect(userTexts(requests[0]!)).toEqual(["Start working"])
@@ -3026,17 +3006,14 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Start working")
 
       responses = [reply.stop(), reply.stop()]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({ sessionID, text: "First steer" })
       yield* session.prompt({ sessionID, text: "Second steer" })
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(first)
-      streamGate = undefined
-      streamStarted = undefined
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(2)
@@ -3053,18 +3030,15 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Start working")
 
       streamFailure = invalidRequest()
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({ sessionID, text: "Recover with this" })
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       expect(yield* Fiber.join(first).pipe(Effect.flip)).toBe(streamFailure)
 
       streamFailure = undefined
-      streamGate = undefined
-      streamStarted = undefined
       yield* session.wait(sessionID)
 
       expect(requests).toHaveLength(2)
@@ -3222,8 +3196,10 @@ describe("SessionRunnerLLM", () => {
         resume: false,
       })
 
+      const stream = yield* gateStream
       yield* (yield* SessionExecution.Service).wake(sessionID)
-      while (requests.length === 0) yield* Effect.yieldNow
+      yield* stream.started
+      yield* stream.release
 
       expect(requests).toHaveLength(1)
       expect(userTexts(requests[0]!)).toEqual(["Wait in queue"])
@@ -3244,8 +3220,10 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = reply.stop()
 
+      const stream = yield* gateStream
       yield* (yield* SessionExecution.Service).wake(sessionID)
-      while (requests.length === 0) yield* Effect.yieldNow
+      yield* stream.started
+      yield* stream.release
 
       expect(userTexts(requests[0]!)).toEqual(["Recover promoted input"])
     }),
@@ -3317,25 +3295,21 @@ describe("SessionRunnerLLM", () => {
         resume: false,
       })
 
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
-      streamStarted = yield* Deferred.make<void>()
+      yield* stream.started
       const second = yield* session.resume(otherSessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
 
       expect(requests).toHaveLength(2)
       expect(requests.map((request) => request.providerOptions?.openai?.promptCacheKey)).toEqual([
         sessionID,
         otherSessionID,
       ])
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(first)
       yield* Fiber.join(second)
-      streamGate = undefined
-      streamStarted = undefined
     }),
   )
 
@@ -3373,22 +3347,19 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Retry after failure")
 
       streamFailure = invalidRequest()
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       const second = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(1)
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       const [firstExit, secondExit] = yield* Effect.all([Fiber.await(first), Fiber.await(second)])
       expect(secondExit).toEqual(firstExit)
 
       streamFailure = undefined
-      streamGate = undefined
-      streamStarted = undefined
       yield* session.resume(sessionID)
       expect(requests).toHaveLength(2)
     }),
@@ -3766,15 +3737,12 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Interrupt provider")
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.interrupt(sessionID)
       const exit = yield* Fiber.await(run)
-      streamGate = undefined
-      streamStarted = undefined
 
       expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
       expect(requests).toHaveLength(1)
@@ -3876,16 +3844,13 @@ describe("SessionRunnerLLM", () => {
         reply.tool("call-after-steer", "echo", { text: "after" }),
         reply.stop(),
       ]
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
+      const stream = yield* gateStream
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
+      yield* stream.started
       yield* session.prompt({ sessionID, text: "Change direction" })
-      yield* Deferred.succeed(streamGate, undefined)
+      yield* stream.release
       yield* Fiber.join(run)
-      streamGate = undefined
-      streamStarted = undefined
 
       expect(requests).toHaveLength(3)
       expect(requests[1]?.toolChoice).toBeUndefined()
