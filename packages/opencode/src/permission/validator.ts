@@ -14,32 +14,13 @@ import { MessageV2 } from "@/session/message-v2"
 import { SessionAutoSummary } from "@/session/auto-summary"
 import { MessageID, SessionID } from "@/session/schema"
 import { Permission } from "."
+import { buildPrompt, parseVerdict } from "./verdict"
 
 const SUMMARY_TIMEOUT = 20_000
 const VALIDATE_TIMEOUT = 15_000
 const HEALTH_TIMEOUT = 10_000
 
-// Strict verdict parse: first non-empty line after stripping think blocks.
-// Anything else is invalid and the caller degrades to the human flow.
-export function parseVerdict(text: string) {
-  const line = text
-    .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-    .split("\n")
-    .map((item) => item.trim())
-    .find((item) => item.length > 0)
-  if (!line) return undefined
-  const upper = line.toUpperCase()
-  if (upper === "ALLOW") return { verdict: "allow" } as const
-  if (upper.startsWith("DENY ")) {
-    const reason = line.slice(5).trim()
-    return reason ? ({ verdict: "deny", reason } as const) : undefined
-  }
-  if (upper.startsWith("UNCERTAIN ")) {
-    const reason = line.slice(10).trim()
-    return reason ? ({ verdict: "uncertain", reason } as const) : undefined
-  }
-  return undefined
-}
+export { parseVerdict }
 
 export interface Health {
   readonly ok: boolean
@@ -209,7 +190,7 @@ const layer = Layer.effect(
         mdl,
         user,
         input.sessionID,
-        prompt(input, summary?.summary),
+        buildPrompt(input, summary?.summary),
         VALIDATE_TIMEOUT,
       ).pipe(Effect.exit)
       if (Exit.isFailure(attempted)) {
@@ -279,17 +260,6 @@ function summarize(metadata: Record<string, unknown>) {
       typeof value === "string" && value.length > 500 ? value.slice(0, 500) + "…" : value,
     ]),
   )
-}
-
-function prompt(input: Permission.AutoInput, summary?: string) {
-  return [
-    `Permission: ${input.permission}`,
-    `Patterns: ${input.patterns.join(", ")}`,
-    `Metadata: ${JSON.stringify(input.metadata)}`,
-    "",
-    "Session summary:",
-    summary ?? "(none)",
-  ].join("\n")
 }
 
 export const node = LayerNode.make({

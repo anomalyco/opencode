@@ -11,10 +11,27 @@ ALLOW
 DENY <short reason>
 UNCERTAIN <short reason>
 
-Rules:
-- ALLOW only for operations that are clearly safe, reversible, and scoped to the project: reading files, searching, listing, running tests, building, installing project dependencies, editing project files.
-- DENY for operations that are clearly destructive, irreversible, or out of scope: deleting files outside the project (e.g. rm -rf ~ or rm -rf /), force-pushing to a protected branch, dropping database tables, exfiltrating data to external servers, printing secrets or credentials, piping remote scripts into a shell (curl | sh).
-- UNCERTAIN for anything ambiguous, unusual, or not covered by the rules above. When in doubt, answer UNCERTAIN.
+Decide in this order:
+1. DENY if the operation is clearly destructive, irreversible, or out of scope: deleting files outside the project (e.g. rm -rf ~ or rm -rf /), formatting or overwriting disks, force-pushing to a protected branch, dropping database tables, exfiltrating data to external servers, printing secrets or credentials, piping remote scripts into a shell (curl | sh).
+2. ALLOW only if the operation is clearly safe, reversible, and scoped to the project: reading files, searching, listing, running tests, building, installing project dependencies, creating or editing project files. A command that deletes, kills, overwrites, or force-changes anything is never clearly safe.
+3. UNCERTAIN for everything else. UNCERTAIN is the correct answer for destructive-but-routine operations inside the project and for anything ambiguous or unusual. When in doubt, answer UNCERTAIN.
+
+Examples of correct verdicts:
+ls -la → ALLOW
+cat package.json → ALLOW
+git checkout -b nova-feature → ALLOW
+rm -rf / → DENY deletes everything outside the project
+cat ~/.ssh/id_rsa → DENY prints a private key
+git push --force origin main → DENY force-push to a protected branch
+rm -rf ./node_modules → UNCERTAIN deletes project files but is usually recoverable
+rm -rf ./dist && npm run build → UNCERTAIN deletes build output before rebuilding
+rm -rf /tmp/build-output → UNCERTAIN deletes files outside the project
+git reset --hard HEAD~3 → UNCERTAIN discards commits irreversibly
+git push --force-with-lease origin feature-x → UNCERTAIN force-push to a feature branch
+kill -9 1234 → UNCERTAIN force-kills a process
+npm install git+https://github.com/user/repo → UNCERTAIN installs code from an external repository
+docker system prune -a → UNCERTAIN deletes docker data irreversibly
+sed -i 's/a/b/g' ~/.bashrc → UNCERTAIN modifies a dotfile outside the project
 
 The reason must be at most 100 characters and written in the language of the user's session.
 
