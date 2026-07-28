@@ -296,6 +296,33 @@ const scenarios: Scenario[] = [
       body: { reply: "once" },
     }))
     .json(404, object, "status"),
+  http.protected
+    .post("/permission/{requestID}/classify", "permission.classify")
+    .at((ctx) => ({
+      path: route("/permission/{requestID}/classify", { requestID: "per_httpapi" }),
+      headers: ctx.headers(),
+    }))
+    .json(
+      404,
+      (body) => {
+        object(body)
+        check(body.requestID === "per_httpapi", "classify should report the unknown request id")
+      },
+      "status",
+    ),
+  http.protected
+    .post("/permission/session/{sessionID}/overlay", "permission.overlay")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/permission/session/{sessionID}/overlay", { sessionID: "ses_httpapi_overlay" }),
+      headers: ctx.headers(),
+      body: { enabled: true },
+    }))
+    .json(200, (body) => {
+      // Auto-approve is gated by experimental.auto_approve, which this instance does not set,
+      // so enabling reports the overlay as still off.
+      check(body === false, "overlay should stay off while the auto-approve beta flag is unset")
+    }),
   http.protected.get("/question", "question.list").json(200, array),
   http.protected
     .post("/question/{requestID}/reply", "question.reply.invalid")

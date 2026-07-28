@@ -77,6 +77,18 @@ export const Info = Schema.Struct({
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),
+  auto_approve: Schema.optional(
+    Schema.Struct({
+      model: Schema.optional(Schema.String).annotate({
+        description:
+          "Model used to classify permission requests in TUI auto-approve mode, in the format provider/model. Defaults to the active provider's small model.",
+      }),
+      show_details: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Show the bounded classifier input and raw output in the TUI. Disabled by default because the input may contain sensitive user text.",
+      }),
+    }),
+  ).annotate({ description: "Configure model-gated TUI auto-approval" }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
@@ -170,6 +182,10 @@ export const Info = Schema.Struct({
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
       batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
+      auto_approve: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Enable the model-gated Auto-approve TUI mode. When unset the mode is hidden and no permission is ever classified.",
+      }),
       openTelemetry: Schema.optional(Schema.Boolean).annotate({
         description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
       }),

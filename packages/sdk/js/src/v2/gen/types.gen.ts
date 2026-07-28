@@ -1927,6 +1927,10 @@ export type Config = {
   enabled_providers?: Array<string>
   model?: string
   small_model?: string
+  auto_approve?: {
+    model?: string
+    show_details?: boolean
+  }
   default_agent?: string
   subagent_depth?: number
   username?: string
@@ -2017,6 +2021,7 @@ export type Config = {
   experimental?: {
     disable_paste_summary?: boolean
     batch_tool?: boolean
+    auto_approve?: boolean
     openTelemetry?: boolean
     primary_tools?: Array<string>
     continue_loop_on_deny?: boolean
@@ -2480,6 +2485,16 @@ export type PermissionNotFoundError = {
   _tag: "PermissionNotFoundError"
   requestID: string
   message: string
+}
+
+export type PermissionClassificationDetails = {
+  input: string
+  output: string
+}
+
+export type PermissionClassificationResult = {
+  approved: boolean
+  details?: PermissionClassificationDetails
 }
 
 export type ProviderAuthMethod = {
@@ -9293,6 +9308,72 @@ export type PermissionReplyResponses = {
 }
 
 export type PermissionReplyResponse = PermissionReplyResponses[keyof PermissionReplyResponses]
+
+export type PermissionClassifyData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/{requestID}/classify"
+}
+
+export type PermissionClassifyErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * PermissionNotFoundError
+   */
+  404: PermissionNotFoundError
+}
+
+export type PermissionClassifyError = PermissionClassifyErrors[keyof PermissionClassifyErrors]
+
+export type PermissionClassifyResponses = {
+  /**
+   * Permission classification result
+   */
+  200: PermissionClassificationResult
+}
+
+export type PermissionClassifyResponse = PermissionClassifyResponses[keyof PermissionClassifyResponses]
+
+export type PermissionOverlayData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/session/{sessionID}/overlay"
+}
+
+export type PermissionOverlayErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type PermissionOverlayError = PermissionOverlayErrors[keyof PermissionOverlayErrors]
+
+export type PermissionOverlayResponses = {
+  /**
+   * Whether the review overlay is now active for the session
+   */
+  200: boolean
+}
+
+export type PermissionOverlayResponse = PermissionOverlayResponses[keyof PermissionOverlayResponses]
 
 export type ProviderListData = {
   body?: never

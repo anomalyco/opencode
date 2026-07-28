@@ -322,7 +322,10 @@ export function Prompt(props: PromptProps) {
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
         // Keep command line --agent if specified.
-        if (!args.agent) local.agent.set(msg.agent)
+        if (!args.agent)
+          local.agent.set(msg.agent, {
+            preservePermission: msg.agent === "build" && local.permission.mode === "review",
+          })
         if (msg.model) {
           local.model.set(msg.model)
           local.model.variant.set(msg.model.variant)
@@ -1022,6 +1025,10 @@ export function Prompt(props: PromptProps) {
       sessionID = res.data.id
     }
 
+    // The route only catches up 50ms after a fresh session is created, so the
+    // review overlay has to be moved here or the first turn escapes review.
+    await local.permission.attach(sessionID)
+
     const inputText = expandTrackedPastedText(
       store.prompt.input,
       input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
@@ -1287,6 +1294,7 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (leader()) return theme.border
     if (store.mode === "shell") return theme.primary
+    if (local.permission.mode === "review") return theme.success
     const agent = local.agent.current()
     if (!agent) return theme.border
     return local.agent.color(agent.name)
@@ -1444,7 +1452,7 @@ export function Prompt(props: PromptProps) {
                   {(agent) => (
                     <>
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                        {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.label())}
                       </text>
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
                         <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
@@ -1668,7 +1676,7 @@ export function Prompt(props: PromptProps) {
                     </Match>
                     <Match when={true}>
                       <text fg={theme.text}>
-                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
+                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>modes</span>
                       </text>
                     </Match>
                   </Switch>
