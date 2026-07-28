@@ -1,6 +1,8 @@
 import { createMemo, For, Show } from "solid-js"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
+import { useTuiConfig } from "../../config"
+import { getScrollAcceleration } from "../../util/scroll"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
@@ -23,6 +25,8 @@ export function SessionSplitView(props: {
   const sync = useSync()
   const { theme } = useTheme()
   const pluginRuntime = usePluginRuntime()
+  const tuiConfig = useTuiConfig()
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const session = () => sync.session.get(props.sessionID)
 
@@ -82,7 +86,25 @@ export function SessionSplitView(props: {
           title=" Plan "
           overflow="hidden"
         >
-          <scrollbox ref={props.planScrollRef} flexGrow={1} minHeight={0} stickyScroll={true} stickyStart="bottom">
+          <scrollbox
+            ref={props.planScrollRef}
+            viewportOptions={{
+              paddingRight: 1,
+            }}
+            verticalScrollbarOptions={{
+              paddingLeft: 1,
+              visible: true,
+              trackOptions: {
+                backgroundColor: theme.backgroundElement,
+                foregroundColor: theme.border,
+              },
+            }}
+            flexGrow={1}
+            minHeight={0}
+            stickyScroll={true}
+            stickyStart="bottom"
+            scrollAcceleration={scrollAcceleration()}
+          >
             <box height={1} />
             <For each={split().planMessages}>
               {(message, index) => props.renderMessage(message, index)}
@@ -103,10 +125,22 @@ export function SessionSplitView(props: {
         >
           <scrollbox
             ref={props.scrollRef}
+            viewportOptions={{
+              paddingRight: 1,
+            }}
+            verticalScrollbarOptions={{
+              paddingLeft: 1,
+              visible: true,
+              trackOptions: {
+                backgroundColor: theme.backgroundElement,
+                foregroundColor: theme.border,
+              },
+            }}
             flexGrow={1}
             minHeight={0}
             stickyScroll={true}
             stickyStart="bottom"
+            scrollAcceleration={scrollAcceleration()}
           >
             <box height={1} />
             <For each={split().buildMessages}>

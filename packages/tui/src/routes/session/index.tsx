@@ -535,7 +535,7 @@ export function Session() {
     }
 
     const found = scrollForMessage(targetID)
-    if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
+    if (found) found.scroll.scrollTo(found.child.y)
     dialog.clear()
   }
 
@@ -645,7 +645,7 @@ export function Session() {
           <DialogTimeline
             onMove={(messageID) => {
               const found = scrollForMessage(messageID)
-              if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
+              if (found) found.scroll.scrollTo(found.child.y)
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
@@ -666,7 +666,7 @@ export function Session() {
             onMove={(messageID) => {
               if (!messageID) return
               const found = scrollForMessage(messageID)
-              if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
+              if (found) found.scroll.scrollTo(found.child.y)
             }}
             sessionID={route.sessionID}
           />
@@ -984,7 +984,7 @@ export function Session() {
 
           if (hasValidTextPart) {
             const found = scrollForMessage(message.id)
-            if (found) found.scroll.scrollBy(found.child.y - found.scroll.y - 1)
+            if (found) found.scroll.scrollTo(found.child.y)
             break
           }
         }
