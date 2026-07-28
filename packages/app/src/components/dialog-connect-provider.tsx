@@ -28,7 +28,6 @@ import {
   Switch,
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useQueryClient } from "@tanstack/solid-query"
 import { useParams } from "@solidjs/router"
 import { Link } from "@/components/link"
 import { useServerSDK } from "@/context/server-sdk"
@@ -38,7 +37,6 @@ import { useSettings } from "@/context/settings"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
-import { pathKey } from "@/utils/path-key"
 
 const CUSTOM_ID = "_custom"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
@@ -159,7 +157,7 @@ function ProviderPicker(props: {
   const settings = useSettings()
   if (settings.general.newLayoutDesigns())
     return <ProviderPickerV2 directory={props.directory} onSelect={props.onSelect} onPrepare={props.onPrepare} />
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory?.())
   const language = useLanguage()
   const popularGroup = () => language.t("dialog.provider.group.popular")
   const otherGroup = () => language.t("dialog.provider.group.other")
@@ -231,7 +229,7 @@ function ProviderPickerV2(props: {
   onSelect: (provider: string) => void
   onPrepare?: () => void
 }) {
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory?.())
   const language = useLanguage()
   const [store, setStore] = createStore({
     filter: "",
@@ -386,12 +384,11 @@ function ProviderConnection(props: {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
-  const queryClient = useQueryClient()
   const params = useParams()
   const language = useLanguage()
   const settings = useSettings()
   const newLayout = settings.general.newLayoutDesigns
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory?.())
   const directory = () => props.directory?.() ?? decode64(params.dir)
   const location = () => {
     const value = directory()
@@ -707,9 +704,8 @@ function ProviderConnection(props: {
   })
 
   async function complete() {
-    const value = directory()
-    await queryClient
-      .refetchQueries(serverSync().queryOptions.providers(value ? pathKey(value) : null))
+    await serverSync()
+      .refreshProviders()
       .catch(() => undefined)
     dialog.close()
     showToast({
@@ -857,6 +853,7 @@ function ProviderConnection(props: {
                 ref={apiKey}
                 class="!w-full"
                 name="apiKey"
+                data-input="provider-api-key"
                 placeholder={language.t("provider.connect.apiKey.placeholder")}
                 value={formStore.value}
                 invalid={formStore.error !== undefined}
@@ -873,7 +870,7 @@ function ProviderConnection(props: {
                 </div>
               )}
             </Show>
-            <ButtonV2 type="submit" variant="contrast">
+            <ButtonV2 type="submit" variant="contrast" data-action="provider-connect-submit">
               {language.t("common.continue")}
             </ButtonV2>
           </form>

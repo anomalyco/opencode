@@ -1,6 +1,6 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
-import type { MessageApi, OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
   Message,
   OpencodeClient,
@@ -21,6 +21,9 @@ import { normalizeSessionInfo } from "@/utils/session"
 import { normalizeSessionMessages } from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
+import type { ServerApi } from "@/utils/server"
+
+type MessageApi = ServerApi["message"]
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const cmpMessage = (a: Message, b: Message) => a.time.created - b.time.created || cmp(a.id, b.id)
@@ -954,10 +957,10 @@ export function createServerSession(
       })
     if (event.type === "session.usage.updated" && info)
       remember({ ...info, cost: event.data.cost, tokens: event.data.tokens })
-    if (event.type === "session.archived") {
-      if (info) remember({ ...info, time: { ...info.time, archived: event.created, updated: event.created } })
-      evict([sessionID])
-    }
+    // if (event.type === "session.archived") {
+    //   if (info) remember({ ...info, time: { ...info.time, archived: event.created, updated: event.created } })
+    //   evict([sessionID])
+    // }
     if (event.type === "session.execution.started") setData("session_status", sessionID, { type: "busy" })
     if (
       event.type === "session.execution.succeeded" ||
