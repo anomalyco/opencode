@@ -5,6 +5,7 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { sessionTree } from "./tree"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -13,9 +14,16 @@ export function Footer() {
   const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
+  // Counter mirrors the prompt UI: viewing the root sums every nested
+  // subagent's pending prompts; viewing a subagent shows only its own.
+  // Without this the chrome would undercount when a grandchild is the
+  // one waiting on input.
   const permissions = createMemo(() => {
     if (route.data.type !== "session") return []
-    return sync.data.permission[route.data.sessionID] ?? []
+    const viewed = sync.session.get(route.data.sessionID)
+    if (!viewed) return []
+    if (viewed.parentID) return sync.data.permission[viewed.id] ?? []
+    return sessionTree(sync.data.session, viewed.id).flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const directory = useDirectory()
   const connected = useConnected()

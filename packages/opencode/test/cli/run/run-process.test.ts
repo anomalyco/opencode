@@ -4,9 +4,12 @@
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
 // `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
 import { describe, expect } from "bun:test"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { pollWithTimeout } from "../../lib/effect"
+import { testProviderConfig } from "../../lib/test-provider"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -275,6 +278,122 @@ describe("opencode run (non-interactive subprocess)", () => {
         expect(yield* Effect.promise(() => Bun.file(`${home}/explicitly-denied`).exists())).toBe(false)
       }),
     60_000,
+  )
+
+  cliIt.concurrent(
+    "answers permission requests from nested Task sessions",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(
+          reply().tool("task", {
+            description: "delegate once",
+            prompt: "Delegate the marker file to another agent.",
+            subagent_type: "nested",
+          }),
+          reply().tool("task", {
+            description: "delegate twice",
+            prompt: "Create the nested marker file.",
+            subagent_type: "nested",
+          }),
+          reply().tool("bash", {
+            command: `touch ${JSON.stringify(`${home}/nested-approved`)}`,
+            description: "Create the nested marker",
+          }),
+          reply().text("grandchild completed"),
+          reply().text("child completed"),
+          reply().text("root completed"),
+        )
+
+        const result = yield* opencode.run("delegate this task twice", {
+          extraArgs: ["--auto"],
+          timeoutMs: 60_000,
+          env: {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              ...testProviderConfig(llm.url),
+              // Required: the default of 1 stops the child from delegating, so
+              // the bash permission would come from the child and the test would
+              // never exercise a grandchild at all.
+              subagent_depth: 2,
+              permission: { task: "allow", bash: "ask" },
+              agent: {
+                nested: {
+                  description: "Delegates nested test work.",
+                  mode: "subagent",
+                  permission: { task: "allow", bash: "ask" },
+                },
+              },
+            }),
+          },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(yield* Effect.promise(() => Bun.file(`${home}/nested-approved`).exists())).toBe(true)
+        // Only a grandchild is ever prompted with the second delegation, so its
+        // presence proves the permission came from depth 2 rather than the child.
+        const inputs = JSON.stringify(yield* llm.inputs)
+        expect(inputs).toContain("Create the nested marker file.")
+        expect(inputs).not.toContain("depth limit")
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "attach mode recovers permissions pending before subscription",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const config = {
+          ...testProviderConfig(llm.url),
+          permission: { bash: "ask" },
+        }
+        yield* llm.push(
+          reply().tool("bash", {
+            command: `touch ${JSON.stringify(`${home}/preexisting-approved`)}`,
+            description: "Create the preexisting marker",
+          }),
+          reply().text("child completed"),
+          reply().text("attached completed"),
+        )
+        const server = yield* opencode.serve({
+          env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
+        })
+        const sdk = createOpencodeClient({ baseUrl: server.url, directory: home })
+        const root = yield* Effect.promise(() => sdk.session.create({ title: "root" }))
+        if (!root.data) return yield* Effect.fail(new Error("failed to create root session"))
+        const child = yield* Effect.promise(() =>
+          sdk.session.create({
+            title: "child",
+            parentID: root.data.id,
+          }),
+        )
+        if (!child.data) return yield* Effect.fail(new Error("failed to create child session"))
+        const admission = yield* Effect.promise(() =>
+          sdk.session.promptAsync({
+            sessionID: child.data.id,
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "create the marker" }],
+          }),
+        )
+        if (admission.error) return yield* Effect.fail(new Error("failed to admit child prompt"))
+
+        yield* pollWithTimeout(
+          Effect.promise(() => sdk.permission.list()).pipe(
+            Effect.map((response) => response.data?.find((permission) => permission.sessionID === child.data.id)),
+          ),
+          "child permission never became pending",
+          "15 seconds",
+        )
+
+        const result = yield* opencode.run("continue from the root", {
+          extraArgs: ["--attach", server.url, "--session", root.data.id, "--auto", "--"],
+          timeoutMs: 60_000,
+          env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(yield* Effect.promise(() => Bun.file(`${home}/preexisting-approved`).exists())).toBe(true)
+      }),
+    90_000,
   )
 
   cliIt.live(

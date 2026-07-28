@@ -544,4 +544,77 @@ describe("run subagent data", () => {
       }),
     ])
   })
+
+  // Regression for nested subagent permission hang: when a subagent spawns
+  // its own subagent via the task tool, the spawning subagent's message
+  // emits the task part with `part.sessionID = spawning subagent`, not the
+  // run's root. `reduceSubagentData` must register a tab for the spawned
+  // grandchild from that event, otherwise the grandchild's subsequent
+  // `permission.asked` event fails the `knownSession` gate and the prompt
+  // is silently dropped.
+  test("registers a tab for a grandchild spawned by an existing subagent", () => {
+    const data = createSubagentData()
+
+    bootstrapSubagentData({
+      data,
+      messages: [taskMessage("child-1", "running")],
+      children: [{ id: "child-1" }],
+      permissions: [],
+      questions: [],
+    })
+
+    const changed = reduce(data, {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-grandchild-1",
+          messageID: "msg-child-1-task",
+          sessionID: "child-1",
+          type: "tool",
+          callID: "call-grandchild-1",
+          tool: "task",
+          state: {
+            status: "running",
+            input: {
+              description: "Deep dive",
+              subagent_type: "explore",
+            },
+            title: "Deep dive",
+            metadata: {
+              sessionId: "grandchild-1",
+            },
+            time: { start: 4 },
+          },
+        },
+      },
+    })
+
+    expect(changed).toBe(true)
+    expect(
+      snapshotSubagentData(data)
+        .tabs.map((tab) => tab.sessionID)
+        .sort(),
+    ).toEqual(["child-1", "grandchild-1"])
+
+    // A permission asked on the grandchild must now route into the
+    // grandchild's detail view rather than being dropped.
+    const permChanged = reduce(data, {
+      type: "permission.asked",
+      properties: {
+        id: "perm-grandchild",
+        sessionID: "grandchild-1",
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        tool: {
+          messageID: "msg-grandchild-tool",
+          callID: "call-grandchild-tool",
+        },
+      },
+    })
+
+    expect(permChanged).toBe(true)
+    expect(snapshotSubagentData(data).permissions.map((p) => p.id)).toContain("perm-grandchild")
+  })
 })

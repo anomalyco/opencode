@@ -798,14 +798,27 @@ export function reduceSubagentData(input: {
 }) {
   const event = input.event
 
+  // Sub-effect: a task tool part can register a new tab in addition to
+  // any per-session detail mutation the downstream routing performs. We
+  // OR this into the eventual return so callers see the tab as a change.
+  let tabChanged = false
+
   if (event.type === "message.part.updated") {
     const part = event.properties.part
     if (part.sessionID === input.sessionID) {
-      if (part.type !== "tool") {
-        return false
-      }
+      if (part.type !== "tool") return tabChanged
+      return syncTaskTab(input.data, part) || tabChanged
+    }
 
-      return syncTaskTab(input.data, part)
+    // A subagent at any depth that spawns another subagent emits its
+    // task tool part with sessionID = the spawning subagent. We register
+    // the grandchild's tab here so its later blocker events pass the
+    // `knownSession` gate below. We rely on the spawning subagent itself
+    // already being known — the parent's task tool part (state=running)
+    // is emitted before the spawned child can produce any events, so
+    // this ordering holds in practice.
+    if (part.type === "tool" && part.tool === "task" && knownSession(input.data, part.sessionID)) {
+      tabChanged = syncTaskTab(input.data, part)
     }
   }
 
@@ -825,7 +838,7 @@ export function reduceSubagentData(input: {
         : undefined
 
   if (!sessionID || !knownSession(input.data, sessionID)) {
-    return false
+    return tabChanged
   }
 
   const detail = ensureDetail(input.data, sessionID)
@@ -835,7 +848,7 @@ export function reduceSubagentData(input: {
       : false
   if (event.type === "session.status") {
     if (event.properties.status.type !== "retry") {
-      return cancelled
+      return cancelled || tabChanged
     }
 
     return (
@@ -847,7 +860,9 @@ export function reduceSubagentData(input: {
           source: "system",
           messageID: `retry:${event.properties.status.attempt}`,
         },
-      ]) || cancelled
+      ]) ||
+      cancelled ||
+      tabChanged
     )
   }
 
@@ -861,7 +876,9 @@ export function reduceSubagentData(input: {
           source: "system",
           messageID: `session.error:${event.properties.sessionID}:${formatError(event.properties.error)}`,
         },
-      ]) || cancelled
+      ]) ||
+      cancelled ||
+      tabChanged
     )
   }
 
@@ -871,6 +888,8 @@ export function reduceSubagentData(input: {
       event,
       thinking: input.thinking,
       limits: input.limits,
-    }) || cancelled
+    }) ||
+    cancelled ||
+    tabChanged
   )
 }
