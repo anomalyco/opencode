@@ -9,7 +9,6 @@ import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
 import { useTheme } from "../context/theme"
 import { useClient } from "../context/client"
-import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
@@ -20,9 +19,8 @@ export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
-  const { themeV2, mode } = useTheme().contextual("elevated")
+  const { themeV2 } = useTheme().contextual("elevated")
   const client = useClient()
-  const local = useLocal()
   const toast = useToast()
   const [filter, setFilter] = createSignal("")
   const shortcuts = Keymap.useShortcuts()
@@ -76,33 +74,13 @@ export function DialogSessionList() {
     return { message: "No sessions found", error: false }
   })
 
-  const quickSwitchHint = createMemo(() => {
-    const first = shortcuts.get("session.quick_switch.1")
-    const last = shortcuts.get("session.quick_switch.9")
-    if (!first || !last) return
-    return quickSwitchRange(first, last)
-  })
-  const quickSwitchFooterHints = createMemo(() => {
-    const hint = quickSwitchHint()
-    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
-  })
-
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const sessionMap = new Map(
-      sessions()
-        .filter((session) => !session.parentID)
-        .map((session) => [session.id, session]),
-    )
-    const pinned = local.session.pinned().filter((sessionID) => sessionMap.has(sessionID))
-    const pinnedSet = new Set(pinned)
-    const slotByID = new Map(local.session.slots().map((sessionID, index) => [sessionID, index + 1]))
 
     const option = (session: SessionInfo, category: string) => {
       const directory = session.location.directory
       const footer =
         directory !== data.location.info()?.project.directory ? Locale.truncate(path.basename(directory), 20) : ""
-      const slot = slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {
         title: deleting ? `Press ${shortcuts.get("session.delete")} again to confirm` : session.title,
@@ -113,20 +91,16 @@ export function DialogSessionList() {
         fg: deleting ? themeV2.text.action.destructive.focused : undefined,
         gutter: data.session.family(session.id).some((id) => data.session.status(id) === "running")
           ? () => <Spinner />
-          : slot === undefined
-            ? undefined
-            : () => <text fg={themeV2.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,
+          : undefined,
       }
     }
 
-    const remaining = sessions()
-      .filter((session) => !session.parentID && !pinnedSet.has(session.id))
+    return sessions()
+      .filter((session) => !session.parentID)
       .map((session) => {
         const date = new Date(session.time.updated).toDateString()
         return option(session, date === today ? "Today" : date)
       })
-
-    return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, "Pinned")), ...remaining]
   })
 
   onMount(() => dialog.setSize("large"))
@@ -160,11 +134,6 @@ export function DialogSessionList() {
       }}
       actions={[
         {
-          command: "session.pin.toggle",
-          title: "pin/unpin",
-          onTrigger: (option: { value: string }) => local.session.togglePin(option.value),
-        },
-        {
           command: "session.delete",
           title: "delete",
           onTrigger: (option: { value: string }) => {
@@ -189,13 +158,6 @@ export function DialogSessionList() {
             DialogSessionRename.show(dialog, option.value, data.session.get(option.value)?.title),
         },
       ]}
-      footerHints={quickSwitchFooterHints()}
     />
   )
-}
-
-function quickSwitchRange(first: string, last: string) {
-  const prefix = first.slice(0, -1)
-  if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
-  return `${first} through ${last}`
 }

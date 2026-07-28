@@ -198,6 +198,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const tab = store.tabs[(start + direction + store.tabs.length) % store.tabs.length]
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
+      selectIndex(index: number) {
+        const tab = store.tabs[index]
+        if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
+      },
     }
   },
 })

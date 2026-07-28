@@ -2,13 +2,11 @@ import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
-import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { useClient } from "./client"
 import { RGBA } from "@opentui/core"
-import { readJson, writeJsonAtomic } from "../util/persistence"
 import {
   createModelPreferenceRepository,
   cycleModelVariant,
@@ -19,7 +17,6 @@ import {
 } from "../model-preference"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
-import { useRoute } from "./route"
 import { useData } from "./data"
 import { usePermission } from "./permission"
 
@@ -51,10 +48,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const client = useClient()
     const toast = useToast()
     const { themeV2, mode } = useTheme()
-    const route = useRoute()
     const paths = useTuiPaths()
     const args = useArgs()
-    const event = useEvent()
     const permission = usePermission()
 
     function isModelValid(model: ModelPreferenceModel) {
@@ -362,105 +357,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const model = createModel()
 
-    function createSession() {
-      const [sessionStore, setSessionStore] = createStore<{
-        ready: boolean
-        pinned: string[]
-      }>({
-        ready: false,
-        pinned: [],
-      })
-
-      const filePath = path.join(paths.state, "session.json")
-      const state = {
-        pending: false,
-      }
-
-      function save() {
-        if (!sessionStore.ready) {
-          state.pending = true
-          return
-        }
-        state.pending = false
-        void writeJsonAtomic(filePath, {
-          pinned: sessionStore.pinned,
-        })
-      }
-
-      readJson<unknown>(filePath)
-        .then((x) => {
-          if (!x || typeof x !== "object") return
-          const pinned = (x as Record<string, unknown>).pinned
-          if (Array.isArray(pinned))
-            setSessionStore(
-              "pinned",
-              pinned.filter((item): item is string => typeof item === "string"),
-            )
-        })
-        .catch(() => {})
-        .finally(() => {
-          setSessionStore("ready", true)
-          if (state.pending) save()
-        })
-
-      const slots = createMemo(() => {
-        const existing = new Set(
-          data.session
-            .list()
-            .filter((x) => x.parentID === undefined)
-            .map((x) => x.id),
-        )
-        return sessionStore.pinned.filter((id) => existing.has(id)).slice(0, 9)
-      })
-
-      function prune(sessionID: string) {
-        batch(() => {
-          if (sessionStore.pinned.includes(sessionID)) {
-            setSessionStore(
-              "pinned",
-              sessionStore.pinned.filter((x) => x !== sessionID),
-            )
-          }
-          save()
-        })
-      }
-
-      event.on("session.deleted", (evt) => {
-        prune(evt.data.sessionID)
-      })
-
-      return {
-        get ready() {
-          return sessionStore.ready
-        },
-        pinned() {
-          return sessionStore.pinned
-        },
-        slots,
-        isPinned(sessionID: string) {
-          return sessionStore.pinned.includes(sessionID)
-        },
-        togglePin(sessionID: string) {
-          batch(() => {
-            const exists = sessionStore.pinned.includes(sessionID)
-            const next = exists
-              ? sessionStore.pinned.filter((x) => x !== sessionID)
-              : [...sessionStore.pinned, sessionID]
-            setSessionStore("pinned", next)
-            save()
-          })
-        },
-        quickSwitch(slot: number) {
-          const target = slots()[slot - 1]
-          if (!target) return
-          if (route.data.type === "session" && route.data.sessionID === target) return
-          route.navigate({ type: "session", sessionID: target })
-        },
-      }
-    }
-
-    const session = createSession()
-
     createEffect(() => {
       const value = agent.current()
       if (!value?.model) return
@@ -475,7 +371,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const result = {
       model,
       agent,
-      session,
       permission,
     }
     return result

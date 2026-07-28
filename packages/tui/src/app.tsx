@@ -100,15 +100,15 @@ const appGlobalBindingCommands = [
   "session.tab.next",
   "session.tab.previous",
   "session.tab.close",
-  "session.quick_switch.1",
-  "session.quick_switch.2",
-  "session.quick_switch.3",
-  "session.quick_switch.4",
-  "session.quick_switch.5",
-  "session.quick_switch.6",
-  "session.quick_switch.7",
-  "session.quick_switch.8",
-  "session.quick_switch.9",
+  "session.tab.select.1",
+  "session.tab.select.2",
+  "session.tab.select.3",
+  "session.tab.select.4",
+  "session.tab.select.5",
+  "session.tab.select.6",
+  "session.tab.select.7",
+  "session.tab.select.8",
+  "session.tab.select.9",
 ] as const
 
 const appBindingCommands = [
@@ -647,13 +647,11 @@ function App(props: { pair?: DialogPairCredentials }) {
         run: () => sessionTabs.close(),
       },
       ...Array.from({ length: 9 }, (_, i) => ({
-        name: `session.quick_switch.${i + 1}`,
-        title: `Switch to session in quick slot ${i + 1}`,
+        name: `session.tab.select.${i + 1}`,
+        title: `Switch to session tab ${i + 1}`,
         category: "Session",
         palette: undefined,
-        run: () => {
-          local.session.quickSwitch(i + 1)
-        },
+        run: () => sessionTabs.selectIndex(i),
       })),
       {
         name: "model.list",
