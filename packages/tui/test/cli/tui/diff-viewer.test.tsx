@@ -22,6 +22,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
+import { createSignal } from "solid-js"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
@@ -142,7 +143,11 @@ async function renderDiffViewer(
   } = {},
 ) {
   const commands = new Map<string, KeymapCommand>()
-  let current = options.initialRoute ?? startRoute
+  const [current, setCurrent] = createSignal<Route>(options.initialRoute ?? startRoute)
+  const currentData = () => {
+    const route = current()
+    return route.type === "plugin" ? route.data : undefined
+  }
   let renderDiff: Page["render"] | undefined
   let renderCommands: SlotClaim<"app">["render"] | undefined
   let vcsDiffInput: unknown
@@ -201,11 +206,13 @@ async function renderDiffViewer(
               return () => {}
             },
             navigate(destination: Destination) {
-              current = destination.type === "plugin" && !("id" in destination)
-                ? { ...destination, id: "diff-viewer" }
-                : destination
+              setCurrent(
+                destination.type === "plugin" && !("id" in destination)
+                  ? { ...destination, id: "diff-viewer" }
+                  : destination,
+              )
             },
-            current: () => current,
+            current,
           },
           slot(claim: SlotClaim<"app">) {
             renderCommands = claim.render
@@ -216,11 +223,10 @@ async function renderDiffViewer(
 
       void diffViewerPlugin.setup(context)
       const commandView = renderCommands?.({})
-      if (current.type !== "plugin") commands.get("diff.open")?.run()
       return (
         <>
           {commandView}
-          {renderDiff?.({ data: current.type === "plugin" ? current.data : undefined })}
+          {renderDiff?.({ data: currentData() })}
         </>
       )
     }
@@ -245,13 +251,19 @@ async function renderDiffViewer(
   const app = await testRender(() => <Harness />, { width: 80, height: options.height ?? 20 })
   await app.waitFor(async () => {
     await Bun.sleep(25)
+    if (current().type !== "plugin") {
+      const open = commands.get("diff.open")
+      if (!open) return false
+      open.run()
+      await app.renderOnce()
+    }
     return commands.has("diff.close")
   })
   await app.waitFor(() => vcsDiffInput !== undefined)
   return {
     app,
     commands,
-    current: () => current,
+    current,
     shortcut: (command: string) => shortcut(command),
     vcsDiffInput: () => vcsDiffInput,
   }
