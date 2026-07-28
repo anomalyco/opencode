@@ -254,8 +254,8 @@ export const settings: Setting[] = [
     category: "Debug",
     path: ["debug", "turn_tokens"],
     default: false,
-    values: [false, true],
-    labels: ["off", "on"],
+    values: [false, true, "verbose"],
+    labels: ["off", "on", "verbose"],
     keywords: ["tokens", "usage", "debug"],
   },
 ]

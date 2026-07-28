@@ -77,6 +77,7 @@ export function DevToolsBar() {
   const runtime = createMemo(() => runtimeStatus(frontendSamples()))
   const timing = () => config.data.debug?.timing ?? false
   const turnTokens = () => config.data.debug?.turn_tokens ?? false
+  const verboseTurnTokens = () => turnTokens() === "verbose"
 
   const offEscape = keymap.intercept(
     "key",
@@ -379,6 +380,16 @@ export function DevToolsBar() {
                 hoverBackground
               >
                 {turnTokens() ? "[x]" : "[ ]"} Turn token usage
+              </Action>
+              <Action
+                onClick={() =>
+                  void config.update((draft) => {
+                    draft.debug = { ...draft.debug, turn_tokens: verboseTurnTokens() ? true : "verbose" }
+                  })
+                }
+                hoverBackground
+              >
+                {verboseTurnTokens() ? "[x]" : "[ ]"} Turn token usage (verbose)
               </Action>
             </box>
             <For each={groups()}>

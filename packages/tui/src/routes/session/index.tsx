@@ -1104,6 +1104,7 @@ function TurnTokenUsage(props: {
 }) {
   const config = useConfig()
   const { themeV2 } = useTheme()
+  const verbose = () => config.data.debug?.turn_tokens === "verbose"
   const steps = createMemo(() => {
     let previousCache = props.previousCache
     return props.messageIDs.flatMap((messageID) => {
@@ -1123,6 +1124,7 @@ function TurnTokenUsage(props: {
       return [
         {
           finish: message.finish === "tool-calls" ? "tool-call" : (message.finish ?? "unknown"),
+          tools: verbose() ? message.content.filter((part) => part.type === "tool") : [],
           newTokens,
           cached: message.tokens.cache.read,
           total,
@@ -1138,7 +1140,7 @@ function TurnTokenUsage(props: {
     total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
   }))
   return (
-    <Show when={config.data.debug?.turn_tokens === true && steps().length > 0}>
+    <Show when={Boolean(config.data.debug?.turn_tokens) && steps().length > 0}>
       <box paddingLeft={3} flexDirection="column">
         <box flexDirection="row">
           <text width={INLINE_TOOL_ICON_WIDTH} fg={themeV2.text.subdued}>
@@ -1161,7 +1163,7 @@ function TurnTokenUsage(props: {
         <For each={steps()}>
           {(item) => (
             <box paddingLeft={INLINE_TOOL_ICON_WIDTH} flexDirection="column">
-              <text fg={themeV2.text.subdued}>
+              <text fg={verbose() && item.finish === "tool-call" ? undefined : themeV2.text.subdued}>
                 {item.finish.padEnd(columns().step + 2)}
                 <span style={{ attributes: TextAttributes.BOLD }}>
                   {item.newTokens.toLocaleString().padStart(columns().newTokens)}
@@ -1171,6 +1173,7 @@ function TurnTokenUsage(props: {
                 {"  "}
                 {item.total.toLocaleString().padStart(columns().total)}
               </text>
+              <TurnTokenToolCalls tools={item.tools} />
               <Show when={item.reuseDrop !== undefined}>
                 <text fg={themeV2.text.feedback.warning.default}>
                   ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
@@ -1182,6 +1185,54 @@ function TurnTokenUsage(props: {
       </box>
     </Show>
   )
+}
+
+function TurnTokenToolCalls(props: { tools: SessionMessageAssistantTool[] }) {
+  const { themeV2 } = useTheme()
+  const nameWidth = () => Math.max(0, ...props.tools.map((tool) => tool.name.length)) + 2
+  return (
+    <Show when={props.tools.length > 0}>
+      <box paddingLeft={2} flexDirection="column">
+        <For each={props.tools}>
+          {(tool) => (
+            <box flexDirection="row">
+              <text
+                width={nameWidth()}
+                flexShrink={0}
+                fg={themeV2.text.subdued}
+                attributes={TextAttributes.BOLD}
+              >
+                {tool.name}
+              </text>
+              <text
+                fg={themeV2.text.subdued}
+                attributes={TextAttributes.DIM}
+                wrapMode="word"
+                flexGrow={1}
+                minWidth={0}
+              >
+                {turnTokenToolSummary(tool)}
+              </text>
+            </box>
+          )}
+        </For>
+      </box>
+    </Show>
+  )
+}
+
+function turnTokenToolSummary(tool: SessionMessageAssistantTool) {
+  const data = tool.state.input
+  if (typeof data === "string") return data
+  const primaryKey = ["command", "id", "pattern", "url", "query", "path", "description", "code"].find(
+    (key) => key in data,
+  )
+  const input = Object.entries(data).filter(([, value]) =>
+    ["string", "number", "boolean"].includes(typeof value),
+  )
+  const primary = input.find(([key]) => key === primaryKey)?.[1]
+  const details = input.filter(([key]) => key !== primaryKey).map(([key, value]) => `${key}: ${String(value)}`)
+  return [primary === undefined ? "" : String(primary), ...details].filter(Boolean).join("  ")
 }
 
 function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
