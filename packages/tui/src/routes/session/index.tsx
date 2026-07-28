@@ -1852,6 +1852,27 @@ function GenericTool(props: ToolProps) {
   )
 }
 
+// Discreet marker for tool calls the LLM validator ("auto" mode) decided
+// without a human dialog, correlated through the audited callID. Only
+// allow/deny appear — uncertain/fallback already surfaced as the dialog.
+function AutoDecisionSuffix(props: { part?: ToolPart }) {
+  const { theme } = useTheme()
+  const ctx = use()
+  const sync = useSync()
+  const decision = createMemo(() => {
+    const part = props.part
+    if (!part) return undefined
+    return sync.data.decision[ctx.sessionID]?.find(
+      (item) => (item.verdict === "allow" || item.verdict === "deny") && item.metadata?.callID === part.callID,
+    )
+  })
+  return (
+    <Show when={decision()}>
+      {(item) => <span style={{ fg: theme.textMuted }}>{` · auto: ${item().verdict}`}</span>}
+    </Show>
+  )
+}
+
 function InlineTool(props: {
   icon: string
   iconColor?: RGBA
@@ -1926,6 +1947,7 @@ function InlineTool(props: {
       }}
     >
       {props.children}
+      <AutoDecisionSuffix part={props.part} />
     </InlineToolRow>
   )
 }
@@ -2047,10 +2069,14 @@ function BlockTool(props: {
             fallback={
               <text paddingLeft={3} fg={theme.textMuted}>
                 {title()}
+                <AutoDecisionSuffix part={props.part} />
               </text>
             }
           >
-            <Spinner color={theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
+            <Spinner color={theme.textMuted}>
+              {title().replace(/^# /, "")}
+              <AutoDecisionSuffix part={props.part} />
+            </Spinner>
           </Show>
         )}
       </Show>

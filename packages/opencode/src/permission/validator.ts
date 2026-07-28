@@ -106,7 +106,11 @@ const layer = Layer.effect(
           sessionID: input.sessionID,
           permission: input.permission,
           patterns: [...input.patterns],
-          metadata: summarize(input.metadata),
+          // callID lets the TUI correlate this row with the tool call in the
+          // transcript; it lives inside the metadata JSON, no schema change.
+          metadata: input.tool
+            ? { ...summarize(input.metadata), callID: input.tool.callID }
+            : summarize(input.metadata),
           verdict,
           reason,
           model,

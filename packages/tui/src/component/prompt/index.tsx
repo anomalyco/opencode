@@ -1292,6 +1292,16 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(agent.name)
   })
 
+  // "auto" mode shows the validator model (cached by the health check on
+  // activation) instead of the session model: `auto (<provider>/<model>)`.
+  const agentLabel = createMemo(() => {
+    const agent = local.agent.current()
+    if (!agent) return ""
+    if (agent.name !== "auto") return Locale.titlecase(agent.name)
+    const model = local.validator.model()
+    return model ? `auto (${model})` : "auto"
+  })
+
   const showVariant = createMemo(() => {
     const variants = local.model.variant.list()
     if (variants.length === 0) return false
@@ -1441,36 +1451,34 @@ export function Prompt(props: PromptProps) {
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  {(agent) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
-                      </text>
-                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
-                      </Show>
-                      <Show when={store.mode === "normal"}>
-                        <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                          <text
-                            flexShrink={0}
-                            fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
-                          >
-                            {local.model.parsed().model}
+                  <>
+                    <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+                      {store.mode === "shell" ? "Shell" : agentLabel()}
+                    </text>
+                    <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
+                      <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                    </Show>
+                    <Show when={store.mode === "normal"}>
+                      <box flexDirection="row" gap={1}>
+                        <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                        <text
+                          flexShrink={0}
+                          fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
+                        >
+                          {local.model.parsed().model}
+                        </text>
+                        <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                        <Show when={showVariant()}>
+                          <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
+                          <text>
+                            <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                              {local.model.variant.current()}
+                            </span>
                           </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                          <Show when={showVariant()}>
-                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
-                            <text>
-                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {local.model.variant.current()}
-                              </span>
-                            </text>
-                          </Show>
-                        </box>
-                      </Show>
-                    </>
-                  )}
+                        </Show>
+                      </box>
+                    </Show>
+                  </>
                 </Show>
               </box>
               <Show when={hasRightContent()}>

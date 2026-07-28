@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, on } from "solid-js"
 import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
@@ -530,12 +530,42 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
     })
 
+    // "auto" mode runs permission asks through the server-side LLM validator.
+    // Ping it once per activation (never per request): cache its resolved
+    // model for the prompt label and warn when it is unreachable — asks then
+    // fall back to the human flow, so the switch itself is never blocked.
+    const [validatorModel, setValidatorModel] = createSignal<string>()
+    createEffect(
+      on(
+        () => agent.current()?.name,
+        (name) => {
+          if (name !== "auto") return
+          void sdk.client.permission.validator
+            .health()
+            .then((x) => {
+              if (!x.data) return
+              setValidatorModel(x.data.model)
+              if (x.data.ok) return
+              toast.show({
+                variant: "warning",
+                message: `Validator unavailable — permission asks will go to you${x.data.reason ? ` (${x.data.reason})` : ""}`,
+                duration: 5000,
+              })
+            })
+            .catch(() => {})
+        },
+      ),
+    )
+
     const result = {
       model,
       agent,
       mcp,
       session,
       permission,
+      validator: {
+        model: validatorModel,
+      },
     }
     return result
   },

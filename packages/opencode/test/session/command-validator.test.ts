@@ -353,6 +353,30 @@ it.instance(
 )
 
 it.instance(
+  "audits the tool callID in metadata for transcript correlation",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      summaryCalls.length = 0
+      const decisions = yield* PermissionDecisionsStore.Service
+      const chat = yield* seedAutoSession()
+      llm.push(text("ALLOW"))
+
+      yield* ask({
+        sessionID: chat.id,
+        agent: "auto",
+        metadata: { command: "ls" },
+        tool: { messageID: "msg_test", callID: "call_test" },
+      })
+
+      const rows = yield* decisions.listBySession(chat.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0].metadata).toEqual({ command: "ls", callID: "call_test" })
+    }),
+  { git: true },
+)
+
+it.instance(
   "DENY fails with CorrectedError carrying the reason",
   () =>
     Effect.gen(function* () {
