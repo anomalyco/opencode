@@ -158,6 +158,7 @@ export function Session() {
       (sessionID) => data.session.permission.list(sessionID) ?? [],
     )
   })
+  const promptedPermissions = createMemo(() => (local.permission.mode === "auto" ? [] : permissions()))
   const forms = createMemo(() => {
     const global = data.session.form.list("global", location()) ?? []
     if (session()?.parentID) return global
@@ -169,7 +170,7 @@ export function Session() {
     open: false,
     tab: undefined as string | undefined,
   })
-  const disabled = createMemo(() => permissions().length > 0 || forms().length > 0)
+  const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
 
   const pending = createMemo(() => {
     const completed = messages().findLast((x) => x.type === "assistant" && x.time.completed)?.id
@@ -969,10 +970,10 @@ export function Session() {
               />
               <Switch>
                 <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
-                <Match when={permissions().length > 0}>
-                  <Show when={permissions()[0]?.id} keyed>
+                <Match when={promptedPermissions().length > 0}>
+                  <Show when={promptedPermissions()[0]?.id} keyed>
                     {(_) => {
-                      const request = permissions()[0]
+                      const request = promptedPermissions()[0]
                       return request ? (
                         <PermissionPrompt request={request} directory={session()?.location.directory} />
                       ) : null

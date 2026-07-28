@@ -5,11 +5,13 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { usePermission } from "../../context/permission"
 
 export function Footer() {
   const { themeV2 } = useTheme()
   const data = useData()
   const route = useRoute()
+  const permission = usePermission()
   const mcp = createMemo(
     () => (data.location.mcp.server.list() ?? []).filter((x) => x.status.status === "connected").length,
   )
@@ -61,7 +63,7 @@ export function Footer() {
             </text>
           </Match>
           <Match when={connected()}>
-            <Show when={permissions().length > 0}>
+            <Show when={permission.mode !== "auto" && permissions().length > 0}>
               <text fg={themeV2.text.feedback.warning.default}>
                 <span style={{ fg: themeV2.text.feedback.warning.default }}>△</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
