@@ -2249,20 +2249,36 @@ describe("SessionRunnerLLM", () => {
       ]
       const firstGate = yield* Deferred.make<void>()
       const summaryGate = yield* Deferred.make<void>()
+      const firstStarted = yield* Deferred.make<void>()
       streamGate = firstGate
+      streamStarted = firstStarted
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          streamGate = undefined
+          streamStarted = undefined
+        }),
+      )
       yield* admit(session, "Continue")
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      while (requests.length < 1) yield* Effect.yieldNow
+      yield* Deferred.await(firstStarted)
+
+      const summaryStarted = yield* Deferred.make<void>()
       streamGate = summaryGate
+      streamStarted = summaryStarted
       yield* Deferred.succeed(firstGate, undefined)
-      while (requests.length < 2) yield* Effect.yieldNow
+      yield* Deferred.await(summaryStarted)
 
       yield* session.interrupt(sessionID)
-      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
-      streamGate = undefined
+      const exit = yield* Fiber.await(run)
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
       expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toContainEqual(
-        expect.objectContaining({ type: "compaction", status: "failed", reason: "auto" }),
+        expect.objectContaining({
+          type: "compaction",
+          status: "failed",
+          reason: "auto",
+          error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+        }),
       )
     }),
   )
