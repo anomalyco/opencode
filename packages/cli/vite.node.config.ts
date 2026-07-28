@@ -39,7 +39,21 @@ function fffNodePlugin(): Plugin {
       if (normalized.endsWith("/ffi-rs/index.js")) {
         const start = code.indexOf("if (!nativeBinding) {")
         if (start === -1) this.error("Failed to rewrite ffi-rs native binding loader")
-        return `const nativeBinding = globalThis.__OPENCODE_FFF_FFI
+        return `const unavailable = () => { throw new Error("ffi-rs native binding unavailable") }
+const nativeBinding = globalThis.__OPENCODE_FFF_FFI ?? {
+  DataType: new Proxy({}, { get: (target, key) => target[key] ?? key }),
+  PointerType: {},
+  FFITypeTag: {},
+  open: unavailable,
+  close: unavailable,
+  load: unavailable,
+  isNullPointer: unavailable,
+  createPointer: unavailable,
+  restorePointer: unavailable,
+  unwrapPointer: unavailable,
+  wrapPointer: unavailable,
+  freePointer: unavailable,
+}
 const loadError = undefined
 ${code.slice(start)}`
       }
