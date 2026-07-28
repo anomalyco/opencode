@@ -1,8 +1,8 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370a4553855 100644
+index 635f1c0..9214f0b 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -3154,6 +3154,7 @@ var Client = class extends require_src.Protocol {
+@@ -3211,6 +3211,7 @@ var Client = class extends require_src.Protocol {
  	*/
  	async _connectPlainLegacy(transport, options) {
  		await super.connect(transport);
@@ -10,7 +10,7 @@ index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370
  		if (transport.sessionId !== void 0) {
  			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
  			if (negotiatedProtocolVersion !== void 0) transport.setProtocolVersion?.(negotiatedProtocolVersion);
-@@ -3170,6 +3171,7 @@ var Client = class extends require_src.Protocol {
+@@ -3227,6 +3228,7 @@ var Client = class extends require_src.Protocol {
  	* the handshake; its completion sets the negotiated (legacy) version.
  	*/
  	async _legacyHandshake(transport, options) {
@@ -18,7 +18,7 @@ index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370
  		const legacyVersions = require_src.legacyProtocolVersions(this._supportedProtocolVersions);
  		try {
  			const offeredVersion = legacyVersions[0];
-@@ -3208,6 +3210,7 @@ var Client = class extends require_src.Protocol {
+@@ -3265,6 +3267,7 @@ var Client = class extends require_src.Protocol {
  			await super.connect(transport);
  			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
  			if (negotiatedProtocolVersion !== void 0 && transport.setProtocolVersion) transport.setProtocolVersion(negotiatedProtocolVersion);
@@ -26,7 +26,7 @@ index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370
  			return;
  		}
  		this._resetConnectionState();
-@@ -5211,10 +5214,32 @@ var StreamableHTTPClientTransport = class {
+@@ -5294,10 +5297,32 @@ var StreamableHTTPClientTransport = class {
  		}
  	}
  	async send(message, options) {
@@ -61,7 +61,7 @@ index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370
  			const { resumptionToken, onresumptiontoken } = options || {};
  			if (resumptionToken) {
  				this._startOrAuthSse({
-@@ -5226,8 +5251,8 @@ var StreamableHTTPClientTransport = class {
+@@ -5309,8 +5334,8 @@ var StreamableHTTPClientTransport = class {
  			}
  			const headers = await this._commonHeaders();
  			this._applyBodyDerivedHeaders(headers, message);
@@ -71,7 +71,7 @@ index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370
  			if (options?.headers !== void 0) for (const [name, value] of Object.entries(options.headers)) {
  				if (RESERVED_REQUEST_HEADER_NAMES.has(name.toLowerCase())) continue;
  				headers.set(name, value);
-@@ -5249,8 +5274,14 @@ var StreamableHTTPClientTransport = class {
+@@ -5332,8 +5357,14 @@ var StreamableHTTPClientTransport = class {
  				signal
  			};
  			const response = await (this._fetch ?? fetch)(this._url, init);
@@ -87,29 +87,29 @@ index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370
  				if (response.status === 401 && this._authProvider) {
  					if (response.headers.has("www-authenticate")) {
  						const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
-@@ -5264,7 +5295,7 @@ var StreamableHTTPClientTransport = class {
- 							fetchFn: this._fetchWithInit
- 						});
+@@ -5351,7 +5382,7 @@ var StreamableHTTPClientTransport = class {
+ 							throw markAuthSeamEscape(error);
+ 						}
  						await response.text?.().catch(() => {});
 -						return this._send(message, options, true, stepUpRetries);
 +						return this._send(message, options, true, stepUpRetries, isSessionRetry);
  					}
  					await response.text?.().catch(() => {});
- 					if (isAuthRetry) throw new require_src.SdkHttpError(require_src.SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
-@@ -5284,7 +5315,7 @@ var StreamableHTTPClientTransport = class {
+ 					if (isAuthRetry) throw markAuthSeamEscape(new require_src.SdkHttpError(require_src.SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
+@@ -5371,7 +5402,7 @@ var StreamableHTTPClientTransport = class {
  							statusText: response.statusText,
  							text
- 						}, stepUpRetries) !== "AUTHORIZED") throw new UnauthorizedError();
+ 						}, stepUpRetries) !== "AUTHORIZED") throw markAuthSeamEscape(new UnauthorizedError());
 -						return this._send(message, options, isAuthRetry, stepUpRetries + 1);
 +						return this._send(message, options, isAuthRetry, stepUpRetries + 1, isSessionRetry);
  					}
  				}
  				if (response.status === 400 && typeof text === "string" && this._isModernEnvelopedRequest(message)) try {
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a7749668c39747 100644
+index f02ce3c..0a5a649 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -3151,6 +3151,7 @@ var Client = class extends Protocol {
+@@ -3208,6 +3208,7 @@ var Client = class extends Protocol {
  	*/
  	async _connectPlainLegacy(transport, options) {
  		await super.connect(transport);
@@ -117,7 +117,7 @@ index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a77496
  		if (transport.sessionId !== void 0) {
  			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
  			if (negotiatedProtocolVersion !== void 0) transport.setProtocolVersion?.(negotiatedProtocolVersion);
-@@ -3167,6 +3168,7 @@ var Client = class extends Protocol {
+@@ -3224,6 +3225,7 @@ var Client = class extends Protocol {
  	* the handshake; its completion sets the negotiated (legacy) version.
  	*/
  	async _legacyHandshake(transport, options) {
@@ -125,7 +125,7 @@ index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a77496
  		const legacyVersions = legacyProtocolVersions(this._supportedProtocolVersions);
  		try {
  			const offeredVersion = legacyVersions[0];
-@@ -3205,6 +3207,7 @@ var Client = class extends Protocol {
+@@ -3262,6 +3264,7 @@ var Client = class extends Protocol {
  			await super.connect(transport);
  			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
  			if (negotiatedProtocolVersion !== void 0 && transport.setProtocolVersion) transport.setProtocolVersion(negotiatedProtocolVersion);
@@ -133,7 +133,7 @@ index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a77496
  			return;
  		}
  		this._resetConnectionState();
-@@ -5208,10 +5211,32 @@ var StreamableHTTPClientTransport = class {
+@@ -5291,10 +5294,32 @@ var StreamableHTTPClientTransport = class {
  		}
  	}
  	async send(message, options) {
@@ -168,7 +168,7 @@ index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a77496
  			const { resumptionToken, onresumptiontoken } = options || {};
  			if (resumptionToken) {
  				this._startOrAuthSse({
-@@ -5223,8 +5248,8 @@ var StreamableHTTPClientTransport = class {
+@@ -5306,8 +5331,8 @@ var StreamableHTTPClientTransport = class {
  			}
  			const headers = await this._commonHeaders();
  			this._applyBodyDerivedHeaders(headers, message);
@@ -178,7 +178,7 @@ index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a77496
  			if (options?.headers !== void 0) for (const [name, value] of Object.entries(options.headers)) {
  				if (RESERVED_REQUEST_HEADER_NAMES.has(name.toLowerCase())) continue;
  				headers.set(name, value);
-@@ -5246,8 +5271,14 @@ var StreamableHTTPClientTransport = class {
+@@ -5329,8 +5354,14 @@ var StreamableHTTPClientTransport = class {
  				signal
  			};
  			const response = await (this._fetch ?? fetch)(this._url, init);
@@ -194,19 +194,19 @@ index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a77496
  				if (response.status === 401 && this._authProvider) {
  					if (response.headers.has("www-authenticate")) {
  						const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
-@@ -5261,7 +5292,7 @@ var StreamableHTTPClientTransport = class {
- 							fetchFn: this._fetchWithInit
- 						});
+@@ -5348,7 +5379,7 @@ var StreamableHTTPClientTransport = class {
+ 							throw markAuthSeamEscape(error);
+ 						}
  						await response.text?.().catch(() => {});
 -						return this._send(message, options, true, stepUpRetries);
 +						return this._send(message, options, true, stepUpRetries, isSessionRetry);
  					}
  					await response.text?.().catch(() => {});
- 					if (isAuthRetry) throw new SdkHttpError(SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
-@@ -5281,7 +5312,7 @@ var StreamableHTTPClientTransport = class {
+ 					if (isAuthRetry) throw markAuthSeamEscape(new SdkHttpError(SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
+@@ -5368,7 +5399,7 @@ var StreamableHTTPClientTransport = class {
  							statusText: response.statusText,
  							text
- 						}, stepUpRetries) !== "AUTHORIZED") throw new UnauthorizedError();
+ 						}, stepUpRetries) !== "AUTHORIZED") throw markAuthSeamEscape(new UnauthorizedError());
 -						return this._send(message, options, isAuthRetry, stepUpRetries + 1);
 +						return this._send(message, options, isAuthRetry, stepUpRetries + 1, isSessionRetry);
  					}
