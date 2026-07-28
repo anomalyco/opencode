@@ -51,6 +51,7 @@ import { StartupLoading } from "./component/startup-loading"
 import { DevToolsBar } from "./component/devtools-bar"
 import { Reconnecting } from "./component/reconnecting"
 import { DataProvider, useData } from "./context/data"
+import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
 import { LocationProvider, useLocation } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
@@ -65,6 +66,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { SessionTabs } from "./component/session-tabs"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -95,6 +97,9 @@ registerOpencodeSpinner()
 const appGlobalBindingCommands = [
   "session.list",
   "session.new",
+  "session.tab.next",
+  "session.tab.previous",
+  "session.tab.close",
   "session.quick_switch.1",
   "session.quick_switch.2",
   "session.quick_switch.3",
@@ -338,6 +343,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             <PermissionProvider>
                                               <DataProvider>
                                                 <LocationProvider>
+                                                  <SessionTabsProvider>
                                                   <ThemeProvider mode={mode}>
                                                     <ThemeErrorToast />
                                                     <LocalProvider>
@@ -369,6 +375,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                       </PromptStashProvider>
                                                     </LocalProvider>
                                                   </ThemeProvider>
+                                                  </SessionTabsProvider>
                                                 </LocationProvider>
                                               </DataProvider>
                                             </PermissionProvider>
@@ -419,6 +426,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const renderer = useRenderer()
   const dialog = useDialog()
   const local = useLocal()
+  const sessionTabs = useSessionTabs()
   const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
@@ -617,6 +625,26 @@ function App(props: { pair?: DialogPairCredentials }) {
           })
           dialog.clear()
         },
+      },
+      {
+        name: "session.tab.next",
+        title: "Next open session tab",
+        category: "Session",
+        palette: undefined,
+        run: () => sessionTabs.cycle(1),
+      },
+      {
+        name: "session.tab.previous",
+        title: "Previous open session tab",
+        category: "Session",
+        palette: undefined,
+        run: () => sessionTabs.cycle(-1),
+      },
+      {
+        name: "session.tab.close",
+        title: "Close current session tab",
+        category: "Session",
+        run: () => sessionTabs.close(),
       },
       ...Array.from({ length: 9 }, (_, i) => ({
         name: `session.quick_switch.${i + 1}`,
@@ -1109,6 +1137,9 @@ function App(props: { pair?: DialogPairCredentials }) {
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
+              <Show when={sessionTabs.tabs().length > 0}>
+                <SessionTabs />
+              </Show>
               <Switch>
                 <Match when={route.data.type === "home"}>
                   <Home />
