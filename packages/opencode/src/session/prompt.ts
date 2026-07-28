@@ -227,10 +227,16 @@ const layer = Layer.effect(
         )
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        // Some models emit a lone closing tag when the opening one was trimmed
+        // by the provider (observed with local qwen3 builds); drop the orphan.
+        .replace(/^\s*<\/think>\s*/g, "")
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line.length > 0)
-      if (!cleaned) return undefined
+      if (!cleaned) {
+        yield* Effect.logDebug("title generation returned empty text", { "session.id": input.sessionID })
+        return undefined
+      }
       return {
         text: cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned,
         model: `${mdl.providerID}/${mdl.id}`,
