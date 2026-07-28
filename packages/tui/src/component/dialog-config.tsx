@@ -94,6 +94,14 @@ export const settings: Setting[] = [
     keywords: ["transcript", "messages"],
   },
   {
+    title: "Tabs",
+    category: "Session",
+    path: ["session", "tabs"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+  },
+  {
     title: "Layout",
     category: "Diffs",
     path: ["diffs", "view"],

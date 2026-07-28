@@ -4,7 +4,6 @@ import {
   closeSessionTab,
   cycleSessionTab,
   openSessionTab,
-  sessionTabWindow,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
@@ -31,25 +30,6 @@ describe("session tabs", () => {
     expect(cycleSessionTab(tabs, "b", 1)?.sessionID).toBe("a")
   })
 
-  test("keeps the active tab in a bounded visible window", () => {
-    const tabs = ["a", "b", "c", "d", "e"].map((sessionID) => ({ sessionID }))
-    expect(sessionTabWindow(tabs, "c", 3)).toEqual({
-      tabs: [{ sessionID: "b" }, { sessionID: "c" }, { sessionID: "d" }],
-      before: 1,
-      after: 1,
-    })
-    expect(sessionTabWindow(tabs, "a", 3)).toEqual({
-      tabs: [{ sessionID: "a" }, { sessionID: "b" }, { sessionID: "c" }],
-      before: 0,
-      after: 2,
-    })
-    expect(sessionTabWindow(tabs, "e", 2)).toEqual({
-      tabs: [{ sessionID: "d" }, { sessionID: "e" }],
-      before: 3,
-      after: 0,
-    })
-  })
-
   test("expands the active tab and keeps inactive widths equal", () => {
     const tabs = ["a", "b", "c", "d", "e", "f", "g"].map((sessionID) => ({ sessionID }))
     const layout = adaptiveSessionTabLayout(tabs, "d", 76)
@@ -69,12 +49,36 @@ describe("session tabs", () => {
     expect(after.widths).toEqual([9, 9, 9, 22, 9, 9, 9])
   })
 
-  test("fills extra room by extending the active tab to the right edge", () => {
+  test("shares roomy width equally without changing widths on selection", () => {
     const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
-    const layout = adaptiveSessionTabLayout(tabs, "c", 100)
+    const before = adaptiveSessionTabLayout(tabs, "a", 100)
+    const after = adaptiveSessionTabLayout(tabs, "c", 100, before.start)
 
-    expect(layout.widths).toEqual([22, 22, 56])
-    expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(100)
+    expect(before.widths).toEqual([32, 32, 32])
+    expect(after.widths).toEqual(before.widths)
+    expect(before.total).toBe(96)
+  })
+
+  test("caps a single tab instead of stretching it across the terminal", () => {
+    const layout = adaptiveSessionTabLayout([{ sessionID: "a" }], "a", 100)
+
+    expect(layout.widths).toEqual([32])
+    expect(layout.total).toBe(32)
+  })
+
+  test("fills roomy space equally below the maximum width", () => {
+    const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
+
+    expect(adaptiveSessionTabLayout(tabs, "b", 100).widths).toEqual([25, 25, 25, 25])
+  })
+
+  test("expands only the active tab under compact pressure", () => {
+    const tabs = ["a", "b", "c", "d", "e"].map((sessionID) => ({ sessionID }))
+    const before = adaptiveSessionTabLayout(tabs, "c", 100)
+    const after = adaptiveSessionTabLayout(tabs, "d", 100, before.start)
+
+    expect(before.widths).toEqual([19, 19, 24, 19, 19])
+    expect(after.widths).toEqual([19, 19, 19, 24, 19])
   })
 
   test("moves the window only after selection crosses its edge", () => {

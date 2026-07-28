@@ -2,13 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import {
-  resolve,
-  ConfigProvider,
-  Info,
-  useConfig,
-  type Interface,
-} from "../src/config"
+import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
 
 test("validates mini replay settings", () => {
   const decode = Schema.decodeUnknownSync(Info)
@@ -18,6 +12,13 @@ test("validates mini replay settings", () => {
   })
   expect(() => decode({ mini: { replay_limit: 0 } })).toThrow()
   expect(() => decode({ mini: { replay_limit: 1.5 } })).toThrow()
+})
+
+test("validates the session tabs setting", () => {
+  const decode = Schema.decodeUnknownSync(Info)
+
+  expect(decode({ session: { tabs: true } })).toEqual({ session: { tabs: true } })
+  expect(() => decode({ session: { tabs: "on" } })).toThrow()
 })
 
 test("resolves nested config and keybind defaults", () => {

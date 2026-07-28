@@ -6,7 +6,9 @@ import { useData } from "./data"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useTuiPaths } from "./runtime"
+import { useConfig } from "../config"
 import { readJson, writeJsonAtomic } from "../util/persistence"
+import { isRecord } from "../util/record"
 import {
   closeSessionTab,
   cycleSessionTab,
@@ -26,8 +28,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const route = useRoute()
     const data = useData()
     const event = useEvent()
+    const config = useConfig().data
     const filePath = path.join(useTuiPaths().state, "session-tabs.json")
-    const state = { pending: false }
+    const enabled = () => config.session?.tabs ?? false
+    const state: {
+      pending: boolean
+      saving: boolean
+      snapshot: string
+      value?: PersistedState
+    } = { pending: false, saving: false, snapshot: "" }
     const [store, setStore] = createStore<PersistedState & { ready: boolean }>({
       ready: false,
       tabs: [],
@@ -51,8 +60,26 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         state.pending = true
         return
       }
+      const value = { tabs: [...store.tabs], unread: { ...store.unread } }
+      const snapshot = JSON.stringify(value)
+      if (snapshot === state.snapshot) return
+      state.snapshot = snapshot
+      state.value = value
+      state.pending = true
+      flush()
+    }
+
+    function flush() {
+      if (state.saving || !state.pending || !state.value) return
+      const value = state.value
       state.pending = false
-      void writeJsonAtomic(filePath, { tabs: store.tabs, unread: store.unread })
+      state.saving = true
+      void writeJsonAtomic(filePath, value)
+        .catch(() => {})
+        .finally(() => {
+          state.saving = false
+          flush()
+        })
     }
 
     function open(sessionID: string) {
@@ -76,24 +103,25 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     function markUnread(sessionID: string, unread: SessionTabUnread) {
+      if (!enabled()) return
       const session = root(sessionID)
       if (current() === session || !store.tabs.some((tab) => tab.sessionID === session)) return
+      if (store.unread[session] === unread) return
       setStore("unread", session, unread)
       save()
     }
 
     readJson<unknown>(filePath)
       .then((value) => {
-        if (!value || typeof value !== "object") return
-        const persisted = value as Record<string, unknown>
+        if (!isRecord(value)) return
+        const persisted = value
         if (Array.isArray(persisted.tabs))
           setStore(
             "tabs",
             persisted.tabs.flatMap((tab) => {
-              if (!tab || typeof tab !== "object" || !("sessionID" in tab) || typeof tab.sessionID !== "string")
-                return []
+              if (!isRecord(tab) || typeof tab.sessionID !== "string") return []
               if ("title" in tab && tab.title !== undefined && typeof tab.title !== "string") return []
-              return [{ sessionID: tab.sessionID, title: "title" in tab ? tab.title : undefined }]
+              return [{ sessionID: tab.sessionID, title: typeof tab.title === "string" ? tab.title : undefined }]
             }),
           )
         if (persisted.unread && typeof persisted.unread === "object")
@@ -110,9 +138,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       .finally(() => {
         setStore("ready", true)
         if (state.pending) save()
+        else state.snapshot = JSON.stringify({ tabs: store.tabs, unread: store.unread })
       })
 
     createEffect(() => {
+      if (!enabled()) return
       if (!store.ready || route.data.type !== "session" || route.data.sessionID === "dummy") return
       const routeSessionID = route.data.sessionID
       batch(() => {
@@ -123,7 +153,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     })
 
     createEffect(() => {
-      if (!store.ready) return
+      if (!enabled() || !store.ready) return
       const next = store.tabs.reduce((tabs, tab) => {
         const sessionID = root(tab.sessionID)
         return openSessionTab(tabs, { sessionID, title: data.session.get(sessionID)?.title ?? tab.title })
@@ -155,18 +185,22 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     )
     onCleanup(
       event.on("session.deleted", (evt) => {
-        const sessionID = root(evt.data.sessionID)
-        const closed = closeSessionTab(store.tabs, sessionID)
-        if (closed.tabs.length === store.tabs.length) return
-        batch(() => {
-          setStore("tabs", reconcile(closed.tabs))
-          clearUnread(sessionID)
-          if (current() === sessionID)
-            route.navigate(closed.next ? { type: "session", sessionID: closed.next } : { type: "home" })
-        })
-        save()
+        remove(evt.data.sessionID, enabled())
       }),
     )
+
+    function remove(sessionID: string, navigate: boolean) {
+      const target = root(sessionID)
+      const closed = closeSessionTab(store.tabs, target)
+      if (closed.tabs.length === store.tabs.length) return
+      batch(() => {
+        setStore("tabs", reconcile(closed.tabs))
+        clearUnread(target)
+        if (navigate && current() === target)
+          route.navigate(closed.next ? { type: "session", sessionID: closed.next } : { type: "home" })
+      })
+      save()
+    }
 
     return {
       tabs() {
@@ -183,27 +217,22 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return family(sessionID).some((id) => data.session.status(id) === "running")
       },
       select(sessionID: string) {
-        route.navigate({ type: "session", sessionID: open(sessionID) })
-        save()
+        if (!enabled()) return
+        route.navigate({ type: "session", sessionID: root(sessionID) })
       },
       close(sessionID?: string) {
+        if (!enabled()) return
         const target = sessionID ? root(sessionID) : current()
         if (!target) return
-        const closed = closeSessionTab(store.tabs, target)
-        if (closed.tabs.length === store.tabs.length) return
-        batch(() => {
-          setStore("tabs", reconcile(closed.tabs))
-          clearUnread(target)
-          if (current() === target)
-            route.navigate(closed.next ? { type: "session", sessionID: closed.next } : { type: "home" })
-        })
-        save()
+        remove(target, true)
       },
       cycle(direction: 1 | -1) {
+        if (!enabled()) return
         const tab = cycleSessionTab(store.tabs, current(), direction)
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
       cycleUnread(direction: 1 | -1) {
+        if (!enabled()) return
         const tab = cycleSessionTab(
           store.tabs.filter((tab) => store.unread[tab.sessionID] || attention(tab.sessionID)),
           current(),
@@ -212,6 +241,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
       selectIndex(index: number) {
+        if (!enabled()) return
         const tab = store.tabs[index]
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },

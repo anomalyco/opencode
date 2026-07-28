@@ -5,6 +5,11 @@ export type SessionTab = {
 
 export type SessionTabUnread = "activity" | "error"
 
+export const SESSION_TAB_WIDTH = 22
+export const SESSION_TAB_MAX_WIDTH = 32
+export const SESSION_TAB_MIN_WIDTH = 8
+export const SESSION_TAB_OVERFLOW_WIDTH = 3
+
 export function openSessionTab(tabs: readonly SessionTab[], tab: SessionTab) {
   const index = tabs.findIndex((item) => item.sessionID === tab.sessionID)
   if (index === -1) return [...tabs, tab]
@@ -28,27 +33,11 @@ export function cycleSessionTab(tabs: readonly SessionTab[], active: string | un
   return tabs[(start + direction + tabs.length) % tabs.length]
 }
 
-export function sessionTabWindow(tabs: readonly SessionTab[], active: string | undefined, limit: number) {
-  if (tabs.length <= limit) return { tabs: [...tabs], before: 0, after: 0 }
-  const count = Math.max(1, limit)
-  const index = Math.max(
-    0,
-    tabs.findIndex((tab) => tab.sessionID === active),
-  )
-  const start = Math.min(Math.max(0, index - Math.floor(count / 2)), tabs.length - count)
-  return {
-    tabs: tabs.slice(start, start + count),
-    before: start,
-    after: tabs.length - start - count,
-  }
-}
-
 export function adaptiveSessionTabLayout(
   tabs: readonly SessionTab[],
   active: string | undefined,
   available: number,
   previousStart = 0,
-  options = { preferredWidth: 22, minimumWidth: 8, overflowWidth: 3 },
 ) {
   if (tabs.length === 0) return { tabs: [], widths: [], before: 0, after: 0, start: 0, total: 0 }
 
@@ -57,17 +46,15 @@ export function adaptiveSessionTabLayout(
     tabs.findIndex((tab) => tab.sessionID === active),
   )
   const fit = (width: number) =>
-    Math.min(
-      tabs.length,
-      Math.max(1, 1 + Math.floor((Math.max(0, width) - options.preferredWidth) / options.minimumWidth)),
-    )
+    Math.min(tabs.length, Math.max(1, 1 + Math.floor((Math.max(0, width) - SESSION_TAB_WIDTH) / SESSION_TAB_MIN_WIDTH)))
   const solve = (count: number, start: number, attempts: number): { count: number; start: number } => {
     const nextStart = Math.min(
       Math.max(0, activeIndex < start ? activeIndex : activeIndex >= start + count ? activeIndex - count + 1 : start),
       tabs.length - count,
     )
     const markers =
-      (nextStart > 0 ? options.overflowWidth : 0) + (nextStart + count < tabs.length ? options.overflowWidth : 0)
+      (nextStart > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0) +
+      (nextStart + count < tabs.length ? SESSION_TAB_OVERFLOW_WIDTH : 0)
     const nextCount = fit(available - markers)
     if (nextCount === count || attempts === 0) return { count, start: nextStart }
     return solve(nextCount, nextStart, attempts - 1)
@@ -78,17 +65,30 @@ export function adaptiveSessionTabLayout(
   const after = tabs.length - solved.start - solved.count
   const contentWidth = Math.max(
     1,
-    available - (before > 0 ? options.overflowWidth : 0) - (after > 0 ? options.overflowWidth : 0),
+    available - (before > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0) - (after > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0),
   )
-  const total = contentWidth
+  const roomy = contentWidth >= SESSION_TAB_WIDTH * visible.length
+  const total = roomy ? Math.min(contentWidth, SESSION_TAB_MAX_WIDTH * visible.length) : contentWidth
+  if (roomy) {
+    const width = Math.floor(total / visible.length)
+    const remainder = total - width * visible.length
+    return {
+      tabs: visible,
+      widths: visible.map((_, index) => width + Number(index < remainder)),
+      before,
+      after,
+      start: solved.start,
+      total,
+    }
+  }
   const inactiveWidth =
     visible.length === 1
       ? 0
       : Math.min(
-          options.preferredWidth,
+          SESSION_TAB_WIDTH,
           Math.max(
-            options.minimumWidth,
-            Math.floor((total - Math.min(options.preferredWidth, total)) / (visible.length - 1)),
+            SESSION_TAB_MIN_WIDTH,
+            Math.floor((total - Math.min(SESSION_TAB_WIDTH, total)) / (visible.length - 1)),
           ),
         )
   const activeWidth = visible.length === 1 ? total : total - inactiveWidth * (visible.length - 1)

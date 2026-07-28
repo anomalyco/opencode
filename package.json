@@ -14,7 +14,6 @@
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
     "dev:www": "bun run --cwd packages/www dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
-    "prototype:tabs": "bun run --cwd packages/tui --conditions=browser src/prototype/session-tabs.tsx",
     "lint": "oxlint",
     "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml packages/util/src packages/core/src packages/server/src packages/protocol/src packages/cli/src",
     "test:lint-rules": "ast-grep test -c script/ast-grep/sgconfig.yml",

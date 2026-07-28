@@ -1,24 +1,14 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { RGBA } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useTheme } from "../context/theme"
-import { adaptiveSessionTabLayout } from "../context/session-tabs-model"
+import { adaptiveSessionTabLayout, SESSION_TAB_OVERFLOW_WIDTH } from "../context/session-tabs-model"
 import { TabPulse } from "./tab-pulse"
 import { drawTabShadow } from "./tab-shadow"
+import { tint } from "../theme/color"
 
-const TAB_WIDTH = 22
-const MIN_TAB_WIDTH = 8
-const OVERFLOW_WIDTH = 3
 const ADAPTIVE_SPRING = { visualDuration: 0.1, bounce: 0 } as const
-const blend = (from: RGBA, to: RGBA, amount: number) =>
-  RGBA.fromValues(
-    from.r + (to.r - from.r) * amount,
-    from.g + (to.g - from.g) * amount,
-    from.b + (to.b - from.b) * amount,
-    from.a + (to.a - from.a) * amount,
-  )
 const spring = (value: number, velocity: number, target: number, frequency: number, delta: number) => {
   const offset = value - target
   const decay = Math.exp(-frequency * delta)
@@ -43,16 +33,13 @@ export function SessionTabs() {
   const { themeV2, mode } = useTheme()
   const config = useConfig().data
   const [hovered, setHovered] = createSignal<string>()
-  const accent = () => themeV2.hue.accent[mode() === "light" ? 800 : 200]
-  const idleRail = () => blend(themeV2.border.default, themeV2.background.default, 0.6)
-  const idleNumber = () => blend(themeV2.text.subdued, themeV2.background.default, 0.35)
+  const hueStep = () => (mode() === "light" ? 800 : 200)
+  const accent = () => themeV2.hue.accent[hueStep()]
+  const activeNumber = () => tint(themeV2.hue.interactive[hueStep()], themeV2.background.default, 0.25)
+  const idleNumber = () => tint(themeV2.text.subdued, themeV2.background.default, 0.35)
   let windowStart = 0
   const layout = createMemo(() => {
-    const next = adaptiveSessionTabLayout(tabs.tabs(), tabs.current(), dimensions().width, windowStart, {
-      preferredWidth: TAB_WIDTH,
-      minimumWidth: MIN_TAB_WIDTH,
-      overflowWidth: OVERFLOW_WIDTH,
-    })
+    const next = adaptiveSessionTabLayout(tabs.tabs(), tabs.current(), dimensions().width, windowStart)
     windowStart = next.start
     return next
   })
@@ -75,6 +62,7 @@ export function SessionTabs() {
       if (reset) state.set(sessionID, initialState(width, selection, activity))
       if (!state.has(sessionID)) state.set(sessionID, initialState(width, selection, activity))
     }
+    for (const sessionID of state.keys()) if (!next.has(sessionID)) state.delete(sessionID)
     if (reset) setFrame((value) => value + 1)
     start()
   })
@@ -126,30 +114,21 @@ export function SessionTabs() {
   }
   onCleanup(stop)
 
-  const widths = createMemo(() => {
+  const visuals = createMemo(() => {
     frame()
-    const current = layout().tabs.map((tab) =>
+    const widths = layout().tabs.map((tab) =>
       Math.max(1, Math.round(state.get(tab.sessionID)?.width ?? targets().get(tab.sessionID)!)),
     )
     const active = layout().tabs.findIndex((tab) => tab.sessionID === tabs.current())
-    if (active !== -1) current[active]! += layout().total - current.reduce((sum, width) => sum + width, 0)
-    return new Map(layout().tabs.map((tab, index) => [tab.sessionID, current[index]!]))
-  })
-  const selections = createMemo(() => {
-    frame()
+    if (active !== -1) widths[active]! += layout().total - widths.reduce((sum, width) => sum + width, 0)
     return new Map(
-      layout().tabs.map((tab) => [
+      layout().tabs.map((tab, index) => [
         tab.sessionID,
-        state.get(tab.sessionID)?.selection ?? Number(tab.sessionID === tabs.current()),
-      ]),
-    )
-  })
-  const activities = createMemo(() => {
-    frame()
-    return new Map(
-      layout().tabs.map((tab) => [
-        tab.sessionID,
-        state.get(tab.sessionID)?.activity ?? Number(tabs.unread(tab.sessionID) === "activity"),
+        {
+          width: widths[index]!,
+          selection: state.get(tab.sessionID)?.selection ?? Number(tab.sessionID === tabs.current()),
+          activity: state.get(tab.sessionID)?.activity ?? Number(tabs.unread(tab.sessionID) === "activity"),
+        },
       ]),
     )
   })
@@ -173,42 +152,42 @@ export function SessionTabs() {
       }}
     >
       <Show when={layout().before > 0}>
-        <text width={OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
+        <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
           ‹{layout().before}
         </text>
       </Show>
       <For each={layout().tabs}>
-        {(tab, index) => {
+        {(tab) => {
           const selected = () => tabs.current() === tab.sessionID
           const unread = () => tabs.unread(tab.sessionID)
-          const width = () => widths().get(tab.sessionID) ?? targets().get(tab.sessionID)!
-          const selection = () => selections().get(tab.sessionID) ?? Number(selected())
-          const activity = () => activities().get(tab.sessionID) ?? Number(unread() === "activity")
+          const width = () => visuals().get(tab.sessionID)?.width ?? targets().get(tab.sessionID)!
+          const selection = () => visuals().get(tab.sessionID)?.selection ?? Number(selected())
+          const activity = () => visuals().get(tab.sessionID)?.activity ?? Number(unread() === "activity")
           const background = () => {
             const base =
               hovered() === tab.sessionID && !selected()
                 ? themeV2.background.action.primary.hovered
                 : themeV2.background.default
-            return blend(base, themeV2.raise(themeV2.background.surface.offset), selection())
+            return tint(base, themeV2.raise(themeV2.background.surface.offset), selection())
           }
           const pulseBackground = () => background()
-          const pulseColor = () => blend(pulseBackground(), themeV2.text.default, 0.45)
+          const pulseColor = () => tint(pulseBackground(), themeV2.text.default, 0.45)
           const title = () => tab.title ?? "Untitled session"
-          const availableTitleWidth = () => Math.max(1, width() - 3)
+          const availableTitleWidth = () => Math.max(1, width() - 4)
           const visibleTitle = () => title().slice(0, availableTitleWidth())
           const titleFades = () => title().length > availableTitleWidth() && availableTitleWidth() > 4
           const foreground = () => {
             if (hovered() === tab.sessionID) return themeV2.text.default
-            return blend(themeV2.text.subdued, themeV2.text.default, selection())
+            return tint(themeV2.text.subdued, themeV2.text.default, selection())
           }
           const numberColor = () => {
             if (tabs.attention(tab.sessionID)) return themeV2.text.feedback.warning.default
             if (unread() === "error") return themeV2.text.feedback.error.default
             const base =
-              hovered() === tab.sessionID
+              hovered() === tab.sessionID && !selected()
                 ? foreground()
-                : blend(idleNumber(), blend(themeV2.text.subdued, themeV2.text.default, 0.65), selection())
-            return blend(base, accent(), activity())
+                : tint(idleNumber(), activeNumber(), selection())
+            return tint(base, accent(), activity())
           }
           return (
             <box
@@ -221,15 +200,15 @@ export function SessionTabs() {
               onMouseUp={() => tabs.select(tab.sessionID)}
             >
               <TabPulse
-                active={tabs.running(tab.sessionID) && (config.animations ?? true)}
+                enabled={config.animations ?? true}
+                active={tabs.running(tab.sessionID)}
+                complete={unread() === "activity"}
                 color={pulseColor()}
+                completionColor={accent()}
                 backgroundColor={pulseBackground()}
-                wrap
               />
               <box zIndex={1} width="100%" flexDirection="row">
-                <text width={1} fg={idleRail()}>
-                  {index() === 0 ? " " : "▏"}
-                </text>
+                <text width={2}> </text>
                 <text width={2} fg={numberColor()}>
                   {tabs.tabs().findIndex((item) => item.sessionID === tab.sessionID) + 1}
                 </text>
@@ -243,16 +222,16 @@ export function SessionTabs() {
                 >
                   <text width={availableTitleWidth()} fg={foreground()} wrapMode="none">
                     {visibleTitle().slice(0, -4)}
-                    <span style={{ fg: blend(foreground(), pulseBackground(), 0.2) }}>
+                    <span style={{ fg: tint(foreground(), pulseBackground(), 0.2) }}>
                       {visibleTitle().slice(-4, -3)}
                     </span>
-                    <span style={{ fg: blend(foreground(), pulseBackground(), 0.45) }}>
+                    <span style={{ fg: tint(foreground(), pulseBackground(), 0.45) }}>
                       {visibleTitle().slice(-3, -2)}
                     </span>
-                    <span style={{ fg: blend(foreground(), pulseBackground(), 0.7) }}>
+                    <span style={{ fg: tint(foreground(), pulseBackground(), 0.7) }}>
                       {visibleTitle().slice(-2, -1)}
                     </span>
-                    <span style={{ fg: blend(foreground(), pulseBackground(), 0.92) }}>{visibleTitle().slice(-1)}</span>
+                    <span style={{ fg: tint(foreground(), pulseBackground(), 0.92) }}>{visibleTitle().slice(-1)}</span>
                   </text>
                 </Show>
                 <text
@@ -274,7 +253,7 @@ export function SessionTabs() {
         }}
       </For>
       <Show when={layout().after > 0}>
-        <text width={OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
+        <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
           {layout().after}›
         </text>
       </Show>
