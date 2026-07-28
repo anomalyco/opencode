@@ -290,6 +290,10 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
   const queryClient = useQueryClient()
   const homeSessions = createHomeSessionIndexCache(queryClient, ServerConnection.key(serverSDK.server))
+  const refreshProviders = () =>
+    queryClient.refetchQueries({
+      predicate: (query) => query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "providers",
+    })
 
   let bootedAt = 0
   let bootingRoot = false
@@ -537,6 +541,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       homeSessions.apply(event)
     }
     homeSessions.refresh(event.type)
+    if (eventType === "integration.connection.updated") void refreshProviders()
 
     if (directory === "global") {
       if (eventType === "server.connected" && activeSessionsQuery.data === undefined && !activeSessionsQuery.isFetching)
@@ -678,6 +683,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     peek: children.peek,
     disableMcp: children.disableMcp,
     queryOptions: queryOptionsApi,
+    refreshProviders,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
