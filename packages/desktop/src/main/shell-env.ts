@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { userInfo } from "node:os"
-import { basename } from "node:path"
+import { basename, delimiter, join } from "node:path"
 
 const TIMEOUT = 5_000
 
@@ -98,4 +98,28 @@ export function mergeShellEnv(shell: Record<string, string> | null, env: Record<
     ...shell,
     ...env,
   }
+}
+
+export function restoreVirtualEnv(
+  env: Record<string, string | undefined>,
+  parent: { VIRTUAL_ENV?: string; CONDA_PREFIX?: string },
+) {
+  const conda = parent.CONDA_PREFIX
+  if (conda) {
+    env.CONDA_PREFIX = conda
+    env.PATH = prependFirst(join(conda, "bin"), env.PATH)
+  }
+  const venv = parent.VIRTUAL_ENV
+  if (venv) {
+    env.VIRTUAL_ENV = venv
+    env.PATH = prependFirst(join(venv, "bin"), env.PATH)
+  }
+}
+
+// Prepend only when the dir is not already first: a containment check would
+// wrongly skip the restore when the probed env demoted the dir from the front.
+function prependFirst(dir: string, path: string | undefined) {
+  if (!path) return dir
+  if (path === dir || path.startsWith(`${dir}${delimiter}`)) return path
+  return `${dir}${delimiter}${path}`
 }

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
 import { getLogger } from "./logging"
-import { getUserShell, loadShellEnv } from "./shell-env"
+import { getUserShell, loadShellEnv, restoreVirtualEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
 
@@ -43,13 +43,19 @@ export function setDefaultServerUrl(url: string | null) {
 
 export function preferAppEnv(userDataPath: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
+  const venv = process.env.VIRTUAL_ENV
+  const conda = process.env.CONDA_PREFIX
+  const shellEnv = shell ? loadShellEnv(shell, getLogger()) : null
   Object.assign(process.env, {
-    ...(shell ? loadShellEnv(shell, getLogger()) : null),
+    ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
+  if (shellEnv && (venv || conda)) {
+    restoreVirtualEnv(process.env, { VIRTUAL_ENV: venv, CONDA_PREFIX: conda })
+  }
 }
 
 export async function spawnLocalServer(

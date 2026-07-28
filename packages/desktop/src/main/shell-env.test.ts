@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
+import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell, restoreVirtualEnv } from "./shell-env"
 
 describe("shell env", () => {
   test("parseShellEnv supports null-delimited pairs", () => {
@@ -46,5 +46,55 @@ describe("shell env", () => {
     expect(isNushell("/opt/homebrew/bin/nu")).toBe(true)
     expect(isNushell("C:\\Program Files\\nu.exe")).toBe(true)
     expect(isNushell("/bin/zsh")).toBe(false)
+  })
+
+  test("restoreVirtualEnv prepends venv bin to PATH", () => {
+    const env: Record<string, string | undefined> = { PATH: "/usr/bin:/bin" }
+    restoreVirtualEnv(env, { VIRTUAL_ENV: "/tmp/venv", CONDA_PREFIX: undefined })
+    expect(env.VIRTUAL_ENV).toBe("/tmp/venv")
+    expect(env.PATH).toBe("/tmp/venv/bin:/usr/bin:/bin")
+  })
+
+  test("restoreVirtualEnv prepends conda bin when conda prefix set", () => {
+    const env: Record<string, string | undefined> = { PATH: "/usr/bin:/bin" }
+    restoreVirtualEnv(env, { VIRTUAL_ENV: undefined, CONDA_PREFIX: "/tmp/conda" })
+    expect(env.CONDA_PREFIX).toBe("/tmp/conda")
+    expect(env.PATH).toBe("/tmp/conda/bin:/usr/bin:/bin")
+  })
+
+  test("restoreVirtualEnv orders conda before venv in PATH", () => {
+    const env: Record<string, string | undefined> = { PATH: "/usr/bin:/bin" }
+    restoreVirtualEnv(env, { VIRTUAL_ENV: "/tmp/venv", CONDA_PREFIX: "/tmp/conda" })
+    expect(env.CONDA_PREFIX).toBe("/tmp/conda")
+    expect(env.VIRTUAL_ENV).toBe("/tmp/venv")
+    // conda prepended first, venv prepended second → venv wins at front
+    expect(env.PATH).toBe("/tmp/venv/bin:/tmp/conda/bin:/usr/bin:/bin")
+  })
+
+  test("restoreVirtualEnv no-op when neither venv nor conda set", () => {
+    const env: Record<string, string | undefined> = { PATH: "/usr/bin:/bin" }
+    restoreVirtualEnv(env, { VIRTUAL_ENV: undefined, CONDA_PREFIX: undefined })
+    expect(env.PATH).toBe("/usr/bin:/bin")
+    expect(env.VIRTUAL_ENV).toBeUndefined()
+    expect(env.CONDA_PREFIX).toBeUndefined()
+  })
+
+  test("restoreVirtualEnv sets PATH when no PATH existed", () => {
+    const env: Record<string, string | undefined> = {}
+    restoreVirtualEnv(env, { VIRTUAL_ENV: "/tmp/venv", CONDA_PREFIX: undefined })
+    expect(env.VIRTUAL_ENV).toBe("/tmp/venv")
+    expect(env.PATH).toBe("/tmp/venv/bin")
+  })
+
+  test("restoreVirtualEnv does not duplicate bin already first in PATH", () => {
+    const env: Record<string, string | undefined> = { PATH: "/tmp/venv/bin:/usr/bin:/bin" }
+    restoreVirtualEnv(env, { VIRTUAL_ENV: "/tmp/venv", CONDA_PREFIX: undefined })
+    expect(env.PATH).toBe("/tmp/venv/bin:/usr/bin:/bin")
+  })
+
+  test("restoreVirtualEnv re-prepends bin demoted from first in PATH", () => {
+    const env: Record<string, string | undefined> = { PATH: "/usr/bin:/tmp/venv/bin:/bin" }
+    restoreVirtualEnv(env, { VIRTUAL_ENV: "/tmp/venv", CONDA_PREFIX: undefined })
+    expect(env.PATH).toBe("/tmp/venv/bin:/usr/bin:/tmp/venv/bin:/bin")
   })
 })
