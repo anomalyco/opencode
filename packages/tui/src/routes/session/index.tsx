@@ -2344,11 +2344,13 @@ function InlineTool(props: {
   const { themeV2 } = useTheme()
   const ctx = use()
   const data = useData()
+  const local = useLocal()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const [errorExpanded, setErrorExpanded] = createSignal(false)
 
   const permission = createMemo(() => {
+    if (local.permission.mode === "auto") return false
     const request = data.session.permission.list(ctx.sessionID)?.[0]
     return request?.source?.type === "tool" && request.source.callID === props.part.id
   })
@@ -2531,10 +2533,12 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
   const { themeV2 } = useTheme()
   const ctx = use()
   const data = useData()
+  const local = useLocal()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error.message : undefined))
   const permission = createMemo(() => {
+    if (local.permission.mode === "auto") return false
     if (!props.part) return false
     const request = data.session.permission.list(ctx.sessionID)?.[0]
     return request?.source?.type === "tool" && request.source.callID === props.part.id
@@ -2614,8 +2618,10 @@ function Shell(props: ToolProps) {
   const ctx = use()
   const client = useClient()
   const data = useData()
+  const local = useLocal()
   const pathFormatter = usePathFormatter()
   const permission = createMemo(() => {
+    if (local.permission.mode === "auto") return false
     const request = data.session.permission.list(ctx.sessionID)?.[0]
     return request?.source?.type === "tool" && request.source.callID === props.part.id
   })
