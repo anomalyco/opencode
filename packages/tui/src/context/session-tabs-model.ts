@@ -21,13 +21,17 @@ export function closeSessionTab(tabs: readonly SessionTab[], sessionID: string) 
   }
 }
 
-export function visibleSessionTabs(tabs: readonly SessionTab[], active: string | undefined, limit: number) {
-  if (tabs.length <= limit) return [...tabs]
+export function sessionTabWindow(tabs: readonly SessionTab[], active: string | undefined, limit: number) {
+  if (tabs.length <= limit) return { tabs: [...tabs], before: 0, after: 0 }
   const count = Math.max(1, limit)
   const index = Math.max(
     0,
     tabs.findIndex((tab) => tab.sessionID === active),
   )
   const start = Math.min(Math.max(0, index - Math.floor(count / 2)), tabs.length - count)
-  return tabs.slice(start, start + count)
+  return {
+    tabs: tabs.slice(start, start + count),
+    before: start,
+    after: tabs.length - start - count,
+  }
 }

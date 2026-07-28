@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { closeSessionTab, openSessionTab, visibleSessionTabs } from "../../src/context/session-tabs-model"
+import { closeSessionTab, openSessionTab, sessionTabWindow } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
   test("opens each session once and refreshes its title", () => {
@@ -19,7 +19,20 @@ describe("session tabs", () => {
 
   test("keeps the active tab in a bounded visible window", () => {
     const tabs = ["a", "b", "c", "d", "e"].map((sessionID) => ({ sessionID }))
-    expect(visibleSessionTabs(tabs, "d", 3).map((tab) => tab.sessionID)).toEqual(["c", "d", "e"])
-    expect(visibleSessionTabs(tabs, "a", 3).map((tab) => tab.sessionID)).toEqual(["a", "b", "c"])
+    expect(sessionTabWindow(tabs, "c", 3)).toEqual({
+      tabs: [{ sessionID: "b" }, { sessionID: "c" }, { sessionID: "d" }],
+      before: 1,
+      after: 1,
+    })
+    expect(sessionTabWindow(tabs, "a", 3)).toEqual({
+      tabs: [{ sessionID: "a" }, { sessionID: "b" }, { sessionID: "c" }],
+      before: 0,
+      after: 2,
+    })
+    expect(sessionTabWindow(tabs, "e", 2)).toEqual({
+      tabs: [{ sessionID: "d" }, { sessionID: "e" }],
+      before: 3,
+      after: 0,
+    })
   })
 })

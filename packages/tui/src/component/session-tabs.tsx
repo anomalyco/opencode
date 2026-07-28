@@ -3,11 +3,13 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useTheme } from "../context/theme"
-import { visibleSessionTabs } from "../context/session-tabs-model"
+import { sessionTabWindow } from "../context/session-tabs-model"
 import { Locale } from "../util/locale"
 import { TabPulse } from "./tab-pulse"
+import { TabShadow } from "./tab-shadow"
 
 const TAB_WIDTH = 22
+const OVERFLOW_WIDTH = 3
 
 export function SessionTabs() {
   const tabs = useSessionTabs()
@@ -16,15 +18,24 @@ export function SessionTabs() {
   const config = useConfig().data
   const [hovered, setHovered] = createSignal<string>()
   const accent = () => themeV2.hue.accent[mode() === "light" ? 800 : 200]
-  const tabWidth = createMemo(() => Math.max(8, Math.min(TAB_WIDTH, dimensions().width - 4)))
+  const tabWidth = createMemo(() => Math.max(8, Math.min(TAB_WIDTH, dimensions().width - 8)))
   const titleWidth = createMemo(() => Math.max(1, tabWidth() - 6))
-  const visible = createMemo(() =>
-    visibleSessionTabs(tabs.tabs(), tabs.current(), Math.max(1, Math.floor((dimensions().width - 4) / tabWidth()))),
-  )
+  const visible = createMemo(() => {
+    const available = dimensions().width - 2
+    const initial = sessionTabWindow(tabs.tabs(), tabs.current(), Math.max(1, Math.floor(available / tabWidth())))
+    const overflow = (initial.before > 0 ? OVERFLOW_WIDTH : 0) + (initial.after > 0 ? OVERFLOW_WIDTH : 0)
+    return sessionTabWindow(tabs.tabs(), tabs.current(), Math.max(1, Math.floor((available - overflow) / tabWidth())))
+  })
 
   return (
-    <box height={1} flexShrink={0} flexDirection="row" paddingLeft={1} paddingRight={1}>
-      <For each={visible()}>
+    <box height={1} flexShrink={0} position="relative" flexDirection="row" paddingLeft={1} paddingRight={1}>
+      <TabShadow strength={mode() === "light" ? 0.06 : 0.12} />
+      <Show when={visible().before > 0}>
+        <text width={OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
+          ‹{visible().before}
+        </text>
+      </Show>
+      <For each={visible().tabs}>
         {(tab) => {
           const selected = () => tabs.current() === tab.sessionID
           const unread = () => tabs.unread(tab.sessionID)
@@ -105,8 +116,10 @@ export function SessionTabs() {
           )
         }}
       </For>
-      <Show when={tabs.tabs().length > visible().length}>
-        <text fg={themeV2.text.subdued}>+{tabs.tabs().length - visible().length}</text>
+      <Show when={visible().after > 0}>
+        <text width={OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
+          {visible().after}›
+        </text>
       </Show>
     </box>
   )
