@@ -60,9 +60,6 @@ const countOccurrences = (content: string, search: string) => {
   return count
 }
 
-export const toModelOutput = (output: Output) =>
-  `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`
-
 /** Deferred edit behavior and UX integrations remain visible at the model-facing seam. */
 // TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
 // TODO: Add formatter integration after formatter runtime exists.
@@ -196,7 +193,7 @@ export const Plugin = {
                 }).pipe(
                   Effect.map((output) => ({
                     output,
-                    content: toModelOutput(output),
+                    content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
                     metadata: { files: output.files },
                   })),
                 )
