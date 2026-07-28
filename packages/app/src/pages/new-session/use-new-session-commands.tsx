@@ -2,11 +2,8 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
-import { useServerSync } from "@/context/server-sync"
-import { useProviders } from "@/hooks/use-providers"
 
-export function createNewSessionCommandController(input: {
+export function useNewSessionCommands(input: {
   restoreFocus: () => void
   project: {
     empty: () => boolean
@@ -16,9 +13,6 @@ export function createNewSessionCommandController(input: {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
-  const sdk = useSDK()
-  const serverSync = useServerSync()
-  const providers = useProviders(() => sdk().directory)
 
   useSettingsCommand()
   command.register("new-session", () => [
@@ -47,18 +41,4 @@ export function createNewSessionCommandController(input: {
       onSelect: input.project.open,
     },
   ])
-
-  return {
-    provider: {
-      ready: () => serverSync().child(sdk().directory)[0].provider_ready,
-      connected: () => providers.paid().length > 0,
-      open: () => {
-        void import("@/components/dialog-connect-provider").then(({ DialogConnectProvider }) => {
-          void dialog.show(() => <DialogConnectProvider directory={() => sdk().directory} />)
-        })
-      },
-    },
-  }
 }
-
-export type NewSessionCommandController = ReturnType<typeof createNewSessionCommandController>

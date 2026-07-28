@@ -1,3 +1,4 @@
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
@@ -15,9 +16,11 @@ import {
 } from "@/components/prompt-project-selector"
 import { StatusPopoverV2 } from "@/components/status-popover"
 import { useLanguage } from "@/context/language"
+import { useSDK } from "@/context/sdk"
+import { useServerSync } from "@/context/server-sync"
+import { useProviders } from "@/hooks/use-providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
-import type { NewSessionCommandController } from "./new-session-command-controller"
 import type { NewSessionDraftController } from "./new-session-draft-controller"
 import type { NewSessionWorkspaceController } from "./new-session-workspace-controller"
 
@@ -27,7 +30,6 @@ export function NewSessionView(props: {
   input: NewSessionDraftController["input"]
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
-  provider: NewSessionCommandController["provider"]
 }) {
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
@@ -69,11 +71,7 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
-        <ProviderTip
-          ready={props.provider.ready}
-          connected={props.provider.connected}
-          openProviders={props.provider.open}
-        />
+        <ProviderTip />
       </div>
     </div>
   )
@@ -97,17 +95,21 @@ export function NewSessionStatus(props: { mount: Accessor<HTMLElement | null>; v
   )
 }
 
-function ProviderTip(props: { ready: Accessor<boolean>; connected: Accessor<boolean>; openProviders: () => void }) {
+function ProviderTip() {
   const language = useLanguage()
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const serverSync = useServerSync()
+  const providers = useProviders(() => sdk().directory)
   const [persistedState, setPersistedState, , persistedReady] = persisted(
     Persist.global("new-session.provider-tip"),
     createStore({ dismissedAt: 0 }),
   )
   const visible = createMemo(
     () =>
-      props.ready() &&
+      serverSync().child(sdk().directory)[0].provider_ready &&
       persistedReady() &&
-      !props.connected() &&
+      providers.paid().length === 0 &&
       Date.now() - persistedState.dismissedAt >= providerTipDismissalDuration,
   )
   const [ref, setRef] = createSignal<HTMLDivElement>()
@@ -115,6 +117,11 @@ function ProviderTip(props: { ready: Accessor<boolean>; connected: Accessor<bool
     show: visible,
     element: () => ref() ?? null,
   })
+  const openProviders = () => {
+    void import("@/components/dialog-connect-provider").then(({ DialogConnectProvider }) => {
+      void dialog.show(() => <DialogConnectProvider directory={() => sdk().directory} />)
+    })
+  }
 
   return (
     <Show when={presence.present()}>
@@ -129,7 +136,7 @@ function ProviderTip(props: { ready: Accessor<boolean>; connected: Accessor<bool
           <button
             type="button"
             class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
-            onClick={props.openProviders}
+            onClick={openProviders}
           >
             <span class="truncate">{language.t("home.providerTip")}</span>
             <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
