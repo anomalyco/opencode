@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   hasExistingWebState,
+  initialAgentVisibility,
   isAppUpgrade,
   layoutTransitionState,
   maximumSunsetTimeout,
@@ -10,6 +11,18 @@ import {
   shouldDisplayTabsToast,
   shouldEnableNewLayout,
 } from "./settings"
+
+describe("agent visibility", () => {
+  test("shows the picker for existing profiles and hides it for new profiles", () => {
+    expect(initialAgentVisibility(undefined, true)).toBe(true)
+    expect(initialAgentVisibility(undefined, false)).toBe(false)
+  })
+
+  test("preserves the preference after initialization", () => {
+    expect(initialAgentVisibility(true, true)).toBeUndefined()
+    expect(initialAgentVisibility(true, false)).toBeUndefined()
+  })
+})
 
 describe("layout transition", () => {
   test("blank profiles default to the new layout", () => {
