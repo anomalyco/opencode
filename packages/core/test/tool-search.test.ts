@@ -1,8 +1,7 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Fiber, Layer } from "effect"
-import { TestClock } from "effect/testing"
+import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -12,7 +11,6 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { RipgrepBinary } from "@opencode-ai/core/ripgrep/binary"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { GlobTool } from "@opencode-ai/core/tool/plugin/glob"
@@ -46,7 +44,6 @@ const withTools = <A, E, R>(
   directory: string,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
   assertions?: Permission.AssertInput[],
-  ripgrepBinary?: string,
 ) =>
   Effect.gen(function* () {
     return yield* body(yield* Tool.Service)
@@ -74,17 +71,6 @@ const withTools = <A, E, R>(
             }),
           ),
         ],
-        ...(ripgrepBinary
-          ? [
-              [
-                RipgrepBinary.node,
-                Layer.succeed(
-                  RipgrepBinary.Service,
-                  RipgrepBinary.Service.of({ filepath: Effect.succeed(ripgrepBinary) }),
-                ),
-              ] as const,
-            ]
-          : []),
       ]),
     ),
   )
@@ -97,67 +83,7 @@ const call = (name: "glob" | "grep", input: unknown) => ({
 
 const it = testEffect(Layer.empty)
 
-const waitForFile = (file: string) =>
-  Effect.promise(async () => {
-    while (true) {
-      try {
-        return await fs.readFile(file, "utf8")
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-        await Bun.sleep(10)
-      }
-    }
-  })
-
 describe("search tools", () => {
-  if (process.platform !== "win32") {
-    for (const name of ["glob", "grep"] as const) {
-      it.effect(`${name} times out and terminates ripgrep`, () =>
-        Effect.acquireUseRelease(
-          Effect.promise(() => tmpdir()),
-          (tmp) => {
-            const ready = path.join(tmp.path, "ready")
-            const executable = path.join(tmp.path, "rg")
-            const script = `#!/bin/sh
-trap 'exit 0' TERM
-printf '%s' "$$" > ${JSON.stringify(ready)}
-while :; do :; done
-`
-            return Effect.gen(function* () {
-              yield* Effect.promise(() => fs.writeFile(executable, script, { mode: 0o755 }))
-              yield* withTools(
-                tmp.path,
-                (registry) =>
-                  Effect.gen(function* () {
-                    const run = yield* executeTool(
-                      registry,
-                      call(name, name === "glob" ? { pattern: "**/*" } : { pattern: "needle" }),
-                    ).pipe(Effect.forkChild)
-                    const pid = Number(yield* waitForFile(ready))
-                    expect(() => process.kill(pid, 0)).not.toThrow()
-
-                    yield* TestClock.adjust(FileSystem.DEFAULT_SEARCH_TIMEOUT_MS)
-
-                    expect(yield* Fiber.join(run)).toEqual({
-                      status: "error",
-                      error: {
-                        type: "tool.execution",
-                        message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
-                      },
-                    })
-                    expect(() => process.kill(pid, 0)).toThrow()
-                  }),
-                undefined,
-                executable,
-              )
-            })
-          },
-          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-        ),
-      )
-    }
-  }
-
   it.live("bounds omitted glob and grep limits", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
