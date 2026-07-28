@@ -34,7 +34,7 @@ export const load = (dir: string) =>
 export const registry = (dir: string) =>
   load(dir).pipe(
     Effect.map((config) => {
-      const registry = typeof config.registry === "string" ? config.registry : "https://registry.npmjs.org"
-      return registry.endsWith("/") ? registry.slice(0, -1) : registry
+      const reg = typeof config.registry === "string" ? config.registry.trim() : "https://registry.npmjs.org"
+      return reg.endsWith("/") ? reg.slice(0, -1) : reg
     }),
   )
