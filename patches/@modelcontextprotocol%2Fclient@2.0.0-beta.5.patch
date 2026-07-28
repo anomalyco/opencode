@@ -1,0 +1,214 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 1c43bac25a1037416fdf2ddfb4534ba0897a2e69..7e2108326f368ccbc48897195d57e370a4553855 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -3154,6 +3154,7 @@ var Client = class extends require_src.Protocol {
+ 	*/
+ 	async _connectPlainLegacy(transport, options) {
+ 		await super.connect(transport);
++		transport.onsessionexpired = () => this._legacyHandshake(transport, options);
+ 		if (transport.sessionId !== void 0) {
+ 			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
+ 			if (negotiatedProtocolVersion !== void 0) transport.setProtocolVersion?.(negotiatedProtocolVersion);
+@@ -3170,6 +3171,7 @@ var Client = class extends require_src.Protocol {
+ 	* the handshake; its completion sets the negotiated (legacy) version.
+ 	*/
+ 	async _legacyHandshake(transport, options) {
++		transport.onsessionexpired = () => this._legacyHandshake(transport, options);
+ 		const legacyVersions = require_src.legacyProtocolVersions(this._supportedProtocolVersions);
+ 		try {
+ 			const offeredVersion = legacyVersions[0];
+@@ -3208,6 +3210,7 @@ var Client = class extends require_src.Protocol {
+ 			await super.connect(transport);
+ 			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
+ 			if (negotiatedProtocolVersion !== void 0 && transport.setProtocolVersion) transport.setProtocolVersion(negotiatedProtocolVersion);
++			if (negotiatedProtocolVersion !== void 0 && !require_src.isModernProtocolVersion(negotiatedProtocolVersion)) transport.onsessionexpired = () => this._legacyHandshake(transport, options);
+ 			return;
+ 		}
+ 		this._resetConnectionState();
+@@ -5211,10 +5214,32 @@ var StreamableHTTPClientTransport = class {
+ 		}
+ 	}
+ 	async send(message, options) {
+-		return this._send(message, options, false);
++		return this._send(message, options, false, 0, false);
++	}
++	async _recoverSession(expiredSessionId) {
++		if (this._sessionRecovery) return this._sessionRecovery;
++		if (!this.onsessionexpired) return false;
++		if (this._sessionId !== expiredSessionId) return true;
++		this._sessionId = void 0;
++		this._sessionRecovery = Promise.resolve().then(() => this.onsessionexpired()).then(() => true);
++		try {
++			return await this._sessionRecovery;
++		} catch (error) {
++			this._sessionId = void 0;
++			await this.close();
++			throw error;
++		} finally {
++			this._sessionRecovery = void 0;
++		}
+ 	}
+-	async _send(message, options, isAuthRetry, stepUpRetries = 0) {
++	async _send(message, options, isAuthRetry, stepUpRetries = 0, isSessionRetry = false) {
+ 		try {
++			const isHandshake = Array.isArray(message) ? message.some((m) => require_src.isInitializeRequest(m)) : require_src.isInitializeRequest(message);
++			const isInitialized = Array.isArray(message) ? message.some((m) => require_src.isInitializedNotification(m)) : require_src.isInitializedNotification(message);
++			if (this._sessionRecovery && !isHandshake && !isInitialized) {
++				await this._sessionRecovery;
++				options?.requestSignal?.throwIfAborted();
++			}
+ 			const { resumptionToken, onresumptiontoken } = options || {};
+ 			if (resumptionToken) {
+ 				this._startOrAuthSse({
+@@ -5226,8 +5251,8 @@ var StreamableHTTPClientTransport = class {
+ 			}
+ 			const headers = await this._commonHeaders();
+ 			this._applyBodyDerivedHeaders(headers, message);
+-			const isHandshake = Array.isArray(message) ? message.some((m) => require_src.isInitializeRequest(m)) : require_src.isInitializeRequest(message);
+ 			if (isHandshake) headers.delete("mcp-session-id");
++			const requestSessionId = headers.get("mcp-session-id") || void 0;
+ 			if (options?.headers !== void 0) for (const [name, value] of Object.entries(options.headers)) {
+ 				if (RESERVED_REQUEST_HEADER_NAMES.has(name.toLowerCase())) continue;
+ 				headers.set(name, value);
+@@ -5249,8 +5274,14 @@ var StreamableHTTPClientTransport = class {
+ 				signal
+ 			};
+ 			const response = await (this._fetch ?? fetch)(this._url, init);
+-			if (isHandshake && response.ok) this._sessionId = response.headers.get("mcp-session-id") || void 0;
++			if (isHandshake && response.ok && (requestSessionId === void 0 || this._sessionId === requestSessionId)) this._sessionId = response.headers.get("mcp-session-id") || void 0;
+ 			if (!response.ok) {
++				if (response.status === 404 && requestSessionId && !isSessionRetry && !isInitialized) {
++					if (await this._recoverSession(requestSessionId)) {
++						options?.requestSignal?.throwIfAborted();
++						return this._send(message, options, isAuthRetry, stepUpRetries, true);
++					}
++				}
+ 				if (response.status === 401 && this._authProvider) {
+ 					if (response.headers.has("www-authenticate")) {
+ 						const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
+@@ -5264,7 +5295,7 @@ var StreamableHTTPClientTransport = class {
+ 							fetchFn: this._fetchWithInit
+ 						});
+ 						await response.text?.().catch(() => {});
+-						return this._send(message, options, true, stepUpRetries);
++						return this._send(message, options, true, stepUpRetries, isSessionRetry);
+ 					}
+ 					await response.text?.().catch(() => {});
+ 					if (isAuthRetry) throw new require_src.SdkHttpError(require_src.SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
+@@ -5284,7 +5315,7 @@ var StreamableHTTPClientTransport = class {
+ 							statusText: response.statusText,
+ 							text
+ 						}, stepUpRetries) !== "AUTHORIZED") throw new UnauthorizedError();
+-						return this._send(message, options, isAuthRetry, stepUpRetries + 1);
++						return this._send(message, options, isAuthRetry, stepUpRetries + 1, isSessionRetry);
+ 					}
+ 				}
+ 				if (response.status === 400 && typeof text === "string" && this._isModernEnvelopedRequest(message)) try {
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 77e2389913cb5c5c2b047f95d990ab2892bef923..4b5e4ff2869189d600ca644488a7749668c39747 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3151,6 +3151,7 @@ var Client = class extends Protocol {
+ 	*/
+ 	async _connectPlainLegacy(transport, options) {
+ 		await super.connect(transport);
++		transport.onsessionexpired = () => this._legacyHandshake(transport, options);
+ 		if (transport.sessionId !== void 0) {
+ 			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
+ 			if (negotiatedProtocolVersion !== void 0) transport.setProtocolVersion?.(negotiatedProtocolVersion);
+@@ -3167,6 +3168,7 @@ var Client = class extends Protocol {
+ 	* the handshake; its completion sets the negotiated (legacy) version.
+ 	*/
+ 	async _legacyHandshake(transport, options) {
++		transport.onsessionexpired = () => this._legacyHandshake(transport, options);
+ 		const legacyVersions = legacyProtocolVersions(this._supportedProtocolVersions);
+ 		try {
+ 			const offeredVersion = legacyVersions[0];
+@@ -3205,6 +3207,7 @@ var Client = class extends Protocol {
+ 			await super.connect(transport);
+ 			const negotiatedProtocolVersion = this._negotiatedProtocolVersion;
+ 			if (negotiatedProtocolVersion !== void 0 && transport.setProtocolVersion) transport.setProtocolVersion(negotiatedProtocolVersion);
++			if (negotiatedProtocolVersion !== void 0 && !isModernProtocolVersion(negotiatedProtocolVersion)) transport.onsessionexpired = () => this._legacyHandshake(transport, options);
+ 			return;
+ 		}
+ 		this._resetConnectionState();
+@@ -5208,10 +5211,32 @@ var StreamableHTTPClientTransport = class {
+ 		}
+ 	}
+ 	async send(message, options) {
+-		return this._send(message, options, false);
++		return this._send(message, options, false, 0, false);
++	}
++	async _recoverSession(expiredSessionId) {
++		if (this._sessionRecovery) return this._sessionRecovery;
++		if (!this.onsessionexpired) return false;
++		if (this._sessionId !== expiredSessionId) return true;
++		this._sessionId = void 0;
++		this._sessionRecovery = Promise.resolve().then(() => this.onsessionexpired()).then(() => true);
++		try {
++			return await this._sessionRecovery;
++		} catch (error) {
++			this._sessionId = void 0;
++			await this.close();
++			throw error;
++		} finally {
++			this._sessionRecovery = void 0;
++		}
+ 	}
+-	async _send(message, options, isAuthRetry, stepUpRetries = 0) {
++	async _send(message, options, isAuthRetry, stepUpRetries = 0, isSessionRetry = false) {
+ 		try {
++			const isHandshake = Array.isArray(message) ? message.some((m) => isInitializeRequest(m)) : isInitializeRequest(message);
++			const isInitialized = Array.isArray(message) ? message.some((m) => isInitializedNotification(m)) : isInitializedNotification(message);
++			if (this._sessionRecovery && !isHandshake && !isInitialized) {
++				await this._sessionRecovery;
++				options?.requestSignal?.throwIfAborted();
++			}
+ 			const { resumptionToken, onresumptiontoken } = options || {};
+ 			if (resumptionToken) {
+ 				this._startOrAuthSse({
+@@ -5223,8 +5248,8 @@ var StreamableHTTPClientTransport = class {
+ 			}
+ 			const headers = await this._commonHeaders();
+ 			this._applyBodyDerivedHeaders(headers, message);
+-			const isHandshake = Array.isArray(message) ? message.some((m) => isInitializeRequest(m)) : isInitializeRequest(message);
+ 			if (isHandshake) headers.delete("mcp-session-id");
++			const requestSessionId = headers.get("mcp-session-id") || void 0;
+ 			if (options?.headers !== void 0) for (const [name, value] of Object.entries(options.headers)) {
+ 				if (RESERVED_REQUEST_HEADER_NAMES.has(name.toLowerCase())) continue;
+ 				headers.set(name, value);
+@@ -5246,8 +5271,14 @@ var StreamableHTTPClientTransport = class {
+ 				signal
+ 			};
+ 			const response = await (this._fetch ?? fetch)(this._url, init);
+-			if (isHandshake && response.ok) this._sessionId = response.headers.get("mcp-session-id") || void 0;
++			if (isHandshake && response.ok && (requestSessionId === void 0 || this._sessionId === requestSessionId)) this._sessionId = response.headers.get("mcp-session-id") || void 0;
+ 			if (!response.ok) {
++				if (response.status === 404 && requestSessionId && !isSessionRetry && !isInitialized) {
++					if (await this._recoverSession(requestSessionId)) {
++						options?.requestSignal?.throwIfAborted();
++						return this._send(message, options, isAuthRetry, stepUpRetries, true);
++					}
++				}
+ 				if (response.status === 401 && this._authProvider) {
+ 					if (response.headers.has("www-authenticate")) {
+ 						const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
+@@ -5261,7 +5292,7 @@ var StreamableHTTPClientTransport = class {
+ 							fetchFn: this._fetchWithInit
+ 						});
+ 						await response.text?.().catch(() => {});
+-						return this._send(message, options, true, stepUpRetries);
++						return this._send(message, options, true, stepUpRetries, isSessionRetry);
+ 					}
+ 					await response.text?.().catch(() => {});
+ 					if (isAuthRetry) throw new SdkHttpError(SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
+@@ -5281,7 +5312,7 @@ var StreamableHTTPClientTransport = class {
+ 							statusText: response.statusText,
+ 							text
+ 						}, stepUpRetries) !== "AUTHORIZED") throw new UnauthorizedError();
+-						return this._send(message, options, isAuthRetry, stepUpRetries + 1);
++						return this._send(message, options, isAuthRetry, stepUpRetries + 1, isSessionRetry);
+ 					}
+ 				}
+ 				if (response.status === 400 && typeof text === "string" && this._isModernEnvelopedRequest(message)) try {
