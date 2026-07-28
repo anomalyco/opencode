@@ -249,16 +249,19 @@ async function renderDiffViewer(
   }
 
   const app = await testRender(() => <Harness />, { width: 80, height: options.height ?? 20 })
-  await app.waitFor(async () => {
-    await Bun.sleep(25)
-    if (current().type !== "plugin") {
-      const open = commands.get("diff.open")
-      if (!open) return false
-      open.run()
-      await app.renderOnce()
-    }
-    return commands.has("diff.close")
-  })
+  await app.waitFor(
+    async () => {
+      await Bun.sleep(25)
+      if (current().type !== "plugin") {
+        const open = commands.get("diff.open")
+        if (!open) return false
+        open.run()
+        await app.renderOnce()
+      }
+      return commands.has("diff.close")
+    },
+    { maxPasses: 100 },
+  )
   await app.waitFor(() => vcsDiffInput !== undefined)
   return {
     app,
