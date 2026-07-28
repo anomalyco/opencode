@@ -31,8 +31,8 @@ export function DialogWorkspaceFileChanges(props: {
   message?: string
 }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
-  const overlayTheme = useThemes().contextual("overlay").current
+  const theme = useThemes().contextual("elevated")
+  const overlayTheme = useThemes().contextual("overlay")
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))

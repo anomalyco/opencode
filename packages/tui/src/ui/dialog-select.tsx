@@ -95,7 +95,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   type VisibleAction = (Action & { label: string }) | FooterHint
 
   const dialog = useDialog()
-  const { current: theme, mode } = useThemes().contextual("elevated")
+  const themes = useThemes()
+  const theme = themes.contextual("elevated")
+  const mode = themes.mode
   const config = useConfig().data
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
@@ -771,7 +773,7 @@ function Option(props: {
   activeColor?: RGBA
   onMouseOver?: () => void
 }) {
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const text = createMemo(() => {
     if (props.active && !props.muted) return props.activeColor ?? theme.text.action.primary.focused
     if (props.muted && (props.active || props.current)) return theme.text.subdued

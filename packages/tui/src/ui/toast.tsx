@@ -14,7 +14,7 @@ type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
 export function Toast() {
   const toast = useToast()
-  const theme = useThemes().contextual("overlay").current
+  const theme = useThemes().contextual("overlay")
   const dimensions = useTerminalDimensions()
 
   return (

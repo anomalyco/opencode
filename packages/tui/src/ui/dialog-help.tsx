@@ -5,7 +5,7 @@ import { useDialog } from "./dialog"
 
 export function DialogHelp() {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const shortcuts = Keymap.useShortcuts()
 
   Keymap.createLayer(() => ({

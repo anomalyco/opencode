@@ -161,8 +161,8 @@ test("contextual hooks resolve overrides and fall back to a standalone theme's b
     if (!themes) throw new Error("Theme provider is not mounted")
     if (!theme) throw new Error("Contextual theme is not mounted")
     expect(theme.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
-    expect(theme.text.default).toBe(themes.contextual("elevated").current.text.default)
-    expect(themes.contextual("overlay").current.background.default).toBe(themes.current.background.default)
+    expect(theme.text.default).toBe(themes.contextual("elevated").text.default)
+    expect(themes.contextual("overlay").background.default).toBe(themes.current.background.default)
   } finally {
     app.renderer.destroy()
   }

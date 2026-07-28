@@ -39,7 +39,7 @@ export type ComposerProps = {
 }
 
 export function Composer(props: ComposerProps) {
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
 
   const [store, setStore] = createStore({
     tabs: {} as Record<string, Tab>,

@@ -16,7 +16,7 @@ export function Dialog(
   }>,
 ) {
   const dimensions = useTerminalDimensions()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const renderer = useRenderer()
 
   let dismiss = false

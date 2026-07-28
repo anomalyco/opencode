@@ -3,7 +3,7 @@ import { useThemes } from "../context/theme"
 import { Spinner } from "./spinner"
 
 export function StartupLoading(props: { ready: () => boolean }) {
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const [show, setShow] = createSignal(false)
   const text = createMemo(() => (props.ready() ? "Finishing startup..." : "Loading plugins..."))
   let wait: NodeJS.Timeout | undefined

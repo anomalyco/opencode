@@ -38,7 +38,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const dialog = useDialog()
   const client = useClient()
   const dimensions = useTerminalDimensions()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const sessionData = useData()
   const route = useRoute()
   const toast = useToast()

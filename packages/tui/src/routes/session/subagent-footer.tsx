@@ -42,7 +42,7 @@ export function SubagentFooter() {
     }
   })
 
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const keymap = Keymap.use()
   const shortcuts = Keymap.useShortcuts()
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)

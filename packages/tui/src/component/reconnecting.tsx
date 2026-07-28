@@ -3,7 +3,7 @@ import { useThemes } from "../context/theme"
 import { Spinner } from "./spinner"
 
 export function Reconnecting() {
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
 
   return (
     <box

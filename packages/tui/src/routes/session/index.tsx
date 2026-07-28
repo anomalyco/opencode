@@ -1507,7 +1507,7 @@ function SessionGroupView(props: {
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const ctx = use()
   const local = useLocal()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const model = createMemo(
     () =>
       ctx
@@ -1704,7 +1704,7 @@ function RevertMessage(props: {
   }>
 }) {
   const ctx = use()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const route = useRouteData("session")
   const client = useClient()
   const toast = useToast()
@@ -1777,7 +1777,7 @@ function RevertMessage(props: {
 }
 
 function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "shell" }> }) {
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const output = createMemo(() => stripAnsi(props.message.output?.output.trim() ?? ""))
 
   return (
@@ -1804,7 +1804,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
-  const { current: theme, mode } = useThemes().contextual("elevated")
+  const themes = useThemes()
+  const theme = themes.contextual("elevated")
+  const mode = themes.mode
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const queued = createMemo(
@@ -1880,7 +1882,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
 function AssistantMessage(props: { message: SessionMessageAssistant; last: boolean }) {
   const ctx = use()
   const local = useLocal()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const model = createMemo(
     () =>
       ctx

@@ -98,7 +98,7 @@ type State = {
 type ContextName = "elevated" | "overlay"
 type Themes = {
   current: ComponentTheme
-  contextual(context: ContextName): Themes
+  contextual(context: ContextName): ComponentTheme
   readonly selected: string
   all: typeof allThemes
   has: typeof hasTheme
@@ -318,17 +318,17 @@ const themeContext = createSimpleContext({
 
     const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
     function contextual(context: ContextName) {
-      return contextualServices[context]
+      return contextsV2[context]
     }
     const service: Themes = {
       current,
+      currentSyntax,
       contextual,
       get selected() {
         return store.active
       },
       all: allThemes,
       has: hasTheme,
-      currentSyntax,
       mode,
       modes,
       supports: (requested) => modes().includes(requested),
@@ -355,24 +355,28 @@ const themeContext = createSimpleContext({
         return store.ready
       },
     }
-    const contextualServices = {
-      elevated: Object.assign(Object.create(service) as Themes, { current: contextsV2.elevated }),
-      overlay: Object.assign(Object.create(service) as Themes, { current: contextsV2.overlay }),
+    return {
+      current,
+      themes: service,
+      get ready() {
+        return service.ready
+      },
     }
-    return service
   },
 })
 
-export const useThemes = themeContext.use
+export function useThemes() {
+  return themeContext.use().themes
+}
 export function useTheme() {
-  return useThemes().current
+  return themeContext.use().current
 }
 export const ThemeProvider = themeContext.provider
 
 export function ThemeContextProvider(props: ParentProps<{ context: ContextName }>) {
   const themes = useThemes()
   return (
-    <themeContext.context.Provider value={themes.contextual(props.context)}>
+    <themeContext.context.Provider value={{ current: themes.contextual(props.context), themes, ready: themes.ready }}>
       {props.children}
     </themeContext.context.Provider>
   )

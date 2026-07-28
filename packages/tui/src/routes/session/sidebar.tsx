@@ -10,7 +10,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
   const data = useData()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))

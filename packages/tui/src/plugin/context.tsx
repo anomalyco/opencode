@@ -538,10 +538,7 @@ export function createPluginTheme(theme: ReturnType<typeof useTheme>, themes: Re
   return new Proxy(theme as PluginTheme, {
     get(target, property, receiver) {
       if (property === "contextual") {
-        return (context: "elevated" | "overlay") => {
-          const contextual = themes.contextual(context)
-          return createPluginTheme(contextual.current, contextual)
-        }
+        return (context: "elevated" | "overlay") => createPluginTheme(themes.contextual(context), themes)
       }
       if (property === "syntaxStyle") return themes.currentSyntax
       if (Reflect.has(target, property)) return Reflect.get(target, property, receiver)

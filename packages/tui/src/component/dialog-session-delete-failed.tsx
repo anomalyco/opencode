@@ -13,7 +13,7 @@ export function DialogSessionDeleteFailed(props: {
   onDone?: () => void
 }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const [store, setStore] = createStore({
     active: "delete" as "delete" | "restore",
   })

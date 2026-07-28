@@ -57,7 +57,7 @@ export function Autocomplete(props: {
   const data = useData()
   const keymap = Keymap.use()
   const keymapCommands = Keymap.useCommands()
-  const theme = useThemes().contextual("overlay").current
+  const theme = useThemes().contextual("overlay")
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const config = useConfig().data

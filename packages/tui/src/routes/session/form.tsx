@@ -44,7 +44,9 @@ function requestOptions(form: FormWithLocation) {
 
 export function FormPrompt(props: { form: FormWithLocation }) {
   const client = useClient()
-  const { current: theme, mode: themeMode } = useThemes().contextual("elevated")
+  const themes = useThemes()
+  const theme = themes.contextual("elevated")
+  const themeMode = themes.mode
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const keymap = Keymap.use()

@@ -29,7 +29,7 @@ function getStashPreview(input: string, maxLength: number = 50): string {
 export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const dialog = useDialog()
   const stash = usePromptStash()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const shortcuts = Keymap.useShortcuts()
 
   const [toDelete, setToDelete] = createSignal<number>()

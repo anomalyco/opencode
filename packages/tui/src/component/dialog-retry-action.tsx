@@ -38,7 +38,7 @@ function panelOverlay(color: RGBA) {
 
 export function DialogRetryAction(props: DialogRetryActionProps) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const showGoTreatment = () => props.link === GO_URL
   const textBg = () => (showGoTreatment() ? panelOverlay(theme.background.default) : undefined)
   const [selected, setSelected] = createSignal<"dismiss" | "action">("action")

@@ -7,7 +7,7 @@ import { useDialog, type DialogContext } from "../ui/dialog"
 
 export function DialogProjectCopyName(props: { onConfirm: (name: string) => void }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const shortcuts = Keymap.useShortcuts()
   const [inputTarget, setInputTarget] = createSignal<InputRenderable>()
   let input: InputRenderable

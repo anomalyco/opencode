@@ -64,7 +64,7 @@ export function DialogIntegration(
 ) {
   const data = useData()
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const options = createMemo(() => {
     const providers = data.location.websearch.list() ?? []
     const providersByID = new Map(providers.map((provider) => [provider.id, provider]))
@@ -303,8 +303,8 @@ function CommandPending(props: {
 
 function CommandView(props: { title: string; output: string; message: string }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
-  const overlayTheme = useThemes().contextual("overlay").current
+  const theme = useThemes().contextual("elevated")
+  const overlayTheme = useThemes().contextual("overlay")
   onMount(() => dialog.setSize("large"))
   return (
     <box gap={1} paddingBottom={1}>
@@ -341,7 +341,7 @@ function KeyMethod(props: {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const [error, setError] = createSignal<string>()
 
   return (
@@ -516,7 +516,7 @@ function OAuthCode(props: {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const [error, setError] = createSignal<string>()
   let settled = false
 
@@ -561,7 +561,7 @@ function OAuthCode(props: {
 
 function OAuthView(props: { title: string; url?: string; instructions?: string; message: string; copy?: boolean }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">

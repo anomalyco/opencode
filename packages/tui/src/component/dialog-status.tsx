@@ -8,7 +8,7 @@ export type DialogStatusProps = {}
 
 export function DialogStatus() {
   const data = useData()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const dialog = useDialog()
 
   const mcp = createMemo(() => data.location.mcp.server.list() ?? [])

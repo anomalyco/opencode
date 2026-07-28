@@ -18,7 +18,7 @@ export type DialogPromptProps = {
 
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const shortcuts = Keymap.useShortcuts()
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   let textarea: TextareaRenderable

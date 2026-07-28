@@ -21,7 +21,7 @@ export type DialogConfirmResult = boolean | undefined
 
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated").current
+  const theme = useThemes().contextual("elevated")
   const [store, setStore] = createStore({
     active: "confirm" as "confirm" | "cancel",
   })

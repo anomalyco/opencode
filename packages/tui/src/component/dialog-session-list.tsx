@@ -20,7 +20,9 @@ export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
-  const { current: theme, mode } = useThemes().contextual("elevated")
+  const themes = useThemes()
+  const theme = themes.contextual("elevated")
+  const mode = themes.mode
   const client = useClient()
   const local = useLocal()
   const toast = useToast()
