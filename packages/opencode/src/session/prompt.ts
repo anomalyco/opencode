@@ -197,7 +197,6 @@ const layer = Layer.effect(
       user: SessionV1.User
       context: SessionV1.WithParts[]
       instruction: string
-      subtasksOnly?: boolean
     }) {
       const ag = yield* agents.get("title")
       if (!ag) return undefined
@@ -205,17 +204,7 @@ const layer = Layer.effect(
         ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
         : ((yield* provider.getSmallModel(input.providerID)) ??
           (yield* provider.getModel(input.providerID, input.modelID)))
-      const msgs = input.subtasksOnly
-        ? [
-            {
-              role: "user" as const,
-              content: input.context
-                .flatMap((m) => m.parts.filter((p): p is SessionV1.SubtaskPart => p.type === "subtask"))
-                .map((p) => p.prompt)
-                .join("\n"),
-            },
-          ]
-        : yield* MessageV2.toModelMessagesEffect(input.context, mdl)
+      const msgs = yield* MessageV2.toModelMessagesEffect(input.context, mdl)
       const text = yield* llm
         .stream({
           agent: ag,
@@ -240,62 +229,16 @@ const layer = Layer.effect(
         .map((line) => line.trim())
         .find((line) => line.length > 0)
       if (!cleaned) return undefined
-      return cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      return {
+        text: cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned,
+        model: `${mdl.providerID}/${mdl.id}`,
+      }
     })
 
-    // Sessions whose current title was machine-generated in this process, so
-    // the end-of-turn retitle may replace it but never a user-chosen one.
-    const autoTitles = yield* InstanceState.make(
-      Effect.fn("SessionPrompt.autoTitles")(() => Effect.succeed(new Set<SessionID>())),
-    )
-
-    const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
-      session: Session.Info
-      history: SessionV1.WithParts[]
-      providerID: ProviderV2.ID
-      modelID: ModelV2.ID
-    }) {
-      if (input.session.parentID) return
-      if (!Session.isDefaultTitle(input.session.title)) return
-
-      const real = (m: SessionV1.WithParts) =>
-        m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
-      const idx = input.history.findIndex(real)
-      if (idx === -1) return
-      if (input.history.filter(real).length !== 1) return
-
-      const context = input.history.slice(0, idx + 1)
-      const firstUser = context[idx]
-      if (!firstUser || firstUser.info.role !== "user") return
-
-      const subtasks = firstUser.parts.filter((p): p is SessionV1.SubtaskPart => p.type === "subtask")
-      const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
-
-      const t = yield* generateTitle({
-        sessionID: input.session.id,
-        providerID: input.providerID,
-        modelID: input.modelID,
-        user: firstUser.info,
-        context,
-        instruction: "Generate a title for this conversation:\n",
-        subtasksOnly: onlySubtasks,
-      })
-      if (!t) return
-      // The end-of-turn retitle (or a manual rename) may have landed while
-      // this title was being generated; only write over the provisional one.
-      const fresh = yield* sessions.get(input.session.id).pipe(Effect.option)
-      if (!Session.isDefaultTitle(Option.getOrUndefined(fresh)?.title ?? input.session.title)) return
-      const auto = yield* InstanceState.get(autoTitles)
-      yield* sessions
-        .setTitle({ sessionID: input.session.id, title: t })
-        .pipe(Effect.tap(() => Effect.sync(() => auto.add(input.session.id))))
-        .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
-    })
-
-    // The first-turn title is generated from the user's opening message only
-    // and often reads generic. Once the first turn completes, regenerate it
-    // from the whole conversation — but only if the current title is still
-    // the default or the one this process generated, never a renamed one.
+    // Single title write: fires when a turn completes with the title still at
+    // its default. A user-renamed title is never overwritten, and an aborted
+    // first turn stays default until the next completed turn (the history then
+    // has more than one real user message, so the guard must not require one).
     const retitle = Effect.fn("SessionPrompt.retitle")(function* (input: {
       session: Session.Info
       history: SessionV1.WithParts[]
@@ -307,11 +250,11 @@ const layer = Layer.effect(
       const fresh = yield* sessions.get(input.session.id).pipe(Effect.option)
       const current = Option.getOrUndefined(fresh)
       if (!current) return
-      const auto = yield* InstanceState.get(autoTitles)
-      if (!Session.isDefaultTitle(current.title) && !auto.has(current.id)) return
+      if (!Session.isDefaultTitle(current.title)) return
       const real = (m: SessionV1.WithParts) =>
         m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
-      if (input.history.filter(real).length !== 1) return
+      const trigger = input.history.findLast(real)
+      if (!trigger) return
 
       const t = yield* generateTitle({
         sessionID: current.id,
@@ -324,10 +267,15 @@ const layer = Layer.effect(
       })
       if (!t) return
       yield* sessions
-        .setTitle({ sessionID: current.id, title: t })
-        .pipe(Effect.tap(() => Effect.sync(() => auto.delete(current.id))))
+        .setTitle({
+          sessionID: current.id,
+          title: t.text,
+          source: "llm",
+          model: t.model,
+          triggerMessageId: trigger.info.id,
+        })
         .pipe(
-          Effect.catchCause((cause) => Effect.logError("failed to regenerate title", { error: Cause.squash(cause) })),
+          Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })),
         )
     })
 
@@ -1274,13 +1222,6 @@ const layer = Layer.effect(
           }
 
           step++
-          if (step === 1)
-            yield* title({
-              session,
-              modelID: lastUser.model.modelID,
-              providerID: lastUser.model.providerID,
-              history: msgs,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()

@@ -9,6 +9,7 @@ import { Decimal } from "decimal.js"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
+import { TitleHistoryStore } from "@opencode-ai/core/session/title-history-store"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionV2 } from "@opencode-ai/core/session"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
@@ -38,7 +39,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { Global } from "@opencode-ai/core/global"
-import { Effect, Layer, Option, Context, Schema, Types } from "effect"
+import { Cause, Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -427,7 +428,13 @@ export interface Interface {
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
-  readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
+  readonly setTitle: (input: {
+    sessionID: SessionID
+    title: string
+    source?: TitleHistoryStore.Source
+    model?: string
+    triggerMessageId?: MessageID
+  }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
   readonly setAgentModel: (input: {
@@ -488,7 +495,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | TitleHistoryStore.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -497,6 +504,7 @@ const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const titleHistory = yield* TitleHistoryStore.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -752,8 +760,28 @@ const layer: Layer.Layer<
       yield* patch(sessionID, { time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
-    const setTitle = Effect.fn("Session.setTitle")(function* (input: { sessionID: SessionID; title: string }) {
+    const setTitle = Effect.fn("Session.setTitle")(function* (input: {
+      sessionID: SessionID
+      title: string
+      source?: TitleHistoryStore.Source
+      model?: string
+      triggerMessageId?: MessageID
+    }) {
       yield* patch(input.sessionID, { title: input.title }).pipe(Effect.orDie)
+      // History is audit-only: a failed insert must never fail the rename.
+      yield* titleHistory
+        .insert({
+          sessionID: input.sessionID,
+          title: input.title,
+          source: input.source ?? "user",
+          model: input.model,
+          triggerMessageID: input.triggerMessageId,
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logError("failed to record title history", { error: Cause.squash(cause) }),
+          ),
+        )
     })
 
     const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
@@ -1012,7 +1040,7 @@ function listByProject(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, TitleHistoryStore.node],
 })
 
 export * as Session from "./session"

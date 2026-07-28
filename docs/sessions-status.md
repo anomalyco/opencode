@@ -98,8 +98,8 @@ Config example for a fully local classifier:
 
 ## First-turn retitle (implemented)
 
-The provisional title is generated from the opening user message only and
-often reads generic. When the first turn completes, the title is regenerated
-from the whole conversation by the same `title` agent — but only while the
-current title is still the default or the one this process generated (tracked
-in memory), so a manually renamed title is never overwritten.
+The title is written exactly once: when a turn completes with the title still
+at its default, the `title` agent generates it from the whole conversation. An
+aborted first turn leaves the default title until the next completed turn, and
+a manually renamed title is never overwritten. Every title write (LLM or
+manual rename) is recorded in `session_title_history` with its source.
