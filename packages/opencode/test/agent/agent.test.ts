@@ -69,6 +69,33 @@ it.instance("build agent has correct default properties", () =>
   }),
 )
 
+it.instance("auto agent is primary and mirrors the build ruleset", () =>
+  Effect.gen(function* () {
+    const auto = yield* load((svc) => svc.get("auto"))
+    const build = yield* load((svc) => svc.get("build"))
+    expect(auto).toBeDefined()
+    expect(auto?.mode).toBe("primary")
+    expect(auto?.native).toBe(true)
+    expect(auto?.hidden).toBeUndefined()
+    expect(auto?.permission).toEqual(build?.permission)
+  }),
+)
+
+it.instance("command-validator and session-summarizer are hidden deny-all agents", () =>
+  Effect.gen(function* () {
+    const validator = yield* load((svc) => svc.get("command-validator"))
+    const summarizer = yield* load((svc) => svc.get("session-summarizer"))
+    for (const agent of [validator, summarizer]) {
+      expect(agent).toBeDefined()
+      expect(agent?.native).toBe(true)
+      expect(agent?.hidden).toBe(true)
+      expect(agent?.prompt).toBeDefined()
+      expect(evalPerm(agent, "bash")).toBe("deny")
+      expect(evalPerm(agent, "edit")).toBe("deny")
+    }
+  }),
+)
+
 it.instance("plan agent denies edits except .opencode/plans/*", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
@@ -749,6 +776,7 @@ it.instance(
       agent: {
         build: { disable: true },
         plan: { disable: true },
+        auto: { disable: true },
       },
     },
   },
