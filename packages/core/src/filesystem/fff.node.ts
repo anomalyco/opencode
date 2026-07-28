@@ -1,16 +1,17 @@
-import {
-  FileFinder,
-  type DirItem,
-  type DirSearchResult,
-  type FileItem,
-  type GrepCursor,
-  type GrepMatch,
-  type GrepResult,
-  type InitOptions,
-  type MixedItem,
-  type MixedSearchResult,
-  type SearchResult,
+import type {
+  DirItem,
+  DirSearchResult,
+  FileItem,
+  GrepCursor,
+  GrepMatch,
+  GrepResult,
+  InitOptions,
+  MixedItem,
+  MixedSearchResult,
+  SearchResult,
 } from "@ff-labs/fff-node"
+
+const { FileFinder } = await import("@ff-labs/fff-node").catch(() => ({ FileFinder: undefined }))
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -108,10 +109,11 @@ export interface Picker {
 }
 
 export function available() {
-  return FileFinder.isAvailable()
+  return FileFinder?.isAvailable() ?? false
 }
 
 export function create(opts: Init): Result<Picker> {
+  if (!FileFinder) return { ok: false, error: "fff unavailable on node runtime" }
   const made = FileFinder.create(opts)
   if (!made.ok) return made
   const pick = made.value

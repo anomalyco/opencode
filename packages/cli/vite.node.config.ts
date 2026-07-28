@@ -191,7 +191,9 @@ process.env.OPENCODE_PARCEL_WATCHER_PATH = __ocPath.join(__ocAssetRoot, ${JSON.s
 process.env.OPENCODE_PHOTON_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(photonWasmAsset)})
 process.env.FFF_BINARY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffAsset)})
 process.env.OPENCODE_FFF_FFI_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffFfiAsset)})
-globalThis.__OPENCODE_FFF_FFI = require(process.env.OPENCODE_FFF_FFI_PATH)
+try {
+  globalThis.__OPENCODE_FFF_FFI = require(process.env.OPENCODE_FFF_FFI_PATH)
+} catch {}
 globalThis.__OPENCODE_PHOTON_WASM_PATH = process.env.OPENCODE_PHOTON_WASM_PATH
 if (process.platform === "linux") process.env.OPENTUI_LIBC = "glibc"`
 }
