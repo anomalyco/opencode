@@ -195,6 +195,41 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
+  it.live("reloads a configured plugin when its source file changes", () =>
+    withLocation(
+      { plugins: ["-*", "./external/mutable.ts"] },
+      Effect.gen(function* () {
+        yield* ready()
+        const agents = yield* Agent.Service
+        const bus = yield* Bus.Service
+        const location = yield* Location.Service
+        const file = path.join(location.directory, "external", "mutable.ts")
+
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("first")
+
+        const changed = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.promise(async () => {
+          await fs.writeFile(file, mutablePlugin("second"))
+          const modified = new Date(Date.now() + 5_000)
+          await fs.utimes(file, modified, modified)
+        })
+        yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
+      }),
+      false,
+      async (directory) => {
+        // Outside any {plugin,plugins} config-source directory, so only the
+        // configured-entrypoint watch can observe the edit.
+        const external = path.join(directory, "external")
+        await fs.mkdir(external, { recursive: true })
+        await fs.writeFile(path.join(external, "mutable.ts"), mutablePlugin("first"))
+      },
+    ),
+  )
+
   it.live("applies explicit removals after auto-discovery", () =>
     withLocation(
       { plugins: ["-*"] },
@@ -251,9 +286,9 @@ describe("PluginSupervisor config", () => {
         expect((yield* registry.list()).map((plugin) => String(plugin.id))).not.toContain("opencode.variant")
 
         const catalog = yield* Catalog.Service
-        expect(
-          (yield* catalog.model.get(Provider.ID.make("configured"), Model.ID.make("glm-5.2")))?.variants,
-        ).toEqual([expect.objectContaining({ id: "high", headers: { custom: "true" } })])
+        expect((yield* catalog.model.get(Provider.ID.make("configured"), Model.ID.make("glm-5.2")))?.variants).toEqual([
+          expect.objectContaining({ id: "high", headers: { custom: "true" } }),
+        ])
       }),
     ),
   )
