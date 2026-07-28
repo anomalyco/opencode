@@ -15,22 +15,40 @@ import { Shell } from "../../shell"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
-export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
 export const MAX_CAPTURE_BYTES = 1024 * 1024
 
 const BACKGROUND_STARTED = "The command was moved to the background."
 const BACKGROUND_INSTRUCTION =
   "You will be notified automatically when the command finishes. DO NOT sleep, poll, or proactively check on its progress."
+const OS =
+  process.platform === "darwin"
+    ? "macOS"
+    : process.platform === "win32"
+      ? "Windows"
+      : process.platform === "linux"
+        ? "Linux"
+        : process.platform
+const description = (shell?: string) =>
+  [
+    "Execute a shell command and return its output.",
+    ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
+    "Quote file paths containing spaces or special characters.",
+    "Prefer dedicated tools over shell commands when possible.",
+    "When output is large, the full result is saved to a file and a truncated preview is returned.",
+    "Rely on automatic truncation unless filtering the output is more useful.",
+    "Commands accept an optional timeout, background commands have no timeout by default.",
+    "Background commands return immediately, and you will be notified when they complete.",
+  ].join(" ")
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
   workdir: Schema.optionalKey(Schema.String).annotate({
-    description: "Working directory. Defaults to the active Location; relative paths resolve from that Location.",
+    description:
+      "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
   }),
-  timeout: Schema.optionalKey(NonNegativeInt.check(Schema.isLessThanOrEqualTo(MAX_TIMEOUT_MS)))
-    .annotate({
-      description: `Optional timeout in milliseconds. Zero means unlimited. Foreground commands default to ${DEFAULT_TIMEOUT_MS}; background commands default to unlimited. May not exceed ${MAX_TIMEOUT_MS}.`,
-    }),
+  timeout: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${DEFAULT_TIMEOUT_MS} for foreground commands. Background commands have no timeout by default.`,
+  }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the command in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
@@ -69,13 +87,11 @@ const modelOutput = (output: Output): string | undefined => {
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
 // TODO: Port BashArity reusable command-prefix approvals.
 // TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
-// TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once plugin hooks exist.
 // TODO: Persist job status and define restart recovery before exposing remote observation.
 // TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
 // TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
-// TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
 
 const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
 const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
@@ -144,7 +160,7 @@ export const Plugin = {
           ({
             name,
             options: { codemode: false },
-            description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. An optional timeout may be provided in milliseconds (zero: unlimited; foreground default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Background commands default to unlimited. Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Background mode (background=true) launches the command asynchronously and returns immediately; you are notified when it finishes.`,
+            description: description(),
             input: Input,
             output: Output,
             execute: (input, context) =>
@@ -291,5 +307,13 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
+
+    yield* ctx.session.hook("context", (event) =>
+      Effect.gen(function* () {
+        const tool = event.tools[name]
+        if (!tool) return
+        tool.description = description(yield* shell.name())
+      }),
+    )
   }),
 }
