@@ -2,12 +2,12 @@ import { InputRenderable, TextAttributes } from "@opentui/core"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { createSignal, onMount } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
 
 export function DialogProjectCopyName(props: { onConfirm: (name: string) => void }) {
   const dialog = useDialog()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const shortcuts = Keymap.useShortcuts()
   const [inputTarget, setInputTarget] = createSignal<InputRenderable>()
   let input: InputRenderable
@@ -47,10 +47,10 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           Name project copy
         </text>
-        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -61,17 +61,17 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
         }}
         onSubmit={confirm}
         placeholder="Project copy name"
-        placeholderColor={themeV2.text.subdued}
-        textColor={themeV2.text.formfield.default}
-        focusedTextColor={themeV2.text.formfield.default}
-        cursorColor={themeV2.text.formfield.default}
+        placeholderColor={theme.text.subdued}
+        textColor={theme.text.formfield.default}
+        focusedTextColor={theme.text.formfield.default}
+        cursorColor={theme.text.formfield.default}
       />
       <box paddingBottom={1} flexDirection="row" gap={2}>
-        <text fg={themeV2.text.default}>
-          enter <span style={{ fg: themeV2.text.subdued }}>submit</span>
+        <text fg={theme.text.default}>
+          enter <span style={{ fg: theme.text.subdued }}>submit</span>
         </text>
-        <text fg={themeV2.text.default}>
-          {shortcuts.get("dialog.project_copy.generate")} <span style={{ fg: themeV2.text.subdued }}>generate one</span>
+        <text fg={theme.text.default}>
+          {shortcuts.get("dialog.project_copy.generate")} <span style={{ fg: theme.text.subdued }}>generate one</span>
         </text>
       </box>
     </box>

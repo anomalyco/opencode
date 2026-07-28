@@ -68,7 +68,7 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { SessionTabs } from "./component/session-tabs"
 import { ThemeErrorToast } from "./component/theme-error-toast"
-import { ThemeProvider, useTheme } from "./context/theme"
+import { ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
@@ -445,8 +445,8 @@ function App(props: { pair?: DialogPairCredentials }) {
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
-  const themeState = useTheme()
-  const { themeV2, mode, supports, setMode, locked, lock, unlock } = themeState
+  const theme = useTheme()
+  const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
   const location = useLocation()
   const exit = useExit()
@@ -1170,7 +1170,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={themeV2.background.default}
+      backgroundColor={theme.background.default}
       onMouseDown={(evt) => {
         if (copyOnSelectEnabled()) return
         if (evt.button !== MouseButton.RIGHT) return

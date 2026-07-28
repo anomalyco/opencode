@@ -3,7 +3,7 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import open from "open"
-import { useTheme } from "../../context/theme"
+import { useThemes } from "../../context/theme"
 import type { FormField, FormValue } from "@opencode-ai/client"
 import type { FormWithLocation } from "../../context/data"
 import { useClient } from "../../context/client"
@@ -44,7 +44,9 @@ function requestOptions(form: FormWithLocation) {
 
 export function FormPrompt(props: { form: FormWithLocation }) {
   const client = useClient()
-  const { themeV2, mode: themeMode } = useTheme().contextual("elevated")
+  const themes = useThemes()
+  const theme = themes.contextual("elevated")
+  const themeMode = themes.mode
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const keymap = Keymap.use()
@@ -624,27 +626,27 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   return (
     <box
-      backgroundColor={themeV2.background.default}
+      backgroundColor={theme.background.default}
       border={["left"]}
-      borderColor={themeV2.hue.interactive[themeMode() === "light" ? 800 : 200]}
+      borderColor={theme.hue.interactive[themeMode() === "light" ? 800 : 200]}
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box paddingLeft={1}>
-          <text fg={themeV2.text.subdued}>{props.form.title}</text>
+          <text fg={theme.text.subdued}>{props.form.title}</text>
         </box>
         <Show when={message()}>
           <box paddingLeft={1}>
-            <text fg={themeV2.text.default}>{message()}</text>
+            <text fg={theme.text.default}>{message()}</text>
           </box>
         </Show>
         <Show when={!single() && !tabbed()}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
-            <text fg={themeV2.text.subdued}>
+            <text fg={theme.text.subdued}>
               {confirm() ? "Review" : `Field ${Math.min(store.tab, fields().length - 1) + 1} of ${fields().length}`}
             </text>
             <Show when={fields().length > 0}>
-              <text fg={themeV2.text.subdued}>
+              <text fg={theme.text.subdued}>
                 · {answered()}/{fields().length} completed
               </text>
             </Show>
@@ -661,10 +663,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     paddingRight={2}
                     backgroundColor={
                       isTab()
-                        ? themeV2.background.formfield.selected
+                        ? theme.background.formfield.selected
                         : tabHover() === index()
-                          ? themeV2.background.formfield.focused
-                          : themeV2.background.default
+                          ? theme.background.formfield.focused
+                          : theme.background.default
                     }
                     onMouseOver={() => setTabHover(index())}
                     onMouseOut={() => setTabHover(null)}
@@ -676,12 +678,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     <text
                       fg={
                         isTab()
-                          ? themeV2.text.formfield.selected
+                          ? theme.text.formfield.selected
                           : tabHover() === index()
-                            ? themeV2.text.formfield.focused
+                            ? theme.text.formfield.focused
                             : isAnswered()
-                              ? themeV2.text.default
-                              : themeV2.text.subdued
+                              ? theme.text.default
+                              : theme.text.subdued
                       }
                     >
                       {truncate(formLabel(item), 24)}
@@ -693,10 +695,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             <box
               backgroundColor={
                 confirm()
-                  ? themeV2.background.formfield.selected
+                  ? theme.background.formfield.selected
                   : tabHover() === "confirm"
-                    ? themeV2.background.formfield.focused
-                    : themeV2.background.default
+                    ? theme.background.formfield.focused
+                    : theme.background.default
               }
               onMouseOver={() => setTabHover("confirm")}
               onMouseOut={() => setTabHover(null)}
@@ -705,7 +707,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 selectTabFromMouse()
               }}
             >
-              <text fg={confirm() ? themeV2.text.formfield.selected : themeV2.text.formfield.default}>Confirm</text>
+              <text fg={confirm() ? theme.text.formfield.selected : theme.text.formfield.default}>Confirm</text>
             </box>
           </box>
         </Show>
@@ -714,13 +716,13 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           {(external) => (
             <box paddingLeft={1} gap={1}>
               <Show when={external().title}>
-                <text fg={themeV2.text.default}>{external().title}</text>
+                <text fg={theme.text.default}>{external().title}</text>
               </Show>
               <Show when={external().description}>
-                <text fg={themeV2.text.subdued}>{external().description}</text>
+                <text fg={theme.text.subdued}>{external().description}</text>
               </Show>
               <text
-                fg={themeV2.background.action.primary.default}
+                fg={theme.background.action.primary.default}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   openExternal()
@@ -729,9 +731,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 {external().url}
               </text>
               <text
-                fg={
-                  store.answers[external().key] === true ? themeV2.text.feedback.success.default : themeV2.text.subdued
-                }
+                fg={store.answers[external().key] === true ? theme.text.feedback.success.default : theme.text.subdued}
               >
                 {store.answers[external().key] === true
                   ? "✓ Acknowledged"
@@ -746,7 +746,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         <Show when={!confirm() && answerField()}>
           <box paddingLeft={1} gap={1}>
             <box>
-              <text fg={themeV2.text.default}>{answerField()!.description ?? formLabel(answerField()!)}</text>
+              <text fg={theme.text.default}>{answerField()!.description ?? formLabel(answerField()!)}</text>
             </box>
             <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>
@@ -763,12 +763,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     input() || formDisplayValue(answerField()!, store.answers[answerField()!.key], "(none)")
                   }
                   placeholder={placeholder()}
-                  placeholderColor={themeV2.text.subdued}
+                  placeholderColor={theme.text.subdued}
                   minHeight={1}
                   maxHeight={6}
-                  textColor={themeV2.text.default}
-                  focusedTextColor={themeV2.text.default}
-                  cursorColor={themeV2.text.default}
+                  textColor={theme.text.default}
+                  focusedTextColor={theme.text.default}
+                  cursorColor={theme.text.default}
                 />
               </box>
             </Show>
@@ -793,39 +793,35 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       >
                         <box flexDirection="row">
                           <box
-                            backgroundColor={
-                              active() ? themeV2.background.formfield.focused : themeV2.background.default
-                            }
+                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.default}
                             paddingRight={1}
                           >
                             <text
-                              fg={active() ? themeV2.text.formfield.focused : themeV2.text.formfield.default}
+                              fg={active() ? theme.text.formfield.focused : theme.text.formfield.default}
                             >{`${i() + 1}.`}</text>
                           </box>
                           <box
-                            backgroundColor={
-                              active() ? themeV2.background.formfield.focused : themeV2.background.default
-                            }
+                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.default}
                           >
                             <text
                               fg={
                                 active()
-                                  ? themeV2.text.formfield.focused
+                                  ? theme.text.formfield.focused
                                   : picked()
-                                    ? themeV2.text.formfield.selected
-                                    : themeV2.text.formfield.default
+                                    ? theme.text.formfield.selected
+                                    : theme.text.formfield.default
                               }
                             >
                               {multi() ? `[${picked() ? "✓" : " "}] ${row.label}` : row.label}
                             </text>
                           </box>
                           <Show when={!multi()}>
-                            <text fg={themeV2.text.formfield.selected}>{picked() ? " ✓" : ""}</text>
+                            <text fg={theme.text.formfield.selected}>{picked() ? " ✓" : ""}</text>
                           </Show>
                         </box>
                         <Show when={row.description}>
                           <box paddingLeft={3}>
-                            <text fg={themeV2.text.subdued}>{row.description}</text>
+                            <text fg={theme.text.subdued}>{row.description}</text>
                           </box>
                         </Show>
                       </box>
@@ -843,30 +839,28 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   >
                     <box flexDirection="row">
                       <box
-                        backgroundColor={other() ? themeV2.background.formfield.focused : themeV2.background.default}
+                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
                         paddingRight={1}
                       >
-                        <text fg={other() ? themeV2.text.formfield.focused : themeV2.text.formfield.default}>
+                        <text fg={other() ? theme.text.formfield.focused : theme.text.formfield.default}>
                           {`${rows().length + 1}.`}
                         </text>
                       </box>
-                      <box
-                        backgroundColor={other() ? themeV2.background.formfield.focused : themeV2.background.default}
-                      >
+                      <box backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}>
                         <text
                           fg={
                             other()
-                              ? themeV2.text.formfield.focused
+                              ? theme.text.formfield.focused
                               : customPicked()
-                                ? themeV2.text.feedback.success.default
-                                : themeV2.text.default
+                                ? theme.text.feedback.success.default
+                                : theme.text.default
                           }
                         >
                           {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
                         </text>
                       </box>
                       <Show when={!multi()}>
-                        <text fg={themeV2.text.feedback.success.default}>{customPicked() ? " ✓" : ""}</text>
+                        <text fg={theme.text.feedback.success.default}>{customPicked() ? " ✓" : ""}</text>
                       </Show>
                     </box>
                     <Show when={store.editing}>
@@ -882,18 +876,18 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                           }}
                           initialValue={input()}
                           placeholder="Type your own answer"
-                          placeholderColor={themeV2.text.subdued}
+                          placeholderColor={theme.text.subdued}
                           minHeight={1}
                           maxHeight={6}
-                          textColor={themeV2.text.default}
-                          focusedTextColor={themeV2.text.default}
-                          cursorColor={themeV2.text.default}
+                          textColor={theme.text.default}
+                          focusedTextColor={theme.text.default}
+                          cursorColor={theme.text.default}
                         />
                       </box>
                     </Show>
                     <Show when={!store.editing && input()}>
                       <box paddingLeft={3}>
-                        <text fg={themeV2.text.subdued}>{input()}</text>
+                        <text fg={theme.text.subdued}>{input()}</text>
                       </box>
                     </Show>
                   </box>
@@ -906,7 +900,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         <Show when={confirm()}>
           <Show when={tabbed()}>
             <box paddingLeft={1}>
-              <text fg={themeV2.text.default}>Review</text>
+              <text fg={theme.text.default}>Review</text>
             </box>
           </Show>
           <scrollbox
@@ -921,12 +915,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   return (
                     <box paddingLeft={1}>
                       <text>
-                        <span style={{ fg: themeV2.text.subdued }}>{truncate(formLabel(item), 40)}:</span>{" "}
+                        <span style={{ fg: theme.text.subdued }}>{truncate(formLabel(item), 40)}:</span>{" "}
                         <span
                           style={{
                             fg: acknowledged()
-                              ? themeV2.text.feedback.success.default
-                              : themeV2.text.feedback.error.default,
+                              ? theme.text.feedback.success.default
+                              : theme.text.feedback.error.default,
                           }}
                         >
                           {acknowledged() ? "Acknowledged" : "(acknowledgement required)"}
@@ -942,15 +936,15 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 return (
                   <box paddingLeft={1}>
                     <text>
-                      <span style={{ fg: themeV2.text.subdued }}>{truncate(formLabel(item), 40)}:</span>{" "}
+                      <span style={{ fg: theme.text.subdued }}>{truncate(formLabel(item), 40)}:</span>{" "}
                       <span
                         style={{
                           fg:
                             invalid() || missing()
-                              ? themeV2.text.feedback.error.default
+                              ? theme.text.feedback.error.default
                               : answered()
-                                ? themeV2.text.default
-                                : themeV2.text.subdued,
+                                ? theme.text.default
+                                : theme.text.subdued,
                         }}
                       >
                         {invalid() ?? (answered() ? value() : missing() ? "(required)" : "(not answered)")}
@@ -974,41 +968,41 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       >
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
-            <text fg={themeV2.text.default}>
-              {"⇆"} <span style={{ fg: themeV2.text.subdued }}>tab</span>
+            <text fg={theme.text.default}>
+              {"⇆"} <span style={{ fg: theme.text.subdued }}>tab</span>
             </text>
           </Show>
           <Show when={!confirm() && !textual() && !externalField()}>
-            <text fg={themeV2.text.default}>
-              {"↑↓"} <span style={{ fg: themeV2.text.subdued }}>select</span>
+            <text fg={theme.text.default}>
+              {"↑↓"} <span style={{ fg: theme.text.subdued }}>select</span>
             </text>
           </Show>
           <Show when={confirm() && fields().length > 0}>
-            <text fg={themeV2.text.default}>
-              {"↑↓"} <span style={{ fg: themeV2.text.subdued }}>scroll</span>
+            <text fg={theme.text.default}>
+              {"↑↓"} <span style={{ fg: theme.text.subdued }}>scroll</span>
             </text>
           </Show>
           <text
-            fg={themeV2.text.default}
+            fg={theme.text.default}
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               if (confirm()) submit()
               if (externalField()) acknowledgeExternal()
             }}
           >
-            enter <span style={{ fg: themeV2.text.subdued }}>{actionLabel()}</span>
+            enter <span style={{ fg: theme.text.subdued }}>{actionLabel()}</span>
           </text>
           <Show when={externalField() && clipboard.write}>
-            <text fg={themeV2.text.default} onMouseUp={copyExternal}>
-              c <span style={{ fg: themeV2.text.subdued }}>copy</span>
+            <text fg={theme.text.default} onMouseUp={copyExternal}>
+              c <span style={{ fg: theme.text.subdued }}>copy</span>
             </text>
           </Show>
-          <text fg={themeV2.text.default} onMouseUp={cancel}>
-            esc <span style={{ fg: themeV2.text.subdued }}>dismiss</span>
+          <text fg={theme.text.default} onMouseUp={cancel}>
+            esc <span style={{ fg: theme.text.subdued }}>dismiss</span>
           </text>
         </box>
         <Show when={store.error}>
-          <text fg={themeV2.text.feedback.error.default}>{store.error}</text>
+          <text fg={theme.text.feedback.error.default}>{store.error}</text>
         </Show>
       </box>
     </box>

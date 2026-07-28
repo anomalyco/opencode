@@ -5,7 +5,7 @@ import { Keymap } from "../context/keymap"
 import { pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import type { McpServer } from "@opencode-ai/client"
 import { useClipboard } from "../context/clipboard"
@@ -20,12 +20,12 @@ function statusError(status: McpServer["status"]) {
 }
 
 function Status(props: { enabled: boolean; loading: boolean }) {
-  const { themeV2 } = useTheme().contextual("elevated")
-  if (props.loading) return <span style={{ fg: themeV2.text.subdued }}>⋯ Loading</span>
+  const theme = useThemes().contextual("elevated")
+  if (props.loading) return <span style={{ fg: theme.text.subdued }}>⋯ Loading</span>
   if (props.enabled) {
-    return <span style={{ fg: themeV2.text.feedback.success.default, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
+    return <span style={{ fg: theme.text.feedback.success.default, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
   }
-  return <span style={{ fg: themeV2.text.subdued }}>○ Disabled</span>
+  return <span style={{ fg: theme.text.subdued }}>○ Disabled</span>
 }
 
 export function DialogMcp() {
@@ -33,7 +33,7 @@ export function DialogMcp() {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<McpServer>()
   const [loading, setLoading] = createSignal<string | null>(null)
@@ -110,7 +110,7 @@ export function DialogMcp() {
             ]}
             footer={
               <Show when={focusedError()}>
-                <text fg={themeV2.text.subdued}>enter to view error</text>
+                <text fg={theme.text.subdued}>enter to view error</text>
               </Show>
             }
           />
@@ -134,8 +134,8 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
   const dialog = useDialog()
   const clipboard = useClipboard()
   const toast = useToast()
-  const { themeV2 } = useTheme().contextual("elevated")
-  const { themeV2: overlayTheme } = useTheme().contextual("overlay")
+  const theme = useThemes().contextual("elevated")
+  const overlayTheme = useThemes().contextual("overlay")
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
@@ -171,14 +171,14 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
   return (
     <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           MCP server: {props.server.name}
         </text>
-        <text fg={themeV2.text.subdued} onMouseUp={props.onBack}>
+        <text fg={theme.text.subdued} onMouseUp={props.onBack}>
           esc back
         </text>
       </box>
-      <text fg={themeV2.text.feedback.error.default}>✗ Failed</text>
+      <text fg={theme.text.feedback.error.default}>✗ Failed</text>
       <box
         backgroundColor={overlayTheme.background.default}
         paddingLeft={2}
@@ -198,8 +198,8 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
         </scrollbox>
       </box>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={themeV2.text.subdued}>↑↓ scroll</text>
-        <text fg={themeV2.text.subdued} onMouseUp={copy}>
+        <text fg={theme.text.subdued}>↑↓ scroll</text>
+        <text fg={theme.text.subdued} onMouseUp={copy}>
           {copied() ? "✓ copied" : "c copy details"}
         </text>
       </box>

@@ -6,7 +6,7 @@ import { DEFAULT_THEME, selectTheme } from "@opencode-ai/theme/tui"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
 import { ConfigProvider } from "../../../src/config"
-import { ThemeProvider, useTheme, type ThemeError } from "../../../src/context/theme"
+import { ThemeContextProvider, ThemeProvider, useTheme, useThemes, type ThemeError } from "../../../src/context/theme"
 
 async function wait(fn: () => boolean) {
   const started = Date.now()
@@ -27,17 +27,17 @@ test("uses an available mode while retaining the pinned preference", async () =>
   darkOnly.theme.background = "#111111"
   darkOnly.theme.text = "#eeeeee"
   const native = { version: 2, dark: { text: { default: "#abcdef" } } } as const
-  let theme: ReturnType<typeof useTheme> | undefined
+  let themes: ReturnType<typeof useThemes> | undefined
 
   function Probe() {
-    const value = useTheme()
-    theme = value
+    const value = useThemes()
+    themes = value
     return <text>{value.mode()}</text>
   }
 
   function current() {
-    if (!theme) throw new Error("Theme provider is not mounted")
-    return theme
+    if (!themes) throw new Error("Theme provider is not mounted")
+    return themes
   }
 
   const app = await testRender(
@@ -56,7 +56,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
   app.renderer.start()
 
   try {
-    await wait(() => theme?.ready === true)
+    await wait(() => themes?.ready === true)
     expect(current().mode()).toBe("light")
     expect(current().modes()).toEqual(["light"])
     expect(current().supports("dark")).toBeFalse()
@@ -72,7 +72,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
     expect(current().set("native")).toBeTrue()
     await wait(() => current().selected === "native")
     expect(current().modes()).toEqual(["dark"])
-    expect(current().themeV2.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
+    expect(current().current.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
   } finally {
     app.renderer.destroy()
   }
@@ -83,13 +83,13 @@ test.each([
   ["mode merging", { version: 2, light: { mergeMode: true } }],
   ["token reference", { version: 2, light: { text: { default: "$missing" } } }],
 ] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
-  let theme: ReturnType<typeof useTheme> | undefined
+  let themes: ReturnType<typeof useThemes> | undefined
   let failure: ThemeError | undefined
   let unsubscribe: (() => void) | undefined
 
   function Probe() {
-    const value = useTheme()
-    theme = value
+    const value = useThemes()
+    themes = value
     unsubscribe = value.onError((error) => (failure = error))
     return <text>{value.selected}</text>
   }
@@ -107,8 +107,8 @@ test.each([
   app.renderer.start()
 
   try {
-    await wait(() => theme?.ready === true)
-    expect(theme?.selected).toBe("opencode")
+    await wait(() => themes?.ready === true)
+    expect(themes?.selected).toBe("opencode")
     expect(failure?.name).toBe("invalid")
     expect(failure?.error).toBeInstanceOf(Error)
     expect(failure?.error.message.length).toBeGreaterThan(0)
@@ -118,17 +118,30 @@ test.each([
   }
 })
 
-test("contextual themes fall back to a standalone theme's base view", async () => {
+test("contextual hooks resolve overrides and fall back to a standalone theme's base view", async () => {
   const standalone = {
     version: 2,
     standalone: true,
-    dark: { hue: selectTheme(DEFAULT_THEME, "dark").hue },
+    dark: {
+      hue: selectTheme(DEFAULT_THEME, "dark").hue,
+      "@context:elevated": { text: { default: "#abcdef" } },
+    },
   } as const
+  let themes: ReturnType<typeof useThemes> | undefined
   let theme: ReturnType<typeof useTheme> | undefined
 
-  function Probe() {
+  function ContextProbe() {
     theme = useTheme()
-    return <text>{theme.selected}</text>
+    return <text>{theme.text.default.toString()}</text>
+  }
+
+  function Probe() {
+    themes = useThemes()
+    return (
+      <ThemeContextProvider context="elevated">
+        <ContextProbe />
+      </ThemeContextProvider>
+    )
   }
 
   const app = await testRender(
@@ -144,10 +157,12 @@ test("contextual themes fall back to a standalone theme's base view", async () =
   app.renderer.start()
 
   try {
-    await wait(() => theme?.ready === true)
-    if (!theme) throw new Error("Theme provider is not mounted")
-    expect(theme.contextual("elevated").themeV2.text.default).toBe(theme.themeV2.text.default)
-    expect(theme.contextual("overlay").themeV2.background.default).toBe(theme.themeV2.background.default)
+    await wait(() => themes?.ready === true)
+    if (!themes) throw new Error("Theme provider is not mounted")
+    if (!theme) throw new Error("Contextual theme is not mounted")
+    expect(theme.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
+    expect(theme.text.default).toBe(themes.contextual("elevated").text.default)
+    expect(themes.contextual("overlay").background.default).toBe(themes.current.background.default)
   } finally {
     app.renderer.destroy()
   }

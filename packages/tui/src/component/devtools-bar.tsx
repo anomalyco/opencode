@@ -11,7 +11,7 @@ import { useData } from "../context/data"
 import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
 import { Keymap } from "../context/keymap"
-import { useTheme } from "../context/theme"
+import { useTheme, useThemes } from "../context/theme"
 import { DevTools } from "../devtools"
 import { usePlugin } from "../plugin/context"
 import { errorMessage } from "../util/error"
@@ -31,12 +31,12 @@ export function DevToolsBar() {
   const location = useLocation()
   const route = useRoute()
   const plugins = usePlugin()
-  const theme = useTheme()
+  const themes = useThemes()
   const keymap = Keymap.use()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
-  const { themeV2, mode, supports, setMode } = theme
-  const elevatedTheme = theme.contextual("elevated").themeV2
+  const { current: theme, mode, supports, setMode } = themes
+  const elevatedTheme = themes.contextual("elevated")
   const [panel, setPanel] = createSignal<Panel>()
   const [dumping, setDumping] = createSignal(false)
   const [dumpPath, setDumpPath] = createSignal<string>()
@@ -196,8 +196,8 @@ export function DevToolsBar() {
             })),
           },
           theme: {
-            name: theme.selected,
-            mode: theme.mode(),
+            name: themes.selected,
+            mode: themes.mode(),
           },
         },
         null,
@@ -213,7 +213,7 @@ export function DevToolsBar() {
   }
 
   return (
-    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={themeV2.raise(themeV2.background.default)}>
+    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.raise(theme.background.default)}>
       <Show when={panel()}>
         <box
           position="absolute"
@@ -230,12 +230,12 @@ export function DevToolsBar() {
         <text
           fg={
             panel() === "server"
-              ? themeV2.text.action.primary.focused
+              ? theme.text.action.primary.focused
               : serverIndicator().state === "connected"
-                ? themeV2.text.feedback.success.default
+                ? theme.text.feedback.success.default
                 : serverIndicator().state === "disconnected"
-                  ? themeV2.text.feedback.error.default
-                  : themeV2.text.default
+                  ? theme.text.feedback.error.default
+                  : theme.text.default
           }
         >
           {serverIndicator().icon}
@@ -243,10 +243,10 @@ export function DevToolsBar() {
         <text
           fg={
             panel() === "server"
-              ? themeV2.text.action.primary.focused
+              ? theme.text.action.primary.focused
               : serverIndicator().state === "disconnected"
-                ? themeV2.text.feedback.error.default
-                : themeV2.text.subdued
+                ? theme.text.feedback.error.default
+                : theme.text.subdued
           }
         >
           {" "}
@@ -279,10 +279,10 @@ export function DevToolsBar() {
         <text
           fg={
             panel() === "ui"
-              ? themeV2.text.action.primary.focused
+              ? theme.text.action.primary.focused
               : runtime() === "high"
-                ? themeV2.text.feedback.error.default
-                : themeV2.text.subdued
+                ? theme.text.feedback.error.default
+                : theme.text.subdued
           }
         >
           {statusIcon(runtime())}
@@ -290,10 +290,10 @@ export function DevToolsBar() {
         <text
           fg={
             panel() === "ui"
-              ? themeV2.text.action.primary.focused
+              ? theme.text.action.primary.focused
               : runtime() === "high"
-                ? themeV2.text.feedback.error.default
-                : themeV2.text.subdued
+                ? theme.text.feedback.error.default
+                : theme.text.subdued
           }
         >
           {" "}
@@ -320,11 +320,11 @@ export function DevToolsBar() {
         </Show>
       </BarItem>
       <BarItem active={panel() === "theme"} onClick={() => toggle("theme")}>
-        <text fg={panel() === "theme" ? themeV2.text.action.primary.focused : themeV2.text.subdued}>Theme</text>
+        <text fg={panel() === "theme" ? theme.text.action.primary.focused : theme.text.subdued}>Theme</text>
         <Show when={panel() === "theme"}>
           <PanelBox>
             <PanelTitle>Theme</PanelTitle>
-            <Row label="Name" value={theme.selected} />
+            <Row label="Name" value={themes.selected} />
             <Row label="Mode" value={mode()} />
             <For each={themePerformance()}>{(entry) => <Row label={entry.key} value={String(entry.value)} />}</For>
             <Show when={canSwitchMode()}>
@@ -336,7 +336,7 @@ export function DevToolsBar() {
         </Show>
       </BarItem>
       <BarItem active={panel() === "tools"} onClick={() => toggle("tools")}>
-        <text fg={panel() === "tools" ? themeV2.text.action.primary.focused : themeV2.text.subdued}>Tools</text>
+        <text fg={panel() === "tools" ? theme.text.action.primary.focused : theme.text.subdued}>Tools</text>
         <Show when={panel() === "tools"}>
           <PanelBox>
             <PanelTitle>Tools</PanelTitle>
@@ -406,14 +406,14 @@ export function DevToolsBar() {
         </Show>
       </BarItem>
       <box flexGrow={1} minWidth={0}>
-        <TimeToFirstDraw visible={timing()} width="100%" fg={themeV2.text.subdued} label="Time to first draw" />
+        <TimeToFirstDraw visible={timing()} width="100%" fg={theme.text.subdued} label="Time to first draw" />
       </box>
     </box>
   )
 }
 
 function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
-  const { themeV2 } = useTheme()
+  const theme = useTheme()
   const renderer = useRenderer()
   return (
     <box
@@ -423,7 +423,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
       flexDirection="row"
       paddingLeft={1}
       paddingRight={1}
-      backgroundColor={props.active ? themeV2.background.action.primary.focused : undefined}
+      backgroundColor={props.active ? theme.background.action.primary.focused : undefined}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         props.onClick()
@@ -435,7 +435,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
 }
 
 function PanelBox(props: ParentProps) {
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const renderer = useRenderer()
   return (
     <box
@@ -448,7 +448,7 @@ function PanelBox(props: ParentProps) {
       paddingRight={2}
       paddingTop={1}
       paddingBottom={1}
-      backgroundColor={themeV2.background.default}
+      backgroundColor={theme.background.default}
       flexDirection="column"
       onMouseUp={(event) => {
         if (renderer.getSelection()?.getSelectedText()) return
@@ -461,32 +461,32 @@ function PanelBox(props: ParentProps) {
 }
 
 function PanelTitle(props: ParentProps) {
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   return (
-    <text fg={themeV2.text.default} attributes={TextAttributes.BOLD} marginBottom={1}>
+    <text fg={theme.text.default} attributes={TextAttributes.BOLD} marginBottom={1}>
       {props.children}
     </text>
   )
 }
 
 function Row(props: { label: string; value: string }) {
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   return (
     <box flexDirection="row">
-      <text fg={themeV2.text.subdued}>{props.label}</text>
+      <text fg={theme.text.subdued}>{props.label}</text>
       <box flexGrow={1} />
-      <text fg={themeV2.text.default}>{props.value}</text>
+      <text fg={theme.text.default}>{props.value}</text>
     </box>
   )
 }
 
 function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; hoverBackground?: boolean }>) {
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const [hovered, setHovered] = createSignal(false)
   return (
     <box
       backgroundColor={
-        props.hoverBackground && hovered() && !props.disabled ? themeV2.background.action.primary.hovered : undefined
+        props.hoverBackground && hovered() && !props.disabled ? theme.background.action.primary.hovered : undefined
       }
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
@@ -495,7 +495,7 @@ function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; ho
         if (!props.disabled) props.onClick()
       }}
     >
-      <text fg={props.disabled ? themeV2.text.subdued : themeV2.text.action.primary.default}>{props.children}</text>
+      <text fg={props.disabled ? theme.text.subdued : theme.text.action.primary.default}>{props.children}</text>
     </box>
   )
 }
@@ -506,7 +506,7 @@ function cpuPercent(microseconds: number, milliseconds: number) {
 }
 
 function ProcessStat(props: { label: string; values: readonly number[]; unit: string; decimals?: number }) {
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const value = () => {
     const value = props.values.at(-1)
     if (value === undefined) return "--"
@@ -515,13 +515,13 @@ function ProcessStat(props: { label: string; values: readonly number[]; unit: st
   return (
     <box flexDirection="row">
       <box width={7}>
-        <text fg={themeV2.text.subdued}>{props.label}</text>
+        <text fg={theme.text.subdued}>{props.label}</text>
       </box>
       <box flexGrow={1}>
-        <text fg={props.values.length ? themeV2.text.default : themeV2.text.subdued}>{brailleGraph(props.values)}</text>
+        <text fg={props.values.length ? theme.text.default : theme.text.subdued}>{brailleGraph(props.values)}</text>
       </box>
       <box width={8} alignItems="flex-end">
-        <text fg={props.values.length ? themeV2.text.default : themeV2.text.subdued}>{value()}</text>
+        <text fg={props.values.length ? theme.text.default : theme.text.subdued}>{value()}</text>
       </box>
     </box>
   )

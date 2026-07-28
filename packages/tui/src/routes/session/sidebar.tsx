@@ -1,6 +1,6 @@
 import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
-import { useTheme } from "../../context/theme"
+import { useThemes } from "../../context/theme"
 import { useConfig } from "../../config"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { PluginSlot } from "../../plugin/context"
@@ -10,7 +10,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
   const data = useData()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -18,7 +18,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   return (
     <Show when={session()}>
       <box
-        backgroundColor={themeV2.background.default}
+        backgroundColor={theme.background.default}
         width={42}
         height="100%"
         paddingTop={1}
@@ -32,8 +32,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
             trackOptions: {
-              backgroundColor: themeV2.background.default,
-              foregroundColor: themeV2.scrollbar.default,
+              backgroundColor: theme.background.default,
+              foregroundColor: theme.scrollbar.default,
             },
           }}
         >
@@ -45,11 +45,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               title={session()!.title}
             >
               <box paddingRight={1}>
-                <text fg={themeV2.text.default}>
+                <text fg={theme.text.default}>
                   <b>{session()!.title}</b>
                 </text>
                 <Show when={session()!.location.workspaceID}>
-                  <text fg={themeV2.text.subdued}>{session()!.location.workspaceID}</text>
+                  <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>
                 </Show>
               </box>
             </pluginRuntime.Slot>

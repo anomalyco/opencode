@@ -7,7 +7,7 @@ import { useRoute } from "../context/route"
 import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { useClient } from "../context/client"
 import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
@@ -21,7 +21,9 @@ export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
-  const { themeV2, mode } = useTheme().contextual("elevated")
+  const themes = useThemes()
+  const theme = themes.contextual("elevated")
+  const mode = themes.mode
   const client = useClient()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
@@ -112,13 +114,13 @@ export function DialogSessionList() {
         value: session.id,
         category,
         footer,
-        bg: deleting ? themeV2.background.action.destructive.focused : undefined,
-        fg: deleting ? themeV2.text.action.destructive.focused : undefined,
+        bg: deleting ? theme.background.action.destructive.focused : undefined,
+        fg: deleting ? theme.text.action.destructive.focused : undefined,
         gutter: data.session.family(session.id).some((id) => data.session.status(id) === "running")
           ? () => <Spinner />
           : slot === undefined
             ? undefined
-            : () => <text fg={themeV2.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,
+            : () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,
       }
     }
 
@@ -146,12 +148,12 @@ export function DialogSessionList() {
       }}
       emptyView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={themeV2.text.subdued}>No sessions available</text>
+          <text fg={theme.text.subdued}>No sessions available</text>
         </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={searchState().error ? themeV2.text.feedback.error.default : themeV2.text.subdued}>
+          <text fg={searchState().error ? theme.text.feedback.error.default : theme.text.subdued}>
             {searchState().message}
           </text>
         </box>

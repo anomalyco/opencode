@@ -23,7 +23,7 @@ import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
 import { useTuiApp, useTuiLifecycle, useTuiPaths } from "../context/runtime"
 import { useLocation } from "../context/location"
-import { useTheme } from "../context/theme"
+import { useTheme, useThemes } from "../context/theme"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -80,7 +80,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const paths = useTuiPaths()
   const location = useLocation()
   const theme = useTheme()
-  const pluginTheme = createPluginTheme(theme)
+  const themes = useThemes()
+  const pluginTheme = createPluginTheme(theme, themes)
   const dialog = useDialog()
   const toast = useToast()
   const attention = useAttention()
@@ -528,19 +529,20 @@ function isPlugin(value: unknown): value is Plugin.Definition {
   )
 }
 
-type PluginTheme = ReturnType<typeof useTheme>["themeV2"] & {
+type PluginTheme = ReturnType<typeof useTheme> & {
   contextual(context: "elevated" | "overlay"): PluginTheme
-  syntaxStyle(): ReturnType<ReturnType<typeof useTheme>["syntax"]>
+  syntaxStyle(): ReturnType<ReturnType<typeof useThemes>["currentSyntax"]>
 }
 
-export function createPluginTheme(theme: ReturnType<typeof useTheme>): PluginTheme {
-  return new Proxy(theme.themeV2 as PluginTheme, {
+export function createPluginTheme(theme: ReturnType<typeof useTheme>, themes: ReturnType<typeof useThemes>): PluginTheme {
+  return new Proxy(theme as PluginTheme, {
     get(target, property, receiver) {
-      if (property === "contextual")
-        return (context: "elevated" | "overlay") => createPluginTheme(theme.contextual(context))
-      if (property === "syntaxStyle") return theme.syntax
+      if (property === "contextual") {
+        return (context: "elevated" | "overlay") => createPluginTheme(themes.contextual(context), themes)
+      }
+      if (property === "syntaxStyle") return themes.currentSyntax
       if (Reflect.has(target, property)) return Reflect.get(target, property, receiver)
-      return Reflect.get(theme, property, theme)
+      return Reflect.get(themes, property, themes)
     },
   })
 }

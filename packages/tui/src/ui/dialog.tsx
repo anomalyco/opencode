@@ -1,7 +1,7 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
@@ -16,7 +16,7 @@ export function Dialog(
   }>,
 ) {
   const dimensions = useTerminalDimensions()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useThemes().contextual("elevated")
   const renderer = useRenderer()
 
   let dismiss = false
@@ -59,7 +59,7 @@ export function Dialog(
         }}
         width={width()}
         maxWidth={dimensions().width - 2}
-        backgroundColor={themeV2.background.default}
+        backgroundColor={theme.background.default}
         paddingTop={1}
       >
         {props.children}
