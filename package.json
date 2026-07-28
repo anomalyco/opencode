@@ -155,6 +155,7 @@
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch",
-    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch"
+    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
+    "@modelcontextprotocol/client@2.0.0-beta.5": "patches/@modelcontextprotocol%2Fclient@2.0.0-beta.5.patch"
   }
 }
