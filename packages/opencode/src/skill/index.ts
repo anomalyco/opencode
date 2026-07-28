@@ -16,7 +16,6 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
-import { escapeHtml } from "@/util/html"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -330,7 +329,6 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
           "  <skill>",
           `    <name>${skill.name}</name>`,
           `    <description>${skill.description}</description>`,
-          `    <location>${escapeHtml(skill.location)}</location>`,
           "  </skill>",
         ]),
       "</available_skills>",
