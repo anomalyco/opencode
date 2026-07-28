@@ -2,7 +2,6 @@ import { useSync } from "../../context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiPaths } from "../../context/runtime"
-import { InstallationVersion, InstallationChannel } from "@opencode-ai/core/installation/version"
 import { abbreviateHome } from "../../runtime"
 import { useCommandShortcut } from "../../keymap"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
@@ -46,7 +45,16 @@ export function Sidebar(props: { sessionID: string }) {
 
   return (
     <Show when={session()}>
-      <box backgroundColor={theme.backgroundPanel} width="100%" flexShrink={0} paddingLeft={2} paddingRight={2} gap={1}>
+      <box
+        backgroundColor={theme.backgroundPanel}
+        height={1}
+        width="100%"
+        flexShrink={0}
+        paddingLeft={2}
+        paddingRight={2}
+        flexDirection="row"
+        justifyContent="space-between"
+      >
         <box flexDirection="row" gap={2}>
           <text fg={theme.text}>
             <b>{session()!.title}</b>
@@ -59,14 +67,9 @@ export function Sidebar(props: { sessionID: string }) {
               </text>
             )}
           </Show>
-          <text fg={theme.textMuted}>·</text>
-          <text fg={theme.textMuted}>{pathInfo()}</text>
         </box>
         <box flexDirection="row" gap={2}>
-          <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>•</span> OpenCode {InstallationVersion}
-            <Show when={InstallationChannel !== "latest"}> ({InstallationChannel})</Show>
-          </text>
+          <text fg={theme.textMuted}>{pathInfo()}</text>
           <Show when={paletteShortcut()}>
             <text fg={theme.text}>
               {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
