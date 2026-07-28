@@ -5,10 +5,7 @@ import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "e
 
 export type Response = readonly LLMEvent[] | Stream.Stream<LLMEvent, LLMError>
 
-export interface Gate {
-  readonly started: Effect.Effect<void>
-  readonly release: Effect.Effect<void>
-}
+export type Gate = Readonly<{ started: Effect.Effect<void>; release: Effect.Effect<void> }>
 
 export interface Interface {
   readonly requests: LLMRequest[]
@@ -62,17 +59,21 @@ export const layer = (transformRequest: (request: LLMRequest) => LLMRequest = (r
     Effect.gen(function* () {
       const requests: LLMRequest[] = []
       const responses: Response[] = []
-      const waits: Array<{ readonly count: number; readonly ready: Deferred.Deferred<void> }> = []
+      let started = Deferred.makeUnsafe<void>()
       let fallback: Response = []
       let activeGate: { readonly started: Queue.Queue<void>; readonly release: Latch.Latch } | undefined
+      const wait = (count: number): Effect.Effect<void> =>
+        Effect.suspend(() =>
+          requests.length >= count ? Effect.void : Deferred.await(started).pipe(Effect.andThen(wait(count))),
+        )
 
       const client = LLMClient.Service.of({
         prepare: () => Effect.die("unused"),
         stream: ((request: LLMRequest) => {
           requests.push(transformRequest(request))
-          const ready = waits.filter((wait) => requests.length >= wait.count)
-          waits.splice(0, waits.length, ...waits.filter((wait) => requests.length < wait.count))
-          ready.forEach((wait) => Deferred.doneUnsafe(wait.ready, Effect.void))
+          const waiting = started
+          started = Deferred.makeUnsafe()
+          Deferred.doneUnsafe(waiting, Effect.void)
           const response = toStream(responses.shift() ?? fallback)
           const gate = activeGate
           if (!gate) return response
@@ -93,13 +94,7 @@ export const layer = (transformRequest: (request: LLMRequest) => LLMRequest = (r
           Effect.sync(() => {
             fallback = response
           }),
-        wait: (count) =>
-          Effect.gen(function* () {
-            if (requests.length >= count) return
-            const ready = yield* Deferred.make<void>()
-            waits.push({ count, ready })
-            yield* Deferred.await(ready)
-          }),
+        wait,
         gate: Effect.gen(function* () {
           const gate = {
             started: yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown),
@@ -125,30 +120,13 @@ export const layer = (transformRequest: (request: LLMRequest) => LLMRequest = (r
 
 export const clientLayer = Layer.effect(
   LLMClient.Service,
-  Effect.gen(function* () {
-    return (yield* Service).client
-  }),
+  Effect.map(Service, (service) => service.client),
 )
 
-export const push = (...responses: readonly Response[]) =>
-  Effect.gen(function* () {
-    const service = yield* Service
-    yield* service.push(...responses)
-  })
+export const push = (...responses: readonly Response[]) => Service.use((service) => service.push(...responses))
 
-export const always = (response: Response) =>
-  Effect.gen(function* () {
-    const service = yield* Service
-    yield* service.always(response)
-  })
+export const always = (response: Response) => Service.use((service) => service.always(response))
 
-export const wait = (count: number) =>
-  Effect.gen(function* () {
-    const service = yield* Service
-    yield* service.wait(count)
-  })
+export const wait = (count: number) => Service.use((service) => service.wait(count))
 
-export const gate = Effect.gen(function* () {
-  const service = yield* Service
-  return yield* service.gate
-})
+export const gate = Service.use((service) => service.gate)
