@@ -29,7 +29,7 @@ export function SessionTabs() {
 
   return (
     <box height={1} flexShrink={0} position="relative" flexDirection="row" paddingLeft={1} paddingRight={1}>
-      <TabShadow strength={mode() === "light" ? 0.06 : 0.12} />
+      <TabShadow strength={mode() === "light" ? 0.06 : 0.12} color={themeV2.background.default} />
       <Show when={visible().before > 0}>
         <text width={OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
           ‹{visible().before}
