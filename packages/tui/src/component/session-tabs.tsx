@@ -1,10 +1,11 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
-import { Spinner } from "./spinner"
+import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useTheme } from "../context/theme"
 import { visibleSessionTabs } from "../context/session-tabs-model"
 import { Locale } from "../util/locale"
+import { TabPulse } from "./tab-pulse"
 
 const TAB_WIDTH = 22
 
@@ -12,16 +13,13 @@ export function SessionTabs() {
   const tabs = useSessionTabs()
   const dimensions = useTerminalDimensions()
   const { themeV2, mode } = useTheme()
+  const config = useConfig().data
   const [hovered, setHovered] = createSignal<string>()
   const accent = () => themeV2.hue.accent[mode() === "light" ? 800 : 200]
   const tabWidth = createMemo(() => Math.max(8, Math.min(TAB_WIDTH, dimensions().width - 4)))
-  const titleWidth = createMemo(() => Math.max(1, tabWidth() - 7))
+  const titleWidth = createMemo(() => Math.max(1, tabWidth() - 6))
   const visible = createMemo(() =>
-    visibleSessionTabs(
-      tabs.tabs(),
-      tabs.current(),
-      Math.max(1, Math.floor((dimensions().width - 4) / tabWidth())),
-    ),
+    visibleSessionTabs(tabs.tabs(), tabs.current(), Math.max(1, Math.floor((dimensions().width - 4) / tabWidth()))),
   )
 
   return (
@@ -48,49 +46,61 @@ export function SessionTabs() {
           return (
             <box
               width={tabWidth()}
+              position="relative"
               flexDirection="row"
               backgroundColor={background()}
               onMouseOver={() => setHovered(tab.sessionID)}
               onMouseOut={() => setHovered(undefined)}
               onMouseUp={() => tabs.select(tab.sessionID)}
             >
-              <text
-                width={1}
-                fg={selected() ? accent() : hovered() === tab.sessionID ? themeV2.text.default : themeV2.text.subdued}
-              >
-                ▏
-              </text>
-              <box width={2} alignItems="center">
-                <Show
-                  when={tabs.attention(tab.sessionID)}
-                  fallback={
-                    <Show
-                      when={unread()}
-                      fallback={<Show when={tabs.running(tab.sessionID)}>{<Spinner color={accent()} />}</Show>}
-                    >
-                      <text fg={unread() === "error" ? themeV2.text.feedback.error.default : accent()}>•</text>
-                    </Show>
-                  }
+              <TabPulse
+                active={tabs.running(tab.sessionID) && (config.animations ?? true)}
+                color={accent()}
+                backgroundColor={background() ?? themeV2.background.default}
+              />
+              <box zIndex={1} width="100%" flexDirection="row">
+                <text
+                  width={1}
+                  fg={selected() ? accent() : hovered() === tab.sessionID ? themeV2.text.default : themeV2.text.subdued}
                 >
-                  <text fg={themeV2.text.feedback.warning.default}>!</text>
-                </Show>
+                  ▏
+                </text>
+                <box width={1} alignItems="center">
+                  <Show
+                    when={tabs.attention(tab.sessionID)}
+                    fallback={
+                      <Show
+                        when={unread()}
+                        fallback={
+                          <Show when={tabs.running(tab.sessionID) && !(config.animations ?? true)}>
+                            <text fg={accent()}>⋯</text>
+                          </Show>
+                        }
+                      >
+                        <text fg={unread() === "error" ? themeV2.text.feedback.error.default : accent()}>•</text>
+                      </Show>
+                    }
+                  >
+                    <text fg={themeV2.text.feedback.warning.default}>!</text>
+                  </Show>
+                </box>
+                <text width={2} fg={numberColor()}>
+                  {tabs.tabs().findIndex((item) => item.sessionID === tab.sessionID) + 1}
+                </text>
+                <text width={titleWidth()} fg={foreground()} wrapMode="none">
+                  {Locale.truncate(tab.title ?? "Untitled session", titleWidth())}
+                </text>
+                <text
+                  width={2}
+                  fg={foreground()}
+                  onMouseUp={(event) => {
+                    event.stopPropagation()
+                    tabs.close(tab.sessionID)
+                  }}
+                >
+                  {hovered() === tab.sessionID ? "×" : ""}
+                </text>
               </box>
-              <text width={2} fg={numberColor()}>
-                {tabs.tabs().findIndex((item) => item.sessionID === tab.sessionID) + 1}
-              </text>
-              <text width={titleWidth()} fg={foreground()} wrapMode="none">
-                {Locale.truncate(tab.title ?? "Untitled session", titleWidth())}
-              </text>
-              <text
-                width={2}
-                fg={foreground()}
-                onMouseUp={(event) => {
-                  event.stopPropagation()
-                  tabs.close(tab.sessionID)
-                }}
-              >
-                {hovered() === tab.sessionID ? "×" : ""}
-              </text>
             </box>
           )
         }}
