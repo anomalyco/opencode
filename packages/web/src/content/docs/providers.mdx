@@ -1793,6 +1793,78 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Requesty
+
+1. Head over to the [Requesty dashboard](https://app.requesty.ai/api-keys), click **Create API Key**, and copy the key.
+
+2. Run the `/connect` command and search for Requesty.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter the API key for the provider.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Many Requesty models are preloaded by default, run the `/models` command to select the one you want.
+
+   ```txt
+   /models
+   ```
+
+   You can also add additional models through your opencode config.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "requesty": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. Requesty [routing policies](https://app.requesty.ai/routing-policies) let you add failover, load balancing, or latency-based routing. Reference a policy by using `policy/<your-policy-name>` as the model ID.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "requesty": {
+         "models": {
+           "policy/my-fallback-policy": {}
+         }
+       }
+     }
+   }
+   ```
+
+6. For GDPR data residency, route through Requesty's EU endpoint.
+
+   ```json title="opencode.json" {5}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "requesty": {
+         "options": {
+           "baseURL": "https://router.eu.requesty.ai/v1"
+         }
+       }
+     }
+   }
+   ```
+
+---
+
 ### LLM Gateway
 
 1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
