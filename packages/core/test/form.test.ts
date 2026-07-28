@@ -40,6 +40,65 @@ describe("Form", () => {
     }),
   )
 
+  it.effect("joins concurrent asks for the same explicit form id", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const bus = yield* Bus.Service
+      const created = yield* Deferred.make<void>()
+      const events: Form.Info[] = []
+      const unsubscribe = yield* bus.listen((event) => {
+        if (event.type !== Form.Event.Created.type) return Effect.void
+        const form = (event.data as { readonly form: Form.Info }).form
+        events.push(form)
+        return Deferred.succeed(created, undefined).pipe(Effect.asVoid)
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const first = yield* service.ask(input).pipe(Effect.forkScoped)
+      const second = yield* service.ask(input).pipe(Effect.forkScoped)
+      yield* Deferred.await(created)
+
+      expect(events).toHaveLength(1)
+      expect((yield* service.list()).map((form) => form.id)).toEqual([formID])
+
+      yield* service.reply({ id: formID, answer: { name: "Ava" } })
+      const expected = { status: "answered", answer: { name: "Ava" } } as const
+      expect(yield* Fiber.join(first)).toEqual(expected)
+      expect(yield* Fiber.join(second)).toEqual(expected)
+      expect(yield* service.ask(input)).toEqual(expected)
+      expect(events).toHaveLength(1)
+    }),
+  )
+
+  it.effect("rejects conflicting asks for the same explicit form id", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      yield* service.create(input)
+
+      expect(yield* service.ask({ ...input, title: "Different form" }).pipe(Effect.flip)).toEqual(
+        new Form.AlreadyExistsError({ id: formID }),
+      )
+
+      yield* service.cancel(formID)
+    }),
+  )
+
+  it.effect("keeps a joined form pending when one asker is interrupted", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      yield* service.create(input)
+      const first = yield* service.ask(input).pipe(Effect.forkScoped)
+      const second = yield* service.ask(input).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+
+      yield* Fiber.interrupt(first)
+
+      expect(yield* service.state(formID)).toEqual({ status: "pending" })
+      yield* service.reply({ id: formID, answer: { name: "Ava" } })
+      expect(yield* Fiber.join(second)).toEqual({ status: "answered", answer: { name: "Ava" } })
+    }),
+  )
+
   it.effect("supports the temporary global mcp elicitation owner", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

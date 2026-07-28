@@ -57,6 +57,7 @@ export const Plugin = {
                       const providers = (yield* ctx.websearch.providers()).data
                       if (providers.length === 0) return yield* new WebSearch.ProviderRequiredError()
                       const response = yield* forms.ask({
+                        id: Form.ID.create(`frm_websearch_provider_${context.sessionID}_${context.messageID}`),
                         sessionID: context.sessionID,
                         title: "Choose a provider so the agent can search the web",
                         metadata: { kind: "websearch.provider" },

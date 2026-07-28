@@ -1,9 +1,10 @@
 export * as Form from "./form"
 
 import { Form } from "@opencode-ai/schema/form"
-import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
+import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Ref, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus"
+import { KeyedMutex } from "./effect/keyed-mutex"
 
 const RETENTION = Duration.minutes(10)
 
@@ -12,6 +13,7 @@ export type ID = typeof ID.Type
 
 export const Info = Form.Info
 export type Info = typeof Info.Type
+const infoEquivalent = Schema.toEquivalence(Info)
 
 export const Field = Form.Field
 export type Field = Form.Field
@@ -94,12 +96,14 @@ interface Entry {
   readonly form: Info
   readonly state: State
   readonly deferred: Deferred.Deferred<TerminalState>
+  readonly waiters: Ref.Ref<number>
 }
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const locks = KeyedMutex.makeUnsafe<ID>()
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
       {
@@ -120,44 +124,76 @@ export const layer = Layer.effect(
       )
     })
 
-    const create = Effect.fn("Form.create")((input: CreateInput) =>
+    const settleCancelled = Effect.fn("Form.settleCancelled")((id: ID) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          const id = input.id ?? ID.create()
-          const existing = yield* Cache.getSuccess(forms, id)
-          if (Option.isSome(existing)) return yield* new AlreadyExistsError({ id })
-          const invalid = validateFields(input.fields)
-          if (invalid) return yield* new InvalidFormError({ message: invalid })
-          const form: Info = {
-            id,
-            sessionID: input.sessionID,
-            title: input.title,
-            ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
-            fields: input.fields,
-          }
-          const entry: Entry = {
-            form,
-            state: { status: "pending" },
-            deferred: yield* Deferred.make<TerminalState>(),
-          }
-          yield* Cache.set(forms, id, entry)
-          yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
-          return form
+          const entry = yield* find(id)
+          if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
+          const next: TerminalState = { status: "cancelled" }
+          yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
+          yield* Cache.set(forms, id, { ...entry, state: next })
+          yield* Deferred.succeed(entry.deferred, next)
         }),
       ),
     )
 
-    const ask = Effect.fn("Form.ask")((input: CreateInput) =>
-      Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const form = yield* create(input)
-          const entry = yield* find(form.id).pipe(Effect.orDie)
-          return yield* restore(Deferred.await(entry.deferred)).pipe(
-            Effect.onInterrupt(() => Effect.ignore(cancel(form.id))),
-          )
-        }),
+    const acquire = Effect.fn("Form.acquire")((input: CreateInput, id: ID, join: boolean, wait: boolean) =>
+      locks.withLock(id)(
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const existing = yield* Cache.getSuccess(forms, id)
+            if (Option.isSome(existing)) {
+              const expected = makeInfo(input, id)
+              if (join && infoEquivalent(existing.value.form, expected)) {
+                if (wait) yield* Ref.update(existing.value.waiters, (count) => count + 1)
+                return existing.value
+              }
+              return yield* new AlreadyExistsError({ id })
+            }
+            const invalid = validateFields(input.fields)
+            if (invalid) return yield* new InvalidFormError({ message: invalid })
+            const form = makeInfo(input, id)
+            const entry: Entry = {
+              form,
+              state: { status: "pending" },
+              deferred: yield* Deferred.make<TerminalState>(),
+              waiters: yield* Ref.make(wait ? 1 : 0),
+            }
+            yield* Cache.set(forms, id, entry)
+            yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
+            return entry
+          }),
+        ),
       ),
     )
+
+    const create = Effect.fn("Form.create")((input: CreateInput) => {
+      const id = input.id ?? ID.create()
+      return acquire(input, id, false, false).pipe(Effect.map((entry) => entry.form))
+    })
+
+    const release = (entry: Entry, id: ID, interrupted: boolean) =>
+      locks.withLock(id)(
+        Ref.updateAndGet(entry.waiters, (count) => count - 1).pipe(
+          Effect.flatMap((count) =>
+            interrupted && count === 0 ? settleCancelled(id).pipe(Effect.ignore) : Effect.void,
+          ),
+        ),
+      )
+
+    const ask = Effect.fn("Form.ask")((input: CreateInput) => {
+      const id = input.id ?? ID.create()
+      return Effect.uninterruptibleMask((restore) =>
+        acquire(input, id, input.id !== undefined, true).pipe(
+          Effect.flatMap((entry) =>
+            restore(Deferred.await(entry.deferred)).pipe(
+              Effect.tap(() => release(entry, id, false)),
+              Effect.onInterrupt(() => release(entry, id, true)),
+            ),
+          ),
+        ),
+      )
+    })
 
     const get = Effect.fn("Form.get")(function* (id: ID) {
       return (yield* find(id)).form
@@ -176,32 +212,27 @@ export const layer = Layer.effect(
     })
 
     const reply = Effect.fn("Form.reply")((input: ReplyInput) =>
-      Effect.uninterruptible(
-        Effect.gen(function* () {
-          const entry = yield* find(input.id)
-          if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
-          const invalid = validateAnswer(entry.form, input.answer)
-          if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
-          const next: TerminalState = { status: "answered", answer: input.answer }
-          yield* bus.publish(Form.Event.Replied, { id: input.id, sessionID: entry.form.sessionID, answer: input.answer })
-          yield* Cache.set(forms, input.id, { ...entry, state: next })
-          yield* Deferred.succeed(entry.deferred, next)
-        }),
+      locks.withLock(input.id)(
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const entry = yield* find(input.id)
+            if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
+            const invalid = validateAnswer(entry.form, input.answer)
+            if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
+            const next: TerminalState = { status: "answered", answer: input.answer }
+            yield* bus.publish(Form.Event.Replied, {
+              id: input.id,
+              sessionID: entry.form.sessionID,
+              answer: input.answer,
+            })
+            yield* Cache.set(forms, input.id, { ...entry, state: next })
+            yield* Deferred.succeed(entry.deferred, next)
+          }),
+        ),
       ),
     )
 
-    const cancel = Effect.fn("Form.cancel")((id: ID) =>
-      Effect.uninterruptible(
-        Effect.gen(function* () {
-          const entry = yield* find(id)
-          if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
-          const next: TerminalState = { status: "cancelled" }
-          yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
-          yield* Cache.set(forms, id, { ...entry, state: next })
-          yield* Deferred.succeed(entry.deferred, next)
-        }),
-      ),
-    )
+    const cancel = Effect.fn("Form.cancel")((id: ID) => locks.withLock(id)(settleCancelled(id)))
 
     yield* Effect.addFinalizer(() =>
       Cache.values(forms).pipe(
@@ -222,6 +253,10 @@ export const layer = Layer.effect(
 export const locationLayer = layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
+
+function makeInfo(input: CreateInput, id: ID): Info {
+  return Info.make({ ...input, id })
+}
 
 function validateAnswer(form: Info, answer: Answer) {
   const fields = new Map(form.fields.map((field) => [field.key, field] as const))

@@ -30,6 +30,8 @@ const webSearchToolNode = makeLocationNode({
 const sessionID = Session.ID.make("ses_websearch_test")
 const assertions: Permission.AssertInput[] = []
 const queries: WebSearch.Input[] = []
+const forms: Form.CreateInput[] = []
+let providerRequired = false
 let result = new WebSearch.Response({
   providerID: WebSearch.ID.make("exa"),
   results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -38,6 +40,8 @@ let result = new WebSearch.Response({
 beforeEach(() => {
   assertions.length = 0
   queries.length = 0
+  forms.length = 0
+  providerRequired = false
   result = new WebSearch.Response({
     providerID: WebSearch.ID.make("exa"),
     results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -60,11 +64,12 @@ const websearch = Layer.succeed(
   WebSearch.Service.of({
     transform: () => Effect.die("unused"),
     reload: () => Effect.die("unused"),
-    providers: () => Effect.succeed([]),
+    providers: () => Effect.succeed(providerRequired ? [{ id: WebSearch.ID.make("exa"), name: "Exa" }] : []),
     default: () => Effect.succeed(undefined),
     query: (input) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         queries.push(input)
+        if (providerRequired && queries.length === 1) return yield* new WebSearch.ProviderRequiredError()
         return result
       }),
   }),
@@ -73,7 +78,11 @@ const form = Layer.succeed(
   Form.Service,
   Form.Service.of({
     create: () => Effect.die("unused"),
-    ask: () => Effect.die("unused"),
+    ask: (input) =>
+      Effect.sync(() => {
+        forms.push(input)
+        return { status: "answered" as const, answer: { provider: "exa" } }
+      }),
     get: () => Effect.die("unused"),
     list: () => Effect.die("unused"),
     state: () => Effect.die("unused"),
@@ -90,16 +99,13 @@ const kv = Layer.succeed(
   }),
 )
 const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Tool.node, WebSearch.node, webSearchToolNode]),
-    [
-      [Permission.node, permission],
-      [WebSearch.node, websearch],
-      [Form.node, form],
-      [KV.node, kv],
-      [Image.node, imagePassthrough],
-    ],
-  ),
+  AppNodeBuilder.build(LayerNode.group([Tool.node, WebSearch.node, webSearchToolNode]), [
+    [Permission.node, permission],
+    [WebSearch.node, websearch],
+    [Form.node, form],
+    [KV.node, kv],
+    [Image.node, imagePassthrough],
+  ]),
 )
 
 describe("WebSearchTool registration", () => {
@@ -200,6 +206,28 @@ describe("WebSearchTool registration", () => {
         status: "completed",
         content: [{ type: "text", text: WebSearchTool.NO_RESULTS }],
       })
+    }),
+  )
+
+  it.effect("gives provider selection a stable session-scoped form id", () =>
+    Effect.gen(function* () {
+      providerRequired = true
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-provider", name: "websearch", input: { query: "effect" } },
+        }),
+      ).toMatchObject({ status: "completed" })
+      expect(forms).toMatchObject([
+        {
+          id: `frm_websearch_provider_${sessionID}_${toolIdentity.messageID}`,
+          sessionID,
+          metadata: { kind: "websearch.provider" },
+        },
+      ])
     }),
   )
 })
