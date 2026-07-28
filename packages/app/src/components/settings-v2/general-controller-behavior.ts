@@ -9,33 +9,30 @@ export type ShellOption = {
 export type ShellSelectOption = {
   id: string
   value: string
-  label: string
+  name: string
+  terminalOnly: boolean
 }
 
-export function createShellOptions(input: {
-  shells: ShellOption[]
-  current: string | undefined
-  automatic: string
-  terminalOnly: string
-}) {
+export function createShellOptions(input: { shells: ShellOption[]; current: string | undefined }) {
   const counts = input.shells.reduce((result, shell) => {
     result.set(shell.name, (result.get(shell.name) ?? 0) + 1)
     return result
   }, new Map<string, number>())
   const options: ShellSelectOption[] = [
-    { id: "auto", value: "", label: input.automatic },
+    { id: "auto", value: "", name: "", terminalOnly: false },
     ...input.shells.map((shell) => {
       const ambiguous = (counts.get(shell.name) ?? 0) > 1
       const name = ambiguous ? shell.path : shell.name
       return {
         id: shell.path,
         value: ambiguous ? shell.path : shell.name,
-        label: shell.acceptable ? name : `${name} (${input.terminalOnly})`,
+        name,
+        terminalOnly: !shell.acceptable,
       }
     }),
   ]
   if (input.current && !options.some((option) => option.value === input.current)) {
-    options.push({ id: input.current, value: input.current, label: input.current })
+    options.push({ id: input.current, value: input.current, name: input.current, terminalOnly: false })
   }
   return options
 }

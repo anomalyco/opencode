@@ -12,15 +12,13 @@ describe("settings v2 controllers", () => {
           { path: "/bin/zsh", name: "zsh", acceptable: true },
         ],
         current: "fish",
-        automatic: "Automatic",
-        terminalOnly: "Terminal only",
       }),
     ).toEqual([
-      { id: "auto", value: "", label: "Automatic" },
-      { id: "/bin/bash", value: "/bin/bash", label: "/bin/bash" },
-      { id: "/opt/bash", value: "/opt/bash", label: "/opt/bash (Terminal only)" },
-      { id: "/bin/zsh", value: "zsh", label: "zsh" },
-      { id: "fish", value: "fish", label: "fish" },
+      { id: "auto", value: "", name: "", terminalOnly: false },
+      { id: "/bin/bash", value: "/bin/bash", name: "/bin/bash", terminalOnly: false },
+      { id: "/opt/bash", value: "/opt/bash", name: "/opt/bash", terminalOnly: true },
+      { id: "/bin/zsh", value: "zsh", name: "zsh", terminalOnly: false },
+      { id: "fish", value: "fish", name: "fish", terminalOnly: false },
     ])
   })
 

@@ -27,6 +27,48 @@ import {
 } from "./general-controllers"
 import "./settings-v2.css"
 
+const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
+const fontSettings = {
+  ui: {
+    action: "settings-ui-font",
+    title: "settings.general.row.uiFont.title",
+    description: "settings.general.row.uiFont.description",
+    font: "ui",
+    input: "setUI",
+  },
+  code: {
+    action: "settings-code-font",
+    title: "settings.general.row.font.title",
+    description: "settings.general.row.font.description",
+    font: "code",
+    input: "setCode",
+  },
+  terminal: {
+    action: "settings-terminal-font",
+    title: "settings.general.row.terminalFont.title",
+    description: "settings.general.row.terminalFont.description",
+    font: "terminal",
+    input: "setTerminal",
+  },
+} as const
+const soundSettings = {
+  agent: {
+    action: "settings-sounds-agent",
+    title: "settings.general.sounds.agent.title",
+    description: "settings.general.sounds.agent.description",
+  },
+  permissions: {
+    action: "settings-sounds-permissions",
+    title: "settings.general.sounds.permissions.title",
+    description: "settings.general.sounds.permissions.description",
+  },
+  errors: {
+    action: "settings-sounds-errors",
+    title: "settings.general.sounds.errors.title",
+    description: "settings.general.sounds.errors.description",
+  },
+} as const
+
 const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
   const language = useLanguage()
   return (
@@ -51,8 +93,6 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
     createShellOptions({
       shells: props.controller.shells(),
       current: props.controller.current(),
-      automatic: language.t("settings.general.row.shell.autoDefault"),
-      terminalOnly: language.t("settings.general.row.shell.terminalOnly"),
     }),
   )
   return (
@@ -68,7 +108,11 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
         placement="bottom-end"
         gutter={6}
         value={(option) => option.id}
-        label={(option) => option.label}
+        label={(option) => {
+          if (option.id === "auto") return language.t("settings.general.row.shell.autoDefault")
+          if (!option.terminalOnly) return option.name
+          return `${option.name} (${language.t("settings.general.row.shell.terminalOnly")})`
+        }}
         onSelect={(option) => option && props.controller.select(option.value)}
       />
     </SettingsRowV2>
@@ -77,11 +121,6 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
 
 const AppearanceSection: Component<{ controller: AppearanceSettingsController }> = (props) => {
   const language = useLanguage()
-  const schemes = createMemo(() => [
-    { value: "system" as const, label: language.t("theme.scheme.system") },
-    { value: "light" as const, label: language.t("theme.scheme.light") },
-    { value: "dark" as const, label: language.t("theme.scheme.dark") },
-  ])
   return (
     <div class="settings-v2-section">
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.appearance")}</h3>
@@ -93,13 +132,16 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
           <SelectV2
             appearance="inline"
             data-action="settings-color-scheme"
-            options={schemes()}
-            current={schemes().find((option) => option.value === props.controller.scheme.current())}
+            options={schemeOptions}
+            current={schemeOptions.find((option) => option === props.controller.scheme.current())}
             placement="bottom-end"
             gutter={6}
-            value={(option) => option.value}
-            label={(option) => option.label}
-            onSelect={(option) => option && props.controller.scheme.select(option.value)}
+            label={(option) => {
+              if (option === "system") return language.t("theme.scheme.system")
+              if (option === "light") return language.t("theme.scheme.light")
+              return language.t("theme.scheme.dark")
+            }}
+            onSelect={(option) => option && props.controller.scheme.select(option)}
           />
         </SettingsRowV2>
 
@@ -140,48 +182,23 @@ const FontSetting: Component<{
   fonts: AppearanceSettingsController["fonts"]
 }> = (props) => {
   const language = useLanguage()
-  const config = createMemo(
-    () =>
-      ({
-        ui: {
-          action: "settings-ui-font",
-          title: language.t("settings.general.row.uiFont.title"),
-          description: language.t("settings.general.row.uiFont.description"),
-          font: props.fonts.ui,
-          input: props.fonts.setUI,
-        },
-        code: {
-          action: "settings-code-font",
-          title: language.t("settings.general.row.font.title"),
-          description: language.t("settings.general.row.font.description"),
-          font: props.fonts.code,
-          input: props.fonts.setCode,
-        },
-        terminal: {
-          action: "settings-terminal-font",
-          title: language.t("settings.general.row.terminalFont.title"),
-          description: language.t("settings.general.row.terminalFont.description"),
-          font: props.fonts.terminal,
-          input: props.fonts.setTerminal,
-        },
-      })[props.kind],
-  )
+  const config = () => fontSettings[props.kind]
   return (
-    <SettingsRowV2 title={config().title} description={config().description}>
+    <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
       <div class="w-full sm:w-[220px]">
         <TextInputV2
           data-action={config().action}
           type="text"
           appearance="base"
-          value={config().font().value}
-          onInput={(event) => config().input(event.currentTarget.value)}
-          placeholder={config().font().placeholder}
+          value={props.fonts[config().font]().value}
+          onInput={(event) => props.fonts[config().input](event.currentTarget.value)}
+          placeholder={props.fonts[config().font]().placeholder}
           spellcheck={false}
           autocorrect="off"
           autocomplete="off"
           autocapitalize="off"
-          aria-label={config().title}
-          style={{ "font-family": config().font().family }}
+          aria-label={language.t(config().title)}
+          style={{ "font-family": props.fonts[config().font]().family }}
         />
       </div>
     </SettingsRowV2>
@@ -207,28 +224,9 @@ const SoundSetting: Component<{
   channel: SoundSettingsController["agent"]
 }> = (props) => {
   const language = useLanguage()
-  const config = createMemo(
-    () =>
-      ({
-        agent: {
-          action: "settings-sounds-agent",
-          title: language.t("settings.general.sounds.agent.title"),
-          description: language.t("settings.general.sounds.agent.description"),
-        },
-        permissions: {
-          action: "settings-sounds-permissions",
-          title: language.t("settings.general.sounds.permissions.title"),
-          description: language.t("settings.general.sounds.permissions.description"),
-        },
-        errors: {
-          action: "settings-sounds-errors",
-          title: language.t("settings.general.sounds.errors.title"),
-          description: language.t("settings.general.sounds.errors.description"),
-        },
-      })[props.kind],
-  )
+  const config = () => soundSettings[props.kind]
   return (
-    <SettingsRowV2 title={config().title} description={config().description}>
+    <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
       <SelectV2
         appearance="inline"
         data-action={config().action}
