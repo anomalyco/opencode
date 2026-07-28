@@ -49,6 +49,13 @@ export default defineMain({
           { find: /^@\/context\/global-sync$/, replacement: path.resolve(mocks, "app/context/global-sync.ts") },
           { find: /^@\/context\/server-sync$/, replacement: path.resolve(mocks, "app/context/server-sync.ts") },
           { find: /^@\/context\/server-sdk$/, replacement: path.resolve(mocks, "app/context/server-sdk.ts") },
+          { find: /^@\/context\/global$/, replacement: path.resolve(mocks, "app/context/global.ts") },
+          { find: /^@\/context\/tabs$/, replacement: path.resolve(mocks, "app/context/tabs.ts") },
+          { find: /^@\/context\/server$/, replacement: path.resolve(mocks, "app/context/server.ts") },
+          {
+            find: /^@\/pages\/layout\/session-tab-avatar$/,
+            replacement: path.resolve(mocks, "app/pages/layout/session-tab-avatar.tsx"),
+          },
           { find: /^@\/hooks\/use-providers$/, replacement: path.resolve(mocks, "app/hooks/use-providers.ts") },
           {
             find: /^@\/components\/dialog-select-model$/,

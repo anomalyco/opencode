@@ -129,3 +129,5 @@ const prompt = createPromptState()
 export function usePrompt() {
   return prompt
 }
+
+export const createTabPromptState = () => undefined
