@@ -4,7 +4,7 @@ import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useTabs } from "@/context/tabs"
 import { toggleHomeProjectSelection } from "@/pages/layout/helpers"
-import { createEffect, createMemo, startTransition } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 
 export function createHomeController() {
   const sync = useServerSync()
@@ -43,7 +43,7 @@ export function createHomeController() {
   })
 
   function setSelection(next: HomeProjectSelection) {
-    void startTransition(() => layout.home.setSelection(next))
+    layout.home.setSelection(next)
   }
 
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
