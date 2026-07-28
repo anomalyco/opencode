@@ -438,3 +438,7 @@ export const DEFAULT_THEME = {
     },
   },
 } satisfies ThemeDocument
+
+export const DEFAULT_THEMES_V2 = {
+  "opencode-v2": DEFAULT_THEME,
+} as const satisfies Record<string, ThemeDocument>

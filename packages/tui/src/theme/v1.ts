@@ -108,7 +108,7 @@ export type ThemeV1Json = {
   }
 }
 
-export const DEFAULT_THEMES: Record<string, ThemeV1Json> = {
+export const DEFAULT_THEMES_V1: Record<string, ThemeV1Json> = {
   aura,
   ayu,
   catppuccin,
@@ -143,6 +143,8 @@ export const DEFAULT_THEMES: Record<string, ThemeV1Json> = {
   zenburn,
   carbonfox,
 }
+
+export const DEFAULT_THEMES = DEFAULT_THEMES_V1
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   if (theme._hasSelectedListItemText) return theme.selectedListItemText

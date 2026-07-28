@@ -1,11 +1,13 @@
 import { Schema } from "effect"
 import { resolveThemeColors } from "./resolve"
-import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
+import { DEFAULT_THEMES_V1, type Theme, type ThemeV1Json } from "./v1"
+import { DEFAULT_THEMES_V2 } from "./v2/defaults"
 import { resolveThemeDocument, themeDecodeError } from "./v2/resolve"
 import { ThemeDocument } from "./v2/schema"
 import { migrateV1 } from "./v2/v1-migrate"
 
-export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
+export { DEFAULT_THEMES, DEFAULT_THEMES_V1, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
+export { DEFAULT_THEMES_V2 } from "./v2/defaults"
 export { resolveThemeDocument, type ThemeDocument }
 
 export type ThemeDocumentSource = Record<string, unknown>
@@ -20,7 +22,8 @@ const decodeThemeDocument = Schema.decodeUnknownSync(ThemeDocument)
 function listThemes() {
   // Priority: defaults < plugin installs < custom files < generated system.
   const themes: Record<string, ThemeDocumentSource> = {
-    ...DEFAULT_THEMES,
+    ...DEFAULT_THEMES_V1,
+    ...DEFAULT_THEMES_V2,
     ...pluginThemes,
     ...customThemes,
   }
