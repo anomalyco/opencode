@@ -165,8 +165,8 @@ const bodyExitCommand = isWindows
   : "printf body && exit 7"
 const overflowCommand = (bytes: number) =>
   isWindows
-    ? `[Console]::Out.Write(('x' * ${bytes})); Start-Sleep -Milliseconds 100`
-    : `head -c ${bytes} /dev/zero | tr '\\0' 'x'`
+    ? `[Console]::Out.Write('output-start' + ('x' * ${bytes}) + 'output-end'); Start-Sleep -Milliseconds 100`
+    : `printf output-start; head -c ${bytes} /dev/zero | tr '\\0' 'x'; printf output-end`
 const progressOverflowCommand = (bytes: number, release: string) =>
   isWindows
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
@@ -410,7 +410,11 @@ describe("ShellTool", () => {
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
-              expect(settled.content?.[0]).toMatchObject({
+              const content = settled.content?.[0]
+              if (!content || content.type !== "text") throw new Error("Expected text content")
+              expect(content.text.includes("output-start")).toBe(false)
+              expect(content.text.includes("output-end")).toBe(true)
+              expect(content).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("output truncated; full output saved to:"),
               })

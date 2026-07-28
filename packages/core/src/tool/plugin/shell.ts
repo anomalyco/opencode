@@ -205,8 +205,12 @@ export const Plugin = {
                 yield* context.progress({ shellID: info.id })
 
                 const captureShell = Effect.fn("ShellTool.captureShell")(function* () {
-                  const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
-                  const truncated = page.size > page.cursor
+                  const latest = yield* shell.output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
+                  const truncated = latest.size > MAX_CAPTURE_BYTES
+                  const page = yield* shell.output(info.id, {
+                    cursor: Math.max(0, latest.size - MAX_CAPTURE_BYTES),
+                    limit: MAX_CAPTURE_BYTES,
+                  })
                   const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
                   return {
                     output: `${page.output || "(no output)"}${notice}`,
