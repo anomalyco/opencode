@@ -121,7 +121,7 @@ const ModelList: Component<{
 }
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
-type ModelSelectorTrigger = JSX.Element | ((props: ModelSelectorTriggerProps) => JSX.Element)
+type ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => JSX.Element
 type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
 
 export function ModelSelectorPopover(props: {
@@ -172,9 +172,7 @@ export function ModelSelectorPopover(props: {
       placement="top-start"
       gutter={4}
     >
-      <Kobalte.Trigger as={typeof props.trigger === "function" ? props.trigger : "div"}>
-        {typeof props.trigger === "function" ? undefined : props.trigger}
-      </Kobalte.Trigger>
+      <Kobalte.Trigger as={props.trigger} />
       <Kobalte.Portal>
         <Kobalte.Content
           class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
@@ -384,9 +382,7 @@ function ModelSelectorPopoverV2View(props: {
 
   return (
     <MenuV2 open={store.open} modal={false} placement="top-start" gutter={6} onOpenChange={setOpen}>
-      <MenuV2.Trigger as={typeof props.trigger === "function" ? props.trigger : "div"}>
-        {typeof props.trigger === "function" ? undefined : props.trigger}
-      </MenuV2.Trigger>
+      <MenuV2.Trigger as={props.trigger} />
       <MenuV2.Portal>
         <MenuV2.Content
           ref={(element: HTMLDivElement) => (contentRef = element)}
