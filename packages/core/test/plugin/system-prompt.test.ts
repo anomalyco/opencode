@@ -36,15 +36,15 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 
 describe("SystemPromptPlugin", () => {
   test("uses current vocabulary in the Meta prompt", () => {
-    expect(PROMPT_META).toContain("webfetch tool")
-    expect(PROMPT_META).toContain("subagent tool")
-    expect(PROMPT_META).toContain("shell tool")
-    expect(PROMPT_META).toContain("read for reading files")
-    expect(PROMPT_META).toContain("edit for editing")
-    expect(PROMPT_META).toContain("write for creating files")
-    expect(PROMPT_META).toContain("https://v2.opencode.ai/llms.txt")
+    expect(PROMPT_META).toContain("`webfetch` tool")
+    expect(PROMPT_META).toContain("`subagent` tool")
+    expect(PROMPT_META).toContain("Reserve `shell`")
+    expect(PROMPT_META).toContain("`read` for reading files")
+    expect(PROMPT_META).toContain("`edit` for editing")
+    expect(PROMPT_META).toContain("`write` for creating files")
+    expect(PROMPT_META).toContain("https://opencode.ai/v2/llms.txt")
     expect(PROMPT_META).not.toMatch(
-      /TodoWrite|Task tool|WebFetch|\bBash\b|Read for reading files|Edit for editing|Write for creating files|https:\/\/opencode\.ai\/docs/,
+      /TodoWrite|Task tool|WebFetch|\bBash\b|https:\/\/opencode\.ai\/docs/,
     )
   })
 
@@ -75,7 +75,7 @@ describe("SystemPromptPlugin", () => {
         ["claude-sonnet-4", "# Professional objectivity"],
         ["kimi-k2", "# Prompt and Tool Use"],
         ["trinity", "what command should I run to list files"],
-        ["meta/muse-spark-1.1", "OpenCode powered by Meta Muse Spark"],
+        ["meta/muse-spark-1.1", "powered by Muse Spark"],
         ["llama-3.3", "You are opencode, an interactive CLI tool"],
       ] as const
 
