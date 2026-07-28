@@ -46,3 +46,10 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
   expect(desktop).toContain("StartupWMClass=ai.opencode.desktop")
   expect(desktop).toContain("NoDisplay=true")
 })
+
+test("verifies Windows update signatures", async () => {
+  const module = await import("./electron-builder.config.ts?signature=windows")
+  const config = module.default as Configuration
+
+  expect(config.win?.verifyUpdateCodeSignature).toBe(true)
+})

@@ -83,7 +83,7 @@ const getBase = (appId: string): Configuration => ({
       sign: signWindows,
     },
     target: ["nsis"],
-    verifyUpdateCodeSignature: false,
+    verifyUpdateCodeSignature: true,
   },
   nsis: {
     oneClick: true,
