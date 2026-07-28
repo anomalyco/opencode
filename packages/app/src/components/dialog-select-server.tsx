@@ -562,6 +562,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     startEdit,
     resetForm,
     submitForm,
+    canRemove: server.canRemove,
     handleRemove,
     handleFormChange: () => (isAddMode() ? handleAddChange : handleEditChange),
     handleFormNameChange: () => (isAddMode() ? handleAddNameChange : handleEditNameChange),
@@ -649,13 +650,15 @@ export function ServerConnectionList(props: { controller: ReturnType<typeof useS
                             </DropdownMenu.ItemLabel>
                           </DropdownMenu.Item>
                         </Show>
-                        <DropdownMenu.Separator />
-                        <DropdownMenu.Item
-                          onSelect={() => props.controller.handleRemove(ServerConnection.key(i))}
-                          class="text-text-on-critical-base hover:bg-surface-critical-weak"
-                        >
-                          <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
+                        <Show when={props.controller.canRemove(key)}>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onSelect={() => props.controller.handleRemove(ServerConnection.key(i))}
+                            class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                          >
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>

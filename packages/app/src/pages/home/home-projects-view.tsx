@@ -47,6 +47,7 @@ export type HomeProjectsViewProps = {
   onToggleCollapsed: (server: ServerConnection.Any) => void
   onEditServer: (server: ServerConnection.Http) => void
   onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
+  canRemoveServer: (server: ServerConnection.Any) => boolean
   onRemoveServer: (server: ServerConnection.Any) => void
   onMoveProject: (server: ServerConnection.Any, worktree: string, index: number) => void
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
@@ -192,6 +193,7 @@ function HomeServerRow(props: {
   onToggleCollapsed: HomeProjectsViewProps["onToggleCollapsed"]
   onEditServer: HomeProjectsViewProps["onEditServer"]
   onSetDefaultServer: HomeProjectsViewProps["onSetDefaultServer"]
+  canRemoveServer: HomeProjectsViewProps["canRemoveServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
   onSetContextMenuOpen: HomeProjectsContextMenuProps["onSetContextMenuOpen"]
   onChooseProject: HomeProjectsViewProps["onChooseProject"]
@@ -277,6 +279,7 @@ function HomeServerRow(props: {
           labels={serverMenuLabels(props.language)}
           canDefault={props.canDefaultServer()}
           isDefault={props.defaultServerKey() === ServerConnection.key(props.server)}
+          canRemove={props.canRemoveServer(props.server)}
           onEdit={props.onEditServer}
           onSetDefault={() => props.onSetDefaultServer(props.server)}
           onRemoveDefault={() => props.onSetDefaultServer(undefined)}

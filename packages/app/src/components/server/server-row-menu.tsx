@@ -21,6 +21,7 @@ export const ServerRowMenu: Component<{
       labels={serverMenuLabels(language)}
       canDefault={props.controller.canDefault()}
       isDefault={props.controller.defaultKey() === key}
+      canRemove={props.controller.canRemove(key)}
       onEdit={props.onEdit}
       onSetDefault={() => props.controller.setDefault(key)}
       onRemoveDefault={() => props.controller.setDefault(null)}
@@ -47,6 +48,7 @@ export const ServerRowMenuView: Component<{
   labels: ReturnType<typeof serverMenuLabels>
   canDefault: boolean
   isDefault: boolean
+  canRemove: boolean
   onEdit: (server: ServerConnection.Http) => void
   onSetDefault: () => void
   onRemoveDefault: () => void
@@ -84,10 +86,10 @@ export const ServerRowMenuView: Component<{
             <Show when={props.canDefault && props.isDefault}>
               <MenuV2.Item onSelect={props.onRemoveDefault}>{props.labels.defaultRemove}</MenuV2.Item>
             </Show>
-            <MenuV2.Separator />
-            <MenuV2.Item disabled={builtin()} onSelect={props.onRemove}>
-              {props.labels.delete}
-            </MenuV2.Item>
+            <Show when={props.canRemove}>
+              <MenuV2.Separator />
+              <MenuV2.Item onSelect={props.onRemove}>{props.labels.delete}</MenuV2.Item>
+            </Show>
           </MenuV2.Group>
         </MenuV2.Content>
       </MenuV2.Portal>
