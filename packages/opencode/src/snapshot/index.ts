@@ -226,7 +226,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
           // Seed the index from the source repo so already-hashed entries are reused.
           // Best-effort: a missing/incompatible index just falls back to a full add.
-          const sourceIndex = path.join(source, "index")
+          // Resolve the index from the worktree's own git dir (--git-dir), not the
+          // common dir: in a linked worktree --git-common-dir points at the main
+          // repo's .git, whose index does not match the worktree's working tree.
+          const gitdir = yield* git(["rev-parse", "--path-format=absolute", "--git-dir"], {
+            cwd: state.worktree,
+          })
+          const sourceIndex = gitdir.code === 0 ? path.join(gitdir.text.trim(), "index") : path.join(source, "index")
           if (yield* exists(sourceIndex)) {
             yield* fs.copyFile(sourceIndex, path.join(state.gitdir, "index")).pipe(Effect.catch(() => Effect.void))
           }
