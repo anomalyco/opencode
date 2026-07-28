@@ -400,7 +400,6 @@
   border-radius: 4px;
   background: transparent;
   color: var(--v2-text-text-base);
-  cursor: pointer;
 }
 
 .settings-v2-models-group-trigger:focus-visible {
