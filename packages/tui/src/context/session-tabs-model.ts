@@ -42,3 +42,63 @@ export function sessionTabWindow(tabs: readonly SessionTab[], active: string | u
     after: tabs.length - start - count,
   }
 }
+
+export function adaptiveSessionTabLayout(
+  tabs: readonly SessionTab[],
+  active: string | undefined,
+  available: number,
+  previousStart = 0,
+  options = { preferredWidth: 22, minimumWidth: 8, overflowWidth: 3 },
+) {
+  if (tabs.length === 0) return { tabs: [], widths: [], before: 0, after: 0, start: 0, total: 0 }
+
+  const activeIndex = Math.max(
+    0,
+    tabs.findIndex((tab) => tab.sessionID === active),
+  )
+  const fit = (width: number) =>
+    Math.min(
+      tabs.length,
+      Math.max(1, 1 + Math.floor((Math.max(0, width) - options.preferredWidth) / options.minimumWidth)),
+    )
+  const solve = (count: number, start: number, attempts: number): { count: number; start: number } => {
+    const nextStart = Math.min(
+      Math.max(0, activeIndex < start ? activeIndex : activeIndex >= start + count ? activeIndex - count + 1 : start),
+      tabs.length - count,
+    )
+    const markers =
+      (nextStart > 0 ? options.overflowWidth : 0) + (nextStart + count < tabs.length ? options.overflowWidth : 0)
+    const nextCount = fit(available - markers)
+    if (nextCount === count || attempts === 0) return { count, start: nextStart }
+    return solve(nextCount, nextStart, attempts - 1)
+  }
+  const solved = solve(fit(available), previousStart, 3)
+  const visible = tabs.slice(solved.start, solved.start + solved.count)
+  const before = solved.start
+  const after = tabs.length - solved.start - solved.count
+  const contentWidth = Math.max(
+    1,
+    available - (before > 0 ? options.overflowWidth : 0) - (after > 0 ? options.overflowWidth : 0),
+  )
+  const total = contentWidth
+  const inactiveWidth =
+    visible.length === 1
+      ? 0
+      : Math.min(
+          options.preferredWidth,
+          Math.max(
+            options.minimumWidth,
+            Math.floor((total - Math.min(options.preferredWidth, total)) / (visible.length - 1)),
+          ),
+        )
+  const activeWidth = visible.length === 1 ? total : total - inactiveWidth * (visible.length - 1)
+
+  return {
+    tabs: visible,
+    widths: visible.map((tab) => (tab.sessionID === active ? activeWidth : inactiveWidth)),
+    before,
+    after,
+    start: solved.start,
+    total,
+  }
+}

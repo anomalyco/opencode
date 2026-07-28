@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  adaptiveSessionTabLayout,
   closeSessionTab,
   cycleSessionTab,
   openSessionTab,
@@ -47,5 +48,45 @@ describe("session tabs", () => {
       before: 3,
       after: 0,
     })
+  })
+
+  test("expands the active tab and keeps inactive widths equal", () => {
+    const tabs = ["a", "b", "c", "d", "e", "f", "g"].map((sessionID) => ({ sessionID }))
+    const layout = adaptiveSessionTabLayout(tabs, "d", 76)
+
+    expect(layout).toMatchObject({ before: 0, after: 0, start: 0, total: 76 })
+    expect(layout.widths).toEqual([9, 9, 9, 22, 9, 9, 9])
+    expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(76)
+  })
+
+  test("only swaps old and new active width inside a sticky window", () => {
+    const tabs = ["a", "b", "c", "d", "e", "f", "g"].map((sessionID) => ({ sessionID }))
+    const before = adaptiveSessionTabLayout(tabs, "c", 76)
+    const after = adaptiveSessionTabLayout(tabs, "d", 76, before.start)
+
+    expect(before.start).toBe(after.start)
+    expect(before.widths).toEqual([9, 9, 22, 9, 9, 9, 9])
+    expect(after.widths).toEqual([9, 9, 9, 22, 9, 9, 9])
+  })
+
+  test("fills extra room by extending the active tab to the right edge", () => {
+    const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
+    const layout = adaptiveSessionTabLayout(tabs, "c", 100)
+
+    expect(layout.widths).toEqual([22, 22, 56])
+    expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(100)
+  })
+
+  test("moves the window only after selection crosses its edge", () => {
+    const tabs = Array.from({ length: 10 }, (_, index) => ({ sessionID: String(index) }))
+    const initial = adaptiveSessionTabLayout(tabs, "3", 70)
+    const inside = adaptiveSessionTabLayout(tabs, "4", 70, initial.start)
+    const crossed = adaptiveSessionTabLayout(tabs, "7", 70, inside.start)
+
+    expect(initial.start).toBe(0)
+    expect(inside.start).toBe(0)
+    expect(crossed.start).toBeGreaterThan(0)
+    expect(crossed.tabs.some((tab) => tab.sessionID === "7")).toBe(true)
+    expect(crossed.widths.reduce((total, width) => total + width, 0)).toBe(crossed.total)
   })
 })
