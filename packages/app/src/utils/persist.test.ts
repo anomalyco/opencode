@@ -7,6 +7,7 @@ type RemovePersistedType = typeof import("./persist").removePersisted
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>()
+  quotaBytes = Number.POSITIVE_INFINITY
   readonly events: string[] = []
   readonly calls = { get: 0, set: 0, remove: 0 }
 
@@ -34,6 +35,10 @@ class MemoryStorage implements Storage {
     this.events.push(`set:${key}`)
     if (key.startsWith("opencode.quota")) throw new DOMException("quota", "QuotaExceededError")
     if (key.startsWith("opencode.throw")) throw new Error("storage set failed")
+    const next = new Map(this.values)
+    next.set(key, value)
+    const bytes = Array.from(next.values()).reduce((total, item) => total + item.length, 0)
+    if (bytes > this.quotaBytes) throw new DOMException("quota", "QuotaExceededError")
     this.values.set(key, value)
   }
 
@@ -68,6 +73,7 @@ beforeEach(() => {
   storage.calls.get = 0
   storage.calls.set = 0
   storage.calls.remove = 0
+  storage.quotaBytes = Number.POSITIVE_INFINITY
   Object.defineProperty(globalThis, "localStorage", {
     value: storage,
     configurable: true,
@@ -105,6 +111,37 @@ describe("persist localStorage resilience", () => {
     direct.setItem("direct-value", '{"value":5}')
 
     expect(storage.getItem("direct-value")).toBe('{"value":5}')
+  })
+
+  test("keeps the server registry while evicting a filler for another write", () => {
+    const global = persistTesting.localStorageWithPrefix("opencode.global.dat")
+    const registry = JSON.stringify({ projects: Array.from({ length: 20 }, (_, index) => `project-${index}`) })
+    const filler = "filler".repeat(10)
+    const next = "next".repeat(10)
+
+    global.setItem("server", registry)
+    storage.setItem("opencode.filler", filler)
+    storage.quotaBytes = registry.length + next.length
+
+    global.setItem("next", next)
+
+    expect(storage.getItem("opencode.global.dat:server")).toBe(registry)
+    expect(storage.getItem("opencode.filler")).toBeNull()
+    expect(storage.getItem("opencode.global.dat:next")).toBe(next)
+  })
+
+  test("preserves the server registry when its replacement is too large", () => {
+    const global = persistTesting.localStorageWithPrefix("opencode.global.dat")
+    const previous = JSON.stringify({ projects: ["project"] })
+    const replacement = "replacement".repeat(20)
+
+    global.setItem("server", previous)
+    storage.quotaBytes = previous.length
+
+    global.setItem("server", replacement)
+
+    expect(storage.getItem("opencode.global.dat:server")).toBe(previous)
+    expect(global.getItem("server")).toBe(previous)
   })
 
   test("normalizer rejects malformed JSON payloads", () => {
