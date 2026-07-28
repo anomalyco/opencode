@@ -51,11 +51,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const client = useClient()
     const toast = useToast()
     const { themeV2, mode } = useTheme()
+    const route = useRoute()
     const paths = useTuiPaths()
     const args = useArgs()
-    const permission = usePermission()
     const event = useEvent()
-    const route = useRoute()
+    const permission = usePermission()
 
     function isModelValid(model: ModelPreferenceModel) {
       return !!data.location.model

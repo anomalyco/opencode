@@ -46,15 +46,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     const root = (sessionID: string) => data.session.root(sessionID)
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
-    const family = (sessionID: string) => {
+    const status = (sessionID: string) => {
       const session = root(sessionID)
       const members = data.session.family(session)
-      return members.length > 0 ? members : [session]
+      const family = members.length > 0 ? members : [session]
+      return {
+        unread: store.unread[session],
+        attention: family.some(
+          (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
+        ),
+        busy: family.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
+      }
     }
-    const attention = (sessionID: string) =>
-      family(sessionID).some(
-        (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
-      )
 
     function save() {
       if (!store.ready) {
@@ -89,22 +92,22 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     function open(sessionID: string) {
       const session = root(sessionID)
-      setStore(
-        "tabs",
-        reconcile(openSessionTab(store.tabs, { sessionID: session, title: data.session.get(session)?.title })),
-      )
-      return session
+      const next = openSessionTab(store.tabs, { sessionID: session, title: data.session.get(session)?.title })
+      if (next === store.tabs) return { sessionID: session, changed: false }
+      setStore("tabs", reconcile(next))
+      return { sessionID: session, changed: true }
     }
 
     function clearUnread(sessionID: string) {
       const session = root(sessionID)
-      if (!store.unread[session]) return
+      if (!store.unread[session]) return false
       setStore(
         "unread",
         produce((draft) => {
           delete draft[session]
         }),
       )
+      return true
     }
 
     function markUnread(sessionID: string, unread: SessionTabUnread) {
@@ -151,18 +154,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (!store.ready || route.data.type !== "session" || route.data.sessionID === "dummy") return
       const routeSessionID = route.data.sessionID
       batch(() => {
-        const sessionID = open(routeSessionID)
-        clearUnread(sessionID)
+        const opened = open(routeSessionID)
+        const changed = clearUnread(opened.sessionID)
+        if (opened.changed || changed) untrack(save)
       })
-      untrack(save)
     })
 
     createEffect(() => {
       if (!enabled() || !store.ready) return
-      const next = store.tabs.reduce((tabs, tab) => {
+      const next = store.tabs.reduce<SessionTab[]>((tabs, tab) => {
         const sessionID = root(tab.sessionID)
         return openSessionTab(tabs, { sessionID, title: data.session.get(sessionID)?.title ?? tab.title })
-      }, [] as SessionTab[])
+      }, [])
       const unread = Object.entries(store.unread).reduce<Record<string, SessionTabUnread>>((result, entry) => {
         const sessionID = root(entry[0])
         result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
@@ -209,17 +212,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return store.tabs
       },
       current,
-      unread(sessionID: string) {
-        return store.unread[root(sessionID)]
-      },
-      attention(sessionID: string) {
-        return attention(sessionID)
-      },
-      busy(sessionID: string) {
-        return family(sessionID).some(
-          (id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0,
-        )
-      },
+      status,
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
@@ -242,7 +235,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       cycleUnread(direction: 1 | -1) {
         if (!enabled()) return
         const tab = cycleSessionTab(
-          store.tabs.filter((tab) => store.unread[tab.sessionID] || attention(tab.sessionID)),
+          store.tabs.filter((tab) => store.unread[tab.sessionID] || status(tab.sessionID).attention),
           current(),
           direction,
         )

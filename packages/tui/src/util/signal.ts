@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js"
-import { createAnimatable, smoothstep, tween } from "../ui/animation"
+import { createAnimatable, tween } from "../ui/animation"
 
 export function createDebouncedSignal<T>(value: T, ms: number): [Accessor<T>, (value: T) => void] {
   const [get, set] = createSignal(value)
@@ -22,7 +22,7 @@ export function createFadeIn(show: Accessor<boolean>, enabled: Accessor<boolean>
     { value: show() ? 1 : 0 },
     {
       enabled,
-      transition: tween({ duration: 0.16, ease: smoothstep }),
+      transition: tween({ duration: 0.16 }),
     },
   )
   let revealed = show()

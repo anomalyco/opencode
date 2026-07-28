@@ -14,10 +14,10 @@ export const SESSION_TAB_MAX_WIDTH = 32
 export const SESSION_TAB_MIN_WIDTH = 8
 export const SESSION_TAB_OVERFLOW_WIDTH = 3
 
-export function openSessionTab(tabs: readonly SessionTab[], tab: SessionTab) {
+export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[] {
   const index = tabs.findIndex((item) => item.sessionID === tab.sessionID)
   if (index === -1) return [...tabs, tab]
-  if (!tab.title || tabs[index]?.title === tab.title) return [...tabs]
+  if (!tab.title || tabs[index]?.title === tab.title) return tabs
   return tabs.map((item, position) => (position === index ? { ...item, title: tab.title } : item))
 }
 

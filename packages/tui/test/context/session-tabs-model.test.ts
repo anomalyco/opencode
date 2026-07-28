@@ -12,6 +12,7 @@ describe("session tabs", () => {
     const tabs = openSessionTab([{ sessionID: "a", title: "Old" }], { sessionID: "a", title: "New" })
     expect(tabs).toEqual([{ sessionID: "a", title: "New" }])
     expect(openSessionTab(tabs, { sessionID: "b" })).toEqual([{ sessionID: "a", title: "New" }, { sessionID: "b" }])
+    expect(openSessionTab(tabs, { sessionID: "a", title: "New" })).toBe(tabs)
   })
 
   test("selects the right tab then the left tab after closing", () => {

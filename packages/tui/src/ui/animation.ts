@@ -32,7 +32,7 @@ type AnimationTask = (now: number) => boolean
 const tasks = new Set<AnimationTask>()
 let timer: ReturnType<typeof setInterval> | undefined
 
-export const smoothstep = (progress: number) => progress * progress * (3 - 2 * progress)
+const smoothstep = (progress: number) => progress * progress * (3 - 2 * progress)
 
 export function spring(options: { visualDuration: number; restDelta?: number; restSpeed?: number }): Transition {
   return {
@@ -76,13 +76,16 @@ export function createAnimatable<T extends AnimatableTarget>(
     const delta = Math.min(0.05, (now - previous) / 1_000)
     previous = now
     const moving = options.transition.type === "spring" ? advanceSpring(delta) : advanceTween(now)
+    if (!moving) {
+      jump(target)
+      return false
+    }
     setValue(() => read())
-    if (moving) return true
-    jump(target)
-    return false
+    return true
   }
 
   function animate(next: T) {
+    if (sameTarget(next)) return
     target = clone(next)
     if (!enabled() || !sameShape(next)) return jump(next)
 
@@ -131,6 +134,13 @@ export function createAnimatable<T extends AnimatableTarget>(
       if (!current || current.scalar !== (typeof nextValue === "number")) return false
       return current.value.length === values(nextValue).length
     })
+  }
+
+  function sameTarget(next: T) {
+    if (!sameShape(next)) return false
+    return Object.entries(next).every(([key, value]) =>
+      values(value).every((part, index) => part === state.get(key)!.target[index]),
+    )
   }
 
   function settled() {
@@ -190,7 +200,7 @@ export function createAnimatable<T extends AnimatableTarget>(
   })
   onCleanup(stop)
 
-  return { value, animate, jump, stop }
+  return { value, animate, jump }
 }
 
 function values(value: AnimatableValue) {

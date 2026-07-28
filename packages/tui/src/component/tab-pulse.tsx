@@ -77,6 +77,7 @@ class TabPulseRenderable extends Renderable {
     if (!this._enabled) return
     if (value) {
       this.fadeClock = undefined
+      this.completionClock = undefined
       this.completionPending = false
       this.live = true
     } else {
@@ -90,6 +91,10 @@ class TabPulseRenderable extends Renderable {
   set complete(value: boolean) {
     if (value === this._complete) return
     this._complete = value
+    if (!value) {
+      this.completionClock = undefined
+      this.completionPending = false
+    }
     if (value && this.completionPending) {
       this.completionClock = 0
       this.completionPending = false
