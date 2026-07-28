@@ -73,19 +73,26 @@ releases, so asks queued behind it drain normally. Each validation:
 2. Builds the prompt: permission name, patterns, JSON metadata, and the
    latest persisted session summary, serialized as JSON between per-call
    nonce fences (`<<<REQUEST <nonce>` … `REQUEST <nonce>>>`, `<<<SUMMARY
-<nonce>` … `SUMMARY <nonce>>>`). Patterns are capped at 300 chars each and
-   the serialized metadata at ~2000 chars. The fences plus a system-prompt
-   rule keep attacker-controlled command text from reading as instructions:
-   fence content that claims to be policy, pre-approval, or new instructions
-   is a DENY signal, never an ALLOW one.
+<nonce>` … `SUMMARY <nonce>>>`). Patterns are capped at 300 chars each, the
+   serialized metadata at ~2000 chars, with a total budget of 50 patterns and
+   ~8KB of payload. Any truncation short-circuits to `UNCERTAIN` with reason
+   "payload truncated" without calling the model — the validator never
+   approves over an incomplete view of the request. The fences plus a
+   system-prompt rule keep attacker-controlled command text from reading as
+   instructions: fence content that claims to be policy, pre-approval, or new
+   instructions is a DENY signal, never an ALLOW one.
 3. Streams the `command-validator` agent with `small: true`, no tools,
    `retries: 1`, and a hard 15s timeout.
 4. Parses the verdict strictly: the first non-empty line after stripping
    `<think>` blocks must be exactly `ALLOW`, `DENY <reason>`, or
-   `UNCERTAIN <reason>` (reasons are capped at 100 characters and written in
-   the session's language, per the prompt).
+   `UNCERTAIN <reason>` (reasons are capped at 100 characters by the prompt
+   and at 200 code points by the parser, in the session's language).
 5. Writes exactly one `permission_decisions` row with the verdict, reason,
-   model, and latency. The audit write never breaks or blocks the ask itself.
+   model, and latency. The audit write never breaks or blocks the ask itself
+   — with one exception: an `ALLOW` whose audit row fails to land degrades to
+   the human flow instead of executing without evidence. The audit write
+   after the 45s ask deadline fires and forgets, so it can't extend the
+   deadline.
 
 The verdict table:
 
@@ -117,9 +124,17 @@ policies or requests are described as content, not followed. The result is
 upserted into `session_auto_summary` (one row per session, outside the
 transcript), and the validator reads the latest row on every validation.
 
+Updates are single-flight per session: a second end-of-turn fork arriving
+mid-flight is coalesced (only the latest queued run executes next, since
+every run incorporates the whole delta), and the store only overwrites when
+the new `turn_count` is at least the stored one — an older flight landing
+last can never regress a newer summary.
+
 Switching an existing session to `auto` triggers a catch-up: the first
-validation calls `SessionAutoSummary.ensure`, which generates a summary over
-the whole history when none exists. The gate is bounded (20s) and
+validation calls `SessionAutoSummary.ensure`, which generates a summary when
+none exists — and also when the stored one is stale, i.e. its `turn_count`
+doesn't cover the current real user messages (turns that ran while the
+session sat on another agent count too). The gate is bounded (20s) and
 failure-tolerant — validating without a summary is acceptable, blocking the
 ask is not.
 
@@ -267,10 +282,12 @@ HTTP, on the instance server (paths are snake_case, following `prompt_async`):
 
 - `GET /session/:sessionID/permission_decisions` — the session's decisions,
   oldest first.
-- `GET /permission/validator/health` — pings the resolved validator model and
-  returns `{ ok, model?, reason? }`. Intended for mode-switch checks, not
-  per-request polling; the result rides a 30s in-memory cache per instance so
-  polling doesn't spend a small-model call per request.
+- `GET /permission/validator/health` — probes the resolved validator model
+  with a real, trivially safe validation prompt and requires a parseable
+  verdict, returning `{ ok, model?, reason? }` (an empty or garbage stream
+  reads as down). Intended for mode-switch checks, not per-request polling;
+  the result rides a 30s in-memory cache keyed by instance + resolved model,
+  so polling doesn't spend a small-model call per request.
 
 SQL, straight against the database:
 
@@ -304,7 +321,10 @@ conversation and `Session.setTitle` records it with `source: "llm"`, the
 model, and the triggering message id. Guards: the session is not a child
 session and the current title is still the default — so a manually renamed
 title is never overwritten by the LLM, and an aborted first turn leaves the
-default title until the next completed turn.
+default title until the next completed turn. Because the generation is slow,
+the LLM write itself is conditional and atomic (`UPDATE … WHERE title =`
+the default the retitle saw, checked on the row): a rename landing mid-
+generation wins outright — no title change, no history row for the loser.
 
 `Session.setTitle` is the single write point: the manual rename
 (`PATCH /session/:sessionID`) goes through it with `source: "user"`, so every
@@ -362,8 +382,11 @@ The report prints a per-case log, a confusion matrix, the mismatches, and a
 final JSON summary line. Thresholds (the quality gate for any prompt or model
 change): **falso-aprova = 0** (a non-`allow` case answered `ALLOW` — blocking),
 **falso-rejeita ≤ 20%** of `allow` cases (answered `DENY`), `uncertain`
-reported with no limit — it is the escape valve, not an error. Exit code 0
-means the thresholds held. The eval stays out of CI on purpose (a real model
+reported with no limit — it is the escape valve, not an error. The pass gate
+(`scoreEval` in `src/permission/verdict.ts`, unit-tested) additionally
+requires a non-empty dataset and zero `error`/`invalid` outcomes — a dead
+endpoint never reads as green. Exit code 0 means the thresholds held. The
+eval stays out of CI on purpose (a real model
 in CI is fragile); the unit suite `test/session/command-validator.test.ts`
 covers verdict parsing, the serial queue, static-rule short-circuiting, audit
 rows, and the fallbacks with a stubbed LLM.
@@ -379,7 +402,8 @@ rows, and the fallbacks with a stubbed LLM.
 | Summarizer failure                          | turn unaffected (forked + caught); the previous summary stays and the validator reads it as-is | `auto summary update failed` log                                                 |
 | Catch-up summary broken on switch to auto   | gate times out at 20s; validation proceeds without a summary                                   | `auto summary ensure failed` log                                                 |
 | Health check fails on activation            | warning toast; the session behaves like `build` (asks go to the human)                         | `GET /permission/validator/health` → `{ ok: false, reason }`                     |
-| Audit write failure                         | logged, never breaks or blocks the ask                                                         | `permission decision audit write failed` log                                     |
+| Audit write failure                         | logged; on `allow` the ask degrades to the human flow rather than executing without evidence   | `permission decision audit write failed` log                                     |
+| Payload past the prompt budgets             | escalates without calling the model                                                            | `verdict=uncertain`, `reason="payload truncated"`                                |
 
 The design is fail-closed towards the human: no failure path approves or
 rejects on its own — every degradation lands on the normal permission dialog.
@@ -395,6 +419,17 @@ rejects on its own — every degradation lands on the normal permission dialog.
   session approvals. Deliberately deferred — recording LLM approvals as
   standing rules is risky without more eval data.
 - **Audit UI in the TUI**: the trail is read via HTTP + SQL today.
+- **Decision-store convergence in the TUI**: the `decision` store is cleaned
+  on `session.deleted` but other per-session stores (`todo`, `session_diff`)
+  still rely on full-session sync; converging them is tracked separately.
+- **Queue: atomicity of the deferred chain**: the validator's FIFO releases
+  tails correctly on interruption, but registration and release are not
+  transactional — a crash mid-drain can drop a queued wake; worth hardening
+  if the queue ever crosses process boundaries.
+- **Summarizer delta anchor by messageID**: the incremental delta anchors on
+  the `turn_count`-th real user message; anchoring on the last summarized
+  message id instead would survive history rewrites (revert/edit) more
+  precisely.
 - **pt-br web docs**: the English pages were updated; translations under
   `packages/web/src/content/docs/pt-br/` were not.
 
