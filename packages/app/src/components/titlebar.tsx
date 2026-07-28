@@ -17,7 +17,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
-import { TitlebarTabStrip, type TitlebarTabStripHandle } from "@/components/titlebar-tab-strip"
+import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
@@ -28,7 +28,6 @@ import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 import { normalizeSessionInfo } from "@/utils/session"
-import { adjacentTabKey } from "./titlebar-tab-order"
 
 const legacyTitlebarHeight = 40
 const v2TitlebarHeight = 36
@@ -183,7 +182,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
-            let tabStrip: TitlebarTabStripHandle | undefined
             const [session] = createResource(
               () => {
                 const route = layout.route()
@@ -340,40 +338,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   keybind: "mod+shift+t",
                   onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
-                {
-                  id: `tab.prev`,
-                  category: "tab",
-                  title: "",
-                  keybind: `mod+option+ArrowLeft,ctrl+shift+tab`,
-                  hidden: true,
-                  onSelect: () => {
-                    const current = currentTab()
-                    const key = adjacentTabKey(
-                      tabStrip?.visibleTabKeys() ?? tabsStore.map(tabKey),
-                      current ? tabKey(current) : undefined,
-                      -1,
-                    )
-                    const next = tabsStore.find((tab) => tabKey(tab) === key)
-                    if (next) tabs.select(next)
-                  },
-                },
-                {
-                  id: `tab.next`,
-                  category: "tab",
-                  title: "",
-                  keybind: `mod+option+ArrowRight,ctrl+tab`,
-                  hidden: true,
-                  onSelect: () => {
-                    const current = currentTab()
-                    const key = adjacentTabKey(
-                      tabStrip?.visibleTabKeys() ?? tabsStore.map(tabKey),
-                      current ? tabKey(current) : undefined,
-                      1,
-                    )
-                    const next = tabsStore.find((tab) => tabKey(tab) === key)
-                    if (next) tabs.select(next)
-                  },
-                },
               ].filter((v) => v !== undefined)
             })
 
@@ -417,7 +381,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 </TooltipV2>
 
                 <TitlebarTabStrip
-                  ref={(handle) => (tabStrip = handle)}
                   tabs={tabsStore}
                   currentTab={currentTab}
                   forceTruncate={tabsAreOverflowing()}
