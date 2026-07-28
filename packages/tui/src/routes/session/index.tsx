@@ -2126,7 +2126,15 @@ function Shell(props: ToolProps) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}<AutoDecisionSuffix part={props.part} /></text>}>
+            <Show
+              when={isRunning()}
+              fallback={
+                <text fg={theme.text}>
+                  $ {stringValue(props.input.command)}
+                  {!title() && <AutoDecisionSuffix part={props.part} />}
+                </text>
+              }
+            >
               <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
             </Show>
             <Show when={output()}>
