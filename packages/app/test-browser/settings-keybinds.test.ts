@@ -10,36 +10,40 @@ function setup(overrides: Record<string, string> = {}) {
   let controller: ReturnType<typeof createKeybindSettingsController>
 
   const dispose = createRoot((dispose) => {
-    controller = createKeybindSettingsController({
-      command: {
-        catalog: [
-          { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
-          { id: "session.beta", title: "Beta", keybind: "mod+b" },
-        ],
-        options: [],
-        keybinds: (enabled) => suppression.push(enabled),
-      },
-      locale: () => "en",
-      translate: (key, params) => {
-        if (params) return `${key}:${Object.values(params).join("|")}`
-        if (key === "common.key.alt") return "Alt"
-        return String(key)
-      },
-      settings: {
-        current: { keybinds: overrides },
-        keybinds: {
-          get: (id) => overrides[id],
-          set: (id, value) => {
-            overrides[id] = value
-            changes.push([id, value])
-          },
-          resetAll: () => {
-            resets++
+    controller = createKeybindSettingsController(
+      {
+        command: {
+          catalog: [
+            { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
+            { id: "session.beta", title: "Beta", keybind: "mod+b" },
+          ],
+          options: [],
+          keybinds: (enabled) => suppression.push(enabled),
+        },
+        settings: {
+          current: { keybinds: overrides },
+          keybinds: {
+            get: (id) => overrides[id],
+            set: (id, value) => {
+              overrides[id] = value
+              changes.push([id, value])
+            },
+            resetAll: () => {
+              resets++
+            },
           },
         },
+        notify: (toast) => notifications.push(toast),
       },
-      notify: (toast) => notifications.push(toast),
-    })
+      {
+        locale: () => "en",
+        t: (key, params) => {
+          if (params) return `${key}:${Object.values(params).join("|")}`
+          if (key === "common.key.alt") return "Alt"
+          return String(key)
+        },
+      },
+    )
     return dispose
   })
 
