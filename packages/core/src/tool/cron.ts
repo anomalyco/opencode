@@ -6,7 +6,7 @@ import { Tools } from "./tools"
 import { ToolRegistry } from "./registry"
 import { makeLocationNode } from "../effect/app-node"
 import { CronService } from "../cron/service"
-import { CronNode } from "../cron/node"
+import { node as cronNode } from "../cron/node"
 import { CronJob } from "../cron/job"
 import { parseDuration } from "../cron/duration"
 
@@ -79,5 +79,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/cron",
   layer,
-  deps: [ToolRegistry.node, CronNode.node],
+  deps: [ToolRegistry.node, cronNode],
 })
