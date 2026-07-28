@@ -9,6 +9,8 @@ import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
 import type { SessionStatusStore } from "./status-store"
+import type { PermissionDecisionsStore } from "./permission-decisions-store"
+import type { TitleHistoryStore } from "./title-history-store"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
@@ -189,3 +191,55 @@ export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
   snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
   baseline_seq: integer().notNull(),
 })
+
+export const PermissionDecisionsTable = sqliteTable(
+  "permission_decisions",
+  {
+    id: text().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    permission: text().notNull(),
+    patterns: text({ mode: "json" }).notNull().$type<string[]>(),
+    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    verdict: text().$type<PermissionDecisionsStore.Verdict>().notNull(),
+    reason: text(),
+    model: text().notNull(),
+    latency_ms: integer().notNull(),
+    created_at: integer()
+      .notNull()
+      .$default(() => Date.now()),
+  },
+  (table) => [index("permission_decisions_session_idx").on(table.session_id)],
+)
+
+export const SessionAutoSummaryTable = sqliteTable("session_auto_summary", {
+  session_id: text()
+    .$type<SessionSchema.ID>()
+    .primaryKey()
+    .references(() => SessionTable.id, { onDelete: "cascade" }),
+  summary: text().notNull(),
+  model: text().notNull(),
+  turn_count: integer().notNull(),
+  updated_at: integer().notNull(),
+})
+
+export const SessionTitleHistoryTable = sqliteTable(
+  "session_title_history",
+  {
+    id: text().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    source: text().$type<TitleHistoryStore.Source>().notNull(),
+    model: text(),
+    trigger_message_id: text().$type<MessageID>(),
+    created_at: integer()
+      .notNull()
+      .$default(() => Date.now()),
+  },
+  (table) => [index("session_title_history_session_idx").on(table.session_id)],
+)
