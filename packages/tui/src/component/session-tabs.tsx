@@ -7,6 +7,7 @@ import { useTheme, useThemes } from "../context/theme"
 import { adaptiveSessionTabLayout, sessionTabComplete, SESSION_TAB_OVERFLOW_WIDTH } from "../context/session-tabs-model"
 import { createAnimatable, spring } from "../ui/animation"
 import { Locale } from "../util/locale"
+import { stringWidth } from "../util/string-width"
 import { TabPulse } from "./tab-pulse"
 import { tint } from "../theme/color"
 
@@ -138,7 +139,9 @@ export function SessionTabs() {
           const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
           const fadeWidth = () => (hovered() === tab.sessionID ? 6 : 4)
           const fadedTitleParts = createMemo(() => visibleTitleParts().slice(-fadeWidth()))
-          const titleFades = createMemo(() => visibleTitle() !== title() && availableTitleWidth() > fadeWidth())
+          const titleFades = createMemo(
+            () => stringWidth(title()) >= availableTitleWidth() && availableTitleWidth() > fadeWidth(),
+          )
           const foreground = () => {
             if (hovered() === tab.sessionID) return theme.text.default
             return tint(theme.text.subdued, theme.text.default, selection())
