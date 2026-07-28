@@ -561,7 +561,7 @@
       "name": "opencode",
       "version": "1.18.7",
       "bin": {
-        "opencode": "./bin/opencode",
+        "opencode-khoai": "./bin/opencode",
       },
       "dependencies": {
         "@actions/core": "1.11.1",

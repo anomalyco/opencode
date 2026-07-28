@@ -48,6 +48,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
+import { SessionSplitView } from "./split-view"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -123,6 +124,8 @@ const sessionBindingCommands = [
   "session.undo",
   "session.redo",
   "session.sidebar.toggle",
+  "session.split.toggle",
+  "session.todo.toggle",
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
@@ -248,6 +251,8 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [isSplitView, setIsSplitView] = createSignal(true)
+  const [todoOpen, setTodoOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
@@ -260,15 +265,14 @@ export function Session() {
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
-  const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
+    if (sidebar() === "auto") return true
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => dimensions().width - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -329,12 +333,14 @@ export function Session() {
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
       local.agent.set("plan")
+      setIsSplitView(true)
       lastSwitch = part.id
     }
   })
 
   let seeded = false
   let scroll: ScrollBoxRenderable
+  let planScroll: ScrollBoxRenderable | undefined
   let prompt: PromptRef | undefined
   const bind = (r: PromptRef | undefined) => {
     prompt = r
@@ -367,11 +373,122 @@ export function Session() {
     })
   })
 
+  const renderMessageItem = (message: any, index: () => number) => (
+    <Switch>
+      <Match when={message.id === revert()?.messageID}>
+        {(function () {
+          const redoShortcut = useCommandShortcut("session.redo")
+          const [hover, setHover] = createSignal(false)
+          const dialog = useDialog()
+
+          const handleUnrevert = async () => {
+            const confirmed = await DialogConfirm.show(
+              dialog,
+              "Confirm Redo",
+              "Are you sure you want to restore the reverted messages?",
+            )
+            if (confirmed) {
+              keymap.dispatchCommand("session.redo")
+            }
+          }
+
+          return (
+            <box
+              onMouseOver={() => setHover(true)}
+              onMouseOut={() => setHover(false)}
+              onMouseUp={handleUnrevert}
+              marginTop={1}
+              flexShrink={0}
+              border={["left"]}
+              customBorderChars={SplitBorder.customBorderChars}
+              borderColor={theme.backgroundPanel}
+            >
+              <box
+                paddingTop={1}
+                paddingBottom={1}
+                paddingLeft={2}
+                backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                <text fg={theme.textMuted}>
+                  <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
+                </text>
+                <Show when={revert()!.diffFiles?.length}>
+                  <box marginTop={1}>
+                    <For each={revert()!.diffFiles}>
+                      {(file) => (
+                        <text fg={theme.text}>
+                          {file.filename}
+                          <Show when={file.additions > 0}>
+                            <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                          </Show>
+                          <Show when={file.deletions > 0}>
+                            <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                          </Show>
+                        </text>
+                      )}
+                    </For>
+                  </box>
+                </Show>
+              </box>
+            </box>
+          )
+        })()}
+      </Match>
+      <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+        <></>
+      </Match>
+      <Match when={message.role === "user"}>
+        <UserMessage
+          index={index()}
+          onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            dialog.replace(() => (
+              <DialogMessage
+                messageID={message.id}
+                sessionID={route.sessionID}
+                setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+              />
+            ))
+          }}
+          message={message as UserMessage}
+          parts={sync.data.part[message.id] ?? []}
+          pending={pending()}
+        />
+      </Match>
+      <Match when={message.role === "assistant"}>
+        <AssistantMessage
+          last={lastAssistant()?.id === message.id}
+          message={message as AssistantMessage}
+          parts={sync.data.part[message.id] ?? []}
+        />
+      </Match>
+    </Switch>
+  )
+
+  // Helper: Get active scrollbox in split or normal mode
+  const getActiveScrollbox = (): ScrollBoxRenderable => {
+    if (!isSplitView() || !planScroll) return scroll
+    const focused = renderer.currentFocusedRenderable
+    if (!focused) return scroll
+    function hasFocus(item: any): boolean {
+      if (!item) return false
+      if (item === focused) return true
+      for (const child of item.getChildren?.() ?? []) {
+        if (hasFocus(child)) return true
+      }
+      return false
+    }
+    if (hasFocus(planScroll)) return planScroll
+    return scroll
+  }
+
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
-    const children = scroll.getChildren()
+    const activeScroll = getActiveScrollbox()
+    const children = activeScroll.getChildren()
     const messagesList = messages()
-    const scrollTop = scroll.y
+    const scrollTop = activeScroll.y
 
     // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
@@ -398,25 +515,36 @@ export function Session() {
     return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
   }
 
+  // Helper: Find which scrollbox contains a message by ID
+  const scrollForMessage = (messageID: string): { scroll: ScrollBoxRenderable; child: any } | undefined => {
+    const search = (sb: ScrollBoxRenderable | undefined) => {
+      if (!sb || sb.isDestroyed) return
+      const child = sb.getChildren().find((c) => c.id === messageID)
+      if (child) return { scroll: sb, child }
+    }
+    return search(scroll) ?? (isSplitView() ? search(planScroll) : undefined)
+  }
+
   // Helper: Scroll to message in direction or fallback to page scroll
   const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
+    const activeScroll = getActiveScrollbox()
     const targetID = findNextVisibleMessage(direction)
 
     if (!targetID) {
-      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
+      activeScroll.scrollBy(direction === "next" ? activeScroll.height : -activeScroll.height)
       dialog.clear()
       return
     }
 
-    const child = scroll.getChildren().find((c) => c.id === targetID)
-    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    const found = scrollForMessage(targetID)
+    if (found) found.scroll.scrollTo(found.child.y)
     dialog.clear()
   }
 
   function toBottom() {
     setTimeout(() => {
-      if (!scroll || scroll.isDestroyed) return
-      scroll.scrollTo(scroll.scrollHeight)
+      if (scroll && !scroll.isDestroyed) scroll.scrollTo(scroll.scrollHeight)
+      if (planScroll && !planScroll.isDestroyed) planScroll.scrollTo(planScroll.scrollHeight)
     }, 50)
   }
 
@@ -518,10 +646,8 @@ export function Session() {
         dialog.replace(() => (
           <DialogTimeline
             onMove={(messageID) => {
-              const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              const found = scrollForMessage(messageID)
+              if (found) found.scroll.scrollTo(found.child.y)
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
@@ -541,10 +667,8 @@ export function Session() {
           <DialogForkFromTimeline
             onMove={(messageID) => {
               if (!messageID) return
-              const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              const found = scrollForMessage(messageID)
+              if (found) found.scroll.scrollTo(found.child.y)
             }}
             sessionID={route.sessionID}
           />
@@ -664,7 +788,7 @@ export function Session() {
       },
     },
     {
-      title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
+      title: sidebarVisible() ? "Hide status bar" : "Show status bar",
       value: "session.sidebar.toggle",
       category: "Session",
       run: () => {
@@ -673,6 +797,24 @@ export function Session() {
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: isSplitView() ? "Disable split-screen view" : "Enable split-screen view",
+      value: "session.split.toggle",
+      category: "Session",
+      run: () => {
+        setIsSplitView((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: todoOpen() ? "Hide session todo list" : "Show session todo list",
+      value: "session.todo.toggle",
+      category: "Session",
+      run: () => {
+        setTodoOpen((prev) => !prev)
         dialog.clear()
       },
     },
@@ -748,7 +890,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 2)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(-activeScroll.height / 2)
         dialog.clear()
       },
     },
@@ -758,7 +901,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 2)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(activeScroll.height / 2)
         dialog.clear()
       },
     },
@@ -768,7 +912,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-1)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(-1)
         dialog.clear()
       },
     },
@@ -778,7 +923,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(1)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(1)
         dialog.clear()
       },
     },
@@ -788,7 +934,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 4)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(-activeScroll.height / 4)
         dialog.clear()
       },
     },
@@ -798,7 +945,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 4)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollBy(activeScroll.height / 4)
         dialog.clear()
       },
     },
@@ -808,7 +956,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(0)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollTo(0)
         dialog.clear()
       },
     },
@@ -818,7 +967,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(scroll.scrollHeight)
+        const activeScroll = getActiveScrollbox()
+        activeScroll.scrollTo(activeScroll.scrollHeight)
         dialog.clear()
       },
     },
@@ -844,10 +994,8 @@ export function Session() {
           )
 
           if (hasValidTextPart) {
-            const child = scroll.getChildren().find((child) => {
-              return child.id === message.id
-            })
-            if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            const found = scrollForMessage(message.id)
+            if (found) found.scroll.scrollTo(found.child.y)
             break
           }
         }
@@ -1164,183 +1312,96 @@ export function Session() {
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
-            <Show when={session()}>
-              <scrollbox
-                ref={(r) => (scroll = r)}
-                viewportOptions={{
-                  paddingRight: showScrollbar() ? 1 : 0,
-                }}
-                verticalScrollbarOptions={{
-                  paddingLeft: 1,
-                  visible: showScrollbar(),
-                  trackOptions: {
-                    backgroundColor: theme.backgroundElement,
-                    foregroundColor: theme.border,
-                  },
-                }}
-                stickyScroll={true}
-                stickyStart="bottom"
-                flexGrow={1}
-                scrollAcceleration={scrollAcceleration()}
-              >
-                <box height={1} />
-                <For each={messages()}>
-                  {(message, index) => (
-                    <Switch>
-                      <Match when={message.id === revert()?.messageID}>
-                        {(function () {
-                          const redoShortcut = useCommandShortcut("session.redo")
-                          const [hover, setHover] = createSignal(false)
-                          const dialog = useDialog()
-
-                          const handleUnrevert = async () => {
-                            const confirmed = await DialogConfirm.show(
-                              dialog,
-                              "Confirm Redo",
-                              "Are you sure you want to restore the reverted messages?",
-                            )
-                            if (confirmed) {
-                              keymap.dispatchCommand("session.redo")
-                            }
-                          }
-
-                          return (
-                            <box
-                              onMouseOver={() => setHover(true)}
-                              onMouseOut={() => setHover(false)}
-                              onMouseUp={handleUnrevert}
-                              marginTop={1}
-                              flexShrink={0}
-                              border={["left"]}
-                              customBorderChars={SplitBorder.customBorderChars}
-                              borderColor={theme.backgroundPanel}
-                            >
-                              <box
-                                paddingTop={1}
-                                paddingBottom={1}
-                                paddingLeft={2}
-                                backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-                              >
-                                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                                <text fg={theme.textMuted}>
-                                  <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
-                                </text>
-                                <Show when={revert()!.diffFiles?.length}>
-                                  <box marginTop={1}>
-                                    <For each={revert()!.diffFiles}>
-                                      {(file) => (
-                                        <text fg={theme.text}>
-                                          {file.filename}
-                                          <Show when={file.additions > 0}>
-                                            <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
-                                          </Show>
-                                          <Show when={file.deletions > 0}>
-                                            <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
-                                          </Show>
-                                        </text>
-                                      )}
-                                    </For>
-                                  </box>
-                                </Show>
-                              </box>
-                            </box>
-                          )
-                        })()}
-                      </Match>
-                      <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
-                        <></>
-                      </Match>
-                      <Match when={message.role === "user"}>
-                        <UserMessage
-                          index={index()}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            dialog.replace(() => (
-                              <DialogMessage
-                                messageID={message.id}
-                                sessionID={route.sessionID}
-                                setPrompt={(promptInfo) => prompt?.set(promptInfo)}
-                              />
-                            ))
-                          }}
-                          message={message as UserMessage}
-                          parts={sync.data.part[message.id] ?? []}
-                          pending={pending()}
-                        />
-                      </Match>
-                      <Match when={message.role === "assistant"}>
-                        <AssistantMessage
-                          last={lastAssistant()?.id === message.id}
-                          message={message as AssistantMessage}
-                          parts={sync.data.part[message.id] ?? []}
-                        />
-                      </Match>
-                    </Switch>
-                  )}
-                </For>
-              </scrollbox>
-              <box flexShrink={0}>
-                <Show when={permissions().length > 0}>
-                  <PermissionPrompt
-                    request={permissions()[0]}
-                    directory={sync.session.get(permissions()[0].sessionID)?.directory}
-                  />
-                </Show>
-                <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt
-                    request={questions()[0]}
-                    directory={sync.session.get(questions()[0].sessionID)?.directory}
-                  />
-                </Show>
-                <Show when={session()?.parentID}>
-                  <SubagentFooter />
-                </Show>
-                <Show when={visible()}>
-                  <pluginRuntime.Slot
-                    name="session_prompt"
-                    mode="replace"
-                    session_id={route.sessionID}
-                    visible={visible()}
-                    disabled={disabled()}
-                    on_submit={toBottom}
-                    ref={bind}
+            <Show
+              when={isSplitView()}
+              fallback={
+                <Show when={session()}>
+                  <scrollbox
+                    ref={(r) => (scroll = r)}
+                    viewportOptions={{
+                      paddingRight: showScrollbar() ? 1 : 0,
+                    }}
+                    verticalScrollbarOptions={{
+                      paddingLeft: 1,
+                      visible: showScrollbar(),
+                      trackOptions: {
+                        backgroundColor: theme.backgroundElement,
+                        foregroundColor: theme.border,
+                      },
+                    }}
+                    stickyScroll={true}
+                    stickyStart="bottom"
+                    flexGrow={1}
+                    scrollAcceleration={scrollAcceleration()}
                   >
-                    <Prompt
-                      visible={visible()}
-                      ref={bind}
-                      disabled={disabled()}
-                      onSubmit={() => {
-                        toBottom()
-                      }}
-                      sessionID={route.sessionID}
-                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
-                    />
-                  </pluginRuntime.Slot>
+                    <box height={1} />
+                    <For each={messages()}>
+                      {(message, index) => renderMessageItem(message, index)}
+                    </For>
+                  </scrollbox>
+                  <box flexShrink={0}>
+                    <Show when={permissions().length > 0}>
+                      <PermissionPrompt
+                        request={permissions()[0]}
+                        directory={sync.session.get(permissions()[0].sessionID)?.directory}
+                      />
+                    </Show>
+                    <Show when={permissions().length === 0 && questions().length > 0}>
+                      <QuestionPrompt
+                        request={questions()[0]}
+                        directory={sync.session.get(questions()[0].sessionID)?.directory}
+                      />
+                    </Show>
+                    <Show when={session()?.parentID}>
+                      <SubagentFooter />
+                    </Show>
+                    <Show when={visible()}>
+                      <pluginRuntime.Slot
+                        name="session_prompt"
+                        mode="replace"
+                        session_id={route.sessionID}
+                        visible={visible()}
+                        disabled={disabled()}
+                        on_submit={toBottom}
+                        ref={bind}
+                      >
+                        <Prompt
+                          visible={visible()}
+                          ref={bind}
+                          disabled={disabled()}
+                          onSubmit={() => {
+                            toBottom()
+                          }}
+                          sessionID={route.sessionID}
+                          right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                        />
+                      </pluginRuntime.Slot>
+                    </Show>
+                  </box>
                 </Show>
-              </box>
+              }
+            >
+              <SessionSplitView
+                sessionID={route.sessionID}
+                messages={messages()}
+                scrollRef={(r) => (scroll = r)}
+                planScrollRef={(r) => (planScroll = r)}
+                promptRef={bind}
+                disabled={disabled()}
+                visible={visible()}
+                onPromptSubmit={toBottom}
+                permissions={permissions()}
+                questions={questions()}
+                renderMessage={(message, index) => renderMessageItem(message, index)}
+                todoOpen={todoOpen()}
+                onToggleTodo={() => setTodoOpen((o) => !o)}
+              />
             </Show>
             <Toast />
+            <Show when={sidebarVisible()}>
+              <Sidebar sessionID={route.sessionID} />
+            </Show>
           </box>
-          <Show when={sidebarVisible()}>
-            <Switch>
-              <Match when={wide()}>
-                <Sidebar sessionID={route.sessionID} />
-              </Match>
-              <Match when={!wide()}>
-                <box
-                  position="absolute"
-                  top={0}
-                  left={0}
-                  right={0}
-                  bottom={0}
-                  alignItems="flex-end"
-                  backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
-                >
-                  <Sidebar sessionID={route.sessionID} />
-                </box>
-              </Match>
-            </Switch>
-          </Show>
         </box>
       </context.Provider>
     </LocationProvider>

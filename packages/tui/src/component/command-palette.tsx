@@ -1,6 +1,9 @@
 import { createMemo } from "solid-js"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { type DialogContext } from "../ui/dialog"
+import { TextAttributes } from "@opentui/core"
+import { useTheme } from "../context/theme"
+import { InstallationVersion, InstallationChannel } from "@opencode-ai/core/installation/version"
 import {
   COMMAND_PALETTE_COMMAND,
   formatKeyBindings,
@@ -26,6 +29,7 @@ function isSuggestedPaletteCommand(entry: PaletteCommandEntry) {
 export function CommandPaletteDialog() {
   const config = useTuiConfig()
   const keymap = useOpencodeKeymap()
+  const { theme } = useTheme()
   const entries = useKeymapSelector((keymap: OpenTuiKeymap) => {
     const query = {
       namespace: "palette",
@@ -75,5 +79,22 @@ export function CommandPaletteDialog() {
     ]
   }
 
-  return <DialogSelect ref={(value) => (ref = value)} title="Commands" options={list()} />
+  return (
+    <DialogSelect
+      ref={(value) => (ref = value)}
+      title="Commands"
+      titleView={
+        <box flexDirection="column" width="100%">
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            Commands
+          </text>
+          <text fg={theme.textMuted}>
+            OpenCode {InstallationVersion}
+            {InstallationChannel !== "latest" ? ` (${InstallationChannel})` : ""}
+          </text>
+        </box>
+      }
+      options={list()}
+    />
+  )
 }
