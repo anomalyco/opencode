@@ -1108,7 +1108,18 @@ const layer = Layer.effect(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
 
-          if (
+          if (lastAssistant?.finish === "length" && !hasToolCalls && lastUser.id < lastAssistant.id) {
+            // The model hit its output token cap mid-turn (e.g. a heavy reasoning
+            // model burning its budget on thinking with no room left for the
+            // answer/tool call). Treat this like "tool-calls": keep looping so a
+            // fresh step continues from where the truncated message left off,
+            // instead of silently going idle and waiting for the user to type
+            // "continue".
+            yield* Effect.logWarning("continuing loop after truncated (length) finish reason", {
+              "session.id": sessionID,
+              messageID: lastAssistant.id,
+            })
+          } else if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
