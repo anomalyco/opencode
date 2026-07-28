@@ -55,6 +55,7 @@ import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
+import { SessionAutoSummary } from "./auto-summary"
 import { LLMEvent } from "@opencode-ai/llm"
 
 // @ts-ignore
@@ -137,6 +138,7 @@ const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const autoSummary = yield* SessionAutoSummary.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
@@ -1218,6 +1220,16 @@ const layer = Layer.effect(
               modelID: lastUser.model.modelID,
               user: lastUser,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
+            yield* autoSummary
+              .update({
+                sessionID,
+                agent: lastUser.agent,
+                messages: msgs,
+                providerID: lastUser.model.providerID,
+                modelID: lastUser.model.modelID,
+                user: lastUser,
+              })
+              .pipe(Effect.ignore, Effect.forkIn(scope))
             break
           }
 
@@ -1707,6 +1719,7 @@ export const node = LayerNode.make({
     SessionSummary.node,
     SystemPrompt.node,
     LLM.node,
+    SessionAutoSummary.node,
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
