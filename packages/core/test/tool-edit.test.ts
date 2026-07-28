@@ -150,7 +150,7 @@ describe("EditTool", () => {
                 expect(settled.content).toEqual([
                   {
                     type: "text",
-                    text: "Edited file successfully: hello.txt\nReplacements: 1\n```diff\n-before\n+after\n```",
+                    text: "Edited hello.txt (1 replacement)",
                   },
                 ])
                 // Compact UI metadata carries the file diffs the TUI renders.
@@ -385,7 +385,7 @@ describe("EditTool", () => {
                   error: {
                     type: "tool.execution",
                     message:
-                      "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                      "Could not find oldString in matches.txt. It must match exactly, including whitespace and indentation.",
                   },
                 })
                 expect(
@@ -395,8 +395,43 @@ describe("EditTool", () => {
                   error: {
                     type: "tool.execution",
                     message:
-                      "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                      "Found 2 matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.",
                   },
+                })
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("returns specific missing file and directory errors", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const directory = path.join(tmp.path, "src")
+        return Effect.promise(() => fs.mkdir(directory)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call({ path: "missing.ts", oldString: "before", newString: "after" }),
+                  ),
+                ).toEqual({
+                  status: "error",
+                  error: { type: "tool.execution", message: "File not found: missing.ts" },
+                })
+                expect(
+                  yield* executeTool(registry, call({ path: "src", oldString: "before", newString: "after" })),
+                ).toEqual({
+                  status: "error",
+                  error: { type: "tool.execution", message: "Path is a directory, not a file: src" },
                 })
                 expect(writes).toEqual([])
               }),
@@ -425,6 +460,7 @@ describe("EditTool", () => {
               expect(settled.status).toBe("completed")
               if (settled.status !== "completed") return
               expect(settled.output).toMatchObject({ replacements: 3 })
+              expect(settled.content).toEqual([{ type: "text", text: "Edited all.txt (3 replacements)" }])
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after after after")
               expect(writes).toHaveLength(1)
             }),

@@ -60,22 +60,8 @@ const countOccurrences = (content: string, search: string) => {
   return count
 }
 
-const previewLines = (value: string, prefix: "+" | "-") => {
-  const lines = normalizeLineEndings(value).split("\n")
-  const shown = lines.slice(0, 6).map((line) => `${prefix}${line.length > 240 ? `${line.slice(0, 240)}...` : line}`)
-  if (lines.length > shown.length) shown.push(`${prefix}...`)
-  return shown
-}
-
-export const toModelOutput = (output: Output, oldString: string, newString: string) =>
-  [
-    `Edited file successfully: ${output.files[0]?.file}`,
-    `Replacements: ${output.replacements}`,
-    "```diff",
-    ...previewLines(oldString, "-"),
-    ...previewLines(newString, "+"),
-    "```",
-  ].join("\n")
+export const toModelOutput = (output: Output) =>
+  `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`
 
 /** Deferred edit behavior and UX integrations remain visible at the model-facing seam. */
 // TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
@@ -105,7 +91,11 @@ export const Plugin = {
               execute: (input, context) => {
                 const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
                   effect.pipe(
-                    Effect.mapError((error) => new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
+                    Effect.mapError((error) =>
+                      error instanceof ToolFailure
+                        ? error
+                        : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
+                    ),
                   )
 
                 return Effect.gen(function* () {
@@ -148,6 +138,16 @@ export const Plugin = {
                       source: permissionSource,
                     }),
                   )
+                  const info = yield* unableToEdit(
+                    fs.stat(target.canonical).pipe(
+                      Effect.catchReason("PlatformError", "NotFound", () =>
+                        Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
+                      ),
+                    ),
+                  )
+                  if (info.type === "Directory") {
+                    return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
+                  }
                   const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
                   const ending = detectLineEnding(source.text)
                   const oldString = convertToLineEnding(input.oldString, ending)
@@ -155,14 +155,12 @@ export const Plugin = {
                   const replacements = countOccurrences(source.text, oldString)
                   if (replacements === 0) {
                     return yield* new ToolFailure({
-                      message:
-                        "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                      message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
                     })
                   }
                   if (replacements > 1 && input.replaceAll !== true) {
                     return yield* new ToolFailure({
-                      message:
-                        "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                      message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
                     })
                   }
 
@@ -198,7 +196,7 @@ export const Plugin = {
                 }).pipe(
                   Effect.map((output) => ({
                     output,
-                    content: toModelOutput(output, input.oldString, input.newString),
+                    content: toModelOutput(output),
                     metadata: { files: output.files },
                   })),
                 )
