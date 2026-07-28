@@ -18,7 +18,7 @@ export function hasNonBlockingServiceIssue(input: {
 export function serverStatusDotClass(input: {
   ready: boolean
   serverHealth: boolean | undefined
-  attention: boolean
+  attention?: boolean
   issue: boolean
 }) {
   if (input.serverHealth === false) return "bg-icon-critical-base"
