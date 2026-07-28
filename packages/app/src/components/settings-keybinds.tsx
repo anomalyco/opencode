@@ -325,60 +325,59 @@ export function createKeybindSettingsController(input: {
   }
   const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
 
-  onMount(() => {
-    const handle = (event: KeyboardEvent) => {
-      const id = store.active
-      if (!id) return
+  const handle = (event: KeyboardEvent) => {
+    const id = store.active
+    if (!id) return
 
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
+    event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
 
-      if (event.key === "Escape") {
-        stop()
-        return
-      }
-
-      const clear =
-        (event.key === "Backspace" || event.key === "Delete") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey
-      if (clear) {
-        input.settings.keybinds.set(id, "none")
-        stop()
-        return
-      }
-
-      const next = recordKeybind(event)
-      if (!next) return
-
-      const conflicts = new Map<string, string>()
-      for (const signature of signatures(next)) {
-        for (const item of used().get(signature) ?? []) {
-          if (item.id === id) continue
-          conflicts.set(item.id, item.title)
-        }
-      }
-
-      if (conflicts.size > 0) {
-        notify({
-          title: input.translate("settings.shortcuts.conflict.title"),
-          description: input.translate("settings.shortcuts.conflict.description", {
-            keybind: formatKeybind(next, input.translate),
-            titles: [...conflicts.values()].join(", "),
-          }),
-        })
-        return
-      }
-
-      input.settings.keybinds.set(id, next)
+    if (event.key === "Escape") {
       stop()
+      return
     }
 
-    makeEventListener(input.target ?? document, "keydown", handle, { capture: true })
-  })
+    const clear =
+      (event.key === "Backspace" || event.key === "Delete") &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    if (clear) {
+      input.settings.keybinds.set(id, "none")
+      stop()
+      return
+    }
+
+    const next = recordKeybind(event)
+    if (!next) return
+
+    const conflicts = new Map<string, string>()
+    for (const signature of signatures(next)) {
+      for (const item of used().get(signature) ?? []) {
+        if (item.id === id) continue
+        conflicts.set(item.id, item.title)
+      }
+    }
+
+    if (conflicts.size > 0) {
+      notify({
+        title: input.translate("settings.shortcuts.conflict.title"),
+        description: input.translate("settings.shortcuts.conflict.description", {
+          keybind: formatKeybind(next, input.translate),
+          titles: [...conflicts.values()].join(", "),
+        }),
+      })
+      return
+    }
+
+    input.settings.keybinds.set(id, next)
+    stop()
+  }
+
+  const target = input.target ?? (typeof document === "object" ? document : undefined)
+  if (target) makeEventListener(target, "keydown", handle, { capture: true })
 
   onCleanup(() => {
     if (store.active) input.command.keybinds(true)
