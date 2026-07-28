@@ -27,6 +27,7 @@ import {
   TextPart,
   ToolPart,
   UserMessage,
+  Todo,
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
@@ -41,6 +42,7 @@ import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
+import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
@@ -519,6 +521,7 @@ export function getToolInfo(
       }
     }
     case "bash":
+    case "shell":
       return {
         icon: "console",
         title: i18n.t("ui.tool.shell"),
@@ -544,6 +547,11 @@ export function getToolInfo(
         subtitle: input.files?.length
           ? `${input.files.length} ${i18n.t(input.files.length > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
           : undefined,
+      }
+    case "todowrite":
+      return {
+        icon: "checklist",
+        title: i18n.t("ui.tool.todos"),
       }
     case "question":
       return {
@@ -608,6 +616,8 @@ function taskSession(
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const HIDDEN_TOOLS = new Set(["todowrite"])
+
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
   return fallback
@@ -711,6 +721,7 @@ function index<T extends { id: string }>(items: readonly T[]) {
 
 export function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
+    if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
@@ -720,7 +731,7 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
 }
 
 function toolDefaultOpen(tool: string, shell = false, edit = false) {
-  if (tool === "bash") return shell
+  if (tool === "bash" || tool === "shell") return shell
   if (tool === "edit" || tool === "write" || tool === "patch" || tool === "apply_patch") return edit
 }
 
@@ -1081,11 +1092,7 @@ export function ContextToolGroup(props: {
         <div data-component="context-tool-group-trigger">
           <span
             data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium"
-            classList={{
-              "text-text-strong": pending(),
-              "text-text-weak": !pending(),
-            }}
+            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
@@ -1097,11 +1104,7 @@ export function ContextToolGroup(props: {
             </span>
             <span
               data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal"
-              classList={{
-                "text-text-base": pending(),
-                "text-text-weak": !pending(),
-              }}
+              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
             >
               <AnimatedCountList
                 items={[
@@ -1505,7 +1508,7 @@ export function registerTool(input: { name: string; render?: ToolComponent }) {
 }
 
 export function getTool(name: string) {
-  return state[name === "apply_patch" ? "patch" : name]?.render
+  return state[name === "apply_patch" ? "patch" : name === "bash" ? "shell" : name]?.render
 }
 
 export const ToolRegistry = {
@@ -1553,6 +1556,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
+  if (part().tool === "todowrite") return null
+
   const hideQuestion = createMemo(
     () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),
   )
@@ -2098,7 +2103,7 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
-  name: "bash",
+  name: "shell",
   render(props) {
     const i18n = useI18n()
     const pending = () => props.status === "pending" || props.status === "running"
@@ -2533,6 +2538,57 @@ ToolRegistry.register({
           </BasicTool>
         </div>
       </Show>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "todowrite",
+  render(props) {
+    const i18n = useI18n()
+    const todos = createMemo(() => {
+      const meta = props.metadata?.todos
+      if (Array.isArray(meta)) return meta
+
+      const input = props.input.todos
+      if (Array.isArray(input)) return input
+
+      return []
+    })
+
+    const subtitle = createMemo(() => {
+      const list = todos()
+      if (list.length === 0) return ""
+      return `${list.filter((t: Todo) => t.status === "completed").length}/${list.length}`
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        defaultOpen
+        icon="checklist"
+        trigger={{
+          title: i18n.t("ui.tool.todos"),
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={todos().length}>
+          <div data-component="todos">
+            <For each={todos()}>
+              {(todo: Todo) => (
+                <Checkbox readOnly checked={todo.status === "completed"}>
+                  <span
+                    data-slot="message-part-todo-content"
+                    data-completed={todo.status === "completed" ? "completed" : undefined}
+                  >
+                    {todo.content}
+                  </span>
+                </Checkbox>
+              )}
+            </For>
+          </div>
+        </Show>
+      </BasicTool>
     )
   },
 })

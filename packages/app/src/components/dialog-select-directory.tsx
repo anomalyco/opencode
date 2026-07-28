@@ -9,6 +9,7 @@ import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
 import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
+import type { Path } from "@opencode-ai/sdk/v2/client"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -59,10 +60,11 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
     () => (missingBase() ? true : undefined),
-    async () => {
+    async (): Promise<Path | undefined> => {
+      if ((await sdk.protocol) !== "v1") return
       return sdk.client.path
         .get()
-        .then((x) => x.data)
+        .then((result) => result.data)
         .catch(() => undefined)
     },
     { initialValue: undefined },
@@ -162,7 +164,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           const path = displayPickerPath(item.absolute, filter(), home())
           if (path === "~") {
             return (
-              <div class="w-full flex items-center justify-between rounded-md">
+              <div data-directory-path={item.absolute} class="w-full flex items-center justify-between rounded-md">
                 <div class="flex items-center gap-x-3 grow min-w-0">
                   <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular min-w-0">
@@ -174,7 +176,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
             )
           }
           return (
-            <div class="w-full flex items-center justify-between rounded-md">
+            <div data-directory-path={item.absolute} class="w-full flex items-center justify-between rounded-md">
               <div class="flex items-center gap-x-3 grow min-w-0">
                 <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                 <div class="flex items-center text-14-regular min-w-0">
