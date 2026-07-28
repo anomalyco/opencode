@@ -1,106 +1,99 @@
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Show, createEffect, createMemo, createResource, createSignal, type Accessor, type JSX } from "solid-js"
+import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
+import { Show, createMemo, createSignal, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
-import { NewSessionDesignView } from "@/components/session"
+import { PromptInputV2Composer } from "@/components/prompt-input-v2"
 import { PromptGitStatus, PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
-import type { PromptProject } from "@/components/prompt-project-selector"
+import {
+  PromptProjectAddButton,
+  PromptProjectSelector,
+  type PromptProjectController,
+} from "@/components/prompt-project-selector"
 import { StatusPopoverV2 } from "@/components/status-popover"
 import { useLanguage } from "@/context/language"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
+import type { NewSessionCommandController } from "./new-session-command-controller"
+import type { NewSessionDraftController } from "./new-session-draft-controller"
+import type { NewSessionWorkspaceController } from "./new-session-workspace-controller"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
 export function NewSessionView(props: {
-  rightMount: Accessor<HTMLElement | null>
-  statusVisible: Accessor<boolean>
-  statusLabel: Accessor<string>
-  promptReady: Accessor<boolean>
-  promptReadyPromise: Accessor<Promise<unknown> | undefined>
-  restoreFocus: () => void
-  composer: () => JSX.Element
-  projectEmpty: Accessor<boolean>
-  projectSelected: Accessor<PromptProject | undefined>
-  projectAdd: () => JSX.Element
-  projectSelector: () => JSX.Element
-  workspaceVisible: Accessor<boolean>
-  workspaceValue: Accessor<string>
-  workspaceRoot: Accessor<string>
-  workspaces: Accessor<string[]>
-  branch: Accessor<string | undefined>
-  noGit: Accessor<boolean>
-  onWorkspaceChange: (value: string) => void
-  providerReady: Accessor<boolean>
-  providerConnected: Accessor<boolean>
-  onOpenProviders: () => void
+  input: NewSessionDraftController["input"]
+  project: PromptProjectController
+  workspace: NewSessionWorkspaceController
+  provider: NewSessionCommandController["provider"]
 }) {
-  createEffect(() => {
-    if (!props.promptReady()) return
-    props.restoreFocus()
-  })
-
-  const ready = Promise.resolve()
-  const [suspendUntilPromptReady] = createResource(
-    () => props.promptReadyPromise() ?? ready,
-    (promise) => promise.then(() => true),
-  )
-
   return (
-    <div class="relative size-full overflow-hidden flex flex-col">
-      {suspendUntilPromptReady()}
-      <Show when={props.rightMount()}>
-        {(mount) => (
-          <Portal mount={mount()}>
-            <Show when={props.statusVisible()}>
-              <Tooltip placement="bottom" value={props.statusLabel()}>
-                <StatusPopoverV2 />
-              </Tooltip>
-            </Show>
-          </Portal>
-        )}
-      </Show>
-      <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
-        <div class="@container relative flex flex-col min-h-0 h-full flex-1">
-          <div class="flex-1 min-h-0 overflow-hidden rounded-[10px]">
-            <NewSessionDesignView>
-              <div class={NEW_SESSION_CONTENT_WIDTH}>
-                <div class="flex flex-col gap-8">
-                  {props.composer()}
-                  <Show when={props.projectEmpty()}>{props.projectAdd()}</Show>
-                  <Show when={props.projectSelected()}>
-                    <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
-                      {props.projectSelector()}
-                      <Show
-                        when={props.workspaceVisible()}
-                        fallback={<PromptGitStatus branch={props.branch()} noGit={props.noGit()} />}
-                      >
-                        <PromptWorkspaceSelector
-                          value={props.workspaceValue()}
-                          projectRoot={props.workspaceRoot()}
-                          workspaces={props.workspaces()}
-                          branch={props.branch()}
-                          onChange={props.onWorkspaceChange}
-                          onDone={props.restoreFocus}
-                        />
-                      </Show>
-                    </div>
+    <div class="@container relative flex flex-col min-h-0 h-full flex-1">
+      <div
+        data-component="session-new-design"
+        class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
+      >
+        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+          <div class={NEW_SESSION_CONTENT_WIDTH}>
+            <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            <div class="mt-8 flex flex-col gap-8">
+              <PromptInputV2Composer controller={props.input} />
+              <Show when={props.project.empty()}>
+                <PromptProjectAddButton controller={props.project} />
+              </Show>
+              <Show when={props.project.selected()}>
+                <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
+                  <PromptProjectSelector controller={props.project} placement="bottom" />
+                  <Show
+                    when={props.workspace.bar.visible()}
+                    fallback={
+                      <PromptGitStatus
+                        branch={props.workspace.bar.branch()}
+                        noGit={!props.workspace.project.git()}
+                      />
+                    }
+                  >
+                    <PromptWorkspaceSelector
+                      value={props.workspace.selection.value()}
+                      projectRoot={props.workspace.project.root()}
+                      workspaces={props.workspace.project.workspaces()}
+                      branch={props.workspace.bar.branch()}
+                      onChange={props.workspace.selection.set}
+                      onDone={props.input.restoreFocus}
+                    />
                   </Show>
                 </div>
-              </div>
-            </NewSessionDesignView>
-            <ProviderTip
-              ready={props.providerReady}
-              connected={props.providerConnected}
-              openProviders={props.onOpenProviders}
-            />
+              </Show>
+            </div>
           </div>
         </div>
+        <ProviderTip
+          ready={props.provider.ready}
+          connected={props.provider.connected}
+          openProviders={props.provider.open}
+        />
       </div>
     </div>
+  )
+}
+
+export function NewSessionStatus(props: { mount: Accessor<HTMLElement | null>; visible: Accessor<boolean> }) {
+  const language = useLanguage()
+
+  return (
+    <Show when={props.mount()}>
+      {(mount) => (
+        <Portal mount={mount()}>
+          <Show when={props.visible()}>
+            <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+              <StatusPopoverV2 />
+            </Tooltip>
+          </Show>
+        </Portal>
+      )}
+    </Show>
   )
 }
 
