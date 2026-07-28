@@ -219,7 +219,6 @@ jobs:
 
   build-electron:
     needs:
-      - build-cli
       - version
     if: github.repository == 'anomalyco/opencode'
     continue-on-error: false
@@ -316,10 +315,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
 
       - name: Build
         run: bun run build
