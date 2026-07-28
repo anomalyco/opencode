@@ -360,25 +360,26 @@ function HomeProjectSlot(
     index: () => number
   },
 ) {
-  const project = createMemo(() => props.items.find((item) => item.worktree === props.worktree))
+  const initial = props.items.find((item) => item.worktree === props.worktree)
+  if (!initial) return
+  const project = createMemo<LocalProject>(
+    (previous) => props.items.find((item) => item.worktree === props.worktree) ?? previous,
+    initial,
+  )
 
   return (
-    <Show when={project()}>
-      {(item) => (
-        <HomeProjectRow
-          {...props}
-          project={item()}
-          server={props.server}
-          index={props.index}
-          serverSelected={props.selection().server === ServerConnection.key(props.server)}
-          selected={
-            props.selection().server === ServerConnection.key(props.server) &&
-            props.selection().directory === props.worktree
-          }
-          unseen={props.unseenCount(props.server, item())}
-        />
-      )}
-    </Show>
+    <HomeProjectRow
+      {...props}
+      project={project()}
+      server={props.server}
+      index={props.index}
+      serverSelected={props.selection().server === ServerConnection.key(props.server)}
+      selected={
+        props.selection().server === ServerConnection.key(props.server) &&
+        props.selection().directory === props.worktree
+      }
+      unseen={props.unseenCount(props.server, project())}
+    />
   )
 }
 
