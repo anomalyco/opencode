@@ -173,6 +173,7 @@ function DraftTabSlot(props: {
 }
 
 export function TitlebarTabStrip(props: {
+  ref?: (handle: TitlebarTabStripHandle) => void
   tabs: Tab[]
   currentTab: () => Tab | undefined
   forceTruncate: boolean
@@ -186,6 +187,14 @@ export function TitlebarTabStrip(props: {
   let scrollRef!: HTMLDivElement
   let listRef!: HTMLDivElement
   let resizeFrame: number | undefined
+
+  props.ref?.({
+    visibleTabKeys: () =>
+      Array.from(listRef?.children ?? []).flatMap((element) => {
+        if (!(element instanceof HTMLElement) || element.classList.contains("hidden")) return []
+        return element.dataset.tabKey ? [element.dataset.tabKey] : []
+      }),
+  })
 
   const tabIds = () => props.tabs.map(tabKey)
 
@@ -322,6 +331,10 @@ export function TitlebarTabStrip(props: {
       />
     </div>
   )
+}
+
+export type TitlebarTabStripHandle = {
+  visibleTabKeys: () => string[]
 }
 
 function useTabShortcut(index: () => number, onSelect: () => void) {
