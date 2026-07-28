@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, PubSub, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Command } from "@opencode-ai/core/command"
@@ -12,12 +12,18 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "@opencode-ai/core/bus"
+import { Credential } from "@opencode-ai/core/credential"
+import { WellKnown } from "@opencode-ai/core/wellknown"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
+import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
@@ -234,6 +240,106 @@ Review files`,
     ),
   )
 })
+
+const describeNative = Watcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+
+// End-to-end proof for #37429: a real file edit reaches the command registry
+// through the native watcher, Config's watch topology, the source filter, and
+// the debounced reload — no mocked change feed.
+describeNative("ConfigCommandPlugin native watcher", () => {
+  it.live("reloads commands from real file edits", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        return Effect.promise(async () => {
+          await fs.mkdir(path.join(global, "commands"), { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const command = yield* Command.Service
+              const config = yield* Config.Service
+              const bus = yield* Bus.Service
+              yield* ConfigCommandPlugin.Plugin.effect(
+                host({
+                  command: {
+                    list: () => Effect.die("unused command.list"),
+                    transform: command.transform,
+                    reload: command.reload,
+                  },
+                }),
+              )
+              yield* watchReady(config, global)
+
+              const created = yield* nextCommandUpdate(bus)
+              yield* Effect.promise(() => fs.writeFile(path.join(global, "commands", "review.md"), "Review native"))
+              yield* Fiber.join(created).pipe(Effect.timeout("10 seconds"))
+              expect((yield* command.get("review"))?.template).toBe("Review native")
+
+              const updated = yield* nextCommandUpdate(bus)
+              yield* Effect.promise(() =>
+                fs.writeFile(path.join(global, "commands", "review.md"), "Review native again"),
+              )
+              yield* Fiber.join(updated).pipe(Effect.timeout("10 seconds"))
+              expect((yield* command.get("review"))?.template).toBe("Review native again")
+            }).pipe(
+              Effect.provide(
+                AppNodeBuilder.build(LayerNode.group([Command.node, Config.node, Bus.node, FSUtil.node]), [
+                  [
+                    Location.node,
+                    Layer.succeed(
+                      Location.Service,
+                      Location.Service.of(location({ directory: AbsolutePath.make(project) })),
+                    ),
+                  ],
+                  [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
+                  [Credential.node, emptyCredentialNode],
+                  [WellKnown.node, emptyWellknownNode],
+                ]),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
+function nextCommandUpdate(bus: Bus.Interface) {
+  return bus
+    .subscribe(Command.Event.Updated)
+    .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+}
+
+// Native directory watches start asynchronously; probe with unrelated files
+// until the change feed delivers so command edits afterwards cannot be missed.
+function watchReady(config: Config.Interface, directory: string) {
+  return Effect.gen(function* () {
+    const seen = yield* Deferred.make<void>()
+    const listener = yield* config.changes().pipe(
+      Stream.runForEach(() => Deferred.succeed(seen, undefined).pipe(Effect.asVoid)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* Effect.yieldNow
+    const probe = path.join(directory, ".watch-probe")
+    while (true) {
+      yield* Effect.promise(() => fs.writeFile(probe, `ready-${Math.random()}`))
+      const result = yield* Deferred.await(seen).pipe(Effect.timeoutOption("250 millis"))
+      if (Option.isSome(result)) break
+    }
+    yield* Fiber.interrupt(listener)
+    yield* Effect.promise(() => fs.rm(probe, { force: true }))
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: "10 seconds",
+      orElse: () => Effect.fail(new Error("timed out waiting for the config watch to become ready")),
+    }),
+  )
+}
 
 function directoryEntry(directory: string) {
   return new Config.Directory({ type: "directory", path: AbsolutePath.make(directory) })

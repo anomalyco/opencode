@@ -23,44 +23,13 @@ import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Integration } from "@opencode-ai/schema/integration"
+import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
-
-const emptyCredentialNode = makeGlobalNode({
-  service: Credential.Service,
-  layer: Layer.succeed(
-    Credential.Service,
-    Credential.Service.of({
-      all: () => Effect.succeed([]),
-      list: () => Effect.succeed([]),
-      get: () => Effect.succeed(undefined),
-      create: () => Effect.die("unused Credential.create"),
-      update: () => Effect.die("unused Credential.update"),
-      remove: () => Effect.die("unused Credential.remove"),
-    }),
-  ),
-  deps: [],
-})
-
-const emptyWellknownNode = makeGlobalNode({
-  service: WellKnown.Service,
-  layer: Layer.succeed(
-    WellKnown.Service,
-    WellKnown.Service.of({
-      entries: () => Effect.succeed([]),
-      snapshot: () => [],
-      refresh: () => Effect.succeed(false),
-      add: () => Effect.die("unused Wellknown.add"),
-      remove: () => Effect.die("unused Wellknown.remove"),
-      resolve: () => Effect.die("unused Wellknown.resolve"),
-    }),
-  ),
-  deps: [],
-})
 
 function testLayer(
   directory: string,
