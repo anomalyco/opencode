@@ -98,12 +98,6 @@ export function Composer(props: ComposerProps) {
       { bind: "left", title: "Previous tab", group: "Composer", run: () => switchTab(-1) },
       { bind: "right", title: "Next tab", group: "Composer", run: () => switchTab(1) },
       { bind: "escape", title: "Close composer", group: "Composer", run: close },
-      {
-        bind: "<leader>down",
-        title: "Toggle composer",
-        group: "Composer",
-        run: close,
-      },
     ],
   }))
 
