@@ -39,6 +39,28 @@ In the TUI, open the command palette and select **Enable auto-approve permission
 
 ---
 
+## Auto agent (LLM validator)
+
+The built-in **auto** agent is a semantic alternative to `--auto`: instead of blanket-approving every ask, a validator LLM reads each request — the exact command or patterns, the tool metadata, and a running summary of the session — and decides per call. Select it like any primary agent (**Tab** in the TUI, or `--agent auto` with `opencode run`).
+
+Static rules keep precedence and are never seen by the validator:
+
+- `"deny"` rules still block immediately, without spending an LLM call.
+- `"allow"` rules still run without approval.
+- Only requests that evaluate to `"ask"` go to the validator.
+
+The validator answers one of three verdicts:
+
+- `ALLOW` — the tool call runs.
+- `DENY <reason>` — the tool call fails and the agent receives the reason as feedback, so it can correct course.
+- `UNCERTAIN <reason>` — the request escalates to the normal approval dialog, with the validator's reason shown.
+
+The flow is fail-closed: on timeout (15s), error, or an unparseable answer, the request falls back to the normal approval dialog. A validator failure never approves or rejects on its own. When the validator is unreachable, the TUI warns once on activation and the session behaves like Build.
+
+Every decision is written to a `permission_decisions` audit table (no TTL) with the verdict, reason, model, and latency, readable via `GET /session/:sessionID/permission_decisions` on the server or plain SQL. The validator and its session summarizer are configurable via `agent.command-validator` and `agent.session-summarizer` — see the [agents docs](/docs/agents#use-auto) and the `docs/auto-mode.md` design record in the repository for the full flow, configuration examples, and failure modes.
+
+---
+
 ## Configuration
 
 You can set permissions globally (with `*`), and override specific tools.
