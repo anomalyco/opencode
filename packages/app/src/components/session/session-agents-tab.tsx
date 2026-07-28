@@ -2,7 +2,6 @@ import { createMemo, For, Show, createSignal } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
 import { useSubAgents } from "@/context/sub-agents"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { sessionHref, requireServerKey } from "@/utils/session-route"
@@ -73,7 +72,13 @@ export function taskSessionID(part: ToolPart) {
 }
 
 export function taskStatus(part: ToolPart): TaskStatus {
-  if (part.state.status === "completed") return "completed"
+  if (part.state.status === "completed") {
+    // A `task` tool that swallows the abort finalizes a normal successful result, so the cancellation
+    // survives only as the first line of the free-text output.
+    const firstLine = text(part.state.output)?.split("\n")[0]?.trim() ?? ""
+    if (firstLine === "Aborted" || firstLine.startsWith("Task aborted")) return "cancelled"
+    return "completed"
+  }
 
   if (part.state.status === "error") {
     // Cancellation is never a wire status, only a refinement of `error`.
@@ -91,7 +96,6 @@ export function SessionAgentsTab() {
   const language = useLanguage()
   const navigate = useNavigate()
   const { params } = useSessionLayout()
-  const sdk = useSDK()
   const { children, totalCost } = useSubAgents()
   const [expanded, setExpanded] = createSignal(false)
 
@@ -202,10 +206,12 @@ export function SessionAgentsTab() {
                               </Show>
                             </span>
                           </div>
-                          <Show when={session.cost != null}>
-                            <span class="text-12-regular text-text-weak whitespace-nowrap">
-                              {formatter().cost(session.cost)}
-                            </span>
+                          <Show when={session.cost != null ? session.cost : undefined}>
+                            {(cost) => (
+                              <span class="text-12-regular text-text-weak whitespace-nowrap">
+                                {formatter().cost(cost())}
+                              </span>
+                            )}
                           </Show>
                         </div>
                       </div>

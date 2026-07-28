@@ -29,7 +29,7 @@ export function SubAgentsProvider(props: { children: JSX.Element }) {
     queryKey: [serverSDK().scope, sdk().directory, "childSessions", params.id] as const,
     queryFn: async () => {
       const id = params.id
-      if (!id) return [] as Session[]
+      if (!id) return []
       const resp = await sdk().client.session.list()
       const all = resp.data ?? []
       return all.filter((s) => s.parentID === id)
@@ -40,7 +40,7 @@ export function SubAgentsProvider(props: { children: JSX.Element }) {
 
   const children = createMemo(() => {
     const parentID = params.id
-    if (!parentID) return [] as Session[]
+    if (!parentID) return []
     const merged = new Map((backfillQuery.data ?? []).map((s) => [s.id, s]))
     // The live store is fresher than the backfill snapshot, so it wins on conflict.
     sync()

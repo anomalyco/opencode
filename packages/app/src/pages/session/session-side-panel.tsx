@@ -50,7 +50,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
@@ -98,9 +97,6 @@ export function SessionSidePanel(props: {
   const sdk = useSDK()
   const { sessionKey, tabs, view, params } = useSessionLayout()
   const projectDirectory = createMemo(() => sdk().directory)
-
-  const sync = useSync()
-
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const shown = settings.visibility.fileTree
 
@@ -229,7 +225,7 @@ export function SessionSidePanel(props: {
     const path = file.pathFromTab(next)
     if (path) void file.load(path)
     openReviewPanel()
-    tabs().open(next)
+    void tabs().open(next)
     tabs().setActive(next)
   }
   const browserTab = createMemo(() => {

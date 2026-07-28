@@ -48,13 +48,20 @@ function failed(error: string, metadata?: Record<string, unknown>): ToolState {
   return { status: "error", input, error, time, ...(metadata ? { metadata } : {}) }
 }
 
+function completed(output: string): ToolState {
+  return { status: "completed", input, output, title: "", metadata: {}, time }
+}
+
 describe("taskStatus", () => {
   const cases: [string, string, ToolPart][] = [
-    [
-      "completed wire status",
-      "completed",
-      part({ status: "completed", input, output: "", title: "", metadata: {}, time }),
-    ],
+    ["completed wire status", "completed", part(completed(""))],
+    ["completed with ordinary output", "completed", part(completed("Task completed in 4s."))],
+    // The `task` tool the user actually runs finalizes an abort as a successful result and signals it only
+    // in the output's first line - see `.omo/evidence/subagents-tab-cleanup/F3-manual-qa.md` section 5.
+    ["completed with the long-running abort line", "cancelled", part(completed("Task aborted.\nRan for 12s."))],
+    ["completed with the bare abort line", "cancelled", part(completed("Aborted"))],
+    ["completed mentioning abort mid-line", "completed", part(completed("Successfully handled an abort case"))],
+    ["completed with abort after the first line", "completed", part(completed("Task completed in 4s.\nAborted"))],
     ["error refined by state.metadata.interrupted", "cancelled", part(failed("boom", { interrupted: true }))],
     ["error refined by part.metadata.interrupted", "cancelled", part(failed("boom"), { interrupted: true })],
     ["error carrying the abort sentinel", "cancelled", part(failed("Tool execution aborted"))],
