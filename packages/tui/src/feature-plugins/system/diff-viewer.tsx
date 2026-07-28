@@ -1061,6 +1061,7 @@ const tui: TuiPlugin = async (api) => {
         namespace: "palette",
         enabled: () => api.route.current.name !== ROUTE,
         run() {
+          if (api.route.current.name === ROUTE) return
           api.route.navigate(ROUTE, {
             mode: "git",
             sessionID: "params" in api.route.current ? api.route.current.params?.sessionID : undefined,

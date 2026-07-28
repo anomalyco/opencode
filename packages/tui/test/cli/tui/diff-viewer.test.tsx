@@ -33,7 +33,7 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   }
 })
 
-test("diff viewer exposes close instead of open in the palette", async () => {
+test("diff viewer exposes close instead of open and blocks re-entry", async () => {
   const viewer = await renderDiffViewer([])
   try {
     expect(viewer.initialPaletteCommands).toEqual(["diff.open"])
@@ -45,6 +45,9 @@ test("diff viewer exposes close instead of open in the palette", async () => {
 
     const current = viewer.current()
     await viewer.keymap().dispatchCommand("diff.open")
+    expect(viewer.current()).toBe(current)
+
+    viewer.commands.get("diff.open")!.run?.({} as never)
     expect(viewer.current()).toBe(current)
   } finally {
     viewer.app.renderer.destroy()
