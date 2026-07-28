@@ -190,7 +190,7 @@ export function Prompt(props: PromptProps) {
   const exit = useExit()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])

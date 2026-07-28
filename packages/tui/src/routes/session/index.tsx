@@ -1324,7 +1324,7 @@ function SessionReasoningGroupView(props: {
 }) {
   const ctx = use()
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
@@ -1626,7 +1626,7 @@ function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { typ
 function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type: "compaction" }> }) {
   const ctx = use()
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const status = () => props.message.status
   const cancelled = () => props.message.status === "failed" && props.message.error.type === "aborted"
   const text = () =>
@@ -2050,7 +2050,7 @@ function ReasoningPart(props: {
   message: SessionMessageAssistant
 }) {
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -2173,7 +2173,7 @@ function ReasoningHeader(props: {
 function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
   const ctx = use()
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
@@ -2275,7 +2275,7 @@ type ToolProps = {
 }
 function GenericTool(props: ToolProps) {
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const output = createMemo(() => props.output?.trim() ?? "")
   const args = createMemo(() => JSON.stringify(props.input, null, 2))
   const [expanded, setExpanded] = createSignal(false)
@@ -2757,7 +2757,7 @@ function Shell(props: ToolProps) {
 
 function Write(props: ToolProps) {
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
@@ -2973,7 +2973,7 @@ function Execute(props: ToolProps) {
 function Edit(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
 
   const view = createMemo(() => {
@@ -3036,7 +3036,7 @@ function Edit(props: ToolProps) {
 function ApplyPatch(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
-  const { syntax } = useThemes()
+  const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
   const targets = createMemo(() => {

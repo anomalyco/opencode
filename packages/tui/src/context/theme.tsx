@@ -102,7 +102,7 @@ type Themes = {
   readonly selected: string
   all: typeof allThemes
   has: typeof hasTheme
-  syntax: Accessor<SyntaxStyle>
+  currentSyntax: Accessor<SyntaxStyle>
   mode: Accessor<"dark" | "light">
   modes: Accessor<readonly ("dark" | "light")[]>
   supports(mode: "dark" | "light"): boolean
@@ -316,7 +316,7 @@ const themeContext = createSimpleContext({
 
     createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
 
-    const syntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
+    const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
     function contextual(context: ContextName) {
       return contextualServices[context]
     }
@@ -328,7 +328,7 @@ const themeContext = createSimpleContext({
       },
       all: allThemes,
       has: hasTheme,
-      syntax,
+      currentSyntax,
       mode,
       modes,
       supports: (requested) => modes().includes(requested),

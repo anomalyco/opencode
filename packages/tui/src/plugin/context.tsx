@@ -531,7 +531,7 @@ function isPlugin(value: unknown): value is Plugin.Definition {
 
 type PluginTheme = ReturnType<typeof useTheme> & {
   contextual(context: "elevated" | "overlay"): PluginTheme
-  syntaxStyle(): ReturnType<ReturnType<typeof useThemes>["syntax"]>
+  syntaxStyle(): ReturnType<ReturnType<typeof useThemes>["currentSyntax"]>
 }
 
 export function createPluginTheme(theme: ReturnType<typeof useTheme>, themes: ReturnType<typeof useThemes>): PluginTheme {
@@ -543,7 +543,7 @@ export function createPluginTheme(theme: ReturnType<typeof useTheme>, themes: Re
           return createPluginTheme(contextual.current, contextual)
         }
       }
-      if (property === "syntaxStyle") return themes.syntax
+      if (property === "syntaxStyle") return themes.currentSyntax
       if (Reflect.has(target, property)) return Reflect.get(target, property, receiver)
       return Reflect.get(themes, property, themes)
     },

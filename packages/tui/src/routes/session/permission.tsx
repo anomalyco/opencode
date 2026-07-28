@@ -20,7 +20,7 @@ type PermissionStage = "permission" | "always" | "reject"
 function EditBody(props: { file?: string; diff?: string; patch?: string }) {
   const theme = useTheme()
   const themes = useThemes()
-  const syntax = themes.syntax
+  const syntax = themes.currentSyntax
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
 
