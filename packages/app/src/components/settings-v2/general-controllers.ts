@@ -24,6 +24,7 @@ export type { ShellOption, ShellSelectOption } from "./general-controller-behavi
 
 export function createPermissionScopeController(sessionID: Accessor<string | undefined>) {
   const permission = usePermission()
+  const settings = useSettings()
   const serverSync = useServerSync()
   const directory = createMemo(() => {
     const id = sessionID()
@@ -35,16 +36,17 @@ export function createPermissionScopeController(sessionID: Accessor<string | und
     accepting: createMemo(() => {
       const id = sessionID()
       const dir = directory()
-      if (!id || !dir) return false
-      return permission.isAutoAccepting(id, dir)
+      if (id && dir) return permission.isAutoAccepting(id, dir)
+      return settings.permissions.autoApprove()
     }),
-    enabled: createMemo(() => !!directory()),
+    enabled: createMemo(() => true),
     set: (checked: boolean) => {
+      settings.permissions.setAutoApprove(checked)
       const id = sessionID()
       const dir = directory()
       if (!id || !dir) return
-      if (checked) return permission.enableAutoAccept(id, dir)
-      permission.disableAutoAccept(id, dir)
+      if (checked) permission.enableAutoAccept(id, dir)
+      else permission.disableAutoAccept(id, dir)
     },
   }
 }
