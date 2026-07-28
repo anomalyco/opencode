@@ -761,6 +761,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.ended":
+          setStore(
+            "session",
+            "pending",
+            event.data.sessionID,
+            (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.type !== "compaction"),
+          )
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
