@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, type Accessor } from "solid-js"
+import { Component, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
@@ -16,13 +16,13 @@ import { LayoutRetirementNotice, LayoutTransitionToggle } from "./interface-tran
 import {
   createAppearanceSettingsController,
   createPermissionScopeController,
+  createShellOptions,
   createShellSettingsController,
   createSoundSettingsController,
+  soundOptions,
   type AppearanceSettingsController,
   type PermissionScopeController,
-  type ShellSelectOption,
   type ShellSettingsController,
-  type SoundSelectOption,
   type SoundSettingsController,
 } from "./general-controllers"
 import "./settings-v2.css"
@@ -30,295 +30,248 @@ import "./settings-v2.css"
 const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
   const language = useLanguage()
   return (
-    <PermissionScopeSettingView
+    <SettingsRowV2
       title={language.t("command.permissions.autoaccept.enable")}
       description={language.t("toast.permissions.autoaccept.on.description")}
-      checked={props.controller.accepting}
-      enabled={props.controller.enabled}
-      onChange={(checked) => props.controller.set(checked)}
-    />
+    >
+      <div data-action="settings-auto-accept-permissions">
+        <Switch
+          checked={props.controller.accepting()}
+          disabled={!props.controller.enabled()}
+          onChange={props.controller.set}
+        />
+      </div>
+    </SettingsRowV2>
   )
 }
-
-const PermissionScopeSettingView: Component<{
-  title: string
-  description: string
-  checked: Accessor<boolean>
-  enabled: Accessor<boolean>
-  onChange: (checked: boolean) => void
-}> = (props) => (
-  <SettingsRowV2 title={props.title} description={props.description}>
-    <div data-action="settings-auto-accept-permissions">
-      <Switch checked={props.checked()} disabled={!props.enabled()} onChange={props.onChange} />
-    </div>
-  </SettingsRowV2>
-)
 
 const ShellSetting: Component<{ controller: ShellSettingsController }> = (props) => {
   const language = useLanguage()
+  const options = createMemo(() =>
+    createShellOptions({
+      shells: props.controller.shells(),
+      current: props.controller.current(),
+      automatic: language.t("settings.general.row.shell.autoDefault"),
+      terminalOnly: language.t("settings.general.row.shell.terminalOnly"),
+    }),
+  )
   return (
-    <ShellSettingView
+    <SettingsRowV2
       title={language.t("settings.general.row.shell.title")}
       description={language.t("settings.general.row.shell.description")}
-      options={props.controller.options}
-      current={props.controller.current}
-      onSelect={(option) => props.controller.select(option)}
-    />
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-shell"
+        options={options()}
+        current={options().find((option) => option.value === props.controller.current()) ?? options()[0]}
+        placement="bottom-end"
+        gutter={6}
+        value={(option) => option.id}
+        label={(option) => option.label}
+        onSelect={(option) => option && props.controller.select(option.value)}
+      />
+    </SettingsRowV2>
   )
 }
-
-const ShellSettingView: Component<{
-  title: string
-  description: string
-  options: Accessor<ShellSelectOption[]>
-  current: Accessor<ShellSelectOption | undefined>
-  onSelect: (option: ShellSelectOption | null) => void
-}> = (props) => (
-  <SettingsRowV2 title={props.title} description={props.description}>
-    <SelectV2
-      appearance="inline"
-      data-action="settings-shell"
-      options={props.options()}
-      current={props.current()}
-      placement="bottom-end"
-      gutter={6}
-      value={(option) => option.id}
-      label={(option) => option.label}
-      onSelect={props.onSelect}
-    />
-  </SettingsRowV2>
-)
 
 const AppearanceSection: Component<{ controller: AppearanceSettingsController }> = (props) => {
   const language = useLanguage()
+  const schemes = createMemo(() => [
+    { value: "system" as const, label: language.t("theme.scheme.system") },
+    { value: "light" as const, label: language.t("theme.scheme.light") },
+    { value: "dark" as const, label: language.t("theme.scheme.dark") },
+  ])
   return (
-    <AppearanceSectionView
-      t={language.t}
-      schemeOptions={props.controller.scheme.options}
-      currentScheme={props.controller.scheme.current}
-      onSchemeSelect={props.controller.scheme.select}
-      themeOptions={props.controller.theme.options}
-      currentTheme={props.controller.theme.current}
-      onThemeSelect={props.controller.theme.select}
-      uiFont={props.controller.fonts.ui}
-      codeFont={props.controller.fonts.code}
-      terminalFont={props.controller.fonts.terminal}
-      onUIFontInput={props.controller.fonts.setUI}
-      onCodeFontInput={props.controller.fonts.setCode}
-      onTerminalFontInput={props.controller.fonts.setTerminal}
-    />
+    <div class="settings-v2-section">
+      <h3 class="settings-v2-section-title">{language.t("settings.general.section.appearance")}</h3>
+      <SettingsListV2>
+        <SettingsRowV2
+          title={language.t("settings.general.row.colorScheme.title")}
+          description={language.t("settings.general.row.colorScheme.description")}
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-color-scheme"
+            options={schemes()}
+            current={schemes().find((option) => option.value === props.controller.scheme.current())}
+            placement="bottom-end"
+            gutter={6}
+            value={(option) => option.value}
+            label={(option) => option.label}
+            onSelect={(option) => option && props.controller.scheme.select(option.value)}
+          />
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.theme.title")}
+          description={
+            <>
+              {language.t("settings.general.row.theme.description")}{" "}
+              <Link class="settings-v2-link" href="https://opencode.ai/docs/themes/">
+                {language.t("common.learnMore")}
+              </Link>
+            </>
+          }
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-theme"
+            options={props.controller.theme.options()}
+            current={props.controller.theme.current()}
+            placement="bottom-end"
+            gutter={6}
+            value={(option) => option.id}
+            label={(option) => option.name}
+            onSelect={props.controller.theme.select}
+          />
+        </SettingsRowV2>
+
+        <FontSetting kind="ui" fonts={props.controller.fonts} />
+        <FontSetting kind="code" fonts={props.controller.fonts} />
+        <FontSetting kind="terminal" fonts={props.controller.fonts} />
+      </SettingsListV2>
+    </div>
   )
 }
 
-type AppearanceSectionViewProps = {
-  t: ReturnType<typeof useLanguage>["t"]
-  schemeOptions: AppearanceSettingsController["scheme"]["options"]
-  currentScheme: AppearanceSettingsController["scheme"]["current"]
-  onSchemeSelect: AppearanceSettingsController["scheme"]["select"]
-  themeOptions: AppearanceSettingsController["theme"]["options"]
-  currentTheme: AppearanceSettingsController["theme"]["current"]
-  onThemeSelect: AppearanceSettingsController["theme"]["select"]
-  uiFont: AppearanceSettingsController["fonts"]["ui"]
-  codeFont: AppearanceSettingsController["fonts"]["code"]
-  terminalFont: AppearanceSettingsController["fonts"]["terminal"]
-  onUIFontInput: (value: string) => void
-  onCodeFontInput: (value: string) => void
-  onTerminalFontInput: (value: string) => void
+const FontSetting: Component<{
+  kind: "ui" | "code" | "terminal"
+  fonts: AppearanceSettingsController["fonts"]
+}> = (props) => {
+  const language = useLanguage()
+  const config = createMemo(
+    () =>
+      ({
+        ui: {
+          action: "settings-ui-font",
+          title: language.t("settings.general.row.uiFont.title"),
+          description: language.t("settings.general.row.uiFont.description"),
+          font: props.fonts.ui,
+          input: props.fonts.setUI,
+        },
+        code: {
+          action: "settings-code-font",
+          title: language.t("settings.general.row.font.title"),
+          description: language.t("settings.general.row.font.description"),
+          font: props.fonts.code,
+          input: props.fonts.setCode,
+        },
+        terminal: {
+          action: "settings-terminal-font",
+          title: language.t("settings.general.row.terminalFont.title"),
+          description: language.t("settings.general.row.terminalFont.description"),
+          font: props.fonts.terminal,
+          input: props.fonts.setTerminal,
+        },
+      })[props.kind],
+  )
+  return (
+    <SettingsRowV2 title={config().title} description={config().description}>
+      <div class="w-full sm:w-[220px]">
+        <TextInputV2
+          data-action={config().action}
+          type="text"
+          appearance="base"
+          value={config().font().value}
+          onInput={(event) => config().input(event.currentTarget.value)}
+          placeholder={config().font().placeholder}
+          spellcheck={false}
+          autocorrect="off"
+          autocomplete="off"
+          autocapitalize="off"
+          aria-label={config().title}
+          style={{ "font-family": config().font().family }}
+        />
+      </div>
+    </SettingsRowV2>
+  )
 }
-
-const AppearanceSectionView: Component<AppearanceSectionViewProps> = (props) => (
-  <div class="settings-v2-section">
-    <h3 class="settings-v2-section-title">{props.t("settings.general.section.appearance")}</h3>
-    <SettingsListV2>
-      <SettingsRowV2
-        title={props.t("settings.general.row.colorScheme.title")}
-        description={props.t("settings.general.row.colorScheme.description")}
-      >
-        <SelectV2
-          appearance="inline"
-          data-action="settings-color-scheme"
-          options={props.schemeOptions()}
-          current={props.currentScheme()}
-          placement="bottom-end"
-          gutter={6}
-          value={(option) => option.value}
-          label={(option) => option.label}
-          onSelect={props.onSchemeSelect}
-        />
-      </SettingsRowV2>
-
-      <SettingsRowV2
-        title={props.t("settings.general.row.theme.title")}
-        description={
-          <>
-            {props.t("settings.general.row.theme.description")}{" "}
-            <Link class="settings-v2-link" href="https://opencode.ai/docs/themes/">
-              {props.t("common.learnMore")}
-            </Link>
-          </>
-        }
-      >
-        <SelectV2
-          appearance="inline"
-          data-action="settings-theme"
-          options={props.themeOptions()}
-          current={props.currentTheme()}
-          placement="bottom-end"
-          gutter={6}
-          value={(option) => option.id}
-          label={(option) => option.name}
-          onSelect={props.onThemeSelect}
-        />
-      </SettingsRowV2>
-
-      <FontSettingView
-        action="settings-ui-font"
-        title={props.t("settings.general.row.uiFont.title")}
-        description={props.t("settings.general.row.uiFont.description")}
-        font={props.uiFont}
-        onInput={props.onUIFontInput}
-      />
-      <FontSettingView
-        action="settings-code-font"
-        title={props.t("settings.general.row.font.title")}
-        description={props.t("settings.general.row.font.description")}
-        font={props.codeFont}
-        onInput={props.onCodeFontInput}
-      />
-      <FontSettingView
-        action="settings-terminal-font"
-        title={props.t("settings.general.row.terminalFont.title")}
-        description={props.t("settings.general.row.terminalFont.description")}
-        font={props.terminalFont}
-        onInput={props.onTerminalFontInput}
-      />
-    </SettingsListV2>
-  </div>
-)
-
-const FontSettingView: Component<{
-  action: string
-  title: string
-  description: string
-  font: Accessor<{ value: string; family: string; placeholder: string }>
-  onInput: (value: string) => void
-}> = (props) => (
-  <SettingsRowV2 title={props.title} description={props.description}>
-    <div class="w-full sm:w-[220px]">
-      <TextInputV2
-        data-action={props.action}
-        type="text"
-        appearance="base"
-        value={props.font().value}
-        onInput={(event) => props.onInput(event.currentTarget.value)}
-        placeholder={props.font().placeholder}
-        spellcheck={false}
-        autocorrect="off"
-        autocomplete="off"
-        autocapitalize="off"
-        aria-label={props.title}
-        style={{ "font-family": props.font().family }}
-      />
-    </div>
-  </SettingsRowV2>
-)
 
 const SoundsSection: Component<{ controller: SoundSettingsController }> = (props) => {
   const language = useLanguage()
   return (
-    <SoundsSectionView
-      t={language.t}
-      options={props.controller.options}
-      label={props.controller.label}
-      agentCurrent={props.controller.agent.current}
-      onAgentHighlight={(option) => props.controller.agent.highlight(option)}
-      onAgentSelect={(option) => props.controller.agent.select(option)}
-      permissionsCurrent={props.controller.permissions.current}
-      onPermissionsHighlight={(option) => props.controller.permissions.highlight(option)}
-      onPermissionsSelect={(option) => props.controller.permissions.select(option)}
-      errorsCurrent={props.controller.errors.current}
-      onErrorsHighlight={(option) => props.controller.errors.highlight(option)}
-      onErrorsSelect={(option) => props.controller.errors.select(option)}
-    />
+    <div class="settings-v2-section">
+      <h3 class="settings-v2-section-title">{language.t("settings.general.section.sounds")}</h3>
+      <SettingsListV2>
+        <SoundSetting kind="agent" channel={props.controller.agent} />
+        <SoundSetting kind="permissions" channel={props.controller.permissions} />
+        <SoundSetting kind="errors" channel={props.controller.errors} />
+      </SettingsListV2>
+    </div>
   )
 }
 
-const SoundsSectionView: Component<{
-  t: ReturnType<typeof useLanguage>["t"]
-  options: SoundSelectOption[]
-  label: (option: SoundSelectOption) => string
-  agentCurrent: Accessor<SoundSelectOption>
-  onAgentHighlight: (option: SoundSelectOption | undefined) => void
-  onAgentSelect: (option: SoundSelectOption | null) => void
-  permissionsCurrent: Accessor<SoundSelectOption>
-  onPermissionsHighlight: (option: SoundSelectOption | undefined) => void
-  onPermissionsSelect: (option: SoundSelectOption | null) => void
-  errorsCurrent: Accessor<SoundSelectOption>
-  onErrorsHighlight: (option: SoundSelectOption | undefined) => void
-  onErrorsSelect: (option: SoundSelectOption | null) => void
-}> = (props) => (
-  <div class="settings-v2-section">
-    <h3 class="settings-v2-section-title">{props.t("settings.general.section.sounds")}</h3>
-    <SettingsListV2>
-      <SoundSettingView
-        action="settings-sounds-agent"
-        title={props.t("settings.general.sounds.agent.title")}
-        description={props.t("settings.general.sounds.agent.description")}
-        options={props.options}
-        label={props.label}
-        current={props.agentCurrent}
-        onHighlight={props.onAgentHighlight}
-        onSelect={props.onAgentSelect}
+const SoundSetting: Component<{
+  kind: "agent" | "permissions" | "errors"
+  channel: SoundSettingsController["agent"]
+}> = (props) => {
+  const language = useLanguage()
+  const config = createMemo(
+    () =>
+      ({
+        agent: {
+          action: "settings-sounds-agent",
+          title: language.t("settings.general.sounds.agent.title"),
+          description: language.t("settings.general.sounds.agent.description"),
+        },
+        permissions: {
+          action: "settings-sounds-permissions",
+          title: language.t("settings.general.sounds.permissions.title"),
+          description: language.t("settings.general.sounds.permissions.description"),
+        },
+        errors: {
+          action: "settings-sounds-errors",
+          title: language.t("settings.general.sounds.errors.title"),
+          description: language.t("settings.general.sounds.errors.description"),
+        },
+      })[props.kind],
+  )
+  return (
+    <SettingsRowV2 title={config().title} description={config().description}>
+      <SelectV2
+        appearance="inline"
+        data-action={config().action}
+        options={soundOptions}
+        current={props.channel.current()}
+        value={(option) => option.id}
+        label={(option) => language.t(option.label)}
+        onHighlight={props.channel.highlight}
+        onSelect={props.channel.select}
+        placement="bottom-end"
+        gutter={6}
       />
-      <SoundSettingView
-        action="settings-sounds-permissions"
-        title={props.t("settings.general.sounds.permissions.title")}
-        description={props.t("settings.general.sounds.permissions.description")}
-        options={props.options}
-        label={props.label}
-        current={props.permissionsCurrent}
-        onHighlight={props.onPermissionsHighlight}
-        onSelect={props.onPermissionsSelect}
-      />
-      <SoundSettingView
-        action="settings-sounds-errors"
-        title={props.t("settings.general.sounds.errors.title")}
-        description={props.t("settings.general.sounds.errors.description")}
-        options={props.options}
-        label={props.label}
-        current={props.errorsCurrent}
-        onHighlight={props.onErrorsHighlight}
-        onSelect={props.onErrorsSelect}
-      />
-    </SettingsListV2>
-  </div>
-)
+    </SettingsRowV2>
+  )
+}
 
-const SoundSettingView: Component<{
-  action: string
-  title: string
-  description: string
-  options: SoundSelectOption[]
-  label: (option: SoundSelectOption) => string
-  current: Accessor<SoundSelectOption>
-  onHighlight: (option: SoundSelectOption | undefined) => void
-  onSelect: (option: SoundSelectOption | null) => void
-}> = (props) => (
-  <SettingsRowV2 title={props.title} description={props.description}>
-    <SelectV2
-      appearance="inline"
-      data-action={props.action}
-      options={props.options}
-      current={props.current()}
-      value={(option) => option.id}
-      label={props.label}
-      onHighlight={props.onHighlight}
-      onSelect={props.onSelect}
-      placement="bottom-end"
-      gutter={6}
-    />
-  </SettingsRowV2>
-)
+const LanguageSetting = () => {
+  const language = useLanguage()
+  const options = createMemo(() =>
+    language.locales.map((locale) => ({
+      value: locale,
+      label: language.label(locale),
+    })),
+  )
+  return (
+    <SettingsRowV2
+      title={language.t("settings.general.row.language.title")}
+      description={language.t("settings.general.row.language.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-language"
+        options={options()}
+        placement="bottom-end"
+        gutter={6}
+        current={options().find((option) => option.value === language.locale())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        onSelect={(option) => option && language.setLocale(option.value)}
+      />
+    </SettingsRowV2>
+  )
+}
 
 export const SettingsGeneralV2: Component<{
   sessionID?: string
@@ -348,13 +301,6 @@ export const SettingsGeneralV2: Component<{
     void update.catch(() => setPinchZoom(!checked))
   }
 
-  const languageOptions = createMemo(() =>
-    language.locales.map((locale) => ({
-      value: locale,
-      label: language.label(locale),
-    })),
-  )
-
   const InterfaceSection = () => (
     <LayoutTransitionToggle
       title={language.t("settings.general.row.newInterface.title")}
@@ -383,22 +329,7 @@ export const SettingsGeneralV2: Component<{
   const GeneralSection = () => (
     <div class="settings-v2-section">
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.language.title")}
-          description={language.t("settings.general.row.language.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-language"
-            options={languageOptions()}
-            placement="bottom-end"
-            gutter={6}
-            current={languageOptions().find((o) => o.value === language.locale())}
-            value={(o) => o.value}
-            label={(o) => o.label}
-            onSelect={(option) => option && language.setLocale(option.value)}
-          />
-        </SettingsRowV2>
+        <LanguageSetting />
 
         <PermissionScopeSetting controller={permissionScope} />
 

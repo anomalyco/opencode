@@ -1,7 +1,6 @@
 import { createMemo, createResource, onMount, type Accessor } from "solid-js"
 import type { ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useTheme } from "@opencode-ai/ui/theme/context"
-import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
@@ -18,12 +17,7 @@ import {
   useSettings,
 } from "@/context/settings"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
-import {
-  createShellOptions,
-  createSoundPreviewController,
-  type ShellOption,
-  type ShellSelectOption,
-} from "./general-controller-behavior"
+import { createSoundPreviewController, type ShellOption } from "./general-controller-behavior"
 
 export { createShellOptions, createSoundPreviewController } from "./general-controller-behavior"
 export type { ShellOption, ShellSelectOption } from "./general-controller-behavior"
@@ -56,7 +50,6 @@ export function createPermissionScopeController(sessionID: Accessor<string | und
 }
 
 export function createShellSettingsController() {
-  const language = useLanguage()
   const serverSdk = useServerSDK()
   const serverSync = useServerSync()
   const [shells] = createResource(
@@ -68,43 +61,28 @@ export function createShellSettingsController() {
     { initialValue: [] as ShellOption[] },
   )
   const current = createMemo(() => serverSync().data.config.shell ?? "")
-  const options = createMemo(() =>
-    createShellOptions({
-      shells: shells.latest,
-      current: current(),
-      automatic: language.t("settings.general.row.shell.autoDefault"),
-      terminalOnly: language.t("settings.general.row.shell.terminalOnly"),
-    }),
-  )
 
   return {
-    current: createMemo(() => options().find((option) => option.value === current()) ?? options()[0]),
-    options,
-    select: (option: ShellSelectOption | null) => {
-      if (!option || option.value === current()) return
-      void serverSync().updateConfig({ shell: option.value })
+    shells: () => shells.latest,
+    current,
+    select: (value: string) => {
+      if (value === current()) return
+      void serverSync().updateConfig({ shell: value })
     },
   }
 }
 
 export function createAppearanceSettingsController() {
-  const language = useLanguage()
   const settings = useSettings()
   const theme = useTheme()
-  const schemes = createMemo((): { value: ColorScheme; label: string }[] => [
-    { value: "system", label: language.t("theme.scheme.system") },
-    { value: "light", label: language.t("theme.scheme.light") },
-    { value: "dark", label: language.t("theme.scheme.dark") },
-  ])
   const themes = createMemo(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
   onMount(() => void theme.loadThemes())
 
   return {
     scheme: {
-      options: schemes,
-      current: createMemo(() => schemes().find((option) => option.value === theme.colorScheme())),
-      select: (option: { value: ColorScheme } | null) => option && theme.setColorScheme(option.value),
+      current: theme.colorScheme,
+      select: (value: ColorScheme) => theme.setColorScheme(value),
     },
     theme: {
       options: themes,
@@ -139,7 +117,6 @@ export const soundOptions = [noneSound, ...SOUND_OPTIONS]
 export type SoundSelectOption = (typeof soundOptions)[number]
 
 export function createSoundSettingsController() {
-  const language = useLanguage()
   const settings = useSettings()
   const preview = createSoundPreviewController(playSoundById)
   const channel = (
@@ -169,8 +146,6 @@ export function createSoundSettingsController() {
   })
 
   return {
-    options: soundOptions,
-    label: (option: SoundSelectOption) => language.t(option.label),
     agent: channel(
       settings.sounds.agentEnabled,
       settings.sounds.agent,
