@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { closeSessionTab, openSessionTab, sessionTabWindow } from "../../src/context/session-tabs-model"
+import {
+  closeSessionTab,
+  cycleSessionTab,
+  openSessionTab,
+  sessionTabWindow,
+} from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
   test("opens each session once and refreshes its title", () => {
@@ -15,6 +20,14 @@ describe("session tabs", () => {
     })
     expect(closeSessionTab([{ sessionID: "a" }, { sessionID: "b" }], "b").next).toBe("a")
     expect(closeSessionTab([{ sessionID: "a" }], "a").next).toBeUndefined()
+  })
+
+  test("cycles through a filtered tab set in either direction", () => {
+    const tabs = ["a", "c", "e"].map((sessionID) => ({ sessionID }))
+    expect(cycleSessionTab(tabs, "c", 1)?.sessionID).toBe("e")
+    expect(cycleSessionTab(tabs, "c", -1)?.sessionID).toBe("a")
+    expect(cycleSessionTab(tabs, "e", 1)?.sessionID).toBe("a")
+    expect(cycleSessionTab(tabs, "b", 1)?.sessionID).toBe("a")
   })
 
   test("keeps the active tab in a bounded visible window", () => {

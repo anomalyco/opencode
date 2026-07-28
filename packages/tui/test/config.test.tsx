@@ -100,7 +100,16 @@ test("resolves message navigation defaults", () => {
 test("opens the subagent picker with down", () => {
   const config = resolve({}, { terminalSuspend: true })
 
-  expect(config.keybinds.get("session.child.first")).toMatchObject([{ key: "down,<leader>down" }])
+  expect(config.keybinds.get("session.child.first")).toMatchObject([{ key: "down" }])
+})
+
+test("navigates session tabs with leader arrows", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,<leader>right" }])
+  expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,<leader>left" }])
+  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "<leader>down" }])
+  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "<leader>up" }])
 })
 
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {

@@ -7,7 +7,13 @@ import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useTuiPaths } from "./runtime"
 import { readJson, writeJsonAtomic } from "../util/persistence"
-import { closeSessionTab, openSessionTab, type SessionTab, type SessionTabUnread } from "./session-tabs-model"
+import {
+  closeSessionTab,
+  cycleSessionTab,
+  openSessionTab,
+  type SessionTab,
+  type SessionTabUnread,
+} from "./session-tabs-model"
 
 type PersistedState = {
   tabs: SessionTab[]
@@ -35,6 +41,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const members = data.session.family(session)
       return members.length > 0 ? members : [session]
     }
+    const attention = (sessionID: string) =>
+      family(sessionID).some(
+        (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
+      )
 
     function save() {
       if (!store.ready) {
@@ -167,9 +177,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return store.unread[root(sessionID)]
       },
       attention(sessionID: string) {
-        return family(sessionID).some(
-          (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
-        )
+        return attention(sessionID)
       },
       running(sessionID: string) {
         return family(sessionID).some((id) => data.session.status(id) === "running")
@@ -192,10 +200,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         save()
       },
       cycle(direction: 1 | -1) {
-        if (store.tabs.length === 0) return
-        const index = store.tabs.findIndex((tab) => tab.sessionID === current())
-        const start = index === -1 ? (direction === 1 ? -1 : 0) : index
-        const tab = store.tabs[(start + direction + store.tabs.length) % store.tabs.length]
+        const tab = cycleSessionTab(store.tabs, current(), direction)
+        if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
+      },
+      cycleUnread(direction: 1 | -1) {
+        const tab = cycleSessionTab(
+          store.tabs.filter((tab) => store.unread[tab.sessionID] || attention(tab.sessionID)),
+          current(),
+          direction,
+        )
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
       selectIndex(index: number) {

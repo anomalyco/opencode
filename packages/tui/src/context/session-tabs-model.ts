@@ -21,6 +21,13 @@ export function closeSessionTab(tabs: readonly SessionTab[], sessionID: string) 
   }
 }
 
+export function cycleSessionTab(tabs: readonly SessionTab[], active: string | undefined, direction: 1 | -1) {
+  if (tabs.length === 0) return
+  const index = tabs.findIndex((tab) => tab.sessionID === active)
+  const start = index === -1 ? (direction === 1 ? -1 : 0) : index
+  return tabs[(start + direction + tabs.length) % tabs.length]
+}
+
 export function sessionTabWindow(tabs: readonly SessionTab[], active: string | undefined, limit: number) {
   if (tabs.length <= limit) return { tabs: [...tabs], before: 0, after: 0 }
   const count = Math.max(1, limit)
