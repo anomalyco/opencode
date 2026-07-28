@@ -19,6 +19,23 @@ const blend = (from: RGBA, to: RGBA, amount: number) =>
     from.b + (to.b - from.b) * amount,
     from.a + (to.a - from.a) * amount,
   )
+const spring = (value: number, velocity: number, target: number, frequency: number, delta: number) => {
+  const offset = value - target
+  const decay = Math.exp(-frequency * delta)
+  const nextVelocity = velocity + frequency * offset
+  return {
+    value: target + (offset + nextVelocity * delta) * decay,
+    velocity: (velocity - frequency * nextVelocity * delta) * decay,
+  }
+}
+const initialState = (width: number, selection: number, activity: number) => ({
+  width,
+  velocity: 0,
+  selection,
+  selectionVelocity: 0,
+  activity,
+  activityVelocity: 0,
+})
 
 export function SessionTabs() {
   const tabs = useSessionTabs()
@@ -40,7 +57,7 @@ export function SessionTabs() {
     return next
   })
   const targets = createMemo(() => new Map(layout().tabs.map((tab, index) => [tab.sessionID, layout().widths[index]!])))
-  const state = new Map<string, { width: number; velocity: number; selection: number; selectionVelocity: number }>()
+  const state = new Map<string, ReturnType<typeof initialState>>()
   const [frame, setFrame] = createSignal(0)
   let signature = ""
   let total = 0
@@ -54,8 +71,9 @@ export function SessionTabs() {
     total = layout().total
     for (const [sessionID, width] of next) {
       const selection = Number(sessionID === tabs.current())
-      if (reset) state.set(sessionID, { width, velocity: 0, selection, selectionVelocity: 0 })
-      if (!state.has(sessionID)) state.set(sessionID, { width, velocity: 0, selection, selectionVelocity: 0 })
+      const activity = Number(tabs.unread(sessionID) === "activity")
+      if (reset) state.set(sessionID, initialState(width, selection, activity))
+      if (!state.has(sessionID)) state.set(sessionID, initialState(width, selection, activity))
     }
     if (reset) setFrame((value) => value + 1)
     start()
@@ -83,26 +101,24 @@ export function SessionTabs() {
 
     for (const [sessionID, target] of targets()) {
       const selectionTarget = Number(sessionID === tabs.current())
-      const current = state.get(sessionID) ?? {
-        width: target,
-        velocity: 0,
-        selection: selectionTarget,
-        selectionVelocity: 0,
-      }
-      const decay = Math.exp(-frequency * delta)
-      const offset = current.width - target
-      const velocity = current.velocity + frequency * offset
-      current.width = target + (offset + velocity * delta) * decay
-      current.velocity = (current.velocity - frequency * velocity * delta) * decay
-      const selectionOffset = current.selection - selectionTarget
-      const selectionVelocity = current.selectionVelocity + frequency * selectionOffset
-      current.selection = selectionTarget + (selectionOffset + selectionVelocity * delta) * decay
-      current.selectionVelocity = (current.selectionVelocity - frequency * selectionVelocity * delta) * decay
+      const activityTarget = Number(tabs.unread(sessionID) === "activity")
+      const current = state.get(sessionID) ?? initialState(target, selectionTarget, activityTarget)
+      const width = spring(current.width, current.velocity, target, frequency, delta)
+      current.width = width.value
+      current.velocity = width.velocity
+      const selection = spring(current.selection, current.selectionVelocity, selectionTarget, frequency, delta)
+      current.selection = selection.value
+      current.selectionVelocity = selection.velocity
+      const activity = spring(current.activity, current.activityVelocity, activityTarget, frequency, delta)
+      current.activity = activity.value
+      current.activityVelocity = activity.velocity
       moving ||=
         Math.abs(current.width - target) > 0.002 ||
         Math.abs(current.velocity) > 0.002 ||
         Math.abs(current.selection - selectionTarget) > 0.002 ||
-        Math.abs(current.selectionVelocity) > 0.002
+        Math.abs(current.selectionVelocity) > 0.002 ||
+        Math.abs(current.activity - activityTarget) > 0.002 ||
+        Math.abs(current.activityVelocity) > 0.002
       state.set(sessionID, current)
     }
     setFrame((value) => value + 1)
@@ -125,6 +141,15 @@ export function SessionTabs() {
       layout().tabs.map((tab) => [
         tab.sessionID,
         state.get(tab.sessionID)?.selection ?? Number(tab.sessionID === tabs.current()),
+      ]),
+    )
+  })
+  const activities = createMemo(() => {
+    frame()
+    return new Map(
+      layout().tabs.map((tab) => [
+        tab.sessionID,
+        state.get(tab.sessionID)?.activity ?? Number(tabs.unread(tab.sessionID) === "activity"),
       ]),
     )
   })
@@ -158,6 +183,7 @@ export function SessionTabs() {
           const unread = () => tabs.unread(tab.sessionID)
           const width = () => widths().get(tab.sessionID) ?? targets().get(tab.sessionID)!
           const selection = () => selections().get(tab.sessionID) ?? Number(selected())
+          const activity = () => activities().get(tab.sessionID) ?? Number(unread() === "activity")
           const background = () => {
             const base =
               hovered() === tab.sessionID && !selected()
@@ -178,10 +204,11 @@ export function SessionTabs() {
           const numberColor = () => {
             if (tabs.attention(tab.sessionID)) return themeV2.text.feedback.warning.default
             if (unread() === "error") return themeV2.text.feedback.error.default
-            if (unread() === "activity") return accent()
-            if (selected()) return blend(themeV2.text.subdued, themeV2.text.default, 0.65)
-            if (hovered() === tab.sessionID) return foreground()
-            return idleNumber()
+            const base =
+              hovered() === tab.sessionID
+                ? foreground()
+                : blend(idleNumber(), blend(themeV2.text.subdued, themeV2.text.default, 0.65), selection())
+            return blend(base, accent(), activity())
           }
           return (
             <box
