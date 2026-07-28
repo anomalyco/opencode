@@ -192,6 +192,47 @@ const itFast = testEffect(
   ),
 )
 
+// Same graph as itFast, with the audit store broken: covers the
+// allow-without-evidence degradation.
+const brokenDecisions = Layer.succeed(
+  PermissionDecisionsStore.Service,
+  PermissionDecisionsStore.Service.of({
+    insert: () => Effect.die(new Error("disk full")),
+    listBySession: () => Effect.succeed([]),
+  }),
+)
+
+const itBroken = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      SessionNs.node,
+      SessionProjector.node,
+      Permission.node,
+      PermissionValidator.node,
+      Database.node,
+      AutoSummaryStore.node,
+      PermissionDecisionsStore.node,
+      EventV2Bridge.node,
+      CrossSpawnSpawner.node,
+      InstanceStore.node,
+    ]),
+    [
+      [LLM.node, llm.layer],
+      [Agent.node, agents],
+      [
+        Provider.node,
+        ProviderTest.fake({ model: ProviderTest.model({ id: ref.modelID, providerID: ref.providerID }) }).layer,
+      ],
+      [SessionAutoSummary.node, autoSummary],
+      [
+        InstanceStore.bootstrapNode,
+        Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+      ],
+      [PermissionDecisionsStore.node, brokenDecisions],
+    ],
+  ),
+)
+
 const ask = (input: Partial<PermissionV1.AskInput> & Pick<PermissionV1.AskInput, "sessionID">) =>
   Effect.gen(function* () {
     const permission = yield* Permission.Service
@@ -579,6 +620,54 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "a truncated payload escalates to uncertain without calling the model",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      summaryCalls.length = 0
+      const decisions = yield* PermissionDecisionsStore.Service
+      const chat = yield* seedAutoSession()
+      // Benign prefix, destructive suffix past the per-pattern cap: the model
+      // would only see the safe part, so the validator must not call it.
+      const command = `echo ${"harmless ".repeat(300)} && rm -rf ~`
+
+      const fiber = yield* ask({ sessionID: chat.id, agent: "auto", patterns: [command], metadata: { command } }).pipe(
+        Effect.forkScoped,
+      )
+
+      const items = yield* waitForPending(1)
+      expect(items[0].auto).toEqual({ verdict: "uncertain", reason: "payload truncated", model: "test/test-model" })
+      expect(llm.state.hits).toHaveLength(0)
+      const rows = yield* decisions.listBySession(chat.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ verdict: "uncertain", reason: "payload truncated", model: "test/test-model" })
+
+      yield* reply({ requestID: items[0].id, reply: "once" })
+      yield* Fiber.join(fiber)
+    }),
+  { git: true },
+)
+
+itBroken.instance(
+  "an ALLOW without its audit row degrades to the human flow",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      summaryCalls.length = 0
+      const chat = yield* seedAutoSession()
+      llm.push(text("ALLOW"))
+
+      const fiber = yield* ask({ sessionID: chat.id, agent: "auto" }).pipe(Effect.forkScoped)
+
+      const items = yield* waitForPending(1)
+      expect(items[0].auto).toEqual({ verdict: "fallback", reason: "audit", model: "test/test-model" })
+
+      yield* reply({ requestID: items[0].id, reply: "once" })
+      yield* Fiber.join(fiber)
+    }),
+  { git: true },
+)
 itFast.instance(
   "an ask that exceeds the total deadline falls back and the queue keeps draining",
   () =>
@@ -623,11 +712,23 @@ itFast.instance(
       yield* Fiber.join(b)
 
       expect(llm.state.maxInFlight).toBe(1)
-      const rows = yield* decisions.listBySession(chat.id)
+      // b's expiry audit is fire-and-forget (it must not extend the
+      // deadline), so poll until it lands.
+      const rows = yield* Effect.gen(function* () {
+        while (true) {
+          const rows = yield* decisions.listBySession(chat.id)
+          if (rows.length === 3) return rows
+          yield* Effect.sleep("10 millis")
+        }
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: "2 seconds",
+          orElse: () => Effect.fail(new Error("expired ask's audit row never landed")),
+        }),
+      )
       // b's expiry audit and c's audit race at the deadline, so compare by
       // pattern rather than row order.
       const byPattern = new Map(rows.map((row) => [row.patterns[0], row]))
-      expect(rows).toHaveLength(3)
       expect(byPattern.get("cmd-one")?.verdict).toBe("allow")
       expect(byPattern.get("cmd-two")).toMatchObject({ verdict: "fallback", reason: "timeout", model: "unknown" })
       expect(byPattern.get("cmd-three")?.verdict).toBe("allow")
@@ -657,6 +758,28 @@ itFast.instance(
       llm.push(() => Stream.fail(new Error("down")))
       const third = yield* validator.health()
       expect(third).toEqual({ ok: false, model: "test/test-model", reason: "down" })
+      expect(llm.state.hits).toHaveLength(2)
+    }),
+  { git: true },
+)
+
+itFast.instance(
+  "health demands a parseable verdict, not just any stream",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      const validator = yield* PermissionValidator.Service
+
+      llm.push(text("I cannot decide about this"))
+      const garbage = yield* validator.health()
+      expect(garbage).toEqual({ ok: false, model: "test/test-model", reason: "unparseable verdict" })
+
+      // Past the cache TTL: an empty stream is not healthy either.
+      yield* Effect.sleep("700 millis")
+      llm.push(() => Stream.empty)
+      const empty = yield* validator.health()
+      expect(empty.ok).toBe(false)
+      expect(empty.reason).toBe("unparseable verdict")
       expect(llm.state.hits).toHaveLength(2)
     }),
   { git: true },

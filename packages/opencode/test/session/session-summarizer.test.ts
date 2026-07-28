@@ -423,6 +423,103 @@ it.instance(
 )
 
 it.instance(
+  "catch-up re-runs when the stored summary is behind the history",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const auto = yield* SessionAutoSummary.Service
+      const store = yield* AutoSummaryStore.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+      yield* seedTurn(chat.id, "build", "first question", "reply one")
+      yield* seedTurn(chat.id, "auto", "second question", "reply two")
+      yield* store.upsert({ sessionID: chat.id, summary: "STALE", model: "test/test-model", turnCount: 1 })
+
+      yield* llm.pushMatch(isSummarizer, reply().text("FRESH").stop())
+      yield* auto.ensure(chat.id)
+
+      const row = yield* waitForSummary(chat.id, "FRESH")
+      expect(row.turnCount).toBe(2)
+      const hits = yield* summarizerHits
+      expect(hits).toHaveLength(1)
+      const body = JSON.stringify(hits[0]?.body)
+      expect(body).toContain("STALE")
+      expect(body).toContain("second question")
+      expect(body).not.toContain("first question")
+    }),
+  15_000,
+)
+
+it.instance(
+  "serializes concurrent summary updates per session",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* useServerConfig()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+
+      yield* llm.text("reply one")
+      yield* llm.pushMatch(isSummarizer, reply().wait(gate).text("SUMMARY_ONE").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        parts: [{ type: "text", text: "first question" }],
+      })
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const hits = yield* summarizerHits
+          return hits.length === 1 ? hits : undefined
+        }),
+        "first summarizer request never arrived",
+        "5 seconds",
+      )
+
+      // The second turn's update must queue behind the held flight, not race
+      // it — no second request may leave while the first is in flight.
+      yield* llm.text("reply two")
+      yield* llm.pushMatch(isSummarizer, reply().text("SUMMARY_TWO").stop())
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        parts: [{ type: "text", text: "second question" }],
+      })
+      yield* Effect.sleep("500 millis")
+      expect(yield* summarizerHits).toHaveLength(1)
+
+      release()
+      const row = yield* waitForSummary(chat.id, "SUMMARY_TWO")
+      expect(row.turnCount).toBe(2)
+      expect(yield* summarizerHits).toHaveLength(2)
+    }),
+  15_000,
+)
+
+it.instance(
+  "never regresses the stored turnCount",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig()
+      const store = yield* AutoSummaryStore.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+
+      yield* store.upsert({ sessionID: chat.id, summary: "NEW", model: "test/test-model", turnCount: 2 })
+      yield* store.upsert({ sessionID: chat.id, summary: "OLD", model: "test/test-model", turnCount: 1 })
+
+      const row = yield* store.get(chat.id)
+      expect(row?.summary).toBe("NEW")
+      expect(row?.turnCount).toBe(2)
+    }),
+  15_000,
+)
+
+it.instance(
   "keeps the previous summary when the summarizer fails",
   () =>
     Effect.gen(function* () {

@@ -1,7 +1,7 @@
 export * as AutoSummaryStore from "./auto-summary-store"
 
 import { Context, Effect, Layer } from "effect"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { Database } from "../database/database"
 import { makeGlobalNode } from "../effect/app-node"
 import { SessionAutoSummaryTable } from "./sql"
@@ -47,6 +47,9 @@ const layer = Layer.effect(
         .onConflictDoUpdate({
           target: SessionAutoSummaryTable.session_id,
           set: { summary: input.summary, model: input.model, turn_count: input.turnCount, updated_at: now },
+          // A stale writer (an older summarizer flight landing last) must
+          // never regress the incorporated turn count.
+          where: sql`${SessionAutoSummaryTable.turn_count} <= excluded.turn_count`,
         })
         .run()
         .pipe(Effect.orDie)

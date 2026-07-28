@@ -132,28 +132,67 @@ const layer = Layer.effect(
       })
     })
 
+    // Single-flight per session: one summary update at a time, so two
+    // end-of-turn forks never read the same version and regress each other.
+    // An update arriving mid-flight is coalesced — only the latest queued
+    // work runs next, since every run already incorporates the whole delta.
+    const flights = new Map<string, { running: boolean; queued?: Effect.Effect<void> }>()
+    const fly = (sessionID: SessionID, work: Effect.Effect<void>) =>
+      Effect.suspend(() => {
+        const slot = flights.get(sessionID) ?? { running: false }
+        flights.set(sessionID, slot)
+        if (slot.running) {
+          slot.queued = work
+          return Effect.void
+        }
+        slot.running = true
+        return Effect.gen(function* () {
+          let current: Effect.Effect<void> | undefined = work
+          while (current) {
+            yield* current
+            current = slot.queued
+            slot.queued = undefined
+          }
+          slot.running = false
+          flights.delete(sessionID)
+        })
+      })
+
     const update: Interface["update"] = Effect.fn("SessionAutoSummary.update")(function* (input) {
       if (input.agent !== "auto") return
-      yield* run(input).pipe(
-        Effect.catchCause((cause) => Effect.logWarning("auto summary update failed", { cause: Cause.pretty(cause) })),
+      yield* fly(
+        input.sessionID,
+        run(input).pipe(
+          Effect.catchCause((cause) => Effect.logWarning("auto summary update failed", { cause: Cause.pretty(cause) })),
+        ),
       )
     })
 
     const ensure: Interface["ensure"] = Effect.fn("SessionAutoSummary.ensure")(function* (sessionID) {
-      if (yield* store.get(sessionID)) return
       const msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
         Effect.provideService(Database.Service, database),
       )
       const lastUser = MessageV2.latest(msgs).user
       if (!lastUser) return
-      yield* run({
+      // Fresh means the stored summary already covers every real user
+      // message; an older one (a first turn, or turns that ran while the
+      // session was on another agent) re-runs the catch-up first.
+      const current = msgs.filter(real).length
+      const existing = yield* store.get(sessionID)
+      if (existing && existing.turnCount >= current) return
+      yield* fly(
         sessionID,
-        messages: msgs,
-        providerID: lastUser.model.providerID,
-        modelID: lastUser.model.modelID,
-        user: lastUser,
-      }).pipe(
-        Effect.catchCause((cause) => Effect.logWarning("auto summary catch-up failed", { cause: Cause.pretty(cause) })),
+        run({
+          sessionID,
+          messages: msgs,
+          providerID: lastUser.model.providerID,
+          modelID: lastUser.model.modelID,
+          user: lastUser,
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("auto summary catch-up failed", { cause: Cause.pretty(cause) }),
+          ),
+        ),
       )
     })
 

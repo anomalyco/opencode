@@ -13,6 +13,7 @@ import { LLM } from "@/session/llm"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionAutoSummary } from "@/session/auto-summary"
 import { MessageID, SessionID } from "@/session/schema"
+import { InstanceState } from "@/effect/instance-state"
 import { Permission } from "."
 import { buildPrompt, parseVerdict, summarize } from "./verdict"
 
@@ -95,8 +96,11 @@ const make = (options?: Options) =>
         latencyMs: number,
         reason?: string,
       ) {
-        yield* recover(
-          decisions.insert({
+        // The audit trail must never break or block the ask itself — but the
+        // caller learns whether the row landed, because an ALLOW without it
+        // is an approval without evidence and must degrade to the human flow.
+        const outcome = yield* decisions
+          .insert({
             sessionID: input.sessionID,
             permission: input.permission,
             patterns: [...input.patterns],
@@ -109,10 +113,16 @@ const make = (options?: Options) =>
             reason,
             model,
             latencyMs,
-          }),
-          // The audit trail must never break or block the ask itself.
-          "permission decision audit write failed",
-        )
+          })
+          .pipe(Effect.exit)
+        if (Exit.isFailure(outcome)) {
+          if (Cause.hasInterruptsOnly(outcome.cause)) return yield* Effect.interrupt
+          yield* Effect.logWarning("permission decision audit write failed", {
+            cause: Cause.pretty(outcome.cause),
+          })
+          return false
+        }
+        return true
       })
 
       const stream = (
@@ -190,14 +200,15 @@ const make = (options?: Options) =>
         if (!mdl) return yield* fallback("error", "unknown")
         const model = `${mdl.providerID}/${mdl.id}`
 
-        const attempted = yield* stream(
-          ag,
-          mdl,
-          user,
-          input.sessionID,
-          buildPrompt(input, summary?.summary),
-          VALIDATE_TIMEOUT,
-        ).pipe(Effect.exit)
+        const prompt = buildPrompt(input, summary?.summary)
+        if (prompt.truncated) {
+          // Never approve over an incomplete view of the request: a
+          // destructive suffix past the cap would be invisible to the model.
+          yield* audit(input, "uncertain", model, Date.now() - started, "payload truncated")
+          return { verdict: "uncertain" as const, reason: "payload truncated", model }
+        }
+
+        const attempted = yield* stream(ag, mdl, user, input.sessionID, prompt.text, VALIDATE_TIMEOUT).pipe(Effect.exit)
         if (Exit.isFailure(attempted)) {
           // An interrupted validation must die interrupted (see recover), not
           // degrade into a second fallback audit row.
@@ -209,8 +220,14 @@ const make = (options?: Options) =>
         const parsed = parseVerdict(attempted.value)
         if (!parsed) return yield* fallback("invalid", model)
         if (parsed.verdict === "allow") {
-          yield* audit(input, "allow", model, Date.now() - started)
-          return { verdict: "allow" as const }
+          const recorded = yield* audit(input, "allow", model, Date.now() - started)
+          if (recorded) return { verdict: "allow" as const }
+          yield* Effect.logWarning("permission.validator.fallback", {
+            reason: "audit",
+            sessionID: input.sessionID,
+            permission: input.permission,
+          })
+          return { verdict: "fallback" as const, reason: "audit", model }
         }
         if (parsed.verdict === "deny") {
           yield* audit(input, "deny", model, Date.now() - started, parsed.reason)
@@ -235,15 +252,19 @@ const make = (options?: Options) =>
             sessionID: input.sessionID,
             permission: input.permission,
           })
-          yield* audit(input, "fallback", "unknown", Date.now() - started, "timeout")
+          // The deadline already fired; auditing inline would extend it.
+          // Fire and forget — best-effort row, the human flow is decided.
+          yield* Effect.forkDetach(audit(input, "fallback", "unknown", Date.now() - started, "timeout"))
           return { verdict: "fallback" as const, reason: "timeout", model: "unknown" }
         })
 
       // Health probes cost a small-model call; the last result rides a short
-      // in-memory cache so polling the route doesn't spend one per request.
-      const healthCache: { current?: { at: number; value: Health } } = {}
+      // in-memory cache per instance+model so polling the route doesn't
+      // spend one call per request.
+      const healthCache = new Map<string, { at: number; value: Health }>()
 
-      const probe = Effect.fn("PermissionValidator.probe")(function* () {
+      const health = Effect.fn("PermissionValidator.health")(function* () {
+        const directory = yield* InstanceState.directory
         const ag = yield* recover(agents.get("command-validator"))
         if (!ag) return { ok: false, reason: "command-validator agent not registered" }
         const mdl = yield* recover(
@@ -257,8 +278,14 @@ const make = (options?: Options) =>
         )
         if (!mdl) return { ok: false, reason: "could not resolve a model for command-validator" }
         const model = `${mdl.providerID}/${mdl.id}`
+        const key = `${directory} ${model}`
+        const cached = healthCache.get(key)
+        if (cached && Date.now() - cached.at < healthCacheTtl) return cached.value
         // Health runs outside any session: a synthetic user message satisfies
-        // the stream input contract without touching session storage.
+        // the stream input contract without touching session storage. The
+        // probe replays a real, trivially safe validation prompt and demands
+        // a parseable verdict — an empty or garbage stream used to read as
+        // healthy.
         const user: SessionV1.User = {
           id: MessageID.ascending(),
           role: "user",
@@ -267,19 +294,16 @@ const make = (options?: Options) =>
           model: { providerID: mdl.providerID, modelID: mdl.id },
           time: { created: Date.now() },
         }
-        const ping = yield* stream(ag, mdl, user, HEALTH_SESSION, "Reply ALLOW", HEALTH_TIMEOUT).pipe(Effect.exit)
-        if (Exit.isFailure(ping)) {
-          const squashed = Cause.squash(ping.cause)
-          return { ok: false, model, reason: squashed instanceof Error ? squashed.message : "unreachable" }
-        }
-        return { ok: true, model }
-      })
-
-      const health = Effect.fn("PermissionValidator.health")(function* () {
-        const cached = healthCache.current
-        if (cached && Date.now() - cached.at < healthCacheTtl) return cached.value
-        const value = yield* probe()
-        healthCache.current = { at: Date.now(), value }
+        const ping = yield* stream(
+          ag,
+          mdl,
+          user,
+          HEALTH_SESSION,
+          buildPrompt({ permission: "bash", patterns: ["ls"], metadata: { command: "ls" } }, "(health probe)").text,
+          HEALTH_TIMEOUT,
+        ).pipe(Effect.exit)
+        const value = verdictOf(model, ping)
+        healthCache.set(key, { at: Date.now(), value })
         return value
       })
 
@@ -300,6 +324,15 @@ function recover<A, E, R>(self: Effect.Effect<A, E, R>, message?: string): Effec
       return Effect.logWarning(message, { cause: Cause.pretty(cause) }).pipe(Effect.as(undefined))
     }),
   )
+}
+
+function verdictOf(model: string, ping: Exit.Exit<string, unknown>): Health {
+  if (Exit.isFailure(ping)) {
+    const squashed = Cause.squash(ping.cause)
+    return { ok: false, model, reason: squashed instanceof Error ? squashed.message : "unreachable" }
+  }
+  if (!parseVerdict(ping.value)) return { ok: false, model, reason: "unparseable verdict" }
+  return { ok: true, model }
 }
 
 const deps = [

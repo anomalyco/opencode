@@ -434,6 +434,7 @@ export interface Interface {
     source?: TitleHistoryStore.Source
     model?: string
     triggerMessageId?: MessageID
+    expectedTitle?: string
   }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
@@ -766,7 +767,22 @@ const layer: Layer.Layer<
       source?: TitleHistoryStore.Source
       model?: string
       triggerMessageId?: MessageID
+      expectedTitle?: string
     }) {
+      // LLM retitles race with the human: a rename landing while the title
+      // was being generated must win. The write is conditional on the title
+      // the retitle originally saw, checked atomically — a lost race writes
+      // nothing, not even the history row.
+      if (input.source === "llm" && input.expectedTitle !== undefined) {
+        const won = yield* db
+          .update(SessionTable)
+          .set({ title: input.title })
+          .where(and(eq(SessionTable.id, input.sessionID), eq(SessionTable.title, input.expectedTitle)))
+          .returning({ id: SessionTable.id })
+          .get()
+          .pipe(Effect.orDie)
+        if (!won) return
+      }
       yield* patch(input.sessionID, { title: input.title }).pipe(Effect.orDie)
       // History is audit-only: a failed insert must never fail the rename.
       yield* titleHistory

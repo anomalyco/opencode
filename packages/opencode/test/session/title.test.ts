@@ -400,6 +400,48 @@ it.instance(
 )
 
 it.instance(
+  "a rename landing during title generation beats the llm retitle",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig()
+      const sessions = yield* Session.Service
+      const history = yield* TitleHistoryStore.Service
+      const chat = yield* sessions.create({})
+      const initial = (yield* sessions.get(chat.id)).title
+
+      // The write a retitle makes when the default title still holds wins.
+      yield* sessions.setTitle({
+        sessionID: chat.id,
+        title: "Generated",
+        source: "llm",
+        model: "test/test-model",
+        triggerMessageId: MessageID.ascending(),
+        expectedTitle: initial,
+      })
+      expect((yield* sessions.get(chat.id)).title).toBe("Generated")
+
+      yield* sessions.setTitle({ sessionID: chat.id, title: "User picked" })
+      // The same retitle, landing after the rename, must lose outright: no
+      // title change, no history row.
+      yield* sessions.setTitle({
+        sessionID: chat.id,
+        title: "Late llm",
+        source: "llm",
+        model: "test/test-model",
+        triggerMessageId: MessageID.ascending(),
+        expectedTitle: initial,
+      })
+
+      expect((yield* sessions.get(chat.id)).title).toBe("User picked")
+      const rows = yield* history.listBySession(chat.id)
+      expect(rows).toHaveLength(2)
+      expect(rows[0]).toMatchObject({ title: "Generated", source: "llm" })
+      expect(rows[1]).toMatchObject({ title: "User picked", source: "user" })
+    }),
+  15_000,
+)
+
+it.instance(
   "records the source of each title write",
   () =>
     Effect.gen(function* () {

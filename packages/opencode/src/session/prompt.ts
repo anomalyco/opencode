@@ -281,6 +281,9 @@ const layer = Layer.effect(
           source: "llm",
           model: t.model,
           triggerMessageId: trigger.info.id,
+          // The rename race guard: only write if the title is still the
+          // default this retitle verified before the (slow) generation.
+          expectedTitle: current.title,
         })
         .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
     })
