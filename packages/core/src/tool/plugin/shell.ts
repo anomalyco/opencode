@@ -24,32 +24,31 @@ const BACKGROUND_INSTRUCTION =
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
-  workdir: Schema.String.pipe(Schema.optional).annotate({
+  workdir: Schema.optionalKey(Schema.String).annotate({
     description: "Working directory. Defaults to the active Location; relative paths resolve from that Location.",
   }),
-  timeout: NonNegativeInt.check(Schema.isLessThanOrEqualTo(MAX_TIMEOUT_MS))
-    .pipe(Schema.optional)
+  timeout: Schema.optionalKey(NonNegativeInt.check(Schema.isLessThanOrEqualTo(MAX_TIMEOUT_MS)))
     .annotate({
       description: `Optional timeout in milliseconds. Zero means unlimited. Foreground commands default to ${DEFAULT_TIMEOUT_MS}; background commands default to unlimited. May not exceed ${MAX_TIMEOUT_MS}.`,
     }),
-  background: Schema.Boolean.pipe(Schema.optional).annotate({
+  background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the command in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
   }),
 })
 
 const StructuredOutput = Schema.Struct({
-  exit: Schema.Number.pipe(Schema.optional),
-  shellID: Schema.String.pipe(Schema.optional),
+  exit: Schema.optionalKey(Schema.Number),
+  shellID: Schema.optionalKey(Schema.String),
   truncated: Schema.Boolean,
-  timeout: Schema.Boolean.pipe(Schema.optional),
+  timeout: Schema.optionalKey(Schema.Boolean),
 })
 
 const Output = Schema.Struct({
   ...StructuredOutput.fields,
   output: Schema.String,
-  status: Schema.Literals(["completed", "running"]).pipe(Schema.optional),
-  warnings: Schema.Array(Schema.String).pipe(Schema.optional),
+  status: Schema.optionalKey(Schema.Literals(["completed", "running"])),
+  warnings: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 
 type Output = typeof Output.Type
@@ -202,9 +201,11 @@ export const Plugin = {
                 const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
                   const final = yield* shell.wait(info.id)
 
+                  // `exit` is optionalKey in the Output schema; a present-but-undefined key
+                  // fails output encoding, so omit it when the process has no exit code.
                   if (final.status === "timeout") {
                     return {
-                      exit: final.exit,
+                      ...(final.exit !== undefined ? { exit: final.exit } : {}),
                       output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
                       truncated: false,
                       timeout: true,
@@ -214,7 +215,7 @@ export const Plugin = {
 
                   const capture = yield* captureShell()
                   return {
-                    exit: final.exit,
+                    ...(final.exit !== undefined ? { exit: final.exit } : {}),
                     output: capture.output,
                     truncated: capture.truncated,
                     status: "completed" as const,

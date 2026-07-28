@@ -140,6 +140,22 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("snapshots external tools with missing input schemas", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((draft) =>
+        draft.add({
+          ...make(),
+          input: undefined,
+        } as unknown as Info),
+      )
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.codeModeCatalog?.[0]?.signature).toContain("tools.echo")
+    }),
+  )
+
   it.effect("keeps execute available without Code Mode tools unless explicitly denied", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

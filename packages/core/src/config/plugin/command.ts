@@ -27,7 +27,28 @@ export const Plugin = define({
         )
       }).pipe(Effect.map((documents) => documents.flat()))
     })
-    const loaded = { documents: yield* load() }
+    const loaded = { documents: [] as { commands: Config.Info["commands"] }[] }
+    const reload = load().pipe(
+      Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
+      Effect.andThen(ctx.command.reload()),
+    )
+    // One merged trigger stream serializes reloads and shares one debounce
+    // window; subscribing before the initial scan means updates racing the
+    // scan still trigger a rebuild.
+    const sourceChanges = config
+      .changes()
+      .pipe(
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isCommandSource(entries, update.path)),
+        ),
+      )
+    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
+    yield* Stream.merge(sourceChanges, configUpdates).pipe(
+      Stream.debounce("100 millis"),
+      Stream.runForEach(() => reload),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    loaded.documents = yield* load()
     yield* ctx.command.transform((draft) => {
       for (const document of loaded.documents) {
         for (const [name, command] of Object.entries(document.commands ?? {})) {
@@ -46,18 +67,21 @@ export const Plugin = define({
         }
       }
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() =>
-        load().pipe(
-          Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
-          Effect.andThen(ctx.command.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
 })
+
+// Keep in sync with the loadDirectory scan pattern and the name-strip regex in decode.
+const sourceDirectories = ["command", "commands"] as const
+
+// Matches anything at or under <root>/{command,commands}. No file-suffix check:
+// directory-level events such as renames carry no per-file paths.
+function isCommandSource(entries: Config.Entry[], file: string) {
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
+  )
+}
 
 function loadDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {

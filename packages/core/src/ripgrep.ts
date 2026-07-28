@@ -16,7 +16,6 @@ import { RipgrepBinary } from "./ripgrep/binary"
  */
 
 const ERROR_BYTES = 8 * 1024
-const MAX_RECORD_BYTES = 64 * 1024
 const MAX_SUBMATCHES = 100
 
 const RawMatch = Schema.Struct({
@@ -231,10 +230,8 @@ const layer = Layer.effect(
             input.file ?? ".",
           ],
           parse: (line) =>
-            (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
-              ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
-              : decodeJsonRecord(line).pipe(Effect.mapError((cause) => failure("Invalid ripgrep JSON output", cause)))
-            ).pipe(
+            decodeJsonRecord(line).pipe(
+              Effect.mapError((cause) => failure("Invalid ripgrep JSON output", cause)),
               Effect.flatMap((json) => {
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
                   return Effect.succeed(undefined)

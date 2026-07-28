@@ -3,7 +3,6 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
-import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -17,7 +16,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Effect, Logger } from "effect"
+import { Effect, Fiber, Logger, Stream } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -173,18 +172,19 @@ describe("PluginSupervisor config", () => {
         expect(first).toBeDefined()
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("first")
 
+        const changed = yield* bus
+          .subscribe(Plugin.Event.Updated)
+          .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
         yield* Effect.promise(async () => {
           await fs.writeFile(file, mutablePlugin("second"))
           const modified = new Date(Date.now() + 5_000)
           await fs.utimes(file, modified, modified)
         })
-        yield* bus.publish(ConfigSchema.Event.Updated, {})
-        yield* waitUntil(
-          Effect.gen(function* () {
-            const current = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
-            return current === first && (yield* agents.get(Agent.ID.make("mutable")))?.description === "second"
-          }),
-        )
+        yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+
+        const current = (yield* plugins.list()).find((plugin) => plugin.id === "mutable-plugin")?.id
+        expect(current).toBe(first)
+        expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("second")
       }),
       false,
       async (directory) => {
@@ -303,7 +303,7 @@ function withLocation<A, E, R>(
 }
 
 function mutablePlugin(description: string) {
-  const plugin = pathToFileURL(path.join(import.meta.dir, "../../../plugin/src/index.ts")).href
+  const plugin = pathToFileURL(path.join(import.meta.dir, "../../../plugin/src/promise/index.ts")).href
   return `
 import { Plugin } from ${JSON.stringify(plugin)}
 
@@ -320,11 +320,3 @@ export default Plugin.define({
 })
 `
 }
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for plugin reload")
-})

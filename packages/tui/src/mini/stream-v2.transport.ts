@@ -146,6 +146,7 @@ type State = {
   pending: Map<string, FooterQueuedPrompt>
   admitted: Set<string>
   stepModel: RunInput["model"]
+  activeCompaction?: string
 }
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
@@ -364,6 +365,40 @@ function skillCommit(messageID: string, name: string): StreamCommit {
     messageID,
     partID: `skill:${messageID}`,
     text: `→ Skill "${name}"`,
+    phase: "start",
+  }
+}
+
+function compactionCommit(messageID: string): StreamCommit {
+  return {
+    kind: "system",
+    source: "system",
+    messageID,
+    partID: "compaction:header",
+    text: "Compaction",
+    phase: "start",
+    compaction: true,
+  }
+}
+
+function compactionSummary(messageID: string, text: string, phase: "progress" | "final"): StreamCommit {
+  return {
+    kind: "assistant",
+    source: "assistant",
+    messageID,
+    partID: "compaction:summary",
+    text,
+    phase,
+  }
+}
+
+function compactionError(messageID: string, text: string): StreamCommit {
+  return {
+    kind: "error",
+    source: "system",
+    messageID,
+    partID: "compaction:error",
+    text,
     phase: "start",
   }
 }
@@ -642,6 +677,28 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (completed && state.shellWait?.callID === message.shellID) state.shellWait.resolve()
       return
     }
+    if (message.type === "compaction") {
+      const visible = state.messageIDs.has(message.id)
+      state.messageIDs.add(message.id)
+      if (message.status === "running") state.activeCompaction = message.id
+      if (message.status !== "running" && state.activeCompaction === message.id) state.activeCompaction = undefined
+      if (visible) return
+      if (message.status === "failed") {
+        if (render && message.error.type !== "aborted")
+          write([compactionCommit(message.id), compactionError(message.id, message.error.message)])
+        return
+      }
+      const fragment = { messageID: message.id, partID: "compaction:summary" }
+      const show = render || message.status === "running"
+      state.fragments.project(fragment, message.summary, show)
+      if (!show) return
+      write([
+        compactionCommit(message.id),
+        ...(message.summary ? [compactionSummary(message.id, message.summary, "progress")] : []),
+        ...(message.status === "completed" ? [compactionSummary(message.id, "", "final")] : []),
+      ])
+      return
+    }
     if (message.type !== "assistant") return
     state.messageIDs.add(message.id)
     let textOrdinal = 0
@@ -890,6 +947,48 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (state.skillMessages.has(messageID)) return
       state.skillMessages.add(messageID)
       write([skillCommit(messageID, event.data.name)])
+      return
+    }
+    if (event.type === "session.compaction.started") {
+      const messageID = event.data.inputID ?? messageIDFromEvent(event.id)
+      state.activeCompaction = messageID
+      if (state.messageIDs.has(messageID)) return
+      state.messageIDs.add(messageID)
+      write([compactionCommit(messageID)], { phase: "running", status: "compacting session" })
+      return
+    }
+    if (event.type === "session.compaction.delta") {
+      if (!state.activeCompaction) return
+      const fragment = { messageID: state.activeCompaction, partID: "compaction:summary" }
+      if (!state.fragments.delta(fragment, event.data.text)) return
+      write([compactionSummary(state.activeCompaction, event.data.text, "progress")])
+      return
+    }
+    if (event.type === "session.compaction.ended") {
+      if (!state.activeCompaction) return
+      const messageID = state.activeCompaction
+      state.activeCompaction = undefined
+      const update = state.fragments.end({ messageID, partID: "compaction:summary" }, event.data.text)
+      write([
+        ...(event.data.text.length > update.previous.length
+          ? [compactionSummary(messageID, event.data.text.slice(update.previous.length), "progress")]
+          : []),
+        compactionSummary(messageID, "", "final"),
+      ])
+      return
+    }
+    if (event.type === "session.compaction.failed") {
+      if (!state.activeCompaction) return
+      const messageID = state.activeCompaction
+      state.activeCompaction = undefined
+      if (event.data.error.type === "aborted") {
+        write([compactionSummary(messageID, "", "final")])
+        return
+      }
+      write([
+        compactionSummary(messageID, "", "final"),
+        compactionError(messageID, event.data.error.message),
+      ])
       return
     }
     if (event.type === "session.shell.started") {
@@ -1427,6 +1526,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.skillMessages.clear()
       state.shellCommands.clear()
       state.shellStarted.clear()
+      state.activeCompaction = undefined
       state.shellEnded.clear()
       state.errors.clear()
       await hydrate(attempt, { render: true, reuseVisibleWait: false })

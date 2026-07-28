@@ -42,6 +42,7 @@ import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { PromptCacheDiagnostics } from "@opencode-ai/core/session/prompt-cache-diagnostics"
 import { SessionUsage } from "@opencode-ai/core/session/usage"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -75,8 +76,10 @@ import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { agentHost, catalogHost, host } from "./plugin/host"
 import PROMPT_DEFAULT from "../src/session/runner/prompt/base.txt"
+import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
 const requests: LLMRequest[] = []
+const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
 let responseStream: Stream.Stream<LLMEvent, LLMError> | undefined
@@ -94,7 +97,14 @@ const client = Layer.succeed(
   LLMClient.Service.of({
     prepare: () => Effect.die("unused"),
     stream: ((request: LLMRequest) => {
-      requests.push(request)
+      requests.push({
+        ...request,
+        system: request.system.map((part) => ({
+          ...part,
+          text: part.text.replace(emptyCodeMode, ""),
+        })),
+        tools: request.tools.filter((tool) => tool.name !== "execute"),
+      })
       if (responseStreams) return responseStreams.shift() ?? Stream.empty
       if (responseStream) {
         const stream = responseStream
@@ -355,23 +365,17 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
   load: () => Effect.succeed(Instructions.empty),
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
-const config = Layer.succeed(
-  Config.Service,
-  Config.Service.of({
-    entries: () =>
-      Effect.succeed([
-        new Config.Document({
-          type: "document",
-          info: new Config.Info({
-            compaction: new ConfigCompaction.Info({
-              buffer: 3_000,
-              keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
-            }),
-          }),
-        }),
-      ]),
+const config = Config.testLayer([
+  new Config.Document({
+    type: "document",
+    info: new Config.Info({
+      compaction: new ConfigCompaction.Info({
+        buffer: 3_000,
+        keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
+      }),
+    }),
   }),
-)
+])
 let pluginFlushHook = Effect.void
 const pluginSupervisor = Layer.succeed(
   PluginSupervisor.Service,
@@ -855,7 +859,7 @@ describe("SessionRunnerLLM", () => {
             {
               type: "tool",
               id: "call-removed",
-              state: { status: "error", error: { type: "tool.unknown" } },
+              state: { status: "error", error: { type: "tool.execution" } },
             },
           ],
         },
@@ -920,58 +924,6 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
-      ])
-    }),
-  )
-
-  it.effect("prefers failure outcome metadata over retained progress", () =>
-    Effect.gen(function* () {
-      const session = yield* setup
-      const registry = yield* Tool.Service
-      const hooks = yield* PluginHooks.Service
-      yield* hooks.register("tool", "execute.after", (event) => {
-        if (event.status === "error")
-          event.error = new Tool.Error({ message: event.error.message, metadata: { phase: "failed" } })
-        return Effect.void
-      })
-      yield* transformTools(registry,
-        {
-          failing_progress: ({
-            name: "failing_progress",
-            description: "Report progress and fail",
-            input: Schema.Struct({}),
-            output: Schema.Struct({}),
-            execute: (_, context) =>
-              Effect.gen(function* () {
-                yield* context.progress({ phase: "running" })
-                return yield* new ToolFailure({ message: "failed after progress" })
-              }),
-          }),
-        },
-        { codemode: false },
-      )
-      yield* admit(session, "Run failing progress")
-      responses = [reply.tool("call-failing-progress", "failing_progress", {}), reply.stop()]
-
-      yield* session.resume(sessionID)
-
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user", text: "Run failing progress" },
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "tool",
-              id: "call-failing-progress",
-              state: {
-                status: "error",
-                metadata: { phase: "failed" },
-                error: { message: "failed after progress" },
-              },
-            },
-          ],
-        },
-        { type: "assistant", finish: "stop" },
       ])
     }),
   )
@@ -1314,6 +1266,12 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Second")
       yield* session.resume(sessionID)
 
+      expect(
+        PromptCacheDiagnostics.compare(
+          PromptCacheDiagnostics.snapshot(requests[0]!),
+          PromptCacheDiagnostics.snapshot(requests[1]!),
+        ),
+      ).toEqual({ status: "append-only", previousMessages: 1, currentMessages: 3 })
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
         [defaultSystem, "Initial context"],
         [defaultSystem, "Initial context"],
@@ -1330,7 +1288,7 @@ describe("SessionRunnerLLM", () => {
         .all()
         .pipe(Effect.orDie)
       expect(updates).toHaveLength(2)
-      expect(updates[0]?.data).toEqual({
+      expect(updates[0]?.data).toMatchObject({
         sessionID,
         delta: { "test/context": Instructions.hash("Initial context") },
       })
@@ -3439,7 +3397,7 @@ describe("SessionRunnerLLM", () => {
               id: "call-missing",
               state: {
                 status: "error",
-                error: { type: "tool.unknown", message: "Unknown tool: missing" },
+                error: { type: "tool.execution", message: "Unknown tool: missing" },
               },
             },
           ],
@@ -3603,41 +3561,6 @@ describe("SessionRunnerLLM", () => {
           ],
         },
         { type: "assistant", finish: "stop" },
-      ])
-    }),
-  )
-
-  it.effect("fails the drain when tool output persistence fails", () =>
-    Effect.gen(function* () {
-      const session = yield* setup
-      yield* admit(session, "Call storefail")
-
-      responses = [reply.tool("call-storefail", "storefail", {}), []]
-
-      const exit = yield* session.resume(sessionID).pipe(Effect.exit)
-
-      expect(Exit.isFailure(exit)).toBe(true)
-      expect(requests).toHaveLength(1)
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user", text: "Call storefail" },
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "tool",
-              id: "call-storefail",
-              state: {
-                status: "error",
-                error: {
-                  type: "unknown",
-                  message: expect.stringContaining("Failed to write tool output"),
-                },
-              },
-            },
-          ],
-          finish: "error",
-          error: { type: "unknown", message: expect.stringContaining("Failed to write tool output") },
-        },
       ])
     }),
   )

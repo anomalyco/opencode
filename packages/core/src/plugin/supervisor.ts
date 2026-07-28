@@ -202,6 +202,16 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   })
 }
 
+const sourceDirectories = ["plugin", "plugins"] as const
+
+function isPluginSource(entries: readonly Config.Entry[], file: string) {
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((directory) => FSUtil.contains(path.join(entry.path, directory), file)),
+  )
+}
+
 export interface Interface {
   /** Wait for the initial plugin generation and startup updates to settle. */
   readonly flush: Effect.Effect<void>
@@ -239,12 +249,25 @@ const layer = Layer.effect(
         }),
       )
     })
-    const updates = yield* bus
+    const sourceChanges = config
+      .changes()
+      .pipe(
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
+        ),
+        // Make accepted filesystem work visible to flush before coalescing the burst.
+        Stream.mapEffect(() => Effect.sync(() => ++observed)),
+        Stream.debounce("100 millis"),
+      )
+    const busUpdates = bus
       .subscribe([Event.Updated, SdkPlugins.Updated])
-      .pipe(Stream.toQueue({ capacity: 1, strategy: "sliding" }))
+      .pipe(Stream.mapEffect(() => Effect.sync(() => ++observed)))
+    const updates = yield* Stream.merge(busUpdates, sourceChanges).pipe(
+      Stream.toQueue({ capacity: 1, strategy: "sliding" }),
+    )
     const signals = yield* Stream.concat(
       Stream.succeed(0),
-      Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
+      Stream.fromQueue(updates),
     ).pipe(Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }))
     const attempt = (target: number) =>
       activate(target).pipe(

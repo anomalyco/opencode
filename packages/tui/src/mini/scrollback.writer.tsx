@@ -123,6 +123,15 @@ export function RunEntryContent(props: {
 
   return (
     <Switch fallback={null}>
+      <Match when={props.commit.compaction}>
+        <box width="100%" flexDirection="row" alignItems="center">
+          <box border={["top"]} borderColor={theme().block.muted} flexGrow={1} />
+          <box paddingLeft={1} paddingRight={1}>
+            <text fg={theme().block.muted}>{props.commit.text}</text>
+          </box>
+          <box border={["top"]} borderColor={theme().block.muted} flexGrow={1} />
+        </box>
+      </Match>
       <Match when={text()}>
         <text width="100%" wrapMode="word" fg={style().fg} attributes={style().attrs}>
           {text()!.content}

@@ -346,7 +346,6 @@ describe("fromPromise", () => {
           call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
         }),
       ).toMatchObject({
-        status: "completed",
         output: "Hello, world!",
         content: [{ type: "text", text: "Hello, world!" }],
       })

@@ -49,7 +49,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_allow", "perm_always", {
             action: "read",
-            metadata: { filePath: "/workspace/file.ts" },
+            metadata: { path: "/workspace/file.ts" },
             source: { type: "tool", messageID: "msg_allow", callID: "call_always" },
           }),
         )
@@ -96,7 +96,7 @@ describe("acp permission behavior", () => {
           title: "/workspace/file.ts",
           kind: "read",
           locations: [{ path: "/workspace/file.ts" }],
-          rawInput: { filePath: "/workspace/file.ts" },
+          rawInput: { path: "/workspace/file.ts" },
         },
       })
       expect(permissionReplies(fixture)).toEqual([

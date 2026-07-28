@@ -20,7 +20,7 @@ export const Input = Schema.Struct({
   ).annotate({
     description: "Regular expression to search for in file contents (ripgrep syntax)",
   }),
-  path: RelativePath.pipe(Schema.optional).annotate({
+  path: Schema.optionalKey(RelativePath).annotate({
     description: "File or directory to search. Defaults to the current working directory.",
   }),
   include: FileSystem.GrepInput.fields.include.annotate({

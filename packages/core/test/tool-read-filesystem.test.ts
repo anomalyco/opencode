@@ -115,4 +115,21 @@ describe("ReadToolFileSystem", () => {
       )
     }),
   )
+
+  it.effect("reads PDFs as bounded media", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "document.pdf")
+      yield* files.writeFileString(file, "%PDF-1.7\ncontent")
+
+      const result = yield* ReadToolFileSystem.read(fs, file, "document.pdf")
+
+      expect(result).toMatchObject({
+        type: "file",
+        content: Buffer.from("%PDF-1.7\ncontent").toString("base64"),
+        encoding: "base64",
+        mime: "application/pdf",
+      })
+    }),
+  )
 })

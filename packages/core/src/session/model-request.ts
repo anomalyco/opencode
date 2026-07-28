@@ -3,7 +3,7 @@ export * as SessionModelRequest from "./model-request"
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Context, Effect, Layer, Result } from "effect"
+import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { Model } from "../model"
@@ -13,6 +13,7 @@ import { QuestionTool } from "../tool/plugin/question"
 import { Tool } from "../tool"
 import { SessionContext } from "./context"
 import { SessionModelHeaders } from "./model-headers"
+import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
@@ -109,6 +110,11 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     const app = yield* App.Metadata
+    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
+      Config.withDefault(false),
+      Effect.orDie,
+    )
+    const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
 
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* (input: PrepareInput) {
       const session = input.context.session
@@ -156,6 +162,23 @@ export const layer = Layer.effect(
         tools: hookedTools,
         toolChoice: stepLimitReached ? "none" : undefined,
       })
+      if (promptCacheSnapshots) {
+        const current = PromptCacheDiagnostics.snapshot(request)
+        const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(session.id), current)
+        promptCacheSnapshots.delete(session.id)
+        promptCacheSnapshots.set(session.id, current)
+        const oldest = promptCacheSnapshots.keys().next().value
+        if (promptCacheSnapshots.size > 100 && oldest !== undefined) promptCacheSnapshots.delete(oldest)
+        yield* Effect.logInfo("prompt cache prefix").pipe(
+          Effect.annotateLogs({
+            sessionID: session.id,
+            toolCount: current.tools.length,
+            systemParts: current.system.length,
+            messageCount: current.messages.length,
+            ...comparison,
+          }),
+        )
+      }
       const executeTool: Prepared["executeTool"] = (executeInput) => {
         if (stepLimitReached)
           return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })

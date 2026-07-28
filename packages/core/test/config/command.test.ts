@@ -1,7 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, PubSub, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { advance, drain } from "../lib/clock"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Command } from "@opencode-ai/core/command"
 import { Agent } from "@opencode-ai/core/agent"
@@ -11,12 +12,18 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "@opencode-ai/core/bus"
+import { Credential } from "@opencode-ai/core/credential"
+import { WellKnown } from "@opencode-ai/core/wellknown"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
+import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
@@ -68,18 +75,14 @@ Review files`,
               event: { subscribe: () => Stream.fromPubSub(updates) },
             }),
           ).pipe(
-            Effect.provideService(
-              Config.Service,
-              Config.Service.of({
-                entries: () =>
-                  Effect.succeed([
-                    new Config.Document({
-                      type: "document",
-                      info: decode({ commands: { review: { template: "Inline review" } } }),
-                    }),
-                    new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
-                  ]),
-              }),
+            Effect.provide(
+              Config.testLayer([
+                new Config.Document({
+                  type: "document",
+                  info: decode({ commands: { review: { template: "Inline review" } } }),
+                }),
+                new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+              ]),
             ),
           )
 
@@ -112,4 +115,292 @@ Review files`,
       ),
     ),
   )
+
+  for (const testCase of sourceCases()) {
+    it.effect(`rebuilds commands when a source file is ${testCase.name}`, () =>
+      Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const directory = path.join(tmp.path, "commands")
+            yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+            yield* testCase.prepare(directory)
+
+            const command = yield* Command.Service
+            const bus = yield* Bus.Service
+            const configTest = yield* Config.Test
+            yield* ConfigCommandPlugin.Plugin.effect(
+              host({
+                command: {
+                  list: () => Effect.die("unused command.list"),
+                  transform: command.transform,
+                  reload: command.reload,
+                },
+              }),
+            )
+
+            // Verify inside the subscription so the update event is a read barrier:
+            // committed state must be visible at event delivery time.
+            let received = 0
+            const changed = yield* bus.subscribe(Command.Event.Updated).pipe(
+              Stream.take(1),
+              Stream.tap(() => Effect.sync(() => received++)),
+              Stream.mapEffect(() => testCase.verify(command)),
+              Stream.runDrain,
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            yield* Effect.yieldNow
+
+            const updates = yield* testCase.mutate(directory)
+            yield* Effect.forEach(updates, (update) => configTest.emitChange(update), { discard: true })
+            yield* advance(() => received === 1)
+            yield* Fiber.join(changed)
+          }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
+        ),
+      ),
+    )
+  }
+
+  it.effect("coalesces updates inside the debounce window into one rebuild", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "commands")
+          yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+
+          const command = yield* Command.Service
+          const configTest = yield* Config.Test
+          let reloads = 0
+          yield* ConfigCommandPlugin.Plugin.effect(
+            host({
+              command: {
+                list: () => Effect.die("unused command.list"),
+                transform: command.transform,
+                reload: () => command.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review once"))
+          yield* configTest.emitChange({ type: "create", path: path.join(directory, "review.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })
+          yield* advance(() => reloads >= 1)
+          expect(reloads).toBe(1)
+
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review twice"))
+          yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })
+          yield* advance(() => reloads >= 2)
+          expect(reloads).toBe(2)
+          expect((yield* command.get("review"))?.template).toBe("Review twice")
+        }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
+      ),
+    ),
+  )
+
+  it.effect("ignores updates outside command source directories", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "commands")
+          yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+
+          const command = yield* Command.Service
+          const configTest = yield* Config.Test
+          let reloads = 0
+          yield* ConfigCommandPlugin.Plugin.effect(
+            host({
+              command: {
+                list: () => Effect.die("unused command.list"),
+                transform: command.transform,
+                reload: () => command.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+
+          yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "notes", "todo.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
+          yield* drain
+          expect(reloads).toBe(0)
+
+          // The feed stays live after unrelated updates.
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review related"))
+          yield* configTest.emitChange({ type: "create", path: path.join(directory, "review.md") })
+          yield* advance(() => reloads >= 1)
+          expect((yield* command.get("review"))?.template).toBe("Review related")
+        }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
+      ),
+    ),
+  )
 })
+
+const describeNative = Watcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+
+// End-to-end proof for #37429: a real file edit reaches the command registry
+// through the native watcher, Config's watch topology, the source filter, and
+// the debounced reload — no mocked change feed.
+describeNative("ConfigCommandPlugin native watcher", () => {
+  it.live("reloads commands from real file edits", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      // Watcher events report real paths, so resolve the tempdir symlink up front.
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-core-test-" }).pipe(Effect.flatMap(fs.realPath))
+      const global = path.join(tmp, "global")
+      yield* fs.makeDirectory(path.join(global, "commands"), { recursive: true })
+      yield* fs.makeDirectory(path.join(tmp, "project"))
+      yield* Effect.gen(function* () {
+        const command = yield* Command.Service
+        const config = yield* Config.Service
+        const bus = yield* Bus.Service
+        yield* ConfigCommandPlugin.Plugin.effect(
+          host({
+            command: {
+              list: () => Effect.die("unused command.list"),
+              transform: command.transform,
+              reload: command.reload,
+            },
+          }),
+        )
+        yield* watchReady(config, global)
+
+        const created = yield* nextCommandUpdate(bus)
+        yield* fs.writeFileString(path.join(global, "commands", "review.md"), "Review native")
+        yield* Fiber.join(created).pipe(Effect.timeout("10 seconds"))
+        expect((yield* command.get("review"))?.template).toBe("Review native")
+
+        const updated = yield* nextCommandUpdate(bus)
+        yield* fs.writeFileString(path.join(global, "commands", "review.md"), "Review native again")
+        yield* Fiber.join(updated).pipe(Effect.timeout("10 seconds"))
+        expect((yield* command.get("review"))?.template).toBe("Review native again")
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([Command.node, Config.node, Bus.node, FSUtil.node]), [
+            [
+              Location.node,
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(path.join(tmp, "project")) })),
+              ),
+            ],
+            [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
+            [Credential.node, emptyCredentialNode],
+            [WellKnown.node, emptyWellknownNode],
+          ]),
+        ),
+      )
+    }),
+  )
+})
+
+function nextCommandUpdate(bus: Bus.Interface) {
+  return bus
+    .subscribe(Command.Event.Updated)
+    .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+}
+
+// Native directory watches start asynchronously; probe with unrelated files
+// until the change feed delivers so command edits afterwards cannot be missed.
+function watchReady(config: Config.Interface, directory: string) {
+  return Effect.gen(function* () {
+    const fs = yield* FSUtil.Service
+    const seen = yield* Deferred.make<void>()
+    const listener = yield* config.changes().pipe(
+      Stream.runForEach(() => Deferred.succeed(seen, undefined).pipe(Effect.asVoid)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* Effect.yieldNow
+    const probe = path.join(directory, ".watch-probe")
+    while (true) {
+      yield* fs.writeFileString(probe, `ready-${Math.random()}`)
+      const result = yield* Deferred.await(seen).pipe(Effect.timeoutOption("250 millis"))
+      if (Option.isSome(result)) break
+    }
+    yield* Fiber.interrupt(listener)
+    yield* fs.remove(probe, { force: true })
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: "10 seconds",
+      orElse: () => Effect.fail(new Error("timed out waiting for the config watch to become ready")),
+    }),
+  )
+}
+
+function directoryEntry(directory: string) {
+  return new Config.Directory({ type: "directory", path: AbsolutePath.make(directory) })
+}
+
+function sourceCases() {
+  return [
+    {
+      name: "created",
+      prepare: () => Effect.void,
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const file = path.join(directory, "review.md")
+          await fs.writeFile(file, "Review created")
+          return [{ type: "create" as const, path: file }]
+        }),
+      verify: (command: Command.Interface) =>
+        Effect.gen(function* () {
+          expect((yield* command.get("review"))?.template).toBe("Review created")
+        }),
+    },
+    {
+      name: "updated",
+      prepare: (directory: string) =>
+        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review first")),
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const file = path.join(directory, "review.md")
+          await fs.writeFile(file, "Review updated")
+          return [{ type: "update" as const, path: file }]
+        }),
+      verify: (command: Command.Interface) =>
+        Effect.gen(function* () {
+          expect((yield* command.get("review"))?.template).toBe("Review updated")
+        }),
+    },
+    {
+      name: "renamed",
+      prepare: (directory: string) =>
+        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review renamed")),
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const previous = path.join(directory, "review.md")
+          const next = path.join(directory, "release.md")
+          await fs.rename(previous, next)
+          return [
+            { type: "delete" as const, path: previous },
+            { type: "create" as const, path: next },
+          ]
+        }),
+      verify: (command: Command.Interface) =>
+        Effect.gen(function* () {
+          expect(yield* command.get("review")).toBeUndefined()
+          expect((yield* command.get("release"))?.template).toBe("Review renamed")
+        }),
+    },
+    {
+      name: "deleted",
+      prepare: (directory: string) =>
+        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review deleted")),
+      mutate: (directory: string) =>
+        Effect.promise(async () => {
+          const file = path.join(directory, "review.md")
+          await fs.unlink(file)
+          return [{ type: "delete" as const, path: file }]
+        }),
+      verify: (command: Command.Interface) =>
+        Effect.gen(function* () {
+          expect(yield* command.get("review")).toBeUndefined()
+        }),
+    },
+  ] as const
+}

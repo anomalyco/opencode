@@ -32,6 +32,67 @@ test("tools are structural values", async () => {
   })
 })
 
+test("Effect tool schemas use exact optional keys and flatten compatible constraints", () => {
+  const tool: Info = {
+    name: "constraints",
+    description: "Constraints",
+    input: Schema.Struct({
+      offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+      code: Schema.String.check(Schema.isPattern(/^a/), Schema.isPattern(/z$/)),
+    }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({
+    type: "object",
+    properties: {
+      offset: { type: "integer", minimum: 0 },
+      code: { type: "string", allOf: [{ pattern: "^a" }, { pattern: "z$" }] },
+    },
+    required: ["code"],
+    additionalProperties: false,
+  })
+})
+
+test("Effect tool schemas inline named child schemas", () => {
+  const Child = Schema.Struct({ value: Schema.String }).annotate({ identifier: "Child" })
+  const tool: Info = {
+    name: "references",
+    description: "References",
+    input: Schema.Struct({ child: Child.annotate({ description: "Child value" }) }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({
+    type: "object",
+    properties: {
+      child: {
+        type: "object",
+        properties: { value: { type: "string" } },
+        required: ["value"],
+        additionalProperties: false,
+        description: "Child value",
+      },
+    },
+    required: ["child"],
+    additionalProperties: false,
+  })
+})
+
+test("Effect tool schemas resolve escaped definition names", () => {
+  const Slash = Schema.Struct({ slash: Schema.String }).annotate({ identifier: "A/B" })
+  const Tilde = Schema.Struct({ tilde: Schema.String }).annotate({ identifier: "A~B" })
+  const tool: Info = {
+    name: "escaped-references",
+    description: "Escaped references",
+    input: Schema.Struct({ slash: Slash, tilde: Tilde }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$ref")
+  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$defs")
+})
+
 test("portable schemas validate and describe typed tools", async () => {
   const input = {
     "~standard": {
@@ -141,5 +202,20 @@ test("raw JSON schemas are render-only and omitted output means model-only", asy
   expect(await Effect.runPromise(execute(tool, { value: 1 }, {} as Tool.Context))).toEqual({
     output: undefined,
     content: [{ type: "text", text: '{"value":1}' }],
+  })
+})
+
+test("missing external input schemas fall back to an empty schema", () => {
+  const tool = {
+    name: "external",
+    description: "External tool",
+    input: undefined,
+    execute: () => Effect.succeed({ content: "unused" }),
+  } as unknown as Info
+
+  expect(definition(tool)).toEqual({
+    name: "external",
+    description: "External tool",
+    inputSchema: {},
   })
 })

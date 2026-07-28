@@ -1,6 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
 import { Global } from "@opencode-ai/util/global"
@@ -41,22 +41,18 @@ describe("ConfigSkillPlugin.Plugin", () => {
       ).pipe(
         Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: "/home/test" })),
         Effect.provideService(Location.Service, Location.Service.of(location({ directory }))),
-        Effect.provideService(
-          Config.Service,
-          Config.Service.of({
-            entries: () =>
-              Effect.succeed([
-                new Config.ClaudeDirectory({ type: "claude", path: AbsolutePath.make("/repo/.claude") }),
-                new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/repo/.agents") }),
-                new Config.Directory({ type: "directory", path: AbsolutePath.make("/repo/.opencode") }),
-                new Config.Document({
-                  type: "document",
-                  info: decode({
-                    skills: ["./skills", "~/shared-skills", "/opt/skills", "https://example.test/skills/"],
-                  }),
-                }),
-              ]),
-          }),
+        Effect.provide(
+          Config.testLayer([
+            new Config.ClaudeDirectory({ type: "claude", path: AbsolutePath.make("/repo/.claude") }),
+            new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/repo/.agents") }),
+            new Config.Directory({ type: "directory", path: AbsolutePath.make("/repo/.opencode") }),
+            new Config.Document({
+              type: "document",
+              info: decode({
+                skills: ["./skills", "~/shared-skills", "/opt/skills", "https://example.test/skills/"],
+              }),
+            }),
+          ]),
         ),
       )
 

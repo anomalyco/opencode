@@ -1,10 +1,9 @@
 export * as ReadTool from "./read"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { dirname } from "path"
+import { basename, dirname, join } from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
-import { FileSystem } from "../../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
@@ -15,18 +14,22 @@ import { ReadToolFileSystem } from "../read-filesystem"
 
 export const name = "read"
 const FILENAME = "AGENTS.md"
-const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+const SUPPORTED_MEDIA_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"])
 const LocationInput = Schema.Struct({
-  path: Schema.String,
+  path: Schema.String.annotate({ description: "File or directory to read" }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
-    description: "The 1-based directory entry or text line offset to start reading from",
+    description: "The line or directory entry to start reading from (1-based)",
   }),
   limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
-    description: "The maximum number of directory entries or text lines to read",
+    description: "The maximum number of lines or directory entries to read (defaults to 2000)",
   }),
 })
-const Input = LocationInput
-const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
+export const Input = LocationInput
+const Output = Schema.Union([
+  ReadToolFileSystem.FileContent,
+  ReadToolFileSystem.TextPage,
+  ReadToolFileSystem.ListPage,
+])
 
 export const Plugin = {
   id: "opencode.tool.read",
@@ -45,7 +48,7 @@ export const Plugin = {
             name,
             options: { codemode: false },
             description:
-              "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths inside it are accepted, while external absolute paths require external_directory approval.",
+              "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
             input: Input,
             output: Output,
             execute: (input, context) => {
@@ -66,7 +69,6 @@ export const Plugin = {
                   })
                 const resource = target.resource
                 const absolute = AbsolutePath.make(target.canonical)
-                const type = yield* reader.inspect(absolute)
                 yield* permission.assert({
                   action: name,
                   resources: [resource],
@@ -75,6 +77,9 @@ export const Plugin = {
                   agent: context.agent,
                   source,
                 })
+                const type = yield* reader.inspect(absolute).pipe(
+                  Effect.catchReason("PlatformError", "NotFound", () => missing(input.path, target.canonical)),
+                )
                 const content =
                   type === "directory"
                     ? yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
@@ -107,33 +112,22 @@ export const Plugin = {
                   Effect.catch(() => Effect.void),
                   Effect.catchDefect(() => Effect.void),
                 )
-                if ("encoding" in content && content.encoding === "base64" && !SUPPORTED_IMAGE_MIMES.has(content.mime))
+                if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_MEDIA_MIMES.has(content.mime))
                   return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
                 return content
               }).pipe(
-                Effect.map((output) => {
-                  // Image base64 reaches the model through content items; avoid a second
-                  // unresized copy in model text.
-                  const content =
-                    "encoding" in output && output.encoding === "base64"
-                      ? SUPPORTED_IMAGE_MIMES.has(output.mime)
-                        ? ([
-                            { type: "text", text: "Image read successfully" },
-                            {
-                              type: "file",
-                              uri: `data:${output.mime};base64,${output.content}`,
-                              mime: output.mime,
-                              name: input.path,
-                            },
-                          ] as const)
-                        : JSON.stringify({ ...output, content: "" }, null, 2)
-                      : JSON.stringify(output, null, 2)
-                  return { output, content }
-                }),
+                Effect.map((output) => ({
+                  output,
+                  content: toModelContent(input.path, input.offset, output),
+                })),
                 Effect.mapError((error) => {
+                  if (error instanceof ToolFailure) return error
                   const message =
                     error instanceof ReadToolFileSystem.BinaryFileError ||
-                    error instanceof ReadToolFileSystem.MediaIngestLimitError
+                    error instanceof ReadToolFileSystem.MediaIngestLimitError ||
+                    error instanceof ReadToolFileSystem.MalformedUtf8Error ||
+                    error instanceof ReadToolFileSystem.OffsetOutOfRangeError ||
+                    error instanceof ReadToolFileSystem.PathKindError
                       ? error.message
                       : `Unable to read ${input.path}`
                   return new ToolFailure({ message, error })
@@ -144,5 +138,62 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
+
+    const missing = Effect.fn("ReadTool.missing")(function* (input: string, canonical: string) {
+      const base = basename(input).toLowerCase()
+      const suggestions = yield* fs.readDirectory(dirname(canonical)).pipe(
+        Effect.map((entries) =>
+          entries
+            .filter((entry) => {
+              const candidate = entry.toLowerCase()
+              return candidate.includes(base) || base.includes(candidate)
+            })
+            .map((entry) => join(dirname(input), entry))
+            .slice(0, 3),
+        ),
+        Effect.catch(() => Effect.succeed([] as string[])),
+      )
+      const message =
+        suggestions.length === 0
+          ? `File not found: ${input}`
+          : `File not found: ${input}\n\nDid you mean one of these?\n${suggestions.join("\n")}`
+      return yield* new ToolFailure({ message })
+    })
   }),
+}
+
+export const toModelContent = (path: string, offset: number | undefined, output: typeof Output.Type) => {
+  if (output.type === "file" && output.encoding === "base64")
+    return [
+      { type: "text", text: output.mime === "application/pdf" ? "PDF read successfully" : "Image read successfully" },
+      {
+        type: "file",
+        uri: `data:${output.mime};base64,${output.content}`,
+        mime: output.mime,
+        name: path,
+      },
+    ] as const
+
+  if (output.type === "list-page") {
+    const start = offset ?? 1
+    const content = [
+      output.entries.length === 0
+        ? `Read directory ${path}, 0 entries`
+        : `Read directory ${path}, entries ${start}-${start + output.entries.length - 1}`,
+    ]
+    output.entries.forEach((entry) => content.push(entry.path))
+    if (output.truncated && output.next !== undefined)
+      content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
+    return content.join("\n")
+  }
+
+  const start = output.type === "text-page" ? output.offset : 1
+  const lines = output.content === "" ? [] : output.content.replace(/\n$/, "").split("\n")
+  const content = [
+    lines.length === 0 ? `Read file ${path}, 0 lines` : `Read file ${path}, lines ${start}-${start + lines.length - 1}`,
+  ]
+  lines.forEach((line, index) => content.push(`${start + index}: ${line}`))
+  if (output.type === "text-page" && output.truncated && output.next !== undefined)
+    content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
+  return content.join("\n")
 }

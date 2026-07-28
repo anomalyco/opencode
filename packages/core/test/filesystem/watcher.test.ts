@@ -23,12 +23,116 @@ type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
 
-const configLayer = Layer.succeed(
-  Config.Service,
-  Config.Service.of({
-    entries: () => Effect.succeed([]),
-  }),
-)
+const configLayer = Config.testLayer()
+
+describe("Watcher.testLayer", () => {
+  it.effect("records subscriptions and broadcasts emitted updates through the service", () =>
+    Effect.gen(function* () {
+      const watcher = yield* Watcher.Service
+      const test = yield* Watcher.Test
+      const received = yield* watcher
+        .subscribe({ path: "/root", type: "directory" })
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* Effect.yieldNow
+
+      yield* test.emit({ type: "update", path: "/root/file.md" })
+
+      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "update", path: "/root/file.md" }])
+      // subscriptions() reports acquired watches, so paths come back resolved.
+      expect(yield* test.subscriptions()).toEqual([{ path: path.resolve("/root"), type: "directory" }])
+    }).pipe(Effect.provide(Watcher.testLayer)),
+  )
+})
+
+function withNative(native: Watcher.NativeInterface) {
+  return Effect.provide(Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native))))
+}
+
+function countingNative() {
+  const counts = { subscribes: 0, unsubscribes: 0 }
+  const native: Watcher.NativeInterface = {
+    subscribe: () =>
+      Effect.sync(() => {
+        counts.subscribes++
+        return {
+          unsubscribe: () => {
+            counts.unsubscribes++
+            return Promise.resolve()
+          },
+        }
+      }),
+  }
+  return { native, counts }
+}
+
+describe("Watcher lifecycle", () => {
+  it.effect("interrupting a consumer interrupts a pending acquisition", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const interrupted = yield* Deferred.make<void>()
+      yield* Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const consumer = yield* watcher
+          .subscribe({ path: "/pending", type: "directory" })
+          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Deferred.await(started)
+        yield* Fiber.interrupt(consumer)
+        expect(yield* Deferred.isDone(interrupted)).toBe(true)
+      }).pipe(
+        withNative({
+          subscribe: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+            ),
+        }),
+      )
+    }),
+  )
+
+  it.effect("shares one subscription and releases exactly once after the final consumer", () => {
+    const { native, counts } = countingNative()
+    return Effect.gen(function* () {
+      const watcher = yield* Watcher.Service
+      const consume = () =>
+        watcher
+          .subscribe({ path: "/shared", type: "directory" })
+          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+      const first = yield* consume()
+      const second = yield* consume()
+      yield* Effect.yieldNow
+      expect(counts.subscribes).toBe(1)
+
+      yield* Fiber.interrupt(first)
+      expect(counts.unsubscribes).toBe(0)
+
+      yield* Fiber.interrupt(second)
+      expect(counts.subscribes).toBe(1)
+      expect(counts.unsubscribes).toBe(1)
+    }).pipe(withNative(native))
+  })
+
+  it.effect("scope shutdown releases an active subscription exactly once", () => {
+    const { native, counts } = countingNative()
+    return Effect.gen(function* () {
+      const consumer = yield* Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const consumer = yield* watcher
+          .subscribe({ path: "/active", type: "directory" })
+          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        yield* Effect.yieldNow
+        expect(counts.subscribes).toBe(1)
+        expect(counts.unsubscribes).toBe(0)
+        return consumer
+      }).pipe(withNative(native))
+      // Closing the layer scope tears the native subscription down while the
+      // consumer still holds a reference; the consumer's own release as its
+      // stream ends must not tear it down a second time.
+      yield* Fiber.join(consumer)
+      expect(counts.unsubscribes).toBe(1)
+    })
+  })
+})
 
 function provide(directory: string, vcs?: Location.Interface["vcs"]) {
   const locationLayer = Layer.succeed(

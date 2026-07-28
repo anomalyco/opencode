@@ -28,7 +28,7 @@ describe("acp tools", () => {
   })
 
   test("extracts file locations from tool input", () => {
-    expect(toLocations("read", { filePath: "/tmp/a.ts" })).toEqual([{ path: "/tmp/a.ts" }])
+    expect(toLocations("read", { path: "/tmp/a.ts" })).toEqual([{ path: "/tmp/a.ts" }])
     expect(toLocations("edit", { filePath: "/tmp/b.ts" })).toEqual([{ path: "/tmp/b.ts" }])
     expect(toLocations("write", { filePath: "/tmp/c.ts" })).toEqual([{ path: "/tmp/c.ts" }])
     expect(toLocations("grep", { path: "/repo/src" })).toEqual([{ path: "/repo/src" }])
@@ -43,7 +43,7 @@ describe("acp tools", () => {
     ])
     expect(toLocations("bash", { command: "pwd", workdir: "/abs/dir" }, "/workspace")).toEqual([{ path: "/abs/dir" }])
     expect(toLocations("bash", { command: "printf hello" })).toEqual([])
-    expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([])
+    expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([{ path: "/tmp/missing-file-path.ts" }])
   })
 
   test("builds completed content with text and image attachments", () => {
@@ -205,12 +205,13 @@ describe("acp tools", () => {
       runningToolUpdate({
         toolCallId: "call",
         toolName: "read",
-        state: { input: { filePath: "/tmp/a" } },
+        state: { input: { path: "/tmp/a" } },
         content: [{ type: "text", text: "done" }],
       }),
     ).toMatchObject({
       toolCallId: "call",
       status: "in_progress",
+      locations: [{ path: "/tmp/a" }],
       content: [{ type: "content", content: { type: "text", text: "done" } }],
     })
   })
@@ -273,7 +274,7 @@ describe("acp tools", () => {
       errorToolUpdate({
         toolCallId: "call",
         toolName: "read",
-        input: { filePath: "/tmp/a" },
+        input: { path: "/tmp/a" },
         content: [{ type: "text", text: "partial output" }],
         metadata: { path: "/tmp/a" },
         error: "failed",
@@ -284,7 +285,7 @@ describe("acp tools", () => {
       kind: "read",
       title: "read",
       locations: [{ path: "/tmp/a" }],
-      rawInput: { filePath: "/tmp/a" },
+      rawInput: { path: "/tmp/a" },
       content: [
         { type: "content", content: { type: "text", text: "partial output" } },
         { type: "content", content: { type: "text", text: "failed" } },

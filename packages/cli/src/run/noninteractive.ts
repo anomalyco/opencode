@@ -1,11 +1,11 @@
 import type {
   EventSubscribeOutput,
   JsonValue,
-  LLMToolContent,
   LocationRef,
   OpenCodeClient,
   SessionMessageAssistantTool,
   SessionMessageInfo,
+  ToolContent,
 } from "@opencode-ai/client/promise"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { EOL } from "node:os"
@@ -56,7 +56,7 @@ type ToolState = StartedPart & {
   provider?: unknown
   providerState?: SessionMessageAssistantTool["providerState"]
   metadata: Record<string, JsonValue>
-  content: LLMToolContent[]
+  content: ToolContent[]
 }
 
 type V2Event = EventSubscribeOutput
