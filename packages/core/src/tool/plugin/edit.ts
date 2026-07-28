@@ -41,7 +41,6 @@ const crlf = "\r\n"
 interface Match {
   readonly start: number
   readonly end: number
-  readonly indentation?: string
 }
 
 const normalizeForMatch = (value: string) =>
@@ -61,22 +60,10 @@ const findOccurrences = (content: string, search: string) => {
   return result
 }
 
-const commonIndent = (lines: ReadonlyArray<string>) => {
-  const indents = lines
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.match(/^[ \t]*/)![0])
-  return indents.reduce(
-    (result, indentation) => (indentation.length < result.length ? indentation : result),
-    indents[0] ?? "",
-  )
-}
-
-const findLineOccurrences = (content: string, search: string, mode: "trailing" | "indentation") => {
+const findLineOccurrences = (content: string, search: string) => {
   const trailingNewline = search.endsWith("\n")
   const expected = search.split("\n")
   if (trailingNewline) expected.pop()
-  if (mode === "indentation" && expected.length < 2) return []
-  const expectedIndent = mode === "indentation" ? commonIndent(expected) : ""
   const lines = [...content.matchAll(/[^\n]*(?:\n|$)/g)]
     .filter((match) => match[0] !== "")
     .map((match) => {
@@ -93,32 +80,16 @@ const findLineOccurrences = (content: string, search: string, mode: "trailing" |
   const candidates = lines.flatMap((line, index) => {
     const actual = lines.slice(index, index + expected.length)
     if (actual.length !== expected.length) return []
-    const actualIndent = mode === "indentation" ? commonIndent(actual.map((item) => item.text)) : ""
     if (
       !actual.every(
-        (item, lineIndex) => {
-          const left = item.text
-          const right = expected[lineIndex]!
-          if (mode === "indentation") {
-            return (
-              normalizeForMatch(left.slice(actualIndent.length).trimEnd()) ===
-              normalizeForMatch(right.slice(expectedIndent.length).trimEnd())
-            )
-          }
-          return normalizeForMatch(left.trimEnd()) === normalizeForMatch(right.trimEnd())
-        },
+        (item, lineIndex) =>
+          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex]!.trimEnd()),
       )
     )
       return []
     const last = actual.at(-1)!
     if (trailingNewline && !last.newline) return []
-    return [
-      {
-        start: line.start,
-        end: trailingNewline ? last.end : last.contentEnd,
-        indentation: mode === "trailing" ? undefined : actualIndent || commonIndent(actual.map((item) => item.text)),
-      },
-    ]
+    return [{ start: line.start, end: trailingNewline ? last.end : last.contentEnd }]
   })
   return candidates.reduce<Match[]>((result, candidate) => {
     if (result.some((match) => match.end > candidate.start && match.start < candidate.end)) return result
@@ -209,19 +180,8 @@ export const Plugin = {
                   const trailing =
                     exact.length > 0 || unicode.length > 0
                       ? []
-                      : findLineOccurrences(source, oldString, "trailing")
-                  const indentation =
-                    exact.length > 0 || unicode.length > 0 || trailing.length > 0
-                      ? []
-                      : findLineOccurrences(source, oldString, "indentation")
-                  const matches =
-                    exact.length > 0
-                      ? exact
-                      : unicode.length > 0
-                        ? unicode
-                        : trailing.length > 0
-                          ? trailing
-                          : indentation
+                      : findLineOccurrences(source, oldString)
+                  const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
                   const replacements = matches.length
                   if (replacements === 0) {
                     return yield* new ToolFailure({
@@ -236,21 +196,11 @@ export const Plugin = {
 
                   const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
                     .toReversed()
-                    .reduce((content, match) => {
-                      if (match.indentation === undefined) {
-                        return `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`
-                      }
-                      const replacementLines = newString.split("\n")
-                      const replacementIndent = commonIndent(replacementLines)
-                      const replacement = replacementLines
-                        .map((line) =>
-                          line.trim().length === 0
-                            ? line
-                            : `${match.indentation}${line.slice(replacementIndent.length)}`,
-                        )
-                        .join("\n")
-                      return `${content.slice(0, match.start)}${replacement}${content.slice(match.end)}`
-                    }, source)
+                    .reduce(
+                      (content, match) =>
+                        `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
+                      source,
+                    )
                   const counts = diffLines(source, replaced).reduce(
                     (result, item) => ({
                       additions: result.additions + (item.added ? (item.count ?? 0) : 0),

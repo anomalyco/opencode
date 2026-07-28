@@ -568,36 +568,6 @@ describe("EditTool", () => {
     ),
   )
 
-  it.live("matches shifted indentation and rebases the replacement", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => {
-        reset()
-        const target = path.join(tmp.path, "indentation.ts")
-        return Effect.promise(() => fs.writeFile(target, "    if (ready) {\n      run()\n    }\n")).pipe(
-          Effect.andThen(
-            withTool(tmp.path, (registry) =>
-              executeTool(
-                registry,
-                call({
-                  path: "indentation.ts",
-                  oldString: "if (ready) {\n  run()\n}",
-                  newString: "if (ready) {\n  stop()\n}",
-                }),
-              ),
-            ),
-          ),
-          Effect.tap((result) => Effect.sync(() => expect(result.status).toBe("completed"))),
-          Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
-          Effect.tap((content) =>
-            Effect.sync(() => expect(content).toBe("    if (ready) {\n      stop()\n    }\n")),
-          ),
-        )
-      },
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
-  )
-
   it.live("preserves BOM and CRLF line endings", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
