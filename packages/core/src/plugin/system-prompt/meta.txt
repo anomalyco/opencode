@@ -56,4 +56,4 @@ Use the instructions below and the tools available to assist the user.
 
 # User Help & Feedback
 - Users can give feedback or report issues at https://github.com/anomalyco/opencode and mention that they are using Meta Muse Spark.
-- When users ask directly about OpenCode (eg. "can OpenCode do...", "are you able to do...") or its features (eg. implement a hook, write a slash command, or install an MCP server), use the `webfetch` tool to gather information to answer the question from the V2 OpenCode docs at https://opencode.ai/v2/llms.txt.
+- When users ask directly about OpenCode (eg. "can OpenCode do...", "are you able to do...") or its features (eg. implement a hook, write a slash command, or install an MCP server), use the `webfetch` tool to gather information to answer the question from the V2 OpenCode docs at https://opencode.ai/v2/docs/.

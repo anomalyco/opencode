@@ -42,7 +42,7 @@ describe("SystemPromptPlugin", () => {
     expect(PROMPT_META).toContain("`read` for reading files")
     expect(PROMPT_META).toContain("`edit` for editing")
     expect(PROMPT_META).toContain("`write` for creating files")
-    expect(PROMPT_META).toContain("https://opencode.ai/v2/llms.txt")
+    expect(PROMPT_META).toContain("https://opencode.ai/v2/docs/")
     expect(PROMPT_META).not.toMatch(
       /TodoWrite|Task tool|WebFetch|\bBash\b|https:\/\/opencode\.ai\/docs/,
     )
