@@ -26,7 +26,7 @@ type CurrentDelta = Extract<
 >
 
 export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
-  if (event.type === "permission.v2.asked") {
+  if (event.type === "permission.asked") {
     return {
       id: event.id,
       type: "permission.asked",
@@ -45,14 +45,6 @@ export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
       current: event,
     } as ServerEvent
   }
-  if (event.type === "permission.v2.replied")
-    return { id: event.id, type: "permission.replied", properties: event.data, current: event } as ServerEvent
-  if (event.type === "question.v2.asked")
-    return { id: event.id, type: "question.asked", properties: event.data, current: event } as ServerEvent
-  if (event.type === "question.v2.replied")
-    return { id: event.id, type: "question.replied", properties: event.data, current: event } as ServerEvent
-  if (event.type === "question.v2.rejected")
-    return { id: event.id, type: "question.rejected", properties: event.data, current: event } as ServerEvent
   return { id: event.id, type: event.type, properties: event.data, current: event } as ServerEvent
 }
 

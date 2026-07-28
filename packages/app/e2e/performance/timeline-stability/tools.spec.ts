@@ -33,9 +33,11 @@ test.describe("timeline tool state stability", () => {
     }
     const names = { webfetch: "webfetch", websearch: "websearch", task: "task", skill: "skill", custom: "mcp_probe" }
     const questionID = "prt_state_question"
+    const todoID = "prt_state_todo"
     const initial = [
       ...ids.map((id) => toolPart(`prt_state_${id}`, names[id], "pending", inputs[id])),
       toolPart(questionID, "question", "pending", questionInput()),
+      toolPart(todoID, "todowrite", "pending", { todos: [{ content: "Hidden", status: "pending" }] }),
       textPart("prt_state_following", "Following lightweight tools"),
     ]
     const childID = "ses_timeline_child"
@@ -47,6 +49,7 @@ test.describe("timeline tool state stability", () => {
     await timeline.send(status("busy"), 120)
     for (const id of ids) await timeline.waitForPart(`prt_state_${id}`)
     await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
+    await expect(page.locator(`[data-timeline-part-id="${todoID}"]`)).toHaveCount(0)
 
     const regionIDs = [
       "prt_state_webfetch",
@@ -102,6 +105,7 @@ test.describe("timeline tool state stability", () => {
       ]),
     )
     await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toContainText("Keep it stable")
+    await expect(page.locator(`[data-timeline-part-id="${todoID}"]`)).toHaveCount(0)
     await expect(
       page.locator(`a[href$="/session/${childID}"]`, { has: page.locator('[data-component="task-tool-card"]') }),
     ).toBeVisible()

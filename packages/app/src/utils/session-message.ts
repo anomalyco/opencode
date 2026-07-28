@@ -328,7 +328,7 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
               messageID,
               type: "file",
               mime: item.mime,
-              filename: item.name,
+              filename: item.name ?? undefined,
               url: item.uri,
             },
           ]

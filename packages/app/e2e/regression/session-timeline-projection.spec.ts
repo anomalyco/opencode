@@ -35,6 +35,7 @@ test.describe("session timeline projection", () => {
       editPart("prt_edit"),
       toolPart("prt_write", "write", "completed", { filePath: "src/new.ts", content: "export const stable = true\n" }),
       patchPart("prt_patch"),
+      toolPart("prt_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
       toolPart(
         "prt_question",
         "question",
@@ -64,6 +65,7 @@ test.describe("session timeline projection", () => {
     ]) {
       await expect(page.locator(`[data-timeline-part-id="${id}"]`).first(), id).toBeVisible()
     }
+    await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
   })
 
   test("projects gaps, dividers, assistant parts, and errors together", async ({ page }) => {
@@ -247,7 +249,7 @@ function editPart(id: string) {
 function patchPart(id: string) {
   return toolPart(
     id,
-    "patch",
+    "apply_patch",
     "completed",
     { files: ["src/a.ts", "src/b.ts"] },
     {
