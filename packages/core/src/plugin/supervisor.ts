@@ -1,7 +1,8 @@
 export * as PluginSupervisor from "./supervisor"
 
+import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Deferred, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Agent } from "../agent"
@@ -14,6 +15,7 @@ import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Bus } from "../bus"
 import { FileMutation } from "../file-mutation"
 import { FileSystem } from "../filesystem"
+import { Watcher } from "../filesystem/watcher"
 import { Form } from "../form"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
@@ -45,9 +47,9 @@ const PluginModule = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-    effect: Schema.declare<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>(
-      (input): input is import("@opencode-ai/plugin/effect/plugin").Plugin["effect"] => typeof input === "function",
-    ),
+      effect: Schema.declare<PluginDefinition["effect"]>(
+        (input): input is PluginDefinition["effect"] => typeof input === "function",
+      ),
     }),
     Schema.Struct({
       id: Schema.String,
@@ -226,10 +228,42 @@ const layer = Layer.effect(
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
     const bus = yield* Bus.Service
+    const watcher = yield* Watcher.Service
+    const fs = yield* FSUtil.Service
     const lock = Semaphore.makeUnsafe(1)
     const ready = yield* Deferred.make<void>()
     let observed = 0
     let applied = -1
+
+    // Configured local plugin files can live outside config roots, where the
+    // config change feed cannot see them; watch those entrypoints directly.
+    // Watches start on first sighting and are never torn down individually:
+    // a stale watch after a config edit costs one deduped fs handle and a
+    // no-op activation, and every watch dies with this layer's scope.
+    const configuredChanges = yield* PubSub.unbounded<void>()
+    const watched = new Set<string>()
+    const watchConfiguredSources = Effect.fn("PluginSupervisor.watchConfiguredSources")(function* (
+      entries: readonly Config.Entry[],
+      operations: readonly Operation[],
+    ) {
+      for (const operation of operations) {
+        if (operation.type !== "add" || !path.isAbsolute(operation.target)) continue
+        if (watched.has(operation.target)) continue
+        // The config change feed already covers {plugin,plugins} directories.
+        if (isPluginSource(entries, operation.target)) continue
+        // Directory targets can't hot-reload (their stat mtime ignores edits
+        // inside), so don't watch what can't trigger anything.
+        if (yield* fs.isDir(operation.target)) continue
+        watched.add(operation.target)
+        yield* watcher.subscribe({ path: operation.target, type: "file" }).pipe(
+          Stream.runForEach(() => PubSub.publish(configuredChanges, undefined)),
+          Effect.catchCause((cause) =>
+            Effect.logError("configured plugin watch failed", { target: operation.target, cause }),
+          ),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      }
+    })
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* (target: number) {
       yield* lock.withPermit(
@@ -240,7 +274,9 @@ const layer = Layer.effect(
           // Combine internal plugins with host-contributed SDK plugins in boot order.
           const pre = [...internal.pre.map((plugin) => ({ ...plugin, version: "internal" })), ...sdk.all()]
           const post = internal.post.map((plugin) => ({ ...plugin, version: "internal" }))
-          const operations = yield* scan(yield* config.entries())
+          const entries = yield* config.entries()
+          const operations = yield* scan(entries)
+          yield* watchConfiguredSources(entries, operations)
           // Apply config operations and load enabled package plugins into one ordered generation.
           const plugins = yield* resolve(pre, post, operations)
           // Replace the active generation in one scoped, batched activation.
@@ -249,26 +285,22 @@ const layer = Layer.effect(
         }),
       )
     })
-    const sourceChanges = config
-      .changes()
-      .pipe(
-        Stream.filterEffect((update) =>
-          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
-        ),
-        // Make accepted filesystem work visible to flush before coalescing the burst.
-        Stream.mapEffect(() => Effect.sync(() => ++observed)),
-        Stream.debounce("100 millis"),
-      )
+    const sourceChanges = config.changes().pipe(
+      Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+      Stream.merge(Stream.fromPubSub(configuredChanges)),
+      // Make accepted filesystem work visible to flush before coalescing the burst.
+      Stream.mapEffect(() => Effect.sync(() => ++observed)),
+      Stream.debounce("100 millis"),
+    )
     const busUpdates = bus
       .subscribe([Event.Updated, SdkPlugins.Updated])
       .pipe(Stream.mapEffect(() => Effect.sync(() => ++observed)))
     const updates = yield* Stream.merge(busUpdates, sourceChanges).pipe(
       Stream.toQueue({ capacity: 1, strategy: "sliding" }),
     )
-    const signals = yield* Stream.concat(
-      Stream.succeed(0),
-      Stream.fromQueue(updates),
-    ).pipe(Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }))
+    const signals = yield* Stream.concat(Stream.succeed(0), Stream.fromQueue(updates)).pipe(
+      Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }),
+    )
     const attempt = (target: number) =>
       activate(target).pipe(
         Effect.map(() => observed === target),
@@ -329,6 +361,7 @@ export const node = makeLocationNode({
     Shell.node,
     Skill.node,
     Tool.node,
+    Watcher.node,
     WebSearch.node,
     WellKnown.node,
   ],

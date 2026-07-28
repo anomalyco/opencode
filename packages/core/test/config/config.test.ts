@@ -209,6 +209,64 @@ describe("Config", () => {
     ),
   )
 
+  // Real watcher on purpose: the regression this pins (a deleted config file's
+  // watch being torn down, making recreation invisible) only reproduces with
+  // path-faithful event delivery.
+  it.live("keeps watching a deleted config file so recreating it reloads", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(project, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            yield* Effect.sleep("10 millis")
+
+            const removed = yield* bus
+              .subscribe(ConfigSchema.Event.Updated)
+              .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+            yield* Effect.promise(() => fs.rm(file))
+            yield* Fiber.join(removed).pipe(Effect.timeout("5 seconds"))
+            expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+
+            const recreated = yield* bus
+              .subscribe(ConfigSchema.Event.Updated)
+              .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            yield* Fiber.join(recreated).pipe(Effect.timeout("5 seconds"))
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("two")
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+                [
+                  Location.node,
+                  Layer.succeed(
+                    Location.Service,
+                    Location.Service.of(location({ directory: AbsolutePath.make(project) })),
+                  ),
+                ],
+                [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
+                [Credential.node, emptyCredentialNode],
+                [WellKnown.node, emptyWellknownNode],
+              ]),
+            ),
+          )
+        }),
+      ),
+    ),
+  )
+
   it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
     Effect.gen(function* () {
       const config = yield* Config.Service
@@ -524,7 +582,11 @@ describe("Config", () => {
             yield* config.entries()
 
             expect(yield* watcher.subscriptions()).toEqual([
-              { type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) },
+              {
+                type: "directory",
+                path: AbsolutePath.make(path.join(tmp.path, "global")),
+                ignore: ["**/{node_modules,.git}/**", ".git", "node_modules"],
+              },
             ])
           }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, Watcher.testLayer)))
         }),

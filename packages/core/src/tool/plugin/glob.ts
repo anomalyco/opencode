@@ -104,6 +104,15 @@ export const Plugin = {
                     limit: limit + 1,
                   })
                   .pipe(
+                    Effect.timeoutOrElse({
+                      duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
+                      orElse: () =>
+                        Effect.fail(
+                          new ToolFailure({
+                            message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
+                          }),
+                        ),
+                    }),
                     Effect.map((result) =>
                       result.map((entry) =>
                         FileSystem.Entry.make({
