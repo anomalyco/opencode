@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { Context, Effect, Fiber, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -373,29 +373,30 @@ export const layer = (options?: Options) => Layer.effect(
     const initial = yield* discover()
     let configs = initial
     const updates = yield* PubSub.unbounded<Watcher.Update>()
-    const subscriptions = new Map<string, Effect.Effect<unknown>>()
+    // Vendored trees inside config roots (a plugin's node_modules, a nested
+    // .git) produce event blizzards that can never change discovery output.
+    const ignore = ["node_modules", ".git", "**/{node_modules,.git}/**"]
+    // Watch-once: roots leave discovery only by deletion, so a stale watch is
+    // inert, bounded, and dies with this layer — and keeping a deleted root's
+    // watch alive is exactly what makes its recreation observable.
+    const watched = new Set<string>()
     const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
       const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
       const files = entries.flatMap((entry) => (entry.type === "file" ? [entry.path] : []))
       const targets = [
-        ...directories.map((path) => ({ path, type: "directory" as const })),
+        ...directories.map((path) => ({ path, type: "directory" as const, ignore })),
         ...files
           .filter((file) => !directories.some((directory) => FSUtil.contains(directory, file)))
           .map((path) => ({ path, type: "file" as const })),
       ]
-      const next = new Map(targets.map((target) => [JSON.stringify(target), target]))
-      for (const [key, stop] of subscriptions) {
-        if (next.has(key)) continue
-        yield* stop
-        subscriptions.delete(key)
-      }
-      for (const [key, target] of next) {
-        if (subscriptions.has(key)) continue
-        const fiber = yield* watcher.subscribe(target).pipe(
+      for (const target of targets) {
+        const key = JSON.stringify(target)
+        if (watched.has(key)) continue
+        watched.add(key)
+        yield* watcher.subscribe(target).pipe(
           Stream.runForEach((update) => PubSub.publish(updates, update)),
           Effect.forkScoped({ startImmediately: true }),
         )
-        subscriptions.set(key, Fiber.interrupt(fiber))
       }
     })
 
