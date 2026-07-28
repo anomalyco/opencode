@@ -199,7 +199,6 @@
   width: 100%;
   height: 28px;
   border-radius: 4px;
-  border: 0.5px solid transparent;
   box-sizing: border-box;
   color: var(--v2-text-text-muted);
 }
@@ -222,5 +221,4 @@
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
   background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
-  border: 0.5px solid var(--v2-border-border-muted);
 }
