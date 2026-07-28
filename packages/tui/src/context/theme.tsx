@@ -17,7 +17,7 @@ import {
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes, themeDirectories } from "../theme/discovery"
-import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
+import { createComponentTheme, type ComponentTheme } from "../theme/component"
 import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
