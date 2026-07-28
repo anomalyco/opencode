@@ -1,7 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
-import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { Server, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
@@ -13,7 +11,7 @@ const serve = Effect.acquireRelease(
   Effect.promise(async () => {
     const requests: Headers[] = []
     const protocol = new Server({ name: "headers", version: "1.0.0" }, { capabilities: { tools: {} } })
-    protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
+    protocol.setRequestHandler("tools/list", () => Promise.resolve({ tools: [] }))
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       enableJsonResponse: true,
@@ -36,6 +34,11 @@ const serve = Effect.acquireRelease(
     }
   }),
   (server) => Effect.promise(server.close),
+)
+
+const serveUnauthorized = Effect.acquireRelease(
+  Effect.sync(() => Bun.serve({ port: 0, fetch: () => new Response("Unauthorized", { status: 401 }) })),
+  (server) => Effect.sync(() => server.stop(true)),
 )
 
 describe("mcp.headers", () => {
@@ -97,6 +100,20 @@ describe("mcp.headers", () => {
         expect(headers.has("authorization")).toBe(false)
         expect(headers.has("x-custom-header")).toBe(false)
       }
+    }),
+  )
+
+  it.instance("reports 401 as failed when oauth is explicitly disabled", () =>
+    Effect.gen(function* () {
+      const server = yield* serveUnauthorized
+      const mcp = yield* MCP.Service
+      const result = yield* mcp.add("unauthorized-no-oauth", {
+        type: "remote",
+        url: server.url.toString(),
+        oauth: false,
+      })
+
+      expect(result.status).toMatchObject({ "unauthorized-no-oauth": { status: "failed" } })
     }),
   )
 })

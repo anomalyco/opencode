@@ -1,7 +1,5 @@
 import { expect } from "bun:test"
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
-import { ListResourcesRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { Server, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -40,13 +38,13 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
       let requiresAuth = true
 
       if (capabilities === "tools") {
-        protocol.setRequestHandler(ListToolsRequestSchema, () => {
+        protocol.setRequestHandler("tools/list", () => {
           listToolsCalls++
           return Promise.resolve({ tools: [{ name: "test_tool", inputSchema: { type: "object" } }] })
         })
       }
       if (capabilities === "resources") {
-        protocol.setRequestHandler(ListResourcesRequestSchema, () =>
+        protocol.setRequestHandler("resources/list", () =>
           Promise.resolve({ resources: [{ name: "docs", uri: "docs://readme" }] }),
         )
       }
