@@ -4,6 +4,7 @@ import {
   Message as MessageType,
   Part as PartType,
 } from "@opencode-ai/sdk/v2/client"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
@@ -90,7 +91,7 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-type SummaryDiff = SnapshotFileDiff & { file: string }
+type SummaryDiff = (SnapshotFileDiff & { file: string }) | FileDiffInfo
 
 function summaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
   return typeof value.file === "string"

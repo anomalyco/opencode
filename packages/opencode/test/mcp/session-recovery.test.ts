@@ -24,4 +24,24 @@ describe("mcp session recovery", () => {
       { method: "ping", session: "replacement" },
     ])
   })
+
+  test("retries a concurrent stale response after recovery completes", async () => {
+    const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "../fixture/mcp-session-recovery.ts")], {
+      cwd: path.join(import.meta.dir, "../.."),
+      env: { ...process.env, MCP_RECOVERY_CONCURRENT: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      Bun.readableStreamToText(child.stdout),
+      Bun.readableStreamToText(child.stderr),
+    ])
+
+    expect(code, stderr).toBe(0)
+    const posts = JSON.parse(stdout) as Array<{ method: string; session: string | null }>
+    expect(posts.filter((post) => post.method === "initialize").map((post) => post.session)).toEqual([null, null])
+    expect(posts.filter((post) => post.method === "ping" && post.session === "expired")).toHaveLength(2)
+    expect(posts.filter((post) => post.method === "ping" && post.session === "replacement")).toHaveLength(2)
+  })
 })

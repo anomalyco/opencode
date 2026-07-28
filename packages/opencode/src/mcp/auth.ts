@@ -11,6 +11,7 @@ export const Tokens = Schema.Struct({
   refreshToken: Schema.mutableKey(Schema.optional(Schema.String)),
   expiresAt: Schema.mutableKey(Schema.optional(Schema.Number)),
   scope: Schema.mutableKey(Schema.optional(Schema.String)),
+  issuer: Schema.mutableKey(Schema.optional(Schema.String)),
 })
 export type Tokens = Schema.Schema.Type<typeof Tokens>
 
@@ -19,6 +20,9 @@ export const ClientInfo = Schema.Struct({
   clientSecret: Schema.mutableKey(Schema.optional(Schema.String)),
   clientIdIssuedAt: Schema.mutableKey(Schema.optional(Schema.Number)),
   clientSecretExpiresAt: Schema.mutableKey(Schema.optional(Schema.Number)),
+  redirectUris: Schema.mutableKey(Schema.optional(Schema.Array(Schema.String))),
+  issuer: Schema.mutableKey(Schema.optional(Schema.String)),
+  configPreRegistered: Schema.mutableKey(Schema.optional(Schema.Boolean)),
 })
 export type ClientInfo = Schema.Schema.Type<typeof ClientInfo>
 
