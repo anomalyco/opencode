@@ -8,6 +8,7 @@ import {
   OpenAI,
   OpenAICompatible,
   OpenRouter,
+  Requesty,
 } from "@opencode-ai/llm/providers"
 import type { ModelMessage } from "ai"
 import type { Provider } from "@/provider/provider"
@@ -175,6 +176,7 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
       baseURL: requireBaseURL(model, url),
     }).model(model.api.id)
   if (model.api.npm === "@openrouter/ai-sdk-provider") return OpenRouter.configure(options).model(model.api.id)
+  if (model.api.npm === "@requesty/ai-sdk") return Requesty.configure(options).model(model.api.id)
   throw new Error(`Native LLM request adapter does not support provider package ${model.api.npm}`)
 }
 

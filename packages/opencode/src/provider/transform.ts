@@ -84,6 +84,8 @@ function sdkKey(npm: string): string | undefined {
       return "gateway"
     case "@openrouter/ai-sdk-provider":
       return "openrouter"
+    case "@requesty/ai-sdk":
+      return "requesty"
     case "ai-gateway-provider":
       // ai-gateway-provider/unified wraps createOpenAICompatible({ name: "Unified" }),
       // and @ai-sdk/openai-compatible parses compatibleOptions from one of

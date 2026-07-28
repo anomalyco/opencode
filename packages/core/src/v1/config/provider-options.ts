@@ -155,6 +155,7 @@ const lowerers: Readonly<Record<string, Lowerer>> = {
   "@ai-sdk/togetherai": openaiCompatible,
   "@ai-sdk/xai": openaiCompatible,
   "@openrouter/ai-sdk-provider": openaiCompatible,
+  "@requesty/ai-sdk": openaiCompatible,
   "ai-gateway-provider": openaiCompatible,
   "venice-ai-sdk-provider": openaiCompatible,
 }
