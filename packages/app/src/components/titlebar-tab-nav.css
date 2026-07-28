@@ -81,20 +81,3 @@
   display: none;
 }
 
-@container (max-width: 64px) {
-  [data-titlebar-tab-link] {
-    justify-content: center;
-    gap: 0;
-    padding-inline: 0;
-  }
-
-  [data-titlebar-tab-title] {
-    display: none;
-  }
-
-  [data-slot="tab-close"] {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-}
