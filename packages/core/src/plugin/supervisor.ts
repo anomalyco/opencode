@@ -1,7 +1,7 @@
 export * as PluginSupervisor from "./supervisor"
 
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Option, PubSub, RcMap, Schema, Scope, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Agent } from "../agent"
@@ -236,36 +236,50 @@ const layer = Layer.effect(
 
     // Configured local plugin files can live outside config roots, where the
     // config change feed cannot see them; watch those entrypoints directly.
+    // Each entry holds one background watch alive while any generation
+    // references its target.
     const configuredChanges = yield* PubSub.unbounded<void>()
-    const watches = new Map<string, Effect.Effect<void>>()
-    const reconcileWatches = Effect.fn("PluginSupervisor.reconcileWatches")(function* (
-      entries: readonly Config.Entry[],
-      operations: readonly Operation[],
-    ) {
-      const targets = new Set<string>()
-      for (const operation of operations) {
-        if (operation.type !== "add" || !path.isAbsolute(operation.target)) continue
-        // The config change feed already covers {plugin,plugins} directories.
-        if (isPluginSource(entries, operation.target)) continue
-        // File entrypoints only: directory targets keep reloading on config
-        // changes alone, and their revisions need a separate design.
-        if (yield* fs.isDir(operation.target)) continue
-        targets.add(operation.target)
-      }
-      for (const [target, stop] of watches) {
-        if (targets.has(target)) continue
-        watches.delete(target)
-        yield* stop
-      }
-      for (const target of targets) {
-        if (watches.has(target)) continue
-        const fiber = yield* watcher.subscribe({ path: target, type: "file" }).pipe(
+    const watches = yield* RcMap.make({
+      lookup: (target: string) =>
+        watcher.subscribe({ path: target, type: "file" }).pipe(
           Stream.runForEach(() => PubSub.publish(configuredChanges, undefined)),
           Effect.catchCause((cause) => Effect.logError("configured plugin watch failed", { target, cause })),
           Effect.forkScoped({ startImmediately: true }),
-        )
-        watches.set(target, Fiber.interrupt(fiber).pipe(Effect.asVoid))
-      }
+          Effect.asVoid,
+        ),
+    })
+    // Watches live in per-activation scopes: acquiring the next generation
+    // before closing the previous one keeps unchanged targets subscribed
+    // through the refcount overlap.
+    let generation: Scope.Closeable | undefined
+    yield* Effect.addFinalizer(() =>
+      Effect.suspend(() => (generation ? Scope.close(generation, Exit.void) : Effect.void)),
+    )
+    const rotateWatches = Effect.fn("PluginSupervisor.rotateWatches")(function* (
+      entries: readonly Config.Entry[],
+      operations: readonly Operation[],
+    ) {
+      const targets = yield* Effect.filter(
+        operations.flatMap((operation) =>
+          operation.type === "add" &&
+          path.isAbsolute(operation.target) &&
+          // The config change feed already covers {plugin,plugins} directories.
+          !isPluginSource(entries, operation.target)
+            ? [operation.target]
+            : [],
+        ),
+        // Watch file entrypoints only. Editing inside a directory target does
+        // not change the directory's mtime, so the ?mtime= cache-busting could
+        // not reload it anyway; directory targets behave as before.
+        (target) => Effect.map(fs.isDir(target), (isDir) => !isDir),
+      )
+      const next = yield* Scope.make()
+      yield* Effect.forEach(targets, (target) => RcMap.get(watches, target), { discard: true }).pipe(
+        Scope.provide(next),
+      )
+      const previous = generation
+      generation = next
+      if (previous) yield* Scope.close(previous, Exit.void)
     })
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* (target: number) {
@@ -279,7 +293,7 @@ const layer = Layer.effect(
           const post = internal.post.map((plugin) => ({ ...plugin, version: "internal" }))
           const entries = yield* config.entries()
           const operations = yield* scan(entries)
-          yield* reconcileWatches(entries, operations)
+          yield* rotateWatches(entries, operations)
           // Apply config operations and load enabled package plugins into one ordered generation.
           const plugins = yield* resolve(pre, post, operations)
           // Replace the active generation in one scoped, batched activation.
