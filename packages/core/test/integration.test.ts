@@ -5,11 +5,11 @@ import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { Integration } from "@opencode-ai/core/integration"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, EventV2.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node])))
 const failingCredentialNode = makeGlobalNode({
   service: Credential.Service,
   layer: Layer.succeed(
@@ -26,7 +26,7 @@ const failingCredentialNode = makeGlobalNode({
   deps: [],
 })
 const failingIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Integration.node, EventV2.node]), [[Credential.node, failingCredentialNode]]),
+  AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [[Credential.node, failingCredentialNode]]),
 )
 
 function eventually<A, E, R>(
@@ -135,7 +135,7 @@ describe("Integration", () => {
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const credentials = yield* Credential.Service
-      const events = yield* EventV2.Service
+      const bus = yield* Bus.Service
       const integrationID = Integration.ID.make("openai")
       yield* integrations.transform((editor) =>
         editor.method.update({
@@ -143,7 +143,7 @@ describe("Integration", () => {
           method: { type: "key", label: "API key" },
         }),
       )
-      const updated = yield* events
+      const updated = yield* bus
         .subscribe(Integration.Event.Updated)
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow

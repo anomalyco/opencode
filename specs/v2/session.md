@@ -43,13 +43,13 @@ The managed server provides graceful restart continuity through private Session 
 
 Before each Step, the runner reloads Session History, resolves the selected agent and model, prepares instructions, and materializes tools. Most Steps make one Physical Attempt; overflow-triggered compaction recovery may rebuild the same Step for one additional provider request.
 
-Each complete local tool call is durable before side effects begin. Local calls start eagerly and may run concurrently, but settlement publication remains serialized. Every local and hosted call reaches durable success or failure before the Step publishes its single terminal ended or failed event.
+Each complete local tool call is durable before side effects begin. Local calls start eagerly and may run concurrently, but terminal outcome publication remains serialized. Every local and hosted call reaches durable success or failure before the Step publishes its single terminal ended or failed event.
 
 Tool calls belong to their assistant message. `callID` is unique only within that Step, so durable tool events also carry `assistantMessageID`.
 
 Before `runStep` assembles its provider request, orphan reconciliation fails tool calls still projected as streaming or running from an earlier process. It preserves the original assistant attribution and never replays ambiguous side effects.
 
-After local settlement, continuation reloads projected history and begins a new Step. The runner never delegates orchestration to an in-memory tool loop.
+After a local outcome, continuation reloads projected history and begins a new Step. The runner never delegates orchestration to an in-memory tool loop.
 
 ## Retry Is Narrow And Observable
 

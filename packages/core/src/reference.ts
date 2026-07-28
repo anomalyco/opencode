@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "@opencode-ai/util/global"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { Repository } from "./repository"
 import { RepositoryCache } from "./repository-cache"
 import { AbsolutePath } from "./schema"
@@ -19,7 +19,7 @@ export type GitSource = Reference.GitSource
 export const Source = Reference.Source
 export type Source = Reference.Source
 
-export const Event = Reference.Event
+export { Event } from "@opencode-ai/schema/reference"
 
 export const Info = Reference.Info
 export type Info = Reference.Info
@@ -38,13 +38,13 @@ export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Reference") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Reference") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const global = yield* Global.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
@@ -107,7 +107,7 @@ const layer = Layer.effect(
               Effect.forkIn(scope),
             )
           }
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Reference.Event.Updated, {})
         }),
     })
 
@@ -124,5 +124,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Global.node, EventV2.node, RepositoryCache.node],
+  deps: [Global.node, Bus.node, RepositoryCache.node],
 })

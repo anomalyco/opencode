@@ -10,6 +10,11 @@ export type PartRef = {
   partID: string
 }
 
+export type CacheUsage = {
+  read: number
+  model: SessionMessageAssistant["model"]
+}
+
 export type SessionRow =
   | { type: "message"; messageID: string }
   | { type: "compaction-queued"; inputID: string }
@@ -28,7 +33,7 @@ export type SessionRow =
       completed: boolean
     }
   | { type: "assistant-footer"; messageID: string }
-  | { type: "turn-usage"; messageIDs: string[]; previousCacheRead?: number }
+  | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
 export function createSessionRows(sessionID: Accessor<string>) {
   const data = useData()
@@ -280,7 +285,7 @@ export function reduceSessionRows(
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
   const usage = turnTokens
-    ? { steps: [] as SessionMessageAssistant[], previousTurnCacheRead: undefined as number | undefined }
+    ? { steps: [] as SessionMessageAssistant[], previousTurnCache: undefined as CacheUsage | undefined }
     : undefined
   return [
     ...messages.filter((message) => !pending.has(message.id)),
@@ -289,6 +294,8 @@ export function reduceSessionRows(
   ].reduce<SessionRow[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "synthetic" && !message.description?.trim()) return rows
+      if (message.type === "compaction" && message.status === "completed" && usage)
+        usage.previousTurnCache = undefined
       if (!pending.has(message.id)) completePrevious(rows)
       rows.push({ type: "message", messageID: message.id })
       return rows
@@ -312,16 +319,28 @@ export function reduceSessionRows(
         rows.push({
           type: "turn-usage",
           messageIDs: stepsWithUsage.map((step) => step.id),
-          ...(usage.previousTurnCacheRead === undefined
-            ? {}
-            : { previousCacheRead: usage.previousTurnCacheRead }),
+          ...(usage.previousTurnCache === undefined ? {} : { previousCache: usage.previousTurnCache }),
         })
-        usage.previousTurnCacheRead = last.tokens.cache.read
+        usage.previousTurnCache = { read: last.tokens.cache.read, model: last.model }
       }
       usage.steps.length = 0
     }
     return rows
   }, [])
+}
+
+export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheUsage) {
+  if (previous === undefined) return
+  if (
+    previous.model.providerID !== current.model.providerID ||
+    previous.model.id !== current.model.id ||
+    previous.model.variant !== current.model.variant
+  )
+    return
+  const drop = previous.read - current.read
+  // OpenAI cache reads can move between one and two 1,024-token buckets without a material loss of reuse.
+  if (current.model.providerID === "openai" && drop >= 1_024 && drop <= 2_048) return
+  return drop > 0 ? drop : undefined
 }
 
 function hasTokenUsage(

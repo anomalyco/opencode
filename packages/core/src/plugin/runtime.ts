@@ -1,16 +1,16 @@
 export * as PluginRuntime from "./runtime"
 
 import { Context, Effect, Layer } from "effect"
-import { AgentV2 } from "../agent"
+import { Agent } from "../agent"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Job } from "../job"
 import { Location } from "../location"
 import { LocationServiceMap } from "../location-service-map"
-import { SessionV2 } from "../session"
+import { Session } from "../session"
 
 export interface Interface {
   readonly session: Pick<
-    SessionV2.Interface,
+    Session.Interface,
     "get" | "create" | "messages" | "prompt" | "generate" | "command" | "resume" | "interrupt" | "synthetic"
   >
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel">
@@ -18,7 +18,7 @@ export interface Interface {
     readonly agent: {
       readonly list: (
         ref: Location.Ref,
-      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: AgentV2.Info[] }>
+      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: Agent.Info[] }>
     }
   }
 }
@@ -74,7 +74,7 @@ export const layerWithCell = (cell: Cell) =>
 export const providerLayerWithCell = (cell: Cell) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
-      const sessions = yield* SessionV2.Service
+      const sessions = yield* Session.Service
       const jobs = yield* Job.Service
       const locations = yield* LocationServiceMap.Service
       const runtime: Interface = {
@@ -85,7 +85,7 @@ export const providerLayerWithCell = (cell: Cell) =>
             list: (ref) =>
               Effect.gen(function* () {
                 const location = yield* Location.Service
-                const agents = yield* AgentV2.Service
+                const agents = yield* Agent.Service
                 return {
                   location: new Location.Info({
                     directory: location.directory,
@@ -118,7 +118,7 @@ export const providerNodeWithCell = (cell: Cell) =>
   makeGlobalNode({
     name: "plugin-runtime-provider",
     layer: providerLayerWithCell(cell),
-    deps: [node, SessionV2.node, Job.node, LocationServiceMap.node],
+    deps: [node, Session.node, Job.node, LocationServiceMap.node],
   })
 
 export const providerNode = providerNodeWithCell(defaultCell)

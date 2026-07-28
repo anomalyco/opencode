@@ -15,8 +15,8 @@ import {
   UnknownProviderReason,
   ToolFailure,
 } from "@opencode-ai/ai"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { Tool } from "@opencode-ai/plugin/v2/effect/tool"
+import { Permission } from "@opencode-ai/core/permission"
+import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 
@@ -56,7 +56,7 @@ describe("toSessionError", () => {
   })
 
   test("preserves the permission rejection type without exposing internal fields", () => {
-    const blocked = new PermissionV2.BlockedError({ rules: [], permission: "external_directory", resources: [] })
+    const blocked = new Permission.BlockedError({ rules: [], permission: "external_directory", resources: [] })
     expect(toSessionError(blocked)).toEqual({
       type: "permission.rejected",
       message: "Permission denied: external_directory",
@@ -65,7 +65,7 @@ describe("toSessionError", () => {
       type: "permission.rejected",
       message: "Permission denied: external_directory",
     })
-    expect(toSessionError(new Tool.Failure({ message: "failed" }))).toEqual({
+    expect(toSessionError(new Tool.Error({ message: "failed" }))).toEqual({
       type: "tool.execution",
       message: "failed",
     })

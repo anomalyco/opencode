@@ -6,11 +6,11 @@ export type ServiceStopResponse = { accepted: boolean }
 
 export type ModelRef = { id: string; providerID: string; variant?: string }
 
-export type ProviderSettings = { [x: string]: JsonValue }
+export type ProviderSettings = { [x: string]: any }
 
 export type AgentColor = string
 
-export type PermissionV2Effect = "allow" | "deny" | "ask"
+export type PermissionEffect = "allow" | "deny" | "ask"
 
 export type PluginInfo = { id: string }
 
@@ -98,15 +98,19 @@ export type SessionMessageShell = {
   output?: { output: string; cursor: number; size: number; truncated: boolean }
 }
 
-export type SessionMessageAssistantText = { type: "text"; text: string }
-
 export type SessionMessageProviderState = { [x: string]: JsonValue }
 
 export type SessionMessageToolStateStreaming = { status: "streaming"; input: string }
 
+export type SessionMessageToolStateRunning = {
+  status: "running"
+  input: { [x: string]: JsonValue }
+  metadata: { [x: string]: JsonValue }
+}
+
 export type ToolTextContent = { type: "text"; text: string }
 
-export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string }
+export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string | null }
 
 export type SessionStructuredError = { type: string; message: string }
 
@@ -151,8 +155,6 @@ export type ShellInfo = {
   time: { started: number; completed?: number }
 }
 
-export type SessionMessageProviderState3 = { [x: string]: any }
-
 export type SessionMessageProviderState4 = { [x: string]: any }
 
 export type SessionMessageProviderState5 = { [x: string]: any }
@@ -160,6 +162,12 @@ export type SessionMessageProviderState5 = { [x: string]: any }
 export type SessionMessageProviderState6 = { [x: string]: any }
 
 export type SessionMessageProviderState7 = { [x: string]: any }
+
+export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
+
+export type SessionMessageProviderState8 = { [x: string]: any }
+
+export type SessionMessageProviderState9 = { [x: string]: any }
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: number }
 
@@ -169,24 +177,24 @@ export type ModelCapabilities = { tools: boolean; input: Array<string>; output: 
 
 export type ModelVariant = {
   id: string
-  settings?: { [x: string]: JsonValue }
+  settings?: { [x: string]: any }
   headers?: { [x: string]: string }
-  body?: { [x: string]: JsonValue }
+  body?: { [x: string]: any }
 }
 
 export type MoneyUSDPerMillionTokens = number
 
 export type GenerateTextResponse = { data: { text: string } }
 
-export type ProviderV2Info = {
+export type ProviderInfo = {
   id: string
   integrationID?: string
   name: string
   disabled?: boolean
   package: string
-  settings?: { [x: string]: JsonValue }
+  settings?: { [x: string]: any }
   headers?: { [x: string]: string }
-  body?: { [x: string]: JsonValue }
+  body?: { [x: string]: any }
 }
 
 export type IntegrationWhen = { key: string; op: "eq" | "neq"; value: string }
@@ -293,7 +301,7 @@ export type FormExternalField = { key: string; type: "external"; url: string; ti
 
 export type FormValue = string | number | boolean | Array<string>
 
-export type PermissionV2Source = { type: "tool"; messageID: string; callID: string }
+export type PermissionSource = { type: "tool"; messageID: string; callID: string }
 
 export type PermissionSavedInfo = { id: string; projectID: string; action: string; resource: string }
 
@@ -317,9 +325,9 @@ export type FileDiffLegacyInfo = {
   status?: "added" | "deleted" | "modified"
 }
 
-export type PermissionAction = "allow" | "deny" | "ask"
+export type PermissionV1Action = "allow" | "deny" | "ask"
 
-export type JSONSchema = { [x: string]: any }
+export type SessionV1JSONSchema = { [x: string]: any }
 
 export type ProviderAuthError = { name: "ProviderAuthError"; data: { providerID: string; message: string } }
 
@@ -350,7 +358,7 @@ export type APIError = {
   }
 }
 
-export type TextPart = {
+export type SessionV1TextPart = {
   id: string
   sessionID: string
   messageID: string
@@ -362,7 +370,7 @@ export type TextPart = {
   metadata?: { [x: string]: any } | undefined
 }
 
-export type SubtaskPart = {
+export type SessionV1SubtaskPart = {
   id: string
   sessionID: string
   messageID: string
@@ -374,7 +382,7 @@ export type SubtaskPart = {
   command?: string | undefined
 }
 
-export type ReasoningPart = {
+export type SessionV1ReasoningPart = {
   id: string
   sessionID: string
   messageID: string
@@ -384,13 +392,13 @@ export type ReasoningPart = {
   time: { start: number; end?: number | undefined }
 }
 
-export type FilePartSourceText = { value: string; start: number; end: number }
+export type SessionV1FilePartSourceText = { value: string; start: number; end: number }
 
-export type Range = { start: { line: number; character: number }; end: { line: number; character: number } }
+export type SessionV1Range = { start: { line: number; character: number }; end: { line: number; character: number } }
 
-export type ToolStatePending = { status: "pending"; input: { [x: string]: any }; raw: string }
+export type SessionV1ToolStatePending = { status: "pending"; input: { [x: string]: any }; raw: string }
 
-export type ToolStateRunning = {
+export type SessionV1ToolStateRunning = {
   status: "running"
   input: { [x: string]: any }
   title?: string | undefined
@@ -398,7 +406,7 @@ export type ToolStateRunning = {
   time: { start: number }
 }
 
-export type ToolStateError = {
+export type SessionV1ToolStateError = {
   status: "error"
   input: { [x: string]: any }
   error: string
@@ -406,7 +414,7 @@ export type ToolStateError = {
   time: { start: number; end: number }
 }
 
-export type StepStartPart = {
+export type SessionV1StepStartPart = {
   id: string
   sessionID: string
   messageID: string
@@ -414,7 +422,7 @@ export type StepStartPart = {
   snapshot?: string | undefined
 }
 
-export type StepFinishPart = {
+export type SessionV1StepFinishPart = {
   id: string
   sessionID: string
   messageID: string
@@ -431,9 +439,15 @@ export type StepFinishPart = {
   }
 }
 
-export type SnapshotPart = { id: string; sessionID: string; messageID: string; type: "snapshot"; snapshot: string }
+export type SessionV1SnapshotPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "snapshot"
+  snapshot: string
+}
 
-export type PatchPart = {
+export type SessionV1PatchPart = {
   id: string
   sessionID: string
   messageID: string
@@ -442,7 +456,7 @@ export type PatchPart = {
   files: Array<string>
 }
 
-export type AgentPart = {
+export type SessionV1AgentPart = {
   id: string
   sessionID: string
   messageID: string
@@ -451,7 +465,7 @@ export type AgentPart = {
   source?: { value: string; start: number; end: number } | undefined
 }
 
-export type CompactionPart = {
+export type SessionV1CompactionPart = {
   id: string
   sessionID: string
   messageID: string
@@ -461,7 +475,7 @@ export type CompactionPart = {
   tail_start_id?: string | undefined
 }
 
-export type PermissionV2Reply = "once" | "always" | "reject"
+export type PermissionReply = "once" | "always" | "reject"
 
 export type Pty = {
   id: string
@@ -474,11 +488,11 @@ export type Pty = {
   exitCode?: number
 }
 
-export type QuestionV2Option = { label: string; description: string }
+export type QuestionOption = { label: string; description: string }
 
-export type QuestionV2Tool = { messageID: string; callID: string }
+export type QuestionTool = { messageID: string; callID: string }
 
-export type QuestionV2Answer = Array<string>
+export type QuestionAnswer = Array<string>
 
 export type FormMetadata1 = { [x: string]: any }
 
@@ -494,12 +508,6 @@ export type SessionStatus =
       next: number
     }
   | { type: "busy" }
-
-export type QuestionOption = { label: string; description: string }
-
-export type QuestionTool = { messageID: string; callID: string }
-
-export type QuestionAnswer = Array<string>
 
 export type ShellInfo1 = {
   id: string
@@ -533,6 +541,10 @@ export type VcsFileStatus = {
   status: "added" | "deleted" | "modified"
 }
 
+export type WebSearchProvider = { id: string; name: string }
+
+export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
+
 export type SessionMessageModelSelected = {
   id: string
   metadata?: { [x: string]: JsonValue }
@@ -554,10 +566,10 @@ export type CommandInfo = {
 export type ProviderRequest = {
   settings: ProviderSettings
   headers: { [x: string]: string }
-  body: { [x: string]: JsonValue }
+  body: { [x: string]: any }
 }
 
-export type PermissionV2Rule = { action: string; resource: string; effect: PermissionV2Effect }
+export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type SessionAgentSelected = {
   id: string
@@ -725,16 +737,6 @@ export type SessionTextStarted = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; assistantMessageID: string; ordinal: number }
-}
-
-export type SessionTextEnded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.text.ended"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; ordinal: number; text: string }
 }
 
 export type SessionToolInputStarted = {
@@ -918,6 +920,15 @@ export type SessionToolInputDelta = {
   data: { sessionID: string; assistantMessageID: string; callID: string; delta: string }
 }
 
+export type SessionToolProgress = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.tool.progress"
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; callID: string; metadata: { [x: string]: JsonValue } }
+}
+
 export type SessionCompactionDelta = {
   id: string
   created: number
@@ -1035,11 +1046,11 @@ export type ShellDeleted = {
   data: { id: string }
 }
 
-export type QuestionV2Rejected = {
+export type QuestionRejected = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "question.v2.rejected"
+  type: "question.rejected"
   location?: LocationRef
   data: { sessionID: string; requestID: string }
 }
@@ -1051,6 +1062,15 @@ export type FormCancelled = {
   type: "form.cancelled"
   location?: LocationRef
   data: { id: string; sessionID: string }
+}
+
+export type WebsearchUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "websearch.updated"
+  location?: LocationRef
+  data: {}
 }
 
 export type SessionIdle = {
@@ -1168,41 +1188,6 @@ export type McpResourcesChanged = {
   data: { server: string }
 }
 
-export type PermissionAsked = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "permission.asked"
-  location?: LocationRef
-  data: {
-    id: string
-    sessionID: string
-    permission: string
-    patterns: Array<string>
-    metadata: { [x: string]: any }
-    always: Array<string>
-    tool?: { messageID: string; callID: string } | undefined
-  }
-}
-
-export type PermissionReplied = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "permission.replied"
-  location?: LocationRef
-  data: { sessionID: string; requestID: string; reply: "once" | "always" | "reject" }
-}
-
-export type QuestionRejected = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.rejected"
-  location?: LocationRef
-  data: { sessionID: string; requestID: string }
-}
-
 export type V2EventServerConnected = {
   id: string
   metadata?: { [x: string]: any } | undefined
@@ -1234,6 +1219,8 @@ export type SessionPendingSynthetic = {
   delivery: "steer" | "queue"
 }
 
+export type SessionMessageAssistantText = { type: "text"; text: string; state?: SessionMessageProviderState }
+
 export type SessionMessageAssistantReasoning = {
   type: "reasoning"
   text: string
@@ -1241,7 +1228,7 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
-export type LLMToolContent = ToolTextContent | ToolFileContent
+export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
 
@@ -1344,6 +1331,22 @@ export type ShellCreated = {
   data: { info: ShellInfo }
 }
 
+export type SessionTextEnded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.text.ended"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    ordinal: number
+    text: string
+    state?: SessionMessageProviderState4
+  }
+}
+
 export type SessionReasoningStarted = {
   id: string
   created: number
@@ -1351,7 +1354,7 @@ export type SessionReasoningStarted = {
   type: "session.reasoning.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState3 }
+  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState5 }
 }
 
 export type SessionReasoningEnded = {
@@ -1366,7 +1369,7 @@ export type SessionReasoningEnded = {
     assistantMessageID: string
     ordinal: number
     text: string
-    state?: SessionMessageProviderState4
+    state?: SessionMessageProviderState6
   }
 }
 
@@ -1383,9 +1386,11 @@ export type SessionToolCalled = {
     callID: string
     input: { [x: string]: any }
     executed: boolean
-    state?: SessionMessageProviderState5
+    state?: SessionMessageProviderState7
   }
 }
+
+export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type ModelCompatibility = { reasoningField?: ModelReasoningField }
 
@@ -1508,21 +1513,21 @@ export type FormMultiselectField = {
 
 export type FormAnswer = { [x: string]: FormValue }
 
-export type PermissionV2Request = {
+export type PermissionRequest = {
   id: string
   sessionID: string
   action: string
   resources: Array<string>
   save?: Array<string>
   metadata?: { [x: string]: JsonValue }
-  source?: PermissionV2Source
+  source?: PermissionSource
 }
 
-export type PermissionV2Asked = {
+export type PermissionAsked = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "permission.v2.asked"
+  type: "permission.asked"
   location?: LocationRef
   data: {
     id: string
@@ -1531,17 +1536,17 @@ export type PermissionV2Asked = {
     resources: Array<string>
     save?: Array<string>
     metadata?: { [x: string]: any }
-    source?: PermissionV2Source
+    source?: PermissionSource
   }
 }
 
-export type PermissionRule = { permission: string; pattern: string; action: PermissionAction }
+export type PermissionV1Rule = { permission: string; pattern: string; action: PermissionV1Action }
 
-export type OutputFormat =
+export type SessionV1OutputFormat =
   | { type: "text" }
-  | { type: "json_schema"; schema: JSONSchema; retryCount?: number | undefined | undefined }
+  | { type: "json_schema"; schema: SessionV1JSONSchema; retryCount?: number | undefined | undefined }
 
-export type AssistantMessage = {
+export type SessionV1AssistantMessage = {
   id: string
   sessionID: string
   role: "assistant"
@@ -1576,7 +1581,7 @@ export type AssistantMessage = {
   finish?: string | undefined
 }
 
-export type RetryPart = {
+export type SessionV1RetryPart = {
   id: string
   sessionID: string
   messageID: string
@@ -1607,26 +1612,31 @@ export type SessionError = {
   }
 }
 
-export type FileSource = { text: FilePartSourceText; type: "file"; path: string }
+export type SessionV1FileSource = { text: SessionV1FilePartSourceText; type: "file"; path: string }
 
-export type ResourceSource = { text: FilePartSourceText; type: "resource"; clientName: string; uri: string }
+export type SessionV1ResourceSource = {
+  text: SessionV1FilePartSourceText
+  type: "resource"
+  clientName: string
+  uri: string
+}
 
-export type SymbolSource = {
-  text: FilePartSourceText
+export type SessionV1SymbolSource = {
+  text: SessionV1FilePartSourceText
   type: "symbol"
   path: string
-  range: Range
+  range: SessionV1Range
   name: string
   kind: number
 }
 
-export type PermissionV2Replied = {
+export type PermissionReplied = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "permission.v2.replied"
+  type: "permission.replied"
   location?: LocationRef
-  data: { sessionID: string; requestID: string; reply: PermissionV2Reply }
+  data: { sessionID: string; requestID: string; reply: PermissionReply }
 }
 
 export type PtyCreated = {
@@ -1647,21 +1657,21 @@ export type PtyUpdated = {
   data: { info: Pty }
 }
 
-export type QuestionV2Info = {
+export type QuestionInfo = {
   question: string
   header: string
-  options: Array<QuestionV2Option>
+  options: Array<QuestionOption>
   multiple?: boolean
   custom?: boolean
 }
 
-export type QuestionV2Replied = {
+export type QuestionReplied = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "question.v2.replied"
+  type: "question.replied"
   location?: LocationRef
-  data: { sessionID: string; requestID: string; answers: Array<QuestionV2Answer> }
+  data: { sessionID: string; requestID: string; answers: Array<QuestionAnswer> }
 }
 
 export type FormStringField1 = {
@@ -1738,26 +1748,9 @@ export type SessionStatus2 = {
   data: { sessionID: string; status: SessionStatus }
 }
 
-export type QuestionInfo = {
-  question: string
-  header: string
-  options: Array<QuestionOption>
-  multiple?: boolean | undefined
-  custom?: boolean | undefined
-}
-
-export type QuestionReplied = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.replied"
-  location?: LocationRef
-  data: { sessionID: string; requestID: string; answers: Array<QuestionAnswer> }
-}
-
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
-export type PermissionV2Ruleset = Array<PermissionV2Rule>
+export type PermissionRuleset = Array<PermissionRule>
 
 export type SessionInfo = {
   id: string
@@ -1809,46 +1802,41 @@ export type SessionPendingUserData1 = {
   metadata?: { [x: string]: any }
 }
 
-export type SessionMessageToolStateRunning = {
-  status: "running"
-  input: { [x: string]: JsonValue }
-  structured: { [x: string]: JsonValue }
-  content: Array<LLMToolContent>
-}
-
 export type SessionMessageToolStateCompleted = {
   status: "completed"
   input: { [x: string]: JsonValue }
-  content: Array<LLMToolContent>
-  structured: { [x: string]: JsonValue }
-  result?: JsonValue
+  content: [ToolContent, ...Array<ToolContent>]
+  metadata?: { [x: string]: JsonValue }
 }
 
 export type SessionMessageToolStateError = {
   status: "error"
   input: { [x: string]: JsonValue }
-  content: Array<LLMToolContent>
-  structured: { [x: string]: JsonValue }
   error: SessionStructuredError
-  result?: JsonValue
+  content?: [ToolContent, ...Array<ToolContent>]
+  metadata?: { [x: string]: JsonValue }
 }
+
+export type SessionMessageCompaction =
+  | SessionMessageCompactionRunning
+  | SessionMessageCompactionCompleted
+  | SessionMessageCompactionFailed
 
 export type SessionToolSuccess = {
   id: string
   created: number
   metadata?: { [x: string]: any }
   type: "session.tool.success"
-  durable: { aggregateID: string; seq: number; version: 1 }
+  durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
   data: {
     sessionID: string
     assistantMessageID: string
     callID: string
-    structured: { [x: string]: any }
-    content: Array<LLMToolContent>
-    result?: any
+    content: [ToolContent1, ...Array<ToolContent1>]
+    metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageProviderState6
+    resultState?: SessionMessageProviderState8
   }
 }
 
@@ -1857,40 +1845,19 @@ export type SessionToolFailed = {
   created: number
   metadata?: { [x: string]: any }
   type: "session.tool.failed"
-  durable: { aggregateID: string; seq: number; version: 1 }
+  durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
   data: {
     sessionID: string
     assistantMessageID: string
     callID: string
     error: SessionStructuredError
-    content?: [LLMToolContent, ...Array<LLMToolContent>]
-    metadata?: { [x: string]: any }
-    result?: any
+    content?: [ToolContent1, ...Array<ToolContent1>]
+    metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageProviderState7
+    resultState?: SessionMessageProviderState9
   }
 }
-
-export type SessionToolProgress = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.tool.progress"
-  location?: LocationRef
-  data: {
-    sessionID: string
-    assistantMessageID: string
-    callID: string
-    structured: { [x: string]: any }
-    content: Array<LLMToolContent>
-  }
-}
-
-export type SessionMessageCompaction =
-  | SessionMessageCompactionRunning
-  | SessionMessageCompactionCompleted
-  | SessionMessageCompactionFailed
 
 export type ModelInfo = {
   id: string
@@ -1900,9 +1867,9 @@ export type ModelInfo = {
   name: string
   compatibility?: ModelCompatibility
   package?: string
-  settings?: { [x: string]: JsonValue }
+  settings?: { [x: string]: any }
   headers?: { [x: string]: string }
-  body?: { [x: string]: JsonValue }
+  body?: { [x: string]: any }
   capabilities: ModelCapabilities
   variants: Array<ModelVariant>
   time: { released: number }
@@ -1938,14 +1905,14 @@ export type FormReplied = {
   data: { id: string; sessionID: string; answer: FormAnswer }
 }
 
-export type PermissionRuleset = Array<PermissionRule>
+export type PermissionV1Ruleset = Array<PermissionV1Rule>
 
-export type UserMessage = {
+export type SessionV1UserMessage = {
   id: string
   sessionID: string
   role: "user"
   time: { created: number }
-  format?: OutputFormat | undefined
+  format?: SessionV1OutputFormat | undefined
   summary?: { title?: string | undefined; body?: string | undefined; diffs: Array<FileDiffLegacyInfo> } | undefined
   agent: string
   model: { providerID: string; modelID: string; variant?: string | undefined }
@@ -1953,23 +1920,18 @@ export type UserMessage = {
   tools?: { [x: string]: boolean } | undefined
 }
 
-export type FilePartSource = FileSource | SymbolSource | ResourceSource
+export type SessionV1FilePartSource = SessionV1FileSource | SessionV1SymbolSource | SessionV1ResourceSource
 
-export type QuestionV2Asked = {
+export type QuestionAsked = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "question.v2.asked"
+  type: "question.asked"
   location?: LocationRef
-  data: { id: string; sessionID: string; questions: Array<QuestionV2Info>; tool?: QuestionV2Tool }
+  data: { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool }
 }
 
-export type QuestionV2Request = {
-  id: string
-  sessionID: string
-  questions: Array<QuestionV2Info>
-  tool?: QuestionV2Tool
-}
+export type QuestionRequest = { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool }
 
 export type FormField1 =
   | FormStringField1
@@ -1978,15 +1940,6 @@ export type FormField1 =
   | FormBooleanField1
   | FormMultiselectField1
   | FormExternalField
-
-export type QuestionAsked = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.asked"
-  location?: LocationRef
-  data: { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool | undefined }
-}
 
 export type ReferenceInfo = {
   name: string
@@ -2007,7 +1960,7 @@ export type AgentInfo = {
   hidden: boolean
   color?: AgentColor
   steps?: number
-  permissions: PermissionV2Ruleset
+  permissions: PermissionRuleset
 }
 
 export type SessionsResponse = { data: Array<SessionInfo>; cursor: { previous?: string | null; next?: string | null } }
@@ -2065,13 +2018,13 @@ export type SessionV1Info = {
   version: string
   metadata?: { [x: string]: any }
   time: { created: number; updated: number; compacting?: number; archived?: number }
-  permission?: PermissionRuleset
+  permission?: PermissionV1Ruleset
   revert?: { messageID: string; partID?: string; snapshot?: string; diff?: string }
 }
 
-export type Message = UserMessage | AssistantMessage
+export type SessionV1Message = SessionV1UserMessage | SessionV1AssistantMessage
 
-export type FilePart = {
+export type SessionV1FilePart = {
   id: string
   sessionID: string
   messageID: string
@@ -2079,7 +2032,7 @@ export type FilePart = {
   mime: string
   filename?: string | undefined
   url: string
-  source?: FilePartSource | undefined
+  source?: SessionV1FilePartSource | undefined
 }
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
@@ -2150,17 +2103,17 @@ export type MessageUpdated = {
   type: "message.updated"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; info: Message }
+  data: { sessionID: string; info: SessionV1Message }
 }
 
-export type ToolStateCompleted = {
+export type SessionV1ToolStateCompleted = {
   status: "completed"
   input: { [x: string]: any }
   output: string
   title: string
   metadata: { [x: string]: any }
   time: { start: number; end: number; compacted?: number | undefined }
-  attachments?: Array<FilePart> | undefined
+  attachments?: Array<SessionV1FilePart> | undefined
 }
 
 export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
@@ -2186,7 +2139,11 @@ export type SessionMessageInfo =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
-export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
+export type SessionV1ToolState =
+  | SessionV1ToolStatePending
+  | SessionV1ToolStateRunning
+  | SessionV1ToolStateCompleted
+  | SessionV1ToolStateError
 
 export type FormCreated = {
   id: string
@@ -2242,32 +2199,32 @@ export type SessionMessagesResponse = {
   cursor: { previous?: string | null; next?: string | null }
 }
 
-export type ToolPart = {
+export type SessionV1ToolPart = {
   id: string
   sessionID: string
   messageID: string
   type: "tool"
   callID: string
   tool: string
-  state: ToolState
+  state: SessionV1ToolState
   metadata?: { [x: string]: any } | undefined
 }
 
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
-export type Part =
-  | TextPart
-  | SubtaskPart
-  | ReasoningPart
-  | FilePart
-  | ToolPart
-  | StepStartPart
-  | StepFinishPart
-  | SnapshotPart
-  | PatchPart
-  | AgentPart
-  | RetryPart
-  | CompactionPart
+export type SessionV1Part =
+  | SessionV1TextPart
+  | SessionV1SubtaskPart
+  | SessionV1ReasoningPart
+  | SessionV1FilePart
+  | SessionV1ToolPart
+  | SessionV1StepStartPart
+  | SessionV1StepFinishPart
+  | SessionV1SnapshotPart
+  | SessionV1PatchPart
+  | SessionV1AgentPart
+  | SessionV1RetryPart
+  | SessionV1CompactionPart
 
 export type MessagePartUpdated = {
   id: string
@@ -2276,7 +2233,7 @@ export type MessagePartUpdated = {
   type: "message.part.updated"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; part: Part; time: number }
+  data: { sessionID: string; part: SessionV1Part; time: number }
 }
 
 export type V2Event =
@@ -2337,8 +2294,8 @@ export type V2Event =
   | SessionRevertCommitted
   | FilesystemChanged
   | ReferenceUpdated
-  | PermissionV2Asked
-  | PermissionV2Replied
+  | PermissionAsked
+  | PermissionReplied
   | PluginAdded
   | PluginUpdated
   | ProjectDirectoriesUpdated
@@ -2352,12 +2309,13 @@ export type V2Event =
   | ShellCreated
   | ShellExited
   | ShellDeleted
-  | QuestionV2Asked
-  | QuestionV2Replied
-  | QuestionV2Rejected
+  | QuestionAsked
+  | QuestionReplied
+  | QuestionRejected
   | FormCreated
   | FormReplied
   | FormCancelled
+  | WebsearchUpdated
   | SessionStatus2
   | SessionIdle
   | TuiPromptAppend
@@ -2369,11 +2327,6 @@ export type V2Event =
   | VcsBranchUpdated
   | McpStatusChanged
   | McpResourcesChanged
-  | PermissionAsked
-  | PermissionReplied
-  | QuestionAsked
-  | QuestionReplied
-  | QuestionRejected
   | SessionError
   | V2EventServerConnected
 
@@ -2389,6 +2342,14 @@ export type InvalidRequestError = {
 }
 export const isInvalidRequestError = (value: unknown): value is InvalidRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidRequestError"
+
+export type AgentNotFoundError = {
+  readonly _tag: "AgentNotFoundError"
+  readonly agentID: string
+  readonly message: string
+}
+export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
 
 export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
@@ -2571,6 +2532,18 @@ export type AgentListInput = {
 export type AgentListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: Array<AgentInfo>
+}
+
+export type AgentGetInput = {
+  readonly agentID: { readonly agentID: string }["agentID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type AgentGetOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: AgentInfo
 }
 
 export type PluginListInput = {
@@ -3301,7 +3274,7 @@ export type ProviderListInput = {
 
 export type ProviderListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Array<ProviderV2Info>
+  data: Array<ProviderInfo>
 }
 
 export type ProviderGetInput = {
@@ -3313,7 +3286,7 @@ export type ProviderGetInput = {
 
 export type ProviderGetOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: ProviderV2Info
+  data: ProviderInfo
 }
 
 export type IntegrationListInput = {
@@ -4465,7 +4438,7 @@ export type PermissionRequestListInput = {
 
 export type PermissionRequestListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Array<PermissionV2Request>
+  data: Array<PermissionRequest>
 }
 
 export type PermissionSavedListInput = { readonly projectID?: { readonly projectID?: string | undefined }["projectID"] }
@@ -4543,18 +4516,18 @@ export type PermissionCreateInput = {
   }["agent"]
 }
 
-export type PermissionCreateOutput = { data: { id: string; effect: PermissionV2Effect } }["data"]
+export type PermissionCreateOutput = { data: { id: string; effect: PermissionEffect } }["data"]
 
 export type PermissionListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type PermissionListOutput = { data: Array<PermissionV2Request> }["data"]
+export type PermissionListOutput = { data: Array<PermissionRequest> }["data"]
 
 export type PermissionGetInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
   readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
 }
 
-export type PermissionGetOutput = { data: PermissionV2Request }["data"]
+export type PermissionGetOutput = { data: PermissionRequest }["data"]
 
 export type PermissionReplyInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
@@ -4853,12 +4826,12 @@ export type QuestionRequestListInput = {
 
 export type QuestionRequestListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
-  data: Array<QuestionV2Request>
+  data: Array<QuestionRequest>
 }
 
 export type QuestionListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type QuestionListOutput = { data: Array<QuestionV2Request> }["data"]
+export type QuestionListOutput = { data: Array<QuestionRequest> }["data"]
 
 export type QuestionReplyInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
@@ -4961,3 +4934,27 @@ export type DebugLocationEvictInput = {
 }
 
 export type DebugLocationEvictOutput = void
+
+export type WebsearchProvidersInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type WebsearchProvidersOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: Array<WebSearchProvider>
+}
+
+export type WebsearchQueryInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly query: { readonly query: string; readonly providerID?: string }["query"]
+  readonly providerID?: { readonly query: string; readonly providerID?: string }["providerID"]
+}
+
+export type WebsearchQueryOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: { providerID: string; results: Array<WebSearchResult> }
+}

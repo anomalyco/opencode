@@ -1,0 +1,46 @@
+import { Location } from "@opencode-ai/schema/location"
+import { WebSearch } from "@opencode-ai/schema/websearch"
+import { Schema } from "effect"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { InvalidRequestError, ServiceUnavailableError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
+
+export const WebSearchGroup = HttpApiGroup.make("server.websearch")
+  .add(
+    HttpApiEndpoint.get("websearch.providers", "/api/websearch/provider", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(WebSearch.Provider)),
+      error: ServiceUnavailableError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.websearch.providers",
+          summary: "List web search providers",
+          description: "Return the registered web search providers.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("websearch.query", "/api/websearch", {
+      query: LocationQuery,
+      payload: Schema.Struct(WebSearch.Input.fields),
+      success: Location.response(WebSearch.Response),
+      error: [InvalidRequestError, ServiceUnavailableError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.websearch.query",
+          summary: "Search the web",
+          description:
+            "Run one web search through the selected provider. Specify a provider to override the configured default.",
+        }),
+      ),
+  )
+  .annotateMerge(
+    OpenApi.annotations({
+      title: "websearch",
+      description: "Location-scoped web search routes.",
+    }),
+  )

@@ -3,9 +3,9 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { Model } from "@opencode-ai/core/model"
 import { VariantPlugin } from "@opencode-ai/core/plugin/variant"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Effect, Layer } from "effect"
 import { location } from "../fixture/location"
@@ -23,17 +23,17 @@ describe("VariantPlugin", () => {
     Effect.gen(function* () {
       const service = yield* Catalog.Service
       yield* service.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.opencode, (provider) => {
-          provider.package = ProviderV2.aisdk("@ai-sdk/openai-compatible")
+        catalog.provider.update(Provider.ID.opencode, (provider) => {
+          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
         })
-        catalog.model.update(ProviderV2.ID.opencode, ModelV2.ID.make("glm-5.2"), (model) => {
-          model.modelID = ModelV2.ID.make("glm-5.2")
-          model.package = ProviderV2.aisdk("@ai-sdk/openai-compatible")
+        catalog.model.update(Provider.ID.opencode, Model.ID.make("glm-5.2"), (model) => {
+          model.modelID = Model.ID.make("glm-5.2")
+          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
         })
       })
       yield* VariantPlugin.Plugin.effect(host({ catalog: catalogHost(service) }))
 
-      expect((yield* service.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("glm-5.2")))?.variants).toEqual([
+      expect((yield* service.model.get(Provider.ID.opencode, Model.ID.make("glm-5.2")))?.variants).toEqual([
         expect.objectContaining({ id: "high", settings: { reasoningEffort: "high" } }),
         expect.objectContaining({ id: "max", settings: { reasoningEffort: "max" } }),
       ])
@@ -44,15 +44,15 @@ describe("VariantPlugin", () => {
     Effect.gen(function* () {
       const service = yield* Catalog.Service
       yield* service.transform((catalog) => {
-        catalog.model.update(ProviderV2.ID.opencode, ModelV2.ID.make("glm-5.2"), (model) => {
-          model.modelID = ModelV2.ID.make("glm-5.2")
-          model.package = ProviderV2.aisdk("@ai-sdk/openai-compatible")
-          model.variants = [{ id: ModelV2.VariantID.make("high"), settings: {}, headers: { custom: "true" }, body: {} }]
+        catalog.model.update(Provider.ID.opencode, Model.ID.make("glm-5.2"), (model) => {
+          model.modelID = Model.ID.make("glm-5.2")
+          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          model.variants = [{ id: Model.VariantID.make("high"), settings: {}, headers: { custom: "true" }, body: {} }]
         })
       })
       yield* VariantPlugin.Plugin.effect(host({ catalog: catalogHost(service) }))
 
-      expect((yield* service.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("glm-5.2")))?.variants).toEqual([
+      expect((yield* service.model.get(Provider.ID.opencode, Model.ID.make("glm-5.2")))?.variants).toEqual([
         expect.objectContaining({ id: "high", headers: { custom: "true" } }),
         expect.objectContaining({ id: "max", settings: { reasoningEffort: "max" } }),
       ])

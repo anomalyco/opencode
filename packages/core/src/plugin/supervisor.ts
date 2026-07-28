@@ -1,40 +1,42 @@
 export * as PluginSupervisor from "./supervisor"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
+import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Context, Deferred, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
-import { AgentV2 } from "../agent"
+import { Agent } from "../agent"
 import { Catalog } from "../catalog"
-import { CommandV2 } from "../command"
+import { Command } from "../command"
 import { Config } from "../config"
 import { ConfigPlugin } from "../config/plugin"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { FileMutation } from "../file-mutation"
 import { FileSystem } from "../filesystem"
+import { Watcher } from "../filesystem/watcher"
 import { Form } from "../form"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Image } from "../image"
 import { Integration } from "../integration"
+import { KV } from "../kv"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { ModelsDev } from "../models-dev"
 import { Npm } from "@opencode-ai/util/npm"
-import { PermissionV2 } from "../permission"
-import { PluginV2 } from "../plugin"
+import { Permission } from "../permission"
+import { Plugin } from "../plugin"
 import { PluginPromise } from "../plugin/promise"
 import { Reference } from "../reference"
 import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
 import { Shell } from "../shell"
-import { SkillV2 } from "../skill"
+import { Skill } from "../skill"
 import { ReadToolFileSystem } from "../tool/read-filesystem"
-import { ToolRegistry } from "../tool/registry"
-import { WebSearchTool } from "../tool/websearch"
+import { Tool } from "../tool"
+import { WebSearch } from "../websearch"
 import { WellKnown } from "../wellknown"
 import { PluginInternal } from "./internal"
 import { PluginRuntime } from "./runtime"
@@ -45,7 +47,9 @@ const PluginModule = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-      effect: Schema.declare<Plugin["effect"]>((input): input is Plugin["effect"] => typeof input === "function"),
+      effect: Schema.declare<PluginDefinition["effect"]>(
+        (input): input is PluginDefinition["effect"] => typeof input === "function",
+      ),
     }),
     Schema.Struct({
       id: Schema.String,
@@ -112,15 +116,15 @@ const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Con
 })
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
-  pre: readonly PluginV2.Versioned[],
-  post: readonly PluginV2.Versioned[],
+  pre: readonly Plugin.Versioned[],
+  post: readonly Plugin.Versioned[],
   operations: readonly Operation[],
 ) {
   const matches = (selector: string, target: string) =>
     selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
   const definitions = [...pre, ...post]
   const enabled = new Set(definitions.map((plugin) => plugin.id))
-  const packages = new Map<string, PluginV2.Versioned>()
+  const packages = new Map<string, Plugin.Versioned>()
   const plugins = () => [...definitions, ...packages.values()]
 
   for (const operation of operations) {
@@ -182,7 +186,7 @@ const load = Effect.fn("PluginSupervisor.load")(function* (operation: Extract<Op
     id: plugin.id,
     version: JSON.stringify(operation),
     effect: (host) => plugin.effect({ ...host, options: operation.options }),
-  } satisfies PluginV2.Versioned
+  } satisfies Plugin.Versioned
 })
 
 function discoverDirectory(fs: FSUtil.Interface, directory: string) {
@@ -200,6 +204,16 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   })
 }
 
+const sourceDirectories = ["plugin", "plugins"] as const
+
+function isPluginSource(entries: readonly Config.Entry[], file: string) {
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((directory) => FSUtil.contains(path.join(entry.path, directory), file)),
+  )
+}
+
 export interface Interface {
   /** Wait for the initial plugin generation and startup updates to settle. */
   readonly flush: Effect.Effect<void>
@@ -210,14 +224,46 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pl
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const registry = yield* PluginV2.Service
+    const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
     const config = yield* Config.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
+    const watcher = yield* Watcher.Service
+    const fs = yield* FSUtil.Service
     const lock = Semaphore.makeUnsafe(1)
     const ready = yield* Deferred.make<void>()
     let observed = 0
     let applied = -1
+
+    // Configured local plugin files can live outside config roots, where the
+    // config change feed cannot see them; watch those entrypoints directly.
+    // Watches start on first sighting and are never torn down individually:
+    // a stale watch after a config edit costs one deduped fs handle and a
+    // no-op activation, and every watch dies with this layer's scope.
+    const configuredChanges = yield* PubSub.unbounded<void>()
+    const watched = new Set<string>()
+    const watchConfiguredSources = Effect.fn("PluginSupervisor.watchConfiguredSources")(function* (
+      entries: readonly Config.Entry[],
+      operations: readonly Operation[],
+    ) {
+      for (const operation of operations) {
+        if (operation.type !== "add" || !path.isAbsolute(operation.target)) continue
+        if (watched.has(operation.target)) continue
+        // The config change feed already covers {plugin,plugins} directories.
+        if (isPluginSource(entries, operation.target)) continue
+        // Directory targets can't hot-reload (their stat mtime ignores edits
+        // inside), so don't watch what can't trigger anything.
+        if (yield* fs.isDir(operation.target)) continue
+        watched.add(operation.target)
+        yield* watcher.subscribe({ path: operation.target, type: "file" }).pipe(
+          Stream.runForEach(() => PubSub.publish(configuredChanges, undefined)),
+          Effect.catchCause((cause) =>
+            Effect.logError("configured plugin watch failed", { target: operation.target, cause }),
+          ),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      }
+    })
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* (target: number) {
       yield* lock.withPermit(
@@ -228,7 +274,9 @@ const layer = Layer.effect(
           // Combine internal plugins with host-contributed SDK plugins in boot order.
           const pre = [...internal.pre.map((plugin) => ({ ...plugin, version: "internal" })), ...sdk.all()]
           const post = internal.post.map((plugin) => ({ ...plugin, version: "internal" }))
-          const operations = yield* scan(yield* config.entries())
+          const entries = yield* config.entries()
+          const operations = yield* scan(entries)
+          yield* watchConfiguredSources(entries, operations)
           // Apply config operations and load enabled package plugins into one ordered generation.
           const plugins = yield* resolve(pre, post, operations)
           // Replace the active generation in one scoped, batched activation.
@@ -237,13 +285,22 @@ const layer = Layer.effect(
         }),
       )
     })
-    const updates = yield* events
+    const sourceChanges = config.changes().pipe(
+      Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+      Stream.merge(Stream.fromPubSub(configuredChanges)),
+      // Make accepted filesystem work visible to flush before coalescing the burst.
+      Stream.mapEffect(() => Effect.sync(() => ++observed)),
+      Stream.debounce("100 millis"),
+    )
+    const busUpdates = bus
       .subscribe([Event.Updated, SdkPlugins.Updated])
-      .pipe(Stream.toQueue({ capacity: 1, strategy: "sliding" }))
-    const signals = yield* Stream.concat(
-      Stream.succeed(0),
-      Stream.fromQueue(updates).pipe(Stream.mapEffect(() => Effect.sync(() => ++observed))),
-    ).pipe(Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }))
+      .pipe(Stream.mapEffect(() => Effect.sync(() => ++observed)))
+    const updates = yield* Stream.merge(busUpdates, sourceChanges).pipe(
+      Stream.toQueue({ capacity: 1, strategy: "sliding" }),
+    )
+    const signals = yield* Stream.concat(Stream.succeed(0), Stream.fromQueue(updates)).pipe(
+      Stream.broadcast({ capacity: 1, strategy: "sliding", replay: 1 }),
+    )
     const attempt = (target: number) =>
       activate(target).pipe(
         Effect.map(() => observed === target),
@@ -275,13 +332,13 @@ export const node = makeLocationNode({
   service: Service,
   layer: nodeLayer,
   deps: [
-    PluginV2.node,
+    Plugin.node,
     SdkPlugins.node,
-    AgentV2.node,
+    Agent.node,
     Catalog.node,
-    CommandV2.node,
+    Command.node,
     Config.node,
-    EventV2.node,
+    Bus.node,
     FileMutation.node,
     FileSystem.node,
     FSUtil.node,
@@ -289,11 +346,12 @@ export const node = makeLocationNode({
     httpClient,
     Image.node,
     Integration.node,
+    KV.node,
     Location.node,
     LocationMutation.node,
     ModelsDev.node,
     Npm.node,
-    PermissionV2.node,
+    Permission.node,
     PluginRuntime.node,
     Form.node,
     ReadToolFileSystem.node,
@@ -301,9 +359,10 @@ export const node = makeLocationNode({
     Ripgrep.node,
     SessionInstructions.node,
     Shell.node,
-    SkillV2.node,
-    ToolRegistry.toolsNode,
-    WebSearchTool.configNode,
+    Skill.node,
+    Tool.node,
+    Watcher.node,
+    WebSearch.node,
     WellKnown.node,
   ],
 })

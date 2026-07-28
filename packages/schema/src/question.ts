@@ -8,7 +8,7 @@ import { SessionID } from "./session-id.js"
 import { statics } from "./schema.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
-  Schema.brand("QuestionV2.ID"),
+  Schema.brand("Question.ID"),
   statics((schema) => {
     const create = () => schema.make("que_" + ascending())
     return {
@@ -22,7 +22,7 @@ export type ID = typeof ID.Type
 export const Option = Schema.Struct({
   label: Schema.String.annotate({ description: "Display text (1-5 words, concise)" }),
   description: Schema.String.annotate({ description: "Explanation of choice" }),
-}).annotate({ identifier: "QuestionV2.Option" })
+}).annotate({ identifier: "Question.Option" })
 export interface Option extends Schema.Schema.Type<typeof Option> {}
 
 const base = {
@@ -37,16 +37,16 @@ export const Info = Schema.Struct({
   custom: Schema.Boolean.pipe(optional).annotate({
     description: "Allow typing a custom answer (default: true)",
   }),
-}).annotate({ identifier: "QuestionV2.Info" })
+}).annotate({ identifier: "Question.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
-export const Prompt = Schema.Struct(base).annotate({ identifier: "QuestionV2.Prompt" })
+export const Prompt = Schema.Struct(base).annotate({ identifier: "Question.Prompt" })
 export interface Prompt extends Schema.Schema.Type<typeof Prompt> {}
 
 export const Tool = Schema.Struct({
   messageID: Schema.String,
   callID: Schema.String,
-}).annotate({ identifier: "QuestionV2.Tool" })
+}).annotate({ identifier: "Question.Tool" })
 export interface Tool extends Schema.Schema.Type<typeof Tool> {}
 
 export const Request = Schema.Struct({
@@ -54,22 +54,22 @@ export const Request = Schema.Struct({
   sessionID: SessionID,
   questions: Schema.Array(Info).annotate({ description: "Questions to ask" }),
   tool: Tool.pipe(optional),
-}).annotate({ identifier: "QuestionV2.Request" })
+}).annotate({ identifier: "Question.Request" })
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 
-export const Answer = Schema.Array(Schema.String).annotate({ identifier: "QuestionV2.Answer" })
+export const Answer = Schema.Array(Schema.String).annotate({ identifier: "Question.Answer" })
 export type Answer = typeof Answer.Type
 
 export const Reply = Schema.Struct({
   answers: Schema.Array(Answer).annotate({
     description: "User answers in order of questions (each answer is an array of selected labels)",
   }),
-}).annotate({ identifier: "QuestionV2.Reply" })
+}).annotate({ identifier: "Question.Reply" })
 export interface Reply extends Schema.Schema.Type<typeof Reply> {}
 
-const Asked = ephemeral({ type: "question.v2.asked", schema: Request.fields })
+const Asked = ephemeral({ type: "question.asked", schema: Request.fields })
 const Replied = ephemeral({
-  type: "question.v2.replied",
+  type: "question.replied",
   schema: {
     sessionID: SessionID,
     requestID: ID,
@@ -77,7 +77,7 @@ const Replied = ephemeral({
   },
 })
 const Rejected = ephemeral({
-  type: "question.v2.rejected",
+  type: "question.rejected",
   schema: {
     sessionID: SessionID,
     requestID: ID,

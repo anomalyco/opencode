@@ -2,22 +2,22 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { Plugin } from "@opencode-ai/plugin/v2/effect"
+import { Tool } from "@opencode-ai/core/tool"
+import { Plugin } from "@opencode-ai/plugin/effect"
 import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect"
 import type { Scope } from "effect/Scope"
 import { SimulatedProvider } from "../src/backend/simulated-provider"
@@ -241,6 +241,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             additionalProperties: false,
           },
           outputSchema: { type: "object" },
+          permission: "simulate_lookup",
           options: { codemode: false },
         }
         const locations = yield* LocationServiceMap.Service
@@ -263,22 +264,25 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(messages)).toMatchObject({ id: 1, result: { attached: true } })
-          const registry = yield* ToolRegistry.Service
-          const materialized = yield* registry.materialize()
-          expect(materialized.definitions).toContainEqual(
+          const registry = yield* Tool.Service
+          const toolSet = yield* registry.snapshot()
+          expect(toolSet.definitions).toContainEqual(
             expect.objectContaining({ name: "lookup", description: "Look up a value" }),
           )
-          const secondaryMaterialized = yield* ToolRegistry.Service.use((secondaryRegistry) =>
-            secondaryRegistry.materialize(),
+          expect(
+            (yield* registry.snapshot([{ action: "simulate_lookup", resource: "*", effect: "deny" }])).definitions,
+          ).not.toContainEqual(expect.objectContaining({ name: "lookup" }))
+          const secondaryToolSet = yield* Tool.Service.use((secondaryRegistry) =>
+            secondaryRegistry.snapshot(),
           ).pipe(Effect.provide(secondary))
-          expect(secondaryMaterialized.definitions).toContainEqual(
+          expect(secondaryToolSet.definitions).toContainEqual(
             expect.objectContaining({ name: "lookup", description: "Look up a value" }),
           )
-          const progress: ToolRegistry.Progress[] = []
-          const settle = (callID: string, query: string) =>
-            materialized.settle({
-              sessionID: SessionV2.ID.make("ses_simulated_tools"),
-              agent: AgentV2.ID.make("build"),
+          const progress: Tool.Metadata[] = []
+          const executeCall = (callID: string, query: string) =>
+            toolSet.execute({
+              sessionID: Session.ID.make("ses_simulated_tools"),
+              agent: Agent.ID.make("build"),
               messageID: SessionMessage.ID.make("msg_simulated_tools"),
               progress: (update) => Effect.sync(() => progress.push(update)),
               call: {
@@ -289,7 +293,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
               },
             })
 
-          const successful = yield* settle("call_success", "answer").pipe(Effect.forkScoped)
+          const successful = yield* executeCall("call_success", "answer").pipe(Effect.forkScoped)
           const successInvocation = yield* takeToolInvocation(messages)
           expect(successInvocation.params).toMatchObject({
             name: "lookup",
@@ -309,10 +313,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             params: {
               id: successID,
               sequence: 0,
-              update: {
-                structured: { phase: "searching" },
-                content: [{ type: "text", text: "Searching" }],
-              },
+              update: { phase: "searching" },
             },
           })
           socket.send(update)
@@ -334,7 +335,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
               params: {
                 id: successID,
                 sequence: 0,
-                update: { structured: { phase: "different" } },
+                update: { phase: "different" },
               },
             }),
           )
@@ -350,7 +351,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
               params: {
                 id: successID,
                 sequence: 2,
-                update: { structured: { phase: "skipped" } },
+                update: { phase: "skipped" },
               },
             }),
           )
@@ -389,20 +390,12 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           )
           expect(yield* Queue.take(messages)).toMatchObject({ id: 23, result: { ok: true } })
           expect(yield* Fiber.join(successful)).toMatchObject({
-            result: { type: "text", value: "42" },
-            output: {
-              structured: { answer: 42 },
-              content: [{ type: "text", text: "42" }],
-            },
+            output: { answer: 42 },
+            content: [{ type: "text", text: "42" }],
           })
-          expect(progress).toEqual([
-            {
-              structured: { phase: "searching" },
-              content: [{ type: "text", text: "Searching" }],
-            },
-          ])
+          expect(progress).toEqual([{ phase: "searching" }])
 
-          const failed = yield* settle("call_failure", "missing").pipe(Effect.forkScoped)
+          const failed = yield* executeCall("call_failure", "missing").pipe(Effect.exit, Effect.forkScoped)
           const failedInvocation = yield* takeToolInvocation(messages)
           const failedID = requireString(requireRecord(failedInvocation.params).id)
           socket.send(
@@ -414,13 +407,13 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(messages)).toMatchObject({ id: 4, result: { ok: true } })
-          expect(yield* Fiber.join(failed)).toMatchObject({
-            result: { type: "error", value: "lookup failed" },
-          })
+          const failedExit = yield* Fiber.join(failed)
+          expect(failedExit).toMatchObject({ _tag: "Failure" })
+          expect(failedExit.toString()).toContain("lookup failed")
 
           const concurrent = [
-            yield* settle("call_first", "first").pipe(Effect.forkScoped),
-            yield* settle("call_second", "second").pipe(Effect.forkScoped),
+            yield* executeCall("call_first", "first").pipe(Effect.forkScoped),
+            yield* executeCall("call_second", "second").pipe(Effect.forkScoped),
           ]
           const invocations = [yield* takeToolInvocation(messages), yield* takeToolInvocation(messages)]
           const byCall = new Map(
@@ -447,10 +440,16 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             )
             expect(yield* Queue.take(messages)).toMatchObject({ id, result: { ok: true } })
           }
-          expect((yield* Fiber.join(concurrent[0])).result).toEqual({ type: "text", value: "first result" })
-          expect((yield* Fiber.join(concurrent[1])).result).toEqual({ type: "text", value: "second result" })
+          expect(yield* Fiber.join(concurrent[0])).toMatchObject({
+            output: "first result",
+            content: [{ type: "text", text: "first result" }],
+          })
+          expect(yield* Fiber.join(concurrent[1])).toMatchObject({
+            output: "second result",
+            content: [{ type: "text", text: "second result" }],
+          })
 
-          const cancelled = yield* settle("call_cancelled", "slow").pipe(Effect.forkScoped)
+          const cancelled = yield* executeCall("call_cancelled", "slow").pipe(Effect.forkScoped)
           const cancelledInvocation = yield* takeToolInvocation(messages)
           const cancelledID = requireString(requireRecord(cancelledInvocation.params).id)
           yield* Fiber.interrupt(cancelled)
@@ -474,13 +473,10 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             error: { message: expect.stringContaining("not found or already finished") },
           })
 
-          const replayed = yield* settle("call_replayed", "reconnect").pipe(Effect.forkScoped)
+          const replayed = yield* executeCall("call_replayed", "reconnect").pipe(Effect.forkScoped)
           const original = yield* takeToolInvocation(messages)
           const originalID = requireString(requireRecord(original.params).id)
-          const replayedProgress = {
-            structured: { phase: "before-reconnect" },
-            content: [{ type: "text", text: "Still running" }],
-          }
+          const replayedProgress = { phase: "before-reconnect" }
           socket.send(
             JSON.stringify({
               jsonrpc: "2.0",
@@ -505,7 +501,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             error: { message: expect.stringContaining("already attached") },
           })
           yield* closeSocket(socket)
-          const disconnected = yield* registry.materialize()
+          const disconnected = yield* registry.snapshot()
           expect(disconnected.definitions).toContainEqual(expect.objectContaining({ name: "lookup" }))
           replacement.send(
             JSON.stringify({
@@ -547,7 +543,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(replacementMessages)).toMatchObject({ id: 26, result: { ok: true } })
-          expect(progress.filter((update) => update.structured.phase === "before-reconnect")).toHaveLength(1)
+          expect(progress.filter((update) => update.phase === "before-reconnect")).toHaveLength(1)
           replacement.send(
             JSON.stringify({
               jsonrpc: "2.0",
@@ -563,12 +559,12 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(replacementMessages)).toMatchObject({ id: 10, result: { ok: true } })
-          expect((yield* Fiber.join(replayed)).result).toEqual({
-            type: "text",
-            value: "replayed result",
+          expect(yield* Fiber.join(replayed)).toMatchObject({
+            output: "replayed result",
+            content: [{ type: "text", text: "replayed result" }],
           })
 
-          const preserved = yield* settle("call_preserved", "same generation").pipe(Effect.forkScoped)
+          const preserved = yield* executeCall("call_preserved", "same generation").pipe(Effect.forkScoped)
           const preservedInvocation = yield* takeToolInvocation(replacementMessages)
           const preservedID = requireString(requireRecord(preservedInvocation.params).id)
           replacement.send(
@@ -583,7 +579,10 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(replacementMessages)).toMatchObject({ id: 27, result: { ok: true } })
-          expect((yield* Fiber.join(preserved)).result).toEqual({ type: "text", value: "preserved" })
+          expect(yield* Fiber.join(preserved)).toMatchObject({
+            output: "preserved",
+            content: [{ type: "text", text: "preserved" }],
+          })
 
           const namespaced = [
             { ...registration, name: "search", options: { namespace: "github", codemode: false } },
@@ -598,20 +597,20 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(replacementMessages)).toMatchObject({ id: 11, result: { attached: true } })
-          const replaced = yield* registry.materialize()
+          const replaced = yield* registry.snapshot()
           const replacedNames = replaced.definitions.map((definition) => definition.name)
           expect(replacedNames).toEqual(expect.arrayContaining(["github_search", "web_search"]))
           expect(replacedNames).not.toContain("lookup")
-          const secondaryReplaced = yield* ToolRegistry.Service.use((secondaryRegistry) =>
-            secondaryRegistry.materialize(),
+          const secondaryReplaced = yield* Tool.Service.use((secondaryRegistry) =>
+            secondaryRegistry.snapshot(),
           ).pipe(Effect.provide(secondary))
           const secondaryNames = secondaryReplaced.definitions.map((definition) => definition.name)
           expect(secondaryNames).toEqual(expect.arrayContaining(["github_search", "web_search"]))
           expect(secondaryNames).not.toContain("lookup")
           const routed = yield* replaced
-            .settle({
-              sessionID: SessionV2.ID.make("ses_simulated_tools"),
-              agent: AgentV2.ID.make("build"),
+            .execute({
+              sessionID: Session.ID.make("ses_simulated_tools"),
+              agent: Agent.ID.make("build"),
               messageID: SessionMessage.ID.make("msg_simulated_tools"),
               call: {
                 type: "tool-call",
@@ -636,11 +635,14 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             }),
           )
           expect(yield* Queue.take(replacementMessages)).toMatchObject({ id: 12, result: { ok: true } })
-          expect((yield* Fiber.join(routed)).result).toEqual({ type: "text", value: "routed" })
-          expect(
-            yield* materialized.settle({
-              sessionID: SessionV2.ID.make("ses_simulated_tools"),
-              agent: AgentV2.ID.make("build"),
+          expect(yield* Fiber.join(routed)).toMatchObject({
+            output: "routed",
+            content: [{ type: "text", text: "routed" }],
+          })
+          const stale = yield* toolSet
+            .execute({
+              sessionID: Session.ID.make("ses_simulated_tools"),
+              agent: Agent.ID.make("build"),
               messageID: SessionMessage.ID.make("msg_simulated_tools"),
               call: {
                 type: "tool-call",
@@ -648,10 +650,10 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
                 name: "lookup",
                 input: { query: "stale" },
               },
-            }),
-          ).toMatchObject({
-            result: { type: "error", value: expect.stringContaining("no longer active") },
-          })
+            })
+            .pipe(Effect.exit)
+          expect(stale).toMatchObject({ _tag: "Failure" })
+          expect(stale.toString()).toContain("no longer active")
           expect(activations).toBe(2)
         }).pipe(Effect.provide(primary))
       }).pipe(Effect.provide(toolLifecycleLayer(endpoint)), Effect.scoped),
@@ -698,8 +700,13 @@ const toolLifecycleLayer = (endpoint: string) => {
     deps: [SdkPlugins.node],
   })
   return AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SdkPlugins.node, LocationServiceMap.node, provider]),
-    [[Config.node, Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))]],
+    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, provider]),
+    [
+      [
+        Config.node,
+        Config.testLayer(),
+      ],
+    ],
   )
 }
 

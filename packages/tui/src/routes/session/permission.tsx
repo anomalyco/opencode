@@ -3,7 +3,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme } from "../../context/theme"
-import type { PermissionV2Request } from "@opencode-ai/client"
+import type { PermissionRequest } from "@opencode-ai/client"
 import { useClient } from "../../context/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
@@ -107,7 +107,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
   )
 }
 
-export function PermissionPrompt(props: { request: PermissionV2Request; directory?: string }) {
+export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
   const client = useClient()
   const data = useData()
   const [store, setStore] = createStore({
@@ -118,14 +118,14 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
 
   const source = createMemo(() => {
     const tool = props.request.source
-    if (!tool) return { input: undefined, structured: undefined }
+    if (!tool) return { input: undefined, metadata: undefined }
     const message = data.session.message.get(props.request.sessionID, tool.messageID)
-    if (message?.type !== "assistant") return { input: undefined, structured: undefined }
+    if (message?.type !== "assistant") return { input: undefined, metadata: undefined }
     const part = message.content.find((part) => part.type === "tool" && part.id === tool.callID)
     if (part?.type === "tool" && part.state.status !== "streaming") {
-      return { input: part.state.input, structured: part.state.structured }
+      return { input: part.state.input, metadata: part.state.metadata }
     }
-    return { input: undefined, structured: undefined }
+    return { input: undefined, metadata: undefined }
   })
 
   const { themeV2 } = useTheme()
@@ -182,7 +182,7 @@ export function PermissionPrompt(props: { request: PermissionV2Request; director
               resources: props.request.resources,
               metadata: props.request.metadata,
               input: source().input,
-              structured: source().structured,
+              toolMetadata: source().metadata,
             },
             pathFormatter.format,
           )

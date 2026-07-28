@@ -1,5 +1,5 @@
 import { Model } from "@opencode-ai/schema/model"
-import { ProviderV2 } from "./provider"
+import { Provider } from "./provider"
 import type { DeepMutable } from "./schema"
 
 export const ID = Model.ID
@@ -37,12 +37,12 @@ export function compatibility(input: unknown): Compatibility | undefined {
   return typeof input.field === "string" ? { reasoningField: input.field } : undefined
 }
 
-export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID } {
+export function parse(input: string): { providerID: Provider.ID; modelID: ID } {
   const [providerID, ...modelID] = input.split("/")
   return {
-    providerID: ProviderV2.ID.make(providerID),
+    providerID: Provider.ID.make(providerID),
     modelID: ID.make(modelID.join("/")),
   }
 }
 
-export * as ModelV2 from "./model"
+export * as Model from "./model"

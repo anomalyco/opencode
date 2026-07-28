@@ -1,7 +1,7 @@
 export * as SessionExecution from "./execution"
 
 import { Cause, Context, Effect, Exit, Layer } from "effect"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { LocationServiceMap } from "../location-service-map"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionEvent } from "./event"
@@ -26,7 +26,7 @@ export interface Interface {
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionExecution") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionExecution") {}
 
 type InterruptReason = "user" | "shutdown" | "superseded"
 
@@ -44,7 +44,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -65,7 +65,7 @@ export const layer = Layer.effect(
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
-          events.publish(SessionEvent.Execution.Started, { sessionID }, clearSuspensionOnCommit(sessionID)),
+          bus.publish(SessionEvent.Execution.Started, { sessionID }, clearSuspensionOnCommit(sessionID)),
         ),
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
         const session = yield* store.get(sessionID)
@@ -86,14 +86,14 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             const outcome = terminal(exit, reason)
             if (outcome.type === "succeeded") {
-              yield* events.publish(SessionEvent.Execution.Succeeded, { sessionID }, clearSuspensionOnCommit(sessionID))
+              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, clearSuspensionOnCommit(sessionID))
               return
             }
             if (outcome.type === "interrupted") {
-              yield* events.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason })
+              yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason })
               return
             }
-            yield* events.publish(
+            yield* bus.publish(
               SessionEvent.Execution.Failed,
               {
                 sessionID,
@@ -118,7 +118,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, EventV2.node],
+  deps: [SessionStore.node, LocationServiceMap.node, Bus.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */

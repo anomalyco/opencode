@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { FileDiffInfo } from "@opencode-ai/client"
-import { Plugin } from "@opencode-ai/plugin/v2/tui"
-import type { KeymapCommand, Route } from "@opencode-ai/plugin/v2/tui/context"
+import { Plugin } from "@opencode-ai/plugin/tui"
+import type { KeymapCommand, Route } from "@opencode-ai/plugin/tui/context"
 import {
   TextAttributes,
   type BorderSides,

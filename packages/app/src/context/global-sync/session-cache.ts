@@ -4,14 +4,14 @@ import type {
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
-  FileDiffInfo,
 } from "@opencode-ai/sdk/v2/client"
+import type { SessionDiff } from "@/utils/diffs"
 
 export const SESSION_CACHE_LIMIT = 40
 
 type SessionCache = {
   session_status: Record<string, SessionStatus | undefined>
-  session_diff: Record<string, FileDiffInfo[] | undefined>
+  session_diff: Record<string, SessionDiff[] | undefined>
   message: Record<string, Message[] | undefined>
   part: Record<string, Part[] | undefined>
   permission: Record<string, PermissionRequest[] | undefined>

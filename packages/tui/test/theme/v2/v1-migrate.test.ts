@@ -5,7 +5,7 @@ import { selectThemeMode, themeModes } from "../../../src/theme/v2/select"
 import { migrateV1 } from "../../../src/theme/v2/v1-migrate"
 import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "../../../src/theme/v2/defaults"
 
-test("migrates resolved V1 modes into literal V2 tokens", () => {
+test("migrates resolved V1 modes into V2 tokens", () => {
   const migrated = migrateV1(DEFAULT_THEMES.opencode)
   if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
   const legacy = resolveV1(DEFAULT_THEMES.opencode, "light")
@@ -14,13 +14,8 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   expect(migrated.standalone).toBeTrue()
   expect(migrated.light.categorical?.length).toBeGreaterThan(0)
   expect(migrated.dark.categorical?.length).toBeGreaterThan(0)
-  expect(migrated.light.hue?.accent).toBeObject()
-  expect(migrated.light.hue?.interactive).toBeObject()
-  if (typeof migrated.light.hue?.accent !== "object" || typeof migrated.light.hue.interactive !== "object") {
-    throw new Error("Expected concrete accent and interactive scales")
-  }
-  expect(migrated.light.hue.accent[800]).toBe(hex(legacy.accent))
-  expect(migrated.light.hue.interactive[800]).toBe(hex(legacy.primary))
+  expect(migrated.light.hue?.accent).toMatch(/^\$hue\.[^.]+$/)
+  expect(migrated.light.hue?.interactive).toMatch(/^\$hue\.[^.]+$/)
   expect(migrated.light.text?.default).toBe("$hue.neutral.800")
   expect(migrated.light.text?.subdued).toBe("$hue.neutral.600")
   expect(migrated.light.background?.action?.primary?.default).toBe("transparent")
@@ -32,9 +27,6 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   expect(migrated.dark.background?.surface?.overlay).toBe("$hue.neutral.600")
   expect(migrated.light.text?.action?.primary?.default).toBe("$text.default")
   expect(migrated.light.background?.action?.primary?.$selected).toBe("transparent")
-  expect(migrated.light.scrollbar?.default).toBe(hex(legacy.borderActive))
-  expect(migrated.light.diff?.lineNumber?.background?.removed).toBe(hex(legacy.diffRemovedLineNumberBg))
-  expect(migrated.light.markdown?.emphasis).toBe(hex(legacy.markdownEmph))
   expect(resolved.background.surface.offset.toInts()).toEqual(legacy.backgroundPanel.toInts())
   expect(resolved.background.surface.overlay.toInts()).toEqual(legacy.backgroundElement.toInts())
   expect(resolved.background.formfield.selected.toInts()).toEqual(legacy.background.toInts())
@@ -52,6 +44,22 @@ test("migrates resolved V1 modes into literal V2 tokens", () => {
   expect(resolved.contexts["@context:elevated"]?.text.action.primary.default.toInts()).toEqual(legacy.text.toInts())
   expect(resolved.contexts["@context:overlay"]?.background.default.toInts()).toEqual(legacy.backgroundMenu.toInts())
   expect(resolved.contexts["@context:overlay"]?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
+})
+
+test("references generated hues from matching token colors", () => {
+  const source = structuredClone(DEFAULT_THEMES.opencode)
+  source.theme.border = source.theme.primary
+  source.theme.borderActive = source.theme.accent
+  source.theme.syntaxKeyword = source.theme.error
+  source.theme.markdownEmph = "#123456"
+
+  const migrated = migrateV1(source)
+  if (!migrated.light) throw new Error("Expected light mode")
+
+  expect(migrated.light.border?.default).toBe("$hue.interactive.800")
+  expect(migrated.light.scrollbar?.default).toBe("$hue.accent.800")
+  expect(migrated.light.syntax?.keyword).toMatch(/^\$hue\.[^.]+\.800$/)
+  expect(migrated.light.markdown?.emphasis).toBe("#123456")
 })
 
 test("infers chromatic hues, anchors light and dark colors, and aliases ambiguous hues to gray", () => {
@@ -106,6 +114,33 @@ test("orders categorical hues by V1 semantic color mapping", () => {
 
   source.theme.accent = source.theme.secondary
   expect(migrateV1(source).light?.categorical).toEqual(["purple", "green", "yellow", "blue", "red"])
+})
+
+test("gives accent and primary ownership of their inferred hues", () => {
+  const source = structuredClone(DEFAULT_THEMES.opencode)
+  source.theme.success = DEFAULT_THEME.light.hue.orange[300]
+  source.theme.accent = DEFAULT_THEME.light.hue.orange[400]
+  source.theme.info = DEFAULT_THEME.light.hue.blue[300]
+  source.theme.primary = DEFAULT_THEME.light.hue.blue[400]
+
+  const migrated = migrateV1(source)
+  if (!migrated.light) throw new Error("Expected light mode")
+  const orange = migrated.light.hue?.orange
+  const blue = migrated.light.hue?.blue
+  if (typeof orange !== "object" || typeof blue !== "object") throw new Error("Expected concrete hue scales")
+
+  expect(orange[800]).toBe(source.theme.accent)
+  expect(blue[800]).toBe(source.theme.primary)
+  expect(migrated.light.hue?.accent).toBe("$hue.orange")
+  expect(migrated.light.hue?.interactive).toBe("$hue.blue")
+
+  source.theme.primary = DEFAULT_THEME.light.hue.orange[500]
+  const collisionMode = migrateV1(source).light
+  const collision = collisionMode?.hue?.orange
+  if (typeof collision !== "object") throw new Error("Expected concrete orange scale")
+  expect(collision[800]).toBe(source.theme.primary)
+  expect(collisionMode?.hue?.accent).toBe("$hue.orange")
+  expect(collisionMode?.hue?.interactive).toBe("$hue.orange")
 })
 
 test("uses default categorical hues when V1 semantic colors are ambiguous", () => {

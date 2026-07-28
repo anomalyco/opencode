@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/v2/tui"
+import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"

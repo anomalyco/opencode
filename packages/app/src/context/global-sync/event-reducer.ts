@@ -8,8 +8,8 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
-  FileDiffInfo,
 } from "@opencode-ai/sdk/v2/client"
+import type { SessionDiff } from "@/utils/diffs"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
@@ -171,7 +171,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.diff": {
-      const props = event.properties as { sessionID: string; diff: FileDiffInfo[] }
+      const props = event.properties as { sessionID: string; diff: SessionDiff[] }
       input.setStore("session_diff", props.sessionID, reconcile(list(props.diff), { key: "file" }))
       break
     }

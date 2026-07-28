@@ -1,4 +1,4 @@
-export * as LegacyEvent from "./legacy-event.js"
+export * as LegacyEventV1 from "./legacy-event.js"
 
 import { Schema } from "effect"
 import { ephemeral, inventory } from "../event.js"

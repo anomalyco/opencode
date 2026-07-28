@@ -6,12 +6,12 @@ description: "Connect an application to the OpenCode HTTP API."
 `@opencode-ai/client` is the generated TypeScript client for the OpenCode HTTP
 API. Use it when your application connects to an OpenCode server over the
 network. Its types and methods are generated from the same contract as the
-[API reference](/docs/api).
+[API reference](/api).
 
-<Warning>
+<Callout type="warning">
   The V2 API and client are beta. Method names, inputs, and outputs may change
   before the stable release.
-</Warning>
+</Callout>
 
 ## Install
 
@@ -70,6 +70,48 @@ for await (const event of client.event.subscribe()) {
 }
 ```
 
+## Local background service
+
+The main client entrypoints are browser-compatible and do not include local
+process management. In a Node application, import the native Promise service
+API from `@opencode-ai/client/service`.
+
+- `Service.discover()` returns a healthy registered endpoint without starting
+  a process.
+- `Service.ensure()` returns a compatible service, starting one when needed.
+- `Service.stop()` stops the exact registered service instance.
+- `Service.headers(endpoint)` creates the authentication headers for a client.
+
+```ts
+import { OpenCode } from "@opencode-ai/client"
+import { Service } from "@opencode-ai/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const health = await client.health.get()
+```
+
+`Service.ensure()` accepts an optional registration file, required version,
+service command, and `onStart` callback:
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: "2.0.0",
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+Omit these options to use the standard registration path and
+`opencode serve --service` command.
+
 ## Effect
 
 OpenCode provides a first-class Effect client through the
@@ -106,16 +148,11 @@ const session = await Effect.runPromise(
 Streaming operations, including `client.event.subscribe()` and
 `client.session.log(...)`, return Effect `Stream` values.
 
-### Service
+### Local background service
 
-`Service` discovers and manages the local OpenCode background service from a
-Node application:
-
-- `Service.discover()` returns a healthy registered endpoint without starting
-  a process.
-- `Service.ensure()` returns a compatible service, starting one when needed.
-- `Service.stop()` stops the registered service.
-- `Service.headers(endpoint)` creates the authentication headers for a client.
+The Node-only `@opencode-ai/client/effect/service` entrypoint exposes the same
+operations as Effect values. Add `@effect/platform-node` and provide its
+filesystem layer when running them.
 
 ```sh
 bun add @effect/platform-node

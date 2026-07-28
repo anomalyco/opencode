@@ -3,11 +3,12 @@ export * as InstructionState from "./instruction-state"
 import { and, asc, desc, eq, gt, inArray, lte, sql } from "drizzle-orm"
 import { DateTime, Effect, Option, Schema } from "effect"
 import type { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { EventTable } from "../event/sql"
 import { Instructions } from "../instructions/index"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+import { Event } from "@opencode-ai/schema/event"
 import { SessionSchema } from "./schema"
 import { InstructionBlobTable, InstructionStateTable, SessionTable } from "./sql"
 
@@ -39,11 +40,11 @@ export const observe = Effect.fn("InstructionState.observe")(function* (
 
 export const commit = Effect.fn("InstructionState.commit")(function* (
   db: DatabaseService,
-  events: EventV2.Interface,
+  bus: Bus.Interface,
   observation: Observation,
 ) {
   if (!observation.initial && Object.keys(observation.delta).length === 0) return
-  yield* events.publish(
+  yield* bus.publish(
     SessionEvent.InstructionsUpdated,
     { sessionID: observation.sessionID, delta: observation.delta },
     {
@@ -56,11 +57,11 @@ export const commit = Effect.fn("InstructionState.commit")(function* (
 
 export const prepare = Effect.fn("InstructionState.prepare")(function* (
   db: DatabaseService,
-  events: EventV2.Interface,
+  bus: Bus.Interface,
   instructions: Instructions.Instructions,
   sessionID: SessionSchema.ID,
 ) {
-  yield* commit(db, events, yield* observe(db, instructions, sessionID))
+  yield* commit(db, bus, yield* observe(db, instructions, sessionID))
 })
 
 export const apply = Effect.fn("InstructionState.apply")(function* (
@@ -171,7 +172,7 @@ const assembleState = Effect.fnUntraced(function* (
       result.push({
         seq: update.row.seq,
         message: SessionMessage.System.make({
-          id: SessionMessage.ID.fromEvent(EventV2.ID.make(update.row.id)),
+          id: SessionMessage.ID.fromEvent(Event.ID.make(update.row.id)),
           type: "system",
           text,
           time: { created: DateTime.makeUnsafe(update.row.created) },
@@ -310,16 +311,16 @@ function requireBlob(blobs: ReadonlyMap<Instructions.Hash, Schema.Json>, hash: I
   return value
 }
 
-const instructionEventType = EventV2.versionedType(
+const instructionEventType = Bus.versionedType(
   SessionEvent.InstructionsUpdated.type,
   SessionEvent.InstructionsUpdated.durable.version,
 )
-const compactionEventType = EventV2.versionedType(
+const compactionEventType = Bus.versionedType(
   SessionEvent.Compaction.Ended.type,
   SessionEvent.Compaction.Ended.durable.version,
 )
-const movedEventType = EventV2.versionedType(SessionEvent.Moved.type, SessionEvent.Moved.durable.version)
-const revertedEventType = EventV2.versionedType(
+const movedEventType = Bus.versionedType(SessionEvent.Moved.type, SessionEvent.Moved.durable.version)
+const revertedEventType = Bus.versionedType(
   SessionEvent.RevertEvent.Committed.type,
   SessionEvent.RevertEvent.Committed.durable.version,
 )

@@ -23,7 +23,7 @@ export interface Interface {
   readonly suspend: (sessionIDs: Iterable<Session.ID>) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionStore") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
 
 const layer = Layer.effect(
   Service,

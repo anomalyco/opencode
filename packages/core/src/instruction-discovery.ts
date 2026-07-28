@@ -26,7 +26,7 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionDiscovery") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionDiscovery") {}
 
 export const layer = (options?: Options) => Layer.effect(
   Service,

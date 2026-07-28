@@ -3,11 +3,11 @@ import { App } from "@opencode-ai/core/app"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Model } from "@opencode-ai/core/model"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { copilotBaseURL, copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { testEffect } from "../lib/effect"
@@ -16,7 +16,7 @@ import { PluginTestLayer } from "./fixture"
 const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
-  const plugin = yield* PluginV2.Service
+  const plugin = yield* Plugin.Service
   const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* GithubCopilotPlugin.effect(host)
@@ -94,22 +94,22 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("creates the bundled Copilot SDK for the GitHub Copilot package", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const ignored = yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5")),
-          modelID: ModelV2.ID.make("gpt-5"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5")),
+          modelID: Model.ID.make("gpt-5"),
           package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/openai-compatible",
         options: { name: "github-copilot" },
       })
       const result = yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5")),
-          modelID: ModelV2.ID.make("gpt-5"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5")),
+          modelID: Model.ID.make("gpt-5"),
           package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/github-copilot",
@@ -122,14 +122,14 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("selects languageModel when responses and chat are absent", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("claude-sonnet-4")),
-          modelID: ModelV2.ID.make("claude-sonnet-4"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("claude-sonnet-4")),
+          modelID: Model.ID.make("claude-sonnet-4"),
           package: "aisdk:test-provider",
         }),
         sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
@@ -141,14 +141,14 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("selects languageModel with the API model ID when responses and chat are absent", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("alias")),
-          modelID: ModelV2.ID.make("claude-sonnet-4"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("alias")),
+          modelID: Model.ID.make("claude-sonnet-4"),
           package: "aisdk:test-provider",
         }),
         sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
@@ -160,50 +160,50 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("uses responses for gpt-5 models except gpt-5-mini", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5")),
-          modelID: ModelV2.ID.make("gpt-5"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5")),
+          modelID: Model.ID.make("gpt-5"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5.1-codex")),
-          modelID: ModelV2.ID.make("gpt-5.1-codex"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5.1-codex")),
+          modelID: Model.ID.make("gpt-5.1-codex"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-4o")),
-          modelID: ModelV2.ID.make("gpt-4o"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-4o")),
+          modelID: Model.ID.make("gpt-4o"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-mini")),
-          modelID: ModelV2.ID.make("gpt-5-mini"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-mini")),
+          modelID: Model.ID.make("gpt-5-mini"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-mini-2025-08-07")),
-          modelID: ModelV2.ID.make("gpt-5-mini-2025-08-07"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-mini-2025-08-07")),
+          modelID: Model.ID.make("gpt-5-mini-2025-08-07"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
@@ -221,14 +221,14 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("uses advertised Copilot endpoint metadata before model ID fallbacks", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("mai-code-1-flash-picker")),
-          modelID: ModelV2.ID.make("mai-code-1-flash-picker"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("mai-code-1-flash-picker")),
+          modelID: Model.ID.make("mai-code-1-flash-picker"),
           package: "aisdk:test-provider",
           settings: { endpoint: "responses" },
         }),
@@ -236,9 +236,9 @@ describe("GithubCopilotPlugin", () => {
         options: { endpoint: "responses" },
       })
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5")),
-          modelID: ModelV2.ID.make("gpt-5"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5")),
+          modelID: Model.ID.make("gpt-5"),
           package: "aisdk:test-provider",
           settings: { endpoint: "chat" },
         }),
@@ -251,32 +251,32 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("uses the API model ID when selecting responses or chat", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("default")),
-          modelID: ModelV2.ID.make("gpt-5"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("default")),
+          modelID: Model.ID.make("gpt-5"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("small")),
-          modelID: ModelV2.ID.make("gpt-5-mini"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("small")),
+          modelID: Model.ID.make("gpt-5-mini"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
         options: {},
       })
       yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("sonnet")),
-          modelID: ModelV2.ID.make("claude-sonnet-4"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("sonnet")),
+          modelID: Model.ID.make("claude-sonnet-4"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
@@ -290,12 +290,12 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.make("github-copilot"), () => {})
-        catalog.model.update(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
+        catalog.provider.update(Provider.ID.make("github-copilot"), () => {})
+        catalog.model.update(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
       expect(
-        required(yield* catalog.model.get(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest")))
+        required(yield* catalog.model.get(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-chat-latest")))
           .enabled,
       ).toBe(false)
     }),
@@ -305,12 +305,12 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.make("custom-copilot"), () => {})
-        catalog.model.update(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
+        catalog.provider.update(Provider.ID.make("custom-copilot"), () => {})
+        catalog.model.update(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
       expect(
-        required(yield* catalog.model.get(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest")))
+        required(yield* catalog.model.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest")))
           .enabled,
       ).toBe(true)
     }),
@@ -318,14 +318,14 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("ignores non-Copilot providers", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
       const result = yield* aisdk.runLanguage({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("openai"), ModelV2.ID.make("gpt-5")),
-          modelID: ModelV2.ID.make("gpt-5"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5")),
+          modelID: Model.ID.make("gpt-5"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),

@@ -1,7 +1,7 @@
 import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { LLM, LLMError, LLMEvent, Message } from "@opencode-ai/ai"
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { expect } from "bun:test"
@@ -11,10 +11,10 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(AISDK.locationLayer)
 
 const model = (packageName: string, settings: Record<string, unknown> = {}) =>
-  ModelV2.Info.make({
-    ...ModelV2.Info.default(ProviderV2.ID.make("test-provider"), ModelV2.ID.make("catalog-model")),
-    modelID: ModelV2.ID.make("api-model"),
-    package: ProviderV2.aisdk(packageName),
+  Model.Info.make({
+    ...Model.Info.default(Provider.ID.make("test-provider"), Model.ID.make("catalog-model")),
+    modelID: Model.ID.make("api-model"),
+    package: Provider.aisdk(packageName),
     settings,
     limit: { context: 100, output: 20 },
   })
@@ -185,7 +185,7 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
         gateway: { order: ["anthropic"] },
         thinking: { type: "adaptive" },
       }),
-      modelID: ModelV2.ID.make("anthropic/claude-sonnet-5"),
+      modelID: Model.ID.make("anthropic/claude-sonnet-5"),
     })
     const anthropicPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
       LLM.request({ model: anthropic, prompt: "Hello" }),
@@ -197,7 +197,7 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
 
     const bedrock = yield* aisdk.model({
       ...model("@ai-sdk/gateway", { reasoningConfig: { type: "enabled" } }),
-      modelID: ModelV2.ID.make("amazon/nova-2-lite"),
+      modelID: Model.ID.make("amazon/nova-2-lite"),
     })
     const bedrockPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
       LLM.request({ model: bedrock, prompt: "Hello" }),
@@ -208,7 +208,7 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
 
     const fallback = yield* aisdk.model({
       ...model("@ai-sdk/gateway", { reasoningEffort: "high" }),
-      modelID: ModelV2.ID.make("deepseek/deepseek-v4"),
+      modelID: Model.ID.make("deepseek/deepseek-v4"),
     })
     const fallbackPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
       LLM.request({ model: fallback, prompt: "Hello" }),
@@ -299,6 +299,7 @@ it.effect("emits malformed AI SDK tool input without executing it", () =>
     })
     expect(response.events.some(LLMEvent.is.toolInputEnd)).toBeTrue()
     expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
+    expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
   }),
 )
 

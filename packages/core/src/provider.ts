@@ -1,4 +1,4 @@
-export * as ProviderV2 from "./provider"
+export * as Provider from "./provider"
 
 import { Effect, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
@@ -25,7 +25,7 @@ type Json = Schema.Schema.Type<typeof Schema.Json>
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 const decodeJsonRecord = Schema.decodeUnknownSync(JsonRecord)
 
-export class LoadError extends Schema.TaggedErrorClass<LoadError>()("ProviderV2.LoadError", {
+export class LoadError extends Schema.TaggedErrorClass<LoadError>()("Provider.LoadError", {
   package: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -47,7 +47,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/xai", () => import("@opencode-ai/ai/providers/xai")],
 ])
 
-export const loadPackage = Effect.fn("ProviderV2.loadPackage")(function* (specifier: string, npm?: Npm.Interface) {
+export const loadPackage = Effect.fn("Provider.loadPackage")(function* (specifier: string, npm?: Npm.Interface) {
   const builtin = builtins.get(specifier)
   if (builtin) return yield* importPackage(specifier, specifier, builtin)
   const resolved = yield* Effect.sync(() => {
@@ -133,7 +133,7 @@ export type Info = Provider.Info
 
 export type MutableInfo = DeepMutable<Info>
 
-const importPackage = Effect.fn("ProviderV2.importPackage")(function* (
+const importPackage = Effect.fn("Provider.importPackage")(function* (
   specifier: string,
   entrypoint: string,
   load = () => importModule(entrypoint),

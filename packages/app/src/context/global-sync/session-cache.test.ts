@@ -5,8 +5,8 @@ import type {
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
-  FileDiffInfo,
 } from "@opencode-ai/sdk/v2/client"
+import type { SessionDiff } from "@/utils/diffs"
 import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
 
 const msg = (id: string, sessionID: string) =>
@@ -32,7 +32,7 @@ describe("app session cache", () => {
   test("dropSessionCaches clears orphaned parts without message rows", () => {
     const store: {
       session_status: Record<string, SessionStatus | undefined>
-      session_diff: Record<string, FileDiffInfo[] | undefined>
+      session_diff: Record<string, SessionDiff[] | undefined>
       message: Record<string, Message[] | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
@@ -63,7 +63,7 @@ describe("app session cache", () => {
     const m = msg("msg_1", "ses_1")
     const store: {
       session_status: Record<string, SessionStatus | undefined>
-      session_diff: Record<string, FileDiffInfo[] | undefined>
+      session_diff: Record<string, SessionDiff[] | undefined>
       message: Record<string, Message[] | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>

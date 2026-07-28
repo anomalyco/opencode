@@ -1,10 +1,10 @@
 import os from "os"
 import { App } from "../../app"
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
 
-const providerID = ProviderV2.ID.make("cloudflare-workers-ai")
+const providerID = Provider.ID.make("cloudflare-workers-ai")
 
 export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare-workers-ai",
@@ -13,7 +13,7 @@ export const CloudflareWorkersAIPlugin = define({
       const item = evt.provider.get(providerID)
       if (!item) return
       evt.provider.update(item.provider.id, (provider) => {
-        if (!ProviderV2.isAISDK(provider.package)) return
+        if (!Provider.isAISDK(provider.package)) return
         if (typeof provider.settings?.baseURL === "string") return
         const accountId = resolveAccountId(provider.settings ?? {})
         if (accountId) provider.settings = { ...provider.settings, baseURL: workersEndpoint(accountId) }
@@ -61,7 +61,7 @@ function hasWorkersEndpoint(model: {
   readonly package?: string
   readonly settings?: Readonly<Record<string, unknown>>
 }) {
-  return ProviderV2.isAISDK(model.package) && typeof model.settings?.baseURL === "string"
+  return Provider.isAISDK(model.package) && typeof model.settings?.baseURL === "string"
 }
 
 function sdkOptions(options: Record<string, any>, app: App.Info) {

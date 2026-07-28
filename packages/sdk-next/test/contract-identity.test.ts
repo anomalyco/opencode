@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test"
-import { AgentV2 } from "@opencode-ai/core/agent"
 import { Location as CoreLocation } from "@opencode-ai/core/location"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProjectV2 } from "@opencode-ai/core/project"
-import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionPending as CoreSessionPending } from "@opencode-ai/core/session/pending"
 import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
 import { Agent } from "@opencode-ai/schema/agent"
@@ -11,6 +7,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
 import { Project } from "@opencode-ai/schema/project"
 import { Provider } from "@opencode-ai/schema/provider"
+import { WebSearch } from "@opencode-ai/schema/websearch"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionPending } from "@opencode-ai/schema/session-pending"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -20,10 +17,15 @@ import { ClientApi, groupNames, promiseOmitEndpoints } from "@opencode-ai/protoc
 import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
 
 const SDK = await import("../src/index")
+const CoreAgent = await import("@opencode-ai/core/agent")
+const CoreModel = await import("@opencode-ai/core/model")
+const CoreProject = await import("@opencode-ai/core/project")
+const CoreSession = await import("@opencode-ai/core/session")
 
 test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Agent).toBe(Agent)
   expect(SDK.Model).toBe(Model)
+  expect(SDK.WebSearch).toBe(WebSearch)
   expect(SDK.Session).toBe(Session)
   expect(Object.keys(SDK).sort()).toEqual([
     "AbsolutePath",
@@ -52,17 +54,18 @@ test("re-exports canonical contracts directly from Schema", () => {
     "SessionPending",
     "Skill",
     "Tool",
+    "WebSearch",
   ])
 })
 
 test("Core and Server reuse the authoritative Schema and Protocol values", () => {
-  expect(AgentV2.ID).toBe(Agent.ID)
+  expect(CoreAgent.ID).toBe(Agent.ID)
   expect(CoreLocation.Ref).toBe(Location.Ref)
-  expect(ModelV2.Ref).toBe(Model.Ref)
-  expect(SessionV2.Info).toBe(Session.Info)
-  expect(ProjectV2.Current).toBe(Project.Current)
-  expect(ProjectV2.Directory).toBe(Project.Directory)
-  expect(ProjectV2.Directories).toBe(Project.Directories)
+  expect(CoreModel.Ref).toBe(Model.Ref)
+  expect(CoreSession.Info).toBe(Session.Info)
+  expect(CoreProject.Current).toBe(Project.Current)
+  expect(CoreProject.Directory).toBe(Project.Directory)
+  expect(CoreProject.Directories).toBe(Project.Directories)
   expect(CoreSessionPending.Message).toBe(SessionPending.Message)
   expect(CoreSessionPending.User).toBe(SessionPending.User)
   expect(CoreSessionPending.Synthetic).toBe(SessionPending.Synthetic)

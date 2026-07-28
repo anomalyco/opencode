@@ -62,4 +62,27 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("returns a bounded preview for matches on oversized lines", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "generated.ts"), `Cloudflare${"x".repeat(70 * 1024)}\n`))
+
+          const matches = yield* (yield* Ripgrep.Service).grep({
+            cwd: tmp.path,
+            pattern: "Cloudflare",
+            limit: 10,
+          })
+
+          expect(matches).toHaveLength(1)
+          expect(matches[0]?.entry.path).toBe(RelativePath.make("generated.ts"))
+          expect(matches[0]?.text).toHaveLength(2_003)
+          expect(matches[0]?.text.endsWith("...")).toBe(true)
+          expect(matches[0]?.submatches).toEqual([{ text: "Cloudflare", start: 0, end: 10 }])
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })

@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/v2/tui"
+import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { contextUsage } from "../../util/session"

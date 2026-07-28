@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ToolContent, ToolFileContent, ToolTextContent } from "@opencode-ai/schema/llm"
+import { Tool } from "@opencode-ai/schema/tool"
 import { JsonSchema, MessageRole, ProviderMetadata } from "./ids"
 import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, ModelSchema, ProviderOptions } from "./options"
 import { isRecord } from "../utils/record"
@@ -40,8 +40,6 @@ export const MediaPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
-export { ToolContent, ToolFileContent, ToolTextContent }
-
 const isToolResultValue = (value: unknown): value is ToolResultValue =>
   isRecord(value) &&
   (value.type === "text" || value.type === "json" || value.type === "error" || value.type === "content") &&
@@ -63,7 +61,7 @@ export const ToolResultValue = Object.assign(
     }),
     Schema.Struct({
       type: Schema.Literal("content"),
-      value: Schema.Array(ToolContent),
+      value: Schema.Array(Tool.Content),
     }),
   ]).annotate({ identifier: "LLM.ToolResult" }),
   {
@@ -79,16 +77,16 @@ export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
 
 export interface ToolOutput {
   readonly structured: unknown
-  readonly content: ReadonlyArray<ToolContent>
+  readonly content: ReadonlyArray<Tool.Content>
 }
 
 export const ToolOutput = Object.assign(
   Schema.Struct({
     structured: Schema.Unknown,
-    content: Schema.Array(ToolContent),
+    content: Schema.Array(Tool.Content),
   }).annotate({ identifier: "LLM.ToolOutput" }),
   {
-    make: (structured: unknown, content: ReadonlyArray<ToolContent> = []): ToolOutput => ({ structured, content }),
+    make: (structured: unknown, content: ReadonlyArray<Tool.Content> = []): ToolOutput => ({ structured, content }),
     fromResultValue: (result: ToolResultValue): ToolOutput | undefined => {
       switch (result.type) {
         case "json":

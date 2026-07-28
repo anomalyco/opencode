@@ -20,7 +20,7 @@ import {
 import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential"
 import { State } from "./state"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { IntegrationConnection } from "./integration/connection"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
@@ -129,7 +129,7 @@ export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationErr
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export const Event = Integration.Event
+export { Event } from "@opencode-ai/schema/integration"
 
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref
@@ -222,7 +222,7 @@ export interface Interface extends State.Transformable<Draft> {
   }
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Integration") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Integration") {}
 
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))
@@ -271,7 +271,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
@@ -338,7 +338,7 @@ const layer = Layer.effect(
           },
         },
       }),
-      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
+      finalize: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
@@ -433,8 +433,8 @@ const layer = Layer.effect(
             // Persisting attempts cannot be cancelled, expired, or claimed again.
             yield* SynchronizedRef.update(attempts, (current) => new Map(current).set(attemptID, terminal))
             if (Exit.isFailure(persistence)) yield* Effect.failCause(persistence.cause)
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: attempt.integrationID })
-            yield* events.publish(Event.Updated, {})
+            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
+            yield* bus.publish(Integration.Event.Updated, {})
           }).pipe(Effect.ensuring(close(attempt.scope)))
         }),
       )
@@ -489,8 +489,8 @@ const layer = Layer.effect(
           yield* SynchronizedRef.update(commandAttempts, (current) => new Map(current).set(attemptID, terminal))
           yield* close(attempt.scope)
           if (Exit.isFailure(persistence)) return
-          yield* events.publish(Event.ConnectionUpdated, { integrationID: attempt.integrationID })
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
       )
     })
@@ -706,24 +706,24 @@ const layer = Layer.effect(
             label: input.label,
             value: Credential.Key.make({ type: "key", key: input.key }),
           })
-          yield* events.publish(Event.ConnectionUpdated, { integrationID: input.integrationID })
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
         update: Effect.fn("Integration.connection.update")(function* (credentialID, updates) {
           const credential = yield* credentials.get(credentialID)
           yield* credentials.update(credentialID, updates)
           if (credential) {
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
           }
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
         remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
           const credential = yield* credentials.get(credentialID)
           yield* credentials.remove(credentialID)
           if (credential) {
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
           }
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
       },
       oauth: {
@@ -809,5 +809,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Credential.node, EventV2.node, AppProcess.node],
+  deps: [Credential.node, Bus.node, AppProcess.node],
 })

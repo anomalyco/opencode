@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin/v2/tui"
+import type { Plugin } from "@opencode-ai/plugin/tui"
 import {
   batch,
   createContext,
@@ -13,7 +13,7 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Context, Page, Slot } from "@opencode-ai/plugin/v2/tui/context"
+import type { Context, Page, Slot } from "@opencode-ai/plugin/tui/context"
 import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
 import { useConfig } from "../config"
 import { useClient } from "../context/client"

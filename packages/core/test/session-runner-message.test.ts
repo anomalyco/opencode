@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Message } from "@opencode-ai/ai"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { AgentAttachment, Base64, FileAttachment } from "@opencode-ai/schema/prompt"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
-const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
-const build = AgentV2.defaultID
+const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+const build = Agent.defaultID
 
 describe("toLLMMessages", () => {
   test("omits empty assistant turns", () => {
@@ -21,7 +21,7 @@ describe("toLLMMessages", () => {
         id: id(value),
         type: "assistant",
         agent: build,
-        model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+        model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
         content,
         time: { created, completed: created },
       })
@@ -45,7 +45,7 @@ describe("toLLMMessages", () => {
     expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
   })
 
-  test("maps every top-level V2 Session message type", () => {
+  test("maps every top-level Session message type", () => {
     const file = FileAttachment.make({
       data: Base64.make("aGVsbG8="),
       mime: "image/png",
@@ -63,7 +63,7 @@ describe("toLLMMessages", () => {
         SessionMessage.ModelSelected.make({
           id: id("model"),
           type: "model-switched",
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           time: { created },
         }),
         SessionMessage.System.make({
@@ -345,7 +345,7 @@ Recent work
           id: id("assistant"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantText.make({ type: "text", text: "Checking" }),
             SessionMessage.AssistantReasoning.make({
@@ -367,8 +367,7 @@ Recent work
               state: SessionMessage.ToolStateRunning.make({
                 status: "running",
                 input: { path: "README.md" },
-                content: [],
-                structured: { type: "media", mime: "image/png" },
+                metadata: { type: "media", mime: "image/png" },
               }),
               time: { created },
             }),
@@ -388,7 +387,6 @@ Recent work
                     name: "hello.png",
                   },
                 ],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -403,7 +401,6 @@ Recent work
                 status: "completed",
                 input: { query: "Effect" },
                 content: [{ type: "text", text: "Found it" }],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -416,8 +413,6 @@ Recent work
               state: SessionMessage.ToolStateError.make({
                 status: "error",
                 input: { path: "README.md" },
-                content: [],
-                structured: {},
                 error: { type: "unknown", message: "Denied" },
               }),
               time: { created, completed: created },
@@ -473,7 +468,7 @@ Recent work
         providerMetadata: { provider: { continuation: "failed" } },
         result: {
           type: "error",
-          value: { error: { type: "unknown", message: "Denied" }, content: [], structured: {} },
+          value: { error: { type: "unknown", message: "Denied" }, content: [] },
         },
       },
     ])
@@ -500,7 +495,7 @@ Recent work
           id: id("assistant-openai-reasoning"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
@@ -524,7 +519,7 @@ Recent work
   })
 
   test("replays flat state under an OpenCode hosted model's route key", () => {
-    const opencode = ModelV2.Ref.make({ id: ModelV2.ID.make("claude-fable-5"), providerID: ProviderV2.ID.opencode })
+    const opencode = Model.Ref.make({ id: Model.ID.make("claude-fable-5"), providerID: Provider.ID.opencode })
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -558,7 +553,7 @@ Recent work
           id: id("assistant-failed"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
@@ -575,9 +570,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { query: "Effect" },
-                content: [],
-                structured: {},
-                result: { type: "json", value: { found: true } },
+                content: [{ type: "text", text: '{"found":true}' }],
               }),
               time: { created, completed: created },
             }),
@@ -592,8 +585,6 @@ Recent work
                 status: "error",
                 input: { query: "Effect" },
                 error: { type: "unknown", message: "Step interrupted" },
-                content: [],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -620,8 +611,10 @@ Recent work
         type: "tool-result",
         id: "hosted-completed",
         name: "web_search",
-        result: { type: "json", value: { found: true } },
+        result: { type: "text", value: '{"found":true}' },
         providerExecuted: true,
+        cache: undefined,
+        metadata: undefined,
         providerMetadata: { provider: { itemId: "result_completed" } },
       },
       {
@@ -630,7 +623,7 @@ Recent work
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: undefined,
+        providerMetadata: { provider: { itemId: "call_failed" } },
       },
       {
         type: "tool-result",
@@ -641,25 +634,24 @@ Recent work
           value: {
             error: { type: "unknown", message: "Step interrupted" },
             content: [],
-            structured: {},
           },
         },
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: undefined,
+        providerMetadata: { provider: { itemId: "result_failed" } },
       },
     ])
   })
 
-  test("drops provider-native continuation metadata after a model switch", () => {
+  test("drops model-scoped continuation metadata after a model switch but keeps hosted result payloads", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant-old-model"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("old-model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
@@ -676,9 +668,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { query: "Effect" },
-                content: [],
-                structured: {},
-                result: { type: "json", value: { status: "completed" } },
+                content: [{ type: "text", text: '{"status":"completed"}' }],
               }),
               time: { created, completed: created },
             }),
@@ -692,8 +682,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { path: "README.md" },
-                content: [],
-                structured: { text: "Hello" },
+                content: [{ type: "text", text: "Hello" }],
               }),
               time: { created, completed: created },
             }),
@@ -718,11 +707,13 @@ Recent work
         type: "tool-result",
         id: "hosted-old-model",
         name: "web_search",
-        result: { type: "json", value: { status: "completed" } },
+        result: { type: "text", value: '{"status":"completed"}' },
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: undefined,
+        // Hosted result payloads are provider-format state and must survive a
+        // model switch within the same provider for replay to stay valid.
+        providerMetadata: { provider: { itemId: "hosted-old-model" } },
       },
       {
         type: "tool-call",
@@ -738,7 +729,7 @@ Recent work
         type: "tool-result",
         id: "local-old-model",
         name: "read",
-        result: { type: "json", value: { text: "Hello" } },
+        result: { type: "text", value: "Hello" },
         providerExecuted: false,
         cache: undefined,
         metadata: undefined,
@@ -754,7 +745,7 @@ Recent work
           id: id("assistant-alias"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
@@ -765,7 +756,7 @@ Recent work
           time: { created, completed: created },
         }),
       ],
-      ModelV2.Ref.make({ id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") }),
+      Model.Ref.make({ id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") }),
     )
 
     expect(messages[0]?.content).toEqual([
@@ -773,6 +764,37 @@ Recent work
         type: "reasoning",
         text: "Visible thought",
         providerMetadata: { provider: { reasoningEncryptedContent: "encrypted" } },
+      },
+    ])
+  })
+
+  test("preserves assistant text provider state across same-provider model changes and failures", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-phase"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("old"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Checking.",
+              state: { phase: "commentary" },
+            }),
+          ],
+          error: { type: "provider.unknown", message: "Interrupted after commentary" },
+          time: { created, completed: created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("new"), providerID: Provider.ID.make("provider") }),
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Checking.",
+        providerMetadata: { provider: { phase: "commentary" } },
       },
     ])
   })

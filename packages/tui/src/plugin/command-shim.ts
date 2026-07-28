@@ -1,5 +1,5 @@
 // Legacy `api.command` bridge for v1 plugins; remove in v2.
-import type { TuiCommand, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiCommand, TuiPluginApi } from "@opencode-ai/plugin/v1/tui"
 import { TuiKeybind } from "../config/keybind"
 import type { DialogContext } from "../ui/dialog"
 

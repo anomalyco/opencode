@@ -2,7 +2,7 @@ export * as ConfigFormatter from "./formatter"
 
 import { Schema } from "effect"
 
-export class Entry extends Schema.Class<Entry>("ConfigV2.Formatter.Entry")({
+export class Entry extends Schema.Class<Entry>("Config.Formatter.Entry")({
   disabled: Schema.Boolean.pipe(Schema.optional),
   command: Schema.String.pipe(Schema.Array, Schema.optional),
   environment: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),

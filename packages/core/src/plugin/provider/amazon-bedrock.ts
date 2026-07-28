@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
 
 type MantleSDK = {
   languageModel: (modelID: string) => LanguageModelV3
@@ -64,8 +64,8 @@ export const AmazonBedrockPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!ProviderV2.isAISDK(item.provider.package)) continue
-        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/amazon-bedrock") continue
+        if (!Provider.isAISDK(item.provider.package)) continue
+        if (Provider.packageName(item.provider.package) !== "@ai-sdk/amazon-bedrock") continue
         evt.provider.update(item.provider.id, (provider) => {
           if (typeof provider.settings?.endpoint !== "string") return
           // The AI SDK expects a base URL, but users configure Bedrock private/VPC
@@ -112,10 +112,10 @@ export const AmazonBedrockPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
+        if (evt.model.providerID !== Provider.ID.amazonBedrock) return
         if (
-          ProviderV2.isAISDK(evt.model.package) &&
-          ProviderV2.packageName(evt.model.package) === "@ai-sdk/amazon-bedrock/mantle"
+          Provider.isAISDK(evt.model.package) &&
+          Provider.packageName(evt.model.package) === "@ai-sdk/amazon-bedrock/mantle"
         ) {
           evt.language = selectMantleModel(evt.sdk, evt.model.modelID ?? evt.model.id)
           return

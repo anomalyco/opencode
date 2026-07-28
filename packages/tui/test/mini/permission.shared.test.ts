@@ -95,8 +95,7 @@ describe("run permission shared", () => {
             {
               status: "running",
               input: { command: "git status --short" },
-              structured: {},
-              content: [],
+              metadata: {},
             },
             "call-shell",
           ),
@@ -141,8 +140,7 @@ describe("run permission shared", () => {
             {
               status: "running",
               input: { query: "current releases" },
-              structured: { provider: "exa", retained: true },
-              content: [],
+              metadata: { provider: "exa", retained: true },
             },
             "call-search",
           ),
@@ -165,8 +163,7 @@ describe("run permission shared", () => {
         {
           status: "running",
           input: { patchText: patch },
-          structured: {},
-          content: [],
+          metadata: {},
         },
         "call-edit",
       ),

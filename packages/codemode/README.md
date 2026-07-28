@@ -33,7 +33,7 @@ const lookupOrder = Tool.make({
   description: "Look up an order by ID",
   input: Schema.Struct({ id: Schema.String }),
   output: Schema.Struct({ id: Schema.String, status: Schema.String }),
-  run: ({ id }) => Effect.succeed({ id, status: "open" }),
+  execute: ({ id }) => Effect.succeed({ id, status: "open" }),
 })
 
 const runtime = CodeMode.make({
@@ -55,10 +55,10 @@ const result = await Effect.runPromise(
 ### `Tool.make`
 
 `input` and `output` accept either an Effect Schema or a render-only JSON Schema document. Effect Schema input is
-decoded before `run`; Effect Schema output is decoded and safely copied before the program sees it. JSON Schemas only
-shape the model-visible signature. Without `output`, the signature uses `Promise<unknown>`.
+decoded before `execute`; Effect Schema output is decoded and safely copied before the program sees it. JSON Schemas
+only shape the model-visible signature. Without `output`, the signature uses `Promise<void>`.
 
-Descriptions and schemas are model-visible contracts. Authorization belongs in `run`.
+Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
 Dots in tool names create namespaces: `{ "issues.list": tool }` and `{ issues: { list: tool } }` both expose
 `tools.issues.list(...)`. Other characters use bracket notation, such as
@@ -72,7 +72,6 @@ Dots in tool names create namespaces: `{ "issues.list": tool }` and `{ issues: {
 const runtime = CodeMode.make({ tools, limits: { timeoutMs: 30_000 } })
 
 runtime.catalog() // structured tool descriptions
-runtime.instructions() // model-facing syntax and tool guide
 runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 ```
 
@@ -145,13 +144,13 @@ safe refusal to the model; its optional cause remains private.
 
 ## Discovery
 
-Generated instructions contain a tool catalog with a default budget of 2,000 estimated tokens. Configure it with
-`discovery: { catalogBudget }`. Every namespace remains visible, and the instructions say whether the catalog is
-complete or partial.
+`runtime.catalog()` returns structured descriptors — exact path, description, and generated TypeScript signature — for
+every visible tool. Hosts render their own model-facing instructions from these descriptors; `CodeMode.searchSignature`
+and `CodeMode.toolExpression(path)` supply the exact callable forms.
 
-The synchronous `search(...)` built-in is always available and advertised when the catalog is partial. It supports
-exact-path lookup, namespace-scoped search, empty-query browsing, and pagination, and returns callable paths with full
-signatures. Search counts toward `maxToolCalls`.
+The synchronous `search(...)` built-in is always available. It supports exact-path lookup, namespace-scoped search,
+empty-query browsing, and pagination, and returns callable paths with full signatures. Search counts toward
+`maxToolCalls`.
 
 ## Execution Limits
 

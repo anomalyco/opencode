@@ -5,8 +5,8 @@ import { Model } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Catalog } from "../../catalog"
 import { ModelResolver } from "../../model-resolver"
-import { ModelV2 } from "../../model"
-import { ProviderV2 } from "../../provider"
+import { Capabilities, ID, Info, Ref, VariantID } from "../../model"
+import { Provider } from "../../provider"
 import { SessionSchema } from "../schema"
 
 export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelectedError>()(
@@ -20,7 +20,7 @@ export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelec
 
 export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
   "SessionRunnerModel.ModelUnavailableError",
-  { providerID: ProviderV2.ID, modelID: ModelV2.ID },
+  { providerID: Provider.ID, modelID: ID },
 ) {
   override get message() {
     return `Model unavailable: ${this.providerID}/${this.modelID}`
@@ -38,21 +38,21 @@ export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Resolved, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunnerModel") {}
 
 /** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
 export const resolved = (
   model: Model,
   options: {
-    readonly capabilities: ModelV2.Capabilities
-    readonly variant?: ModelV2.VariantID
-    readonly cost: ModelV2.Info["cost"]
+    readonly capabilities: Capabilities
+    readonly variant?: VariantID
+    readonly cost: Info["cost"]
   },
 ): Resolved => ({
   model,
-  ref: ModelV2.Ref.make({
-    id: ModelV2.ID.make(model.id),
-    providerID: ProviderV2.ID.make(model.provider),
+  ref: Ref.make({
+    id: ID.make(model.id),
+    providerID: Provider.ID.make(model.provider),
     ...(options.variant === undefined ? {} : { variant: options.variant }),
   }),
   capabilities: options.capabilities,

@@ -7,7 +7,7 @@ const echo = (description: string, result: string) =>
     description,
     input: Schema.Struct({}),
     output: Schema.String,
-    run: () => Effect.succeed(result),
+    execute: () => Effect.succeed(result),
   })
 
 const value = async (runtime: CodeMode.Runtime, code: string) => {
@@ -30,7 +30,6 @@ describe("dotted tool names", () => {
     expect(catalog).toHaveLength(1)
     expect(catalog[0]?.path).toBe("api.issues.list")
     expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(input:")
-    expect(runtime.instructions()).toContain("tools.api.issues.list(input:")
   })
 
   test("the advertised dotted path is executable", async () => {
@@ -54,6 +53,27 @@ describe("dotted tool names", () => {
     const flat = CodeMode.make({ tools: { "issues.list": echo("List issues", "flat") } })
     expect(flat.catalog()[0]?.path).toBe("issues.list")
     expect(await value(flat, `return await tools.issues.list({})`)).toBe("flat")
+  })
+
+  test("search scopes to a nested namespace subtree", async () => {
+    const nested = CodeMode.make({
+      tools: {
+        slack: {
+          admin: echo("Admin", "admin"),
+          "admin.invite": echo("Invite", "invite"),
+          "admin.users.list": echo("List users", "users"),
+          "administrator.list": echo("List administrators", "administrators"),
+          read: echo("Read Slack", "read"),
+        },
+      },
+    })
+
+    const result = await value(nested, `return search({ query: "", namespace: "slack.admin" })`)
+    expect((result as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual([
+      "tools.slack.admin",
+      "tools.slack.admin.invite",
+      "tools.slack.admin.users.list",
+    ])
   })
 })
 
@@ -86,13 +106,41 @@ describe("callable namespaces", () => {
     const diagnostic = await failure(runtime, `return await tools.issues.missing({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
     expect(diagnostic.message).toContain("Unknown tool 'issues.missing'")
+    expect(diagnostic.suggestions).toEqual([
+      "The tool may have been removed or renamed. Use search to find available tools.",
+    ])
   })
 
-  test("a namespace without its own definition stays non-callable", async () => {
+  test("a namespace without its own tool stays non-callable", async () => {
     const nested = CodeMode.make({ tools: { "issues.list": echo("List issues", "list") } })
     const diagnostic = await failure(nested, `return await tools.issues({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
     expect(diagnostic.message).toContain("Tool 'issues' is not callable")
+  })
+})
+
+describe("tool input diagnostics", () => {
+  const runtime = CodeMode.make({
+    tools: {
+      "notes.echo": Tool.make({
+        description: "Echo text",
+        input: Schema.Struct({ text: Schema.String }),
+        output: Schema.String,
+        execute: ({ text }) => Effect.succeed(text),
+      }),
+    },
+  })
+
+  test("a schema mismatch suggests searching for the current signature", async () => {
+    const diagnostic = await failure(runtime, `return await tools.notes.echo({ message: "hello" })`)
+    expect(diagnostic.kind).toBe("InvalidToolInput")
+    expect(diagnostic.suggestions).toEqual(["The signature may have changed. Use search to get the current signature."])
+  })
+
+  test("a wrong argument count keeps the existing error without a stale-signature hint", async () => {
+    const diagnostic = await failure(runtime, `return await tools.notes.echo()`)
+    expect(diagnostic.kind).toBe("InvalidToolInput")
+    expect(diagnostic.suggestions).toBeUndefined()
   })
 })
 
@@ -106,7 +154,7 @@ describe("blocked member names on tool paths", () => {
   })
 
   test("tools may use blocked member names because path segments never touch real properties", async () => {
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["prototype", "issues.constructor", "nested.__proto__"])
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.constructor", "nested.__proto__", "prototype"])
     expect(await value(runtime, `return await tools.prototype({})`)).toBe("proto")
     expect(await value(runtime, `return await tools.issues.constructor({})`)).toBe("ctor")
     expect(await value(runtime, `return await tools["issues.constructor"]({})`)).toBe("ctor")
@@ -114,9 +162,9 @@ describe("blocked member names on tool paths", () => {
     expect(await value(runtime, `return Object.keys(tools.issues)`)).toEqual(["constructor"])
   })
 
-  test("a literal __proto__ key cannot poison a namespace into a fake definition", async () => {
+  test("a literal __proto__ key cannot poison a namespace into a fake tool", async () => {
     const poisoned = CodeMode.make({
-      tools: { ns: { "__proto__": echo("Hidden", "hidden"), real: echo("Real tool", "real") } },
+      tools: { ns: { __proto__: echo("Hidden", "hidden"), real: echo("Real tool", "real") } },
     })
     expect(poisoned.catalog().map((tool) => tool.path)).toEqual(["ns.real"])
     expect(await value(poisoned, `return await tools.ns.real({})`)).toBe("real")
@@ -138,7 +186,7 @@ describe("empty segments", () => {
 })
 
 describe("canonical path collisions", () => {
-  test("the last definition supplied for a canonical path wins", async () => {
+  test("the last tool supplied for a canonical path wins", async () => {
     const runtime = CodeMode.make({
       tools: { "issues.list": echo("First", "first"), issues: { list: echo("Second", "second") } },
     })
@@ -155,8 +203,7 @@ describe("canonical path collisions", () => {
         "issues.close": echo("Close issue", "closed"),
       },
     })
-    // Catalog order follows first appearance of each canonical path.
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.list", "issues.get", "issues.close"])
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.close", "issues.get", "issues.list"])
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("second")
     expect(await value(runtime, `return await tools.issues.get({})`)).toBe("got")
     expect(await value(runtime, `return await tools.issues.close({})`)).toBe("closed")

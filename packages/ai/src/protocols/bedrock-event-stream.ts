@@ -53,8 +53,22 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
       })
       cursor = { buffer: cursor.buffer, offset: cursor.offset + totalLength }
 
-      if (decoded.headers[":message-type"]?.value !== "event") continue
-      const eventType = decoded.headers[":event-type"]?.value
+      const messageType = decoded.headers[":message-type"]?.value
+      if (messageType === "error") {
+        const code = decoded.headers[":error-code"]?.value
+        const message = decoded.headers[":error-message"]?.value
+        return yield* ProviderShared.eventError(
+          route,
+          [code, message].filter((value): value is string => typeof value === "string").join(": ") ||
+            "Bedrock Converse event-stream error",
+        )
+      }
+      const eventType =
+        messageType === "event"
+          ? decoded.headers[":event-type"]?.value
+          : messageType === "exception"
+            ? decoded.headers[":exception-type"]?.value
+            : undefined
       if (typeof eventType !== "string") continue
       const payload = utf8.decode(decoded.body)
       if (!payload) continue

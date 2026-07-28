@@ -5,14 +5,14 @@ import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { Job } from "@opencode-ai/core/job"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionPending } from "@opencode-ai/core/session/pending"
@@ -31,10 +31,10 @@ const model = Model.make({
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
 })
 const projects = Layer.succeed(
-  ProjectV2.Service,
-  ProjectV2.Service.of({
+  Project.Service,
+  Project.Service.of({
     list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
+    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
     directories: () => Effect.succeed([]),
     commit: () => Effect.void,
   }),
@@ -62,7 +62,7 @@ const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     () =>
-      // The test only needs the compaction location service used by SessionV2.compact.
+      // The test only needs the compaction location service used by Session.compact.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       SessionCompaction.layer.pipe(
         Layer.provide(client),
@@ -73,25 +73,25 @@ const locations = Layer.effect(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [LocationServiceMap.node, locations],
-      [ProjectV2.node, projects],
+      [Project.node, projects],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
 )
 
-describe("SessionV2.compact", () => {
+describe("Session.compact", () => {
   it.effect("durably admits and coalesces manual compaction", () =>
     Effect.gen(function* () {
       requests = []
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
       const created = yield* session.create({ location })
 
       const messageID = SessionMessage.ID.create()
-      yield* events.publish(SessionEvent.InputAdmitted, {
+      yield* bus.publish(SessionEvent.InputAdmitted, {
         sessionID: created.id,
         inputID: messageID,
         input: {
@@ -100,7 +100,7 @@ describe("SessionV2.compact", () => {
           delivery: "steer",
         },
       })
-      yield* events.publish(SessionEvent.InputPromoted, {
+      yield* bus.publish(SessionEvent.InputPromoted, {
         sessionID: created.id,
         inputID: messageID,
       })

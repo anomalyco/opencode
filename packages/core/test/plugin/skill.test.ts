@@ -4,20 +4,20 @@ import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SkillV2 } from "@opencode-ai/core/skill"
+import { Skill } from "@opencode-ai/core/skill"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
-const it = testEffect(AppNodeBuilder.build(SkillV2.node))
+const it = testEffect(AppNodeBuilder.build(Skill.node))
 
 describe("SkillPlugin.Plugin", () => {
   it.effect("registers built-in skills", () =>
     Effect.gen(function* () {
-      const skill = yield* SkillV2.Service
+      const skill = yield* Skill.Service
       yield* SkillPlugin.Plugin.effect(
         host({
           app: { name: "test", version: "1.2.3", channel: "beta" },
@@ -28,7 +28,7 @@ describe("SkillPlugin.Plugin", () => {
           },
         }),
       ).pipe(
-        Effect.provideService(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) })),
+        Effect.provide(Config.testLayer()),
         Effect.provideService(
           Location.Service,
           Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),

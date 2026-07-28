@@ -1,6 +1,6 @@
 export * as ConfigReferencePlugin from "./reference"
 
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import path from "path"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"

@@ -8,8 +8,8 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
-  FileDiffInfo,
 } from "@opencode-ai/sdk/v2/client"
+import type { SessionDiff } from "@/utils/diffs"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { diffs as cleanDiffs, message as cleanMessage } from "@/utils/diffs"
@@ -140,7 +140,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
   const [data, setData] = createStore({
     info: {} as Record<string, Session | undefined>,
     session_status: {} as Record<string, SessionStatus>,
-    session_diff: {} as Record<string, FileDiffInfo[]>,
+    session_diff: {} as Record<string, SessionDiff[]>,
     permission: {} as Record<string, PermissionRequest[]>,
     question: {} as Record<string, QuestionRequest[]>,
     message: {} as Record<string, Message[]>,
@@ -773,7 +773,7 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
         return
       }
       case "session.diff": {
-        const props = event.properties as { sessionID: string; diff: FileDiffInfo[] }
+        const props = event.properties as { sessionID: string; diff: SessionDiff[] }
         setData("session_diff", props.sessionID, reconcile(cleanDiffs(props.diff), { key: "file" }))
         return
       }

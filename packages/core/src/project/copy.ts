@@ -10,7 +10,7 @@ import { Project } from "../project"
 import { ProjectDirectories } from "./directories"
 import { makeGitWorktreeStrategy } from "./copy-strategies"
 import { Slug } from "../util/slug"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { Database } from "../database/database"
 import { Location } from "../location"
 import { Event } from "@opencode-ai/schema/project-directories"
@@ -132,10 +132,10 @@ const layer = Layer.effect(
     const git = yield* Git.Service
     const directories = yield* ProjectDirectories.Service
     const db = (yield* Database.Service).db
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
 
     const changed = Effect.fnUntraced(function* (projectID: Project.ID, update: boolean) {
-      if (update) yield* events.publish(Event.Updated, { projectID })
+      if (update) yield* bus.publish(Event.Updated, { projectID })
     })
 
     const canonical = Effect.fnUntraced(function* (input: AbsolutePath) {
@@ -282,7 +282,7 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Git.node, ProjectDirectories.node, EventV2.node, Database.node],
+  deps: [FSUtil.node, Git.node, ProjectDirectories.node, Bus.node, Database.node],
 })
 
 export const refreshNode = makeLocationNode({

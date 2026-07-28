@@ -17,7 +17,7 @@ export type PermissionPresentationInput = {
   resources: ReadonlyArray<unknown>
   metadata?: unknown
   input?: unknown
-  structured?: unknown
+  toolMetadata?: unknown
 }
 
 export function permissionPresentation(
@@ -26,7 +26,7 @@ export function permissionPresentation(
 ): PermissionPresentation {
   const action = canonicalToolName(source.action)
   const input = normalizeInput(action, source.input)
-  const metadata = { ...dict(source.structured), ...dict(source.metadata) }
+  const metadata = { ...dict(source.toolMetadata), ...dict(source.metadata) }
   const resources = source.resources.filter((item): item is string => typeof item === "string")
 
   if (action === "edit") {

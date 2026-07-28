@@ -1,4 +1,5 @@
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
+import { Event } from "@opencode-ai/schema/event"
 import { Effect, Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -11,7 +12,7 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
     return handlers.handleRaw("event.subscribe", () =>
       Effect.gen(function* () {
         const connected = {
-          id: EventV2.ID.create(),
+          id: Event.ID.create(),
           type: "server.connected",
           data: {},
         } as const

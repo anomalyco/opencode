@@ -28,7 +28,7 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
 
   return decodeAndExecute(tool, call).pipe(
     Effect.map((value) => result(call, value)),
-    Effect.catchTag("LLM.ToolFailure", (failure) =>
+    Effect.catchTag("Tool.Error", (failure) =>
       Effect.succeed(result(call, { type: "error", value: failure.message }, failure.error)),
     ),
   )

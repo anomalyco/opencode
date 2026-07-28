@@ -3,7 +3,7 @@ import { Cause, Deferred, Effect, Exit, Layer, Queue } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Pty } from "@opencode-ai/core/pty"
 import type { PtyID } from "@opencode-ai/core/pty/schema"
@@ -19,7 +19,7 @@ const locationLayer = Layer.succeed(
 )
 const configLayer = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [
     [Config.node, configLayer],
     [Location.node, locationLayer],
   ]),
@@ -27,7 +27,7 @@ const it = testEffect(
 const ptyTest = process.platform === "win32" ? it.live.skip : it.live
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
-  const source = yield* EventV2.Service
+  const source = yield* Bus.Service
   const events = yield* Queue.unbounded<PtyEvent>()
   const unsubscribe = yield* source.listen((event) => {
     if (event.type === Pty.Event.Created.type)
@@ -206,7 +206,7 @@ describe("pty", () => {
 
 const configuredShell = process.platform === "win32" ? undefined : Bun.which("bash")
 const configuredIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [
     [
       Config.node,
       Layer.mock(Config.Service)({

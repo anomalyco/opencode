@@ -28,7 +28,7 @@ describe("acp permission behavior", () => {
       cwd: "/workspace",
       toolName: "edit",
       toolInput: { filePath: "/workspace/file.ts" },
-      structured: {},
+      metadata: {},
     })
 
     expect(writes).toEqual([])
@@ -49,7 +49,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_allow", "perm_always", {
             action: "read",
-            metadata: { filePath: "/workspace/file.ts" },
+            metadata: { path: "/workspace/file.ts" },
             source: { type: "tool", messageID: "msg_allow", callID: "call_always" },
           }),
         )
@@ -96,7 +96,7 @@ describe("acp permission behavior", () => {
           title: "/workspace/file.ts",
           kind: "read",
           locations: [{ path: "/workspace/file.ts" }],
-          rawInput: { filePath: "/workspace/file.ts" },
+          rawInput: { path: "/workspace/file.ts" },
         },
       })
       expect(permissionReplies(fixture)).toEqual([
@@ -193,7 +193,7 @@ describe("acp permission behavior", () => {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
             callID: "call_edit",
-            structured: { files: [{ file: "file.ts" }], replacements: 1 },
+            metadata: { files: [{ file: "file.ts" }], replacements: 1 },
             content: [{ type: "text", text: "edited" }],
             executed: true,
           }),
@@ -286,7 +286,7 @@ describe("acp permission behavior", () => {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
             callID: "call_patch",
-            structured: { files: [{ file: "first.ts" }, { file: "second.ts" }] },
+            metadata: { files: [{ file: "first.ts" }, { file: "second.ts" }] },
             content: [{ type: "text", text: "patched" }],
             executed: true,
           }),
@@ -502,7 +502,7 @@ function permissionAsked(
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
   } = {},
 ) {
-  return ephemeralEvent("permission.v2.asked", {
+  return ephemeralEvent("permission.asked", {
     id,
     sessionID,
     action: input.action ?? "shell",

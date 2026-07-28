@@ -1,4 +1,4 @@
-import type { TuiRouteDefinition } from "@opencode-ai/plugin/tui"
+import type { TuiRouteDefinition } from "@opencode-ai/plugin/v1/tui"
 import { createSignal } from "solid-js"
 
 type RouteEntry = {

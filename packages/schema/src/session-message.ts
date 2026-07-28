@@ -2,7 +2,7 @@ export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { ToolContent } from "./llm.js"
+import { Content } from "./tool.js"
 import { Model } from "./model.js"
 import { Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
@@ -110,27 +110,24 @@ export interface ToolStateRunning extends Schema.Schema.Type<typeof ToolStateRun
 export const ToolStateRunning = Schema.Struct({
   status: Schema.tag("running"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  structured: Schema.Record(Schema.String, Schema.Unknown),
-  content: ToolContent.pipe(Schema.Array),
+  metadata: Schema.Record(Schema.String, Schema.Json),
 }).annotate({ identifier: "Session.Message.ToolState.Running" })
 
 export interface ToolStateCompleted extends Schema.Schema.Type<typeof ToolStateCompleted> {}
 export const ToolStateCompleted = Schema.Struct({
   status: Schema.tag("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  content: ToolContent.pipe(Schema.Array),
-  structured: Schema.Record(Schema.String, Schema.Unknown),
-  result: Schema.Unknown.pipe(optional),
+  content: Schema.NonEmptyArray(Content),
+  metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Completed" })
 
 export interface ToolStateError extends Schema.Schema.Type<typeof ToolStateError> {}
 export const ToolStateError = Schema.Struct({
   status: Schema.tag("error"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  content: ToolContent.pipe(Schema.Array),
-  structured: Schema.Record(Schema.String, Schema.Unknown),
   error: SessionError.Error,
-  result: Schema.Unknown.pipe(optional),
+  content: Schema.NonEmptyArray(Content).pipe(optional),
+  metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Error" })
 
 export const ToolState = Schema.Union([ToolStateStreaming, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
@@ -158,6 +155,7 @@ export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> 
 export const AssistantText = Schema.Struct({
   type: Schema.tag("text"),
   text: Schema.String,
+  state: ProviderState.pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
 
 export interface AssistantReasoning extends Schema.Schema.Type<typeof AssistantReasoning> {}
@@ -250,8 +248,6 @@ export const Info = Schema.Union([
   Shell,
   Assistant,
   Compaction,
-])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Session.Message.Info" })
+]).annotate({ identifier: "Session.Message.Info" })
 export type Info = AgentSelected | ModelSelected | User | Synthetic | System | Skill | Shell | Assistant | Compaction
 export type Type = Info["type"]

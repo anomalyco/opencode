@@ -1,14 +1,12 @@
 import { Effect, Layer, LayerMap } from "effect"
-import { AgentV2 } from "./agent"
+import { Agent } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
-import { CodeMode } from "./codemode"
-import { CodeModeInstructions } from "./codemode/instructions"
-import { CommandV2 } from "./command"
+import { Command } from "./command"
 import { Config } from "./config"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Node } from "@opencode-ai/util/effect/app-node"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { FileMutation } from "./file-mutation"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
@@ -22,20 +20,21 @@ import { LocationMutation } from "./location-mutation"
 import { LocationServiceMap } from "./location-service-map"
 import { ModelResolver } from "./model-resolver"
 import { MCP } from "./mcp/index"
-import { PermissionV2 } from "./permission"
-import { PluginV2 } from "./plugin"
+import { Permission } from "./permission"
+import { Plugin } from "./plugin"
 import { PluginSupervisor } from "./plugin/supervisor"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
-import { QuestionV2 } from "./question"
+import { Question } from "./question"
 import { Shell } from "./shell"
 import { Reference } from "./reference"
+import { WebSearch } from "./websearch"
 import { ReferenceInstructions } from "./reference/instructions"
 import { SessionRunnerLLM } from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SessionCompaction } from "./session/compaction"
 import { SessionTitle } from "./session/title"
-import { SkillV2 } from "./skill"
+import { Skill } from "./skill"
 import { SkillInstructions } from "./skill/instructions"
 import { Snapshot } from "./snapshot"
 import { InstructionDiscovery } from "./instruction-discovery"
@@ -45,8 +44,7 @@ import { SessionInstructions } from "./session/instructions"
 import { SessionGenerateNode } from "./session/generate-node"
 import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
-import { ToolRegistry } from "./tool/registry"
-import { ToolOutputStore } from "./tool-output-store"
+import { Tool } from "./tool"
 import { Vcs } from "./vcs"
 
 export { LocationServiceMap } from "./location-service-map"
@@ -54,14 +52,15 @@ export { LocationServiceMap } from "./location-service-map"
 const locationServiceNodes = [
   Location.node,
   Config.node,
-  AgentV2.node,
-  CommandV2.node,
+  Agent.node,
+  Command.node,
   Reference.node,
+  WebSearch.node,
   Integration.node,
   Catalog.node,
   ModelResolver.node,
   AISDK.node,
-  PluginV2.node,
+  Plugin.node,
   PluginSupervisor.node,
   ProjectCopy.node,
   ProjectCopy.refreshNode,
@@ -69,24 +68,20 @@ const locationServiceNodes = [
   FileSystem.node,
   Pty.node,
   Shell.node,
-  SkillV2.node,
-  CodeMode.node,
+  Skill.node,
   InstructionBuiltIns.node,
   InstructionDiscovery.node,
   LocationMutation.node,
   FileMutation.node,
   MCP.node,
-  PermissionV2.node,
-  ToolOutputStore.node,
-  ToolRegistry.node,
-  ToolRegistry.toolsNode,
+  Permission.node,
+  Tool.node,
   Image.node,
   SkillInstructions.node,
-  CodeModeInstructions.node,
   ReferenceInstructions.node,
   InstructionEntry.node,
   Form.node,
-  QuestionV2.node,
+  Question.node,
   Generate.node,
   SessionGenerateNode.node,
   ReadToolFileSystem.node,

@@ -1,6 +1,6 @@
 import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 import { Timestamps } from "../database/schema.sql"
-import { ProjectV2 } from "../project"
+import { Project } from "../project"
 import { ProjectTable } from "../project/sql"
 import type { PermissionSaved } from "./saved"
 
@@ -9,7 +9,7 @@ export const PermissionTable = sqliteTable(
   {
     id: text().$type<PermissionSaved.ID>().primaryKey(),
     project_id: text()
-      .$type<ProjectV2.ID>()
+      .$type<Project.ID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     action: text().notNull(),

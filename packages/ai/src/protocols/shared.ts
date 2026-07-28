@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer"
+import { Tool } from "@opencode-ai/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
@@ -9,7 +10,6 @@ import {
   type ContentPart,
   type LLMRequest,
   type MediaPart,
-  type ToolFileContent,
   type TextPart,
   type ToolResultPart,
 } from "../schema"
@@ -206,7 +206,7 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
   return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
 })
 
-export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>
+export const validateToolFile = (route: string, part: Tool.FileContent, supportedMimes: ReadonlySet<string>) =>
   validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes)
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")

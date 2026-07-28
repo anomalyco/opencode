@@ -1,7 +1,7 @@
 import os from "os"
 import { App } from "../../app"
 import { Effect, Option, Schema } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 
 export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",

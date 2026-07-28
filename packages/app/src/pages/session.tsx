@@ -909,13 +909,8 @@ export default function Page() {
   )
 
   const stopVcs = sdk().event.listen((evt) => {
-    if (evt.details.type !== "filesystem.changed") return
-    const props =
-      typeof evt.details.properties === "object" && evt.details.properties
-        ? (evt.details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
+    if (evt.details.type !== "file.watcher.updated") return
+    if (evt.details.properties.file.startsWith(".git/")) return
     refreshVcs()
   })
   onCleanup(stopVcs)

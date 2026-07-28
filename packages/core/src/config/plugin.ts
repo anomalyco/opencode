@@ -2,7 +2,7 @@ export * as ConfigPlugin from "./plugin"
 
 import { Schema } from "effect"
 
-export class Entry extends Schema.Class<Entry>("ConfigV2.Plugin.Entry")({
+export class Entry extends Schema.Class<Entry>("Config.Plugin.Entry")({
   package: Schema.String,
   options: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 }) {}

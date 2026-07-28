@@ -23,7 +23,8 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { SessionDiff } from "@/utils/diffs"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
@@ -59,7 +60,7 @@ import type { RenderDiff } from "@/pages/session/v2/review-diff-kinds"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
-  diffs: () => (FileDiffInfo | VcsFileDiff)[]
+  diffs: () => (SessionDiff | VcsFileDiff)[]
   diffsReady: () => boolean
   empty: () => string
   hasReview: () => boolean

@@ -10,7 +10,7 @@ export interface Interface {
   readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Instructions>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionBuiltIns") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}
 
 const layer = Layer.effect(
   Service,

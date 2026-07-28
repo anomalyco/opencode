@@ -1,4 +1,4 @@
-export * as WorkspaceV2 from "./workspace"
+export * as Workspace from "./workspace"
 
 import { Workspace } from "@opencode-ai/schema/workspace"
 

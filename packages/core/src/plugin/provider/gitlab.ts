@@ -1,8 +1,8 @@
 import os from "os"
 import { App } from "../../app"
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
 
 export const GitLabPlugin = define({
   id: "opencode.provider.gitlab",
@@ -35,7 +35,7 @@ export const GitLabPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.gitlab) return
+        if (evt.model.providerID !== Provider.ID.gitlab) return
         const featureFlags =
           typeof evt.options.featureFlags === "object" && evt.options.featureFlags ? evt.options.featureFlags : {}
         const id = evt.model.modelID ?? evt.model.id

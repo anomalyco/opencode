@@ -6,7 +6,7 @@ export const Disabled = Schema.Struct({
   disabled: Schema.Literal(true),
 })
 
-export class Server extends Schema.Class<Server>("ConfigV2.LSP.Server")({
+export class Server extends Schema.Class<Server>("Config.LSP.Server")({
   command: Schema.String.pipe(Schema.Array),
   extensions: Schema.String.pipe(Schema.Array, Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),

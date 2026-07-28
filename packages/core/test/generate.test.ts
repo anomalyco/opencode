@@ -6,15 +6,15 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Generate } from "@opencode-ai/core/generate"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ID, Info, Ref } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { Npm } from "@opencode-ai/util/npm"
 import { Effect, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
-const selected = ModelV2.Info.make({
-  ...ModelV2.Info.default(ProviderV2.ID.make("test-provider"), ModelV2.ID.make("gemini")),
-  package: ProviderV2.aisdk("@ai-sdk/google"),
+const selected = Info.make({
+  ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
+  package: Provider.aisdk("@ai-sdk/google"),
 })
 const runtime = Model.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
@@ -73,7 +73,7 @@ const client = Layer.mock(LLMClient.Service)({
         LLMEvent.textStart({ id: "generate" }),
         LLMEvent.textDelta({ id: "generate", text: "OK" }),
         LLMEvent.textEnd({ id: "generate" }),
-        LLMEvent.finish({ reason: "stop" }),
+        LLMEvent.finish({ reason: { normalized: "stop" } }),
       ])
       if (!response) throw new Error("Incomplete generate response")
       return response
@@ -89,7 +89,7 @@ it.effect("loads dynamic AI SDK models", () =>
     const generate = yield* Generate.Service
     const result = yield* generate.text({
       prompt: "Return exactly OK",
-      model: ModelV2.Ref.make({ providerID: selected.providerID, id: selected.id }),
+      model: Ref.make({ providerID: selected.providerID, id: selected.id }),
     })
 
     expect(result).toBe("OK")
@@ -99,11 +99,11 @@ it.effect("loads dynamic AI SDK models", () =>
 resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
   Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
-    const result = yield* resolver.resolve(ModelV2.Ref.make({ providerID: selected.providerID, id: selected.id }))
+    const result = yield* resolver.resolve(Ref.make({ providerID: selected.providerID, id: selected.id }))
 
     expect(result).toEqual({
       model: runtime,
-      ref: ModelV2.Ref.make({ providerID: selected.providerID, id: selected.id }),
+      ref: Ref.make({ providerID: selected.providerID, id: selected.id }),
       capabilities: selected.capabilities,
       cost: selected.cost,
     })

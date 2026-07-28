@@ -8,7 +8,7 @@ import { Shell } from "@opencode-ai/schema/shell"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { Location } from "./location"
 import { Global } from "@opencode-ai/util/global"
 import { ShellSelect } from "./shell/select"
@@ -57,12 +57,12 @@ export interface Interface {
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Shell") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
 
 export const layer = (options?: ShellSelect.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const location = yield* Location.Service
     const config = yield* Config.Service
     const global = yield* Global.Service
@@ -105,7 +105,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       // Unblock any wait still pending when the command is removed before it terminated.
       yield* Deferred.fail(session.done, new NotFoundError({ id }))
       yield* Effect.promise(() => unlink(session.file).catch(() => {}))
-      yield* events.publish(Shell.Event.Deleted, { id })
+      yield* bus.publish(Shell.Event.Deleted, { id })
     })
 
     const remove = Effect.fn("Shell.remove")(function* (id: Shell.ID) {
@@ -259,7 +259,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
                 // the timeout-fiber interrupt below, which on the timeout path would otherwise cancel
                 // this very fiber (finish is invoked by the timeout fiber) before waiters are resolved.
                 yield* Deferred.succeed(session.done, session.info)
-                yield* events.publish(Shell.Event.Exited, {
+                yield* bus.publish(Shell.Event.Exited, {
                   id,
                   ...(exit !== undefined ? { exit } : {}),
                   status,
@@ -299,7 +299,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
               ),
             )
 
-            yield* events.publish(Shell.Event.Created, { info })
+            yield* bus.publish(Shell.Event.Created, { info })
             yield* Deferred.succeed(ready, session)
             // Hold the handle's scope open until the command terminates; closing it earlier would
             // release (kill) the process before its exit is observed.
@@ -320,7 +320,7 @@ export function configured(options?: ShellSelect.Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [EventV2.node, Location.node, Config.node, Global.node, AppProcess.node],
+    deps: [Bus.node, Location.node, Config.node, Global.node, AppProcess.node],
   })
 }
 

@@ -104,7 +104,8 @@ type RunFooterOptions = {
 
 export function resolveRunAgent(agents: RunAgent[], current: string | undefined) {
   const selectable = agents.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-  return selectable.find((agent) => agent.id === current) ?? selectable.at(0)
+  if (current === undefined) return selectable.at(0)
+  return selectable.find((agent) => agent.id === current)
 }
 
 const PERMISSION_ROWS = 12
@@ -327,6 +328,7 @@ export class RunFooter implements FooterApi {
               providers: footer.providers,
               currentAgent: footer.currentAgent,
               currentAgentID: footer.currentAgentID,
+              currentAgentExplicit: () => selectedAgentID() !== undefined,
               currentModel: footer.currentModel,
               variants: footer.variants,
               currentVariant: footer.currentVariant,

@@ -8,7 +8,7 @@ import { SessionID } from "./session-id.js"
 import { statics } from "./schema.js"
 
 export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
-  Schema.brand("PermissionV2.ID"),
+  Schema.brand("Permission.ID"),
   statics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + ascending()) })),
 )
 export type ID = typeof ID.Type
@@ -19,7 +19,7 @@ export const Source = Schema.Union([
     messageID: Schema.String,
     callID: Schema.String,
   }),
-]).annotate({ identifier: "PermissionV2.Source" })
+]).annotate({ identifier: "Permission.Source" })
 export type Source = typeof Source.Type
 
 const RequestFields = {
@@ -34,15 +34,15 @@ const RequestFields = {
 export const Request = Schema.Struct({
   id: ID,
   ...RequestFields,
-}).annotate({ identifier: "PermissionV2.Request" })
+}).annotate({ identifier: "Permission.Request" })
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 
-export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "PermissionV2.Reply" })
+export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "Permission.Reply" })
 export type Reply = typeof Reply.Type
 
-const Asked = ephemeral({ type: "permission.v2.asked", schema: Request.fields })
+const Asked = ephemeral({ type: "permission.asked", schema: Request.fields })
 const Replied = ephemeral({
-  type: "permission.v2.replied",
+  type: "permission.replied",
   schema: {
     sessionID: SessionID,
     requestID: ID,
@@ -51,7 +51,7 @@ const Replied = ephemeral({
 })
 export const Event = { Asked, Replied, Definitions: inventory(Asked, Replied) }
 
-export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Effect" })
+export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "Permission.Effect" })
 export type Effect = typeof Effect.Type
 
 export interface Rule extends Schema.Schema.Type<typeof Rule> {}
@@ -59,7 +59,7 @@ export const Rule = Schema.Struct({
   action: Schema.String,
   resource: Schema.String,
   effect: Effect,
-}).annotate({ identifier: "PermissionV2.Rule" })
+}).annotate({ identifier: "Permission.Rule" })
 
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
 export type Ruleset = typeof Ruleset.Type

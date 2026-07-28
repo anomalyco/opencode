@@ -15,17 +15,17 @@ import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
 import { Credential } from "./credential"
 import { Integration } from "./integration"
-import { ModelV2 } from "./model"
+import { Capabilities, ID, Info, Ref, VariantID } from "./model"
 import { Npm } from "@opencode-ai/util/npm"
 import { OpenAICodex } from "./plugin/provider/openai-codex"
-import { ProviderV2 } from "./provider"
+import { Provider } from "./provider"
 
 export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
   {
-    providerID: ProviderV2.ID,
-    modelID: ModelV2.ID,
-    variant: ModelV2.VariantID,
+    providerID: Provider.ID,
+    modelID: ID,
+    variant: VariantID,
   },
 ) {
   override get message() {
@@ -36,8 +36,8 @@ export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnav
 export class UnsupportedPackageError extends Schema.TaggedErrorClass<UnsupportedPackageError>()(
   "SessionRunnerModel.UnsupportedPackageError",
   {
-    providerID: ProviderV2.ID,
-    modelID: ModelV2.ID,
+    providerID: Provider.ID,
+    modelID: ID,
     package: Schema.String,
   },
 ) {
@@ -52,21 +52,21 @@ export interface Resolved {
   /** Route-level model for provider requests; its id is the provider API model id, which may differ from the catalog id. */
   readonly model: Model
   /** Selected catalog identity. Durable records and displays must use this, never the API model id. */
-  readonly ref: ModelV2.Ref
+  readonly ref: Ref
   /** Catalog capabilities used to shape requests before provider lowering. */
-  readonly capabilities: ModelV2.Capabilities
+  readonly capabilities: Capabilities
   /** Catalog pricing in dollars per million tokens. */
-  readonly cost: ModelV2.Info["cost"]
+  readonly cost: Info["cost"]
 }
 
 export interface Interface {
-  readonly resolve: (requested?: ModelV2.Ref) => Effect.Effect<Resolved | undefined, Error>
-  readonly resolveModel: (model: ModelV2.Info, variant?: ModelV2.VariantID) => Effect.Effect<Resolved, Error>
+  readonly resolve: (requested?: Ref) => Effect.Effect<Resolved | undefined, Error>
+  readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ModelResolver") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ModelResolver") {}
 
-const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
+const apiKey = (model: Info, credential?: Credential.Value) => {
   if (credential?.type === "key") return Auth.value(credential.key)
   if (credential?.type === "oauth") return Auth.value(credential.access)
   const value = model.settings?.apiKey
@@ -74,7 +74,7 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   return undefined
 }
 
-const withDefaults = (model: ModelV2.Info, route: AnyRoute) =>
+const withDefaults = (model: Info, route: AnyRoute) =>
   route.with({
     provider: model.providerID,
     endpoint: typeof model.settings?.baseURL === "string" ? { baseURL: model.settings.baseURL } : undefined,
@@ -84,8 +84,8 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) =>
     limits: { context: model.limit.context, output: model.limit.output },
   })
 
-const providerHeaders = (model: ModelV2.Info) => {
-  const packageName = ProviderV2.packageName(model.package)
+const providerHeaders = (model: Info) => {
+  const packageName = Provider.packageName(model.package)
   const generated = new Map<string, string>()
   if (packageName === "@ai-sdk/openai" && typeof model.settings?.organization === "string")
     generated.set("OpenAI-Organization", model.settings.organization)
@@ -93,16 +93,16 @@ const providerHeaders = (model: ModelV2.Info) => {
     generated.set("OpenAI-Project", model.settings.project)
   if (packageName === "@ai-sdk/anthropic" && typeof model.settings?.authToken === "string")
     generated.set("Authorization", `Bearer ${model.settings.authToken}`)
-  return ProviderV2.mergeHeaders(generated.size === 0 ? undefined : Object.fromEntries(generated), model.headers)
+  return Provider.mergeHeaders(generated.size === 0 ? undefined : Object.fromEntries(generated), model.headers)
 }
 
 const providerOptions = (
-  model: ModelV2.Info,
+  model: Info,
 ): { readonly [key: string]: { readonly [key: string]: unknown } } | undefined => {
-  if (!ProviderV2.isAISDK(model.package) || model.settings === undefined) return undefined
+  if (!Provider.isAISDK(model.package) || model.settings === undefined) return undefined
   const { apiKey: _, baseURL: _baseURL, ...settings } = model.settings
   if (Object.keys(settings).length === 0) return undefined
-  const packageName = ProviderV2.packageName(model.package)
+  const packageName = Provider.packageName(model.package)
   if (packageName === "@ai-sdk/openai") return { openai: settings }
   if (packageName === "@ai-sdk/anthropic") return { anthropic: settings }
   if (packageName === "@ai-sdk/openai-compatible") return { openai: settings }
@@ -110,9 +110,9 @@ const providerOptions = (
 }
 
 export const withVariant = (
-  model: ModelV2.Info,
-  variantID: ModelV2.VariantID | undefined,
-): Effect.Effect<ModelV2.Info, VariantUnavailableError> => {
+  model: Info,
+  variantID: VariantID | undefined,
+): Effect.Effect<Info, VariantUnavailableError> => {
   const id = variantID === "default" ? undefined : variantID
   const variant = model.variants?.find((item) => item.id === id)
   if (!variant && variantID !== undefined && variantID !== "default")
@@ -126,37 +126,37 @@ export const withVariant = (
   return Effect.succeed(
     variant
       ? produce(model, (draft) => {
-          draft.settings = ProviderV2.mergeOverlay(draft.settings, variant.settings)
-          draft.headers = ProviderV2.mergeHeaders(draft.headers, variant.headers)
-          draft.body = ProviderV2.mergeOverlay(draft.body, variant.body)
+          draft.settings = Provider.mergeOverlay(draft.settings, variant.settings)
+          draft.headers = Provider.mergeHeaders(draft.headers, variant.headers)
+          draft.body = Provider.mergeOverlay(draft.body, variant.body)
         })
       : model,
   )
 }
 
 export interface Dependencies {
-  readonly loadPackage?: (specifier: string) => Effect.Effect<ProviderV2.ProviderPackage, ProviderV2.LoadError>
-  readonly loadAISDK?: (model: ModelV2.Info) => Effect.Effect<Model, AISDK.InitError>
+  readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
+  readonly loadAISDK?: (model: Info) => Effect.Effect<Model, AISDK.InitError>
 }
 
 export const fromCatalogModel = (
-  model: ModelV2.Info,
+  model: Info,
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ): Effect.Effect<Model, UnsupportedPackageError> => {
   const resolved = produce(model, (draft) => {
     if (draft.settings?.apiKey === "") delete draft.settings.apiKey
     if (credential?.type === "key" && credential.metadata !== undefined)
-      draft.body = ProviderV2.mergeOverlay(draft.body, credential.metadata)
+      draft.body = Provider.mergeOverlay(draft.body, credential.metadata)
   })
-  const packageName = ProviderV2.packageName(resolved.package)
+  const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
 
-  if (OpenAICodex.isChatGPT(credential) && !ProviderV2.isAISDK(resolved.package) && isNativeOpenAI(resolved.package)) {
+  if (OpenAICodex.isChatGPT(credential) && !Provider.isAISDK(resolved.package) && isNativeOpenAI(resolved.package)) {
     return Effect.succeed(codexModel(resolved, credential, key))
   }
 
-  if (ProviderV2.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
+  if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
     if (OpenAICodex.isChatGPT(credential)) return Effect.succeed(codexModel(resolved, credential, key))
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
@@ -164,7 +164,7 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  if (ProviderV2.isAISDK(resolved.package) && packageName === "@ai-sdk/anthropic") {
+  if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/anthropic") {
     return Effect.succeed(
       withDefaults(resolved, AnthropicMessages.route)
         .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })
@@ -172,7 +172,7 @@ export const fromCatalogModel = (
     )
   }
   if (
-    ProviderV2.isAISDK(resolved.package) &&
+    Provider.isAISDK(resolved.package) &&
     packageName === "@ai-sdk/openai-compatible" &&
     typeof resolved.settings?.baseURL === "string"
   ) {
@@ -182,10 +182,10 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  if (ProviderV2.isAISDK(resolved.package)) {
+  if (Provider.isAISDK(resolved.package)) {
     if (!dependencies?.loadAISDK) return Effect.fail(unsupported(resolved))
     const runtime = produce(resolved, (draft) => {
-      draft.settings = ProviderV2.mergeOverlay(draft.settings, {
+      draft.settings = Provider.mergeOverlay(draft.settings, {
         ...(credential?.type === "key" ? { apiKey: credential.key } : {}),
         ...(credential?.type === "oauth" ? { apiKey: credential.access } : {}),
         ...credential?.metadata,
@@ -197,7 +197,7 @@ export const fromCatalogModel = (
 
   const specifier = resolved.package
   return Effect.gen(function* () {
-    const module = yield* (dependencies?.loadPackage ?? ProviderV2.loadPackage)(specifier).pipe(
+    const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
       Effect.mapError(() => unsupported(resolved)),
     )
     const configured = { ...resolved.settings, ...credential?.metadata }
@@ -249,7 +249,7 @@ const withoutNativeAuthSettings = (settings: Record<string, unknown>) => {
 }
 
 const codexModel = (
-  model: ModelV2.Info,
+  model: Info,
   credential: Credential.Value | undefined,
   key: ReturnType<typeof Auth.value> | undefined,
 ) => {
@@ -264,7 +264,7 @@ const codexModel = (
     .model({ id: model.modelID ?? model.id, compatibility: model.compatibility })
 }
 
-const unsupported = (model: ModelV2.Info) =>
+const unsupported = (model: Info) =>
   new UnsupportedPackageError({
     providerID: model.providerID,
     modelID: model.id,
@@ -272,13 +272,13 @@ const unsupported = (model: ModelV2.Info) =>
   })
 
 export const resolveModel = (
-  model: ModelV2.Info,
-  variant: ModelV2.VariantID | undefined,
+  model: Info,
+  variant: VariantID | undefined,
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) => withVariant(model, variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential, dependencies)))
 
-export const supported = (model: ModelV2.Info) => Boolean(model.package)
+export const supported = (model: Info) => Boolean(model.package)
 
 /** Resolves catalog selections into runtime models for the current Location. */
 export const layer = Layer.effect(
@@ -289,8 +289,8 @@ export const layer = Layer.effect(
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (
-      selected: ModelV2.Info,
-      variant?: ModelV2.VariantID,
+      selected: Info,
+      variant?: VariantID,
     ) {
       const provider = yield* catalog.provider.get(selected.providerID)
       const connection = yield* integrations.connection.active(
@@ -301,13 +301,13 @@ export const layer = Layer.effect(
         variant,
         connection ? yield* integrations.connection.resolve(connection) : undefined,
         {
-          loadPackage: (specifier) => ProviderV2.loadPackage(specifier, npm),
+          loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
           loadAISDK: (model) => aisdk.model(model),
         },
       )
       return {
         model,
-        ref: ModelV2.Ref.make({
+        ref: Ref.make({
           id: selected.id,
           providerID: selected.providerID,
           ...(variant === undefined ? {} : { variant }),

@@ -96,6 +96,65 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
+  test("generates Effect API types from schemas instead of the imported API", () => {
+    const Info = Schema.Struct({ id: Schema.String }).annotate({ identifier: "Session.Info" })
+    const output = emitEffectShape(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("get", "/session/:id", {
+            params: { id: Schema.String },
+            success: Schema.Struct({ data: Info }),
+          }),
+        ),
+      ),
+      {
+        typeReferences: [
+          {
+            schema: Info,
+            name: "Session.Info",
+            import: 'import type { Session } from "@example/schema/session"',
+          },
+        ],
+      },
+    )
+    const source = output.files[0]?.content
+
+    expect(source).toContain('import type { Session } from "@example/schema/session"')
+    expect(source).toContain('export type Endpoint0_0Input = { readonly "id": string }')
+    expect(source).toContain("export type Endpoint0_0Output = Session.Info")
+    expect(source).not.toContain("HttpApiClient")
+    expect(source).not.toContain("@example/api")
+  })
+
+  test("allows composed Effect outputs to use an authoritative named type", () => {
+    const output = emitEffectShape(
+      compileContract(api(HttpApiEndpoint.get("events", "/event", { success: Schema.Unknown }))),
+      {
+        outputTypes: {
+          "session.events": {
+            name: "OpenCodeEvent",
+            import: 'import type { OpenCodeEvent } from "@example/protocol/event"',
+          },
+        },
+      },
+    )
+    const source = output.files[0]?.content
+
+    expect(source).toContain('import type { OpenCodeEvent } from "@example/protocol/event"')
+    expect(source).toContain("export type Endpoint0_0Output = OpenCodeEvent")
+  })
+
+  test("exposes an imported Effect client through its generated shape", () => {
+    const output = emitEffectImported(
+      compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Schema.String }))),
+      { module: "@example/api", api: "Api", shapeModule: "../api" },
+    )
+    const source = output.files.find((file) => file.path === "client.ts")?.content
+
+    expect(source).toContain('import type { Endpoint0_0Output } from "../api"')
+    expect(source).toContain("preserveEffect<Endpoint0_0Output>()")
+  })
+
   test("projects imported endpoint constants into a generated API", () => {
     const output = emitEffectImported(
       compileContract(
@@ -220,7 +279,7 @@ describe("HttpApiCodegen.generate", () => {
       '"instructions": { "list": Endpoint0_0(raw), "put": Endpoint0_1(raw), "remove": Endpoint0_2(raw) }',
     )
 
-    const shape = emitEffectShape(contract, { module: "@example/api", api: "Api" })
+    const shape = emitEffectShape(contract)
     const apiShape = shape.files.find((file) => file.path === "api.ts")?.content
     expect(apiShape).toContain('readonly "instructions": { readonly "list": SessionInstructionsListOperation<E>')
     expect(apiShape).toContain('readonly "put": SessionInstructionsPutOperation<E>')
@@ -1033,7 +1092,7 @@ describe("HttpApiCodegen.generate", () => {
     const contract = compileContract(source)
     const effect = emitEffect(contract)
     const imported = emitEffectImported(contract, { module: "@example/api", api: "Api" })
-    const shape = emitEffectShape(contract, { module: "@example/api", api: "Api" })
+    const shape = emitEffectShape(contract)
     const promise = emitPromise(contract)
 
     expect(effect.operations[0]).toMatchObject({
@@ -1042,7 +1101,9 @@ describe("HttpApiCodegen.generate", () => {
     })
     expect(effect.files.find((file) => file.path === "session.ts")?.content).toContain('payload: input["payload"]')
     expect(imported.files.find((file) => file.path === "client.ts")?.content).toContain('payload: input["payload"]')
-    expect(shape.files[0]?.content).toContain('Endpoint0_0Request["payload"]')
+    expect(shape.files[0]?.content).toContain(
+      'readonly "payload": { readonly "type": "local", readonly "command": ReadonlyArray<string> }',
+    )
     expect(promise.files.find((file) => file.path === "types.ts")?.content).toContain(
       'readonly "payload": { readonly "type": "local", readonly "command": ReadonlyArray<string> } | { readonly "type": "remote", readonly "url": string }',
     )

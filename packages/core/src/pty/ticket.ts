@@ -1,6 +1,6 @@
 export * as PtyTicket from "./ticket"
 
-import { WorkspaceV2 } from "../workspace"
+import { Workspace } from "../workspace"
 import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import { PtyID } from "./schema"
 import { Cache, Context, Duration, Effect, Layer } from "effect"
@@ -14,7 +14,7 @@ export const ConnectToken = PtyTicket.ConnectToken
 export type Scope = {
   readonly ptyID: PtyID
   readonly directory?: string
-  readonly workspaceID?: WorkspaceV2.ID
+  readonly workspaceID?: Workspace.ID
 }
 
 export interface Interface {

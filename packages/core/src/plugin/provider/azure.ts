@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
@@ -15,8 +15,8 @@ export const AzurePlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!ProviderV2.isAISDK(item.provider.package)) continue
-        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/azure") continue
+        if (!Provider.isAISDK(item.provider.package)) continue
+        if (Provider.packageName(item.provider.package) !== "@ai-sdk/azure") continue
         const configured = item.provider.settings?.resourceName
         const resourceName =
           typeof configured === "string" && configured.trim() !== "" ? configured : process.env.AZURE_RESOURCE_NAME
@@ -30,11 +30,11 @@ export const AzurePlugin = define({
       "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/azure") return
-        if (evt.model.providerID === ProviderV2.ID.azure) {
+        if (evt.model.providerID === Provider.ID.azure) {
           if (
             !evt.options.resourceName &&
             !evt.options.baseURL &&
-            (!ProviderV2.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
+            (!Provider.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
           ) {
             throw new Error(
               "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
@@ -48,7 +48,7 @@ export const AzurePlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.azure) return
+        if (evt.model.providerID !== Provider.ID.azure) return
         evt.language = selectLanguage(
           evt.sdk,
           evt.model.modelID ?? evt.model.id,
@@ -66,8 +66,8 @@ export const AzureCognitiveServicesPlugin = define({
       const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
       if (!resourceName) return
       for (const item of evt.provider.list()) {
-        if (!ProviderV2.isAISDK(item.provider.package)) continue
-        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
+        if (!Provider.isAISDK(item.provider.package)) continue
+        if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
         if (!item.provider.id.includes("azure-cognitive-services")) continue
         evt.provider.update(item.provider.id, (provider) => {
           provider.settings = {
@@ -80,7 +80,7 @@ export const AzureCognitiveServicesPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return
+        if (evt.model.providerID !== Provider.ID.make("azure-cognitive-services")) return
         evt.language = selectLanguage(
           evt.sdk,
           evt.model.modelID ?? evt.model.id,

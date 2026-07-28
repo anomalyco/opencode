@@ -4,7 +4,8 @@ import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
+import { Event } from "@opencode-ai/schema/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Instructions } from "@opencode-ai/core/instructions"
 import { Project } from "@opencode-ai/core/project"
@@ -16,7 +17,7 @@ import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { InstructionBlobTable, InstructionStateTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node])))
 
 const source = (name: string, read: Effect.Effect<string | Instructions.Unavailable | Instructions.Removed>) =>
   Instructions.make({
@@ -51,7 +52,7 @@ const setup = (sessionID: SessionSchema.ID) =>
       })
       .run()
       .pipe(Effect.orDie)
-    return { db, events: yield* EventV2.Service }
+    return { db, events: yield* Bus.Service }
   })
 
 const instructionEvents = (db: Database.Interface["db"], sessionID: SessionSchema.ID) =>
@@ -90,7 +91,7 @@ describe("InstructionState", () => {
           }),
         ),
       ])
-      const published: EventV2.Payload[] = []
+      const published: Event.Payload[] = []
       const unsubscribe = yield* events.listen((event) =>
         Effect.sync(() => {
           if (event.type === "session.instructions.updated") published.push(event)
@@ -146,7 +147,7 @@ describe("InstructionState", () => {
           }),
         ),
       ])
-      const published: EventV2.Payload[] = []
+      const published: Event.Payload[] = []
       const unsubscribe = yield* events.listen((event) =>
         Effect.sync(() => {
           if (event.type === "session.instructions.updated") published.push(event)

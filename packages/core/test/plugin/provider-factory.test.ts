@@ -1,8 +1,8 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { AISDK } from "@opencode-ai/core/aisdk"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Model } from "@opencode-ai/core/model"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AlibabaPlugin } from "@opencode-ai/core/plugin/provider/alibaba"
 import { CoherePlugin } from "@opencode-ai/core/plugin/provider/cohere"
@@ -13,11 +13,11 @@ import { MistralPlugin } from "@opencode-ai/core/plugin/provider/mistral"
 import { PerplexityPlugin } from "@opencode-ai/core/plugin/provider/perplexity"
 import { TogetherAIPlugin } from "@opencode-ai/core/plugin/provider/togetherai"
 import { VenicePlugin } from "@opencode-ai/core/plugin/provider/venice"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
-const modelID = ModelV2.ID.make("test-model")
+const modelID = Model.ID.make("test-model")
 const options = { name: "custom-provider", apiKey: "test", baseURL: "https://example.test" }
 const providers = [
   { id: "alibaba", plugin: AlibabaPlugin, package: "@ai-sdk/alibaba", provider: "alibaba.chat" },
@@ -36,14 +36,14 @@ const it = testEffect(PluginTestLayer)
 providers.forEach((item) =>
   it.effect(`${item.id} loads only its exact package`, () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const host = yield* PluginHost.make(plugin)
       yield* item.plugin.effect(host)
-      const model = ModelV2.Info.make({
-        ...ModelV2.Info.default(ProviderV2.ID.make(item.id), modelID),
+      const model = Model.Info.make({
+        ...Model.Info.default(Provider.ID.make(item.id), modelID),
         modelID,
-        package: ProviderV2.aisdk(item.package),
+        package: Provider.aisdk(item.package),
       })
       const matched = yield* aisdk.runSDK({ model, package: item.package, options })
       const ignored = yield* aisdk.runSDK({ model, package: `${item.package}/unsupported`, options })

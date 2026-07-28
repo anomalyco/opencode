@@ -12,7 +12,6 @@ import { SessionGenerate } from "./generate"
 import { SessionHistory } from "./history"
 import { SessionModelHeaders } from "./model-headers"
 import { SessionRunnerModel } from "./runner/model"
-import { ToolRegistry } from "../tool/registry"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
 
@@ -24,7 +23,6 @@ export const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const llm = yield* LLMClient.Service
     const models = yield* SessionRunnerModel.Service
-    const registry = yield* ToolRegistry.Service
     const app = yield* App.Metadata
 
     return SessionGenerate.Service.of({
@@ -36,8 +34,8 @@ export const layer = Layer.effect(
         const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(selection.session.id)
           ? selection.session.id.slice(4)
           : selection.session.id
-        const executableTools = yield* registry.materialize(selection.agent.info.permissions)
-        const toolDefinitions = executableTools.definitions
+        const tools = selection.tools
+        const toolDefinitions = tools.definitions
         const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
         const contextEvent = yield* hooks.trigger("session", "context", {
           sessionID: selection.session.id,
@@ -52,7 +50,10 @@ export const layer = Layer.effect(
             Message.user(input.prompt),
           ],
           tools: Object.fromEntries(
-            toolDefinitions.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
+            toolDefinitions.map((tool) => [
+              tool.name,
+              { description: tool.description, input: { ...tool.inputSchema } },
+            ]),
           ),
         })
         const hookedTools = Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
@@ -86,13 +87,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: SessionGenerate.Service,
   layer,
-  deps: [
-    SessionContext.node,
-    Database.node,
-    PluginHooks.node,
-    SessionRunnerModel.node,
-    ToolRegistry.node,
-    App.node,
-    llmClient,
-  ],
+  deps: [SessionContext.node, Database.node, PluginHooks.node, SessionRunnerModel.node, App.node, llmClient],
 })

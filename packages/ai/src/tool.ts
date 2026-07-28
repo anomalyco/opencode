@@ -1,7 +1,7 @@
 import { Effect, JsonSchema, Schema } from "effect"
+import { Tool } from "@opencode-ai/schema/tool"
 import type {
   ToolCallPart,
-  ToolContent,
   ToolDefinition as ToolDefinitionClass,
   ToolOutput as ToolOutputType,
 } from "./schema"
@@ -31,7 +31,7 @@ export interface ToolModelOutputInput<Parameters, Output> {
 
 export type ToolToModelOutput<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = (
   input: ToolModelOutputInput<Schema.Schema.Type<Parameters>, Success["Encoded"]>,
-) => ReadonlyArray<ToolContent>
+) => ReadonlyArray<Tool.Content>
 
 /**
  * A type-safe LLM tool. Each tool bundles its own description, parameter
@@ -95,7 +95,7 @@ type DynamicToolConfig = {
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute?: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
-  readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<ToolContent>
+  readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
 }
 
@@ -151,7 +151,7 @@ export function make(config: {
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
-  readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<ToolContent>
+  readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
 }): AnyExecutableTool
 export function make(config: {
@@ -159,7 +159,7 @@ export function make(config: {
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
   readonly execute?: undefined
-  readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<ToolContent>
+  readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
 }): AnyTool
 export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
@@ -236,7 +236,7 @@ const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
 }
 
 const project = (
-  toModelOutput: ((input: ToolModelOutputInput<any, any>) => ReadonlyArray<ToolContent>) | undefined,
+  toModelOutput: ((input: ToolModelOutputInput<any, any>) => ReadonlyArray<Tool.Content>) | undefined,
   toStructuredOutput: ((output: unknown) => unknown) | undefined,
   parameters: unknown,
   callID: ToolCallPart["id"],

@@ -21,7 +21,7 @@ export interface Interface {
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Vcs") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
 // Adapter seam: one working-copy implementation per VCS type, selected by the
 // resolved location. Locations without a supported VCS degrade to empty

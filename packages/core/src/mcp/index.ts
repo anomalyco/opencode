@@ -9,7 +9,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Config } from "../config"
 import { ConfigMCP } from "../config/mcp"
 import { Credential } from "../credential"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { Form } from "../form"
 import { Integration } from "../integration"
 import { IntegrationConnection } from "../integration/connection"
@@ -155,7 +155,7 @@ export interface Interface {
   }) => Effect.Effect<ResourceContent | undefined, NotFoundError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/MCP") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
 
 export const Options = Schema.Struct({
   clientInfo: Schema.optional(
@@ -172,7 +172,7 @@ export const layer = (options?: Options) => Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
     const location = yield* Location.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const forms = yield* Form.Service
     const integration = yield* Integration.Service
     const credentials = yield* Credential.Service
@@ -433,9 +433,9 @@ export const layer = (options?: Options) => Layer.effect(
         Effect.map((defs) => {
           entry.prompts = defs.map((def) => toPrompt(name, def))
         }),
-        Effect.andThen(events.publish(Command.Event.Updated, {})),
+        Effect.andThen(bus.publish(Command.Event.Updated, {})),
         Effect.catch(() =>
-          Effect.sync(() => (entry.prompts = [])).pipe(Effect.andThen(events.publish(Command.Event.Updated, {}))),
+          Effect.sync(() => (entry.prompts = [])).pipe(Effect.andThen(bus.publish(Command.Event.Updated, {}))),
         ),
       )
 
@@ -460,10 +460,10 @@ export const layer = (options?: Options) => Layer.effect(
             entry.tools = undefined
             entry.prompts = undefined
             entry.status = { status: "failed", error: "Connection closed" }
-            yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
-            yield* events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-            yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
-            yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
           }),
         ),
       )
@@ -471,12 +471,12 @@ export const layer = (options?: Options) => Layer.effect(
       connection.onToolsChanged(() =>
         live(
           refreshTools(name, entry, connection).pipe(
-            Effect.andThen(events.publish(McpEvent.ToolsChanged, { server: name })),
+            Effect.andThen(bus.publish(McpEvent.ToolsChanged, { server: name })),
           ),
         ),
       )
       connection.onPromptsChanged(() => live(refreshPrompts(name, entry, connection)))
-      connection.onResourcesChanged(() => live(events.publish(McpEvent.ResourcesChanged, { server: name })))
+      connection.onResourcesChanged(() => live(bus.publish(McpEvent.ResourcesChanged, { server: name })))
     }
 
     const serverLog = (server: ServerName, message: MCPClient.LogMessage) => {
@@ -502,7 +502,7 @@ export const layer = (options?: Options) => Layer.effect(
         // Announce the handshake so connect() and credential reconnects don't show a stale
         // disabled/failed status for the duration of the connection attempt.
         entry.status = { status: "pending" }
-        yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+        yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
         const scope = yield* Scope.fork(root)
         entry.scope = scope
         const authProvider = yield* connectProvider(entry)
@@ -530,9 +530,9 @@ export const layer = (options?: Options) => Layer.effect(
           // Announce the new tool set so the tool registry registers it. A server that finishes connecting
           // after the initial registration sweep and emits no list-changed notification would otherwise
           // stay invisible to the model.
-          yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
-          yield* events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+          yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
+          yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
           whenLive(name, entry, result.value.connection)(refreshPrompts(name, entry, result.value.connection))
           return
         }
@@ -544,7 +544,7 @@ export const layer = (options?: Options) => Layer.effect(
             ? { status: "needs_auth" }
             : { status: "failed", error: error instanceof Error ? error.message : String(error) }
         yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
-        yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+        yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
       }).pipe(Effect.ensuring(Deferred.succeed(entry.startup, undefined)))
 
     const stopServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
@@ -555,9 +555,9 @@ export const layer = (options?: Options) => Layer.effect(
       entry.tools = undefined
       entry.prompts = undefined
       yield* Scope.close(scope, Exit.void)
-      yield* events.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
-      yield* events.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-      yield* events.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
+      yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+      yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
+      yield* bus.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
     })
 
     // Disabled servers settle their startup immediately so queries never block on them.
@@ -587,7 +587,7 @@ export const layer = (options?: Options) => Layer.effect(
         }).pipe(locks.withLock(name))
       })
     fork(
-      events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+      bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
         Stream.filter((event) => owned.has(event.data.integrationID)),
         Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
         Effect.ignore,
@@ -632,7 +632,7 @@ export const layer = (options?: Options) => Layer.effect(
             yield* register(name, entry)
             if (config.disabled) {
               entry.status = { status: "disabled" }
-              yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+              yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
               return
             }
             yield* startServer(name, entry)
@@ -657,7 +657,7 @@ export const layer = (options?: Options) => Layer.effect(
           const target = yield* requireServer(name)
           yield* stopServer(name, target.entry)
           target.entry.status = { status: "disabled" }
-          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
         }).pipe(locks.withLock(name))
       }),
       remove: Effect.fn("MCP.remove")(function* (server) {
@@ -670,7 +670,7 @@ export const layer = (options?: Options) => Layer.effect(
           // Credentials are kept: they are keyed by name + url, so re-adding the same server
           // reuses them without forcing re-auth, matching add()'s replacement semantics.
           runtime.delete(name)
-          yield* events.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
         }).pipe(locks.withLock(name))
       }),
       tools: Effect.fn("MCP.tools")(function* () {
@@ -793,7 +793,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Config.node, Location.node, EventV2.node, Form.node, Integration.node, Credential.node],
+    deps: [Config.node, Location.node, Bus.node, Form.node, Integration.node, Credential.node],
   })
 }
 

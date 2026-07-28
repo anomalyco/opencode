@@ -1,11 +1,11 @@
 import { DateTime, Schema } from "effect"
-import { AgentV2 } from "../agent"
+import { Agent } from "../agent"
 import { Location } from "../location"
-import { ModelV2 } from "../model"
-import { ProjectV2 } from "../project"
-import { ProviderV2 } from "../provider"
+import { Model } from "../model"
+import { Project } from "../project"
+import { Provider } from "../provider"
 import { AbsolutePath, RelativePath } from "../schema"
-import { WorkspaceV2 } from "../workspace"
+import { Workspace } from "../workspace"
 import { SessionSchema } from "./schema"
 import { SessionTable } from "./sql"
 import { SessionMessage } from "./message"
@@ -17,7 +17,7 @@ const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
   return SessionSchema.Info.make({
     id: SessionSchema.ID.make(row.id),
-    projectID: ProjectV2.ID.make(row.project_id),
+    projectID: Project.ID.make(row.project_id),
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
     fork: row.fork_session_id
@@ -26,12 +26,12 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
           messageID: row.fork_message_id ? SessionMessage.ID.make(row.fork_message_id) : undefined,
         }
       : undefined,
-    agent: row.agent ? AgentV2.ID.make(row.agent) : undefined,
+    agent: row.agent ? Agent.ID.make(row.agent) : undefined,
     model: row.model
       ? {
-          id: ModelV2.ID.make(row.model.id),
-          providerID: ProviderV2.ID.make(row.model.providerID),
-          variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
+          id: Model.ID.make(row.model.id),
+          providerID: Provider.ID.make(row.model.providerID),
+          variant: Model.VariantID.make(row.model.variant ?? "default"),
         }
       : undefined,
     cost: Money.USD.make(row.cost),
@@ -46,7 +46,7 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
     },
     location: Location.Ref.make({
       directory: AbsolutePath.make(row.directory),
-      workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
+      workspaceID: row.workspace_id ? Workspace.ID.make(row.workspace_id) : undefined,
     }),
     subpath: row.path ? RelativePath.make(row.path) : undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,

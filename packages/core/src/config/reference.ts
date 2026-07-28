@@ -2,14 +2,14 @@ export * as ConfigReference from "./reference"
 
 import { Schema } from "effect"
 
-export class Git extends Schema.Class<Git>("ConfigV2.Reference.Git")({
+export class Git extends Schema.Class<Git>("Config.Reference.Git")({
   repository: Schema.String,
   branch: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
   hidden: Schema.Boolean.pipe(Schema.optional),
 }) {}
 
-export class Local extends Schema.Class<Local>("ConfigV2.Reference.Local")({
+export class Local extends Schema.Class<Local>("Config.Reference.Local")({
   path: Schema.String,
   description: Schema.String.pipe(Schema.optional),
   hidden: Schema.Boolean.pipe(Schema.optional),

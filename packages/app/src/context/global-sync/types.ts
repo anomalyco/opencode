@@ -13,9 +13,9 @@ import type {
   ReferenceInfo,
   Session,
   SessionStatus,
-  FileDiffInfo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
+import type { SessionDiff } from "@/utils/diffs"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
@@ -50,7 +50,7 @@ export type State = {
   }
   session_working(id: string): boolean
   session_diff: {
-    [sessionID: string]: FileDiffInfo[]
+    [sessionID: string]: SessionDiff[]
   }
   permission: {
     [sessionID: string]: PermissionRequest[]

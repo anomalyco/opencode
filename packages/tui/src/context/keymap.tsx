@@ -1,4 +1,4 @@
-import type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/v2/tui/context"
+import type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/tui/context"
 import { InputRenderable, TextareaRenderable, type KeyEvent, type Renderable } from "@opentui/core"
 import { stringifyKeyStroke, type Binding, type CommandContext } from "@opentui/keymap"
 import {
@@ -155,7 +155,7 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
   )
 }
 
-export type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/v2/tui/context"
+export type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/tui/context"
 
 export interface Keymap {
   /** Dispatches a reachable command by ID. */

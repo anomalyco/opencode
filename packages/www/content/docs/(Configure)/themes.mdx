@@ -1,0 +1,127 @@
+---
+title: "Themes"
+description: "Choose a built-in TUI theme or create a custom color scheme."
+---
+
+OpenCode includes built-in light and dark themes and can load custom themes
+from your global configuration or a project directory. The default theme is
+`opencode`.
+
+## Choose a theme
+
+In the full-screen TUI, run:
+
+```text
+/themes
+```
+
+You can also open the picker with `ctrl+x`, then `t`, using the
+default keybindings.
+
+Use `/settings` to change both the theme and its color mode. OpenCode supports
+three modes:
+
+| Mode     | Behavior                                                 |
+| -------- | -------------------------------------------------------- |
+| `system` | Follow the terminal's detected light or dark appearance. |
+| `dark`   | Always use the theme's dark colors.                      |
+| `light`  | Always use the theme's light colors.                     |
+
+Your selection is stored in `~/.config/opencode/cli.json`, or the equivalent
+path under `$XDG_CONFIG_HOME`:
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+<Callout type="note">
+  Theme selection applies to the full-screen TUI. Direct interactive runs use colors derived from the terminal palette
+  and honor only the color mode.
+</Callout>
+
+## Built-in themes
+
+OpenCode currently includes:
+
+|              |                     |                        |
+| ------------ | ------------------- | ---------------------- |
+| `aura`       | `ayu`               | `carbonfox`            |
+| `catppuccin` | `catppuccin-frappe` | `catppuccin-macchiato` |
+| `cobalt2`    | `cursor`            | `dracula`              |
+| `everforest` | `flexoki`           | `github`               |
+| `gruvbox`    | `kanagawa`          | `lucent-orng`          |
+| `material`   | `matrix`            | `mercury`              |
+| `monokai`    | `nightowl`          | `nord`                 |
+| `one-dark`   | `opencode`          | `orng`                 |
+| `osaka-jade` | `palenight`         | `rosepine`             |
+| `solarized`  | `synthwave84`       | `tokyonight`           |
+| `vercel`     | `vesper`            | `zenburn`              |
+
+When OpenCode can read your terminal palette, the picker also includes
+`system`. The `system` theme generates its colors from your terminal's
+foreground, background, and ANSI palette.
+
+## Custom themes
+
+Create a JSON file in either of these locations:
+
+```text
+~/.config/opencode/themes/my-theme.json
+.opencode/themes/my-theme.json
+```
+
+OpenCode checks the global theme directory first, followed by every
+`.opencode/themes` directory from the filesystem root down to the current
+directory. A more local file with the same filename overrides an earlier one.
+The filename becomes the theme name, so `my-theme.json` appears as `my-theme`.
+
+Custom theme files must be strict JSON. Comments and trailing commas are not
+supported.
+
+### Format
+
+V2 themes organize colors into hue scales and semantic tokens. Set `version`
+to `2` and define at least one of `light` or `dark`:
+
+<Callout type="warning">
+  Native V2 custom theme files are not loaded directly by the current beta. Existing custom files use the V1 format and
+  are migrated to these tokens at runtime. This reference tracks the native V2 schema while direct file loading is
+  completed.
+</Callout>
+
+By default, a theme inherits OpenCode's complete theme, so you only need to
+define overrides. Set `mergeMode` to `true` to inherit one mode from the other
+before applying that mode's overrides. Set `standalone` to `true` only when you
+intend to supply a complete independent theme.
+
+Each token accepts:
+
+- A hex color such as `"#5c9cf5"`
+- `"transparent"` to use the terminal default
+- A hue reference such as `"$hue.blue.500"`
+- Another semantic token reference such as `"$text.default"`
+
+Syntax and markdown tokens accept hex colors and hue references. Other
+semantic tokens can reference any semantic token.
+
+<ThemeTokens />
+
+If you add or edit a custom theme while OpenCode is running, restart the TUI to
+reload it.
+
+## Terminal colors
+
+Themes display most accurately in a terminal with truecolor support. Check
+your terminal with:
+
+```bash
+echo $COLORTERM
+```
+
+Most modern terminals report `truecolor` or `24bit`. Without truecolor,
+OpenCode approximates theme colors using the available terminal palette.

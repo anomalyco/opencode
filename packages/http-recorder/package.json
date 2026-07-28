@@ -52,7 +52,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@effect/platform-node-shared": "4.0.0-beta.98"
+    "@effect/platform-node-shared": "4.0.0-beta.101"
   },
   "peerDependencies": {
     "effect": "catalog:"

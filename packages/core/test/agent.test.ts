@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Agent } from "@opencode-ai/core/agent"
+import { Bus } from "@opencode-ai/core/bus"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -17,22 +17,22 @@ const testLocation = location({ directory: AbsolutePath.make("/project") })
 const locationLayer = Layer.succeed(Location.Service, Location.Service.of(testLocation))
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([AgentV2.node, EventV2.node, Location.node]), [
+  AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, Location.node]), [
     [Location.node, locationLayer],
   ]) as unknown as Layer.Layer<unknown, never>,
 )
 
-describe("AgentV2", () => {
+describe("Agent", () => {
   it.effect("publishes an updated event after agent changes", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
-      const events = yield* EventV2.Service
-      const updated = yield* events
-        .subscribe(AgentV2.Event.Updated)
+      const agent = yield* Agent.Service
+      const bus = yield* Bus.Service
+      const updated = yield* bus
+        .subscribe(Agent.Event.Updated)
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
-      yield* agent.transform((editor) => editor.update(AgentV2.ID.make("reviewer"), () => {}))
+      yield* agent.transform((editor) => editor.update(Agent.ID.make("reviewer"), () => {}))
 
       expect(yield* Fiber.join(updated)).toMatchObject([{ location: { directory: testLocation.directory } }])
     }),
@@ -40,17 +40,17 @@ describe("AgentV2", () => {
 
   it.effect("starts without agents", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
+      const agent = yield* Agent.Service
 
       expect(yield* agent.list()).toEqual([])
-      expect(yield* agent.get(AgentV2.ID.make("build"))).toBeUndefined()
+      expect(yield* agent.get(Agent.ID.make("build"))).toBeUndefined()
     }),
   )
 
   it.effect("materializes replayable agent transforms", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
-      const id = AgentV2.ID.make("reviewer")
+      const agent = yield* Agent.Service
+      const id = Agent.ID.make("reviewer")
       yield* agent.transform((editor) =>
         editor.update(id, (info) => {
           info.description = "Reviews code"
@@ -65,8 +65,8 @@ describe("AgentV2", () => {
 
   it.effect("rebuilds state when a transform is replaced", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
-      const id = AgentV2.ID.make("reviewer")
+      const agent = yield* Agent.Service
+      const id = Agent.ID.make("reviewer")
       let description = "Old description"
       let hidden = true
       yield* agent.transform((editor) =>
@@ -87,8 +87,8 @@ describe("AgentV2", () => {
 
   it.effect("removes a transform when its scope closes", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
-      const id = AgentV2.ID.make("scoped")
+      const agent = yield* Agent.Service
+      const id = Agent.ID.make("scoped")
       const scope = yield* Scope.make()
       yield* agent.transform((editor) => editor.update(id, () => {})).pipe(Scope.provide(scope))
       expect(yield* agent.get(id)).toBeDefined()
@@ -100,8 +100,8 @@ describe("AgentV2", () => {
 
   it.effect("applies direct agent updates", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
-      const id = AgentV2.ID.make("build")
+      const agent = yield* Agent.Service
+      const id = Agent.ID.make("build")
 
       yield* agent.transform((editor) =>
         editor.update(id, (info) => {
@@ -116,11 +116,11 @@ describe("AgentV2", () => {
 
   it.effect("creates agents with runtime defaults and supports direct removal", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
-      const id = AgentV2.ID.make("custom")
+      const agent = yield* Agent.Service
+      const id = Agent.ID.make("custom")
 
       yield* agent.transform((editor) => editor.update(id, () => {}))
-      expect(yield* agent.get(id)).toEqual(AgentV2.Info.empty(id))
+      expect(yield* agent.get(id)).toEqual(Agent.Info.empty(id))
 
       yield* agent.transform((editor) => editor.remove(id))
       expect(yield* agent.get(id)).toBeUndefined()
@@ -129,7 +129,7 @@ describe("AgentV2", () => {
 
   it.effect("does not ambiently opt built-in agents into bash", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
+      const agent = yield* Agent.Service
       yield* AgentPlugin.Plugin.effect(
         host({
           agent: agentHost(agent),
@@ -151,7 +151,7 @@ describe("AgentV2", () => {
         "summary",
         "title",
       ])
-      expect((yield* agent.get(AgentV2.defaultID))?.system).toBeUndefined()
+      expect((yield* agent.get(Agent.defaultID))?.system).toBeUndefined()
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
@@ -160,7 +160,7 @@ describe("AgentV2", () => {
 
   it.effect("denies the subagent tool for built-in subagents", () =>
     Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
+      const agent = yield* Agent.Service
       yield* AgentPlugin.Plugin.effect(
         host({
           agent: agentHost(agent),
@@ -174,11 +174,11 @@ describe("AgentV2", () => {
 
       yield* Effect.forEach(["general", "explore"], (id) =>
         Effect.gen(function* () {
-          const info = yield* agent.get(AgentV2.ID.make(id))
+          const info = yield* agent.get(Agent.ID.make(id))
           if (!info) throw new Error(`expected built-in agent: ${id}`)
           expect(info.mode).toBe("subagent")
           expect(info.permissions).toContainEqual({ action: "subagent", resource: "*", effect: "deny" })
-          expect(PermissionV2.evaluate("subagent", "*", info.permissions).effect).toBe("deny")
+          expect(Permission.evaluate("subagent", "*", info.permissions).effect).toBe("deny")
         }),
       )
     }),

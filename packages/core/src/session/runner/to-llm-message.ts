@@ -1,13 +1,6 @@
-import {
-  Message,
-  ToolCallPart,
-  ToolOutput,
-  ToolResultPart,
-  type ContentPart,
-  type ProviderMetadata,
-} from "@opencode-ai/ai"
+import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
 import { Option, Schema } from "effect"
-import type { ModelV2 } from "../../model"
+import type { Model } from "../../model"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
@@ -90,15 +83,15 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
     // TODO: Materialize remote and managed URIs before provider-history lowering.
-    // ToolOutput.toResultValue rejects unresolved URIs rather than treating them as media bytes.
-    const result =
-      tool.executed === true && tool.state.result !== undefined
-        ? tool.state.result
-        : ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content })
+    const content = tool.state.content
+    const single = content.length === 1 ? content[0] : undefined
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result,
+      result:
+        single?.type === "text"
+          ? { type: "text" as const, value: single.text }
+          : { type: "content" as const, value: content },
       providerExecuted: tool.executed,
       providerMetadata,
     })
@@ -107,10 +100,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result:
-        tool.executed === true && tool.state.result !== undefined
-          ? tool.state.result
-          : { error: tool.state.error, content: tool.state.content, structured: tool.state.structured },
+      result: { error: tool.state.error, content: tool.state.content ?? [] },
       resultType: "error",
       providerExecuted: tool.executed,
       providerMetadata,
@@ -118,12 +108,19 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, providerMetadataKey: string) => {
-  const sameModel =
-    String(message.model.providerID) === String(model.providerID) && String(message.model.id) === String(model.id)
+const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
+  const sameProvider = String(message.model.providerID) === String(model.providerID)
+  const sameModel = sameProvider && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
-    if (item.type === "text") return [{ type: "text", text: item.text }]
+    if (item.type === "text")
+      return [
+        {
+          type: "text",
+          text: item.text,
+          providerMetadata: sameProvider ? providerMetadata(providerMetadataKey, item.state) : undefined,
+        },
+      ]
     if (item.type === "reasoning")
       return reuseProviderMetadata
         ? [
@@ -138,19 +135,21 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, provid
           : []
     const reuseToolProviderMetadata =
       reuseProviderMetadata ||
-      (sameModel &&
-        item.executed === true &&
-        (item.state.status === "completed" || (item.state.status === "error" && item.state.result !== undefined)))
+      (sameModel && item.executed === true && (item.state.status === "completed" || item.state.status === "error"))
     const call = toolCall(
       item,
       reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.providerState) : undefined,
     )
     if (item.executed !== true) return [call]
+    // Hosted result payloads are provider-format state, not model state:
+    // replay must survive a model switch within the same provider.
     const result = toolResult(
       item,
       reuseToolProviderMetadata
         ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.providerState)
-        : undefined,
+        : sameProvider && item.executed === true && item.providerResultState !== undefined
+          ? providerMetadata(providerMetadataKey, item.providerResultState)
+          : undefined,
     )
     return result ? [call, result] : [call]
   })
@@ -178,7 +177,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, provid
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -240,9 +239,9 @@ ${message.recent}
   }
 }
 
-/** Translate projected V2 Session history into canonical @opencode-ai/ai context. */
+/** Translate projected Session history into canonical @opencode-ai/ai context. */
 export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
-  model: ModelV2.Ref,
+  model: Model.Ref,
   providerMetadataKey: string = model.providerID,
 ) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))

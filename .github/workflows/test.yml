@@ -99,7 +99,7 @@ jobs:
 
       - name: Check generated documentation
         if: runner.os == 'Linux'
-        working-directory: packages/docs
+        working-directory: packages/www
         run: bun run check:generated
 
   e2e:

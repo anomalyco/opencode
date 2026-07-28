@@ -6,7 +6,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -15,7 +15,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
@@ -49,7 +49,7 @@ const client = Layer.mock(LLMClient.Service)({
       LLMEvent.textDelta({ id: "summary", text: "manual summary" }),
       LLMEvent.stepFinish({
         index: 0,
-        reason: "stop",
+        reason: { normalized: "stop" },
         usage: {
           inputTokens: 15,
           outputTokens: 6,
@@ -60,7 +60,7 @@ const client = Layer.mock(LLMClient.Service)({
         },
       }),
       LLMEvent.finish({
-        reason: "stop",
+        reason: { normalized: "stop" },
       }),
     )
   },
@@ -78,7 +78,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionCompaction.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, SessionCompaction.node]),
     [
       [llmClient, client],
       [Config.node, config],
@@ -136,10 +136,10 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     requests = []
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const store = yield* SessionStore.Service
-    const sessionID = SessionV2.ID.make("ses_manual_compaction")
-    const parentID = SessionV2.ID.make("ses_manual_compaction_parent")
+    const sessionID = Session.ID.make("ses_manual_compaction")
+    const parentID = Session.ID.make("ses_manual_compaction_parent")
     const userMessage = {
       id: SessionMessage.ID.create(),
       type: "user" as const,
@@ -174,7 +174,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         ),
       )
 
-    const delta = yield* events
+    const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
       .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
     yield* Effect.yieldNow
@@ -215,9 +215,9 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         .all()
         .pipe(Effect.orDie),
     ).toEqual([
-      { type: EventV2.versionedType(SessionEvent.Compaction.Started.type, 1) },
-      { type: EventV2.versionedType(SessionEvent.UsageRecorded.type, 1) },
-      { type: EventV2.versionedType(SessionEvent.Compaction.Ended.type, 1) },
+      { type: Bus.versionedType(SessionEvent.Compaction.Started.type, 1) },
+      { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
+      { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
     ])
   }),
 )

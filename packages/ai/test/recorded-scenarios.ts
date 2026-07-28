@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import {
   LLM,
   LLMEvent,
+  LLMRequest,
   LLMResponse,
   Message,
   ToolRuntime,
@@ -11,7 +12,6 @@ import {
   toDefinitions,
   type ContentPart,
   type FinishReason,
-  type LLMRequest,
   type Model,
 } from "../src"
 import { LLMClient } from "../src/route"
@@ -91,7 +91,7 @@ const restroomImage = () =>
 export const runWeatherToolLoop = (request: LLMRequest) =>
   Effect.gen(function* () {
     const tools = { [weatherToolName]: weatherRuntimeTool }
-    let next = LLM.updateRequest(request, { tools: toDefinitions(tools) })
+    let next = LLMRequest.update(request, { tools: toDefinitions(tools) })
     const events: LLMEvent[] = []
 
     for (let step = 0; step < 10; step++) {
@@ -108,7 +108,7 @@ export const runWeatherToolLoop = (request: LLMRequest) =>
         ToolRuntime.dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
       )
       events.push(...dispatched.flatMap(([, result]) => result.events))
-      next = LLM.updateRequest(next, {
+      next = LLMRequest.update(next, {
         messages: [
           ...next.messages,
           Message.assistant(assistantContent(response.events)),
@@ -123,10 +123,8 @@ export const runWeatherToolLoop = (request: LLMRequest) =>
 const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
   events.reduce(LLMResponse.reduce, LLMResponse.empty()).message.content
 
-export const expectFinish = (
-  events: ReadonlyArray<LLMEvent>,
-  reason: Extract<LLMEvent, { readonly type: "finish" }>["reason"],
-) => expect(events.at(-1)).toMatchObject({ type: "finish", reason })
+export const expectFinish = (events: ReadonlyArray<LLMEvent>, reason: FinishReason) =>
+  expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
 
 export const expectWeatherToolCall = (response: LLMResponse) =>
   expect(response.toolCalls).toMatchObject([
@@ -136,10 +134,10 @@ export const expectWeatherToolCall = (response: LLMResponse) =>
 export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
   const finishes = events.filter(LLMEvent.is.finish)
   expect(finishes).toHaveLength(1)
-  expect(finishes[0]?.reason).toBe("stop")
+  expect(finishes[0]?.reason.normalized).toBe("stop")
 
   const stepFinishes = events.filter(LLMEvent.is.stepFinish)
-  expect(stepFinishes.map((event) => event.reason)).toEqual(["tool-calls", "stop"])
+  expect(stepFinishes.map((event) => event.reason.normalized)).toEqual(["tool-calls", "stop"])
 
   const toolCalls = events.filter(LLMEvent.is.toolCall)
   expect(toolCalls).toHaveLength(1)
@@ -503,7 +501,7 @@ export const eventSummary = (events: ReadonlyArray<LLMEvent>) => {
       continue
     }
     if (event.type === "finish") {
-      summary.push({ type: "finish", reason: event.reason, usage: usageSummary(event.usage) })
+      summary.push({ type: "finish", reason: event.reason.normalized, usage: usageSummary(event.usage) })
     }
   }
   return summary.map((item) => Object.fromEntries(Object.entries(item).filter((entry) => entry[1] !== undefined)))

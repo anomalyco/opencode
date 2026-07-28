@@ -1,18 +1,27 @@
 ---
 title: "SDK"
-description: "Embed an OpenCode host in an Effect application."
+description: "Embed OpenCode directly in your application."
 ---
 
-`@opencode-ai/sdk-next` is the Effect-native SDK for applications that need to
-host OpenCode in-process. Unlike the [network client](/docs/build/client), it assembles the
-OpenCode server and routes API calls through its HTTP router in memory. It opens
-no HTTP listener and adds no network hop between the client and server.
+We're working on a general-purpose SDK for embedding OpenCode directly inside
+your application. The regular SDK is coming soon.
 
-<Warning>
+An Effect-native version is available now for applications built with Effect.
+Its current documentation is below. For other applications, run OpenCode as a
+server and use the [TypeScript client](/build/client) in the meantime.
+
+## Effect
+
+`@opencode-ai/sdk-next` hosts OpenCode in-process. Unlike the
+[network client](/build/client), it assembles the OpenCode server and routes API
+calls through its HTTP router in memory. It opens no HTTP listener and adds no
+network hop between the client and server.
+
+<Callout type="warning">
   The V2 SDK is beta and currently private to the OpenCode workspace. It is not
   published for external installation yet, and its package name and API may
   change before release.
-</Warning>
+</Callout>
 
 ## Create a host
 
@@ -72,4 +81,4 @@ const active = await Effect.runPromise(
 Call `opencode.plugin(...)` to register an embedded V2 plugin. Embedded plugins
 use the same discovery and location-scoped activation path as configured
 plugins. The SDK also exports `Tool` for plugin-defined tools. See the
-[Plugins guide](/docs/build/plugins) for the plugin shape and available hooks.
+[Plugins guide](/build/plugins) for the plugin shape and available hooks.

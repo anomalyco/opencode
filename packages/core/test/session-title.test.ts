@@ -1,12 +1,12 @@
 import { expect } from "bun:test"
 import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -14,7 +14,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTitle } from "@opencode-ai/core/session/title"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
@@ -47,7 +47,7 @@ const client = Layer.mock(LLMClient.Service)({
       LLMEvent.textDelta({ id: "title", text: "Generated Title\n" }),
       LLMEvent.stepFinish({
         index: 0,
-        reason: "stop",
+        reason: { normalized: "stop" },
         usage: {
           inputTokens: 15,
           outputTokens: 6,
@@ -58,7 +58,7 @@ const client = Layer.mock(LLMClient.Service)({
         },
       }),
       LLMEvent.finish({
-        reason: "stop",
+        reason: { normalized: "stop" },
       }),
     )
   },
@@ -77,10 +77,10 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
-      EventV2.node,
+      Bus.node,
       SessionProjector.node,
       SessionStore.node,
-      AgentV2.node,
+      Agent.node,
       SessionTitle.node,
     ]),
     [
@@ -90,7 +90,7 @@ const it = testEffect(
   ),
 )
 
-const insertSession = (id: SessionV2.ID) =>
+const insertSession = (id: Session.ID) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -114,16 +114,16 @@ const insertSession = (id: SessionV2.ID) =>
       .pipe(Effect.orDie)
   })
 
-const prompt = (sessionID: SessionV2.ID, text: string) =>
+const prompt = (sessionID: Session.ID, text: string) =>
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const messageID = SessionMessage.ID.create()
-    yield* events.publish(SessionEvent.InputAdmitted, {
+    yield* bus.publish(SessionEvent.InputAdmitted, {
       sessionID,
       inputID: messageID,
       input: { type: "user", data: { text }, delivery: "steer" },
     })
-    yield* events.publish(SessionEvent.InputPromoted, {
+    yield* bus.publish(SessionEvent.InputPromoted, {
       sessionID,
       inputID: messageID,
     })
@@ -132,15 +132,15 @@ const prompt = (sessionID: SessionV2.ID, text: string) =>
 it.effect("generates a title from the sole user message and renames the session", () =>
   Effect.gen(function* () {
     requests = []
-    const agentService = yield* AgentV2.Service
+    const agentService = yield* Agent.Service
     yield* agentService.transform((editor) => {
-      editor.update(AgentV2.ID.make("title"), (agent) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
         agent.mode = "primary"
         agent.hidden = true
         agent.system = "You are a title generator."
       })
     })
-    const sessionID = SessionV2.ID.make("ses_title_generate")
+    const sessionID = Session.ID.make("ses_title_generate")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Help me debug the failing build")
 
@@ -171,15 +171,15 @@ it.effect("generates a title from the sole user message and renames the session"
 it.effect("does not generate once a second user message exists", () =>
   Effect.gen(function* () {
     requests = []
-    const agentService = yield* AgentV2.Service
+    const agentService = yield* Agent.Service
     yield* agentService.transform((editor) => {
-      editor.update(AgentV2.ID.make("title"), (agent) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
         agent.mode = "primary"
         agent.hidden = true
         agent.system = "You are a title generator."
       })
     })
-    const sessionID = SessionV2.ID.make("ses_title_second_message")
+    const sessionID = Session.ID.make("ses_title_second_message")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "First message")
     yield* prompt(sessionID, "Second message")
@@ -200,15 +200,15 @@ it.effect("does not generate once a second user message exists", () =>
 it.effect("does not generate for a child session", () =>
   Effect.gen(function* () {
     requests = []
-    const agentService = yield* AgentV2.Service
+    const agentService = yield* Agent.Service
     yield* agentService.transform((editor) => {
-      editor.update(AgentV2.ID.make("title"), (agent) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
         agent.mode = "primary"
         agent.hidden = true
         agent.system = "You are a title generator."
       })
     })
-    const sessionID = SessionV2.ID.make("ses_title_child")
+    const sessionID = Session.ID.make("ses_title_child")
     const { db } = yield* Database.Service
     yield* db
       .insert(ProjectTable)
@@ -221,7 +221,7 @@ it.effect("does not generate for a child session", () =>
       .values({
         id: sessionID,
         project_id: Project.ID.global,
-        parent_id: SessionV2.ID.make("ses_title_parent"),
+        parent_id: Session.ID.make("ses_title_parent"),
         slug: sessionID,
         directory: "/project",
         title: "Child session - fake",
@@ -246,7 +246,7 @@ it.effect("does not generate for a child session", () =>
 it.effect("does not generate when the title agent is removed", () =>
   Effect.gen(function* () {
     requests = []
-    const sessionID = SessionV2.ID.make("ses_title_no_agent")
+    const sessionID = Session.ID.make("ses_title_no_agent")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Help me debug the failing build")
 

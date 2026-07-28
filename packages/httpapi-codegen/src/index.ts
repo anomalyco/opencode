@@ -35,6 +35,19 @@ export type Contract = {
   readonly groups: ReadonlyArray<Group>
 }
 
+export type EffectTypeReference = {
+  readonly schema: Schema.Top
+  readonly name: string
+  readonly import: string
+}
+
+export type EffectOutputType = {
+  readonly name: string
+  readonly import: string
+}
+
+type ResolvedEffectTypeReference = Omit<EffectTypeReference, "schema"> & { readonly ast: SchemaAST.AST }
+
 export class GenerationError extends Schema.TaggedErrorClass<GenerationError>()("GenerationError", {
   reason: Schema.String,
 }) {
@@ -280,9 +293,13 @@ export function emitEffect(contract: Contract): Output {
 export function emitEffectImported(
   contract: Contract,
   options:
-    | { readonly module: string; readonly api: string }
-    | { readonly module: string; readonly group: string }
-    | { readonly module: string; readonly endpoints: Readonly<Record<string, string>> },
+    | { readonly module: string; readonly api: string; readonly shapeModule?: string }
+    | { readonly module: string; readonly group: string; readonly shapeModule?: string }
+    | {
+        readonly module: string
+        readonly endpoints: Readonly<Record<string, string>>
+        readonly shapeModule?: string
+      },
 ): Output {
   return {
     operations: operations(contract.groups),
@@ -292,11 +309,19 @@ export function emitEffectImported(
 
 export function emitEffectShape(
   contract: Contract,
-  options: { readonly module: string; readonly api: string },
+  options?: {
+    readonly typeReferences?: ReadonlyArray<EffectTypeReference>
+    readonly outputTypes?: Readonly<Record<string, EffectOutputType>>
+  },
 ): Output {
   return {
     operations: operations(contract.groups),
-    files: [{ path: "api.ts", content: renderEffectShape(contract.groups, options) }],
+    files: [
+      {
+        path: "api.ts",
+        content: renderEffectShape(contract.groups, options?.typeReferences ?? [], options?.outputTypes),
+      },
+    ],
   }
 }
 
@@ -332,28 +357,31 @@ export function emitPromise(
   }
 }
 
-function renderEffectShape(groups: ReadonlyArray<Group>, options: { readonly module: string; readonly api: string }) {
+function renderEffectShape(
+  groups: ReadonlyArray<Group>,
+  typeReferences: ReadonlyArray<EffectTypeReference>,
+  outputTypes?: Readonly<Record<string, EffectOutputType>>,
+) {
+  const references = effectTypeReferences(typeReferences)
+  const imports = new Set<string>()
   const endpointTypes = groups.map((group, groupIndex) => {
-    const rawGroup = group.endpoints[0]?.topLevel ? "RawClient" : `RawClient[${JSON.stringify(group.sourceIdentifier)}]`
     const endpoints = group.endpoints.map((endpoint, endpointIndex) => {
       const prefix = `Endpoint${groupIndex}_${endpointIndex}`
-      const request =
-        endpoint.operation.inputMode === "none"
-          ? ""
-          : `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(endpoint.endpoint.identifier)}]>[0]`
       const input = endpoint.input
-        .map(
-          (field) =>
-            `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${prefix}Request[${JSON.stringify(field.source)}]${isOpaquePayload(endpoint) && field.source === "payload" ? "" : `[${JSON.stringify(field.name)}]`}`,
-        )
+        .map((field) => {
+          const schema = effectInputSchema(endpoint, field)
+          if (schema === undefined) {
+            throw new GenerationError({ reason: `Missing Effect input schema: ${endpoint.group}.${endpoint.endpoint.identifier}.${field.name}` })
+          }
+          return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${effectType(schema, references, imports)}`
+        })
         .join("; ")
       const inputType = endpoint.operation.inputMode === "none" ? "" : `export type ${prefix}Input = { ${input} }`
-      const rawOutput = `EffectValue<ReturnType<${rawGroup}[${JSON.stringify(endpoint.endpoint.identifier)}]>>`
-      const outputType = isStreamSchema(endpoint.successes[0])
-        ? `export type ${prefix}Output = StreamValue<${rawOutput}>`
-        : `export type ${prefix}Output = ${endpoint.unwrapData ? `(${rawOutput})["data"]` : rawOutput}`
+      const output = effectOutputSchema(endpoint)
+      const override = outputTypes?.[clientOperationKey(group, endpoint)]
+      if (override !== undefined) imports.add(override.import)
+      const outputType = `export type ${prefix}Output = ${override?.name ?? (output === undefined ? "void" : effectType(output, references, imports))}`
       return [
-        request,
         endpoint.operation.inputMode === "none" ? "" : inputType,
         outputType,
         `export type ${groupShapeTypeName(group, endpoint)}<E = never> = (${endpoint.operation.inputMode === "none" ? "" : `input${endpoint.operation.inputMode === "optional" ? "?" : ""}: ${prefix}Input`}) => ${endpoint.operation.success === "stream" ? `Stream.Stream<${prefix}Output, E>` : `Effect.Effect<${prefix}Output, E>`}`,
@@ -383,12 +411,7 @@ function renderEffectShape(groups: ReadonlyArray<Group>, options: { readonly mod
   )
   return `// Generated by @opencode-ai/httpapi-codegen. Do not edit.
 import type { Effect, Stream } from "effect"
-import type { HttpApiClient } from "effect/unstable/httpapi"
-import type { ${options.api} } from ${JSON.stringify(options.module)}
-
-type RawClient = HttpApiClient.ForApi<typeof ${options.api}>
-type EffectValue<A> = A extends Effect.Effect<infer Success, any, any> ? Success : never
-type StreamValue<A> = A extends Stream.Stream<infer Success, any, any> ? Success : never
+${[...imports].join("\n")}
 
 ${endpointTypes.join("\n\n")}
 
@@ -396,6 +419,112 @@ export interface AppApi<E = never> {
 ${clientFields.join("\n")}
 }
 `
+}
+
+function effectTypeReferences(input: ReadonlyArray<EffectTypeReference>) {
+  const names = new Map<string, ResolvedEffectTypeReference>()
+  const asts = new Map<SchemaAST.AST, ResolvedEffectTypeReference>()
+  const brands = new Map<string, ResolvedEffectTypeReference>()
+  for (const reference of input) {
+    const value = { name: reference.name, import: reference.import, ast: reference.schema.ast }
+    const document = SchemaRepresentation.toCodeDocument(
+      SchemaRepresentation.fromASTs([Schema.toType(reference.schema).ast]),
+    )
+    const name = document.codes[0]?.Type
+    const type =
+      name === undefined
+        ? undefined
+        : (document.references.nonRecursives.find((item) => item.$ref === name)?.code.Type ?? name)
+    if (type?.includes("Brand.Brand<") && !brands.has(type)) brands.set(type, value)
+    if (SchemaAST.resolveIdentifier(reference.schema.ast) !== undefined || type?.includes("Brand.Brand<")) {
+      asts.set(reference.schema.ast, value)
+      asts.set(Schema.toType(reference.schema).ast, value)
+    }
+    if (name === undefined || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) continue
+    const previous = names.get(name)
+    if (previous !== undefined) {
+      if (previous.ast !== reference.schema.ast) {
+        throw new GenerationError({ reason: `Conflicting Effect type reference: ${name}` })
+      }
+      continue
+    }
+    names.set(name, value)
+  }
+  return { names, asts, brands }
+}
+
+function effectType(
+  schema: Schema.Top,
+  references: ReturnType<typeof effectTypeReferences>,
+  imports: Set<string>,
+) {
+  const projected = Schema.toType(schema)
+  const direct = references.asts.get(schema.ast) ?? references.asts.get(projected.ast)
+  if (direct !== undefined) {
+    imports.add(direct.import)
+    return direct.name
+  }
+  const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.fromASTs([projected.ast]))
+  const source = new Map(document.references.nonRecursives.map((reference) => [reference.$ref, reference.code.Type]))
+  const expand = (type: string, seen = new Set<string>()): string => {
+    for (const [name, value] of source) {
+      const pattern = new RegExp(
+        `(?<![A-Za-z0-9_$.'\"])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'\"])`,
+        "g",
+      )
+      if (!pattern.test(type)) continue
+      const reference = references.names.get(name)
+      if (reference !== undefined) {
+        imports.add(reference.import)
+        type = type.replace(pattern, reference.name)
+        continue
+      }
+      if (seen.has(name)) continue
+      type = type.replace(pattern, `(${expand(value, new Set([...seen, name]))})`)
+    }
+    return type
+  }
+  let type = expand(document.codes[0].Type)
+  for (const [brand, reference] of references.brands) {
+    if (!type.includes(brand)) continue
+    imports.add(reference.import)
+    type = type.replaceAll(brand, reference.name)
+  }
+  if (type.includes("Brand.Brand<")) imports.add('import type { Brand } from "effect"')
+  if (type.includes("DateTime.")) imports.add('import type { DateTime } from "effect"')
+  if (type.includes("Schema.")) imports.add('import type { Schema } from "effect"')
+  return type
+}
+
+function effectInputSchema(endpoint: Endpoint, field: InputField): Schema.Top | undefined {
+  const schema =
+    field.source === "params"
+      ? endpoint.params
+      : field.source === "query"
+        ? endpoint.query
+        : field.source === "headers"
+          ? endpoint.headers
+          : endpoint.payloads[0]
+  if (schema === undefined) return undefined
+  if (isOpaquePayload(endpoint) && field.source === "payload") return schema
+  const ast = Schema.toType(schema).ast
+  if (!SchemaAST.isObjects(ast)) return undefined
+  const property = ast.propertySignatures.find((property) => property.name === field.name)
+  return property === undefined ? undefined : Schema.make<Schema.Top>(property.type)
+}
+
+function effectOutputSchema(endpoint: Endpoint): Schema.Top | undefined {
+  const schema = endpoint.successes[0]
+  if (HttpApiSchema.isNoContent(schema.ast)) return undefined
+  if (isStreamSchema(schema)) {
+    if (schema._tag === "StreamUint8Array") return Schema.Uint8Array
+    return schema.sseMode === "data" ? streamDataSchema(schema) : Schema.make<Schema.Top>(schema.events.ast)
+  }
+  if (!endpoint.unwrapData) return schema
+  const ast = Schema.toType(schema).ast
+  if (!SchemaAST.isObjects(ast)) return undefined
+  const data = ast.propertySignatures.find((property) => property.name === "data")
+  return data === undefined ? undefined : Schema.make<Schema.Top>(data.type)
 }
 
 function groupShapeName(group: Group) {
@@ -474,9 +603,13 @@ function renderEffectFiles(groups: ReadonlyArray<Group>): Output["files"] {
 function renderImportedEffectFiles(
   groups: ReadonlyArray<Group>,
   options:
-    | { readonly module: string; readonly api: string }
-    | { readonly module: string; readonly group: string }
-    | { readonly module: string; readonly endpoints: Readonly<Record<string, string>> },
+    | { readonly module: string; readonly api: string; readonly shapeModule?: string }
+    | { readonly module: string; readonly group: string; readonly shapeModule?: string }
+    | {
+        readonly module: string
+        readonly endpoints: Readonly<Record<string, string>>
+        readonly shapeModule?: string
+      },
 ): Output["files"] {
   const adapters = groups.map((group, groupIndex) => {
     const rawGroup = group.endpoints[0]?.topLevel ? "RawClient" : `RawClient[${JSON.stringify(group.sourceIdentifier)}]`
@@ -514,7 +647,21 @@ function renderImportedEffectFiles(
       // produces one object containing a union value. The shapes are equivalent but TypeScript cannot correlate them.
       const rawCall = `raw[${JSON.stringify(item.endpoint.identifier)}]({ ${request} }${isOpaquePayload(item) ? ` as ${prefix}Request` : ""})`
       const mapped = `${rawCall}.pipe(Effect.mapError(mapClientError)${item.unwrapData ? ", Effect.map((value) => value.data)" : ""})`
-      return `${item.operation.inputMode === "none" ? "" : `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\ntype ${prefix}Input = { ${input} }\n`}const ${prefix} = (raw: ${rawGroup}) => (${argument}) => ${item.operation.success === "stream" ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(mapClientError), Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError)))))` : mapped}`
+      const result =
+        item.operation.success === "stream"
+          ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(mapClientError), Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError)))))`
+          : mapped
+      const output =
+        options.shapeModule === undefined
+          ? result
+          : `${item.operation.success === "stream" ? "preserveStream" : "preserveEffect"}<${prefix}Output>()(${result})`
+      const declarations =
+        options.shapeModule === undefined && item.operation.inputMode !== "none"
+          ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\ntype ${prefix}Input = { ${input} }\n`
+          : isOpaquePayload(item)
+            ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\n`
+            : ""
+      return `${declarations}const ${prefix} = (raw: ${rawGroup}) => (${argument}) => ${output}`
     })
     const fields = renderClientTree(
       group.endpoints,
@@ -542,7 +689,21 @@ function renderImportedEffectFiles(
       ? `import { ${api} } from ${JSON.stringify(options.module)}`
       : `import { HttpApi, HttpApiClient${"endpoints" in options ? ", HttpApiGroup" : ""} } from "effect/unstable/httpapi"\nimport { ${projection.imports.join(", ")} } from ${JSON.stringify(options.module)}`
   const httpApiImport = projection === undefined ? 'import { HttpApiClient } from "effect/unstable/httpapi"\n' : ""
-  const client = `// Generated by @opencode-ai/httpapi-codegen. Do not edit.\nimport { Effect${usesStream ? ", Stream" : ""}, Schema } from "effect"\nimport { Sse } from "effect/unstable/encoding"\nimport { HttpClientError } from "effect/unstable/http"\n${httpApiImport}${imports}\nimport { ClientError } from "./client-error"\n\n${projection?.source ?? ""}type RawClient = HttpApiClient.ForApi<typeof ${api}>\n\nconst mapClientError = <E>(error: E) => HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error) ? new ClientError({ cause: error }) : error\n\n${adapters.join("\n\n")}\n\nconst adaptClient = (raw: RawClient) => ({ ${fields.join(", ")} })\n\nexport const make = (options?: { readonly baseUrl?: URL | string }) => HttpApiClient.make(${api}, options).pipe(Effect.map(adaptClient))\n`
+  const shapeTypes = groups.flatMap((group, groupIndex) =>
+    group.endpoints.flatMap((endpoint, endpointIndex) => [
+      ...(endpoint.operation.inputMode === "none" ? [] : [`Endpoint${groupIndex}_${endpointIndex}Input`]),
+      `Endpoint${groupIndex}_${endpointIndex}Output`,
+    ]),
+  )
+  const shapeImport =
+    options.shapeModule === undefined
+      ? ""
+      : `import type { ${shapeTypes.join(", ")} } from ${JSON.stringify(options.shapeModule)}\n`
+  const preserve =
+    options.shapeModule === undefined
+      ? ""
+      : `const preserveEffect = <A>() => <E, R>(effect: Effect.Effect<A, E, R>) => effect\n${usesStream ? "const preserveStream = <A>() => <E, R>(stream: Stream.Stream<A, E, R>) => stream\n" : ""}\n`
+  const client = `// Generated by @opencode-ai/httpapi-codegen. Do not edit.\nimport { Effect${usesStream ? ", Stream" : ""}, Schema } from "effect"\nimport { Sse } from "effect/unstable/encoding"\nimport { HttpClientError } from "effect/unstable/http"\n${httpApiImport}${imports}\n${shapeImport}import { ClientError } from "./client-error"\n\n${projection?.source ?? ""}type RawClient = HttpApiClient.ForApi<typeof ${api}>\n\nconst mapClientError = <E>(error: E) => HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error) ? new ClientError({ cause: error }) : error\n\n${preserve}${adapters.join("\n\n")}\n\nconst adaptClient = (raw: RawClient) => ({ ${fields.join(", ")} })\n\nexport const make = (options?: { readonly baseUrl?: URL | string }) => HttpApiClient.make(${api}, options).pipe(Effect.map(adaptClient))\n`
   return [
     {
       path: "client-error.ts",

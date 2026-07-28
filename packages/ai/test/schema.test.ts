@@ -48,8 +48,12 @@ describe("llm schema", () => {
   })
 
   test("finish constructors accept usage input", () => {
-    expect(LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 1 } }).usage).toBeInstanceOf(Usage)
-    expect(LLMEvent.finish({ reason: "stop", usage: { outputTokens: 2 } }).usage).toBeInstanceOf(Usage)
+    expect(
+      LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" }, usage: { inputTokens: 1 } }).usage,
+    ).toBeInstanceOf(Usage)
+    expect(LLMEvent.finish({ reason: { normalized: "stop" }, usage: { outputTokens: 2 } }).usage).toBeInstanceOf(
+      Usage,
+    )
   })
 
   test("content part tagged union exposes guards", () => {

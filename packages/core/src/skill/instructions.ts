@@ -2,13 +2,13 @@ export * as SkillInstructions from "./instructions"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { AgentV2 } from "../agent"
-import { SkillV2 } from "../skill"
+import { Agent } from "../agent"
+import { Skill } from "../skill"
 import { Instructions } from "../instructions/index"
 
 const Summary = Schema.Struct({
-  id: SkillV2.ID,
-  name: SkillV2.Name,
+  id: Skill.ID,
+  name: Skill.Name,
   description: Schema.String,
 })
 type Summary = typeof Summary.Type
@@ -57,21 +57,21 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
 }
 
 export interface Interface {
-  readonly load: (agent: AgentV2.Selection) => Effect.Effect<Instructions.Instructions>
+  readonly load: (agent: Agent.Selection) => Effect.Effect<Instructions.Instructions>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillInstructions") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SkillInstructions") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const skills = yield* SkillV2.Service
+    const skills = yield* Skill.Service
 
     return Service.of({
       load: Effect.fn("SkillInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
-        const permitted = SkillV2.available(yield* skills.list(), agent)
+        const permitted = Skill.available(yield* skills.list(), agent)
         const available = permitted
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
@@ -94,4 +94,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [SkillV2.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node] })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LegacyEvent } from "../src/legacy-event.js"
+import { LegacyEventV1 } from "../src/legacy-event.js"
 import { PermissionV1 } from "../src/permission-v1.js"
 import { QuestionV1 } from "../src/question-v1.js"
 import { Project } from "../src/project.js"
@@ -36,7 +36,7 @@ describe("legacy public event schemas", () => {
       QuestionV1.Event.Replied.type,
       QuestionV1.Event.Rejected.type,
       Project.Event.Updated.type,
-      LegacyEvent.CommandExecuted.type,
+      LegacyEventV1.CommandExecuted.type,
     ]).toEqual([
       "message.part.delta",
       "session.diff",

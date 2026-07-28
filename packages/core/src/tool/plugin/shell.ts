@@ -1,0 +1,295 @@
+export * as ShellTool from "./shell"
+
+import path from "path"
+import { ToolFailure } from "@opencode-ai/ai"
+import type { Content } from "@opencode-ai/schema/tool"
+import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import { Deferred, Effect, Schema, Scope } from "effect"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { LocationMutation } from "../../location-mutation"
+import { Permission } from "../../permission"
+import { PluginRuntime } from "../../plugin/runtime"
+import { NonNegativeInt } from "../../schema"
+import { SessionSchema } from "../../session/schema"
+import { Shell } from "../../shell"
+
+export const name = "shell"
+export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
+export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
+export const MAX_CAPTURE_BYTES = 1024 * 1024
+
+const BACKGROUND_STARTED = "The command was moved to the background."
+const BACKGROUND_INSTRUCTION =
+  "You will be notified automatically when the command finishes. DO NOT sleep, poll, or proactively check on its progress."
+
+export const Input = Schema.Struct({
+  command: Schema.String.annotate({ description: "Shell command string to execute" }),
+  workdir: Schema.optionalKey(Schema.String).annotate({
+    description: "Working directory. Defaults to the active Location; relative paths resolve from that Location.",
+  }),
+  timeout: Schema.optionalKey(NonNegativeInt.check(Schema.isLessThanOrEqualTo(MAX_TIMEOUT_MS)))
+    .annotate({
+      description: `Optional timeout in milliseconds. Zero means unlimited. Foreground commands default to ${DEFAULT_TIMEOUT_MS}; background commands default to unlimited. May not exceed ${MAX_TIMEOUT_MS}.`,
+    }),
+  background: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Run the command in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
+  }),
+})
+
+const StructuredOutput = Schema.Struct({
+  exit: Schema.optionalKey(Schema.Number),
+  shellID: Schema.optionalKey(Schema.String),
+  truncated: Schema.Boolean,
+  timeout: Schema.optionalKey(Schema.Boolean),
+})
+
+const Output = Schema.Struct({
+  ...StructuredOutput.fields,
+  output: Schema.String,
+  status: Schema.optionalKey(Schema.Literals(["completed", "running"])),
+  warnings: Schema.optionalKey(Schema.Array(Schema.String)),
+})
+
+type Output = typeof Output.Type
+
+const modelOutput = (output: Output): string | undefined => {
+  const warnings = output.warnings?.length
+    ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
+    : ""
+  if (output.status === "running") return `${warnings.trimStart()}${warnings ? "\n\n" : ""}${BACKGROUND_INSTRUCTION}`
+  if (output.timeout) return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command timed out before completion.`
+  return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command exited with code ${output.exit}.`
+}
+
+/**
+ * Minimal core shell boundary. Keep parity debt visible without pulling the
+ * legacy shell runtime into core.
+ */
+// TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
+// TODO: Port BashArity reusable command-prefix approvals.
+// TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
+// TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
+// TODO: Add plugin shell.env environment augmentation once plugin hooks exist.
+// TODO: Persist job status and define restart recovery before exposing remote observation.
+// TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
+// TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
+// TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
+// TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
+
+const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
+const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
+const externalCommandDirectories = Effect.fn("ShellTool.externalCommandDirectories")(function* (
+  fs: FSUtil.Interface,
+  command: string,
+  cwd: string,
+) {
+  const directories = new Set<string>()
+  for (const token of shellTokens(command)) {
+    const value = unquote(token).replace(/[;,|&]+$/, "")
+    if (!path.isAbsolute(value)) continue
+    const resolved = yield* fs.resolve(value)
+    if (FSUtil.contains(cwd, resolved)) continue
+    directories.add(yield* fs.resolve(path.dirname(resolved)))
+  }
+  return [...directories]
+})
+
+export const Plugin = {
+  id: "opencode.tool.shell",
+  effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
+    const runtime = yield* PluginRuntime.Service
+    const scope = yield* Scope.Scope
+    const fsUtil = yield* FSUtil.Service
+    const mutation = yield* LocationMutation.Service
+    const shell = yield* Shell.Service
+    const permission = yield* Permission.Service
+
+    const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
+      sessionID: SessionSchema.ID,
+      callID: string,
+      command: string,
+    ) {
+      yield* runtime.job.wait({ id: callID }).pipe(
+        Effect.flatMap((result) => {
+          const state =
+            result.info?.status === "completed"
+              ? "completed"
+              : result.info?.status === "error"
+                ? "error"
+                : result.info?.status === "cancelled"
+                  ? "cancelled"
+                  : undefined
+          if (state === undefined) return Effect.void
+          const text =
+            state === "completed"
+              ? (result.info!.output ?? "")
+              : state === "error"
+                ? (result.info!.error ?? "Command failed")
+                : "Command cancelled"
+          return runtime.session.synthetic({
+            sessionID,
+            text: `<shell id="${callID}" state="${state}" command="${command}">\n${text}\n</shell>`,
+            description: command,
+            metadata: { source: "shell", state },
+          })
+        }),
+        Effect.forkIn(scope, { startImmediately: true }),
+      )
+    })
+
+    yield* ctx.tool
+      .transform((draft) =>
+        draft.add(
+          ({
+            name,
+            options: { codemode: false },
+            description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. An optional timeout may be provided in milliseconds (zero: unlimited; foreground default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Background commands default to unlimited. Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Background mode (background=true) launches the command asynchronously and returns immediately; you are notified when it finishes.`,
+            input: Input,
+            output: Output,
+            execute: (input, context) =>
+              Effect.gen(function* () {
+                const source = {
+                  type: "tool" as const,
+                  messageID: context.messageID,
+                  callID: context.callID,
+                }
+                const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
+                const external = target.externalDirectory
+                if (external)
+                  yield* permission.assert({
+                    ...LocationMutation.externalDirectoryPermission(external),
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
+                const warnings = (yield* externalCommandDirectories(fsUtil, input.command, target.canonical)).map(
+                  (directory) =>
+                    `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Shell runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
+                )
+                yield* permission.assert({
+                  action: name,
+                  resources: [input.command],
+                  save: [input.command],
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source,
+                })
+
+                if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
+                  return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
+
+                const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
+                const info = yield* shell.create({
+                  command: input.command,
+                  cwd: target.canonical,
+                  timeout,
+                  metadata: { sessionID: context.sessionID },
+                })
+                yield* context.progress({ shellID: info.id })
+
+                const captureShell = Effect.fn("ShellTool.captureShell")(function* () {
+                  const page = yield* shell.output(info.id, { limit: MAX_CAPTURE_BYTES })
+                  const truncated = page.size > page.cursor
+                  const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
+                  return {
+                    output: `${page.output || "(no output)"}${notice}`,
+                    truncated,
+                  }
+                })
+
+                const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
+                  const final = yield* shell.wait(info.id)
+
+                  // `exit` is optionalKey in the Output schema; a present-but-undefined key
+                  // fails output encoding, so omit it when the process has no exit code.
+                  if (final.status === "timeout") {
+                    return {
+                      ...(final.exit !== undefined ? { exit: final.exit } : {}),
+                      output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
+                      truncated: false,
+                      timeout: true,
+                      status: "completed" as const,
+                    }
+                  }
+
+                  const capture = yield* captureShell()
+                  return {
+                    ...(final.exit !== undefined ? { exit: final.exit } : {}),
+                    output: capture.output,
+                    truncated: capture.truncated,
+                    status: "completed" as const,
+                  }
+                })
+
+                const settled = yield* Deferred.make<Output>()
+                const run = settleShell().pipe(
+                  Effect.tap((output) => Deferred.succeed(settled, output)),
+                  Effect.map((output) => output.output),
+                  Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
+                )
+                const job = yield* runtime.job.start({
+                  id: context.callID,
+                  type: name,
+                  title: input.command,
+                  metadata: { sessionID: context.sessionID, shellID: info.id },
+                  run,
+                })
+
+                if (input.background === true) {
+                  yield* runtime.job.background(job.id)
+                  yield* notifyWhenDone(context.sessionID, context.callID, input.command)
+                  return {
+                    output: BACKGROUND_STARTED,
+                    shellID: info.id,
+                    truncated: false,
+                    status: "running" as const,
+                    ...(warnings.length ? { warnings } : {}),
+                  }
+                }
+
+                const result = yield* runtime.job.block({ id: job.id, sessionID: context.sessionID }).pipe(
+                  Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)),
+                )
+                if (result?.type === "backgrounded") {
+                  yield* shell.timeout(info.id, 0)
+                  yield* notifyWhenDone(context.sessionID, context.callID, input.command)
+                  return {
+                    output: BACKGROUND_STARTED,
+                    shellID: info.id,
+                    truncated: false,
+                    status: "running" as const,
+                    ...(warnings.length ? { warnings } : {}),
+                  }
+                }
+                if (result?.info.status === "error")
+                  return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
+                if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
+
+                return { ...(yield* Deferred.await(settled)), ...(warnings.length ? { warnings } : {}) }
+              }).pipe(
+                Effect.map((output) => {
+                  const content: Array<Content> = [{ type: "text", text: output.output }]
+                  const model = modelOutput(output)
+                  if (model) content.push({ type: "text", text: model })
+                  return {
+                    output,
+                    content,
+                    metadata: {
+                      truncated: output.truncated,
+                      ...("exit" in output && output.exit !== undefined ? { exit: output.exit } : {}),
+                      ...("shellID" in output && output.shellID !== undefined ? { shellID: output.shellID } : {}),
+                      ...("timeout" in output && output.timeout !== undefined ? { timeout: output.timeout } : {}),
+                    },
+                  }
+                }),
+                Effect.mapError(
+                  (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
+                ),
+              ),
+          }),
+        ),
+      )
+      .pipe(Effect.orDie)
+  }),
+}

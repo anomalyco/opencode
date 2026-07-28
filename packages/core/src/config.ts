@@ -4,12 +4,12 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { Context, Effect, Fiber, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { Watcher } from "./filesystem/watcher"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
@@ -27,6 +27,7 @@ import { ConfigModel } from "./config/model"
 import { ConfigPlugin } from "./config/plugin"
 import { ConfigProvider } from "./config/provider"
 import { ConfigReference } from "./config/reference"
+import { ConfigWebSearch } from "./config/websearch"
 import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigVariable } from "./config/variable"
 import { ConfigWatcher } from "./config/watcher"
@@ -108,6 +109,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   references: ConfigReference.Info.pipe(Schema.optional).annotate({
     description: "Named local directories or Git repositories available as external context",
   }),
+  websearch: ConfigWebSearch.Info.pipe(Schema.optional).annotate({
+    description: "Web search provider selection",
+  }),
   plugins: ConfigPlugin.Plugins.pipe(Schema.optional).annotate({
     description: "Ordered plugin enablement directives and external package declarations",
   }),
@@ -155,6 +159,12 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
+  /**
+   * Streams raw filesystem updates under config roots. Config owns root
+   * topology and watch reconciliation; domain owners filter this feed for the
+   * source files they parse and rebuild their own state.
+   */
+  readonly changes: () => Stream.Stream<Watcher.Update>
 }
 
 export const Options = Schema.Struct({
@@ -164,7 +174,32 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Config") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
+
+export interface TestInterface extends Interface {
+  /** Replaces the entries returned by subsequent entries() calls. */
+  readonly setEntries: (entries: Entry[]) => Effect.Effect<void>
+  /** Emits one filesystem update to every changes() subscriber. */
+  readonly emitChange: (update: Watcher.Update) => Effect.Effect<void>
+}
+
+export class Test extends Context.Service<Test, TestInterface>()("@opencode/Config/Test") {}
+
+/** In-memory config for tests: static entries with replaceable state and a test-driven change feed. */
+export const testLayer = (initial: Entry[] = []) =>
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const entries = yield* Ref.make(initial)
+      const updates = yield* PubSub.unbounded<Watcher.Update>()
+      const service = Test.of({
+        entries: () => Ref.get(entries),
+        changes: () => Stream.fromPubSub(updates),
+        setEntries: (next) => Ref.set(entries, next),
+        emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
+      })
+      return Context.empty().pipe(Context.add(Service, service), Context.add(Test, service))
+    }),
+  )
 
 export const layer = (options?: Options) => Layer.effect(
   Service,
@@ -173,7 +208,7 @@ export const layer = (options?: Options) => Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const watcher = yield* Watcher.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const credentials = yield* Credential.Service
     const wellknown = yield* WellKnown.Service
     const names = ["opencode.json", "opencode.jsonc"]
@@ -338,29 +373,30 @@ export const layer = (options?: Options) => Layer.effect(
     const initial = yield* discover()
     let configs = initial
     const updates = yield* PubSub.unbounded<Watcher.Update>()
-    const subscriptions = new Map<string, Effect.Effect<unknown>>()
+    // Vendored trees inside config roots (a plugin's node_modules, a nested
+    // .git) produce event blizzards that can never change discovery output.
+    const ignore = ["node_modules", ".git", "**/{node_modules,.git}/**"]
+    // Watch-once: roots leave discovery only by deletion, so a stale watch is
+    // inert, bounded, and dies with this layer — and keeping a deleted root's
+    // watch alive is exactly what makes its recreation observable.
+    const watched = new Set<string>()
     const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
       const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
       const files = entries.flatMap((entry) => (entry.type === "file" ? [entry.path] : []))
       const targets = [
-        ...directories.map((path) => ({ path, type: "directory" as const })),
+        ...directories.map((path) => ({ path, type: "directory" as const, ignore })),
         ...files
           .filter((file) => !directories.some((directory) => FSUtil.contains(directory, file)))
           .map((path) => ({ path, type: "file" as const })),
       ]
-      const next = new Map(targets.map((target) => [JSON.stringify(target), target]))
-      for (const [key, stop] of subscriptions) {
-        if (next.has(key)) continue
-        yield* stop
-        subscriptions.delete(key)
-      }
-      for (const [key, target] of next) {
-        if (subscriptions.has(key)) continue
-        const fiber = yield* watcher.subscribe(target).pipe(
+      for (const target of targets) {
+        const key = JSON.stringify(target)
+        if (watched.has(key)) continue
+        watched.add(key)
+        yield* watcher.subscribe(target).pipe(
           Stream.runForEach((update) => PubSub.publish(updates, update)),
           Effect.forkScoped({ startImmediately: true }),
         )
-        subscriptions.set(key, Fiber.interrupt(fiber))
       }
     })
 
@@ -371,7 +407,7 @@ export const layer = (options?: Options) => Layer.effect(
           if (isDeepStrictEqual(configs, next)) return
           configs = next
           yield* reconcile(next)
-          yield* events.publish(ConfigSchema.Event.Updated, {})
+          yield* bus.publish(ConfigSchema.Event.Updated, {})
         }),
       ),
     )
@@ -385,7 +421,7 @@ export const layer = (options?: Options) => Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filterEffect((event) =>
         wellknown.entries().pipe(
           Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),
@@ -397,7 +433,7 @@ export const layer = (options?: Options) => Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* events.subscribe(WellKnown.Event.Updated).pipe(
+    yield* bus.subscribe(WellKnown.Event.Updated).pipe(
       Stream.runForEach(() =>
         reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown sources", { cause }))),
       ),
@@ -426,6 +462,7 @@ export const layer = (options?: Options) => Layer.effect(
       entries: Effect.fn("Config.entries")(function* () {
         return configs
       }),
+      changes: () => Stream.fromPubSub(updates),
     })
   }),
 )
@@ -434,7 +471,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Watcher.node, EventV2.node, FSUtil.node, Global.node, Location.node, Credential.node, WellKnown.node],
+    deps: [Watcher.node, Bus.node, FSUtil.node, Global.node, Location.node, Credential.node, WellKnown.node],
   })
 }
 

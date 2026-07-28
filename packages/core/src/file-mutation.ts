@@ -64,7 +64,7 @@ export interface Interface {
   readonly remove: (input: RemoveInput) => Effect.Effect<RemoveResult, FSUtil.Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileMutation") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
 
 /**
  * Serialize file changes by canonical target. Conditional writes compare and
@@ -194,12 +194,12 @@ function sameBytes(left: Uint8Array, right: Uint8Array) {
 export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
 
 /**
- * Deferred until the corresponding V2 integrations exist.
+ * Deferred until the corresponding integrations exist.
  */
-// TODO: Add formatter integration after V2 formatter runtime exists.
-// TODO: Publish watcher/file-edit events after V2 watcher integration exists.
-// TODO: Add snapshots / undo after V2 snapshot design exists.
-// TODO: Notify LSP and collect diagnostics after V2 LSP runtime exists.
+// TODO: Add formatter integration after formatter runtime exists.
+// TODO: Publish watcher/file-edit events after watcher integration exists.
+// TODO: Add snapshots / undo after snapshot design exists.
+// TODO: Notify LSP and collect diagnostics after LSP runtime exists.
 // TODO: Design multi-file transactions / rollback if patch needs atomic edits.
 // Until then, edits are sequential and report partial application.
 // TODO: Define crash recovery and idempotency for side effects between Tool.Called and durable settlement.

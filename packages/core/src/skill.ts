@@ -1,15 +1,15 @@
-export * as SkillV2 from "./skill"
+export * as Skill from "./skill"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema, Stream, Types } from "effect"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Skill } from "@opencode-ai/schema/skill"
-import { AgentV2 } from "./agent"
+import { Agent } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { PermissionV2 } from "./permission"
+import { Permission } from "./permission"
 import { AbsolutePath } from "./schema"
 import { SkillDiscovery } from "./skill/discovery"
 import { State } from "./state"
@@ -33,10 +33,10 @@ export type ID = Skill.ID
 export const Name = Skill.Name
 export type Name = Skill.Name
 
-export const Event = Skill.Event
+export { Event } from "@opencode-ai/schema/skill"
 
-export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
-  skills.filter((skill) => PermissionV2.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
+export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
+  skills.filter((skill) => Permission.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
 
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
@@ -73,14 +73,14 @@ export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Skill") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const discovery = yield* SkillDiscovery.Service
     const fs = yield* FSUtil.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
 
     const state = State.create<Data, Draft>({
       name: "skill",
@@ -92,10 +92,10 @@ const layer = Layer.effect(
         },
         list: () => draft.sources as Source[],
       }),
-      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
+      finalize: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
-    const load = Effect.fn("SkillV2.load")(function* (source: Source) {
+    const load = Effect.fn("Skill.load")(function* (source: Source) {
       const skills: Info[] = []
       if (source.type === "embedded") {
         yield* Effect.logDebug("skill source loaded", {
@@ -143,7 +143,7 @@ const layer = Layer.effect(
     })
 
     const cache = new Map<string, { skills: Info[]; directories: readonly string[] }>()
-    const invalidate = Effect.fn("SkillV2.invalidateFromWatcher")(function* (file: string) {
+    const invalidate = Effect.fn("Skill.invalidateFromWatcher")(function* (file: string) {
       const invalidated = Array.from(cache.entries()).filter(([, loaded]) =>
         loaded.directories.some((directory) => FSUtil.contains(directory, file)),
       )
@@ -154,15 +154,15 @@ const layer = Layer.effect(
         sources: invalidated.map(([key]) => key),
         skills: invalidated.flatMap(([, loaded]) => loaded.skills.map((skill) => skill.id)),
       })
-      yield* events.publish(Event.Updated, {}).pipe(Effect.asVoid)
+      yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
 
-    yield* events.subscribe(FileSystem.Event.Changed).pipe(
+    yield* bus.subscribe(FileSystem.Event.Changed).pipe(
       Stream.runForEach((event) => invalidate(event.data.file)),
       Effect.forkScoped({ startImmediately: true }),
     )
 
-    const list = Effect.fn("SkillV2.list")(function* () {
+    const list = Effect.fn("Skill.list")(function* () {
       const skills = new Map<ID, Info>()
       for (const source of state.get().sources) {
         const key = Source.key(source)
@@ -176,7 +176,7 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      sources: Effect.fn("SkillV2.sources")(function* () {
+      sources: Effect.fn("Skill.sources")(function* () {
         return state.get().sources
       }),
       list,
@@ -187,5 +187,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [SkillDiscovery.node, FSUtil.node, EventV2.node],
+  deps: [SkillDiscovery.node, FSUtil.node, Bus.node],
 })

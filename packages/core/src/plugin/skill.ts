@@ -2,10 +2,10 @@
 
 export * as SkillPlugin from "./skill"
 
-import { define, type Context } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define, type Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
-import { SkillV2 } from "../skill"
+import { Skill } from "../skill"
 import { Config } from "../config"
 import { Location } from "../location"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -29,11 +29,11 @@ export const Plugin = define({
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
     yield* ctx.skill.transform((draft) => {
       draft.source(
-        SkillV2.EmbeddedSource.make({
+        Skill.EmbeddedSource.make({
           type: "embedded",
-          skill: SkillV2.Info.make({
-            id: SkillV2.ID.make("opencode"),
-            name: SkillV2.Name.make("OpenCode"),
+          skill: Skill.Info.make({
+            id: Skill.ID.make("opencode"),
+            name: Skill.Name.make("OpenCode"),
             description: OpencodeDescription,
             location: AbsolutePath.make("/builtin/opencode.md"),
             content: OpencodeContent,
@@ -41,11 +41,11 @@ export const Plugin = define({
         }),
       )
       draft.source(
-        SkillV2.EmbeddedSource.make({
+        Skill.EmbeddedSource.make({
           type: "embedded",
-          skill: SkillV2.Info.make({
-            id: SkillV2.ID.make("report"),
-            name: SkillV2.Name.make("Report"),
+          skill: Skill.Info.make({
+            id: Skill.ID.make("report"),
+            name: Skill.Name.make("Report"),
             description: REPORT_DESCRIPTION,
             slash: true,
             location: AbsolutePath.make("/builtin/report.md"),

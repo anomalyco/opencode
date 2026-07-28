@@ -1,8 +1,9 @@
-import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { SessionDiff } from "@/utils/diffs"
 import type { Kind } from "@/components/file-tree-v2"
 import { normalizeFileTreeV2Path } from "@/components/file-tree-v2-model"
 
-export type RenderDiff = FileDiffInfo | VcsFileDiff
+export type RenderDiff = SessionDiff | VcsFileDiff
 
 export function normalizePath(p: string) {
   return normalizeFileTreeV2Path(p)

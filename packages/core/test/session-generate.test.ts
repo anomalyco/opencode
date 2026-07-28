@@ -1,22 +1,22 @@
 import { expect } from "bun:test"
 import { LLMClient, LLMEvent, LLMResponse, Model, SystemPart, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { Instructions } from "@opencode-ai/core/instructions"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { Location } from "@opencode-ai/core/location"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ID } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -38,7 +38,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { Tool } from "@opencode-ai/core/tool"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
@@ -59,8 +59,12 @@ const client = Layer.mock(LLMClient.Service)({
         LLMEvent.textStart({ id: "generate" }),
         LLMEvent.textDelta({ id: "generate", text: "Transient answer" }),
         LLMEvent.textEnd({ id: "generate" }),
-        LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 100, outputTokens: 10 } }),
-        LLMEvent.finish({ reason: "stop" }),
+        LLMEvent.stepFinish({
+          index: 0,
+          reason: { normalized: "stop" },
+          usage: { inputTokens: 100, outputTokens: 10 },
+        }),
+        LLMEvent.finish({ reason: { normalized: "stop" } }),
       ])
       if (!response) throw new Error("Incomplete generate response")
       return response
@@ -94,24 +98,30 @@ const skills = Layer.mock(SkillInstructions.Service, { load: () => Effect.succee
 const references = Layer.mock(ReferenceInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const mcp = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const plugins = Layer.mock(PluginSupervisor.Service, { flush: Effect.void })
-const tools = Layer.mock(ToolRegistry.Service, {
-  materialize: () =>
+const tools = Layer.mock(Tool.Service, {
+  snapshot: () =>
     Effect.succeed({
+      codeModeCatalog: [
+        {
+          path: "captured.lookup",
+          description: "Captured Code Mode catalog",
+          signature: "tools.captured.lookup(input: {}): Promise<string>",
+        },
+      ],
       definitions: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
-      settle: () => Effect.die(new Error("unused")),
+      execute: () => Effect.die(new Error("unused")),
     }),
-  register: () => Effect.die(new Error("unused")),
-  registerBatch: () => Effect.die(new Error("unused")),
+  transform: () => Effect.die(new Error("unused")),
 })
 
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
-      EventV2.node,
+      Bus.node,
       SessionProjector.node,
       SessionStore.node,
-      AgentV2.node,
+      Agent.node,
       InstructionBuiltIns.node,
       PluginHooks.node,
       SessionGenerateNode.node,
@@ -125,7 +135,7 @@ const it = testEffect(
       [ReferenceInstructions.node, references],
       [McpInstructions.node, mcp],
       [PluginSupervisor.node, plugins],
-      [ToolRegistry.node, tools],
+      [Tool.node, tools],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
     ],
   ),
@@ -133,8 +143,8 @@ const it = testEffect(
 
 const durableState = (db: Database.Interface["db"], sessionID: SessionSchema.ID) =>
   Effect.all({
-    sequence: EventV2.latestSequence(db, sessionID),
-    events: db
+    sequence: Bus.latestSequence(db, sessionID),
+    bus: db
       .select()
       .from(EventTable)
       .where(eq(EventTable.aggregate_id, sessionID))
@@ -174,11 +184,11 @@ const userTexts = (request: LLMRequest) =>
 
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
-  const events = yield* EventV2.Service
-  const agents = yield* AgentV2.Service
+  const bus = yield* Bus.Service
+  const agents = yield* Agent.Service
   const instructionBuiltIns = yield* InstructionBuiltIns.Service
   yield* agents.transform((draft) =>
-    draft.update(AgentV2.ID.make("build"), (agent) => {
+    draft.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
     }),
   )
@@ -196,71 +206,71 @@ const setup = Effect.gen(function* () {
       directory: "/project",
       title: "Generate test",
       version: "test",
-      agent: AgentV2.ID.make("build"),
+      agent: Agent.ID.make("build"),
     })
     .run()
     .pipe(Effect.orDie)
-  return { db, events, instructions: yield* instructionBuiltIns.load(sessionID) }
+  return { db, bus, instructions: yield* instructionBuiltIns.load(sessionID) }
 })
 
 it.effect("generates from fresh settled Session context without durable mutation", () =>
   Effect.gen(function* () {
     requests.length = 0
     instruction = "Initial context"
-    const { db, events, instructions } = yield* setup
-    yield* InstructionState.prepare(db, events, instructions, sessionID)
+    const { db, bus, instructions } = yield* setup
+    yield* InstructionState.prepare(db, bus, instructions, sessionID)
     const existing = SessionMessage.ID.create()
-    yield* events.publish(SessionEvent.InputAdmitted, {
+    yield* bus.publish(SessionEvent.InputAdmitted, {
       sessionID,
       inputID: existing,
       input: { type: "user", data: { text: "Existing durable context" }, delivery: "steer" },
     })
-    yield* events.publish(SessionEvent.InputPromoted, { sessionID, inputID: existing })
+    yield* bus.publish(SessionEvent.InputPromoted, { sessionID, inputID: existing })
     const settledAssistant = SessionMessage.ID.create()
-    yield* events.publish(SessionEvent.Step.Started, {
+    yield* bus.publish(SessionEvent.Step.Started, {
       sessionID,
       assistantMessageID: settledAssistant,
-      agent: AgentV2.ID.make("build"),
-      model: { id: ModelV2.ID.make("generate-model"), providerID: ProviderV2.ID.make("test") },
+      agent: Agent.ID.make("build"),
+      model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
     })
-    yield* events.publish(SessionEvent.Text.Started, {
+    yield* bus.publish(SessionEvent.Text.Started, {
       sessionID,
       assistantMessageID: settledAssistant,
       ordinal: 0,
     })
-    yield* events.publish(SessionEvent.Text.Ended, {
+    yield* bus.publish(SessionEvent.Text.Ended, {
       sessionID,
       assistantMessageID: settledAssistant,
       ordinal: 0,
       text: "Settled partial answer",
     })
     const activeAssistant = SessionMessage.ID.create()
-    yield* events.publish(SessionEvent.Step.Started, {
+    yield* bus.publish(SessionEvent.Step.Started, {
       sessionID,
       assistantMessageID: activeAssistant,
-      agent: AgentV2.ID.make("build"),
-      model: { id: ModelV2.ID.make("generate-model"), providerID: ProviderV2.ID.make("test") },
+      agent: Agent.ID.make("build"),
+      model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
     })
-    yield* events.publish(SessionEvent.Tool.Input.Started, {
+    yield* bus.publish(SessionEvent.Tool.Input.Started, {
       sessionID,
       assistantMessageID: activeAssistant,
       callID: "active-call",
       name: "echo",
     })
-    yield* events.publish(SessionEvent.Tool.Input.Ended, {
+    yield* bus.publish(SessionEvent.Tool.Input.Ended, {
       sessionID,
       assistantMessageID: activeAssistant,
       callID: "active-call",
       text: "{}",
     })
-    yield* events.publish(SessionEvent.Tool.Called, {
+    yield* bus.publish(SessionEvent.Tool.Called, {
       sessionID,
       assistantMessageID: activeAssistant,
       callID: "active-call",
       input: {},
       executed: false,
     })
-    yield* events.publish(SessionEvent.InputAdmitted, {
+    yield* bus.publish(SessionEvent.InputAdmitted, {
       sessionID,
       inputID: SessionMessage.ID.create(),
       input: { type: "user", data: { text: "Queued input must remain invisible" }, delivery: "queue" },
@@ -285,13 +295,14 @@ it.effect("generates from fresh settled Session context without durable mutation
     expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
     expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
     expect(requests[0]?.providerOptions).toMatchObject({ openai: { promptCacheKey: sessionID } })
-    expect(
-      requests[0]?.messages.flatMap((message) =>
-        message.role === "system"
-          ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
-          : [],
-      ),
-    ).toEqual(["Changed context"])
+    const instructionUpdates = requests[0]?.messages.flatMap((message) =>
+      message.role === "system"
+        ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
+        : [],
+    )
+    expect(instructionUpdates).toHaveLength(1)
+    expect(instructionUpdates?.[0]).toContain("Changed context")
+    expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(input: {}): Promise<string>")
     expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
     expect(
       requests[0]?.messages.flatMap((message) =>

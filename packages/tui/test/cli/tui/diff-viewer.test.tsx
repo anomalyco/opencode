@@ -10,7 +10,7 @@ import type {
   Page,
   Route,
   Slot,
-} from "@opencode-ai/plugin/v2/tui/context"
+} from "@opencode-ai/plugin/tui/context"
 import { ThemeProvider } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"

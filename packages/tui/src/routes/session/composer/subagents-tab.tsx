@@ -103,7 +103,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       setStore("selected", next)
       const scrollCurrentIntoView = () => scrollToIndex(next, true)
       scrollCurrentIntoView()
-      requestAnimationFrame(scrollCurrentIntoView)
+      // The remounted scrollbox finishes layout on the next frame and resets its scroll position.
+      requestAnimationFrame(() => requestAnimationFrame(scrollCurrentIntoView))
     }
     wasActive = true
     if (store.selected >= list.length) moveTo(Math.max(0, list.length - 1))

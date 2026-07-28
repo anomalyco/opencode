@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMResponse } from "../src"
+import { LLM, LLMRequest, LLMResponse } from "../src"
 import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
 import { Model } from "../src/schema"
 import { testEffect } from "./lib/effect"
@@ -40,7 +40,7 @@ const fakeFraming: FramingDef<FakeEvent> = {
 
 const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
   event.type === "finish"
-    ? { type: "finish", reason: event.reason }
+    ? { type: "finish", reason: { normalized: event.reason } }
     : { type: "text-delta", id: "text-0", text: event.text }
 
 const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
@@ -141,7 +141,7 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const prepared = yield* llm.prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { route: configuredGemini }) }),
+        LLMRequest.update(request, { model: updateModel(request.model, { route: configuredGemini }) }),
       )
 
       expect(prepared.route).toBe("gemini-fake")
@@ -174,7 +174,7 @@ describe("llm route", () => {
       })
 
       const prepared = yield* (yield* LLMClient.Service).prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { route: duplicate }) }),
+        LLMRequest.update(request, { model: updateModel(request.model, { route: duplicate }) }),
       )
 
       expect(prepared.body).toEqual({ body: "late-default" })

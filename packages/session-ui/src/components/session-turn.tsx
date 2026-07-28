@@ -1,6 +1,6 @@
 import {
   AssistantMessage,
-  type FileDiffInfo,
+  type SnapshotFileDiff,
   Message as MessageType,
   Part as PartType,
   type UserMessage,
@@ -92,7 +92,7 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 }
 
 type SummaryDiffInput = NonNullable<NonNullable<UserMessage["summary"]>["diffs"]>[number]
-type SummaryDiff = FileDiffInfo
+type SummaryDiff = SnapshotFileDiff & { file: string; patch: string }
 
 function summaryDiff(value: SummaryDiffInput): value is SummaryDiff {
   return (

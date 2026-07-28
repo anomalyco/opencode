@@ -4,7 +4,7 @@ import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest, type Mode
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Config } from "../config"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
@@ -15,7 +15,7 @@ import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { toSessionError } from "./to-session-error"
 import { Token } from "../util/token"
-import type { ModelV2 } from "../model"
+import type { Info } from "../model"
 import { SessionUsage } from "./usage"
 
 const DEFAULT_BUFFER = 20_000
@@ -62,7 +62,7 @@ type Settings = {
 
 type Dependencies = {
   readonly app: App.Info
-  readonly events: EventV2.Interface
+  readonly bus: Bus.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
@@ -74,7 +74,7 @@ export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
   readonly model: Model
-  readonly cost: ModelV2.Info["cost"]
+  readonly cost: Info["cost"]
 }
 
 export type ManualInput = {
@@ -86,7 +86,7 @@ export type ManualInput = {
 type Plan = {
   readonly session: SessionSchema.Info
   readonly model: Model
-  readonly cost: ModelV2.Info["cost"]
+  readonly cost: Info["cost"]
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
   readonly recent: string
@@ -103,7 +103,7 @@ export interface Interface {
   readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionCompaction") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -233,11 +233,11 @@ const make = (dependencies: Dependencies) => {
     readonly error: SessionError.Error
     readonly inputID?: SessionMessage.ID
   }) {
-    yield* dependencies.events.publish(SessionEvent.Compaction.Failed, input)
+    yield* dependencies.bus.publish(SessionEvent.Compaction.Failed, input)
     return { status: "failed" as const, error: input.error }
   })
   const execute = Effect.fn("SessionCompaction.execute")(function* (plan: Plan) {
-    yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
+    yield* dependencies.bus.publish(SessionEvent.Compaction.Started, {
       sessionID: plan.session.id,
       reason: plan.reason,
       recent: plan.recent,
@@ -249,7 +249,7 @@ const make = (dependencies: Dependencies) => {
     let usage: SessionUsage.Recorded | undefined
     const recordUsage = Effect.suspend(() =>
       usage
-        ? dependencies.events.publish(SessionEvent.UsageRecorded, {
+        ? dependencies.bus.publish(SessionEvent.UsageRecorded, {
             sessionID: plan.session.id,
             source: "compaction",
             ...usage,
@@ -274,7 +274,7 @@ const make = (dependencies: Dependencies) => {
             }
           if (LLMEvent.is.textDelta(event)) {
             chunks.push(event.text)
-            return dependencies.events.publish(SessionEvent.Compaction.Delta, {
+            return dependencies.bus.publish(SessionEvent.Compaction.Delta, {
               sessionID: plan.session.id,
               text: event.text,
             })
@@ -316,7 +316,7 @@ const make = (dependencies: Dependencies) => {
         inputID: plan.inputID,
       })
     }
-    yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
+    yield* dependencies.bus.publish(SessionEvent.Compaction.Ended, {
       sessionID: plan.session.id,
       reason: plan.reason,
       text: summary,
@@ -395,17 +395,17 @@ const make = (dependencies: Dependencies) => {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
     const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
     const app = yield* App.Metadata
-    return make({ events, llm, models, config: settings(yield* config.entries()), app })
+    return make({ bus, llm, models, config: settings(yield* config.entries()), app })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [EventV2.node, llmClient, Config.node, SessionRunnerModel.node, App.node],
+  deps: [Bus.node, llmClient, Config.node, SessionRunnerModel.node, App.node],
 })

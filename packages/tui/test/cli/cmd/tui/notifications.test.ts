@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
 import type { OpenCodeEvent, PermissionAsked, QuestionAsked } from "@opencode-ai/client"
-import type { TuiAttentionNotifyInput, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiAttentionNotifyInput, TuiPluginApi } from "@opencode-ai/plugin/v1/tui"
 import { createTuiPluginApi } from "../../../fixture/tui-plugin"
 
 type Session = NonNullable<ReturnType<TuiPluginApi["state"]["session"]["get"]>>
@@ -95,10 +95,10 @@ function permission(id: string, sessionID = "session"): PermissionAsked["data"] 
   return {
     id,
     sessionID,
-    permission: "edit",
-    patterns: [],
+    action: "edit",
+    resources: [],
     metadata: {},
-    always: [],
+    save: [],
   }
 }
 

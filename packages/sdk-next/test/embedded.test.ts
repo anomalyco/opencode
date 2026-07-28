@@ -72,12 +72,12 @@ it.live(
               yield* ctx.tool
                 .transform((draft) =>
                   draft.add(
-                    "bootstrap_sdk_tool",
-                    fixture.sdk.Tool.make({
+                    ({
+                      name: "bootstrap_sdk_tool",
                       description: "Marks the initial Location plugin generation",
                       input: Schema.Struct({}),
                       output: Schema.Void,
-                      execute: () => Effect.void,
+                      execute: () => Effect.succeed({ output: undefined }),
                     }),
                   ),
                 )
@@ -99,12 +99,12 @@ it.live(
               yield* ctx.tool
                 .transform((draft) =>
                   draft.add(
-                    "late_sdk_tool",
-                    fixture.sdk.Tool.make({
+                    ({
+                      name: "late_sdk_tool",
                       description: "Tool registered after Location boot",
                       input: Schema.Struct({}),
                       output: Schema.Void,
-                      execute: () => Effect.void,
+                      execute: () => Effect.succeed({ output: undefined }),
                     }),
                   ),
                 )
@@ -220,12 +220,12 @@ it.live(
             ctx.tool
               .transform((draft) =>
                 draft.add(
-                  "embedded_tool",
-                  fixture.sdk.Tool.make({
+                  ({
+                    name: "embedded_tool",
                     description: "Embedded test tool",
                     input: Schema.Struct({}),
                     output: Schema.Struct({ ok: Schema.Boolean }),
-                    execute: () => Effect.succeed({ ok: true }),
+                    execute: () => Effect.succeed({ output: { ok: true } }),
                   }),
                 ),
               )
@@ -326,6 +326,38 @@ it.live(
       }),
     ),
   10_000,
+)
+
+it.live("embedded client exposes plugin-backed web search", () =>
+  withEmbedded("opencode-embedded-websearch-", (fixture) =>
+    Effect.gen(function* () {
+      const opencode = yield* fixture.sdk.OpenCode.create()
+      const providerID = fixture.sdk.WebSearch.ID.make("embedded-websearch")
+      yield* opencode.plugin({
+        id: `embedded-websearch-${crypto.randomUUID()}`,
+        effect: (ctx) =>
+          ctx.websearch.transform((draft) => {
+            draft.add({
+              id: providerID,
+              name: "Embedded web search",
+              execute: (input) =>
+                Effect.succeed([{ url: "https://example.com", content: `Found ${input.query}`, time: {} }]),
+            })
+          }),
+      })
+
+      const result = yield* opencode.websearch.query({
+        query: "opencode",
+        providerID,
+        location: location(fixture),
+      })
+
+      expect(result.data).toEqual({
+        providerID,
+        results: [{ url: "https://example.com", content: "Found opencode", time: {} }],
+      })
+    }),
+  ),
 )
 
 it.live(

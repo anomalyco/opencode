@@ -6,7 +6,7 @@ import { FileSystem } from "@opencode-ai/schema/filesystem"
 import os from "os"
 import path from "path"
 import { Config } from "../config"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "../git"
 import { Location } from "../location"
@@ -30,12 +30,12 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const location = yield* Location.Service
     const watcher = yield* Watcher.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const configService = yield* Config.Service
     const publish = (update: { type: "create" | "update" | "delete"; path: string }) =>
-      events.publish(FileSystem.Event.Changed, {
+      bus.publish(FileSystem.Event.Changed, {
         file: update.path,
         event: update.type === "create" ? "add" : update.type === "update" ? "change" : "unlink",
       })
@@ -86,5 +86,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Watcher.node, FSUtil.node, Location.node, Config.node, Git.node, EventV2.node],
+  deps: [Watcher.node, FSUtil.node, Location.node, Config.node, Git.node, Bus.node],
 })

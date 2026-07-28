@@ -32,6 +32,7 @@ test("exposes every standard HTTP API group", () => {
     "projectCopy",
     "vcs",
     "debug",
+    "websearch",
   ])
   expect(Object.keys(client.debug)).toEqual(["location"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
@@ -41,11 +42,43 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.connect)).toEqual(["key"])
   expect(Object.keys(client.integration.oauth)).toEqual(["connect", "status", "complete", "cancel"])
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
+  expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
   expect(Object.keys(client.vcs)).toEqual(["status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
+})
+
+test("websearch.query uses the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json({
+        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
+        data: {
+          providerID: "exa",
+          results: [{ url: "https://example.com", title: "Result", content: "result", time: {} }],
+        },
+      })
+    },
+  })
+
+  const result = await client.websearch.query({
+    query: "opencode",
+    providerID: "exa",
+    location: { directory: "/tmp/project" },
+  })
+
+  expect(result.data).toEqual({
+    providerID: "exa",
+    results: [{ url: "https://example.com", title: "Result", content: "result", time: {} }],
+  })
+  expect(request?.method).toBe("POST")
+  expect(request?.url).toBe("http://localhost:3000/api/websearch?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+  expect(await request?.json()).toEqual({ query: "opencode", providerID: "exa" })
 })
 
 test("server.get uses the public HTTP contract", async () => {

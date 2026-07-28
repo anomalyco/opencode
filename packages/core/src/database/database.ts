@@ -20,7 +20,7 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/storage/Database") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
 
 const databaseLayer = Layer.effect(
   Service,

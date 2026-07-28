@@ -1,14 +1,14 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
 
 export const NvidiaPlugin = define({
   id: "opencode.provider.nvidia",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!ProviderV2.isAISDK(item.provider.package)) continue
-        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
+        if (!Provider.isAISDK(item.provider.package)) continue
+        if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
         if (item.provider.settings?.baseURL !== "https://integrate.api.nvidia.com/v1") continue
         evt.provider.update(item.provider.id, (provider) => {
           provider.headers = {

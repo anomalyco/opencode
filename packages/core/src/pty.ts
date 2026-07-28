@@ -5,7 +5,7 @@ import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Config } from "./config"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { Location } from "./location"
 import { PtyID } from "./pty/schema"
 import { ShellSelect } from "./shell/select"
@@ -47,7 +47,7 @@ export const UpdateInput = Pty.UpdateInput
 
 export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
 
-export const Event = Pty.Event
+export { Event } from "@opencode-ai/schema/pty"
 
 export type AttachInput = {
   // Absolute output cursor to replay from. -1 tails from the current end; omitted replays the full retained buffer.
@@ -87,12 +87,12 @@ export interface Interface {
   readonly attach: (id: PtyID, input: AttachInput) => Effect.Effect<Attachment, NotFoundError | ExitedError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Pty") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
 export const layer = (options?: ShellSelect.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const location = yield* Location.Service
     const config = yield* Config.Service
     const context = yield* Effect.context()
@@ -146,7 +146,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       if (index !== -1) exitOrder.splice(index, 1)
       yield* Effect.logInfo("removing session", { id })
       teardown(session)
-      yield* events.publish(Event.Deleted, { id: session.info.id })
+      yield* bus.publish(Pty.Event.Deleted, { id: session.info.id })
     })
 
     const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
@@ -229,7 +229,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
           runFork(
             Effect.gen(function* () {
               yield* Effect.logInfo("session exited", { id, exitCode })
-              yield* events.publish(Event.Exited, { id, exitCode })
+              yield* bus.publish(Pty.Event.Exited, { id, exitCode })
               while (exitOrder.length > EXITED_LIMIT) {
                 const oldest = exitOrder[0]
                 if (!oldest) break
@@ -239,7 +239,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
           )
         }),
       )
-      yield* events.publish(Event.Created, { info })
+      yield* bus.publish(Pty.Event.Created, { info })
       return info
     })
 
@@ -247,7 +247,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       const session = yield* requireSession(id)
       if (input.title) session.info.title = input.title
       if (input.size && session.info.status === "running") session.process.resize(input.size.cols, input.size.rows)
-      yield* events.publish(Event.Updated, { info: session.info })
+      yield* bus.publish(Pty.Event.Updated, { info: session.info })
       return session.info
     })
 
@@ -314,7 +314,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
 )
 
 export function configured(options?: ShellSelect.Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [EventV2.node, Location.node, Config.node] })
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [Bus.node, Location.node, Config.node] })
 }
 
 export const node = configured()

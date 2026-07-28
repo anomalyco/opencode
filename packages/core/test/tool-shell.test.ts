@@ -9,48 +9,47 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { filesystem } from "@opencode-ai/util/effect/app-node-platform"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Job } from "@opencode-ai/core/job"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Shell } from "@opencode-ai/core/shell"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
-import { ShellTool } from "@opencode-ai/core/tool/shell"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
+import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { toolIdentity, executeTool, settleTool, toolDefinitions, waitForTool } from "./lib/tool"
+import { toolIdentity, executeTool, toolDefinitions, waitForTool } from "./lib/tool"
 
-const sessionID = SessionV2.ID.make("ses_shell_tool_test")
-const sessionModel = ModelV2.Ref.make({ id: ModelV2.ID.make("test"), providerID: ProviderV2.ID.make("test") })
-const assertions: PermissionV2.AssertInput[] = []
+const sessionID = Session.ID.make("ses_shell_tool_test")
+const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
+const assertions: Permission.AssertInput[] = []
 let denyAction: string | undefined
-let afterPermission = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
+let afterPermission = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
 
 const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
+  Permission.Service,
+  Permission.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
         Effect.andThen(Effect.suspend(() => afterPermission(input))),
         Effect.andThen(
           input.action === denyAction
             ? Effect.fail(
-                new PermissionV2.BlockedError({
+                new Permission.BlockedError({
                   rules: [],
                   permission: input.action,
                   resources: input.resources,
@@ -78,30 +77,30 @@ const executionNode = makeGlobalNode({
   layer: Layer.effect(
     SessionExecution.Service,
     Effect.gen(function* () {
-      const events = yield* EventV2.Service
+      const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
-      const complete = Effect.fn("ShellTest.complete")(function* (id: SessionV2.ID) {
+      const complete = Effect.fn("ShellTest.complete")(function* (id: Session.ID) {
         const session = yield* store.get(id)
         if (!session) return
         const assistantMessageID = SessionMessage.ID.create()
-        yield* events.publish(SessionEvent.Step.Started, {
+        yield* bus.publish(SessionEvent.Step.Started, {
           sessionID: id,
           assistantMessageID,
-          agent: session.agent ?? AgentV2.ID.make("code"),
+          agent: session.agent ?? Agent.ID.make("code"),
           model: sessionModel,
         })
-        yield* events.publish(SessionEvent.Text.Started, {
+        yield* bus.publish(SessionEvent.Text.Started, {
           sessionID: id,
           assistantMessageID,
           ordinal: 0,
         })
-        yield* events.publish(SessionEvent.Text.Ended, {
+        yield* bus.publish(SessionEvent.Text.Ended, {
           sessionID: id,
           assistantMessageID,
           ordinal: 0,
           text: "ok",
         })
-        yield* events.publish(SessionEvent.Step.Ended, {
+        yield* bus.publish(SessionEvent.Step.Ended, {
           sessionID: id,
           assistantMessageID,
           finish: "stop",
@@ -118,16 +117,15 @@ const executionNode = makeGlobalNode({
       })
     }),
   ),
-  deps: [EventV2.node, SessionStore.node],
+  deps: [Bus.node, SessionStore.node],
 })
 
 const layer = AppNodeBuilder.build(
   LayerNode.group([
     Database.node,
-    EventV2.node,
+    Bus.node,
     Job.node,
-    ToolOutputStore.cleanupNode,
-    SessionV2.node,
+    Session.node,
     SessionExecution.node,
     PluginRuntime.providerNode,
     LocationServiceMap.node,
@@ -137,7 +135,7 @@ const layer = AppNodeBuilder.build(
   ]),
   [
     [SessionExecution.node, executionNode],
-    [PermissionV2.node, permission],
+    [Permission.node, permission],
   ],
 )
 
@@ -174,9 +172,9 @@ const progressOverflowCommand = (bytes: number, release: string) =>
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
     : `head -c ${bytes} /dev/zero | tr '\\0' 'x'; while [ ! -e '${release}' ]; do sleep 0.05; done`
 
-const withSession = <A, E, R>(directory: string, body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>) =>
+const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
-    const sessions = yield* SessionV2.Service
+    const sessions = yield* Session.Service
     const location = Location.Ref.make({ directory: AbsolutePath.make(directory) })
     yield* sessions.create({
       id: sessionID,
@@ -187,7 +185,7 @@ const withSession = <A, E, R>(directory: string, body: (registry: ToolRegistry.I
     const locations = yield* LocationServiceMap.Service
     const locationLayer = locations.get(location)
     return yield* Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
+      const registry = yield* Tool.Service
       yield* waitForTool(registry, ShellTool.name)
       return yield* body(registry)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
@@ -204,17 +202,19 @@ describe("ShellTool", () => {
             const definitions = yield* toolDefinitions(registry)
             const shell = definitions.find((tool) => tool.name === "shell")
             expect(shell).toBeDefined()
-            expect(shell?.outputSchema).not.toHaveProperty("properties.output")
+            // Code Mode receives the declared output schema, including the command output text.
+            expect(shell?.outputSchema).toHaveProperty("properties.output")
             expect(
               (yield* toolDefinitions(registry, [{ action: "shell", resource: "*", effect: "deny" }])).map(
                 (tool) => tool.name,
               ),
             ).not.toContain("shell")
 
-            const settled = yield* settleTool(registry, call({ command: helloCommand }))
-            expect(settled.output?.structured).toMatchObject({ exit: 0, truncated: false })
-            expect(settled.output?.content[0]).toEqual({ type: "text", text: "hello" })
-            expect(settled.output?.content[1]).toMatchObject({
+            const settled = yield* executeTool(registry, call({ command: helloCommand }))
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
+            expect(settled.content?.[0]).toEqual({ type: "text", text: "hello" })
+            expect(settled.content?.[1]).toMatchObject({
               type: "text",
               text: expect.stringContaining("Command exited with code 0."),
             })
@@ -233,11 +233,11 @@ describe("ShellTool", () => {
         reset()
         return Effect.promise(() => fs.mkdir(path.join(tmp.path, "src"))).pipe(
           Effect.andThen(
-            withSession(tmp.path, (registry) => settleTool(registry, call({ command: cwdCommand, workdir: "src" }))),
+            withSession(tmp.path, (registry) => executeTool(registry, call({ command: cwdCommand, workdir: "src" }))),
           ),
           Effect.andThen((settled) =>
             Effect.sync(() =>
-              expect(settled.output?.content[0]).toMatchObject({
+              expect(settled.content?.[0]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining(realpathSync(path.join(tmp.path, "src"))),
               }),
@@ -256,13 +256,13 @@ describe("ShellTool", () => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
-            const stderr = yield* settleTool(registry, call({ command: stderrCommand }, "call-stderr"))
-            expect(stderr.output?.structured).toMatchObject({ exit: 0, truncated: false })
-            expect(stderr.output?.content[0]).toEqual({ type: "text", text: "stderr only" })
+            const stderr = yield* executeTool(registry, call({ command: stderrCommand }, "call-stderr"))
+            expect(stderr.metadata).toMatchObject({ exit: 0, truncated: false })
+            expect(stderr.content?.[0]).toEqual({ type: "text", text: "stderr only" })
 
-            const mixed = yield* settleTool(registry, call({ command: mixedOutputCommand }, "call-mixed"))
-            expect(mixed.output?.structured).toMatchObject({ exit: 0, truncated: false })
-            const output = mixed.output?.content[0]?.type === "text" ? mixed.output.content[0].text : ""
+            const mixed = yield* executeTool(registry, call({ command: mixedOutputCommand }, "call-mixed"))
+            expect(mixed.metadata).toMatchObject({ exit: 0, truncated: false })
+            const output = mixed.content?.[0]?.type === "text" ? mixed.content[0].text : ""
             expect(output).toContain("stdout")
             expect(output).toContain("stderr")
           }),
@@ -352,12 +352,12 @@ describe("ShellTool", () => {
         reset()
         denyAction = "external_directory"
         const target = path.join(outside.path, "secret.txt")
-        return withSession(active.path, (registry) => settleTool(registry, call({ command: `cat ${target}` }))).pipe(
+        return withSession(active.path, (registry) => executeTool(registry, call({ command: `cat ${target}` }))).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(assertions.map((item) => item.action)).toEqual(["shell"])
-              expect(settled.output?.structured).not.toHaveProperty("warnings")
-              expect(settled.output?.content[1]).toMatchObject({
+              expect(settled.metadata).not.toHaveProperty("warnings")
+              expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Warnings:"),
               })
@@ -378,13 +378,14 @@ describe("ShellTool", () => {
       (tmp) => {
         reset()
         return withSession(tmp.path, (registry) =>
-          settleTool(registry, call({ command: bodyExitCommand }, "call-nonzero")),
+          executeTool(registry, call({ command: bodyExitCommand }, "call-nonzero")),
         ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
-              expect(settled.output?.structured).toMatchObject({ exit: 7, truncated: false })
-              expect(settled.output?.content[0]).toEqual({ type: "text", text: "body" })
-              expect(settled.output?.content[1]).toMatchObject({
+              expect(settled.status).toBe("completed")
+              expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
+              expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Command exited with code 7"),
               })
@@ -403,12 +404,12 @@ describe("ShellTool", () => {
         reset()
         const bytes = ShellTool.MAX_CAPTURE_BYTES + 1024
         return withSession(tmp.path, (registry) =>
-          settleTool(registry, call({ command: overflowCommand(bytes) }, "call-overflow")),
+          executeTool(registry, call({ command: overflowCommand(bytes) }, "call-overflow")),
         ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
-              expect(settled.output?.structured).toMatchObject({ exit: 0, truncated: true })
-              expect(settled.output?.content[0]).toMatchObject({
+              expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
+              expect(settled.content?.[0]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("output truncated; full output saved to:"),
               })
@@ -421,7 +422,7 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "reports bounded output progress for a running command",
+    "reports the shell ID for a running command",
     () =>
       Effect.acquireUseRelease(
         Effect.promise(() => tmpdir()),
@@ -431,32 +432,21 @@ describe("ShellTool", () => {
           const releasePath = path.join(tmp.path, release)
           return withSession(tmp.path, (registry) =>
             Effect.gen(function* () {
-              const observed = yield* Deferred.make<ToolRegistry.Progress>()
-              yield* settleTool(registry, {
+              const observed = yield* Deferred.make<string>()
+              yield* executeTool(registry, {
                 ...call(
                   { command: progressOverflowCommand(ShellTool.MAX_CAPTURE_BYTES + 1024, release) },
                   "call-progress",
                 ),
                 progress: (update) =>
                   Effect.gen(function* () {
-                    if (update.structured.truncated !== true) return
-                    const content = update.content[0]
-                    if (content?.type !== "text") return
-                    if (content.text.indexOf("\n\n[output truncated; full output saved to:") !== ShellTool.MAX_CAPTURE_BYTES)
-                      return
-                    yield* Deferred.succeed(observed, update)
+                    if (typeof update.shellID !== "string") return
+                    yield* Deferred.succeed(observed, update.shellID)
                     yield* Effect.promise(() => fs.writeFile(releasePath, ""))
                   }),
               })
 
-              const progress = yield* Deferred.await(observed)
-              expect(progress.structured).toEqual({ truncated: true })
-              const content = progress.content[0]
-              expect(content?.type).toBe("text")
-              if (content?.type !== "text") return
-              expect(content.text.indexOf("\n\n[output truncated; full output saved to:")).toBe(
-                ShellTool.MAX_CAPTURE_BYTES,
-              )
+              expect(yield* Deferred.await(observed)).toMatch(/^sh_/)
             }).pipe(Effect.ensuring(Effect.promise(() => fs.writeFile(releasePath, "")).pipe(Effect.ignore))),
           )
         },
@@ -466,7 +456,7 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "does not repeat unchanged shell progress",
+    "does not repeat shell ID progress",
     () =>
       Effect.acquireUseRelease(
         Effect.promise(() => tmpdir()),
@@ -474,17 +464,13 @@ describe("ShellTool", () => {
           reset()
           return withSession(tmp.path, (registry) =>
             Effect.gen(function* () {
-              const updates: ToolRegistry.Progress[] = []
-              yield* settleTool(registry, {
+              const updates: Tool.Metadata[] = []
+              yield* executeTool(registry, {
                 ...call({ command: steadyProgressCommand }, "call-steady-progress"),
                 progress: (update) => Effect.sync(() => updates.push(update)),
               })
-              expect(updates).toEqual([
-                {
-                  structured: { truncated: false },
-                  content: [{ type: "text", text: "steady" }],
-                },
-              ])
+              expect(updates).toHaveLength(1)
+              expect(updates[0]?.shellID).toMatch(/^sh_/)
             }),
           )
         },
@@ -493,18 +479,18 @@ describe("ShellTool", () => {
     { timeout: 10_000 },
   )
 
-  it.live("returns a useful timeout settlement", () =>
+  it.live("returns a useful timeout outcome", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
         return withSession(tmp.path, (registry) =>
-          settleTool(registry, call({ command: idleCommand, timeout: 50 })),
+          executeTool(registry, call({ command: idleCommand, timeout: 50 })),
         ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
-              expect(settled.output?.structured).toMatchObject({ timeout: true, truncated: false })
-              expect(settled.output?.content[1]).toMatchObject({
+              expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
+              expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Command timed out"),
               })
@@ -523,16 +509,15 @@ describe("ShellTool", () => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
-            const events = yield* EventV2.Service
-            const admitted = yield* events.subscribe(SessionEvent.InputAdmitted).pipe(
+            const bus = yield* Bus.Service
+            const admitted = yield* bus.subscribe(SessionEvent.InputAdmitted).pipe(
               Stream.filter((event) => event.data.sessionID === sessionID && event.data.input.type === "synthetic"),
               Stream.runHead,
               Effect.forkScoped({ startImmediately: true }),
             )
-            const settled = yield* settleTool(registry, call({ command: idleCommand, timeout: 50, background: true }))
-            const structured = settled.output?.structured as Record<string, unknown> | undefined
-            const shellID = typeof structured?.shellID === "string" ? structured.shellID : undefined
-            expect(settled.output?.structured).toMatchObject({ truncated: false })
+            const settled = yield* executeTool(registry, call({ command: idleCommand, timeout: 50, background: true }))
+            const shellID = typeof settled.metadata?.shellID === "string" ? settled.metadata.shellID : undefined
+            expect(settled.metadata).toMatchObject({ truncated: false })
             expect(shellID).toStartWith("sh_")
 
             const shell = yield* Shell.Service
@@ -562,22 +547,22 @@ describe("ShellTool", () => {
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
             const shell = yield* Shell.Service
-            const timed = yield* settleTool(
+            const timed = yield* executeTool(
               registry,
               call({ command: idleCommand, background: true }, "call-updated-timeout"),
             )
-            const timedID = (timed.output?.structured as Record<string, unknown> | undefined)?.shellID
+            const timedID = timed.metadata?.shellID
             expect(typeof timedID).toBe("string")
             if (typeof timedID !== "string") return
             const timedShellID = ShellSchema.ID.make(timedID)
             yield* shell.timeout(timedShellID, 50)
             expect((yield* shell.wait(timedShellID)).status).toBe("timeout")
 
-            const cleared = yield* settleTool(
+            const cleared = yield* executeTool(
               registry,
               call({ command: idleCommand, timeout: 50, background: true }, "call-cleared-timeout"),
             )
-            const clearedID = (cleared.output?.structured as Record<string, unknown> | undefined)?.shellID
+            const clearedID = cleared.metadata?.shellID
             expect(typeof clearedID).toBe("string")
             if (typeof clearedID !== "string") return
             const clearedShellID = ShellSchema.ID.make(clearedID)
@@ -601,7 +586,7 @@ describe("ShellTool", () => {
           Effect.gen(function* () {
             const jobs = yield* Job.Service
             const scope = yield* Scope.Scope
-            const waiting = yield* settleTool(
+            const waiting = yield* executeTool(
               registry,
               call({ command: idleCommand, timeout: 50 }, "call-background-signal"),
             ).pipe(Effect.forkIn(scope, { startImmediately: true }))
@@ -616,14 +601,13 @@ describe("ShellTool", () => {
               })
             expect(yield* backgroundWhenReady()).toMatchObject([{ id: "call-background-signal", type: "shell" }])
             const settled = yield* Fiber.join(waiting)
-            const structured = settled.output?.structured as Record<string, unknown> | undefined
-            const shellID = typeof structured?.shellID === "string" ? structured.shellID : undefined
-            expect(settled.output?.structured).toMatchObject({ truncated: false })
-            expect(settled.output?.content[0]).toEqual({
+            const shellID = typeof settled.metadata?.shellID === "string" ? settled.metadata.shellID : undefined
+            expect(settled.metadata).toMatchObject({ truncated: false })
+            expect(settled.content?.[0]).toEqual({
               type: "text",
               text: "The command was moved to the background.",
             })
-            expect(settled.output?.content[1]).toMatchObject({
+            expect(settled.content?.[1]).toMatchObject({
               type: "text",
               text: expect.stringContaining("DO NOT sleep, poll"),
             })

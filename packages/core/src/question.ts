@@ -1,9 +1,9 @@
-export * as QuestionV2 from "./question"
+export * as Question from "./question"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Question } from "@opencode-ai/schema/question"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { SessionSchema } from "./session/schema"
 
 export const ID = Question.ID
@@ -30,15 +30,15 @@ export type Answer = typeof Answer.Type
 export const Reply = Question.Reply
 export type Reply = typeof Reply.Type
 
-export const Event = Question.Event
+export { Event } from "@opencode-ai/schema/question"
 
-export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("QuestionV2.RejectedError", {}) {
+export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("Question.RejectedError", {}) {
   override get message() {
     return "The user dismissed this question"
   }
 }
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("QuestionV2.NotFoundError", {
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Question.NotFoundError", {
   requestID: ID,
 }) {}
 
@@ -60,7 +60,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Question") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Question") {}
 
 interface Pending {
   readonly request: Request
@@ -75,7 +75,7 @@ interface Pending {
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const pending = new Map<ID, Pending>()
 
     yield* Effect.addFinalizer(() =>
@@ -90,14 +90,14 @@ const layer = Layer.effect(
       ),
     )
 
-    const ask = Effect.fn("QuestionV2.ask")((input: AskInput) =>
+    const ask = Effect.fn("Question.ask")((input: AskInput) =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const id = ID.ascending()
           const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
           const request: Request = { id, ...input }
           pending.set(id, { request, deferred })
-          return yield* events.publish(Event.Asked, request).pipe(
+          return yield* bus.publish(Question.Event.Asked, request).pipe(
             Effect.andThen(restore(Deferred.await(deferred))),
             Effect.ensuring(
               Effect.sync(() => {
@@ -109,12 +109,12 @@ const layer = Layer.effect(
       ),
     )
 
-    const reply = Effect.fn("QuestionV2.reply")((input: ReplyInput) =>
+    const reply = Effect.fn("Question.reply")((input: ReplyInput) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* events.publish(Event.Replied, {
+          yield* bus.publish(Question.Event.Replied, {
             sessionID: existing.request.sessionID,
             requestID: existing.request.id,
             answers: input.answers.map((answer) => [...answer]),
@@ -125,12 +125,12 @@ const layer = Layer.effect(
       ),
     )
 
-    const reject = Effect.fn("QuestionV2.reject")((requestID: ID) =>
+    const reject = Effect.fn("Question.reject")((requestID: ID) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const existing = pending.get(requestID)
           if (!existing) return yield* new NotFoundError({ requestID })
-          yield* events.publish(Event.Rejected, {
+          yield* bus.publish(Question.Event.Rejected, {
             sessionID: existing.request.sessionID,
             requestID: existing.request.id,
           })
@@ -140,7 +140,7 @@ const layer = Layer.effect(
       ),
     )
 
-    const list = Effect.fn("QuestionV2.list")(function* () {
+    const list = Effect.fn("Question.list")(function* () {
       return Array.from(pending.values(), (item) => item.request)
     })
 
@@ -148,4 +148,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })

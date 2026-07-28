@@ -2,29 +2,30 @@ import { expect, test } from "bun:test"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { LLMEvent } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
-import { EventV2 } from "@opencode-ai/core/event"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Bus } from "@opencode-ai/core/bus"
+import { Event } from "@opencode-ai/schema/event"
+import { Agent } from "@opencode-ai/core/agent"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Session } from "@opencode-ai/core/session"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
 
-const sessionID = SessionV2.ID.make("ses_tool_event_test")
+const sessionID = Session.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
 const capture = (providerMetadataKey = "anthropic", options?: { readonly interruptProgress?: boolean }) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
-  const events: Pick<EventV2.Interface, "publish"> = {
+  const bus: Pick<Bus.Interface, "publish"> = {
     publish: (definition, data) => {
       const publish = Effect.sync(() => {
-        const event = { id: EventV2.ID.create(), type: definition.type, data } as EventV2.Payload<typeof definition>
+        const event = { id: Event.ID.create(), type: definition.type, data } as Event.Payload<typeof definition>
         published.push({
           type: definition.durable
-            ? EventV2.versionedType(definition.type, definition.durable.version)
+            ? Bus.versionedType(definition.type, definition.durable.version)
             : definition.type,
           data,
         })
@@ -37,20 +38,21 @@ const capture = (providerMetadataKey = "anthropic", options?: { readonly interru
   }
   return {
     published,
-    publisher: createLLMEventPublisher(events, {
+    publisher: createLLMEventPublisher(bus, {
       sessionID,
-      agent: AgentV2.ID.make("build"),
+      agent: Agent.ID.make("build"),
       model: {
-        id: ModelV2.ID.make("model"),
-        providerID: ProviderV2.ID.opencode,
+        id: Model.ID.make("model"),
+        providerID: Provider.ID.opencode,
       },
       providerMetadataKey,
+      assistantMessageID: SessionMessage.ID.create(),
     }),
   }
 }
 
 const call = LLMEvent.toolCall({ id: "call-image", name: "read", input: { path: "pixel.png" } })
-const result = LLMEvent.toolResult({
+const hostedResult = LLMEvent.toolResult({
   id: "call-image",
   name: "read",
   result: {
@@ -60,25 +62,27 @@ const result = LLMEvent.toolResult({
       { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
     ],
   },
-  output: {
-    structured: { type: "media", mime: "image/png" },
-    content: [
-      { type: "text", text: "Image read successfully" },
-      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
-    ],
-  },
 })
 
-test("local tool success serializes media base64 once and reconstructs from structured content", async () => {
+test("local tool success serializes media base64 once through canonical content", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))
-  await Effect.runPromise(publisher.publish(result))
+  await Effect.runPromise(
+    publisher.toolExecution(call.id, call.name, {
+      output: { type: "media", mime: "image/png" },
+      content: [
+        { type: "text", text: "Image read successfully" },
+        { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
+      ],
+    }),
+  )
 
-  const success = published.find((event) => event.type === "session.tool.success.1")
+  const success = published.find((event) => event.type === "session.tool.success.2")
   expect(success).toBeDefined()
   const serialized = JSON.stringify(success)
   expect(serialized.split(base64)).toHaveLength(2)
   expect(success?.data).not.toHaveProperty("result")
+  expect(success?.data).not.toHaveProperty("output")
 
   expect(success?.data).toMatchObject({
     content: [
@@ -88,29 +92,51 @@ test("local tool success serializes media base64 once and reconstructs from stru
   })
 })
 
-test("provider-executed success retains its raw provider result", async () => {
+test("provider-executed success derives content and retains provider result state", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true })))
-  await Effect.runPromise(publisher.publish(LLMEvent.toolResult({ ...result, providerExecuted: true })))
-  const success = published.find((event) => event.type === "session.tool.success.1")
-  expect(success?.data).toHaveProperty("result")
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.toolResult({
+        ...hostedResult,
+        providerExecuted: true,
+        providerMetadata: { anthropic: { result: { type: "content", value: [] } } },
+      }),
+    ),
+  )
+  const success = published.find((event) => event.type === "session.tool.success.2")
+  expect(success?.data).not.toHaveProperty("result")
+  expect(success?.data).toMatchObject({
+    executed: true,
+    content: [
+      { type: "text", text: "Image read successfully" },
+      { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" },
+    ],
+    resultState: { result: { type: "content" } },
+  })
 })
 
-test("interrupted progress publication remains in the terminal failure snapshot", async () => {
+test("interrupted progress metadata remains in the terminal failure snapshot", async () => {
   const { published, publisher } = capture("anthropic", { interruptProgress: true })
   await Effect.runPromise(publisher.publish(call))
-  const exit = await Effect.runPromiseExit(
-    publisher.progress(call.id, {
-      structured: { phase: "visible" },
-      content: [{ type: "text", text: "visible" }],
-    }),
-  )
+  const exit = await Effect.runPromiseExit(publisher.progress(call.id, { phase: "visible" }))
   expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
   await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
 
-  expect(published.find((event) => event.type === "session.tool.failed.1")?.data).toMatchObject({
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
     metadata: { phase: "visible" },
-    content: [{ type: "text", text: "visible" }],
+  })
+})
+
+test("failure snapshot retains canonical progress above the default byte limit", async () => {
+  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  await Effect.runPromise(publisher.publish(call))
+  const detail = "x".repeat(60 * 1024)
+  await Effect.runPromiseExit(publisher.progress(call.id, { detail }))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
+
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
+    metadata: { detail },
   })
 })
 
@@ -119,7 +145,7 @@ test("failure before progress omits partial output fields", async () => {
   await Effect.runPromise(publisher.publish(call))
   await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
 
-  const failed = published.find((event) => event.type === "session.tool.failed.1")?.data
+  const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
   expect(failed).not.toHaveProperty("content")
   expect(failed).not.toHaveProperty("metadata")
 })
@@ -192,7 +218,7 @@ test("provider-executed tool metadata is flattened using the route key", async (
   expect(published.find((event) => event.type === "session.tool.called.1")?.data).toMatchObject({
     state: { itemId: "call" },
   })
-  expect(published.find((event) => event.type === "session.tool.success.1")?.data).toMatchObject({
+  expect(published.find((event) => event.type === "session.tool.success.2")?.data).toMatchObject({
     resultState: { itemId: "result" },
   })
 })
@@ -201,38 +227,36 @@ test("binary failure emits no success event", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))
   await Effect.runPromise(
-    publisher.publish(
-      LLMEvent.toolResult({
-        id: call.id,
-        name: call.name,
-        result: { type: "error", value: "Cannot read binary file" },
-      }),
-    ),
+    publisher.failTool(call.id, { type: "tool.execution", message: "Cannot read binary file" }),
   )
-  expect(published.some((event) => event.type === "session.tool.success.1")).toBe(false)
-  expect(published.some((event) => event.type === "session.tool.failed.1")).toBe(true)
+  expect(published.some((event) => event.type === "session.tool.success.2")).toBe(false)
+  expect(published.some((event) => event.type === "session.tool.failed.2")).toBe(true)
 })
 
-test("success event data can carry a provider-executed result", () => {
+test("success event data can carry provider-executed result state", () => {
   const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
     sessionID,
     assistantMessageID: SessionMessage.ID.create(),
     callID: "call-old",
-    structured: { type: "media", mime: "image/png" },
     content: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
-    result: { type: "content", value: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }] },
     executed: true,
+    resultState: {
+      result: {
+        type: "content",
+        value: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
+      },
+    },
   })
-  expect(decoded.result).toMatchObject({ type: "content" })
+  expect(decoded.resultState).toMatchObject({ result: { type: "content" } })
 })
 
 test("step finish records settlement without publishing step ended", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
-  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } })))
 
   expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
-  expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
+  expect(publisher.record().finish).toMatchObject({ finish: "stop" })
 })
 
 test("content-filter finish retains failure evidence until step closeout", async () => {
@@ -242,7 +266,7 @@ test("content-filter finish retains failure evidence until step closeout", async
     publisher.publish(
       LLMEvent.stepFinish({
         index: 0,
-        reason: "content-filter",
+        reason: { normalized: "content-filter" },
         usage: {
           nonCachedInputTokens: 8,
           outputTokens: 3,
@@ -253,7 +277,7 @@ test("content-filter finish retains failure evidence until step closeout", async
   )
 
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
-  const settlement = publisher.stepSettlement()
+  const settlement = publisher.record().finish
   expect(settlement).toMatchObject({
     finish: "content-filter",
     tokens: { input: 8, output: 2, reasoning: 1 },
@@ -285,7 +309,7 @@ test("content-filter finish preserves partial streamed text and never ends the s
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "text" }),
         LLMEvent.textDelta({ id: "text", text: "Partial" }),
-        LLMEvent.stepFinish({ index: 0, reason: "content-filter" }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "content-filter" } }),
       ],
       (event) => publisher.publish(event),
       { discard: true },

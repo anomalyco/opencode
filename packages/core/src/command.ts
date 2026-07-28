@@ -1,11 +1,11 @@
-export * as CommandV2 from "./command"
+export * as Command from "./command"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
 import { State } from "./state"
 import { MCP } from "./mcp/index"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
 import { Config } from "./config"
@@ -14,7 +14,7 @@ import { ShellSelect } from "./shell/select"
 
 export const Info = Command.Info
 export type Info = Command.Info
-export const Event = Command.Event
+export { Event } from "@opencode-ai/schema/command"
 
 export type Evaluation = {
   readonly text: string
@@ -50,13 +50,13 @@ export interface Interface extends State.Transformable<Draft> {
   }) => Effect.Effect<Evaluation, NotFoundError | EvaluationError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Command") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
 export const layer = (options?: ShellSelect.Options) => Layer.effect(
   Service,
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
     const config = yield* Config.Service
     const location = yield* Location.Service
@@ -76,7 +76,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
           draft.commands.delete(name)
         },
       }),
-      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
+      finalize: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
     })
     const staticCommand = (name: string) => state.get().commands.get(name) as Info | undefined
     const mcpCommands = Effect.fnUntraced(function* () {
@@ -92,12 +92,12 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
     return Service.of({
       reload: state.reload,
       transform: state.transform,
-      get: Effect.fn("CommandV2.get")(function* (name) {
+      get: Effect.fn("Command.get")(function* (name) {
         const command = staticCommand(name)
         if (command) return command
         return (yield* mcpCommands()).find((command) => command.name === name)
       }),
-      list: Effect.fn("CommandV2.list")(function* () {
+      list: Effect.fn("Command.list")(function* () {
         const commands = Array.from(state.get().commands.values()) as Info[]
         const names = new Set(commands.map((command) => command.name))
         return [
@@ -105,7 +105,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
           ...(yield* mcpCommands()).filter((command) => !names.has(command.name)),
         ]
       }),
-      evaluate: Effect.fn("CommandV2.evaluate")(function* (input) {
+      evaluate: Effect.fn("Command.evaluate")(function* (input) {
         const command = staticCommand(input.name)
         if (command) return yield* evaluateTemplate(input.name, command.template, input.arguments ?? "", {
           config,
@@ -247,7 +247,7 @@ export function configured(options?: ShellSelect.Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [MCP.node, EventV2.node, AppProcess.node, Config.node, Location.node],
+    deps: [MCP.node, Bus.node, AppProcess.node, Config.node, Location.node],
   })
 }
 

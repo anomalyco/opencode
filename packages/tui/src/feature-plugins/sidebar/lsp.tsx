@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/v2/tui"
+import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTheme } from "../../context/theme"
 
 function View() {

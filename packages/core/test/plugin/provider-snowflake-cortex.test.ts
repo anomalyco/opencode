@@ -1,19 +1,19 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, it as bun_it } from "bun:test"
 import { Effect } from "effect"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Model } from "@opencode-ai/core/model"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { SnowflakeCortexPlugin, cortexFetch } from "@opencode-ai/core/plugin/provider/snowflake-cortex"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
-  const plugin = yield* PluginV2.Service
+  const plugin = yield* Plugin.Service
   const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* SnowflakeCortexPlugin.effect(host)
@@ -53,13 +53,13 @@ describe("SnowflakeCortexPlugin", () => {
 
   it.effect("ignores non-snowflake-cortex providers", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("openai"), ModelV2.ID.make("gpt-4")),
-          modelID: ModelV2.ID.make("gpt-4"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-4")),
+          modelID: Model.ID.make("gpt-4"),
           package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/openai",
@@ -72,13 +72,13 @@ describe("SnowflakeCortexPlugin", () => {
   it.effect("creates SDK for snowflake-cortex using SNOWFLAKE_CORTEX_PAT env var", () =>
     withEnv({ SNOWFLAKE_CORTEX_PAT: "test-pat" }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
+        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.default(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-            modelID: ModelV2.ID.make("claude-sonnet-4-6"),
+          model: Model.Info.make({
+            ...Model.Info.default(Provider.ID.make("snowflake-cortex"), Model.ID.make("claude-sonnet-4-6")),
+            modelID: Model.ID.make("claude-sonnet-4-6"),
             package: "aisdk:test-provider",
           }),
           package: "@ai-sdk/openai-compatible",
@@ -92,13 +92,13 @@ describe("SnowflakeCortexPlugin", () => {
   it.effect("falls back to options.apiKey when SNOWFLAKE_CORTEX_PAT env var is absent", () =>
     withEnv({ SNOWFLAKE_CORTEX_PAT: undefined }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
+        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.default(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-            modelID: ModelV2.ID.make("claude-sonnet-4-6"),
+          model: Model.Info.make({
+            ...Model.Info.default(Provider.ID.make("snowflake-cortex"), Model.ID.make("claude-sonnet-4-6")),
+            modelID: Model.ID.make("claude-sonnet-4-6"),
             package: "aisdk:test-provider",
           }),
           package: "@ai-sdk/openai-compatible",
@@ -116,13 +116,13 @@ describe("SnowflakeCortexPlugin", () => {
   it.effect("uses SNOWFLAKE_CORTEX_TOKEN env var", () =>
     withEnv({ SNOWFLAKE_CORTEX_TOKEN: "oauth-token", SNOWFLAKE_CORTEX_PAT: undefined }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
+        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.default(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-            modelID: ModelV2.ID.make("claude-sonnet-4-6"),
+          model: Model.Info.make({
+            ...Model.Info.default(Provider.ID.make("snowflake-cortex"), Model.ID.make("claude-sonnet-4-6")),
+            modelID: Model.ID.make("claude-sonnet-4-6"),
             package: "aisdk:test-provider",
           }),
           package: "@ai-sdk/openai-compatible",
@@ -136,13 +136,13 @@ describe("SnowflakeCortexPlugin", () => {
   it.effect("falls back to options.token when no Snowflake env token is set", () =>
     withEnv({ SNOWFLAKE_CORTEX_TOKEN: undefined, SNOWFLAKE_CORTEX_PAT: undefined }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
+        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.default(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-            modelID: ModelV2.ID.make("claude-sonnet-4-6"),
+          model: Model.Info.make({
+            ...Model.Info.default(Provider.ID.make("snowflake-cortex"), Model.ID.make("claude-sonnet-4-6")),
+            modelID: Model.ID.make("claude-sonnet-4-6"),
             package: "aisdk:test-provider",
           }),
           package: "@ai-sdk/openai-compatible",
@@ -160,13 +160,13 @@ describe("SnowflakeCortexPlugin", () => {
   it.effect("sets includeUsage on the SDK options", () =>
     withEnv({ SNOWFLAKE_CORTEX_PAT: "test-pat" }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
+        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
         const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.default(ProviderV2.ID.make("snowflake-cortex"), ModelV2.ID.make("claude-sonnet-4-6")),
-            modelID: ModelV2.ID.make("claude-sonnet-4-6"),
+          model: Model.Info.make({
+            ...Model.Info.default(Provider.ID.make("snowflake-cortex"), Model.ID.make("claude-sonnet-4-6")),
+            modelID: Model.ID.make("claude-sonnet-4-6"),
             package: "aisdk:test-provider",
           }),
           package: "@ai-sdk/openai-compatible",

@@ -8,6 +8,7 @@ export type ModelApi = Client["model"]
 export type PluginApi = Client["plugin"]
 export type ProviderApi = Client["provider"]
 export type ReferenceApi = Client["reference"]
+export type WebSearchApi = Client["websearch"]
 export type SessionApi = Client["session"]
 export type SkillApi = Client["skill"]
 

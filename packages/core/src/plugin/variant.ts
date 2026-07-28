@@ -1,9 +1,9 @@
 export * as VariantPlugin from "./variant"
 
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ModelV2 } from "../model"
-import { ProviderV2 } from "../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Model } from "../model"
+import { Provider } from "../provider"
 
 export const Plugin = define({
   id: "opencode.variant",
@@ -32,13 +32,13 @@ export const Plugin = define({
 export function generate(
   model: { readonly id: string; readonly modelID?: string; readonly package?: string },
   provider?: { readonly package: string },
-): NonNullable<ModelV2.Info["variants"]> {
+): NonNullable<Model.Info["variants"]> {
   const packageName = model.package ?? provider?.package
-  if (!ProviderV2.isAISDK(packageName) || ProviderV2.packageName(packageName) !== "@ai-sdk/openai-compatible") return []
+  if (!Provider.isAISDK(packageName) || Provider.packageName(packageName) !== "@ai-sdk/openai-compatible") return []
   const ids = `${model.id} ${model.modelID ?? ""}`.toLowerCase()
   if (!["glm-5.2", "glm-5-2", "glm-5p2"].some((name) => ids.includes(name))) return []
   return ["high", "max"].map((id) => ({
-    id: ModelV2.VariantID.make(id),
+    id: Model.VariantID.make(id),
     settings: { reasoningEffort: id },
   }))
 }

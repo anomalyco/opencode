@@ -2,11 +2,11 @@ import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Model } from "@opencode-ai/core/model"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { CerebrasPlugin } from "@opencode-ai/core/plugin/provider/cerebras"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -14,7 +14,7 @@ const cerebrasOptions: Record<string, unknown>[] = []
 const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
-  const plugin = yield* PluginV2.Service
+  const plugin = yield* Plugin.Service
   const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* CerebrasPlugin.effect(host)
@@ -35,13 +35,13 @@ describe("CerebrasPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.make("cerebras"), (item) => {
-          item.package = ProviderV2.aisdk("@ai-sdk/cerebras")
+        catalog.provider.update(Provider.ID.make("cerebras"), (item) => {
+          item.package = Provider.aisdk("@ai-sdk/cerebras")
           item.headers = { ...item.headers, Existing: "1" }
         })
       })
       yield* addPlugin()
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("cerebras")))?.headers).toEqual({
+      expect((yield* catalog.provider.get(Provider.ID.make("cerebras")))?.headers).toEqual({
         Existing: "1",
         "X-Cerebras-3rd-Party-Integration": "opencode",
       })
@@ -51,25 +51,25 @@ describe("CerebrasPlugin", () => {
   it.effect("ignores non-Cerebras providers", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => catalog.provider.update(ProviderV2.ID.make("groq"), () => {}))
+      yield* catalog.transform((catalog) => catalog.provider.update(Provider.ID.make("groq"), () => {}))
       yield* addPlugin()
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("groq")))?.headers).toBeUndefined()
+      expect((yield* catalog.provider.get(Provider.ID.make("groq")))?.headers).toBeUndefined()
     }),
   )
 
   it.effect("creates a bundled Cerebras SDK with the model provider ID as the SDK name", () =>
     Effect.gen(function* () {
       cerebrasOptions.length = 0
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(
-            ProviderV2.ID.make("custom-cerebras"),
-            ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+        model: Model.Info.make({
+          ...Model.Info.default(
+            Provider.ID.make("custom-cerebras"),
+            Model.ID.make("llama-4-scout-17b-16e-instruct"),
           ),
-          modelID: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+          modelID: Model.ID.make("llama-4-scout-17b-16e-instruct"),
           package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/cerebras",
@@ -83,16 +83,16 @@ describe("CerebrasPlugin", () => {
   it.effect("preserves an explicit bundled Cerebras SDK name option", () =>
     Effect.gen(function* () {
       cerebrasOptions.length = 0
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(
-            ProviderV2.ID.make("custom-cerebras"),
-            ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+        model: Model.Info.make({
+          ...Model.Info.default(
+            Provider.ID.make("custom-cerebras"),
+            Model.ID.make("llama-4-scout-17b-16e-instruct"),
           ),
-          modelID: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+          modelID: Model.ID.make("llama-4-scout-17b-16e-instruct"),
           package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/cerebras",
@@ -105,16 +105,16 @@ describe("CerebrasPlugin", () => {
   it.effect("ignores non-Cerebras SDK packages", () =>
     Effect.gen(function* () {
       cerebrasOptions.length = 0
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(
-            ProviderV2.ID.make("custom-cerebras"),
-            ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+        model: Model.Info.make({
+          ...Model.Info.default(
+            Provider.ID.make("custom-cerebras"),
+            Model.ID.make("llama-4-scout-17b-16e-instruct"),
           ),
-          modelID: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+          modelID: Model.ID.make("llama-4-scout-17b-16e-instruct"),
           package: "aisdk:test-provider",
         }),
         package: "@ai-sdk/groq",

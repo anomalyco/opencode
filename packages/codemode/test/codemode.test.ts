@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool, toolError } from "../src/index.js"
 
-const run = (tool: Tool.Definition<never>) =>
+const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
 class UnsafeHostError extends Schema.TaggedErrorClass<UnsafeHostError>()("UnsafeHostError", {
@@ -16,7 +16,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Fail safely",
         input: Schema.Struct({}),
         output: Schema.String,
-        run: () => Effect.fail(toolError("Authorized request was refused")),
+        execute: () => Effect.fail(toolError("Authorized request was refused")),
       }),
     )
 
@@ -32,7 +32,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Fail safely",
         input: Schema.Struct({}),
         output: Schema.String,
-        run: () => Effect.fail(toolError("File not found: /tmp/report.json")),
+        execute: () => Effect.fail(toolError("File not found: /tmp/report.json")),
       }),
     )
 
@@ -52,7 +52,7 @@ describe("CodeMode host failure boundary", () => {
           description: "Fail internally",
           input: Schema.Struct({}),
           output: Schema.String,
-          run: () => failure,
+          execute: () => failure,
         }),
       )
 
@@ -71,7 +71,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Return invalid output",
         input: Schema.Struct({}),
         output: Schema.Struct({ safe: Schema.String }),
-        run: () => Effect.succeed({ safe: 1, secret } as unknown as { readonly safe: string }),
+        execute: () => Effect.succeed({ safe: 1, secret } as unknown as { readonly safe: string }),
       }),
     )
 
@@ -88,7 +88,7 @@ describe("CodeMode host failure boundary", () => {
         description: "Return hostile output",
         input: Schema.Struct({}),
         output: Schema.Unknown,
-        run: () =>
+        execute: () =>
           Effect.succeed(
             new Proxy(
               {},
@@ -118,7 +118,7 @@ describe("CodeMode host failure boundary", () => {
               description: "Refuse",
               input: Schema.Struct({}),
               output: Schema.String,
-              run: () => Effect.fail(toolError("Refused")),
+              execute: () => Effect.fail(toolError("Refused")),
             }),
           },
         },
@@ -145,7 +145,7 @@ describe("CodeMode host failure boundary", () => {
               description: "Interrupt",
               input: Schema.Struct({}),
               output: Schema.String,
-              run: () => Effect.interrupt,
+              execute: () => Effect.interrupt,
             }),
           },
         },
@@ -166,7 +166,7 @@ describe("CodeMode tool-call observation", () => {
       description: "Look up a value",
       input: Schema.Struct({ query: Schema.String }),
       output: Schema.String,
-      run: ({ query }) => Effect.succeed(query),
+      execute: ({ query }) => Effect.succeed(query),
     })
 
     const result = await Effect.runPromise(
@@ -189,7 +189,12 @@ describe("CodeMode tool-call observation", () => {
       description: "Look up a value",
       input: Schema.Struct({ query: Schema.String }),
       output: Schema.String,
-      run: ({ query }) => (query === "boom" ? Effect.fail(toolError("Lookup refused")) : Effect.succeed(query)),
+      execute: ({ query }) =>
+        query === "boom"
+          ? Effect.fail(toolError("Lookup refused"))
+          : query === "defect"
+            ? Effect.die("broken")
+            : Effect.succeed(query),
     })
 
     const runtime = CodeMode.make({
@@ -215,13 +220,97 @@ describe("CodeMode tool-call observation", () => {
     expect(success.ok).toBe(true)
     const failure = await Effect.runPromise(runtime.execute(`return await tools.context.lookup({ query: "boom" })`))
     expect(failure.ok).toBe(false)
+    const defect = await Effect.runPromise(runtime.execute(`return await tools.context.lookup({ query: "defect" })`))
+    expect(defect.ok).toBe(false)
 
     expect(events).toStrictEqual([
       { phase: "start", index: 0, name: "context.lookup" },
       { phase: "end", index: 0, name: "context.lookup", outcome: "success" },
       { phase: "start", index: 0, name: "context.lookup" },
       { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "Lookup refused" },
+      { phase: "start", index: 0, name: "context.lookup" },
+      { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "Tool execution failed" },
     ])
+  })
+
+  test("observes interrupted calls", async () => {
+    const events: Array<string> = []
+    const call = Tool.make({
+      description: "Interrupt",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.interrupt,
+    })
+    const exit = await Effect.runPromiseExit(
+      CodeMode.make({
+        tools: { host: { call } },
+        onToolCallStart: () => Effect.sync(() => events.push("start")),
+        onToolCallEnd: (call) => Effect.sync(() => events.push(`end:${call.outcome}`)),
+      }).execute("return await tools.host.call({})"),
+    )
+
+    expect(exit._tag).toBe("Failure")
+    expect(events).toEqual(["start", "end:interrupted"])
+  })
+
+  test("observes running calls interrupted during completion", async () => {
+    const events: Array<string> = []
+    const call = Tool.make({
+      description: "Pending",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.never,
+    })
+    const result = await Effect.runPromise(
+      CodeMode.make({
+        tools: { host: { call } },
+        onToolCallStart: () => Effect.sync(() => events.push("start")),
+        onToolCallEnd: (call) => Effect.sync(() => events.push(`end:${call.outcome}`)),
+      }).execute('tools.host.call({}); return "done"'),
+    )
+
+    expect(result).toMatchObject({ ok: true, value: "done" })
+    expect(events).toEqual(["start", "end:interrupted"])
+  })
+
+  test("ends calls interrupted during start observation", async () => {
+    const events: Array<string> = []
+    const call = Tool.make({
+      description: "Unused",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.succeed("unused"),
+    })
+    const exit = await Effect.runPromiseExit(
+      CodeMode.make({
+        tools: { host: { call } },
+        onToolCallStart: () => Effect.interrupt,
+        onToolCallEnd: (call) => Effect.sync(() => events.push(call.outcome)),
+      }).execute("return await tools.host.call({})"),
+    )
+
+    expect(exit._tag).toBe("Failure")
+    expect(events).toEqual(["interrupted"])
+  })
+
+  test("observes calls interrupted by the execution timeout", async () => {
+    const outcomes: Array<string> = []
+    const call = Tool.make({
+      description: "Pending",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.never,
+    })
+    const result = await Effect.runPromise(
+      CodeMode.make({
+        tools: { host: { call } },
+        limits: { timeoutMs: 10 },
+        onToolCallEnd: (call) => Effect.sync(() => outcomes.push(call.outcome)),
+      }).execute("return await tools.host.call({})"),
+    )
+
+    expect(result).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
+    expect(outcomes).toEqual(["interrupted"])
   })
 })
 
@@ -430,7 +519,7 @@ describe("CodeMode schema flexibility", () => {
         properties: { id: { type: "string" }, count: { type: "number" } },
         required: ["id"],
       },
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return { echoed: input }
@@ -442,14 +531,14 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "adapter.call",
         description: "Call an adapter-described tool",
-        signature: "tools.adapter.call(input: {\n  id: string,\n  count?: number,\n}): Promise<unknown>",
+        signature: "tools.adapter.call(input: {\n  id: string,\n  count?: number,\n}): Promise<void>",
       },
     ])
 
     // JSON Schema is render-only: mistyped input passes through unvalidated.
     const result = await Effect.runPromise(runtime.execute(`return await tools.adapter.call({ id: 42 })`))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toStrictEqual({ echoed: { id: 42 } })
+    if (result.ok) expect(result.value).toBeNull()
     expect(observed).toStrictEqual([{ id: 42 }])
   })
 
@@ -458,7 +547,7 @@ describe("CodeMode schema flexibility", () => {
     const call = Tool.make({
       description: "Observe raw input",
       input: { type: "object" },
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return "ok"
@@ -483,7 +572,7 @@ describe("CodeMode schema flexibility", () => {
     const find = Tool.make({
       description: "Find things",
       input: Schema.Struct({ query: Schema.optionalKey(Schema.String), limit: Schema.optionalKey(Schema.Number) }),
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return "ok"
@@ -517,7 +606,7 @@ describe("CodeMode schema flexibility", () => {
           },
         },
       },
-      run: () => Effect.succeed({ login: "kit", id: 7 }),
+      execute: () => Effect.succeed({ login: "kit", id: 7 }),
     })
     const runtime = CodeMode.make({ tools: { users: { lookup } } })
 
@@ -534,18 +623,18 @@ describe("CodeMode schema flexibility", () => {
     if (result.ok) expect(result.value).toStrictEqual({ login: "kit", id: 7 })
   })
 
-  test("Effect Schema output without an input transform still renders unknown when omitted", async () => {
+  test("Effect Schema output without an input transform renders void when omitted", async () => {
     const ping = Tool.make({
       description: "Ping",
       input: Schema.Struct({ host: Schema.String }),
-      run: () => Effect.succeed("pong"),
+      execute: () => Effect.succeed("pong"),
     })
     const runtime = CodeMode.make({ tools: { net: { ping } } })
-    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: {\n  host: string,\n}): Promise<unknown>")
+    expect(runtime.catalog()[0]?.signature).toBe("tools.net.ping(input: {\n  host: string,\n}): Promise<void>")
 
     const result = await Effect.runPromise(runtime.execute(`return await tools.net.ping({ host: "example.test" })`))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value).toBe("pong")
+    if (result.ok) expect(result.value).toBeNull()
   })
 })
 
@@ -554,7 +643,7 @@ describe("CodeMode public contract", () => {
     description: "Look up an order by ID",
     input: Schema.Struct({ id: Schema.String }),
     output: Schema.Struct({ id: Schema.String, status: Schema.String }),
-    run: ({ id }) => Effect.succeed({ id, status: "open" }),
+    execute: ({ id }) => Effect.succeed({ id, status: "open" }),
   })
   const tools = { orders: { lookup } }
   const source = `return await tools.orders.lookup({ id: "order_42" })`
@@ -577,7 +666,7 @@ describe("CodeMode public contract", () => {
       description: "echo",
       input: Schema.Struct({}),
       output: Schema.Number,
-      run: () => Effect.succeed(1),
+      execute: () => Effect.succeed(1),
     })
     const effect = CodeMode.execute({
       tools: { host: { echo } },
@@ -592,7 +681,7 @@ describe("CodeMode public contract", () => {
     expect(second).toStrictEqual({ ok: true, value: 1, logs: ["hi"], toolCalls: [{ name: "host.echo" }] })
   })
 
-  test("inlines a COMPLETE small catalog and keeps search registered but unadvertised", async () => {
+  test("describes the catalog and keeps the search built-in registered", async () => {
     const runtime = CodeMode.make({ tools })
     expect(runtime.catalog()).toStrictEqual([
       {
@@ -601,16 +690,7 @@ describe("CodeMode public contract", () => {
         signature: "tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
       },
     ])
-    expect(runtime.instructions()).toContain("Available tools (COMPLETE list")
-    expect(runtime.instructions()).toContain("- orders (1 tool)")
-    expect(runtime.instructions()).toContain(
-      "  - tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}> // Look up an order by ID",
-    )
-    // A fully inlined catalog does not advertise search in the instructions...
-    expect(runtime.instructions()).not.toContain("search(")
 
-    // ...but the search built-in stays available, so a speculative call still works with the
-    // same signature as the inline catalog.
     const result = await Effect.runPromise(runtime.execute(`return search({ query: "order" })`))
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -629,12 +709,32 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("renders equivalent catalogs identically regardless of tool insertion order", () => {
+    const alpha = Tool.make({
+      description: "Alpha tool",
+      input: Schema.Struct({}),
+      output: Schema.Void,
+      execute: () => Effect.void,
+    })
+    const zeta = Tool.make({
+      description: "Zeta tool",
+      input: Schema.Struct({}),
+      output: Schema.Void,
+      execute: () => Effect.void,
+    })
+    const first = CodeMode.make({ tools: { zeta: { zeta, alpha }, alpha: { zeta, alpha } } })
+    const second = CodeMode.make({ tools: { alpha: { alpha, zeta }, zeta: { alpha, zeta } } })
+
+    expect(first.catalog()).toStrictEqual(second.catalog())
+    expect(first.catalog().map((tool) => tool.path)).toEqual(["alpha.alpha", "alpha.zeta", "zeta.alpha", "zeta.zeta"])
+  })
+
   test("renders bracket notation for tool names that are not JavaScript identifiers", async () => {
     const resolveLibrary = Tool.make({
       description: "Resolve a library ID",
       input: Schema.Struct({ libraryName: Schema.String }),
       output: Schema.String,
-      run: ({ libraryName }) => Effect.succeed(`/resolved/${libraryName}`),
+      execute: ({ libraryName }) => Effect.succeed(`/resolved/${libraryName}`),
     })
     const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
 
@@ -645,9 +745,6 @@ describe("CodeMode public contract", () => {
         signature: 'tools.context7["resolve-library-id"](input: {\n  libraryName: string,\n}): Promise<string>',
       },
     ])
-    expect(runtime.instructions()).toContain(
-      'tools.context7["resolve-library-id"](input: {\n  libraryName: string,\n}): Promise<string>',
-    )
 
     const search = await Effect.runPromise(runtime.execute(`return search({ query: "resolve library id" })`))
     expect(search.ok).toBe(true)
@@ -678,110 +775,22 @@ describe("CodeMode public contract", () => {
     if (exact.ok) expect(exact.value).toMatchObject({ remaining: 0, next: null })
   })
 
-  test("instructions use markdown sections with placeholder-only call forms", () => {
-    const runtime = CodeMode.make({ tools })
-    const instructions = runtime.instructions()
-    // Sections in order: workflow at the top, catalog at the bottom.
-    expect(instructions).toContain("## Workflow")
-    expect(instructions).toContain("## Rules")
-    expect(instructions).toContain("## Language")
-    expect(instructions.indexOf("## Workflow")).toBeLessThan(instructions.indexOf("## Rules"))
-    expect(instructions.indexOf("## Rules")).toBeLessThan(instructions.indexOf("## Language"))
-    expect(instructions.indexOf("## Language")).toBeLessThan(
-      instructions.indexOf("\n## Available tools (COMPLETE list"),
-    )
-    expect(instructions).not.toContain("JSON.parse(res)")
-    expect(instructions).toContain("Return only the fields you need")
-    expect(instructions).toContain("avoid returning large raw payloads")
-    expect(instructions).toContain("Do not infer or normalize tool names")
-    expect(instructions).toContain("bracket notation and quotes are part of the path")
-    expect(instructions).toContain("surrounding agent tools are not available")
-    expect(instructions).toContain("Only tools listed here are available")
-    // Placeholders use generic namespace/tool/field names only - no fabricated real tools
-    // and no real catalog tools cherry-picked into example lines.
-    expect(instructions).toContain("`const result = await tools.<namespace>.<tool>(input)`")
-    expect(instructions).toContain("Return only the fields you need from structured results")
-    expect(instructions).toContain("check that it is a non-null object and not an array")
-    expect(instructions).not.toContain("result.<field>")
-    expect(instructions).not.toContain("data.<field>")
-    expect(instructions).not.toContain("total_count")
-    expect(instructions).not.toContain("list_issues")
-    expect(instructions).not.toContain("tools.orders.lookup({")
-    // COMPLETE: step 1 picks from the inlined list; search is not advertised.
-    expect(instructions).toContain("1. Pick a tool from the list under `## Available tools`")
-    expect(instructions).not.toContain("Browse one namespace")
-
-    const partial = CodeMode.make({ tools, discovery: { catalogBudget: 0 } }).instructions()
-    // PARTIAL: the workflow starts with search (with query-style guidance that is clearly
-    // a query string, never a tool name) and the browse-namespace rule appears.
-    expect(partial).toContain(
-      '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
-    )
-    expect(partial).toContain("In the next execution, copy a returned path exactly")
-    expect(partial).toContain("Only tools listed here or returned by the built-in `search` function")
-    expect(partial).toContain('- Browse one namespace: `search({ query: "", namespace: "<name>" })`.')
-    expect(partial).toContain("repeat the same search with `offset: next.offset`")
-    expect(partial).toContain("  limit?: number,\n  offset?: number,")
-    expect(partial).not.toContain("total_count")
-    expect(partial).not.toContain("tools.orders.lookup({")
-  })
-
-  test("the language section describes the restricted runtime without overclaiming", () => {
-    const instructions = CodeMode.make({ tools }).instructions()
-    expect(instructions).toContain("restricted JavaScript language for calling tools")
-    expect(instructions).toContain("not a general-purpose runtime")
-    expect(instructions).not.toContain("Standard modern JavaScript works")
-    expect(instructions).not.toContain("TypeScript type annotations")
-    for (const missing of ["Modules/imports", "classes", "fetch"]) {
-      expect(instructions).toContain(missing)
-    }
-    expect(instructions).not.toContain("generators")
-    expect(instructions).not.toContain("new Promise(...) are unavailable")
-    expect(instructions).not.toContain("promise chaining")
-    expect(instructions).toContain("URL, URLSearchParams, and URI encoding helpers")
-    expect(instructions).not.toContain("host globals")
-    expect(instructions).toContain("Use tools for external operations")
-    expect(instructions).toContain(
-      "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
-    )
-    expect(instructions).toContain(
-      "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
-    )
-  })
-
-  test("zero tools keep minimal sections and the no-tools notice", () => {
-    const runtime = CodeMode.make({})
-    const instructions = runtime.instructions()
-    expect(instructions).toContain("No tools are currently available.")
-    expect(instructions).toContain("## Language")
-    expect(instructions).toContain("## Available tools")
-    expect(instructions).not.toContain("## Workflow")
-    expect(instructions).not.toContain("## Rules")
-    expect(instructions).not.toContain("search(")
-  })
-
-  test("uses one ranked search returning complete definitions for large catalogs", async () => {
+  test("uses one ranked search returning complete tools for large catalogs", async () => {
     const upload = Tool.make({
       description: "Upload one readable local file to the current Discord thread",
       input: Schema.Struct({ path: Schema.String }),
       output: Schema.Struct({ sent: Schema.Boolean }),
-      run: () => Effect.succeed({ sent: true }),
+      execute: () => Effect.succeed({ sent: true }),
     })
     const generate = Tool.make({
       description: "Generate an image and upload it to the current Discord thread",
       input: Schema.Struct({ prompt: Schema.String }),
       output: Schema.Struct({ sent: Schema.Boolean }),
-      run: () => Effect.succeed({ sent: true }),
+      execute: () => Effect.succeed({ sent: true }),
     })
     const runtime = CodeMode.make({
       tools: { thread: { uploadFile: upload, generateImage: generate }, orders: { lookup } },
-      discovery: { catalogBudget: 0 },
     })
-    expect(runtime.instructions()).toContain("Available tools (PARTIAL - 0 of 3 shown; find the rest with search(...))")
-    expect(runtime.instructions()).toContain("- thread (2 tools, none shown)")
-    expect(runtime.instructions()).toContain("- orders (1 tool, none shown)")
-    expect(runtime.instructions()).toContain("Search returns complete callable signatures:\n- search(input: {")
-    expect(runtime.instructions()).not.toMatch(/tools\.thread\.uploadFile\(input/)
 
     const result = await Effect.runPromise(
       runtime.execute(`
@@ -865,7 +874,7 @@ describe("CodeMode public contract", () => {
         description: `Numbered tool ${index}`,
         input: Schema.Struct({ id: Schema.String }),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     const runtime = CodeMode.make({
       tools: {
@@ -911,7 +920,7 @@ describe("CodeMode public contract", () => {
         description,
         input: Schema.Struct({ id: Schema.String }),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     const runtime = CodeMode.make({
       tools: {
@@ -954,13 +963,13 @@ describe("CodeMode public contract", () => {
         properties: { attachment: { type: "string", description: "Local path of the payload to send" } },
         required: ["attachment"],
       },
-      run: () => Effect.succeed("ok"),
+      execute: () => Effect.succeed("ok"),
     })
     const other = Tool.make({
       description: "Rename the workspace",
       input: Schema.Struct({ name: Schema.String }),
       output: Schema.String,
-      run: () => Effect.succeed("ok"),
+      execute: () => Effect.succeed("ok"),
     })
     const runtime = CodeMode.make({ tools: { files: { upload, other } } })
 
@@ -990,7 +999,7 @@ describe("CodeMode public contract", () => {
         description,
         input: Schema.Struct({ id: Schema.String }),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     const runtime = CodeMode.make({
       tools: {
@@ -1029,7 +1038,7 @@ describe("CodeMode public contract", () => {
         description,
         input: Schema.Struct({}),
         output: Schema.String,
-        run: () => Effect.succeed("ok"),
+        execute: () => Effect.succeed("ok"),
       })
     // Deliberately declared out of alphabetical order.
     const runtime = CodeMode.make({
@@ -1066,71 +1075,13 @@ describe("CodeMode public contract", () => {
     if (exhausted.ok) expect(exhausted.value).toStrictEqual({ items: [], remaining: 0, next: null })
   })
 
-  test("inlines round-robin across namespaces so one expensive namespace cannot starve the rest", () => {
-    const cheap = Tool.make({
-      description: "Cheap",
-      input: Schema.Struct({ q: Schema.String }),
-      output: Schema.String,
-      run: () => Effect.succeed("ok"),
-    })
-    const expensive = Tool.make({
-      description:
-        "An expensive tool whose description alone consumes far more than the remaining inline catalog byte budget for this runtime",
-      input: Schema.Struct({
-        someRatherLongParameterName: Schema.String,
-        anotherEvenLongerParameterName: Schema.Number,
-      }),
-      output: Schema.String,
-      run: () => Effect.succeed("ok"),
-    })
-    // Round 1 places alpha.cheap (~17 estimated tokens) and beta.cheap (~17); in round 2
-    // alpha.expensive does not fit, which marks only alpha done - it must NOT prevent
-    // other namespaces from inlining (beta already got its line in the same round).
-    const runtime = CodeMode.make({
-      tools: { alpha: { cheap, expensive }, beta: { cheap } },
-      discovery: { catalogBudget: 40 },
-    })
-
-    const instructions = runtime.instructions()
-    expect(instructions).toContain("Available tools (PARTIAL - 2 of 3 shown; find the rest with search(...))")
-    expect(instructions).toContain("- alpha (2 tools, 1 shown)")
-    expect(instructions).toContain("  - tools.alpha.cheap(input: {\n  q: string,\n}): Promise<string> // Cheap")
-    expect(instructions).not.toContain("tools.alpha.expensive(")
-    // Fully shown namespaces read cleanly (no "shown" annotation).
-    expect(instructions).toContain("- beta (1 tool)")
-    expect(instructions).toContain("  - tools.beta.cheap(input: {\n  q: string,\n}): Promise<string> // Cheap")
-    expect(instructions).toContain("Search returns complete callable signatures:\n- search(input: {")
-  })
-
-  test("charges inline JSDoc against the catalog token budget", () => {
-    const documented = Tool.make({
-      description: "Look up a record",
-      input: {
-        type: "object",
-        properties: {
-          id: { type: "string", description: "A detailed identifier description. ".repeat(20) },
-        },
-        required: ["id"],
-      } as const,
-      run: () => Effect.succeed("ok"),
-    })
-    const runtime = CodeMode.make({
-      tools: { records: { lookup: documented } },
-      discovery: { catalogBudget: 40 },
-    })
-
-    expect(runtime.catalog()[0]?.signature).toContain("/** A detailed identifier description.")
-    expect(runtime.instructions()).toContain("Available tools (PARTIAL - 0 of 1 shown; find the rest with search(...))")
-    expect(runtime.instructions()).not.toContain("tools.records.lookup(input:")
-  })
-
   test("decodes tool input and output before exposing either side", async () => {
     const observed: Array<unknown> = []
     const transformed = Tool.make({
       description: "Double a number",
       input: Schema.Struct({ value: Schema.NumberFromString }),
       output: Schema.NumberFromString,
-      run: ({ value }) =>
+      execute: ({ value }) =>
         Effect.sync(() => {
           observed.push(value)
           return String(value * 2)
@@ -1184,7 +1135,7 @@ describe("CodeMode public contract", () => {
     expect(result).toStrictEqual({ ok: true, value: null, toolCalls: [] })
   })
 
-  test("rejects invalid configuration and discovery limits", async () => {
+  test("rejects invalid configuration and search limits", async () => {
     expect(() => CodeMode.execute({ code: "return 1", limits: { timeoutMs: 0 } })).toThrow(RangeError)
     expect(() => CodeMode.execute({ code: "return 1", limits: { timeoutMs: Number.POSITIVE_INFINITY } })).toThrow(
       RangeError,
@@ -1192,13 +1143,8 @@ describe("CodeMode public contract", () => {
     expect(() => CodeMode.execute({ code: "return 1", limits: { maxToolCalls: -1 } })).toThrow(RangeError)
     expect(() => CodeMode.execute({ code: "return 1", limits: { maxOutputBytes: -1 } })).toThrow(RangeError)
 
-    expect(() => CodeMode.make({ tools, discovery: { catalogBudget: -1 } })).toThrow(RangeError)
-
     const result = await Effect.runPromise(
-      CodeMode.make({
-        tools,
-        discovery: { catalogBudget: 0 },
-      }).execute(`return search({ query: "order", limit: 0.5 })`),
+      CodeMode.make({ tools }).execute(`return search({ query: "order", limit: 0.5 })`),
     )
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -1226,7 +1172,7 @@ describe("CodeMode public contract", () => {
       description: "Count invocations",
       input: Schema.Struct({}),
       output: Schema.Number,
-      run: () => Effect.succeed(1),
+      execute: () => Effect.succeed(1),
     })
     const result = await Effect.runPromise(
       CodeMode.execute({

@@ -1,38 +1,39 @@
 import { describe, expect, test } from "bun:test"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Agent } from "@opencode-ai/core/agent"
+import { Bus } from "@opencode-ai/core/bus"
+import { Event } from "@opencode-ai/schema/event"
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { DateTime, Deferred, Effect, Exit, Fiber, Option, Schema, Stream } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { EventFeed } from "../src/event-feed"
 
-const Internal = EventV2.ephemeral({ type: "test.internal", schema: { value: Schema.String } })
+const Internal = Bus.ephemeral({ type: "test.internal", schema: { value: Schema.String } })
 
-const event = (id: string): EventV2.Payload<typeof AgentV2.Event.Updated> => ({
-  id: EventV2.ID.make(`evt_${id}`),
+const event = (id: string): Event.Payload<typeof Agent.Event.Updated> => ({
+  id: Event.ID.make(`evt_${id}`),
   created: DateTime.makeUnsafe(Date.now()),
-  type: AgentV2.Event.Updated.type,
+  type: Agent.Event.Updated.type,
   data: {},
 })
 
-const internal = (value: string): EventV2.Payload<typeof Internal> => ({
-  id: EventV2.ID.create(),
+const internal = (value: string): Event.Payload<typeof Internal> => ({
+  id: Event.ID.create(),
   created: DateTime.makeUnsafe(Date.now()),
   type: Internal.type,
   data: { value },
 })
 
 function makeSource() {
-  let subscriber: EventV2.Subscriber | undefined
+  let subscriber: Bus.Subscriber | undefined
   return {
-    observe: (next: EventV2.Subscriber) =>
+    observe: (next: Bus.Subscriber) =>
       Effect.sync(() => {
         subscriber = next
         return Effect.sync(() => {
           if (subscriber === next) subscriber = undefined
         })
       }),
-    publish: (event: EventV2.Payload) => Effect.suspend(() => (subscriber ? subscriber(event) : Effect.void)),
+    publish: (event: Event.Payload) => Effect.suspend(() => (subscriber ? subscriber(event) : Effect.void)),
   }
 }
 
@@ -62,8 +63,8 @@ describe("EventFeed", () => {
       yield* source.publish(event("example"))
 
       expect([Array.from(yield* Fiber.join(left)), Array.from(yield* Fiber.join(right))]).toEqual([
-        [AgentV2.Event.Updated.type],
-        [AgentV2.Event.Updated.type],
+        [Agent.Event.Updated.type],
+        [Agent.Event.Updated.type],
       ])
       expect(encodes).toBe(1)
     }),
@@ -123,7 +124,7 @@ describe("EventFeed", () => {
       yield* source.publish(internal("two"))
       yield* source.publish(event("public"))
 
-      expect(Array.from(yield* stream.pipe(Stream.take(1), Stream.runCollect))).toEqual([AgentV2.Event.Updated.type])
+      expect(Array.from(yield* stream.pipe(Stream.take(1), Stream.runCollect))).toEqual([Agent.Event.Updated.type])
     }),
   )
 
@@ -132,7 +133,7 @@ describe("EventFeed", () => {
       const source = makeSource()
       const feed = yield* EventFeed.make(source.observe, {
         encode: (event) => {
-          if (event.id === EventV2.ID.make("evt_bad")) throw new Error("invalid event")
+          if (event.id === Event.ID.make("evt_bad")) throw new Error("invalid event")
           return event.id
         },
       })

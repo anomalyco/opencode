@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { pathToFileURL } from "url"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Npm } from "@opencode-ai/util/npm"
-import { ProviderV2 } from "../../provider"
+import { Provider } from "../../provider"
 import { importModule } from "@opencode-ai/util/runtime-import"
 
 export const SapAICorePlugin = define({
@@ -12,7 +12,7 @@ export const SapAICorePlugin = define({
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
+        if (evt.model.providerID !== Provider.ID.make("sap-ai-core")) return
         const serviceKey =
           process.env.AICORE_SERVICE_KEY ??
           (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined)
@@ -42,7 +42,7 @@ export const SapAICorePlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
+        if (evt.model.providerID !== Provider.ID.make("sap-ai-core")) return
         evt.language = evt.sdk(evt.model.modelID ?? evt.model.id)
       }),
     )

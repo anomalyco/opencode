@@ -5,8 +5,8 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "../git"
 import { Global } from "@opencode-ai/util/global"
-import { ProjectV2 } from "../project"
-import { SessionV2 } from "../session"
+import { Project } from "../project"
+import { Session } from "../session"
 import { SessionExecution } from "../session/execution"
 import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
@@ -28,8 +28,8 @@ export type Input = typeof Input.Type
 export class DestinationProjectMismatchError extends Schema.TaggedErrorClass<DestinationProjectMismatchError>()(
   "MoveSession.DestinationProjectMismatchError",
   {
-    expected: ProjectV2.ID,
-    actual: ProjectV2.ID,
+    expected: Project.ID,
+    actual: Project.ID,
   },
 ) {}
 
@@ -64,12 +64,12 @@ export class ResetSourceChangesError extends Schema.TaggedErrorClass<ResetSource
 ) {}
 
 export type Error =
-  | SessionV2.NotFoundError
+  | Session.NotFoundError
   | DestinationProjectMismatchError
   | DestinationNotFoundError
   | DestinationNotDirectoryError
-  | SessionV2.DestinationNotFoundError
-  | SessionV2.DestinationNotDirectoryError
+  | Session.DestinationNotFoundError
+  | Session.DestinationNotDirectoryError
   | CaptureChangesError
   | ApplyChangesError
   | ResetSourceChangesError
@@ -86,14 +86,14 @@ const layer = Layer.effect(
     const git = yield* Git.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
-    const project = yield* ProjectV2.Service
+    const project = yield* Project.Service
     const sessions = yield* SessionStore.Service
-    const session = yield* SessionV2.Service
+    const session = yield* Session.Service
     const execution = yield* SessionExecution.Service
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
       const current = yield* sessions.get(input.sessionID)
-      if (!current) return yield* new SessionV2.NotFoundError({ sessionID: input.sessionID })
+      if (!current) return yield* new Session.NotFoundError({ sessionID: input.sessionID })
       const value = input.destination.directory.trim()
       const expanded = value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
       const directory = AbsolutePath.make(path.resolve(current.location.directory, expanded))
@@ -173,8 +173,8 @@ export const node = makeGlobalNode({
     FSUtil.node,
     Git.node,
     Global.node,
-    ProjectV2.node,
-    SessionV2.node,
+    Project.node,
+    Session.node,
     SessionStore.node,
     SessionExecution.node,
   ],

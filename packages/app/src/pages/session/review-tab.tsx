@@ -1,6 +1,7 @@
 import { createEffect, onCleanup, type JSX } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { SessionDiff } from "@/utils/diffs"
 import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import type {
   SessionReviewCommentActions,
@@ -14,7 +15,7 @@ import type { LineComment } from "@/context/comments"
 
 export type DiffStyle = "unified" | "split"
 
-type ReviewDiff = FileDiffInfo | VcsFileDiff
+type ReviewDiff = SessionDiff | VcsFileDiff
 
 export interface SessionReviewTabProps {
   title?: JSX.Element

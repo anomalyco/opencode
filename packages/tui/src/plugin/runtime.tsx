@@ -3,7 +3,7 @@ import type {
   TuiPluginInstallOptions,
   TuiPluginInstallResult,
   TuiPluginStatus,
-} from "@opencode-ai/plugin/tui"
+} from "@opencode-ai/plugin/v1/tui"
 import { createContext, createSignal, useContext, type JSX, type ParentProps } from "solid-js"
 import { createPluginRoutes } from "./api"
 import { createSlots, type HostSlots } from "./slots"

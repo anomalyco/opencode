@@ -64,29 +64,3 @@ describe("Npm.add", () => {
     expect(entries.fallback.entrypoint).toEndWith("/index.js")
   })
 })
-
-describe("Npm.install", () => {
-  test("respects omit from project .npmrc", async () => {
-    await using tmp = await tmpdir()
-
-    await writePackage(tmp.path, {
-      name: "fixture",
-      dependencies: {
-        "prod-pkg": "file:./prod-pkg",
-      },
-      devDependencies: {
-        "dev-pkg": "file:./dev-pkg",
-      },
-    })
-    await Bun.write(path.join(tmp.path, ".npmrc"), "omit=dev\n")
-    await fs.mkdir(path.join(tmp.path, "prod-pkg"))
-    await fs.mkdir(path.join(tmp.path, "dev-pkg"))
-    await writePackage(path.join(tmp.path, "prod-pkg"), { name: "prod-pkg" })
-    await writePackage(path.join(tmp.path, "dev-pkg"), { name: "dev-pkg" })
-
-    await Npm.install(tmp.path)
-
-    await expect(fs.stat(path.join(tmp.path, "node_modules", "prod-pkg"))).resolves.toBeDefined()
-    await expect(fs.stat(path.join(tmp.path, "node_modules", "dev-pkg"))).rejects.toThrow()
-  })
-})

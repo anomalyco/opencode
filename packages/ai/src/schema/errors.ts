@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Tool } from "@opencode-ai/schema/tool"
 import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids"
 
 export const ProviderFailureClassification = Schema.Literal("context-overflow")
@@ -152,8 +153,4 @@ export class LLMError extends Schema.TaggedErrorClass<LLMError>()("LLM.Error", {
  * Anything thrown or yielded by a handler that is not a `ToolFailure` is
  * treated as a defect and fails the stream.
  */
-export class ToolFailure extends Schema.TaggedErrorClass<ToolFailure>()("LLM.ToolFailure", {
-  message: Schema.String,
-  error: Schema.optional(Schema.Defect()),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
+export class ToolFailure extends Tool.Error {}

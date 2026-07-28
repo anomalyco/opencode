@@ -6,15 +6,15 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Job } from "@opencode-ai/core/job"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionPending } from "@opencode-ai/core/session/pending"
@@ -23,30 +23,29 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { SubagentTool } from "@opencode-ai/core/tool/subagent"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
+import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, settleTool, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, toolIdentity, waitForTool } from "./lib/tool"
 
 const childText = "child final response"
-const childModel = ModelV2.Ref.make({ id: ModelV2.ID.make("child"), providerID: ProviderV2.ID.make("test") })
-const parentModel = ModelV2.Ref.make({ id: ModelV2.ID.make("parent"), providerID: ProviderV2.ID.make("test") })
+const childModel = Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") })
+const parentModel = Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") })
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
 const outputSessionID = (value: unknown) =>
-  Schema.decodeUnknownSync(Schema.Struct({ sessionID: SessionV2.ID }))(value).sessionID
+  Schema.decodeUnknownSync(Schema.Struct({ sessionID: Session.ID }))(value).sessionID
 
 const executionNode = makeGlobalNode({
   service: SessionExecution.Service,
   layer: Layer.effect(
     SessionExecution.Service,
     Effect.gen(function* () {
-      const events = yield* EventV2.Service
+      const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
-      const completed = new Set<SessionV2.ID>()
-      const complete = Effect.fn("SubagentTest.complete")(function* (sessionID: SessionV2.ID) {
+      const completed = new Set<Session.ID>()
+      const complete = Effect.fn("SubagentTest.complete")(function* (sessionID: Session.ID) {
         if (completed.has(sessionID)) return
         if ((yield* store.get(sessionID))?.title.includes("fail")) {
           yield* new SessionRunnerModel.ModelNotSelectedError({ sessionID })
@@ -54,24 +53,24 @@ const executionNode = makeGlobalNode({
         }
         completed.add(sessionID)
         const assistantMessageID = SessionMessage.ID.create()
-        yield* events.publish(SessionEvent.Step.Started, {
+        yield* bus.publish(SessionEvent.Step.Started, {
           sessionID,
           assistantMessageID,
-          agent: AgentV2.ID.make("reviewer"),
+          agent: Agent.ID.make("reviewer"),
           model: childModel,
         })
-        yield* events.publish(SessionEvent.Text.Started, {
+        yield* bus.publish(SessionEvent.Text.Started, {
           sessionID,
           assistantMessageID,
           ordinal: 0,
         })
-        yield* events.publish(SessionEvent.Text.Ended, {
+        yield* bus.publish(SessionEvent.Text.Ended, {
           sessionID,
           assistantMessageID,
           ordinal: 0,
           text: childText,
         })
-        yield* events.publish(SessionEvent.Step.Ended, {
+        yield* bus.publish(SessionEvent.Step.Ended, {
           sessionID,
           assistantMessageID,
           finish: "stop",
@@ -88,16 +87,15 @@ const executionNode = makeGlobalNode({
       })
     }),
   ),
-  deps: [EventV2.node, SessionStore.node],
+  deps: [Bus.node, SessionStore.node],
 })
 
 const layer = AppNodeBuilder.build(
   LayerNode.group([
     Database.node,
-    EventV2.node,
+    Bus.node,
     Job.node,
-    ToolOutputStore.cleanupNode,
-    SessionV2.node,
+    Session.node,
     SessionExecution.node,
     PluginRuntime.providerNode,
     LocationServiceMap.node,
@@ -111,21 +109,21 @@ const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
     yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(locations.get(location)))
-    yield* AgentV2.Service.use((agents) =>
+    yield* Agent.Service.use((agents) =>
       agents.transform((draft) => {
         // The caller identity used by executeTool; subagent permission asserts against it.
         draft.update(toolIdentity.agent, (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
         })
-        draft.update(AgentV2.ID.make("reviewer"), (agent) => {
+        draft.update(Agent.ID.make("reviewer"), (agent) => {
           agent.mode = "subagent"
           agent.model = childModel
         })
-        draft.update(AgentV2.ID.make("fallback"), (agent) => {
+        draft.update(Agent.ID.make("fallback"), (agent) => {
           agent.mode = "subagent"
         })
-        draft.update(AgentV2.ID.make("primary"), (agent) => {
+        draft.update(Agent.ID.make("primary"), (agent) => {
           agent.mode = "primary"
         })
       }),
@@ -141,14 +139,14 @@ describe("SubagentTool", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const session = yield* SessionV2.Service
+          const session = yield* Session.Service
           const parent = yield* session.create({ location })
           yield* withSubagent(parent.location)
 
           const locations = yield* LocationServiceMap.Service
-          const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
-          expect((yield* registry.materialize()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
+          expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,
@@ -160,7 +158,10 @@ describe("SubagentTool", () => {
                 input: { agent: "primary", description: "primary", prompt: "should fail" },
               },
             }),
-          ).toEqual({ type: "error", value: "Agent primary cannot run as a subagent" })
+          ).toEqual({
+            status: "error",
+            error: { type: "tool.execution", message: "Agent primary cannot run as a subagent" },
+          })
         }),
       ),
     ),
@@ -174,12 +175,12 @@ describe("SubagentTool", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* SessionV2.Service
+          const sessions = yield* Session.Service
           const root = yield* sessions.create({ location })
           const parent = yield* sessions.create({ parentID: root.id, title: "parent" })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
-          const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
 
           expect(
@@ -193,7 +194,13 @@ describe("SubagentTool", () => {
                 input: { agent: "reviewer", description: "nested", prompt: "should fail" },
               },
             }),
-          ).toEqual({ type: "error", value: expect.stringContaining("Subagent depth limit reached (1)") })
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: expect.stringContaining("Subagent depth limit reached (1)"),
+            },
+          })
           expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
         }),
       ),
@@ -211,15 +218,15 @@ describe("SubagentTool", () => {
             Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_depth: 2 } })),
           )
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* SessionV2.Service
+          const sessions = yield* Session.Service
           const root = yield* sessions.create({ location })
           const parent = yield* sessions.create({ parentID: root.id, title: "parent", model: parentModel })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
-          const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
 
-          const settled = yield* settleTool(registry, {
+          const settled = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             call: {
@@ -231,17 +238,15 @@ describe("SubagentTool", () => {
           })
 
           expect(settled).toMatchObject({
-            result: { type: "text", value: childText },
-            output: {
-              structured: { status: "completed" },
-              content: [{ type: "text", text: childText }],
-            },
+            status: "completed",
+            metadata: { status: "completed" },
+            content: [{ type: "text", text: childText }],
           })
-          expect(settled.output?.structured).toEqual({
-            sessionID: outputSessionID(settled.output?.structured),
+          expect(settled.metadata).toEqual({
+            sessionID: outputSessionID(settled.metadata),
             status: "completed",
           })
-          expect((yield* sessions.get(outputSessionID(settled.output?.structured))).parentID).toBe(parent.id)
+          expect((yield* sessions.get(outputSessionID(settled.metadata))).parentID).toBe(parent.id)
         }),
       ),
     ),
@@ -255,15 +260,15 @@ describe("SubagentTool", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* SessionV2.Service
+          const sessions = yield* Session.Service
           const parent = yield* sessions.create({ location, model: parentModel })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
-          const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
-          const progress: ToolRegistry.Progress[] = []
+          const progress: Tool.Metadata[] = []
 
-          const settled = yield* settleTool(registry, {
+          const settled = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             progress: (update) => Effect.sync(() => progress.push(update)),
@@ -276,15 +281,13 @@ describe("SubagentTool", () => {
           })
 
           expect(settled).toMatchObject({
-            result: { type: "text", value: childText },
-            output: {
-              structured: { status: "completed" },
-              content: [{ type: "text", text: childText }],
-            },
+            status: "completed",
+            metadata: { status: "completed" },
+            content: [{ type: "text", text: childText }],
           })
-          const child = yield* sessions.get(outputSessionID(settled.output?.structured))
-          expect(settled.output?.structured).toEqual({ sessionID: child.id, status: "completed" })
-          expect(progress[0]?.structured).toEqual({ sessionID: child.id, status: "running" })
+          const child = yield* sessions.get(outputSessionID(settled.metadata))
+          expect(settled.metadata).toEqual({ sessionID: child.id, status: "completed" })
+          expect(progress[0]?.metadata).toEqual({ sessionID: child.id, status: "running" })
           expect(child).toMatchObject({
             parentID: parent.id,
             location: parent.location,
@@ -295,7 +298,7 @@ describe("SubagentTool", () => {
             "You are a subagent spawned by another session.\nreview this",
           )
 
-          const fallback = yield* settleTool(registry, {
+          const fallback = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             call: {
@@ -305,7 +308,7 @@ describe("SubagentTool", () => {
               input: { agent: "fallback", description: "fallback", prompt: "fallback" },
             },
           })
-          const fallbackChild = yield* sessions.get(outputSessionID(fallback.output?.structured))
+          const fallbackChild = yield* sessions.get(outputSessionID(fallback.metadata))
           expect(fallbackChild).toMatchObject({ parentID: parent.id, model: parentModel })
         }),
       ),
@@ -320,11 +323,11 @@ describe("SubagentTool", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* SessionV2.Service
+          const sessions = yield* Session.Service
           const parent = yield* sessions.create({ location })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
-          const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
 
           expect(
@@ -338,7 +341,13 @@ describe("SubagentTool", () => {
                 input: { agent: "reviewer", description: "fail review", prompt: "please fail" },
               },
             }),
-          ).toEqual({ type: "error", value: expect.stringContaining("No model is available for session") })
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: expect.stringContaining("No model is available for session"),
+            },
+          })
         }),
       ),
     ),
@@ -352,21 +361,21 @@ describe("SubagentTool", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* SessionV2.Service
+          const sessions = yield* Session.Service
           const parent = yield* sessions.create({ location })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
-          const registry = yield* ToolRegistry.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
-          const events = yield* EventV2.Service
-          const admitted = yield* events.subscribe(SessionEvent.InputAdmitted).pipe(
+          const bus = yield* Bus.Service
+          const admitted = yield* bus.subscribe(SessionEvent.InputAdmitted).pipe(
             Stream.filter((event) => event.data.sessionID === parent.id && event.data.input.type === "synthetic"),
             Stream.take(1),
             Stream.runCollect,
             Effect.forkScoped({ startImmediately: true }),
           )
 
-          const settled = yield* settleTool(registry, {
+          const settled = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
             call: {
@@ -376,13 +385,12 @@ describe("SubagentTool", () => {
               input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
             },
           })
-          const childID = outputSessionID(settled.output?.structured)
-          expect(settled.output?.structured).toMatchObject({
+          const childID = outputSessionID(settled.metadata)
+          expect(settled.metadata).toMatchObject({
             status: "running",
           })
-          expect(settled.output?.structured).toEqual({ sessionID: childID, status: "running" })
-          expect(settled.result).toEqual({ type: "text", value: expect.stringContaining(`id: ${childID}`) })
-          expect(settled.output?.content).toEqual([{ type: "text", text: expect.stringContaining(`id: ${childID}`) }])
+          expect(settled.metadata).toEqual({ sessionID: childID, status: "running" })
+          expect(settled.content).toEqual([{ type: "text", text: expect.stringContaining(`id: ${childID}`) }])
 
           const admission = Array.from(yield* Fiber.join(admitted))[0]
           expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)
@@ -396,7 +404,7 @@ describe("SubagentTool", () => {
             },
           })
           const database = yield* Database.Service
-          yield* SessionPending.promoteSteers(database.db, events, parent.id)
+          yield* SessionPending.promote(database.db, bus, parent.id, "steer")
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent id="${childID}" state="completed"`)

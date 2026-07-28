@@ -9,8 +9,8 @@ import {
   Provider,
   Reference,
   Skill,
-} from "@opencode-ai/plugin/v2/effect"
-import { Tool } from "@opencode-ai/plugin/v2/effect/tool"
+} from "@opencode-ai/plugin/effect"
+import { Tool } from "@opencode-ai/schema/tool"
 
 const key = Symbol.for("opencode.plugin.v2.effect")
 ;(globalThis as typeof globalThis & { [key]?: unknown })[key] = {
@@ -24,5 +24,5 @@ const key = Symbol.for("opencode.plugin.v2.effect")
   Provider,
   Reference,
   Skill,
-  Tool,
+  Tool: { Error: Tool.Error },
 }

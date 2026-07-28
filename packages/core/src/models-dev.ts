@@ -8,11 +8,11 @@ import { Global } from "@opencode-ai/util/global"
 import { Flock } from "@opencode-ai/util/flock"
 import { Hash } from "@opencode-ai/util/hash"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
-import { ModelV2 } from "./model"
-import { ProviderV2 } from "./provider"
+import { Model } from "./model"
+import { Provider } from "./provider"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -54,7 +54,7 @@ type SourceModel = {
         {
           readonly cost?: Cost
           readonly provider?: {
-            readonly body?: ProviderV2.Settings
+            readonly body?: Provider.Settings
             readonly headers?: Readonly<Record<string, string>>
           }
         }
@@ -75,29 +75,29 @@ type SourceProvider = {
 }
 
 export type Snapshot = {
-  readonly info: ProviderV2.Info
-  readonly models: readonly ModelV2.Info[]
+  readonly info: Provider.Info
+  readonly models: readonly Model.Info[]
   readonly environment: readonly string[]
 }
 
 function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
   const providers: Snapshot[] = []
   for (const item of Object.values(input)) {
-    const providerID = ProviderV2.ID.make(item.id)
+    const providerID = Provider.ID.make(item.id)
     const info = {
       id: providerID,
       name: item.name,
-      package: ProviderV2.aisdk(item.npm),
+      package: Provider.aisdk(item.npm),
       ...(item.api ? { settings: { baseURL: item.api } } : {}),
-    } satisfies ProviderV2.Info
-    const models: ModelV2.Info[] = []
+    } satisfies Provider.Info
+    const models: Model.Info[] = []
     for (const model of Object.values(item.models)) {
       const baseCost = cost(model.cost)
       const variants = reasoningVariants(item, model)
-      const id = ModelV2.ID.make(model.id)
+      const id = Model.ID.make(model.id)
       models.push(modelInfo(providerID, id, model, { cost: baseCost, variants }))
       for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
-        const modeID = ModelV2.ID.make(`${model.id}-${mode}`)
+        const modeID = Model.ID.make(`${model.id}-${mode}`)
         models.push(
           modelInfo(providerID, modeID, model, {
             name: modeName(model, mode),
@@ -118,7 +118,7 @@ function released(date: string) {
   return Number.isFinite(time) ? time : 0
 }
 
-function cost(input: SourceModel["cost"]): ModelV2.Info["cost"] {
+function cost(input: SourceModel["cost"]): Model.Info["cost"] {
   const base = {
     input: input?.input ?? Money.USDPerMillionTokens.zero,
     output: input?.output ?? Money.USDPerMillionTokens.zero,
@@ -154,13 +154,13 @@ function cost(input: SourceModel["cost"]): ModelV2.Info["cost"] {
   ]
 }
 
-function mergeCost(base: ModelV2.Info["cost"], override: SourceModel["cost"] | undefined) {
+function mergeCost(base: Model.Info["cost"], override: SourceModel["cost"] | undefined) {
   if (!override) return base
   const next = cost(override)
   const [baseDefault, ...baseTiers] = base
   const [nextDefault, ...nextTiers] = next
-  const tierKey = (item: ModelV2.Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
-  const merge = (left: ModelV2.Info["cost"][number], right: ModelV2.Info["cost"][number]) => ({
+  const tierKey = (item: Model.Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
+  const merge = (left: Model.Info["cost"][number], right: Model.Info["cost"][number]) => ({
     ...left,
     ...right,
     tier: right.tier ?? left.tier,
@@ -187,7 +187,7 @@ function mergeCost(base: ModelV2.Info["cost"], override: SourceModel["cost"] | u
 const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
 const OUTPUT_TOKEN_MAX = 32_000
 
-function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<ModelV2.Info["variants"]> {
+function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<Model.Info["variants"]> {
   const npm = model.provider?.npm ?? provider.npm
   const options = model.reasoning_options
   if (!options?.length) return []
@@ -203,7 +203,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
         if (id === undefined) return []
         if (id === "none" && off.length > 0) return []
         const settings = settingsForEffort(npm, model.id, id)
-        return settings ? [{ id: ModelV2.VariantID.make(id), settings }] : []
+        return settings ? [{ id: Model.VariantID.make(id), settings }] : []
       }),
     ]
     return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
@@ -218,7 +218,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
   return []
 }
 
-function settingsForEffort(npm: string, modelID: string, effort: string): ProviderV2.Settings | undefined {
+function settingsForEffort(npm: string, modelID: string, effort: string): Provider.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
     if (anthropicManualThinking(modelID)) return { effort }
@@ -287,7 +287,7 @@ function budgetVariants(
   npm: string,
   model: SourceModel,
   option: Extract<NonNullable<SourceModel["reasoning_options"]>[number], { type: "budget_tokens" }>,
-): NonNullable<ModelV2.Info["variants"]> {
+): NonNullable<Model.Info["variants"]> {
   const maximum = Math.min(option.max ?? OUTPUT_TOKEN_MAX - 1, model.limit.output - 1, OUTPUT_TOKEN_MAX - 1)
   if (maximum <= 0) return []
   const high = Math.min(Math.max(option.min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
@@ -296,35 +296,35 @@ function budgetVariants(
     { id: "max", budget: maximum },
   ].flatMap((item) => {
     const settings = settingsForBudget(npm, model.id, item.budget)
-    return settings ? [{ id: ModelV2.VariantID.make(item.id), settings }] : []
+    return settings ? [{ id: Model.VariantID.make(item.id), settings }] : []
   })
 }
 
-function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info["variants"]> {
+function toggleVariants(npm: string, modelID: string): NonNullable<Model.Info["variants"]> {
   if (npm === "@ai-sdk/gateway") {
     const upstream = gatewayPackage(modelID)
     if (upstream) return toggleVariants(upstream, modelID)
     return [
       {
-        id: ModelV2.VariantID.make("none"),
+        id: Model.VariantID.make("none"),
         settings: { reasoning: { enabled: false } },
       },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: { reasoning: { enabled: true } },
       },
     ]
   }
   if (npm === "@openrouter/ai-sdk-provider")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
-      { id: ModelV2.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
+      { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
+      { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
     ]
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+      { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: {
           thinking: { type: "adaptive", display: "summarized" },
         },
@@ -333,11 +333,11 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
     return [
       {
-        id: ModelV2.VariantID.make("none"),
+        id: Model.VariantID.make("none"),
         settings: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } },
       },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } },
       },
     ]
@@ -345,7 +345,7 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
     const anthropic = modelID.includes("anthropic")
     return [
       {
-        id: ModelV2.VariantID.make("none"),
+        id: Model.VariantID.make("none"),
         settings: {
           additionalModelRequestFields: anthropic
             ? { thinking: { type: "disabled" } }
@@ -353,7 +353,7 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
         },
       },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: {
           additionalModelRequestFields: anthropic
             ? { thinking: { type: "adaptive", display: "summarized" } }
@@ -364,58 +364,58 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   }
   if (npm === "@ai-sdk/alibaba")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
-      { id: ModelV2.VariantID.make("thinking"), settings: { enableThinking: true } },
+      { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
+      { id: Model.VariantID.make("thinking"), settings: { enableThinking: true } },
     ]
   if (npm === "@ai-sdk/cohere")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
-      { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
+      { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+      { id: Model.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
     ]
   if (npm === "@jerome-benoit/sap-ai-provider-v2") {
     if (modelID.includes("gemini"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: { modelParams: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } } },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } } },
         },
       ]
     if (modelID.includes("cohere"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: { modelParams: { thinking: { type: "disabled" } } },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: { modelParams: { thinking: { type: "enabled" } } },
         },
       ]
     if (modelID.includes("amazon--nova"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "enabled" } } } },
         },
       ]
     if (modelID.includes("anthropic"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: {
             modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
           },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: {
             modelParams: {
               additionalModelRequestFields: {
@@ -429,7 +429,7 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   return []
 }
 
-function settingsForBudget(npm: string, modelID: string, budget: number): ProviderV2.Settings | undefined {
+function settingsForBudget(npm: string, modelID: string, budget: number): Provider.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return { thinking: { type: "enabled", budgetTokens: budget } }
@@ -480,24 +480,24 @@ function modeName(model: SourceModel, mode: string) {
 }
 
 function modelInfo(
-  providerID: ProviderV2.ID,
-  id: ModelV2.ID,
+  providerID: Provider.ID,
+  id: Model.ID,
   model: SourceModel,
   input: {
     readonly name?: string
-    readonly cost?: ModelV2.Info["cost"]
+    readonly cost?: Model.Info["cost"]
     readonly request?: NonNullable<NonNullable<SourceModel["experimental"]>["modes"]>[string]["provider"]
-    readonly variants?: NonNullable<ModelV2.Info["variants"]>
+    readonly variants?: NonNullable<Model.Info["variants"]>
   } = {},
-): ModelV2.Info {
+): Model.Info {
   return {
     id,
-    modelID: ModelV2.ID.make(model.id),
+    modelID: Model.ID.make(model.id),
     providerID,
     name: input.name ?? model.name,
-    compatibility: ModelV2.compatibility(model.interleaved),
-    family: model.family ? ModelV2.Family.make(model.family) : undefined,
-    package: model.provider?.npm ? ProviderV2.aisdk(model.provider.npm) : undefined,
+    compatibility: Model.compatibility(model.interleaved),
+    family: model.family ? Model.Family.make(model.family) : undefined,
+    package: model.provider?.npm ? Provider.aisdk(model.provider.npm) : undefined,
     settings: model.provider?.api ? { baseURL: model.provider.api } : undefined,
     capabilities: {
       tools: model.tool_call,
@@ -519,7 +519,7 @@ function modelInfo(
   }
 }
 
-export const Event = ModelsDev.Event
+export { Event } from "@opencode-ai/schema/models-dev"
 
 declare const OPENCODE_MODELS_DEV: Record<string, SourceProvider> | undefined
 
@@ -542,7 +542,7 @@ export const layer = (options?: Options) =>
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
       const app = yield* App.Metadata
     const http = HttpClient.filterStatusOk(
       (yield* HttpClient.HttpClient).pipe(
@@ -639,7 +639,7 @@ export const layer = (options?: Options) =>
           if (!force && (yield* fresh())) return
           yield* fetchAndWrite()
           yield* invalidate
-          yield* events.publish(Event.Refreshed, {})
+          yield* bus.publish(ModelsDev.Event.Refreshed, {})
         }),
       ).pipe(
         Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
@@ -660,7 +660,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: layer(options),
-    deps: [FSUtil.node, EventV2.node, App.node, httpClient],
+    deps: [FSUtil.node, Bus.node, App.node, httpClient],
   })
 }
 

@@ -10,15 +10,11 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./tool": "./src/tool.ts",
-    "./tui": "./src/tui.ts",
-    "./v2/effect": "./src/v2/effect/index.ts",
-    "./v2/effect/*": "./src/v2/effect/*.ts",
-    "./v2/tui": "./src/v2/tui/index.ts",
-    "./v2/tui/*": "./src/v2/tui/*.ts",
-    "./v2": "./src/v2/promise/index.ts",
-    "./v2/*": "./src/v2/promise/*.ts"
+    ".": "./src/promise/index.ts",
+    "./effect": "./src/effect/index.ts",
+    "./tui": "./src/tui/index.ts",
+    "./v1": "./src/v1/index.ts",
+    "./*": "./src/*.ts"
   },
   "files": [
     "dist"
@@ -28,8 +24,8 @@
     "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@standard-schema/spec": "^1.1.0",
+    "@opencode-ai/sdk": "1.18.5",
+    "@standard-schema/spec": "catalog:",
     "effect": "catalog:",
     "zod": "catalog:"
   },

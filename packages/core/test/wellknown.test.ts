@@ -3,12 +3,12 @@ import { Effect, Fiber, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { KV } from "@opencode-ai/core/kv"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(FetchHttpClient.layer)
-const serviceIt = testEffect(LayerNode.compile(LayerNode.group([WellKnown.node, KV.node, EventV2.node])))
+const serviceIt = testEffect(LayerNode.compile(LayerNode.group([WellKnown.node, KV.node, Bus.node])))
 
 it.live("loads embedded and remote configuration", () =>
   Effect.acquireUseRelease(
@@ -66,8 +66,8 @@ serviceIt.live("persists sources in one KV value", () =>
       Effect.gen(function* () {
         const wellknown = yield* WellKnown.Service
         const kv = yield* KV.Service
-        const events = yield* EventV2.Service
-        const changed = yield* events
+        const bus = yield* Bus.Service
+        const changed = yield* bus
           .subscribe(WellKnown.Event.Updated)
           .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
         const entry = yield* wellknown.add(`${server.url.origin}/`)
@@ -102,11 +102,11 @@ serviceIt.live("refreshes changed manifests", () =>
     ({ server, update }) =>
       Effect.gen(function* () {
         const wellknown = yield* WellKnown.Service
-        const events = yield* EventV2.Service
+        const bus = yield* Bus.Service
         yield* wellknown.add(server.url.origin)
         expect(yield* wellknown.refresh()).toBe(false)
 
-        const changed = yield* events
+        const changed = yield* bus
           .subscribe(WellKnown.Event.Updated)
           .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
         update()

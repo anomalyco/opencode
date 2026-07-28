@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
 
 type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
 
@@ -70,7 +70,7 @@ export const SnowflakeCortexPlugin = define({
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.make("snowflake-cortex")) return
+        if (evt.model.providerID !== Provider.ID.make("snowflake-cortex")) return
         const token =
           process.env.SNOWFLAKE_CORTEX_TOKEN ??
           process.env.SNOWFLAKE_CORTEX_PAT ??

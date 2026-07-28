@@ -14,7 +14,7 @@ export interface Interface {
   readonly remove: (key: string) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/KV") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/KV") {}
 
 const layer = Layer.effect(
   Service,

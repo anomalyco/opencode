@@ -1,14 +1,14 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
+import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
-import { EventV2 } from "../../event"
+import { Bus } from "../../bus"
 import { CopilotModels } from "../../github-copilot/models"
 import { App } from "../../app"
 import { Integration } from "../../integration"
-import { ModelV2 } from "../../model"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { Model } from "../../model"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
 import type { PluginInternal } from "../internal"
 
 const clientID = "Ov23li8tweQw6odWQebz"
@@ -152,11 +152,11 @@ export const GithubCopilotPlugin = define({
   id: "opencode.provider.github-copilot",
   effect: Effect.fn(function* (ctx) {
     const catalog = yield* Catalog.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const loading = Semaphore.makeUnsafe(1)
     const loaded: {
       baseURL?: string
-      models?: Map<ModelV2.ID, ModelV2.Info>
+      models?: Map<Model.ID, Model.Info>
     } = {}
 
     const load = Effect.fn("GithubCopilotPlugin.load")(function* () {
@@ -171,8 +171,8 @@ export const GithubCopilotPlugin = define({
       }
 
       loaded.baseURL = copilotBaseURL(credential.metadata)
-      const provider = yield* catalog.provider.get(ProviderV2.ID.githubCopilot)
-      const existing = (yield* catalog.model.all()).filter((model) => model.providerID === ProviderV2.ID.githubCopilot)
+      const provider = yield* catalog.provider.get(Provider.ID.githubCopilot)
+      const existing = (yield* catalog.model.all()).filter((model) => model.providerID === Provider.ID.githubCopilot)
       loaded.models = yield* Effect.tryPromise({
         try: () =>
           CopilotModels.get(
@@ -197,11 +197,11 @@ export const GithubCopilotPlugin = define({
       draft.method.update(oauth(ctx.app))
     })
     yield* ctx.catalog.transform((evt) => {
-      const item = evt.provider.get(ProviderV2.ID.githubCopilot)
+      const item = evt.provider.get(Provider.ID.githubCopilot)
       if (!item) return
       if (loaded.models) {
         for (const id of item.models.keys()) {
-          if (!loaded.models.has(ModelV2.ID.make(id))) evt.model.remove(item.provider.id, id)
+          if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
         }
         for (const [id, model] of loaded.models) {
           evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
@@ -209,12 +209,12 @@ export const GithubCopilotPlugin = define({
       } else if (loaded.baseURL) {
         for (const id of item.models.keys()) {
           evt.model.update(item.provider.id, id, (model) => {
-            model.settings = ProviderV2.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
+            model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
           })
         }
       }
-      if (item.models.has(ModelV2.ID.make("gpt-5-chat-latest"))) {
-        evt.model.update(item.provider.id, ModelV2.ID.make("gpt-5-chat-latest"), (model) => {
+      if (item.models.has(Model.ID.make("gpt-5-chat-latest"))) {
+        evt.model.update(item.provider.id, Model.ID.make("gpt-5-chat-latest"), (model) => {
           // This chat-only alias conflicts with the Copilot GPT-5 Responses route,
           // so hide it only for Copilot rather than for every provider catalog.
           model.enabled = false
@@ -222,7 +222,7 @@ export const GithubCopilotPlugin = define({
       }
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
-    yield* events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("github-copilot")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
@@ -231,7 +231,7 @@ export const GithubCopilotPlugin = define({
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.githubCopilot) return
+        if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.package !== "@ai-sdk/github-copilot" && evt.package !== "@ai-sdk/anthropic") return
         evt.options.fetch = copilotFetch(
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
@@ -255,7 +255,7 @@ export const GithubCopilotPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.githubCopilot) return
+        if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {
           evt.language = evt.sdk.languageModel(evt.model.modelID ?? evt.model.id)
           return

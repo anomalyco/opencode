@@ -58,7 +58,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
   const backgroundPanel = mode === "light" ? "$hue.neutral.300" : "$hue.neutral.700"
   const backgroundMenu = mode === "light" ? "$hue.neutral.400" : "$hue.neutral.600"
 
-  return {
+  return referenceHues({
     hue: {
       gray: neutralScale(theme, mode),
       ...Object.fromEntries(
@@ -67,8 +67,8 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
           return [name, match ? hueScale(match.color, mode) : "$hue.gray"]
         }),
       ),
-      accent: ambiguous(theme.accent) ? "$hue.gray" : hueScale(theme.accent, mode),
-      interactive: ambiguous(theme.primary) ? "$hue.gray" : hueScale(theme.primary, mode),
+      accent: hues.byToken.accent ? `$hue.${hues.byToken.accent}` : "$hue.gray",
+      interactive: hues.byToken.primary ? `$hue.${hues.byToken.primary}` : "$hue.gray",
       neutral: "$hue.gray",
     },
     categorical: uniqueCategorical.length ? uniqueCategorical : DEFAULT_CATEGORICAL,
@@ -176,7 +176,56 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
       },
     },
     "@context:overlay": { background: { default: "$background.surface.overlay" } },
+  })
+}
+
+function referenceHues(theme: FileThemeDefinition): FileThemeDefinition {
+  const definitions = theme.hue as Record<string, string | Partial<Record<HueStep, string>>> | undefined
+  if (!definitions) return theme
+  const scales = new Map<string, Partial<Record<HueStep, string>>>()
+
+  function resolve(name: string, chain: string[] = []): Partial<Record<HueStep, string>> | undefined {
+    const cached = scales.get(name)
+    if (cached) return cached
+    if (chain.includes(name)) return
+    const value = definitions?.[name]
+    if (!value) return
+    if (typeof value !== "string") {
+      scales.set(name, value)
+      return value
+    }
+    const target = /^\$hue\.([^.]+)$/.exec(value)?.[1]
+    if (!target) return
+    const scale = resolve(target, [...chain, name])
+    if (scale) scales.set(name, scale)
+    return scale
   }
+
+  const references = new Map<string, string>()
+  const index = (name: string, overwrite: boolean) => {
+    const scale = resolve(name)
+    if (!scale) return
+    HueStep.literals.forEach((step) => {
+      const color = scale[step]
+      if (!color || (!overwrite && references.has(color.toLowerCase()))) return
+      references.set(color.toLowerCase(), `$hue.${name}.${step}`)
+    })
+  }
+  chromaticHues.forEach((name) => index(name, false))
+  index("gray", false)
+  index("accent", true)
+  index("interactive", true)
+  index("neutral", true)
+
+  function replace(value: unknown): unknown {
+    if (typeof value === "string") return references.get(value.toLowerCase()) ?? value
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replace(item)]))
+  }
+
+  return Object.fromEntries(
+    Object.entries(theme).map(([key, value]) => [key, key === "hue" || key === "categorical" ? value : replace(value)]),
+  ) as FileThemeDefinition
 }
 
 function inferHues(theme: Theme, mode: "light" | "dark") {
@@ -189,7 +238,7 @@ function inferHues(theme: Theme, mode: "light" | "dark") {
     ["info", theme.info],
     ["secondary", theme.secondary],
   ]
-  return colors.reduce<{
+  const inferred = colors.reduce<{
     byHue: Partial<Record<ChromaticHue, { color: RGBA; distance: number }>>
     byToken: Partial<Record<V1HueToken, ChromaticHue>>
   }>(
@@ -207,6 +256,19 @@ function inferHues(theme: Theme, mode: "light" | "dark") {
     },
     { byHue: {}, byToken: {} },
   )
+  return (
+    [
+      ["accent", theme.accent],
+      ["primary", theme.primary],
+    ] as const
+  ).reduce((result, [token, color]) => {
+    const nearest = inferHue(color, mode)
+    if (!nearest) return result
+    return {
+      byHue: { ...result.byHue, [nearest.name]: { color, distance: nearest.distance } },
+      byToken: { ...result.byToken, [token]: nearest.name },
+    }
+  }, inferred)
 }
 
 function inferHue(color: RGBA, mode: Mode) {

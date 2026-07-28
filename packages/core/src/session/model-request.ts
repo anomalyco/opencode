@@ -1,26 +1,51 @@
 export * as SessionModelRequest from "./model-request"
 
-import { LLM, Message, SystemPart, type LLMRequest, type ToolContent } from "@opencode-ai/ai"
+import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Context, Effect, Layer } from "effect"
+import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
-import { ModelV2 } from "../model"
+import { Model } from "../model"
+import { Permission } from "../permission"
 import { PluginHooks } from "../plugin/hooks"
-import { ToolRegistry } from "../tool/registry"
+import { QuestionTool } from "../tool/plugin/question"
+import { Tool } from "../tool"
 import { SessionContext } from "./context"
 import { SessionModelHeaders } from "./model-headers"
+import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
 
-type ToolCallResolution =
-  | { readonly type: "reject"; readonly error: SessionError.Error }
-  | { readonly type: "settle"; readonly settle: ToolRegistry.Materialization["settle"] }
+/** Failures a prepared execution can surface: infrastructure errors plus user declines resurfaced from the defect tunnel. */
+export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
+
+// User declines dive under the leaves' blanket `mapError` as defects (the deliberate
+// tunnel entered in Permission.assert and the question tool), so a user's "no" can
+// never become model-facing tool output. They resurface as typed failures exactly once,
+// here at the seam the runner executes through.
+const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
+  const decline = cause.reasons.flatMap((reason) =>
+    Cause.isDieReason(reason) &&
+    (reason.defect instanceof Permission.DeclinedError || reason.defect instanceof QuestionTool.CancelledError)
+      ? [reason.defect]
+      : [],
+  )[0]
+  return decline ? Result.succeed(decline) : Result.fail(cause)
+}
 
 interface Prepared {
   readonly request: LLMRequest
-  readonly resolveToolCall: (name: string) => ToolCallResolution
+  /**
+   * One request-scoped execution operation. Unknown, hook-removed, and
+   * step-limit-violating calls fail individually through the same seam.
+   */
+  readonly executeTool: (
+    input: Parameters<Tool.Snapshot["execute"]>[0],
+  ) => Effect.Effect<Tool.Result, ExecuteError>
+  /** True when this request is the final Step; violating calls are rejected and no continuation follows. */
+  readonly stepLimitReached: boolean
 }
 
 interface PrepareInput {
@@ -35,7 +60,7 @@ const mimeToModality = (mime: string) => {
   if (mime === "application/pdf") return "pdf"
 }
 
-const unsupportedMedia = (mime: string, name: string | undefined, capabilities: ModelV2.Capabilities) => {
+const unsupportedMedia = (mime: string, name: string | undefined, capabilities: Model.Capabilities) => {
   const modality = mimeToModality(mime)
   if (!modality || capabilities.input.some((item) => item.startsWith(modality))) return
   return {
@@ -44,7 +69,7 @@ const unsupportedMedia = (mime: string, name: string | undefined, capabilities: 
   }
 }
 
-export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: ModelV2.Capabilities) =>
+export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities) =>
   messages.map((message) =>
     Message.make({
       ...message,
@@ -57,7 +82,7 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
           ...part,
           result: {
             ...part.result,
-            value: part.result.value.map((item: ToolContent) => {
+            value: part.result.value.map((item: Content) => {
               if (item.type !== "file") return item
               return unsupportedMedia(item.mime, item.name, capabilities) ?? item
             }),
@@ -78,14 +103,18 @@ export interface Interface {
 }
 
 /** Location-scoped outbound model-request preparation. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionModelRequest") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionModelRequest") {}
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
-    const registry = yield* ToolRegistry.Service
     const app = yield* App.Metadata
+    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
+      Config.withDefault(false),
+      Effect.orDie,
+    )
+    const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
 
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* (input: PrepareInput) {
       const session = input.context.session
@@ -94,14 +123,16 @@ export const layer = Layer.effect(
       const model = resolved.model
       const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
       const stepLimitReached = agent.info.steps !== undefined && input.step >= agent.info.steps
-      const executableTools = stepLimitReached ? undefined : yield* registry.materialize(agent.info.permissions)
+      // The final Step keeps definitions available to protocols with native "none",
+      // preserving their prompt cache prefix. Calls are still rejected at execution.
+      const tools = input.context.tools
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
       const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
       const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
-      const toolDefinitions = executableTools?.definitions ?? []
+      const toolDefinitions = tools.definitions
       const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
       // Hooks may reshape available definitions but cannot advertise tools omitted by permissions or the Step limit.
       const contextEvent = yield* hooks.trigger("session", "context", {
@@ -117,7 +148,7 @@ export const layer = Layer.effect(
       const hookedTools = Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
         const registered = toolsByName.get(name)
         return registered
-          ? [Object.assign({}, registered, { description: tool.description, inputSchema: tool.input })]
+          ? [{ ...registered, description: tool.description, inputSchema: tool.input }]
           : []
       })
       const request = LLM.request({
@@ -131,22 +162,36 @@ export const layer = Layer.effect(
         tools: hookedTools,
         toolChoice: stepLimitReached ? "none" : undefined,
       })
-      const resolveToolCall = (name: string): ToolCallResolution => {
-        if (!executableTools)
-          return {
-            type: "reject",
-            error: { type: "tool.execution", message: "Tools are disabled after the maximum agent steps" },
-          }
-        if (toolsByName.has(name) && !Object.hasOwn(contextEvent.tools, name))
-          return {
-            type: "reject",
-            error: { type: "tool.execution", message: `Tool is not available for this request: ${name}` },
-          }
-        return { type: "settle", settle: executableTools.settle }
+      if (promptCacheSnapshots) {
+        const current = PromptCacheDiagnostics.snapshot(request)
+        const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(session.id), current)
+        promptCacheSnapshots.delete(session.id)
+        promptCacheSnapshots.set(session.id, current)
+        const oldest = promptCacheSnapshots.keys().next().value
+        if (promptCacheSnapshots.size > 100 && oldest !== undefined) promptCacheSnapshots.delete(oldest)
+        yield* Effect.logInfo("prompt cache prefix").pipe(
+          Effect.annotateLogs({
+            sessionID: session.id,
+            toolCount: current.tools.length,
+            systemParts: current.system.length,
+            messageCount: current.messages.length,
+            ...comparison,
+          }),
+        )
+      }
+      const executeTool: Prepared["executeTool"] = (executeInput) => {
+        if (stepLimitReached)
+          return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+        if (toolsByName.has(executeInput.call.name) && !Object.hasOwn(contextEvent.tools, executeInput.call.name))
+          return new Tool.Error({ message: `Tool is not available for this request: ${executeInput.call.name}` })
+        return tools
+          .execute(executeInput)
+          .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
       }
       return {
         request,
-        resolveToolCall,
+        executeTool,
+        stepLimitReached,
       }
     })
 
@@ -157,5 +202,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, ToolRegistry.node, App.node],
+  deps: [PluginHooks.node, App.node],
 })

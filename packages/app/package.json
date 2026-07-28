@@ -56,7 +56,7 @@
     "@opencode-ai/client": "file:vendor/opencode-ai-client-1.17.13.tgz",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/sdk": "1.18.5",
     "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@pierre/trees": "1.0.0-beta.4",

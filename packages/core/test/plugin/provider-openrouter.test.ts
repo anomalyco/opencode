@@ -2,19 +2,19 @@ import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Model } from "@opencode-ai/core/model"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { OpenRouterPlugin } from "@opencode-ai/core/plugin/provider/openrouter"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
-  const plugin = yield* PluginV2.Service
+  const plugin = yield* Plugin.Service
   const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* OpenRouterPlugin.effect(host)
@@ -29,34 +29,34 @@ describe("OpenRouterPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.openrouter, (provider) => {
-          provider.package = ProviderV2.aisdk("@openrouter/ai-sdk-provider")
+        catalog.provider.update(Provider.ID.openrouter, (provider) => {
+          provider.package = Provider.aisdk("@openrouter/ai-sdk-provider")
           provider.headers = { Existing: "value" }
         })
-        catalog.provider.update(ProviderV2.ID.make("nvidia"), () => {})
+        catalog.provider.update(Provider.ID.make("nvidia"), () => {})
       })
       yield* addPlugin()
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter))?.headers).toEqual({
+      expect((yield* catalog.provider.get(Provider.ID.openrouter))?.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("nvidia")))?.headers).toBeUndefined()
+      expect((yield* catalog.provider.get(Provider.ID.make("nvidia")))?.headers).toBeUndefined()
     }),
   )
 
   it.effect("creates an SDK only for the OpenRouter package", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
+      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
 
       const ignored = yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.openrouter, ModelV2.ID.make("openai/gpt-5")),
-          modelID: ModelV2.ID.make("openai/gpt-5"),
-          package: ProviderV2.aisdk("test-provider"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.openrouter, Model.ID.make("openai/gpt-5")),
+          modelID: Model.ID.make("openai/gpt-5"),
+          package: Provider.aisdk("test-provider"),
         }),
         package: "@ai-sdk/openai-compatible",
         options: { name: "openrouter" },
@@ -64,10 +64,10 @@ describe("OpenRouterPlugin", () => {
       expect(ignored.sdk).toBeUndefined()
 
       const result = yield* aisdk.runSDK({
-        model: ModelV2.Info.make({
-          ...ModelV2.Info.default(ProviderV2.ID.make("custom"), ModelV2.ID.make("openai/gpt-5")),
-          modelID: ModelV2.ID.make("openai/gpt-5"),
-          package: ProviderV2.aisdk("test-provider"),
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("custom"), Model.ID.make("openai/gpt-5")),
+          modelID: Model.ID.make("openai/gpt-5"),
+          package: Provider.aisdk("test-provider"),
         }),
         package: "@openrouter/ai-sdk-provider",
         options: { name: "custom" },
@@ -80,21 +80,21 @@ describe("OpenRouterPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.openrouter, (provider) => {
-          provider.package = ProviderV2.aisdk("@openrouter/ai-sdk-provider")
+        catalog.provider.update(Provider.ID.openrouter, (provider) => {
+          provider.package = Provider.aisdk("@openrouter/ai-sdk-provider")
         })
-        catalog.provider.update(ProviderV2.ID.openai, () => {})
-        catalog.model.update(ProviderV2.ID.openrouter, ModelV2.ID.make("openai/gpt-5-chat"), () => {})
-        catalog.model.update(ProviderV2.ID.openrouter, ModelV2.ID.make("openai/gpt-5"), () => {})
-        catalog.model.update(ProviderV2.ID.openai, ModelV2.ID.make("openai/gpt-5-chat"), () => {})
+        catalog.provider.update(Provider.ID.openai, () => {})
+        catalog.model.update(Provider.ID.openrouter, Model.ID.make("openai/gpt-5-chat"), () => {})
+        catalog.model.update(Provider.ID.openrouter, Model.ID.make("openai/gpt-5"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("openai/gpt-5-chat"), () => {})
       })
       yield* addPlugin()
 
-      expect((yield* catalog.model.get(ProviderV2.ID.openrouter, ModelV2.ID.make("openai/gpt-5-chat")))?.enabled).toBe(
+      expect((yield* catalog.model.get(Provider.ID.openrouter, Model.ID.make("openai/gpt-5-chat")))?.enabled).toBe(
         false,
       )
-      expect((yield* catalog.model.get(ProviderV2.ID.openrouter, ModelV2.ID.make("openai/gpt-5")))?.enabled).toBe(true)
-      expect((yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("openai/gpt-5-chat")))?.enabled).toBe(true)
+      expect((yield* catalog.model.get(Provider.ID.openrouter, Model.ID.make("openai/gpt-5")))?.enabled).toBe(true)
+      expect((yield* catalog.model.get(Provider.ID.openai, Model.ID.make("openai/gpt-5-chat")))?.enabled).toBe(true)
     }),
   )
 
@@ -102,12 +102,12 @@ describe("OpenRouterPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.make("custom-openrouter"), () => {})
-        catalog.model.update(ProviderV2.ID.make("custom-openrouter"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
+        catalog.provider.update(Provider.ID.make("custom-openrouter"), () => {})
+        catalog.model.update(Provider.ID.make("custom-openrouter"), Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
       expect(
-        (yield* catalog.model.get(ProviderV2.ID.make("custom-openrouter"), ModelV2.ID.make("gpt-5-chat-latest")))
+        (yield* catalog.model.get(Provider.ID.make("custom-openrouter"), Model.ID.make("gpt-5-chat-latest")))
           ?.enabled,
       ).toBe(true)
     }),

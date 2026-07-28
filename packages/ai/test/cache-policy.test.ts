@@ -39,8 +39,8 @@ describe("applyCachePolicy", () => {
         }),
       )
 
-      // No explicit cache field → auto policy fires → last system part + latest
-      // user message both get cache_control markers.
+      // A single system block is both the first and last boundary, so the auto
+      // policy deduplicates it and still marks the conversation tail.
       expect(prepared.body).toMatchObject({
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
@@ -48,12 +48,15 @@ describe("applyCachePolicy", () => {
     }),
   )
 
-  it.effect("'auto' marks the last tool, last system part, and latest user message on Anthropic", () =>
+  it.effect("'auto' marks the last tool, first and last system parts, and final message boundary on Anthropic", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
           model: anthropicModel,
-          system: "Sys A",
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
           messages: [
             Message.user("first user"),
@@ -66,7 +69,10 @@ describe("applyCachePolicy", () => {
 
       expect(prepared.body).toMatchObject({
         tools: [{ name: "t1", cache_control: { type: "ephemeral" } }],
-        system: [{ type: "text", text: "Sys A", cache_control: { type: "ephemeral" } }],
+        system: [
+          { type: "text", text: "Base agent", cache_control: { type: "ephemeral" } },
+          { type: "text", text: "Project instructions", cache_control: { type: "ephemeral" } },
+        ],
         messages: [
           { role: "user", content: [{ type: "text", text: "first user" }] },
           { role: "assistant", content: [{ type: "text", text: "assistant reply" }] },
@@ -120,7 +126,10 @@ describe("applyCachePolicy", () => {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
           model: bedrockModel,
-          system: "Sys",
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
           messages: [Message.user("first user"), Message.assistant("reply"), Message.user("latest user")],
           cache: "auto",
@@ -131,7 +140,12 @@ describe("applyCachePolicy", () => {
         toolConfig: {
           tools: [{ toolSpec: { name: "t1" } }, { cachePoint: { type: "default" } }],
         },
-        system: [{ text: "Sys" }, { cachePoint: { type: "default" } }],
+        system: [
+          { text: "Base agent" },
+          { cachePoint: { type: "default" } },
+          { text: "Project instructions" },
+          { cachePoint: { type: "default" } },
+        ],
         messages: [
           { role: "user", content: [{ text: "first user" }] },
           { role: "assistant", content: [{ text: "reply" }] },
@@ -193,9 +207,55 @@ describe("applyCachePolicy", () => {
         }),
       )
 
-      const body = prepared.body as { system: Array<{ text: string; cache_control?: unknown }> }
+      const body = prepared.body as {
+        system: Array<{ text: string; cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
       expect(body.system[0]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
       expect(body.system[1]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(body.messages[0]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
+    }),
+  )
+
+  it.effect("auto policy stays within the four-breakpoint cap when preserving manual hints", () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: anthropicModel,
+        system: [
+          { type: "text", text: "Base agent" },
+          {
+            type: "text",
+            text: "Manual context",
+            cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }),
+          },
+          { type: "text", text: "Project instructions" },
+        ],
+        tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+        prompt: "hi",
+        cache: "auto",
+      })
+      const applied = applyCachePolicy(request)
+      expect(applied.tools[0]?.cache).toBeDefined()
+      expect(applied.system.map((part) => part.cache !== undefined)).toEqual([true, true, true])
+      const tail = applied.messages[0]!.content[0]!
+      expect("cache" in tail ? tail.cache : undefined).toBeUndefined()
+      expect(applyCachePolicy(applied)).toBe(applied)
+
+      const prepared = yield* LLMClient.prepare(request)
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      const marked = [
+        ...body.tools.map((tool) => tool.cache_control),
+        ...body.system.map((part) => part.cache_control),
+        ...body.messages.flatMap((message) => message.content.map((part) => part.cache_control)),
+      ].filter((cache) => cache !== undefined)
+      expect(marked).toHaveLength(4)
+      expect(body.system[1]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
+      expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
 

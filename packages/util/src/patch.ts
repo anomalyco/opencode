@@ -69,7 +69,7 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
     }
     if (header.startsWith("*** Add File: ")) {
       const path = header.slice("*** Add File: ".length).trim()
-      const parsed = parseAdd(lines, index + 1, end)
+      const parsed = parseAdd(lines, index + 1, end, path)
       if ("error" in parsed) return Result.fail(parsed.error)
       hunks.push({ type: "add", path, contents: parsed.content })
       index = parsed.next
@@ -77,6 +77,19 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
     }
     if (header.startsWith("*** Delete File: ")) {
       const path = header.slice("*** Delete File: ".length).trim()
+      const next = lines[index + 1]?.trim()
+      if (index + 1 < end && next !== undefined && !isBoundary(next)) {
+        if (next.startsWith("*** ")) {
+          return Result.fail(new InvalidHunkError({ line: next, lineNumber: index + 2 }))
+        }
+        return Result.fail(
+          new InvalidHunkError({
+            line: next,
+            lineNumber: index + 2,
+            reason: `Unexpected line after Delete File '${path}': '${next}'. Delete hunks do not contain body lines`,
+          }),
+        )
+      }
       hunks.push({ type: "delete", path })
       index++
       continue
@@ -90,7 +103,13 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
       if (move === "*** Move to:" || move?.startsWith("*** Move to: ")) {
         movePath = move.slice("*** Move to: ".length).trim()
         if (!movePath) {
-          return Result.fail(new InvalidHunkError({ line: lines[next]!.trim(), lineNumber: next + 1 }))
+          return Result.fail(
+            new InvalidHunkError({
+              line: lines[next]!.trim(),
+              lineNumber: next + 1,
+              reason: `Move destination for '${path}' must not be empty`,
+            }),
+          )
         }
         next++
       }
@@ -126,12 +145,20 @@ function parseAdd(
   lines: ReadonlyArray<string>,
   start: number,
   end: number,
+  path: string,
 ): { content: string; next: number } | { error: InvalidHunkError } {
   const content: string[] = []
   let index = start
   while (index < end && !isBoundary(lines[index]!.trim())) {
     if (!lines[index]!.startsWith("+")) {
-      return { error: new InvalidHunkError({ line: lines[index]!.trim(), lineNumber: index + 1 }) }
+      const line = lines[index]!.trim()
+      return {
+        error: new InvalidHunkError({
+          line,
+          lineNumber: index + 1,
+          reason: `Invalid Add File line for '${path}': expected a line starting with '+', got '${line}'`,
+        }),
+      }
     }
     content.push(lines[index]!.slice(1))
     index++
@@ -302,6 +329,11 @@ function computeReplacements(lines: ReadonlyArray<string>, path: string, chunks:
       oldLines = oldLines.slice(0, -1)
       if (newLines.at(-1) === "") newLines = newLines.slice(0, -1)
       found = seek(lines, oldLines, lineIndex, chunk.endOfFile)
+    }
+    if (found === -1 && chunk.oldLines.every((line) => line === "")) {
+      const expected =
+        chunk.oldLines.length === 1 ? "an expected blank line" : `${chunk.oldLines.length} consecutive blank lines`
+      throw new Error(`Failed to find ${expected} in ${path}`)
     }
     if (found === -1) throw new Error(`Failed to find expected lines in ${path}:\n${chunk.oldLines.join("\n")}`)
     replacements.push([found, oldLines.length, newLines])

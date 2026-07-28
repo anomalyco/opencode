@@ -315,7 +315,8 @@ const longer = {
 }
 ```
 
-There is no `LLM.updateRequest(...)` helper and no request Schema class.
+There is no `LLM.updateRequest(...)` helper. The current Schema-backed implementation
+uses `LLMRequest.update(...)` when canonical request data must be derived.
 
 ### Conversation history
 
@@ -436,7 +437,7 @@ const call = Array.from(events).find(LLMEvent.is.toolCall)
 
 if (call && !call.providerExecuted) {
   const dispatched = yield * ToolRuntime.dispatch(tools, call)
-  const followUp = LLM.updateRequest(request, {
+  const followUp = LLMRequest.update(request, {
     messages: [...request.messages, Message.assistant([call]), Message.tool({ ...call, result: dispatched.result })],
   })
   // Caller must invoke the provider again and repeat the loop.

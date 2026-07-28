@@ -14,6 +14,14 @@ test("effect entrypoint exposes canonical Schema contracts", () => {
   expect(Client.Session).toBe(Session)
 })
 
+test("generated Effect API names canonical and composed outputs", async () => {
+  const source = await Bun.file(new URL("../src/effect/api/api.ts", import.meta.url)).text()
+
+  expect(source).toContain("export type Endpoint5_3Output = Session.Info")
+  expect(source).toContain("export type Endpoint19_0Output = OpenCodeEvent")
+  expect(source).not.toContain("HttpApiClient.ForApi")
+})
+
 test("shared DTO schemas construct and decode plain objects", () => {
   const made = Prompt.make({ text: "hello" })
   const decoded = Schema.decodeUnknownSync(Prompt)({ text: "hello" })

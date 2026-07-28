@@ -5,11 +5,11 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "./effect/app-node-platform"
 import { ModelResolver } from "./model-resolver"
-import { ModelV2 } from "./model"
+import { Model } from "./model"
 
 export interface TextInput {
   readonly prompt: string
-  readonly model?: ModelV2.Ref
+  readonly model?: Model.Ref
 }
 
 export class ModelSelectionError extends Schema.TaggedErrorClass<ModelSelectionError>()(
@@ -28,7 +28,7 @@ export interface Interface {
   readonly text: (input: TextInput) => Effect.Effect<string, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Generate") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Generate") {}
 
 export const layer = Layer.effect(
   Service,

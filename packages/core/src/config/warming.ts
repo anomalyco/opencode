@@ -2,7 +2,7 @@ export * as ConfigWarming from "./warming"
 
 import { Schema } from "effect"
 
-export class Info extends Schema.Class<Info>("ConfigV2.Warming")({
+export class Info extends Schema.Class<Info>("Config.Warming")({
   prompt: Schema.String.pipe(Schema.optional).annotate({
     description: "Prompt sent for keep-alive requests",
   }),

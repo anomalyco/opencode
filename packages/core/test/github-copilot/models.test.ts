@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { CopilotModels } from "@opencode-ai/core/github-copilot/models"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 
 test("defensively syncs advertised Copilot models", async () => {
   const server = Bun.serve({
@@ -48,28 +48,28 @@ test("defensively syncs advertised Copilot models", async () => {
   })
 
   try {
-    const existing = ModelV2.Info.make({
-      ...ModelV2.Info.default(ProviderV2.ID.githubCopilot, ModelV2.ID.make("gpt-5")),
-      modelID: ModelV2.ID.make("gpt-5"),
+    const existing = Model.Info.make({
+      ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("gpt-5")),
+      modelID: Model.ID.make("gpt-5"),
       name: "GPT-5 local",
     })
-    const stale = ModelV2.Info.make({
-      ...ModelV2.Info.default(ProviderV2.ID.githubCopilot, ModelV2.ID.make("stale")),
-      modelID: ModelV2.ID.make("stale"),
+    const stale = Model.Info.make({
+      ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("stale")),
+      modelID: Model.ID.make("stale"),
     })
     const models = await CopilotModels.get(server.url.origin, {}, [existing, stale])
-    const model = models.get(ModelV2.ID.make("gpt-5"))
+    const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
     expect(model?.settings).toMatchObject({ baseURL: server.url.origin, endpoint: "responses" })
     expect(model?.cost[0]).toMatchObject({ input: 0, output: 0, cache: { read: 0, write: 0 } })
     expect(model?.variants.map((variant) => variant.id)).toEqual([
-      ModelV2.VariantID.make("low"),
-      ModelV2.VariantID.make("high"),
+      Model.VariantID.make("low"),
+      Model.VariantID.make("high"),
     ])
-    expect(models.get(ModelV2.ID.make("utility"))?.enabled).toBe(false)
-    expect(models.has(ModelV2.ID.make("stale"))).toBe(false)
-    expect(models.has(ModelV2.ID.make("incomplete"))).toBe(false)
+    expect(models.get(Model.ID.make("utility"))?.enabled).toBe(false)
+    expect(models.has(Model.ID.make("stale"))).toBe(false)
+    expect(models.has(Model.ID.make("incomplete"))).toBe(false)
   } finally {
     await server.stop(true)
   }

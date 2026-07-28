@@ -59,29 +59,43 @@ export function connectionSummary(integration: IntegrationInfo) {
     .join(", ")
 }
 
-export function DialogIntegration(props: { onConnected?: OnIntegrationConnected } = {}) {
+export function DialogIntegration(
+  props: { onConnected?: OnIntegrationConnected; integrationID?: string; connectionOnly?: boolean } = {},
+) {
   const data = useData()
   const dialog = useDialog()
   const { themeV2 } = useTheme().contextual("elevated")
-  const options = createMemo(() =>
-    integrationOptions(data.location.integration.list() ?? []).map((integration) => {
+  const options = createMemo(() => {
+    const providers = data.location.websearch.list() ?? []
+    const providersByID = new Map(providers.map((provider) => [provider.id, provider]))
+    const integrations = integrationOptions(data.location.integration.list() ?? []).filter(
+      (integration) => props.integrationID === undefined || integration.id === props.integrationID,
+    )
+    return integrations.map((integration) => {
       const methods = connectMethods(integration)
-      const connected = integration.connections.length > 0
+      const provider = providersByID.get(integration.id)
+      const credentials = credentialConnections(integration)
+      let category = "Services"
+      if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
+      if (provider) category = "Web search"
       return {
         title: integration.name,
         value: integration.id,
-        description: methods.length ? undefined : "Environment only",
+        description: methods.length === 0 ? "Environment only" : undefined,
         footer: connectionSummary(integration) || undefined,
-        category: integration.id in INTEGRATION_PRIORITY ? "Popular" : "Services",
-        disabled: methods.length === 0,
-        gutter: connected ? () => <text fg={themeV2.text.feedback.success.default}>✓</text> : undefined,
-        onSelect: () =>
-          credentialConnections(integration).length
-            ? manageConnections(integration, methods, dialog, props.onConnected)
-            : selectMethod(integration, methods, dialog, props.onConnected),
+        category,
+        disabled: methods.length === 0 && credentials.length === 0,
+        gutter:
+          integration.connections.length > 0
+            ? () => <text fg={themeV2.text.feedback.success.default}>✓</text>
+            : undefined,
+        onSelect: () => {
+          if (credentials.length) return manageConnections(integration, methods, dialog, props.onConnected)
+          return selectMethod(integration, methods, dialog, props.onConnected)
+        },
       }
-    }),
-  )
+    })
+  })
 
   return (
     <DialogSelect

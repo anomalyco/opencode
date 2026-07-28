@@ -36,7 +36,7 @@
     "@opencode-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.98"
+    "effect": "4.0.0-beta.101"
   },
   "peerDependenciesMeta": {
     "effect": {

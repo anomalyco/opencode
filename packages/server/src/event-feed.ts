@@ -1,6 +1,7 @@
 export * as EventFeed from "./event-feed"
 
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
+import { Event } from "@opencode-ai/schema/event"
 import { isOpenCodeEvent, OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
 
@@ -12,7 +13,7 @@ export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberO
 ) {}
 
 export class EncodingError extends Schema.TaggedErrorClass<EncodingError>()("EventFeed.EncodingError", {
-  eventID: EventV2.ID,
+  eventID: Event.ID,
   eventType: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -32,7 +33,7 @@ export function frame(event: OpenCodeEvent) {
 }
 
 export const make = Effect.fn("EventFeed.make")(function* (
-  observe: (subscriber: EventV2.Subscriber) => Effect.Effect<EventV2.Unsubscribe>,
+  observe: (subscriber: Bus.Subscriber) => Effect.Effect<Bus.Unsubscribe>,
   options?: { readonly capacity?: number; readonly encode?: (event: OpenCodeEvent) => string },
 ) {
   const capacity = options?.capacity ?? SubscriberCapacity
@@ -46,7 +47,7 @@ export const make = Effect.fn("EventFeed.make")(function* (
       for (const subscriber of current) Queue.failCauseUnsafe(subscriber, Cause.fail(error))
     })
 
-  const publish = Effect.fnUntraced(function* (event: EventV2.Payload) {
+  const publish = Effect.fnUntraced(function* (event: Event.Payload) {
     if (!isOpenCodeEvent(event)) return
     if (subscribers.size === 0) return
     const encoded = yield* Effect.try({
@@ -84,7 +85,7 @@ export const make = Effect.fn("EventFeed.make")(function* (
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
-    return yield* make(events.listen)
+    const bus = yield* Bus.Service
+    return yield* make(bus.listen)
   }),
 )

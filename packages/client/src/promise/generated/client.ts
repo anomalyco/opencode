@@ -7,6 +7,8 @@ import type {
   LocationGetOutput,
   AgentListInput,
   AgentListOutput,
+  AgentGetInput,
+  AgentGetOutput,
   PluginListInput,
   PluginListOutput,
   SessionListInput,
@@ -207,6 +209,10 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  WebsearchProvidersInput,
+  WebsearchProvidersOutput,
+  WebsearchQueryInput,
+  WebsearchQueryOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -395,6 +401,18 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: AgentGetInput, requestOptions?: RequestOptions) =>
+        request<AgentGetOutput>(
+          {
+            method: "GET",
+            path: `/api/agent/${encodeURIComponent(input.agentID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
             empty: false,
           },
           requestOptions,
@@ -1734,6 +1752,33 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+    },
+    websearch: {
+      providers: (input?: WebsearchProvidersInput, requestOptions?: RequestOptions) =>
+        request<WebsearchProvidersOutput>(
+          {
+            method: "GET",
+            path: `/api/websearch/provider`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      query: (input: WebsearchQueryInput, requestOptions?: RequestOptions) =>
+        request<WebsearchQueryOutput>(
+          {
+            method: "POST",
+            path: `/api/websearch`,
+            query: { location: input["location"] },
+            body: { query: input["query"], providerID: input["providerID"] },
+            successStatus: 200,
+            declaredStatuses: [400, 503, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
     },
   }
 }

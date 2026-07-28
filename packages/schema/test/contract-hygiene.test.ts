@@ -84,14 +84,14 @@ describe("contract hygiene", () => {
   test("model defaults and provider overlays preserve public invariants", () => {
     const id = Model.ID.make("model")
     expect(Model.Info.default(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
-    expect(() =>
+    expect(
       Schema.decodeUnknownSync(Provider.Info)({
         id: "provider",
         name: "Provider",
         package: "native",
-        settings: { invalid: 1n },
-      }),
-    ).toThrow()
+        settings: { arbitrary: 1n },
+      }).settings,
+    ).toEqual({ arbitrary: 1n })
   })
 
   test("current ID constructors expose create", () => {
@@ -137,15 +137,19 @@ describe("contract hygiene", () => {
     expect(new Set(identifiers).size).toBe(identifiers.length)
   })
 
-  test("current source avoids Any and mutable contract wrappers", async () => {
+  test("current source limits Any to provider options and avoids mutable contract wrappers", async () => {
     const files = [...new Bun.Glob("*.ts").scanSync(new URL("../src", import.meta.url).pathname)].filter(
       (file) => !file.endsWith("-v1.ts"),
     )
-    const source = await Promise.all(
-      files.map((file) => Bun.file(new URL(`../src/${file}`, import.meta.url)).text()),
-    ).then((values) => values.join("\n"))
+    const sources = await Promise.all(
+      files.map(async (file) => ({ file, source: await Bun.file(new URL(`../src/${file}`, import.meta.url)).text() })),
+    )
+    const source = sources.map((item) => item.source).join("\n")
 
-    expect(source).not.toContain("Schema.Any")
+    expect(sources.filter((item) => item.file !== "provider.ts").map((item) => item.source).join("\n")).not.toContain(
+      "Schema.Any",
+    )
+    expect(sources.find((item) => item.file === "provider.ts")?.source.match(/Schema\.Any/g)).toHaveLength(4)
     expect(source).not.toContain("Schema.mutable")
   })
 

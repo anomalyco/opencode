@@ -8,7 +8,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/sdk": "1.18.5",
     "@slack/bolt": "^3.17.1"
   },
   "devDependencies": {

@@ -41,7 +41,7 @@
     "@kobalte/core": "catalog:",
     "@opencode-ai/client": "file:../app/vendor/opencode-ai-client-1.17.13.tgz",
     "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/sdk": "1.18.5",
     "@opencode-ai/ui": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/stream": "catalog:",

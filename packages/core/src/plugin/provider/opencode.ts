@@ -1,14 +1,14 @@
 import { Duration, Effect, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { CredentialValue } from "@opencode-ai/sdk/v2/types"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { EventV2 } from "../../event"
+import { Bus } from "../../bus"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
-import { ModelV2 } from "../../model"
-import { ProviderV2 } from "../../provider"
+import { Model } from "../../model"
+import { Provider } from "../../provider"
 import { ConfigProviderV1 } from "../../v1/config/provider"
 import { Money } from "@opencode-ai/schema/money"
 import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options"
@@ -82,10 +82,10 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | Scope.Scope>({
+export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope.Scope>({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
     let connected = false
@@ -120,7 +120,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
         catalog.provider.update(providerID, (provider) => {
           provider.integrationID = Integration.ID.make("opencode")
           if (item.name !== undefined) provider.name = item.name
-          provider.package = item.npm ? ProviderV2.aisdk(item.npm) : ""
+          provider.package = item.npm ? Provider.aisdk(item.npm) : ""
           provider.settings = {
             ...provider.settings,
             ...withoutCredentials(item.options),
@@ -131,12 +131,12 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
 
         for (const [modelID, config] of Object.entries(item.models ?? {})) {
           catalog.model.update(providerID, modelID, (model) => {
-            if (config.family !== undefined) model.family = config.family
+            if (config.family !== undefined) model.family = Model.Family.make(config.family)
             if (config.name !== undefined) model.name = config.name
-            if (config.id !== undefined) model.modelID = config.id
-            model.compatibility = ModelV2.compatibility(config.interleaved) ?? model.compatibility
+            if (config.id !== undefined) model.modelID = Model.ID.make(config.id)
+            model.compatibility = Model.compatibility(config.interleaved) ?? model.compatibility
             if (config.provider !== undefined) {
-              model.package = config.provider.npm ? ProviderV2.aisdk(config.provider.npm) : undefined
+              model.package = config.provider.npm ? Provider.aisdk(config.provider.npm) : undefined
               if (config.provider.api) model.settings = { ...model.settings, baseURL: config.provider.api }
             }
             if (config.tool_call !== undefined) model.capabilities.tools = config.tool_call
@@ -147,7 +147,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
             if (config.variants !== undefined) {
               model.variants ??= []
               for (const [id, options] of Object.entries(config.variants)) {
-                const variantID = ModelV2.VariantID.make(id)
+                const variantID = Model.VariantID.make(id)
                 let existing = model.variants.find((item) => item.id === variantID)
                 if (!existing) {
                   existing = { id: variantID }
@@ -174,7 +174,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
         }
       }
 
-      const item = catalog.provider.get(ProviderV2.ID.opencode)
+      const item = catalog.provider.get(Provider.ID.opencode)
       if (!item) return
       const hasKey = Boolean(process.env.OPENCODE_API_KEY || connected || item.provider.settings?.apiKey)
       catalog.provider.update(item.provider.id, (provider) => {
@@ -190,7 +190,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
     })
 
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
-    yield* events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),

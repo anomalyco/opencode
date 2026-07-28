@@ -19,7 +19,7 @@ export interface Interface {
  * Restart continuity actions for the managed server. The service is inert until called: only the
  * managed server invokes it, so default, embedded, and stdio servers never suspend or auto-resume.
  */
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRestart") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRestart") {}
 
 export const layer = Layer.effect(
   Service,
@@ -40,8 +40,7 @@ export const layer = Layer.effect(
               // Drain failures are already logged and durably recorded by the execution layer.
               yield* Effect.ignore(execution.resume(sessionID))
             }),
-          // Each suspension is consumed atomically right before its drain; at most four drains run at once.
-          { concurrency: 4, discard: true },
+          { concurrency: "unbounded", discard: true },
         )
       }),
     })

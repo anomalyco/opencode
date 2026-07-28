@@ -32,8 +32,8 @@ import {
 import { Auth, Endpoint, type AnyRoute } from "@opencode-ai/ai/route"
 import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
-import { ModelV2 } from "./model"
-import { ProviderV2 } from "./provider"
+import type { ID, Info } from "./model"
+import { Provider } from "./provider"
 import { State } from "./state"
 
 type SDK = any
@@ -42,14 +42,14 @@ type AssistantContent = Extract<LanguageModelV3Message, { role: "assistant" }>["
 type ToolResultContent = Extract<AssistantContent[number], { type: "tool-result" }>
 
 export interface SDKEvent {
-  readonly model: ModelV2.Info
+  readonly model: Info
   readonly package: string
   readonly options: Record<string, any>
   sdk?: SDK
 }
 
 export interface LanguageEvent {
-  readonly model: ModelV2.Info
+  readonly model: Info
   readonly sdk: SDK
   readonly options: Record<string, any>
   language?: LanguageModelV3
@@ -103,7 +103,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
-function prepareOptions(model: ModelV2.Info, pkg: string) {
+function prepareOptions(model: Info, pkg: string) {
   const projected = mapBodyToProviderOptions(model, pkg)
   const options: Record<string, any> = {
     name: model.providerID,
@@ -146,7 +146,7 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
     if (typeof opts.body === "string" && model.body !== undefined) {
       const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(opts.body))
       if (Schema.is(Schema.Record(Schema.String, Schema.Json))(decoded)) {
-        opts.body = JSON.stringify(ProviderV2.mergeOverlay(decoded, model.body))
+        opts.body = JSON.stringify(Provider.mergeOverlay(decoded, model.body))
       }
     }
 
@@ -162,11 +162,11 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
 }
 
 export class InitError extends Schema.TaggedErrorClass<InitError>()("AISDK.InitError", {
-  providerID: ProviderV2.ID,
+  providerID: Provider.ID,
   cause: Schema.Defect(),
 }) {}
 
-function initError(providerID: ProviderV2.ID) {
+function initError(providerID: Provider.ID) {
   return Effect.catchCause((cause) => Effect.fail(new InitError({ providerID, cause: Cause.squash(cause) })))
 }
 
@@ -181,11 +181,11 @@ export interface Interface {
   }
   readonly runSDK: (event: SDKEvent) => Effect.Effect<SDKEvent>
   readonly runLanguage: (event: LanguageEvent) => Effect.Effect<LanguageEvent>
-  readonly language: (model: ModelV2.Info) => Effect.Effect<LanguageModelV3, InitError>
-  readonly model: (model: ModelV2.Info) => Effect.Effect<Model, InitError>
+  readonly language: (model: Info) => Effect.Effect<LanguageModelV3, InitError>
+  readonly model: (model: Info) => Effect.Effect<Model, InitError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/AISDK") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/AISDK") {}
 
 export const locationLayer = Layer.effect(
   Service,
@@ -260,13 +260,13 @@ export const locationLayer = Layer.effect(
         })
         const existing = languages.get(key)
         if (existing) return existing
-        if (!ProviderV2.isAISDK(model.package))
+        if (!Provider.isAISDK(model.package))
           return yield* new InitError({
             providerID: model.providerID,
             cause: new Error(`Unsupported package ${model.package}`),
           })
 
-        const packageName = ProviderV2.packageName(model.package)
+        const packageName = Provider.packageName(model.package)
         const options = prepareOptions(model, packageName)
         const sdkKey = cacheKey({
           providerID: model.providerID,
@@ -301,8 +301,8 @@ export const locationLayer = Layer.effect(
 
 export const defaultLayer = locationLayer
 
-function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
-  const packageName = ProviderV2.packageName(info.package!)
+function modelFromLanguage(info: Info, language: LanguageModelV3) {
+  const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
   const optionKey = providerOptionKey(packageName, info.providerID)
   const providerOptions = (() => {
@@ -352,7 +352,7 @@ function modelFromLanguage(info: ModelV2.Info, language: LanguageModelV3) {
   })
 }
 
-function gatewayProviderOptions(modelID: ModelV2.ID, settings: Readonly<Record<string, unknown>>) {
+function gatewayProviderOptions(modelID: ID, settings: Readonly<Record<string, unknown>>) {
   const gateway =
     typeof settings.gateway === "object" && settings.gateway !== null && !Array.isArray(settings.gateway)
       ? Object.fromEntries(Object.entries(settings.gateway))
@@ -369,7 +369,7 @@ function gatewayProviderOptions(modelID: ModelV2.ID, settings: Readonly<Record<s
   return { gateway: model }
 }
 
-function providerOptionKey(packageName: string | undefined, providerID: ProviderV2.ID) {
+function providerOptionKey(packageName: string | undefined, providerID: Provider.ID) {
   if (packageName === "@ai-sdk/google") return "google"
   if (packageName === "@ai-sdk/google-vertex") return "vertex"
   if (packageName === "@ai-sdk/google-vertex/anthropic") return "anthropic"
@@ -395,18 +395,18 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-function mapBodyToProviderOptions(model: ModelV2.Info, packageName: string) {
+function mapBodyToProviderOptions(model: Info, packageName: string) {
   const settings = requestSettings(model.settings)
   const pro = Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning)
   const forceReasoning =
     ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(packageName) &&
     (pro || settings?.reasoningEffort !== undefined || settings?.reasoningSummary !== undefined)
-  const normalized = forceReasoning ? ProviderV2.mergeOverlay(settings, { forceReasoning: true }) : settings
+  const normalized = forceReasoning ? Provider.mergeOverlay(settings, { forceReasoning: true }) : settings
   if (!pro) return { settings: normalized, body: model.body }
   const body = { ...model.body }
   delete body.reasoning
   return {
-    settings: ProviderV2.mergeOverlay(normalized, { reasoningMode: "pro" }),
+    settings: Provider.mergeOverlay(normalized, { reasoningMode: "pro" }),
     body: Object.keys(body).length === 0 ? undefined : body,
   }
 }
@@ -659,12 +659,12 @@ function streamPartEvents(
       return Effect.succeed([
         LLMEvent.stepFinish({
           index: state.step++,
-          reason: finishReason(event.finishReason),
+          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
           usage: usage(event.usage),
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
         LLMEvent.finish({
-          reason: finishReason(event.finishReason),
+          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
           usage: usage(event.usage),
           providerMetadata: providerMetadata(event.providerMetadata),
         }),

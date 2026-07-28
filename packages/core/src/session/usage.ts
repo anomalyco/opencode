@@ -3,7 +3,7 @@ export * as SessionUsage from "./usage"
 import type { Usage } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
 import type { TokenUsage } from "@opencode-ai/schema/token-usage"
-import type { ModelV2 } from "../model"
+import type { Model } from "../model"
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
 
@@ -18,7 +18,7 @@ export const tokens = (usage: Usage | undefined): TokenUsage.Info => ({
 })
 
 // TODO(#35765): Use Copilot's reported billed amount once billing has a dedicated typed runtime contract.
-export function calculateCost(costs: ModelV2.Info["cost"], usage: TokenUsage.Info) {
+export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info) {
   const context = usage.input + usage.cache.read + usage.cache.write
   const tier = costs
     .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
@@ -36,7 +36,7 @@ export function calculateCost(costs: ModelV2.Info["cost"], usage: TokenUsage.Inf
 
 export type Recorded = { readonly tokens: TokenUsage.Info; readonly cost: Money.USD }
 
-export const record = (usage: Usage | undefined, costs: ModelV2.Info["cost"]): Recorded => {
+export const record = (usage: Usage | undefined, costs: Model.Info["cost"]): Recorded => {
   const normalized = tokens(usage)
   return { tokens: normalized, cost: calculateCost(costs, normalized) }
 }

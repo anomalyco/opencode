@@ -3,7 +3,7 @@ import type {
   FormInfo,
   LocationRef,
   OpenCodeClient,
-  PermissionV2Request,
+  PermissionRequest,
   SessionMessageAssistantTool,
   SessionMessageInfo,
   SessionPendingInfo,
@@ -16,6 +16,7 @@ import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
+import { toolDisplayContent } from "../util/tool-display"
 import type {
   FooterApi,
   FooterView,
@@ -145,6 +146,7 @@ type State = {
   pending: Map<string, FooterQueuedPrompt>
   admitted: Set<string>
   stepModel: RunInput["model"]
+  activeCompaction?: string
 }
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
@@ -294,7 +296,7 @@ function permissionSourceKey(messageID: string, callID: string) {
   return streamPartKey(messageID, callID)
 }
 
-function permissionTool(request: PermissionV2Request, tools: Map<string, SessionMessageAssistantTool>) {
+function permissionTool(request: PermissionRequest, tools: Map<string, SessionMessageAssistantTool>) {
   if (request.source?.type !== "tool") return request
   const tool = tools.get(permissionSourceKey(request.source.messageID, request.source.callID))
   return tool ? { ...request, tool } : request
@@ -363,6 +365,40 @@ function skillCommit(messageID: string, name: string): StreamCommit {
     messageID,
     partID: `skill:${messageID}`,
     text: `→ Skill "${name}"`,
+    phase: "start",
+  }
+}
+
+function compactionCommit(messageID: string): StreamCommit {
+  return {
+    kind: "system",
+    source: "system",
+    messageID,
+    partID: "compaction:header",
+    text: "Compaction",
+    phase: "start",
+    compaction: true,
+  }
+}
+
+function compactionSummary(messageID: string, text: string, phase: "progress" | "final"): StreamCommit {
+  return {
+    kind: "assistant",
+    source: "assistant",
+    messageID,
+    partID: "compaction:summary",
+    text,
+    phase,
+  }
+}
+
+function compactionError(messageID: string, text: string): StreamCommit {
+  return {
+    kind: "error",
+    source: "system",
+    messageID,
+    partID: "compaction:error",
+    text,
     phase: "start",
   }
 }
@@ -558,7 +594,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     const current = state.tools.get(key)
-    const output = toolOutputText(part.name, part.state.content)
+    const output = toolOutputText(part.name, toolDisplayContent(part.state))
     const prefix = current ? output.startsWith(current.output) : false
     const version = current && !prefix ? current.version + 1 : (current?.version ?? 0)
     const delta = current && prefix ? output.slice(current.output.length) : output
@@ -641,6 +677,28 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (completed && state.shellWait?.callID === message.shellID) state.shellWait.resolve()
       return
     }
+    if (message.type === "compaction") {
+      const visible = state.messageIDs.has(message.id)
+      state.messageIDs.add(message.id)
+      if (message.status === "running") state.activeCompaction = message.id
+      if (message.status !== "running" && state.activeCompaction === message.id) state.activeCompaction = undefined
+      if (visible) return
+      if (message.status === "failed") {
+        if (render && message.error.type !== "aborted")
+          write([compactionCommit(message.id), compactionError(message.id, message.error.message)])
+        return
+      }
+      const fragment = { messageID: message.id, partID: "compaction:summary" }
+      const show = render || message.status === "running"
+      state.fragments.project(fragment, message.summary, show)
+      if (!show) return
+      write([
+        compactionCommit(message.id),
+        ...(message.summary ? [compactionSummary(message.id, message.summary, "progress")] : []),
+        ...(message.status === "completed" ? [compactionSummary(message.id, "", "final")] : []),
+      ])
+      return
+    }
     if (message.type !== "assistant") return
     state.messageIDs.add(message.id)
     let textOrdinal = 0
@@ -670,8 +728,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             {
               kind: "reasoning",
               source: "reasoning",
-              text:
-                update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
+              text: update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
               phase: "progress",
               messageID: message.id,
               partID: fragment.partID,
@@ -715,7 +772,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const resolvePermissionSources = async (
     client: OpenCodeClient,
-    permissions: PermissionV2Request[],
+    permissions: PermissionRequest[],
     attempt: Attempt,
   ) => {
     const pending = new Set(
@@ -892,6 +949,48 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       write([skillCommit(messageID, event.data.name)])
       return
     }
+    if (event.type === "session.compaction.started") {
+      const messageID = event.data.inputID ?? messageIDFromEvent(event.id)
+      state.activeCompaction = messageID
+      if (state.messageIDs.has(messageID)) return
+      state.messageIDs.add(messageID)
+      write([compactionCommit(messageID)], { phase: "running", status: "compacting session" })
+      return
+    }
+    if (event.type === "session.compaction.delta") {
+      if (!state.activeCompaction) return
+      const fragment = { messageID: state.activeCompaction, partID: "compaction:summary" }
+      if (!state.fragments.delta(fragment, event.data.text)) return
+      write([compactionSummary(state.activeCompaction, event.data.text, "progress")])
+      return
+    }
+    if (event.type === "session.compaction.ended") {
+      if (!state.activeCompaction) return
+      const messageID = state.activeCompaction
+      state.activeCompaction = undefined
+      const update = state.fragments.end({ messageID, partID: "compaction:summary" }, event.data.text)
+      write([
+        ...(event.data.text.length > update.previous.length
+          ? [compactionSummary(messageID, event.data.text.slice(update.previous.length), "progress")]
+          : []),
+        compactionSummary(messageID, "", "final"),
+      ])
+      return
+    }
+    if (event.type === "session.compaction.failed") {
+      if (!state.activeCompaction) return
+      const messageID = state.activeCompaction
+      state.activeCompaction = undefined
+      if (event.data.error.type === "aborted") {
+        write([compactionSummary(messageID, "", "final")])
+        return
+      }
+      write([
+        compactionSummary(messageID, "", "final"),
+        compactionError(messageID, event.data.error.message),
+      ])
+      return
+    }
     if (event.type === "session.shell.started") {
       state.shellCommands.set(event.data.shell.id, event.data.shell.command)
       const wait = state.shellWait
@@ -1042,7 +1141,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         name: current?.part.name ?? "tool",
         executed: event.data.executed,
         providerState: event.data.state,
-        state: { status: "running", input: event.data.input, structured: {}, content: [] },
+        state: { status: "running", input: event.data.input, metadata: {} },
         time: { created: current?.part.time.created ?? event.created, ran: event.created },
       }
       renderTool(event.data.assistantMessageID, item)
@@ -1062,8 +1161,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         state: {
           status: "running",
           input: part && part.state.status !== "streaming" ? part.state.input : {},
-          structured: event.data.structured,
-          content: event.data.content,
+          metadata: event.data.metadata,
         },
         time: { created: part?.time.created ?? event.created, ran: part?.time.ran ?? event.created },
       })
@@ -1084,31 +1182,28 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           ? {
               status: "error",
               input: part && part.state.status !== "streaming" ? part.state.input : {},
-              structured:
-                event.data.metadata ?? (part && part.state.status !== "streaming" ? part.state.structured : {}),
-              content: event.data.content ?? (part && part.state.status !== "streaming" ? part.state.content : []),
+              metadata: event.data.metadata,
+              content: event.data.content,
               error: event.data.error,
-              result: event.data.result,
             }
           : {
               status: "completed",
               input: part && part.state.status !== "streaming" ? part.state.input : {},
-              structured: event.data.structured,
+              metadata: event.data.metadata,
               content: event.data.content,
-              result: event.data.result,
             },
         time: { created: part?.time.created ?? event.created, ran: part?.time.ran, completed: event.created },
       }
       renderTool(event.data.assistantMessageID, item)
       return
     }
-    if (event.type === "permission.v2.asked") {
+    if (event.type === "permission.asked") {
       if (!state.permissions.some((item) => item.id === event.data.id))
         state.permissions.push(permissionTool(event.data, state.toolSources))
       syncBlockers()
       return
     }
-    if (event.type === "permission.v2.replied") {
+    if (event.type === "permission.replied") {
       state.permissions = state.permissions.filter((item) => item.id !== event.data.requestID)
       pruneToolSources()
       syncBlockers()
@@ -1431,6 +1526,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.skillMessages.clear()
       state.shellCommands.clear()
       state.shellStarted.clear()
+      state.activeCompaction = undefined
       state.shellEnded.clear()
       state.errors.clear()
       await hydrate(attempt, { render: true, reuseVisibleWait: false })

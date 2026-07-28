@@ -1,6 +1,6 @@
 export * as SystemPromptPlugin from "./system-prompt"
 
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
@@ -33,14 +33,16 @@ function make(id: string, select: (modelID: string) => string | undefined) {
     effect: Effect.fn(`SystemPromptPlugin.${id}`)(function* (ctx) {
       yield* ctx.session.hook("context", (event) =>
         Effect.gen(function* () {
-          if ((yield* ctx.agent.get(event.agent))?.system) return
+          if ((yield* ctx.agent.get({ agentID: event.agent })).data.system) return
           const system = event.system[0]
           if (!system) return
-          const model = yield* ctx.catalog.model.get(event.model.providerID, event.model.id)
+          const model = (yield* ctx.catalog.model.list()).data.find(
+            (model) => model.providerID === event.model.providerID && model.id === event.model.id,
+          )
           const prompt = select(`${model?.modelID ?? event.model.id} ${model?.family ?? ""}`.toLowerCase())
           if (!prompt) return
           event.system[0] = { ...system, text: prompt }
-        }),
+        }).pipe(Effect.catch(() => Effect.void)),
       )
     }),
   })

@@ -17,7 +17,7 @@ import type {
   OpenCodeClient,
   LocationGetOutput,
   LocationRef,
-  PermissionV2Request,
+  PermissionRequest,
   ReferenceListOutput,
   SessionMessageAssistantTool,
 } from "@opencode-ai/client/promise"
@@ -254,7 +254,7 @@ export type MiniToolPart = {
   state: MiniToolState
 }
 
-export type MiniPermissionRequest = PermissionV2Request & {
+export type MiniPermissionRequest = PermissionRequest & {
   tool?: SessionMessageAssistantTool
 }
 
@@ -418,6 +418,7 @@ export type StreamCommit = {
   text: string
   phase: StreamPhase
   source: StreamSource
+  compaction?: true
   summary?: TurnSummary
   messageID?: string
   partID?: string

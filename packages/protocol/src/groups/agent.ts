@@ -3,6 +3,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
+import { AgentNotFoundError } from "../errors.js"
 
 export const AgentGroup = HttpApiGroup.make("server.agent")
   .add(
@@ -16,6 +17,22 @@ export const AgentGroup = HttpApiGroup.make("server.agent")
           identifier: "v2.agent.list",
           summary: "List agents",
           description: "Retrieve currently registered agents.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("agent.get", "/api/agent/:agentID", {
+      params: { agentID: Agent.ID },
+      query: LocationQuery,
+      success: Location.response(Agent.Info),
+      error: AgentNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.agent.get",
+          summary: "Get agent",
+          description: "Retrieve a single currently registered agent.",
         }),
       ),
   )

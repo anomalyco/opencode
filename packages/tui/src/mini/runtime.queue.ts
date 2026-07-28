@@ -75,7 +75,8 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
 
     state.closed = true
     state.queue.length = 0
-    state.ctrl?.abort()
+    // Ordinary turn signals map to session.interrupt; exiting should only detach the TUI.
+    if (state.active?.mode === "shell") state.ctrl?.abort()
     admissionController.abort()
     stop.resolve({ type: "closed" })
     finish()
@@ -198,7 +199,6 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
 
             const next = await Promise.race([task, stop.promise])
             if (next.type === "closed") {
-              ctrl.abort()
               break
             }
 

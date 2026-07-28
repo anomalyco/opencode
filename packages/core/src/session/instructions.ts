@@ -3,7 +3,7 @@ export * as SessionInstructions from "./instructions"
 import { relative } from "path"
 import { Context, DateTime, Effect, Layer, Option, Ref, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { SessionEvent } from "./event"
@@ -23,12 +23,12 @@ export interface Interface {
   }) => Effect.Effect<void, MessageDecodeError | FSUtil.Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionInstructions") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionInstructions") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const fs = yield* FSUtil.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
@@ -67,12 +67,12 @@ const layer = Layer.effect(
       )
       const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)
       if (readable.length === 0) return
-      // Publish directly rather than through SessionV2.synthetic: a Location-scoped layer
-      // cannot depend on SessionV2 (it routes through LocationServiceMap, forming a type
+      // Publish directly rather than through Session.synthetic: a Location-scoped layer
+      // cannot depend on Session (it routes through LocationServiceMap, forming a type
       // cycle with this node). The durable publish is what makes the synthetic visible on
       // the next projected history reload. The dedup ledger lives on the synthetic message
       // metadata so it survives across Location layer restarts.
-      yield* events.publish(SessionEvent.Synthetic, {
+      yield* bus.publish(SessionEvent.Synthetic, {
         sessionID: input.sessionID,
         text: readable.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n"),
         description: `Loaded ${readable.map((file) => describePath(root, file.path)).join(", ")}`,
@@ -109,5 +109,5 @@ function describePath(root: string, path: string) {
 export const node = makeLocationNode({
   name: "session-instructions",
   layer,
-  deps: [EventV2.node, FSUtil.node, Location.node, SessionStore.node],
+  deps: [Bus.node, FSUtil.node, Location.node, SessionStore.node],
 })

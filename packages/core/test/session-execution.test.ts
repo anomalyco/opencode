@@ -3,24 +3,23 @@ import { LLMError, TransportReason } from "@opencode-ai/ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionStore.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node])))
 
 describe("SessionExecution lifecycle", () => {
   test("classifies success and typed failure terminals", () => {
@@ -36,11 +35,6 @@ describe("SessionExecution lifecycle", () => {
         ),
       ),
     ).toEqual({ type: "failed", error: { type: "provider.transport", message: "Disconnected" } })
-    const storage = new ToolOutputStore.StorageError({ operation: "encode", cause: new Error("invalid output") })
-    expect(SessionExecution.terminal(Exit.fail(storage))).toEqual({
-      type: "failed",
-      error: { type: "unknown", message: storage.message },
-    })
   })
 
   test("defaults owner-scope interruption to shutdown and preserves explicit reasons", () => {
@@ -58,8 +52,8 @@ describe("SessionExecution lifecycle", () => {
     Effect.gen(function* () {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
-      const first = SessionV2.ID.make("ses_recover_first")
-      const second = SessionV2.ID.make("ses_recover_second")
+      const first = Session.ID.make("ses_recover_first")
+      const second = Session.ID.make("ses_recover_second")
       yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
 
       expect(yield* store.consumeSuspended(first)).toBe(true)
@@ -72,8 +66,8 @@ describe("SessionExecution lifecycle", () => {
   it.effect("suspension survives teardown interruption and clears when a drain finishes on its own", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const interrupted = SessionV2.ID.make("ses_suspend_interrupted")
-      const completed = SessionV2.ID.make("ses_suspend_completed")
+      const interrupted = Session.ID.make("ses_suspend_interrupted")
+      const completed = Session.ID.make("ses_suspend_completed")
       yield* seedSessions(database, [interrupted, completed])
 
       const draining = yield* Deferred.make<void>()
@@ -105,19 +99,46 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("starts every suspended execution without waiting for earlier drains to finish", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionIDs = Array.from({ length: 5 }, (_, index) => Session.ID.make(`ses_resume_concurrent_${index}`))
+      yield* seedSessions(database, sessionIDs, { time_suspended: Date.now() })
+
+      const fourStarted = yield* Deferred.make<void>()
+      const started: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID }) =>
+        Effect.sync(() => {
+          started.push(sessionID)
+          if (started.length === 4) Deferred.doneUnsafe(fourStarted, Effect.void)
+        }).pipe(Effect.andThen(Effect.never)),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* restart.resumeSuspendedSessions.pipe(Effect.forkIn(scope))
+      yield* Deferred.await(fourStarted)
+
+      expect([...(yield* execution.active)].toSorted()).toEqual(sessionIDs.toSorted())
+    }),
+  )
+
   it.effect("resumes each suspended Session at most once", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const first = SessionV2.ID.make("ses_resume_first")
-      const second = SessionV2.ID.make("ses_resume_second")
+      const first = Session.ID.make("ses_resume_first")
+      const second = Session.ID.make("ses_resume_second")
       yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
 
       const drained: string[] = []
       const scope = yield* Scope.make()
       const context = yield* buildExecution(scope, ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)))
+      const execution = Context.get(context, SessionExecution.Service)
       const restart = Context.get(context, SessionRestart.Service)
 
       yield* restart.resumeSuspendedSessions
+      yield* Effect.forEach([first, second], execution.awaitIdle, { discard: true })
       expect(drained.toSorted()).toEqual([first, second])
       expect(yield* suspensions(database)).toEqual({ [first]: false, [second]: false })
 
@@ -130,7 +151,7 @@ describe("SessionExecution lifecycle", () => {
 
 function seedSessions(
   database: Database.Service["Service"],
-  sessionIDs: ReadonlyArray<SessionV2.ID>,
+  sessionIDs: ReadonlyArray<Session.ID>,
   values: { time_suspended?: number } = {},
 ) {
   return Effect.gen(function* () {
@@ -172,7 +193,7 @@ function suspensions(database: Database.Service["Service"]) {
 function buildExecution(scope: Scope.Closeable, drain: SessionRunner.Interface["drain"]) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const store = yield* SessionStore.Service
     const runner = Layer.succeed(SessionRunner.Service, SessionRunner.Service.of({ drain }))
     const locations = Layer.effect(
@@ -188,7 +209,7 @@ function buildExecution(scope: Scope.Closeable, drain: SessionRunner.Interface["
       SessionRestart.layer.pipe(
         Layer.provideMerge(SessionExecution.layer),
         Layer.provide(Layer.succeed(Database.Service, database)),
-        Layer.provide(Layer.succeed(EventV2.Service, events)),
+        Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),
         Layer.provide(locations),
       ),

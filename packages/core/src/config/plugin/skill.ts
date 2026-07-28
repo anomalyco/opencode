@@ -1,11 +1,11 @@
 export * as ConfigSkillPlugin from "./skill"
 
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import path from "path"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
 import { AbsolutePath } from "../../schema"
-import { SkillV2 } from "../../skill"
+import { Skill } from "../../skill"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "../../location"
 
@@ -23,7 +23,7 @@ export const Plugin = define({
       const items = loaded.entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
       for (const directory of [...claude, ...agents]) {
         draft.source(
-          SkillV2.DirectorySource.make({
+          Skill.DirectorySource.make({
             type: "directory",
             path: AbsolutePath.make(path.join(directory, "skills")),
           }),
@@ -31,10 +31,10 @@ export const Plugin = define({
       }
       for (const directory of directories) {
         draft.source(
-          SkillV2.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }),
+          Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }),
         )
         draft.source(
-          SkillV2.DirectorySource.make({
+          Skill.DirectorySource.make({
             type: "directory",
             path: AbsolutePath.make(path.join(directory, "skills")),
           }),
@@ -42,12 +42,12 @@ export const Plugin = define({
       }
       for (const item of items) {
         if (URL.canParse(item) && /^(https?:)$/.test(new URL(item).protocol)) {
-          draft.source(SkillV2.UrlSource.make({ type: "url", url: item }))
+          draft.source(Skill.UrlSource.make({ type: "url", url: item }))
           continue
         }
         const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
         draft.source(
-          SkillV2.DirectorySource.make({
+          Skill.DirectorySource.make({
             type: "directory",
             path: AbsolutePath.make(path.isAbsolute(expanded) ? expanded : path.join(location.directory, expanded)),
           }),

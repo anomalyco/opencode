@@ -157,6 +157,7 @@ async function renderFooter(
           providers={() => input.providers}
           currentAgent={() => input.currentAgent ?? "Build"}
           currentAgentID={() => input.currentAgent?.toLowerCase() ?? "build"}
+          currentAgentExplicit={() => input.currentAgent !== undefined}
           currentModel={() => input.currentModel}
           variants={() => []}
           currentVariant={() => input.currentVariant}
@@ -208,11 +209,13 @@ async function renderFooter(
   }
 }
 
-test("direct footer shows the generic default model before resolution", async () => {
+test("direct footer shows the default model without the fallback agent", async () => {
   const app = await renderFooter({ state: { model: "Default model" } })
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Default model")
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("Default model")
+    expect(frame).not.toContain("Build")
   } finally {
     app.cleanup()
   }
@@ -373,6 +376,83 @@ test("run entry content updates when live commit text changes", async () => {
     await app.renderOnce()
 
     expect(app.captureCharFrame()).toContain("I need to inspect the codebase")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("run entry content preserves monochrome markdown grammar", async () => {
+  const [commit, setCommit] = createSignal<StreamCommit>({
+    kind: "assistant",
+    text: "• literal\n\n———\n\narrow →",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+  const app = await testRender(
+    () => (
+      <box width={60} height={8}>
+        <RunEntryContent commit={commit()} theme={RUN_THEME_FALLBACK} opts={{ mono: true }} />
+      </box>
+    ),
+    { width: 60, height: 8 },
+  )
+
+  try {
+    await app.renderOnce()
+    const rows = app
+      .captureCharFrame()
+      .split("\n")
+      .map((row) => row.trimEnd())
+    expect(rows).toContain("* literal")
+    expect(rows).toContain("------")
+    expect(rows).toContain("arrow ->")
+    expect(rows.join("\n")).not.toMatch(/[^\x00-\x7f]/)
+
+    setCommit({ ...commit(), text: "- Café\n- arrow →\n- third …" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("- arrow ->")
+    expect(app.captureCharFrame()).toContain("- third ...")
+
+    setCommit({ ...commit(), text: "| A | B |\n| - | - |\n| Café | → |" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Caf?")
+    expect(app.captureCharFrame()).toContain("->")
+    setCommit({ ...commit(), text: "| A | B |\n| - | - |\n| Café | … |" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("...")
+
+    setCommit({ ...commit(), text: "```\nCafé → …\n```" })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Caf? -> ...")
+    expect(app.captureCharFrame()).not.toMatch(/[^\x00-\x7f]/)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("run entry content eagerly renders final monochrome markdown", async () => {
+  const app = await testRender(
+    () => (
+      <box width={60} height={6}>
+        <RunEntryContent
+          commit={{ kind: "tool", text: "", phase: "final", source: "tool", tool: "subagent" }}
+          body={{ type: "markdown", content: "# Café →\n\n```markdown\nCafé →\n```" }}
+          theme={RUN_THEME_FALLBACK}
+          opts={{ mono: true }}
+        />
+      </box>
+    ),
+    { width: 60, height: 6 },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("# Caf? ->")
+    expect(frame).toContain("Caf? ->")
+    expect(frame).not.toMatch(/[^\x00-\x7f]/)
   } finally {
     app.renderer.destroy()
   }
@@ -1179,6 +1259,7 @@ test("direct footer shows authoritative pending work while running", async () =>
           providers={() => undefined}
           currentAgent={() => "Build"}
           currentAgentID={() => "build"}
+          currentAgentExplicit={() => false}
           currentModel={() => ({
             providerID: "opencode",
             modelID: "a-model-name-long-enough-to-force-responsive-truncation",
@@ -1276,14 +1357,13 @@ test("direct footer progressively adds model details after the command hint", as
   for (const expected of [
     { width: 24, agent: false, model: false, variant: false },
     { width: 32, agent: false, model: true, variant: false },
-    { width: 40, agent: false, model: true, variant: true },
-    { width: 80, agent: true, model: true, variant: true },
+    { width: 40, agent: true, model: true, variant: false },
+    { width: 48, agent: true, model: true, variant: true },
   ]) {
     const app = await renderFooter({
-      providers: [provider()],
       currentAgent: "Plan",
-      currentModel: { providerID: "opencode", modelID: "gpt-5" },
       currentVariant: "xhigh",
+      state: { model: "GPT-5" },
       width: expected.width,
     })
 
@@ -1300,6 +1380,66 @@ test("direct footer progressively adds model details after the command hint", as
     } finally {
       app.cleanup()
     }
+  }
+})
+
+test("direct footer keeps commands and active work ahead of usage under width pressure", async () => {
+  const app = await renderFooter({
+    currentAgent: "Plan",
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      details: {},
+      permissions: [],
+      forms: [],
+    },
+    state: {
+      phase: "running",
+      model: "a-model-name-long-enough-to-force-responsive-truncation",
+      usage: "159.6K (16%) · $4.23",
+    },
+    width: 80,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("Plan")
+    expect(frame).toContain("ctrl+b background")
+    expect(frame).toContain("↓ subagents")
+    expect(frame).toContain("ctrl+p cmd")
+    expect(frame).not.toContain("a-model-name")
+    expect(frame).not.toContain("159.6K")
+    expect(frame).not.toContain("$4.23")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer keeps the command hint at its minimum width", async () => {
+  const app = await renderFooter({ state: { phase: "running" }, width: 10 })
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("ctrl+p cmd")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer keeps complete status text ahead of the spinner", async () => {
+  const app = await renderFooter({
+    tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none" } }),
+    state: { phase: "running" },
+    width: 22,
+  })
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("interrupt")
+    expect(boxPath(footerStatusline(app.renderer.root), "SpinnerRenderable")).toBeUndefined()
+  } finally {
+    app.cleanup()
   }
 })
 
@@ -1377,6 +1517,27 @@ test("direct footer shows full usage metadata when room is available", async () 
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("159.6K (16%) · $4.23")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer omits usage when it would fill the statusline", async () => {
+  const app = await renderFooter({
+    state: { phase: "running", model: "GPT-5.6 SoL", usage: "8.4K (1%) · $0.01" },
+    currentVariant: "high",
+    mono: true,
+    width: 66,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("esc interrupt")
+    expect(frame).toContain("GPT-5.6 SoL high")
+    expect(frame).toContain("ctrl+p cmd")
+    expect(frame).not.toContain("8.4K")
   } finally {
     app.cleanup()
   }

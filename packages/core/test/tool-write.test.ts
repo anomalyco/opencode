@@ -8,38 +8,37 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { WriteTool } from "@opencode-ai/core/tool/write"
+import { Session } from "@opencode-ai/core/session"
+import { Tool } from "@opencode-ai/core/tool"
+import { WriteTool } from "@opencode-ai/core/tool/plugin/write"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { toolIdentity, executeTool, registerToolPlugin, settleTool, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [ToolRegistry.toolsNode, LocationMutation.node, FileMutation.node, PermissionV2.node],
+  deps: [Tool.node, LocationMutation.node, FileMutation.node, Permission.node],
 })
 
-const sessionID = SessionV2.ID.make("ses_write_tool_test")
-const assertions: PermissionV2.AssertInput[] = []
+const sessionID = Session.ID.make("ses_write_tool_test")
+const assertions: Permission.AssertInput[] = []
 const writes: string[] = []
 let denyAction: string | undefined
 
 const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
+  Permission.Service,
+  Permission.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
         Effect.andThen(
           input.action === denyAction
             ? Effect.fail(
-                new PermissionV2.BlockedError({
+                new Permission.BlockedError({
                   rules: [],
                   permission: input.action,
                   resources: input.resources,
@@ -74,19 +73,19 @@ const filesystem = Layer.effect(
   }),
 ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 
-const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>) => {
+const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) => {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
   return Effect.gen(function* () {
-    return yield* body(yield* ToolRegistry.Service)
+    return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(
         LayerNode.group([
-          ToolRegistry.node,
-          ToolRegistry.toolsNode,
+          Tool.node,
+          Tool.node,
           LocationMutation.node,
           FileMutation.node,
           writeToolNode,
@@ -94,8 +93,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
         [
           [FSUtil.node, filesystem],
           [Location.node, activeLocation],
-          [PermissionV2.node, permission],
-          [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+          [Permission.node, permission],
         ],
       ),
     ),
@@ -118,19 +116,17 @@ describe("WriteTool", () => {
         reset()
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
-            expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write"])
-            const settled = yield* settleTool(registry, call({ path: "src/new.txt", content: "created" }))
+            expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write", "execute"])
+            const settled = yield* executeTool(registry, call({ path: "src/new.txt", content: "created" }))
             expect(settled).toEqual({
-              result: { type: "text", value: "Created file successfully: src/new.txt" },
+              status: "completed",
               output: {
-                structured: {
-                  operation: "write",
-                  target: path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
-                  resource: "src/new.txt",
-                  existed: false,
-                },
-                content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
+                operation: "write",
+                target: path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
+                resource: "src/new.txt",
+                existed: false,
               },
+              content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
             })
             expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "src", "new.txt"), "utf8"))).toBe(
               "created",
@@ -151,12 +147,14 @@ describe("WriteTool", () => {
         reset()
         return Effect.promise(() => fs.writeFile(path.join(tmp.path, "existing.txt"), "before")).pipe(
           Effect.andThen(
-            withTool(tmp.path, (registry) => settleTool(registry, call({ path: "existing.txt", content: "after" }))),
+            withTool(tmp.path, (registry) => executeTool(registry, call({ path: "existing.txt", content: "after" }))),
           ),
           Effect.andThen((settled) =>
             Effect.gen(function* () {
-              expect(settled.result).toEqual({ type: "text", value: "Wrote file successfully: existing.txt" })
-              expect(settled.output?.structured).toMatchObject({ resource: "existing.txt", existed: true })
+              expect(settled.status).toBe("completed")
+              if (settled.status !== "completed") return
+              expect(settled.content).toEqual([{ type: "text", text: "Wrote file successfully: existing.txt" }])
+              expect(settled.output).toMatchObject({ resource: "existing.txt", existed: true })
               expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "existing.txt"), "utf8"))).toBe(
                 "after",
               )
@@ -182,8 +180,8 @@ describe("WriteTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                yield* settleTool(registry, call({ path: "preserved.txt", content: "after" }, "call-preserved"))
-                yield* settleTool(
+                yield* executeTool(registry, call({ path: "preserved.txt", content: "after" }, "call-preserved"))
+                yield* executeTool(
                   registry,
                   call({ path: "deduplicated.txt", content: "\uFEFFafter" }, "call-deduplicated"),
                 )
@@ -208,7 +206,10 @@ describe("WriteTool", () => {
         return withTool(tmp.path, (registry) => executeTool(registry, call({ path: target, content: "inside" }))).pipe(
           Effect.andThen((result) =>
             Effect.gen(function* () {
-              expect(result).toEqual({ type: "text", value: "Created file successfully: absolute.txt" })
+              expect(result).toMatchObject({
+                status: "completed",
+                content: [{ type: "text", text: "Created file successfully: absolute.txt" }],
+              })
               expect(assertions.map((input) => input.action)).toEqual(["edit"])
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("inside")
             }),
@@ -236,7 +237,7 @@ describe("WriteTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.sync(() => {
-              expect(result.type).toBe("text")
+              expect(result.status).toBe("completed")
               expect(assertions.map((input) => input.action)).toEqual(["edit"])
               expect(assertions[0]?.resources).toEqual(["link.txt"])
             }),
@@ -259,7 +260,7 @@ describe("WriteTool", () => {
         reset()
         const target = path.join(outside.path, "external.txt")
         return withTool(active.path, (registry) =>
-          settleTool(registry, call({ path: target, content: "external" })),
+          executeTool(registry, call({ path: target, content: "external" })),
         ).pipe(
           Effect.andThen((settled) =>
             Effect.gen(function* () {
@@ -271,10 +272,13 @@ describe("WriteTool", () => {
                 ],
               })
               expect(assertions[1]).toMatchObject({ resources: [canonicalTarget.replaceAll("\\", "/")], save: ["*"] })
-              expect(settled.output?.structured).toMatchObject({
-                target: canonicalTarget,
-                resource: canonicalTarget.replaceAll("\\", "/"),
-                existed: false,
+              expect(settled).toMatchObject({
+                status: "completed",
+                output: {
+                  target: canonicalTarget,
+                  resource: canonicalTarget.replaceAll("\\", "/"),
+                  existed: false,
+                },
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("external")
               expect(writes).toEqual([canonicalTarget])
@@ -336,8 +340,8 @@ describe("WriteTool", () => {
               executeTool(registry, call({ path: external, content: "blocked" })),
             ),
           ).toEqual({
-            type: "error",
-            value: `Unable to write ${external}`,
+            status: "error",
+            error: { type: "permission.rejected", message: "Permission denied: external_directory" },
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(writes).toEqual([])
@@ -349,8 +353,8 @@ describe("WriteTool", () => {
               executeTool(registry, call({ path: "denied.txt", content: "blocked" })),
             ),
           ).toEqual({
-            type: "error",
-            value: "Unable to write denied.txt",
+            status: "error",
+            error: { type: "permission.rejected", message: "Permission denied: edit" },
           })
           expect(assertions.map((input) => input.action)).toEqual(["edit"])
           expect(writes).toEqual([])

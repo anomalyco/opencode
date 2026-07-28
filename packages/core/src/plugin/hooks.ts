@@ -1,8 +1,8 @@
 export * as PluginHooks from "./hooks"
 
-import type { AISDKHooks } from "@opencode-ai/plugin/v2/effect/aisdk"
-import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
-import type { ToolHooks } from "@opencode-ai/plugin/v2/effect/tool"
+import type { AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
+import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
+import type { ToolHooks } from "@opencode-ai/plugin/effect/tool"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { State } from "../state"
@@ -28,7 +28,7 @@ export interface Interface {
   ) => Effect.Effect<Domains[Domain][Name]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PluginHooks") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/PluginHooks") {}
 
 const layer = Layer.effect(
   Service,

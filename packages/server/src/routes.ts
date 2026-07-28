@@ -3,18 +3,18 @@ import { App } from "@opencode-ai/core/app"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { EventLogger } from "@opencode-ai/core/event-logger"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
 import { Observability } from "@opencode-ai/util/observability"
 import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
-import { CommandV2 } from "@opencode-ai/core/command"
+import { Command } from "@opencode-ai/core/command"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Pty } from "@opencode-ai/core/pty"
 import { Project } from "@opencode-ai/core/project"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Shell } from "@opencode-ai/core/shell"
 import { Job } from "@opencode-ai/core/job"
 import { MCP } from "@opencode-ai/core/mcp/index"
@@ -25,7 +25,6 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
@@ -45,13 +44,12 @@ import type { ServerOptions } from "./options"
 
 const applicationServices = LayerNode.group([
   Database.node,
-  EventV2.node,
+  Bus.node,
   EventLogger.node,
   httpClient,
-  ToolOutputStore.cleanupNode,
   Job.node,
   Project.node,
-  SessionV2.node,
+  Session.node,
   PluginRuntime.providerNode,
   SdkPlugins.node,
   PermissionSaved.node,
@@ -99,7 +97,7 @@ function makeRoutes<AuthError, AuthServices>(
       }),
     ],
     [InstructionDiscovery.node, InstructionDiscovery.configured({ project: options.config?.project })],
-    [CommandV2.node, CommandV2.configured({ gitbash: options.windows?.gitbash })],
+    [Command.node, Command.configured({ gitbash: options.windows?.gitbash })],
     [Pty.node, Pty.configured({ gitbash: options.windows?.gitbash })],
     [Shell.node, Shell.configured({ gitbash: options.windows?.gitbash })],
     [

@@ -2,13 +2,13 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Bus } from "@opencode-ai/core/bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SkillV2 } from "@opencode-ai/core/skill"
+import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { tmpdir } from "./fixture/tmpdir"
@@ -26,7 +26,7 @@ const discovery = Layer.succeed(
   }),
 )
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([SkillV2.node, AgentV2.node, EventV2.node]), [[SkillDiscovery.node, discovery]]),
+  AppNodeBuilder.build(LayerNode.group([Skill.node, Agent.node, Bus.node]), [[SkillDiscovery.node, discovery]]),
 )
 
 function write(directory: string, name: string, description: string) {
@@ -42,9 +42,9 @@ description: ${description}
 
 function waitForSkillUpdate() {
   return Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const deferred = yield* Deferred.make<void>()
-    const fiber = yield* events.subscribe(SkillV2.Event.Updated).pipe(
+    const fiber = yield* bus.subscribe(Skill.Event.Updated).pipe(
       Stream.runForEach(() => Deferred.succeed(deferred, undefined).pipe(Effect.asVoid)),
       Effect.forkScoped,
     )
@@ -53,10 +53,10 @@ function waitForSkillUpdate() {
   })
 }
 
-describe("SkillV2", () => {
+describe("Skill", () => {
   it.live("publishes updates when skill sources change", () =>
     Effect.gen(function* () {
-      const skill = yield* SkillV2.Service
+      const skill = yield* Skill.Service
 
       yield* Effect.acquireUseRelease(
         waitForSkillUpdate(),
@@ -88,7 +88,7 @@ describe("SkillV2", () => {
             await fs.writeFile(path.join(first, "foo.md"), "---\nslash: true\n---\n# foo")
           })
 
-          const skill = yield* SkillV2.Service
+          const skill = yield* Skill.Service
           yield* skill.transform((editor) => {
             editor.source({ type: "directory", path: AbsolutePath.make(first) })
             editor.source({ type: "directory", path: AbsolutePath.make(first) })
@@ -104,16 +104,16 @@ describe("SkillV2", () => {
             { type: "directory", path: AbsolutePath.make(second) },
           ])
           expect(yield* skill.list()).toEqual([
-            SkillV2.Info.make({
-              id: SkillV2.ID.make("foo"),
-              name: SkillV2.Name.make("foo"),
+            Skill.Info.make({
+              id: Skill.ID.make("foo"),
+              name: Skill.Name.make("foo"),
               slash: true,
               location: AbsolutePath.make(path.join(first, "foo.md")),
               content: "# foo",
             }),
             {
-              id: SkillV2.ID.make("review"),
-              name: SkillV2.Name.make("review"),
+              id: Skill.ID.make("review"),
+              name: Skill.Name.make("review"),
               description: "Second",
               location: AbsolutePath.make(path.join(second, "review", "SKILL.md")),
               content: "# review",
@@ -138,20 +138,20 @@ describe("SkillV2", () => {
           pulls = 0
           urls.set("https://example.test/skills/", [AbsolutePath.make(tmp.path)])
 
-          const agents = yield* AgentV2.Service
+          const agents = yield* Agent.Service
           yield* agents.transform((editor) =>
-            editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+            editor.update(Agent.ID.make("reviewer"), (agent) => {
               agent.permissions.push({ action: "skill", resource: "deploy", effect: "deny" })
             }),
           )
 
-          const skill = yield* SkillV2.Service
+          const skill = yield* Skill.Service
           yield* skill.transform((editor) => editor.source({ type: "url", url: "https://example.test/skills/" }))
 
-          expect((yield* skill.list()).map((item) => item.name)).toEqual([SkillV2.Name.make("deploy")])
-          expect((yield* skill.list()).map((item) => item.name)).toEqual([SkillV2.Name.make("deploy")])
+          expect((yield* skill.list()).map((item) => item.name)).toEqual([Skill.Name.make("deploy")])
+          expect((yield* skill.list()).map((item) => item.name)).toEqual([Skill.Name.make("deploy")])
           expect(pulls).toBe(1)
-          expect(SkillV2.available(yield* skill.list(), (yield* agents.get(AgentV2.ID.make("reviewer")))!)).toEqual([])
+          expect(Skill.available(yield* skill.list(), (yield* agents.get(Agent.ID.make("reviewer")))!)).toEqual([])
         }),
       ),
     ),
@@ -179,13 +179,13 @@ metadata:
             )
           })
 
-          const skill = yield* SkillV2.Service
+          const skill = yield* Skill.Service
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
 
           expect(yield* skill.list()).toEqual([
             {
-              id: SkillV2.ID.make("manual"),
-              name: SkillV2.Name.make("manual"),
+              id: Skill.ID.make("manual"),
+              name: Skill.Name.make("manual"),
               description: "Manual only",
               slash: true,
               autoinvoke: false,
@@ -210,8 +210,8 @@ metadata:
             await write(tmp.path, "deploy", "Initial deploy")
           })
 
-          const events = yield* EventV2.Service
-          const skill = yield* SkillV2.Service
+          const bus = yield* Bus.Service
+          const skill = yield* Skill.Service
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
 
           expect((yield* skill.list()).find((item) => item.name === "deploy")?.description).toBe("Initial deploy")
@@ -223,7 +223,7 @@ metadata:
           yield* Effect.acquireUseRelease(
             waitForSkillUpdate(),
             ({ deferred }) =>
-              events
+              bus
                 .publish(FileSystem.Event.Changed, { file, event: "change" })
                 .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
             ({ fiber }) => Fiber.interrupt(fiber),

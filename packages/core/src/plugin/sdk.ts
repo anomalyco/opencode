@@ -1,12 +1,12 @@
 export * as SdkPlugins from "./sdk"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
+import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { EventV2 } from "../event"
-import type { PluginV2 } from "../plugin"
+import { Bus } from "../bus"
+import type { Versioned } from "../plugin"
 
-export const Updated = EventV2.ephemeral({ type: "sdk.plugin.updated", schema: {} })
+export const Updated = Bus.ephemeral({ type: "sdk.plugin.updated", schema: {} })
 
 /**
  * Holds the plugins an embedder (the `@opencode-ai/sdk-next` host) contributes,
@@ -21,7 +21,7 @@ export const Updated = EventV2.ephemeral({ type: "sdk.plugin.updated", schema: {
  */
 export interface Interface {
   readonly register: (plugin: Plugin) => Effect.Effect<void>
-  readonly all: () => readonly PluginV2.Versioned[]
+  readonly all: () => readonly Versioned[]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SdkPlugins") {}
@@ -29,17 +29,17 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sd
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
-    const plugins = new Map<string, PluginV2.Versioned>()
+    const bus = yield* Bus.Service
+    const plugins = new Map<string, Versioned>()
     let revision = 0
     return Service.of({
       register: (plugin) =>
         Effect.sync(() => {
           plugins.set(plugin.id, { ...plugin, version: String(++revision) })
-        }).pipe(Effect.andThen(events.publish(Updated, {})), Effect.asVoid),
+        }).pipe(Effect.andThen(bus.publish(Updated, {})), Effect.asVoid),
       all: () => [...plugins.values()],
     })
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [EventV2.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node] })

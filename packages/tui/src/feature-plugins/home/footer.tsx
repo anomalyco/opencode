@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/v2/tui"
+import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiApp, useTuiPaths } from "../../context/runtime"

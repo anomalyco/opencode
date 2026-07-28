@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, Message, ToolCallPart } from "../../src"
+import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
@@ -53,9 +53,9 @@ describe("OpenAI-compatible Chat route", () => {
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
-          toolChoice: { type: "required" },
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+          toolChoice: ToolChoice.make({ type: "required" }),
         }),
       )
 
@@ -232,7 +232,10 @@ describe("OpenAI-compatible Chat route", () => {
 
       expect(response.text).toBe("Hello!")
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
-      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "stop", raw: "stop" },
+      })
     }),
   )
 })

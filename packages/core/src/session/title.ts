@@ -2,9 +2,9 @@ export * as SessionTitle from "./title"
 
 import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Stream } from "effect"
-import { AgentV2 } from "../agent"
+import { Agent } from "../agent"
 import { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { Bus } from "../bus"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { llmClient } from "../effect/app-node-platform"
@@ -19,11 +19,11 @@ const MAX_LENGTH = 100
 
 type Dependencies = {
   readonly app: App.Info
-  readonly events: EventV2.Interface
+  readonly bus: Bus.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
-  readonly agents: AgentV2.Interface
+  readonly agents: Agent.Interface
   readonly models: SessionRunnerModel.Interface
 }
 
@@ -32,7 +32,7 @@ export interface Interface {
   readonly generateForFirstPrompt: (session: SessionSchema.Info) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionTitle") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
 
@@ -44,7 +44,7 @@ const make = (dependencies: Dependencies) => {
     if (session.parentID) return
     const firstUser = yield* SessionHistory.firstUserMessageIfOnly(db, session.id)
     if (!firstUser) return
-    const agent = yield* dependencies.agents.get(AgentV2.ID.make("title"))
+    const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
     const resolved = yield* (
       agent.model
@@ -57,7 +57,7 @@ const make = (dependencies: Dependencies) => {
     let usage: SessionUsage.Recorded | undefined
     const recordUsage = Effect.suspend(() =>
       usage
-        ? dependencies.events.publish(SessionEvent.UsageRecorded, {
+        ? dependencies.bus.publish(SessionEvent.UsageRecorded, {
             sessionID: session.id,
             source: "title",
             ...usage,
@@ -96,7 +96,7 @@ const make = (dependencies: Dependencies) => {
       .map((line) => line.trim())
       .find((line) => line.length > 0)
     if (!title) return
-    yield* dependencies.events.publish(SessionEvent.Renamed, {
+    yield* dependencies.bus.publish(SessionEvent.Renamed, {
       sessionID: session.id,
       title: truncate(title),
     })
@@ -107,13 +107,13 @@ const make = (dependencies: Dependencies) => {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
-    const agents = yield* AgentV2.Service
+    const agents = yield* Agent.Service
     const models = yield* SessionRunnerModel.Service
     const database = yield* Database.Service
     const app = yield* App.Metadata
-    const title = make({ events, llm, agents, models, app })
+    const title = make({ bus, llm, agents, models, app })
     return Service.of({
       generateForFirstPrompt: (session) => title.generateForFirstPrompt(database.db, session),
     })
@@ -123,5 +123,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [EventV2.node, llmClient, AgentV2.node, SessionRunnerModel.node, Database.node, App.node],
+  deps: [Bus.node, llmClient, Agent.node, SessionRunnerModel.node, Database.node, App.node],
 })

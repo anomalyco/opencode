@@ -1,23 +1,23 @@
-export * as SessionV2 from "./session"
+export * as Session from "./session"
 export * from "./session/schema"
 
 import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
-import { ProjectV2 } from "./project"
-import { WorkspaceV2 } from "./workspace"
-import { ModelV2 } from "./model"
+import { Project } from "./project"
+import { Workspace } from "./workspace"
+import { Model } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
-import { EventV2 } from "./event"
+import { Bus } from "./bus"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
-import { AgentV2 } from "./agent"
+import { Agent } from "./agent"
 import { SessionV1 } from "./v1/session"
 import { Money } from "@opencode-ai/schema/money"
 import { App } from "./app"
@@ -41,9 +41,10 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Image } from "./image"
 import { Mime } from "./mime"
 import type { EventLog } from "@opencode-ai/schema/event-log"
-import { SkillV2 } from "./skill"
+import { Event } from "@opencode-ai/schema/event"
+import { Skill } from "./skill"
 import { Job } from "./job"
-import { CommandV2 } from "./command"
+import { Command } from "./command"
 import { Shell } from "./shell"
 import { Global } from "@opencode-ai/util/global"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
@@ -65,7 +66,7 @@ export type RevertState = Session.Revert
 export { ListAnchor }
 
 const ListInputBase = {
-  workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
+  workspaceID: Workspace.ID.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
@@ -80,7 +81,7 @@ const ListDirectoryInput = Schema.Struct({
 
 const ListProjectInput = Schema.Struct({
   ...ListInputBase,
-  project: ProjectV2.ID,
+  project: Project.ID,
   subpath: RelativePath.pipe(Schema.optional),
 })
 
@@ -92,8 +93,8 @@ export type ListInput = typeof ListInput.Type
 type CreateBaseInput = {
   id?: SessionSchema.ID
   title?: string
-  agent?: AgentV2.ID
-  model?: ModelV2.Ref
+  agent?: Agent.ID
+  model?: Model.Ref
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -143,7 +144,7 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.Bus
   sessionID: SessionSchema.ID,
 }) {}
 export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
-  skill: SkillV2.ID,
+  skill: Skill.ID,
 }) {}
 
 export class DestinationNotFoundError extends Schema.TaggedErrorClass<DestinationNotFoundError>()(
@@ -170,8 +171,8 @@ export type Error =
   | SkillNotFoundError
   | DestinationNotFoundError
   | DestinationNotDirectoryError
-  | CommandV2.NotFoundError
-  | CommandV2.EvaluationError
+  | Command.NotFoundError
+  | Command.EvaluationError
   | MessageNotFoundError
   | SessionGenerate.Error
 
@@ -206,11 +207,11 @@ export interface Interface {
    */
   readonly pending: (sessionID: SessionSchema.ID) => Effect.Effect<SessionPending.Info[], NotFoundError>
   /**
-   * Durable, ordered session log read. Replays durable session events after
+   * Durable, ordered session log read. Replays durable session bus after
    * the exclusive `after` cursor, emits a `Synced` marker at the captured
    * replay watermark, then continues live when `follow` is set.
    * The marker's seq may exceed the last emitted event because other durable
-   * events share the aggregate's sequence space.
+   * bus share the aggregate's sequence space.
    */
   readonly log: (input: {
     sessionID: SessionSchema.ID
@@ -219,11 +220,11 @@ export interface Interface {
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
   readonly switchAgent: (input: {
     sessionID: SessionSchema.ID
-    agent: AgentV2.ID
+    agent: Agent.ID
   }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
-    model: ModelV2.Ref
+    model: Model.Ref
   }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
   readonly move: (input: {
@@ -251,25 +252,25 @@ export interface Interface {
     sessionID: SessionSchema.ID
     command: string
     arguments?: string
-    agent?: AgentV2.ID
-    model?: ModelV2.Ref
+    agent?: Agent.ID
+    model?: Model.Ref
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     delivery?: SessionPending.Delivery
     resume?: boolean
   }) => Effect.Effect<
     SessionPending.User,
-    NotFoundError | PromptConflictError | AttachmentError | CommandV2.NotFoundError | CommandV2.EvaluationError
+    NotFoundError | PromptConflictError | AttachmentError | Command.NotFoundError | Command.EvaluationError
   >
   readonly shell: (input: {
-    id?: EventV2.ID
+    id?: Event.ID
     sessionID: SessionSchema.ID
     command: string
   }) => Effect.Effect<void, NotFoundError>
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    skill: SkillV2.ID
+    skill: Skill.ID
     resume?: boolean
   }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
   readonly compact: (
@@ -300,7 +301,7 @@ export interface Interface {
   }
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
 const layer = Layer.effect(
   Service,
@@ -308,8 +309,8 @@ const layer = Layer.effect(
     const app = yield* App.Metadata
     const database = yield* Database.Service
     const db = database.db
-    const events = yield* EventV2.Service
-    const projects = yield* ProjectV2.Service
+    const bus = yield* Bus.Service
+    const projects = yield* Project.Service
     const global = yield* Global.Service
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
@@ -333,7 +334,7 @@ const layer = Layer.effect(
       )
 
     const result = Service.of({
-      create: Effect.fn("V2Session.create")(function* (input) {
+      create: Effect.fn("Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
@@ -341,7 +342,7 @@ const layer = Layer.effect(
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
         const location = parent?.location ?? input.location
         if (location === undefined)
-          return yield* Effect.die(new Error("V2Session.create requires either location or an existing parentID"))
+          return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
         yield* db
           .insert(ProjectTable)
@@ -358,12 +359,12 @@ const layer = Layer.effect(
           parentID: input.parentID,
           directory: location.directory,
           path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
-          workspaceID: location.workspaceID ? WorkspaceV2.ID.make(location.workspaceID) : undefined,
+          workspaceID: location.workspaceID ? Workspace.ID.make(location.workspaceID) : undefined,
           title: input.title ?? `New session - ${new Date(now).toISOString()}`,
           agent: input.agent,
           model: input.model
             ? {
-                id: ModelV2.ID.make(input.model.id),
+                id: Model.ID.make(input.model.id),
                 providerID: input.model.providerID,
                 variant: input.model.variant,
               }
@@ -372,7 +373,7 @@ const layer = Layer.effect(
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: now, updated: now },
         })
-        const projected = yield* events.publish(SessionV1.Event.Created, { sessionID, info }, { location }).pipe(
+        const projected = yield* bus.publish(SessionV1.Event.Created, { sessionID, info }, { location }).pipe(
           Effect.as({ type: "created" } as const),
           Effect.catchDefect((defect) => {
             if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
@@ -392,7 +393,7 @@ const layer = Layer.effect(
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
-      fork: Effect.fn("V2Session.fork")(function* (input) {
+      fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
         const boundary = input.messageID
           ? yield* db
@@ -407,8 +408,8 @@ const layer = Layer.effect(
         if (input.messageID && !boundary)
           return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
         const sessionID = SessionSchema.ID.create()
-        const parentSeq = boundary ? boundary.seq - 1 : yield* EventV2.latestSequence(db, parent.id)
-        yield* events.publish(SessionEvent.Forked, {
+        const parentSeq = boundary ? boundary.seq - 1 : yield* Bus.latestSequence(db, parent.id)
+        yield* bus.publish(SessionEvent.Forked, {
           sessionID,
           parentID: parent.id,
           parentSeq,
@@ -416,21 +417,21 @@ const layer = Layer.effect(
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
-      get: Effect.fn("V2Session.get")(function* (sessionID) {
+      get: Effect.fn("Session.get")(function* (sessionID) {
         const session = yield* store.get(sessionID)
         if (!session) return yield* new NotFoundError({ sessionID })
         return session
       }),
-      remove: Effect.fn("V2Session.remove")(function* (sessionID) {
+      remove: Effect.fn("Session.remove")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)
         yield* execution.awaitIdle(sessionID)
         const children = yield* result.list({ parentID: sessionID })
         yield* Effect.forEach(children.data, (child) => result.remove(child.id), { concurrency: 1, discard: true })
-        yield* events.publish(SessionEvent.Deleted, { sessionID })
-        yield* events.remove(sessionID)
+        yield* bus.publish(SessionEvent.Deleted, { sessionID })
+        yield* bus.remove(sessionID)
       }),
-      list: Effect.fn("V2Session.list")(function* (input = {}) {
+      list: Effect.fn("Session.list")(function* (input = {}) {
         const direction = input.anchor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
@@ -470,7 +471,7 @@ const layer = Layer.effect(
         )
         return { data: (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row)) }
       }),
-      messages: Effect.fn("V2Session.messages")(function* (input) {
+      messages: Effect.fn("Session.messages")(function* (input) {
         yield* result.get(input.sessionID)
         const direction = input.cursor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
@@ -504,15 +505,15 @@ const layer = Layer.effect(
         )
         return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
       }),
-      message: Effect.fn("V2Session.message")(function* (input) {
+      message: Effect.fn("Session.message")(function* (input) {
         const stored = yield* store.message(input.messageID)
         return stored?.sessionID === input.sessionID ? stored.message : undefined
       }),
-      context: Effect.fn("V2Session.context")(function* (sessionID) {
+      context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
-      pending: Effect.fn("V2Session.pending")(function* (sessionID) {
+      pending: Effect.fn("Session.pending")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* SessionPending.list(db, sessionID)
       }),
@@ -520,21 +521,21 @@ const layer = Layer.effect(
         Stream.unwrap(
           result
             .get(input.sessionID)
-            .pipe(Effect.as(events.log({ aggregateID: input.sessionID, after: input.after, follow: input.follow }))),
+            .pipe(Effect.as(bus.log({ aggregateID: input.sessionID, after: input.after, follow: input.follow }))),
         ).pipe(
           Stream.filter(
             (item): item is SessionEvent.DurableEvent | EventLog.Synced =>
-              EventV2.isSynced(item) || isDurableSessionEvent(item),
+              Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: Effect.fn("V2Session.prompt")((input) =>
+      prompt: Effect.fn("Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
             const session = yield* result.get(input.sessionID)
             // A staged revert must be committed before admitting new input so the prompt
             // continues from the reverted boundary rather than stale post-boundary history.
             if (session.revert)
-              yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+              yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
             // Resolved lazily so prompt admission only boots location services when an
             // image attachment actually needs the resizer.
             const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
@@ -548,7 +549,7 @@ const layer = Layer.effect(
               data: { ...prompt, metadata: input.metadata },
               delivery: input.delivery ?? "steer",
             })
-            const admitted = yield* SessionPending.admit(db, events, {
+            const admitted = yield* SessionPending.admit(db, bus, {
               id: messageID,
               sessionID: input.sessionID,
               input: admittedInput,
@@ -572,17 +573,17 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      generate: Effect.fn("V2Session.generate")(function* (input) {
+      generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
         return yield* generate.generate(input)
       }),
-      command: Effect.fn("V2Session.command")(function* (input) {
+      command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const commands = yield* CommandV2.Service.pipe(Effect.provide(locations.get(session.location)))
+        const commands = yield* Command.Service.pipe(Effect.provide(locations.get(session.location)))
         const command = yield* commands.get(input.command)
         if (!command)
-          return yield* new CommandV2.NotFoundError({
+          return yield* new Command.NotFoundError({
             command: input.command,
             message: `Command not found: ${input.command}`,
           })
@@ -592,12 +593,12 @@ const layer = Layer.effect(
         const agent = command.agent ?? input.agent
         const commandAgent = yield* Effect.gen(function* () {
           if (!command.agent) return undefined
-          const agents = yield* AgentV2.Service.pipe(Effect.provide(locations.get(session.location)))
-          return yield* agents.get(AgentV2.ID.make(command.agent))
+          const agents = yield* Agent.Service.pipe(Effect.provide(locations.get(session.location)))
+          return yield* agents.get(Agent.ID.make(command.agent))
         })
         const model = command.model ?? commandAgent?.model ?? input.model
-        if (agent !== undefined && session.agent !== AgentV2.ID.make(agent))
-          yield* result.switchAgent({ sessionID: input.sessionID, agent: AgentV2.ID.make(agent) })
+        if (agent !== undefined && session.agent !== Agent.ID.make(agent))
+          yield* result.switchAgent({ sessionID: input.sessionID, agent: Agent.ID.make(agent) })
         if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
 
         return yield* result.prompt({
@@ -610,7 +611,7 @@ const layer = Layer.effect(
           resume: input.resume,
         })
       }),
-      shell: Effect.fn("V2Session.shell")(function* (input) {
+      shell: Effect.fn("Session.shell")(function* (input) {
         const session = yield* result.get(input.sessionID)
         yield* shellLocks.withLock(input.sessionID)(
           Effect.gen(function* () {
@@ -620,7 +621,7 @@ const layer = Layer.effect(
               const shell = yield* Shell.Service
               return yield* shell.create({ command: input.command, cwd: session.location.directory, timeout: 0 })
             }).pipe(Effect.provide(locations.get(session.location)))
-            yield* events.publish(
+            yield* bus.publish(
               SessionEvent.Shell.Started,
               {
                 sessionID: input.sessionID,
@@ -643,7 +644,7 @@ const layer = Layer.effect(
                 : missingShellOutput()
               return { shell: terminal.info, output }
             }).pipe(Effect.provide(locations.get(session.location)))
-            yield* events.publish(SessionEvent.Shell.Ended, {
+            yield* bus.publish(SessionEvent.Shell.Ended, {
               sessionID: input.sessionID,
               shell: completed.shell,
               output: completed.output,
@@ -658,12 +659,12 @@ const layer = Layer.effect(
           ),
         )
       }),
-      skill: Effect.fn("V2Session.skill")(function* (input) {
+      skill: Effect.fn("Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const skills = yield* SkillV2.Service.pipe(Effect.provide(locations.get(session.location)))
+        const skills = yield* Skill.Service.pipe(Effect.provide(locations.get(session.location)))
         const skill = (yield* skills.list()).find((item) => item.id === input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
-        yield* events.publish(
+        yield* bus.publish(
           SessionEvent.Skill.Activated,
           {
             sessionID: input.sessionID,
@@ -671,21 +672,21 @@ const layer = Layer.effect(
             name: skill.name,
             text: skill.content,
           },
-          { id: input.id ? EventV2.ID.make(input.id.replace(/^msg_/, "evt_")) : undefined },
+          { id: input.id ? Event.ID.make(input.id.replace(/^msg_/, "evt_")) : undefined },
         )
         if (input.resume !== false)
           yield* execution
             .resume(input.sessionID)
             .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
-      switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
+      switchAgent: Effect.fn("Session.switchAgent")(function* (input) {
         yield* result.get(input.sessionID)
-        yield* events.publish(SessionEvent.AgentSelected, {
+        yield* bus.publish(SessionEvent.AgentSelected, {
           sessionID: input.sessionID,
           agent: input.agent,
         })
       }),
-      switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
+      switchModel: Effect.fn("Session.switchModel")(function* (input) {
         const session = yield* result.get(input.sessionID)
         if (
           session.model?.providerID === input.model.providerID &&
@@ -693,19 +694,19 @@ const layer = Layer.effect(
           (session.model.variant ?? "default") === (input.model.variant ?? "default")
         )
           return
-        yield* events.publish(SessionEvent.ModelSelected, {
+        yield* bus.publish(SessionEvent.ModelSelected, {
           sessionID: input.sessionID,
           model: input.model,
         })
       }),
-      rename: Effect.fn("V2Session.rename")(function* (input) {
+      rename: Effect.fn("Session.rename")(function* (input) {
         yield* result.get(input.sessionID)
-        yield* events.publish(SessionEvent.Renamed, {
+        yield* bus.publish(SessionEvent.Renamed, {
           sessionID: input.sessionID,
           title: input.title,
         })
       }),
-      move: Effect.fn("V2Session.move")(function* (input) {
+      move: Effect.fn("Session.move")(function* (input) {
         const current = yield* result.get(input.sessionID)
         const value = input.directory.trim()
         const expanded =
@@ -730,17 +731,17 @@ const layer = Layer.effect(
           yield* execution.interrupt(input.sessionID)
           yield* execution.awaitIdle(input.sessionID)
         }
-        yield* events.publish(SessionEvent.Moved, {
+        yield* bus.publish(SessionEvent.Moved, {
           sessionID: input.sessionID,
           location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
           projectID: project.id,
           subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
         })
       }),
-      compact: Effect.fn("V2Session.compact")(function* (input) {
+      compact: Effect.fn("Session.compact")(function* (input) {
         yield* result.get(input.sessionID)
         const inputID = input.id ?? SessionMessage.ID.create()
-        const admitted = yield* SessionPending.admitCompaction(db, events, {
+        const admitted = yield* SessionPending.admitCompaction(db, bus, {
           id: inputID,
           sessionID: input.sessionID,
         }).pipe(
@@ -753,12 +754,12 @@ const layer = Layer.effect(
         yield* execution.wake(input.sessionID)
         return admitted
       }),
-      wait: Effect.fn("V2Session.wait")(function* (sessionID) {
+      wait: Effect.fn("Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.awaitIdle(sessionID)
       }),
       active: execution.active,
-      background: Effect.fn("V2Session.background")(function* (sessionID) {
+      background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
         const backgrounded = yield* jobs.backgroundAll({ sessionID })
         if (backgrounded.length === 0) return
@@ -776,11 +777,11 @@ const layer = Layer.effect(
           })
           .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
       }),
-      resume: Effect.fn("V2Session.resume")(function* (sessionID) {
+      resume: Effect.fn("Session.resume")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
       }),
-      synthetic: Effect.fn("V2Session.synthetic")((input) =>
+      synthetic: Effect.fn("Session.synthetic")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
@@ -794,7 +795,7 @@ const layer = Layer.effect(
               },
               delivery: input.delivery ?? "steer",
             })
-            const admitted = yield* SessionPending.admit(db, events, {
+            const admitted = yield* SessionPending.admit(db, bus, {
               id: inputID,
               sessionID: input.sessionID,
               input: admittedInput,
@@ -816,34 +817,34 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
+      interrupt: Effect.fn("Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
       revert: {
-        stage: Effect.fn("V2Session.revert.stage")(function* (input) {
+        stage: Effect.fn("Session.revert.stage")(function* (input) {
           const session = yield* result.get(input.sessionID)
           if ((yield* execution.active).has(input.sessionID))
             return yield* new BusyError({ sessionID: input.sessionID })
           return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
             Effect.provideService(Database.Service, database),
-            Effect.provideService(EventV2.Service, events),
+            Effect.provideService(Bus.Service, bus),
             Effect.provide(locations.get(session.location)),
           )
         }),
-        clear: Effect.fn("V2Session.revert.clear")(function* (sessionID) {
+        clear: Effect.fn("Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
           const revert = yield* SessionRevert.clear(session).pipe(
-            Effect.provideService(EventV2.Service, events),
+            Effect.provideService(Bus.Service, bus),
             Effect.provide(locations.get(session.location)),
           )
           yield* execution.wake(sessionID)
           return revert
         }),
-        commit: Effect.fn("V2Session.revert.commit")(function* (sessionID) {
+        commit: Effect.fn("Session.revert.commit")(function* (sessionID) {
           const session = yield* result.get(sessionID)
           if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          return yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
+          return yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
         }),
       },
     })
@@ -872,7 +873,7 @@ function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Inf
   }
 }
 
-const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (
+const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   input: PromptInput.Prompt,
   image: Effect.Effect<Image.Interface>,
 ) {
@@ -885,7 +886,7 @@ const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
-const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(function* (
+const materializeAttachment = Effect.fn("Session.materializeAttachment")(function* (
   fs: FSUtil.Interface,
   input: PromptInput.FileAttachment,
   image: Effect.Effect<Image.Interface>,
@@ -933,7 +934,7 @@ const materializeAttachment = Effect.fn("V2Session.materializeAttachment")(funct
   })
 })
 
-const normalizeImageAttachment = Effect.fn("V2Session.normalizeImageAttachment")(function* (
+const normalizeImageAttachment = Effect.fn("Session.normalizeImageAttachment")(function* (
   input: PromptInput.FileAttachment,
   data: Base64,
   mime: string,
@@ -950,7 +951,7 @@ const normalizeImageAttachment = Effect.fn("V2Session.normalizeImageAttachment")
   return { data: Base64.make(normalized.content), mime: normalized.mime }
 })
 
-const readFileAttachment = Effect.fn("V2Session.readFileAttachment")(function* (fs: FSUtil.Interface, uri: string) {
+const readFileAttachment = Effect.fn("Session.readFileAttachment")(function* (fs: FSUtil.Interface, uri: string) {
   const url = yield* Effect.try({
     try: () => new URL(uri),
     catch: () => new AttachmentError({ uri, message: `Invalid attachment URI: ${uri}` }),
@@ -1033,8 +1034,8 @@ export const node = makeGlobalNode({
   deps: [
     Job.node,
     Database.node,
-    EventV2.node,
-    ProjectV2.node,
+    Bus.node,
+    Project.node,
     SessionExecution.node,
     SessionStore.node,
     LocationServiceMap.node,

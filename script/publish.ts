@@ -26,7 +26,6 @@ async function prepareReleaseFiles() {
   }
 
   await $`bun install`
-  await $`./packages/sdk/js/script/build.ts`
 }
 
 if (Script.release && !Script.preview) {
@@ -53,9 +52,6 @@ await $`bun ./packages/client/script/publish.ts`
 
 console.log("\n=== cli ===\n")
 await $`bun ./packages/cli/script/publish.ts`
-
-console.log("\n=== sdk ===\n")
-await $`bun ./packages/sdk/js/script/publish.ts`
 
 console.log("\n=== plugin ===\n")
 await $`bun ./packages/plugin/script/publish.ts`

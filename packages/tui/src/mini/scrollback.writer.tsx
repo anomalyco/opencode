@@ -1,8 +1,14 @@
 import { createScrollbackWriter } from "@opentui/solid"
-import { TextRenderable, type ColorInput, type ScrollbackRenderContext, type ScrollbackWriter } from "@opentui/core"
+import {
+  MarkdownRenderable,
+  TextRenderable,
+  type ColorInput,
+  type ScrollbackRenderContext,
+  type ScrollbackWriter,
+} from "@opentui/core"
 import { Match, Switch, createMemo } from "solid-js"
 import { entryBody, entryFlags } from "./entry.body"
-import { monoMarkdown, monoMarkdownRenderNode, monoMarkdownTableOptions } from "./mono"
+import { monoMarkdownRenderable, monoMarkdownTableOptions } from "./mono"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolFiletype, toolStructuredFinal } from "./tool"
 import { RUN_THEME_FALLBACK, transparent, type RunTheme } from "./theme"
@@ -117,6 +123,15 @@ export function RunEntryContent(props: {
 
   return (
     <Switch fallback={null}>
+      <Match when={props.commit.compaction}>
+        <box width="100%" flexDirection="row" alignItems="center">
+          <box border={["top"]} borderColor={theme().block.muted} flexGrow={1} />
+          <box paddingLeft={1} paddingRight={1}>
+            <text fg={theme().block.muted}>{props.commit.text}</text>
+          </box>
+          <box border={["top"]} borderColor={theme().block.muted} flexGrow={1} />
+        </box>
+      </Match>
       <Match when={text()}>
         <text width="100%" wrapMode="word" fg={style().fg} attributes={style().attrs}>
           {text()!.content}
@@ -237,13 +252,15 @@ export function RunEntryContent(props: {
       </Match>
       <Match when={markdown()}>
         <markdown
+          ref={(renderable: MarkdownRenderable) => {
+            if (props.opts?.mono) monoMarkdownRenderable(renderable)
+          }}
           width="100%"
           syntaxStyle={syntax()}
           streaming={streaming()}
-          content={monoMarkdown(markdown()!.content, props.opts?.mono === true)}
+          content={markdown()!.content}
           fg={color()}
           tableOptions={props.opts?.mono ? monoMarkdownTableOptions : { widthMode: "content" }}
-          renderNode={props.opts?.mono ? monoMarkdownRenderNode : undefined}
         />
       </Match>
     </Switch>
