@@ -1,9 +1,9 @@
-import { RGBA } from "@opentui/core"
+import { RGBA, TextAttributes } from "@opentui/core"
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
-import { useTheme } from "../context/theme"
+import { useTheme, useThemes } from "../context/theme"
 import { adaptiveSessionTabLayout, sessionTabComplete, SESSION_TAB_OVERFLOW_WIDTH } from "../context/session-tabs-model"
 import { createAnimatable, spring } from "../ui/animation"
 import { Locale } from "../util/locale"
@@ -13,13 +13,14 @@ import { tint } from "../theme/color"
 export function SessionTabs() {
   const tabs = useSessionTabs()
   const dimensions = useTerminalDimensions()
-  const { themeV2, mode } = useTheme()
+  const theme = useTheme()
+  const { mode } = useThemes()
   const config = useConfig().data
   const [hovered, setHovered] = createSignal<string>()
   const hueStep = () => (mode() === "light" ? 800 : 200)
-  const accent = () => themeV2.hue.accent[hueStep()]
-  const activeNumber = () => tint(themeV2.hue.interactive[hueStep()], themeV2.background.default, 0.25)
-  const idleNumber = () => tint(themeV2.text.subdued, themeV2.background.default, 0.35)
+  const accent = () => theme.hue.accent[hueStep()]
+  const activeNumber = () => tint(theme.hue.interactive[hueStep()], theme.background.default, 0.25)
+  const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
   const activeID = createMemo(tabs.current)
   const items = tabs.tabs
   const layout = createMemo((previous: ReturnType<typeof adaptiveSessionTabLayout> | undefined) =>
@@ -102,16 +103,16 @@ export function SessionTabs() {
           width,
           1,
           RGBA.fromValues(
-            themeV2.background.default.r,
-            themeV2.background.default.g,
-            themeV2.background.default.b,
+            theme.background.default.r,
+            theme.background.default.g,
+            theme.background.default.b,
             mode() === "light" ? 0.14 : 0.28,
           ),
         )
       }}
     >
       <Show when={layout().before > 0}>
-        <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
+        <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={theme.text.subdued}>
           ‹{layout().before}
         </text>
       </Show>
@@ -125,12 +126,12 @@ export function SessionTabs() {
           const background = () => {
             const base =
               hovered() === tab.sessionID && !selected()
-                ? themeV2.background.action.primary.hovered
-                : themeV2.background.default
-            return tint(base, themeV2.raise(themeV2.background.surface.offset), selection())
+                ? theme.background.action.primary.hovered
+                : theme.background.default
+            return tint(base, theme.raise(theme.background.surface.offset), selection())
           }
           const pulseBackground = () => background()
-          const pulseColor = () => tint(pulseBackground(), themeV2.text.default, 0.45)
+          const pulseColor = () => tint(pulseBackground(), theme.text.default, 0.45)
           const title = () => tab.title ?? "Untitled session"
           const availableTitleWidth = () => Math.max(1, width() - 3)
           const visibleTitle = createMemo(() => Locale.takeWidth(title(), availableTitleWidth()))
@@ -139,19 +140,19 @@ export function SessionTabs() {
           const fadedTitleParts = createMemo(() => visibleTitleParts().slice(-fadeWidth()))
           const titleFades = createMemo(() => visibleTitle() !== title() && availableTitleWidth() > fadeWidth())
           const foreground = () => {
-            if (hovered() === tab.sessionID) return themeV2.text.default
-            return tint(themeV2.text.subdued, themeV2.text.default, selection())
+            if (hovered() === tab.sessionID) return theme.text.default
+            return tint(theme.text.subdued, theme.text.default, selection())
           }
           const numberColor = () => {
-            if (status().attention) return themeV2.text.feedback.warning.default
-            if (status().unread === "error") return themeV2.text.feedback.error.default
+            if (status().attention) return theme.text.feedback.warning.default
+            if (status().unread === "error") return theme.text.feedback.error.default
             const base =
               hovered() === tab.sessionID && !selected()
                 ? foreground()
                 : tint(idleNumber(), activeNumber(), selection())
             return tint(base, accent(), activity())
           }
-          const closeColor = () => tint(themeV2.text.subdued, themeV2.text.default, 0.6)
+          const closeColor = () => tint(theme.text.subdued, theme.text.default, 0.6)
           return (
             <box
               width={width()}
@@ -172,7 +173,7 @@ export function SessionTabs() {
               />
               <box zIndex={1} width="100%" flexDirection="row">
                 <text width={1}> </text>
-                <text width={2} fg={numberColor()}>
+                <text width={2} fg={numberColor()} attributes={selected() ? TextAttributes.BOLD : undefined}>
                   {items().findIndex((item) => item.sessionID === tab.sessionID) + 1}
                 </text>
                 <Show
@@ -221,7 +222,7 @@ export function SessionTabs() {
         }}
       </For>
       <Show when={layout().after > 0}>
-        <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
+        <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={theme.text.subdued}>
           {layout().after}›
         </text>
       </Show>
