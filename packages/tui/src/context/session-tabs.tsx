@@ -1,6 +1,7 @@
-import { batch, createEffect, onCleanup } from "solid-js"
+import { batch, createEffect, onCleanup, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import path from "path"
+import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useData } from "./data"
 import { useEvent } from "./event"
@@ -62,8 +63,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }
       const value = { tabs: [...store.tabs], unread: { ...store.unread } }
       const snapshot = JSON.stringify(value)
-      if (snapshot === state.snapshot) return
-      state.snapshot = snapshot
+      if (snapshot === state.snapshot && !state.saving) return
       state.value = value
       state.pending = true
       flush()
@@ -72,9 +72,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function flush() {
       if (state.saving || !state.pending || !state.value) return
       const value = state.value
+      const snapshot = JSON.stringify(value)
       state.pending = false
+      if (snapshot === state.snapshot) return
       state.saving = true
       void writeJsonAtomic(filePath, value)
+        .then(() => {
+          state.snapshot = snapshot
+        })
         .catch(() => {})
         .finally(() => {
           state.saving = false
@@ -149,7 +154,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const sessionID = open(routeSessionID)
         clearUnread(sessionID)
       })
-      save()
+      untrack(save)
     })
 
     createEffect(() => {
@@ -163,11 +168,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
         return result
       }, {})
-      if (
-        JSON.stringify(next) === JSON.stringify(store.tabs) &&
-        JSON.stringify(unread) === JSON.stringify(store.unread)
-      )
-        return
+      if (isDeepEqual(next, store.tabs) && isDeepEqual(unread, store.unread)) return
       batch(() => {
         setStore("tabs", reconcile(next))
         setStore("unread", reconcile(unread))
@@ -203,6 +204,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     return {
+      enabled,
       tabs() {
         return store.tabs
       },
@@ -213,8 +215,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       attention(sessionID: string) {
         return attention(sessionID)
       },
-      running(sessionID: string) {
-        return family(sessionID).some((id) => data.session.status(id) === "running")
+      busy(sessionID: string) {
+        return family(sessionID).some(
+          (id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0,
+        )
       },
       select(sessionID: string) {
         if (!enabled()) return
@@ -223,7 +227,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       close(sessionID?: string) {
         if (!enabled()) return
         const target = sessionID ? root(sessionID) : current()
-        if (!target) return
+        if (!target) {
+          const previous = store.tabs.at(-1)
+          if (route.data.type === "home" && previous) route.navigate({ type: "session", sessionID: previous.sessionID })
+          return
+        }
         remove(target, true)
       },
       cycle(direction: 1 | -1) {

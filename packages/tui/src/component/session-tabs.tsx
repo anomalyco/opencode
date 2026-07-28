@@ -4,12 +4,12 @@ import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useRoute } from "../context/route"
 import { useTheme } from "../context/theme"
-import { adaptiveSessionTabLayout, SESSION_TAB_OVERFLOW_WIDTH } from "../context/session-tabs-model"
+import { adaptiveSessionTabLayout, sessionTabComplete, SESSION_TAB_OVERFLOW_WIDTH } from "../context/session-tabs-model"
 import { TabPulse } from "./tab-pulse"
 import { drawTabShadow } from "./tab-shadow"
 import { tint } from "../theme/color"
 
-const ADAPTIVE_SPRING = { visualDuration: 0.1, bounce: 0 } as const
+const ADAPTIVE_SPRING_FREQUENCY = (2 * Math.PI) / (0.1 * 1.2)
 const NEW_SESSION_TAB_ID = "$new"
 const spring = (value: number, velocity: number, target: number, frequency: number, delta: number) => {
   const offset = value - target
@@ -48,6 +48,8 @@ export function SessionTabs() {
   )
   const isNew = (sessionID: string) => sessionID === NEW_SESSION_TAB_ID
   const unread = (sessionID: string) => (isNew(sessionID) ? undefined : tabs.unread(sessionID))
+  const busy = (sessionID: string) => !isNew(sessionID) && tabs.busy(sessionID)
+  const complete = (sessionID: string) => sessionTabComplete(unread(sessionID), busy(sessionID))
   let windowStart = 0
   const layout = createMemo(() => {
     const next = adaptiveSessionTabLayout(items(), activeID(), dimensions().width, windowStart)
@@ -69,9 +71,9 @@ export function SessionTabs() {
     total = layout().total
     for (const [sessionID, width] of next) {
       const selection = Number(sessionID === activeID())
-      const activity = Number(unread(sessionID) === "activity")
-      if (reset) state.set(sessionID, initialState(width, selection, activity))
-      if (!state.has(sessionID)) state.set(sessionID, initialState(width, selection, activity))
+      const activityTarget = Number(complete(sessionID))
+      if (reset) state.set(sessionID, initialState(width, selection, activityTarget))
+      if (!state.has(sessionID)) state.set(sessionID, initialState(width, selection, activityTarget))
     }
     for (const sessionID of state.keys()) if (!next.has(sessionID)) state.delete(sessionID)
     if (reset) setFrame((value) => value + 1)
@@ -94,21 +96,32 @@ export function SessionTabs() {
     if (!(config.animations ?? true)) return stop()
     const now = performance.now()
     const delta = Math.min(0.05, (now - previous) / 1_000)
-    const frequency = (2 * Math.PI) / (ADAPTIVE_SPRING.visualDuration * 1.2)
     previous = now
     let moving = false
 
     for (const [sessionID, target] of targets()) {
       const selectionTarget = Number(sessionID === activeID())
-      const activityTarget = Number(unread(sessionID) === "activity")
+      const activityTarget = Number(complete(sessionID))
       const current = state.get(sessionID) ?? initialState(target, selectionTarget, activityTarget)
-      const width = spring(current.width, current.velocity, target, frequency, delta)
+      const width = spring(current.width, current.velocity, target, ADAPTIVE_SPRING_FREQUENCY, delta)
       current.width = width.value
       current.velocity = width.velocity
-      const selection = spring(current.selection, current.selectionVelocity, selectionTarget, frequency, delta)
+      const selection = spring(
+        current.selection,
+        current.selectionVelocity,
+        selectionTarget,
+        ADAPTIVE_SPRING_FREQUENCY,
+        delta,
+      )
       current.selection = selection.value
       current.selectionVelocity = selection.velocity
-      const activity = spring(current.activity, current.activityVelocity, activityTarget, frequency, delta)
+      const activity = spring(
+        current.activity,
+        current.activityVelocity,
+        activityTarget,
+        ADAPTIVE_SPRING_FREQUENCY,
+        delta,
+      )
       current.activity = activity.value
       current.activityVelocity = activity.velocity
       moving ||=
@@ -138,7 +151,7 @@ export function SessionTabs() {
         {
           width: widths[index]!,
           selection: state.get(tab.sessionID)?.selection ?? Number(tab.sessionID === activeID()),
-          activity: state.get(tab.sessionID)?.activity ?? Number(unread(tab.sessionID) === "activity"),
+          activity: state.get(tab.sessionID)?.activity ?? Number(complete(tab.sessionID)),
         },
       ]),
     )
@@ -171,9 +184,11 @@ export function SessionTabs() {
         {(tab) => {
           const selected = () => activeID() === tab.sessionID
           const tabUnread = () => unread(tab.sessionID)
+          const tabBusy = () => busy(tab.sessionID)
+          const tabComplete = () => complete(tab.sessionID)
           const width = () => visuals().get(tab.sessionID)?.width ?? targets().get(tab.sessionID)!
           const selection = () => visuals().get(tab.sessionID)?.selection ?? Number(selected())
-          const activity = () => visuals().get(tab.sessionID)?.activity ?? Number(tabUnread() === "activity")
+          const activity = () => visuals().get(tab.sessionID)?.activity ?? Number(tabComplete())
           const background = () => {
             const base =
               hovered() === tab.sessionID && !selected()
@@ -215,8 +230,8 @@ export function SessionTabs() {
             >
               <TabPulse
                 enabled={config.animations ?? true}
-                active={!isNew(tab.sessionID) && tabs.running(tab.sessionID)}
-                complete={tabUnread() === "activity"}
+                active={tabBusy()}
+                complete={tabComplete()}
                 color={pulseColor()}
                 completionColor={accent()}
                 backgroundColor={pulseBackground()}
@@ -257,8 +272,7 @@ export function SessionTabs() {
                   onMouseUp={(event) => {
                     event.stopPropagation()
                     if (!isNew(tab.sessionID)) return tabs.close(tab.sessionID)
-                    const previous = tabs.tabs().at(-1)
-                    if (previous) tabs.select(previous.sessionID)
+                    tabs.close()
                   }}
                 >
                   {hovered() === tab.sessionID && (!isNew(tab.sessionID) || tabs.tabs().length > 0) ? "×" : ""}

@@ -510,7 +510,6 @@ function App(props: { pair?: DialogPairCredentials }) {
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
   const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
-  const sessionTabsEnabled = () => config.data.session?.tabs ?? false
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse
@@ -646,7 +645,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: `Switch to session in quick slot ${i + 1}`,
         category: "Session",
         palette: undefined,
-        enabled: () => !sessionTabsEnabled(),
+        enabled: () => !sessionTabs.enabled(),
         run: () => local.session.quickSwitch(i + 1),
       })),
       {
@@ -654,7 +653,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Next open session tab",
         category: "Session",
         palette: undefined,
-        enabled: sessionTabsEnabled,
+        enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycle(1),
       },
       {
@@ -662,7 +661,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Previous open session tab",
         category: "Session",
         palette: undefined,
-        enabled: sessionTabsEnabled,
+        enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycle(-1),
       },
       {
@@ -670,7 +669,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Next unread session tab",
         category: "Session",
         palette: undefined,
-        enabled: sessionTabsEnabled,
+        enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycleUnread(1),
       },
       {
@@ -678,14 +677,14 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Previous unread session tab",
         category: "Session",
         palette: undefined,
-        enabled: sessionTabsEnabled,
+        enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycleUnread(-1),
       },
       {
         name: "session.tab.close",
         title: "Close current session tab",
         category: "Session",
-        enabled: sessionTabsEnabled,
+        enabled: sessionTabs.enabled,
         run: () => sessionTabs.close(),
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -693,7 +692,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: `Switch to session tab ${i + 1}`,
         category: "Session",
         palette: undefined,
-        enabled: sessionTabsEnabled,
+        enabled: sessionTabs.enabled,
         run: () => sessionTabs.selectIndex(i),
       })),
       {
@@ -1075,13 +1074,13 @@ function App(props: { pair?: DialogPairCredentials }) {
 
   Keymap.createLayer(() => ({
     mode: "global",
-    enabled: sessionTabsEnabled,
+    enabled: sessionTabs.enabled,
     bindings: sessionTabBindingCommands,
   }))
 
   Keymap.createLayer(() => ({
     mode: "global",
-    enabled: () => !sessionTabsEnabled(),
+    enabled: () => !sessionTabs.enabled(),
     bindings: pinnedSessionBindingCommands,
   }))
 
@@ -1186,7 +1185,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
-              <Show when={sessionTabsEnabled()}>
+              <Show when={sessionTabs.enabled() && route.data.type !== "plugin"}>
                 <SessionTabs />
               </Show>
               <Switch>

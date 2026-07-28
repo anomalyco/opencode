@@ -97,19 +97,19 @@ test("resolves message navigation defaults", () => {
   expect(config.keybinds.get("session.messages_last_user")).toMatchObject([{ key: "alt+end" }])
 })
 
-test("opens the subagent picker with down", () => {
+test("preserves both subagent picker defaults", () => {
   const config = resolve({}, { terminalSuspend: true })
 
-  expect(config.keybinds.get("session.child.first")).toMatchObject([{ key: "down" }])
+  expect(config.keybinds.get("session.child.first")).toMatchObject([{ key: "down,<leader>down" }])
 })
 
-test("navigates session tabs with leader arrows", () => {
+test("navigates session tabs with leader arrows and brackets", () => {
   const config = resolve({}, { terminalSuspend: true })
 
   expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,<leader>right" }])
   expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,<leader>left" }])
-  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "<leader>down" }])
-  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "<leader>up" }])
+  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "<leader>]" }])
+  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "<leader>[" }])
 })
 
 test("preserves pinned session bindings alongside tab bindings", () => {

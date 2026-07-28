@@ -4,6 +4,7 @@ import {
   closeSessionTab,
   cycleSessionTab,
   openSessionTab,
+  sessionTabComplete,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
@@ -28,6 +29,12 @@ describe("session tabs", () => {
     expect(cycleSessionTab(tabs, "c", -1)?.sessionID).toBe("a")
     expect(cycleSessionTab(tabs, "e", 1)?.sessionID).toBe("a")
     expect(cycleSessionTab(tabs, "b", 1)?.sessionID).toBe("a")
+  })
+
+  test("reveals completion activity only after session work becomes idle", () => {
+    expect(sessionTabComplete("activity", true)).toBe(false)
+    expect(sessionTabComplete("activity", false)).toBe(true)
+    expect(sessionTabComplete("error", false)).toBe(false)
   })
 
   test("expands the active tab and keeps inactive widths equal", () => {

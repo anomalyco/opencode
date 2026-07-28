@@ -5,6 +5,10 @@ export type SessionTab = {
 
 export type SessionTabUnread = "activity" | "error"
 
+export function sessionTabComplete(unread: SessionTabUnread | undefined, busy: boolean) {
+  return unread === "activity" && !busy
+}
+
 export const SESSION_TAB_WIDTH = 22
 export const SESSION_TAB_MAX_WIDTH = 32
 export const SESSION_TAB_MIN_WIDTH = 8
