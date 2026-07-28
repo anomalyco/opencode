@@ -1,5 +1,6 @@
 export * as PluginSupervisor from "./supervisor"
 
+import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
 import { Context, Deferred, Effect, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import path from "path"
@@ -46,8 +47,8 @@ const PluginModule = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-      effect: Schema.declare<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>(
-        (input): input is import("@opencode-ai/plugin/effect/plugin").Plugin["effect"] => typeof input === "function",
+      effect: Schema.declare<PluginDefinition["effect"]>(
+        (input): input is PluginDefinition["effect"] => typeof input === "function",
       ),
     }),
     Schema.Struct({
@@ -250,9 +251,8 @@ const layer = Layer.effect(
         if (watched.has(operation.target)) continue
         // The config change feed already covers {plugin,plugins} directories.
         if (isPluginSource(entries, operation.target)) continue
-        // Watch file entrypoints only. Editing inside a directory target does
-        // not change the directory's mtime, so the ?mtime= cache-busting could
-        // not reload it anyway; directory targets behave as before.
+        // Directory targets can't hot-reload (their stat mtime ignores edits
+        // inside), so don't watch what can't trigger anything.
         if (yield* fs.isDir(operation.target)) continue
         watched.add(operation.target)
         yield* watcher.subscribe({ path: operation.target, type: "file" }).pipe(
