@@ -1,5 +1,4 @@
-import { createMemo } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
@@ -36,12 +35,12 @@ export function createNewSessionWorkspaceController() {
   const sdk = useSDK()
   const sync = useSync()
   const serverSync = useServerSync()
-  const [store, setStore] = createStore<{ worktree?: string }>({})
+  const [worktree, setWorktree] = createSignal<string>()
   const visible = createMemo(() => workspaceBarEnabled && sync().project?.vcs === "git")
   const value = createMemo(() =>
     resolveNewSessionWorktree({
       enabled: visible(),
-      selected: store.worktree,
+      selected: worktree(),
       directory: sdk().directory,
       projectWorktree: sync().project?.worktree,
     }),
@@ -59,9 +58,9 @@ export function createNewSessionWorkspaceController() {
   return {
     selection: {
       value,
-      reset: () => setStore("worktree", undefined),
+      reset: () => setWorktree(),
       set: (worktree: string) =>
-        setStore("worktree", normalizeNewSessionWorktree(worktree, sdk().directory, sync().project?.worktree)),
+        setWorktree(normalizeNewSessionWorktree(worktree, sdk().directory, sync().project?.worktree)),
     },
     project: {
       root: projectRoot,
