@@ -277,17 +277,17 @@ const layer = Layer.effect(
       // Replace the active generation in one scoped, batched activation.
       yield* registry.activate(plugins)
     })
-    const sourceChanges = config.changes().pipe(
-      Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
-      Stream.merge(Stream.fromPubSub(configuredChanges)),
-      // Make accepted filesystem work visible to flush before coalescing the burst.
+    const updates = Stream.merge(
+      config.changes().pipe(
+        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+        Stream.merge(Stream.fromPubSub(configuredChanges)),
+      ),
+      bus.subscribe([Event.Updated, SdkPlugins.Updated]),
+    ).pipe(
+      // Make accepted work visible to flush before coalescing the burst.
       Stream.mapEffect(() => Effect.sync(() => ++observed)),
-      Stream.debounce("100 millis"),
     )
-    const busUpdates = bus
-      .subscribe([Event.Updated, SdkPlugins.Updated])
-      .pipe(Stream.mapEffect(() => Effect.sync(() => ++observed)))
-    yield* Stream.concat(Stream.succeed(0), Stream.merge(busUpdates, sourceChanges)).pipe(
+    yield* Stream.concat(Stream.succeed(0), updates).pipe(
       // Keep observing updates while activation runs, retaining only the latest generation request.
       Stream.buffer({ capacity: 1, strategy: "sliding" }),
       Stream.debounce("100 millis"),
