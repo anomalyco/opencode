@@ -1751,7 +1751,9 @@ const llmScenarios = new Set([
 ])
 
 const main = Effect.gen(function* () {
-  yield* Effect.addFinalizer(() => Effect.promise(() => disposeApps()).pipe(Effect.andThen(cleanupExercisePaths)))
+  yield* Effect.addFinalizer(() =>
+    Effect.promise(() => disposeApps({ timeout: 10_000 })).pipe(Effect.andThen(cleanupExercisePaths)),
+  )
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))
