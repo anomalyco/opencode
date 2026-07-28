@@ -159,6 +159,39 @@ const it = testEffect(
   ),
 )
 
+// Same graph with bounded validator waits, so the ask-deadline and
+// health-cache tests don't sit through production timeouts.
+const itFast = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      SessionNs.node,
+      SessionProjector.node,
+      Permission.node,
+      PermissionValidator.node,
+      Database.node,
+      AutoSummaryStore.node,
+      PermissionDecisionsStore.node,
+      EventV2Bridge.node,
+      CrossSpawnSpawner.node,
+      InstanceStore.node,
+    ]),
+    [
+      [LLM.node, llm.layer],
+      [Agent.node, agents],
+      [
+        Provider.node,
+        ProviderTest.fake({ model: ProviderTest.model({ id: ref.modelID, providerID: ref.providerID }) }).layer,
+      ],
+      [SessionAutoSummary.node, autoSummary],
+      [
+        InstanceStore.bootstrapNode,
+        Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+      ],
+      [PermissionValidator.node, PermissionValidator.nodeWith({ askTimeout: 1_000, healthCacheTtl: 600 })],
+    ],
+  ),
+)
+
 const ask = (input: Partial<PermissionV1.AskInput> & Pick<PermissionV1.AskInput, "sessionID">) =>
   Effect.gen(function* () {
     const permission = yield* Permission.Service
@@ -546,20 +579,85 @@ it.instance(
   { git: true },
 )
 
-it.instance(
-  "health reports ok with a reachable model and the failure reason otherwise",
+itFast.instance(
+  "an ask that exceeds the total deadline falls back and the queue keeps draining",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      summaryCalls.length = 0
+      const decisions = yield* PermissionDecisionsStore.Service
+      const chat = yield* seedAutoSession()
+      const started: string[] = []
+      const one = yield* Deferred.make<void>()
+      const two = yield* Deferred.make<void>()
+      // Pre-succeeded so the third stub records its start and emits at once.
+      const three = yield* Deferred.make<void>()
+      yield* Deferred.succeed(three, undefined)
+      llm.push(
+        gated(one, () => started.push("one")),
+        gated(two, () => started.push("two")),
+        gated(three, () => started.push("three")),
+      )
+
+      const a = yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["cmd-one"] }).pipe(Effect.forkScoped)
+      yield* poll(() => started.length === 1, "first validation never started")
+      const b = yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["cmd-two"] }).pipe(Effect.forkScoped)
+      yield* Effect.sleep("100 millis")
+      expect(started).toEqual(["one"])
+      const c = yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["cmd-three"] }).pipe(Effect.forkScoped)
+      yield* Effect.sleep("100 millis")
+      expect(started).toEqual(["one"])
+
+      // a finishes well inside its deadline; b stalls on the model until its
+      // total budget (queue wait + validation) expires ~1s after entry.
+      yield* Deferred.succeed(one, undefined)
+      yield* poll(() => started.length === 2, "second validation never started")
+
+      // c is queued behind b's tail; b's expiry must release it, not hang it.
+      yield* poll(() => started.length === 3, "third validation never ran after the second expired")
+      yield* Effect.all([Fiber.join(a), Fiber.join(c)])
+
+      const items = yield* waitForPending(1)
+      expect(items[0].auto).toEqual({ verdict: "fallback", reason: "timeout", model: "unknown" })
+      yield* reply({ requestID: items[0].id, reply: "once" })
+      yield* Fiber.join(b)
+
+      expect(llm.state.maxInFlight).toBe(1)
+      const rows = yield* decisions.listBySession(chat.id)
+      // b's expiry audit and c's audit race at the deadline, so compare by
+      // pattern rather than row order.
+      const byPattern = new Map(rows.map((row) => [row.patterns[0], row]))
+      expect(rows).toHaveLength(3)
+      expect(byPattern.get("cmd-one")?.verdict).toBe("allow")
+      expect(byPattern.get("cmd-two")).toMatchObject({ verdict: "fallback", reason: "timeout", model: "unknown" })
+      expect(byPattern.get("cmd-three")?.verdict).toBe("allow")
+    }),
+  { git: true },
+)
+
+itFast.instance(
+  "health caches the probe within the TTL and re-probes after it",
   () =>
     Effect.gen(function* () {
       llm.reset()
       const validator = yield* PermissionValidator.Service
 
       llm.push(text("ALLOW"))
-      const ok = yield* validator.health()
-      expect(ok).toEqual({ ok: true, model: "test/test-model" })
+      const first = yield* validator.health()
+      expect(first).toEqual({ ok: true, model: "test/test-model" })
+      expect(llm.state.hits[0].sessionID).toBe("ses_validator_health")
 
+      // Inside the TTL the cached answer rides again — no new model call.
+      const second = yield* validator.health()
+      expect(second).toEqual(first)
+      expect(llm.state.hits).toHaveLength(1)
+
+      // Past the TTL the next call probes again and caches the failure too.
+      yield* Effect.sleep("700 millis")
       llm.push(() => Stream.fail(new Error("down")))
-      const down = yield* validator.health()
-      expect(down).toEqual({ ok: false, model: "test/test-model", reason: "down" })
+      const third = yield* validator.health()
+      expect(third).toEqual({ ok: false, model: "test/test-model", reason: "down" })
+      expect(llm.state.hits).toHaveLength(2)
     }),
   { git: true },
 )
