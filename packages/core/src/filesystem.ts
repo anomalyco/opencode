@@ -2,7 +2,7 @@ export * as FileSystem from "./filesystem"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
@@ -88,24 +88,29 @@ const baseLayer = Layer.effect(
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)
         if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
-        return yield* fs.readDirectoryEntries(target.real).pipe(
-          Effect.orDie,
-          Effect.map((items) =>
-            items
-              .flatMap((item) => {
-                if (item.type !== "file" && item.type !== "directory") return []
-                const absolute = path.join(target.absolute, item.name)
-                const relative = path.relative(target.directory, absolute)
-                return [
-                  Entry.make({
-                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-                    type: item.type,
-                  }),
-                ]
-              })
-              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
-          ),
-        )
+        const entries = yield* fs.readDirectoryEntries(target.real).pipe(Effect.orDie)
+        const items: Array<Entry> = []
+        for (const entry of entries) {
+          if (entry.type === "file") {
+            const absolute = path.join(target.absolute, entry.name)
+            items.push(Entry.make({ path: RelativePath.make(path.relative(target.directory, absolute)), type: "file" }))
+          } else if (entry.type === "directory") {
+            const absolute = path.join(target.absolute, entry.name)
+            items.push(Entry.make({ path: RelativePath.make(path.relative(target.directory, absolute) + path.sep), type: "directory" }))
+          } else if (entry.type === "symlink") {
+            const resolved = path.resolve(target.absolute, entry.name)
+            const sym = yield* fs.stat(resolved).pipe(Effect.option)
+            if (Option.isSome(sym)) {
+              if (sym.value.type === "Directory") {
+                items.push(Entry.make({ path: RelativePath.make(path.relative(target.directory, resolved) + path.sep), type: "directory" }))
+              } else if (sym.value.type === "File") {
+                items.push(Entry.make({ path: RelativePath.make(path.relative(target.directory, resolved)), type: "file" }))
+              }
+            }
+          }
+        }
+        items.sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
+        return items
       }),
     })
   }),
