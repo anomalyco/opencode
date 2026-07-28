@@ -8,7 +8,7 @@ import { useRoute } from "../../context/route"
 import { usePermission } from "../../context/permission"
 
 export function Footer() {
-  const { themeV2 } = useTheme()
+  const theme = useTheme()
   const data = useData()
   const route = useRoute()
   const permission = usePermission()
@@ -54,35 +54,35 @@ export function Footer() {
 
   return (
     <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
-      <text fg={themeV2.text.subdued}>{directory()}</text>
+      <text fg={theme.text.subdued}>{directory()}</text>
       <box gap={2} flexDirection="row" flexShrink={0}>
         <Switch>
           <Match when={store.welcome}>
-            <text fg={themeV2.text.default}>
-              Get started <span style={{ fg: themeV2.text.subdued }}>/connect</span>
+            <text fg={theme.text.default}>
+              Get started <span style={{ fg: theme.text.subdued }}>/connect</span>
             </text>
           </Match>
           <Match when={connected()}>
             <Show when={permission.mode !== "auto" && permissions().length > 0}>
-              <text fg={themeV2.text.feedback.warning.default}>
-                <span style={{ fg: themeV2.text.feedback.warning.default }}>△</span> {permissions().length} Permission
+              <text fg={theme.text.feedback.warning.default}>
+                <span style={{ fg: theme.text.feedback.warning.default }}>△</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
               </text>
             </Show>
             <Show when={mcp()}>
-              <text fg={themeV2.text.default}>
+              <text fg={theme.text.default}>
                 <Switch>
                   <Match when={mcpError()}>
-                    <span style={{ fg: themeV2.text.feedback.error.default }}>⊙ </span>
+                    <span style={{ fg: theme.text.feedback.error.default }}>⊙ </span>
                   </Match>
                   <Match when={true}>
-                    <span style={{ fg: themeV2.text.feedback.success.default }}>⊙ </span>
+                    <span style={{ fg: theme.text.feedback.success.default }}>⊙ </span>
                   </Match>
                 </Switch>
                 {mcp()} MCP
               </text>
             </Show>
-            <text fg={themeV2.text.subdued}>/status</text>
+            <text fg={theme.text.subdued}>/status</text>
           </Match>
         </Switch>
       </box>

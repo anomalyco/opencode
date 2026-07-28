@@ -96,9 +96,9 @@ type State = {
 }
 
 type ContextName = "elevated" | "overlay"
-type ThemeService = {
-  themeV2: ComponentTheme
-  contextual(context: ContextName): ThemeService
+type Themes = {
+  current: ComponentTheme
+  contextual(context: ContextName): Themes
   readonly selected: string
   all: typeof allThemes
   has: typeof hasTheme
@@ -308,7 +308,7 @@ const themeContext = createSimpleContext({
     const valuesV2 = () => selected().theme
     valuesV2()
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
-    const themeV2 = createComponentTheme(valuesV2, mode)
+    const current = createComponentTheme(valuesV2, mode)
     const contextsV2 = {
       elevated: createComponentTheme(() => valuesV2().contexts["@context:elevated"] ?? valuesV2(), mode),
       overlay: createComponentTheme(() => valuesV2().contexts["@context:overlay"] ?? valuesV2(), mode),
@@ -320,8 +320,8 @@ const themeContext = createSimpleContext({
     function contextual(context: ContextName) {
       return contextualServices[context]
     }
-    const service: ThemeService = {
-      themeV2,
+    const service: Themes = {
+      current,
       contextual,
       get selected() {
         return store.active
@@ -356,20 +356,23 @@ const themeContext = createSimpleContext({
       },
     }
     const contextualServices = {
-      elevated: Object.assign(Object.create(service) as ThemeService, { themeV2: contextsV2.elevated }),
-      overlay: Object.assign(Object.create(service) as ThemeService, { themeV2: contextsV2.overlay }),
+      elevated: Object.assign(Object.create(service) as Themes, { current: contextsV2.elevated }),
+      overlay: Object.assign(Object.create(service) as Themes, { current: contextsV2.overlay }),
     }
     return service
   },
 })
 
-export const useTheme = themeContext.use
+export const useThemes = themeContext.use
+export function useTheme() {
+  return useThemes().current
+}
 export const ThemeProvider = themeContext.provider
 
 export function ThemeContextProvider(props: ParentProps<{ context: ContextName }>) {
-  const theme = useTheme()
+  const themes = useThemes()
   return (
-    <themeContext.context.Provider value={theme.contextual(props.context)}>
+    <themeContext.context.Provider value={themes.contextual(props.context)}>
       {props.children}
     </themeContext.context.Provider>
   )

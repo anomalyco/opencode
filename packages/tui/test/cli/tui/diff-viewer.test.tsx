@@ -11,7 +11,7 @@ import type {
   Route,
   Slot,
 } from "@opencode-ai/plugin/tui/context"
-import { ThemeProvider, useTheme } from "../../../src/context/theme"
+import { ThemeProvider, useTheme, useThemes } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
 import { Keymap } from "../../../src/context/keymap"
@@ -207,7 +207,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
 
     void diffViewerPlugin.setup(context)
     function Content() {
-      theme = createPluginTheme(useTheme())
+      theme = createPluginTheme(useTheme(), useThemes())
       const commandView = renderCommands?.({})
       if (current.type !== "plugin") commands.get("diff.open")?.run()
       return (
