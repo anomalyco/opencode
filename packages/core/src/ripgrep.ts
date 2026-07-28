@@ -48,12 +48,15 @@ export class InvalidPatternError extends Schema.TaggedErrorClass<InvalidPatternE
   message: Schema.String,
 }) {}
 
+export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
+
 export interface FindInput {
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
   readonly hidden?: boolean
   readonly follow?: boolean
+  readonly timeoutMs?: number
   readonly signal?: AbortSignal
   readonly onEntry?: (entry: Entry) => Effect.Effect<void>
 }
@@ -64,6 +67,7 @@ export interface GlobInput {
   readonly limit: number
   readonly hidden?: boolean
   readonly follow?: boolean
+  readonly timeoutMs?: number
   readonly signal?: AbortSignal
 }
 
@@ -73,6 +77,7 @@ export interface GrepInput {
   readonly file?: string
   readonly include?: string
   readonly limit: number
+  readonly timeoutMs?: number
   readonly signal?: AbortSignal
 }
 
@@ -99,11 +104,17 @@ const layer = Layer.effect(
       readonly cwd: string
       readonly args: string[]
       readonly limit: number
+      readonly timeoutMs?: number
       readonly signal?: AbortSignal
       readonly parse: (line: string) => Effect.Effect<A | undefined, Error>
       readonly pattern?: string
       readonly onItem?: (item: A) => Effect.Effect<void>
     }) => {
+      const collectedItems: A[] = []
+      const timeoutMs = input.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS
+      const timeoutSignal = AbortSignal.timeout(timeoutMs)
+      const effectiveSignal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal
+
       const program = Effect.scoped(
         Effect.gen(function* () {
           const handle = yield* process.spawn(
@@ -120,6 +131,7 @@ const layer = Layer.effect(
             Stream.mapEffect(input.parse),
             Stream.filter((row): row is A => row !== undefined),
             Stream.tap((row) => {
+              collectedItems.push(row)
               if (!input.onItem || observed++ >= input.limit) return Effect.void
               return input.onItem(row)
             }),
@@ -141,7 +153,19 @@ const layer = Layer.effect(
           return { items: code === 1 ? [] : rows, truncated: false, partial: code === 2 }
         }),
       )
-      const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
+      const abortable = program.pipe(
+        Effect.raceFirst(waitForAbort(effectiveSignal)),
+        Effect.catch((err) => {
+          if (timeoutSignal.aborted && (!input.signal || !input.signal.aborted)) {
+            return Effect.succeed({
+              items: collectedItems.slice(0, input.limit),
+              truncated: collectedItems.length > input.limit,
+              partial: true,
+            })
+          }
+          return Effect.fail(err)
+        }),
+      )
       return abortable.pipe(
         Effect.mapError((cause) =>
           cause instanceof Error || cause instanceof InvalidPatternError
@@ -157,6 +181,7 @@ const layer = Layer.effect(
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
+          timeoutMs: input.timeoutMs,
           args: [
             "--no-config",
             "--files",
@@ -189,6 +214,7 @@ const layer = Layer.effect(
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
+          timeoutMs: input.timeoutMs,
           args: [
             "--no-config",
             "--files",
@@ -217,7 +243,11 @@ const layer = Layer.effect(
         ),
       grep: (input) =>
         run<RawMatchData>({
-          ...input,
+          cwd: input.cwd,
+          limit: input.limit,
+          signal: input.signal,
+          timeoutMs: input.timeoutMs,
+          pattern: input.pattern,
           args: [
             "--no-config",
             "--json",

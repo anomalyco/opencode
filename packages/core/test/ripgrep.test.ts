@@ -85,4 +85,25 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("bounds execution time when timeoutMs is provided", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "test.ts"), "match\n"))
+          const start = Date.now()
+          const files = yield* (yield* Ripgrep.Service).glob({
+            cwd: tmp.path,
+            pattern: "**/*.ts",
+            limit: 100,
+            timeoutMs: 100,
+          })
+          const duration = Date.now() - start
+          expect(duration).toBeLessThan(5_000)
+          expect(files).toBeDefined()
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
