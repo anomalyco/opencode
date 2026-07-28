@@ -81,24 +81,47 @@ type HybridCard = {
   payload: string
 }
 
-function getDynamicGreeting() {
+function timeAgo(timestamp?: number) {
+  if (!timestamp) return "Resume session"
+  const diff = Date.now() - timestamp
+  if (diff < 60_000) return "Active just now"
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 60) return `Updated ${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `Updated ${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `Updated ${days}d ago`
+  return "Resume session"
+}
+
+function isGenericTitle(title?: string) {
+  if (!title) return true
+  const clean = sessionTitle(title)
+  return !clean || clean === "Greeting" || clean === "New session" || clean === "Child session" || clean === "Untitled Session"
+}
+
+function getDynamicGreeting(projectName?: string) {
   const hour = new Date().getHours()
   let timeGreeting = "Good day"
   if (hour >= 5 && hour < 12) timeGreeting = "Good morning"
   else if (hour >= 12 && hour < 17) timeGreeting = "Good afternoon"
   else if (hour >= 17 && hour < 22) timeGreeting = "Good evening"
-  else timeGreeting = "Working late tonight"
+  else timeGreeting = "Good night"
 
+  const target = projectName ? `for ${projectName}` : "your project"
+
+  // Diverse Claude & ChatGPT inspired greetings (mixing occasional time greetings with action & thought prompts)
   const options = [
-    `${timeGreeting}! What's on your mind today?`,
-    `${timeGreeting}! What are we building next?`,
-    "What's the plan in your mind?",
-    "What would you like to build?",
-    "Where shall we start today?",
-    "Ready to craft something great?",
-    "What are we working on next?",
-    "Let's turn your ideas into code.",
-    "How can I help with your project?",
+    `${timeGreeting}! What are we building today?`,
+    `${timeGreeting}! How can I help with ${target}?`,
+    `${timeGreeting}! Ready to build?`,
+    `What would you like to build today?`,
+    `Where shall we start with ${target}?`,
+    `What's on your mind today?`,
+    `How can I help with ${target}?`,
+    `Let's turn your ideas into code.`,
+    `What are we working on next?`,
+    `Ready to craft something great?`,
   ]
 
   const index = Math.floor(Math.random() * options.length)
@@ -110,20 +133,27 @@ export function NewSessionDesignView(props: { children: JSX.Element }) {
   const sync = useSync()
   const navigate = useNavigate()
 
-  const greeting = createMemo(() => getDynamicGreeting())
+  const activeProjectName = createMemo(() => {
+    const proj = sync().project
+    if (proj?.name) return proj.name
+    if (proj?.worktree) return getFilename(proj.worktree)
+    return undefined
+  })
+
+  const greeting = createMemo(() => getDynamicGreeting(activeProjectName()))
 
   // Hybrid Action Cards: Combines Recent Projects/Sessions (if available) with Dynamic Prompt Cards
   const hybridCards = createMemo<HybridCard[]>(() => {
     const cards: HybridCard[] = []
     const seen = new Set<string>()
 
-    // 1. Collect Recent Projects
+    // 1. Collect Recent Projects (max 1)
     const rawProjects = Array.isArray(sync().data.project) ? (sync().data.project as unknown as any[]) : []
     const projects = rawProjects
       .slice()
       .sort((a: any, b: any) => (b.time?.updated ?? b.time?.created ?? 0) - (a.time?.updated ?? a.time?.created ?? 0))
     for (const project of projects) {
-      if (cards.length >= 2) break
+      if (cards.length >= 1) break
       const name = getFilename(project.worktree) || project.name || "Project"
       if (!seen.has(`project:${name}`)) {
         seen.add(`project:${name}`)
@@ -138,28 +168,34 @@ export function NewSessionDesignView(props: { children: JSX.Element }) {
       }
     }
 
-    // 2. Collect Recent Sessions
+
+    // 2. Collect Recent Sessions (max 1-2, keeping total recent items <= 2 to guarantee prompt suggestions)
+    const maxSessions = Math.max(1, 2 - cards.length)
     const rawSessions = Array.isArray(sync().data.session) ? (sync().data.session as unknown as any[]) : []
     const sessions = rawSessions
       .slice()
       .sort((a: any, b: any) => (b.time?.updated ?? b.time?.created ?? 0) - (a.time?.updated ?? a.time?.created ?? 0))
+    let addedSessions = 0
     for (const sess of sessions) {
-      if (cards.length >= 4) break
+      if (addedSessions >= maxSessions) break
+      if (isGenericTitle(sess.title)) continue
       const title = sessionTitle(sess.title) || "Recent Session"
+      const dir = sess.directory || sess.location?.directory || sync().project?.worktree || ""
       if (!seen.has(`session:${sess.id}`)) {
         seen.add(`session:${sess.id}`)
+        addedSessions++
         cards.push({
           id: `sess-${sess.id}`,
           title,
-          desc: "Resume Session",
+          desc: "Resume session",
           icon: "status",
           kind: "session",
-          payload: legacySessionHref(sess.directory, sess.id),
+          payload: legacySessionHref(dir, sess.id),
         })
       }
     }
 
-    // 3. Fill remaining slots up to 4 with Dynamic Prompt Cards
+    // 3. Fill remaining slots (at least 2) with Dynamic Prompt Cards
     const shuffledPrompts = [...ALL_PROMPT_CARDS].sort(() => 0.5 - Math.random())
     for (const p of shuffledPrompts) {
       if (cards.length >= 4) break
@@ -181,8 +217,9 @@ export function NewSessionDesignView(props: { children: JSX.Element }) {
 
   function handleCardClick(card: HybridCard) {
     if (card.kind === "prompt") {
-      if (!prompt || !prompt.ready()) return
-      prompt.set([{ type: "text", content: card.payload, start: 0, end: card.payload.length }], card.payload.length)
+      if (prompt) {
+        prompt.set([{ type: "text", content: card.payload, start: 0, end: card.payload.length }], card.payload.length)
+      }
     } else {
       navigate(card.payload)
     }
@@ -253,7 +290,7 @@ export function NewSessionDesignView(props: { children: JSX.Element }) {
           <div class="mb-3.5 flex items-center justify-center">
             <WordmarkV2 animated opacity={0.85} class="h-8 w-auto text-v2-text-text-base opacity-90 transition-opacity hover:opacity-100" />
           </div>
-          <h1 class="text-xl font-semibold tracking-tight text-v2-text-text-base sm:text-2xl">
+          <h1 class="max-w-[500px] mx-auto text-xl font-semibold tracking-tight text-v2-text-text-base sm:text-2xl">
             {greeting()}
           </h1>
         </div>

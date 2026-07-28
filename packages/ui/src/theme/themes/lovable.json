@@ -1,5 +1,5 @@
 {
-  "$schema": "https://opencode.ai/desktop-theme.json",
+  "$schema": "../desktop-theme.schema.json",
   "name": "Lovable",
   "id": "lovable",
   "light": {

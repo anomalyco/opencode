@@ -246,7 +246,7 @@ export function SessionTurn(
     const seen = new Set<string>()
     return files
       .reduceRight<SummaryDiff[]>((result, diff) => {
-        if (!summaryDiff(diff)) return result
+        if (!summaryDiff(diff) || !diff.file) return result
         if (seen.has(diff.file)) return result
         seen.add(diff.file)
         result.push(diff)

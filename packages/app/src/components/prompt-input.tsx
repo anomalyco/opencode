@@ -664,8 +664,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (!query.trim()) return [...references, ...agents, ...mcpResources, ...pinned]
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
-        .filter((path) => !seen.has(path))
-        .map((path) => ({ type: "file", path, display: path }))
+        .filter((path: string) => !seen.has(path))
+        .map((path: string) => ({ type: "file", path, display: path }))
       return [...references, ...agents, ...mcpResources, ...pinned, ...fileOptions]
     },
     key: atKey,

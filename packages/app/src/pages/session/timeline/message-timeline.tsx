@@ -829,7 +829,7 @@ export function MessageTimeline(props: {
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
         notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         showToast({
           title: language.t("common.requestFailed"),
           description: errorMessage(err),
@@ -848,7 +848,7 @@ export function MessageTimeline(props: {
     const result = await sdk()
       .api.session.remove({ sessionID })
       .then(() => true)
-      .catch((err) => {
+      .catch((err: unknown) => {
         showToast({
           title: language.t("session.delete.failed.title"),
           description: errorMessage(err),

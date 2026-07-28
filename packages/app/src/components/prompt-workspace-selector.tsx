@@ -5,6 +5,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useLanguage } from "@/context/language"
+import { useSync } from "@/context/sync"
 
 export function PromptWorkspaceSelector(props: {
   value: string
@@ -15,6 +16,7 @@ export function PromptWorkspaceSelector(props: {
   onDone: () => void
 }) {
   const language = useLanguage()
+  const sync = useSync()
   let pending: string | undefined
   const selected = () => (props.value === props.projectRoot ? "main" : props.value)
   const icon = () => {
@@ -93,17 +95,14 @@ export function PromptWorkspaceSelector(props: {
           </MenuV2.Content>
         </MenuV2.Portal>
       </MenuV2>
-      <PromptGitStatus branch={props.branch} />
+      <PromptGitStatus branch={props.branch} noGit={sync().project?.vcs !== "git" || !props.branch} />
     </>
   )
 }
 
 export function PromptGitStatus(props: { branch?: string; noGit?: boolean }) {
-  const language = useLanguage()
-  const label = () => {
-    if (props.noGit) return language.t("session.new.git.none")
-    return props.branch
-  }
+  const isNoGit = () => Boolean(props.noGit || !props.branch)
+  const label = () => (isNoGit() ? "non git" : props.branch)
 
   return (
     <Show when={label()}>
@@ -112,7 +111,7 @@ export function PromptGitStatus(props: { branch?: string; noGit?: boolean }) {
           <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
           <TooltipV2
             placement="top"
-            value={value()}
+            value={isNoGit() ? "Not a git repository" : value()}
             class="min-w-0 max-w-[220px]"
             contentClass="max-w-[calc(100vw-32px)] break-all"
           >

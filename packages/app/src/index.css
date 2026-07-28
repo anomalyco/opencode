@@ -332,6 +332,7 @@
   .lovable-gradient-text {
     background: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #6366f1 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 

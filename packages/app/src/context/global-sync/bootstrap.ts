@@ -235,12 +235,15 @@ export const loadProvidersQuery = (
           return normalizeProviderList(result.data!)
         }
         const location = directory ? { location: { directory } } : undefined
+        const providerList = (sdk as any).provider?.list ?? (sdk as any).providers?.list
+        const modelList = (sdk as any).model?.list ?? (sdk as any).models?.list
+        const modelDefault = (sdk as any).model?.default ?? (sdk as any).models?.default
         const [providers, models, defaultModel] = await Promise.all([
-          sdk.provider.list(location),
-          sdk.model.list(location),
-          sdk.model.default(location),
+          providerList ? providerList(location) : Promise.resolve({ data: [] }),
+          modelList ? modelList(location) : Promise.resolve({ data: [] }),
+          modelDefault ? modelDefault(location) : Promise.resolve({ data: undefined }),
         ])
-        return normalizeProviderList(providers.data, models.data, defaultModel.data)
+        return normalizeProviderList(providers?.data ?? [], models?.data ?? [], defaultModel?.data)
       }),
   })
 
@@ -293,6 +296,7 @@ export const loadCommands = (
         }
       })
     }
+    if (!api?.list) return []
     return api.list({ location: { directory } }).then((result) => result.data)
   })
 
@@ -434,9 +438,14 @@ export async function bootstrapDirectory(input: {
         retry(() =>
           (async () => {
             if ((await input.protocol) === "v1") return (await input.sdk.permission.list()).data ?? []
-            return input.api.permission.request
-              .list({ location: { directory: input.directory } })
-              .then((result) => result.data.map(normalizePermissionRequest))
+            const listFn =
+              (input.api.permission as any)?.request?.list ??
+              (input.api.permissions as any)?.listRequests ??
+              (input.api.permission as any)?.listRequests ??
+              (() => Promise.resolve({ data: [] }))
+            return listFn({ location: { directory: input.directory } }).then((result: any) =>
+              (result?.data ?? []).map(normalizePermissionRequest),
+            )
           })().then((permissions) => {
             const ids = permissions.map((permission) => permission.sessionID)
             const grouped = groupBySession(
@@ -470,9 +479,12 @@ export async function bootstrapDirectory(input: {
         retry(() =>
           (async () => {
             if ((await input.protocol) === "v1") return (await input.sdk.question.list()).data ?? []
-            return input.api.question.request
-              .list({ location: { directory: input.directory } })
-              .then((result) => result.data)
+            const listFn =
+              (input.api.question as any)?.request?.list ??
+              (input.api.questions as any)?.listRequests ??
+              (input.api.question as any)?.listRequests ??
+              (() => Promise.resolve({ data: [] }))
+            return listFn({ location: { directory: input.directory } }).then((result: any) => result?.data ?? [])
           })().then((questions) => {
             const ids = questions.map((question) => question.sessionID)
             const grouped = groupBySession(

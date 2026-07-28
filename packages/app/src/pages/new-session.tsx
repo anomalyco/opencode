@@ -92,7 +92,7 @@ export default function NewSessionPage() {
   const selectedBranch = createMemo(() => {
     const worktree = newSessionWorktree()
     if (worktree === "main" || worktree === "create") return localBranch()
-    return serverSync().child(worktree)[0].vcs?.branch ?? localBranch()
+    return serverSync().child(worktree)[0].vcs?.branch
   })
   const promptInputV2Controller = usePromptInputV2Controller({
     get controls() {
@@ -178,7 +178,12 @@ export default function NewSessionPage() {
                       <PromptProjectSelector controller={projectController} placement="bottom" />
                       <Show
                         when={showWorkspaceBar()}
-                        fallback={<PromptGitStatus branch={selectedBranch()} noGit={sync().project?.vcs !== "git"} />}
+                        fallback={
+                          <PromptGitStatus
+                            branch={selectedBranch()}
+                            noGit={sync().project?.vcs !== "git" || !selectedBranch()}
+                          />
+                        }
                       >
                         <PromptWorkspaceSelector
                           value={newSessionWorktree()}

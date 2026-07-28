@@ -261,9 +261,14 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
     if ((await input.sdk.protocol) === "v1") {
       return (await input.sdk.client.permission.list({ directory })).data ?? []
     }
-    return input.sdk.api.permission.request
-      .list({ location: { directory } })
-      .then((result) => result.data.map(normalizePermissionRequest))
+    const listFn =
+      (input.sdk.api.permission as any)?.request?.list ??
+      (input.sdk.api.permissions as any)?.listRequests ??
+      (input.sdk.api.permission as any)?.listRequests ??
+      (() => Promise.resolve({ data: [] }))
+    return listFn({ location: { directory } }).then((result: any) =>
+      (result?.data ?? []).map(normalizePermissionRequest),
+    )
   }
 
   function respondOnce(permission: PermissionRequest, directory?: string) {

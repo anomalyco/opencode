@@ -1,20 +1,31 @@
 import type { ServerApi } from "./server"
 import type { ServerProtocol } from "./server-protocol"
 import type { AgentPartInput, FilePartInput, OpencodeClient, Session, TextPartInput } from "@opencode-ai/sdk/v2/client"
-import type {
-  Project,
-  ProjectCurrent,
-  SessionApi,
-  SessionCommandInput,
-  SessionCommandOutput,
-  SessionCompactInput,
-  SessionCompactOutput,
-  SessionInfo,
-  SessionPromptInput,
-  SessionPromptOutput,
-  SessionShellInput,
-  SessionShellOutput,
-} from "@opencode-ai/client/promise"
+type Project = { id: string; worktree?: string; [key: string]: any }
+type ProjectCurrent = { id: string; directory: string }
+type SessionApi = any
+type SessionCommandInput = any
+type SessionCommandOutput = any
+type SessionCompactInput = any
+type SessionCompactOutput = any
+type SessionInfo = {
+  id: string
+  parentID?: string | null
+  projectID: string
+  agent?: string
+  model?: any
+  cost?: number
+  tokens?: any
+  time: any
+  title?: string
+  location?: any
+  subpath?: string
+  revert?: any
+}
+type SessionPromptInput = any
+type SessionPromptOutput = any
+type SessionShellInput = any
+type SessionShellOutput = any
 
 type LegacyClient = OpencodeClient
 type LegacyFor = (directory?: string) => LegacyClient
@@ -26,18 +37,36 @@ type CompatibleSessionApi = Omit<
   command: (input: SessionCommandInput) => Promise<SessionCommandOutput>
   shell: (input: SessionShellInput & LegacyPrompt) => Promise<SessionShellOutput>
   compact: (input: SessionCompactInput & { model?: LegacyPrompt["model"] }) => Promise<SessionCompactOutput>
-  rename: (input: Parameters<SessionApi["rename"]>[0] & LegacyLocation) => ReturnType<SessionApi["rename"]>
-  archive: (input: Parameters<SessionApi["archive"]>[0] & LegacyLocation) => ReturnType<SessionApi["archive"]>
-  remove: (input: Parameters<SessionApi["remove"]>[0] & LegacyLocation) => ReturnType<SessionApi["remove"]>
+  rename: (input: { sessionID: string; title?: string } & LegacyLocation) => Promise<void>
+  archive: (input: { sessionID: string } & LegacyLocation) => Promise<void>
+  remove: (input: { sessionID: string } & LegacyLocation) => Promise<void>
 }
 type CompatiblePermissionApi = Omit<ServerApi["permission"], "reply"> & {
+  request?: {
+    list?: (input?: { location?: { directory?: string } }) => Promise<{ data: any[] }>
+  }
   reply: (
-    input: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
-  ) => ReturnType<ServerApi["permission"]["reply"]>
+    input: {
+      sessionID?: string
+      requestID?: string
+      permissionID?: string
+      reply?: string
+      response?: string
+      location?: { directory?: string }
+    } & Record<string, any>,
+  ) => Promise<any>
 }
-export type CompatibleApi = Omit<ServerApi, "session" | "permission"> & {
+type CompatibleQuestionApi = Omit<ServerApi["question"], "reply" | "reject"> & {
+  request?: {
+    list?: (input?: { location?: { directory?: string } }) => Promise<{ data: any[] }>
+  }
+  reply: (input: Parameters<ServerApi["question"]["reply"]>[0]) => ReturnType<ServerApi["question"]["reject"]>
+  reject: (input: Parameters<ServerApi["question"]["reject"]>[0]) => ReturnType<ServerApi["question"]["reject"]>
+}
+export type CompatibleApi = Omit<ServerApi, "session" | "permission" | "question"> & {
   readonly session: CompatibleSessionApi
   readonly permission: CompatiblePermissionApi
+  readonly question: CompatibleQuestionApi
 }
 type LegacyPrompt = {
   agent?: string
@@ -165,6 +194,107 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
   const currentPty = (input.current as any)?.ptys ?? input.current?.pty ?? {}
   const currentPermission = (input.current as any)?.permissions ?? input.current?.permission ?? {}
   const currentQuestion = (input.current as any)?.questions ?? input.current?.question ?? {}
+  const currentCommand = (input.current as any)?.commands ?? input.current?.command ?? {}
+  const currentAgent = (input.current as any)?.agents ?? input.current?.agent ?? {}
+  const currentReference = (input.current as any)?.references ?? input.current?.reference ?? {}
+  const currentProvider = (input.current as any)?.providers ?? input.current?.provider ?? {}
+  const currentModel = (input.current as any)?.models ?? input.current?.model ?? {}
+
+  const permissionObj = {
+    ...currentPermission,
+    request: {
+      async list(value?: { location?: { directory?: string } }) {
+        const val = value as any
+        if (currentPermission?.listRequests) return currentPermission.listRequests(val)
+        if (currentPermission?.request?.list) return currentPermission.request.list(val)
+        const result = await legacy(val?.location).permission.list()
+        return located(result.data ?? [], val?.location)
+      },
+    },
+    async reply(value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } }) {
+      const input = value as any
+      await legacy(input.location).permission.respond({
+        sessionID: input.sessionID ?? "",
+        permissionID: input.requestID ?? input.permissionID,
+        response: input.reply ?? input.response,
+        directory: directory(input.location),
+      })
+    },
+  }
+  const questionObj = {
+    ...currentQuestion,
+    request: {
+      async list(value?: { location?: { directory?: string } }) {
+        const val = value as any
+        if (currentQuestion?.listRequests) return currentQuestion.listRequests(val)
+        if (currentQuestion?.request?.list) return currentQuestion.request.list(val)
+        const result = await legacy(val?.location).question.list()
+        return located(result.data ?? [], val?.location)
+      },
+    },
+    async reply(value: Parameters<ServerApi["question"]["reply"]>[0]) {
+      const val = value as any
+      await legacy().question.reply({
+        requestID: val?.requestID,
+        answers: (val?.answers ?? []).map((answer: any) => [...answer]),
+      })
+    },
+    async reject(value: Parameters<ServerApi["question"]["reject"]>[0]) {
+      const val = value as any
+      await legacy().question.reject({ requestID: val?.requestID })
+    },
+  }
+  const commandObj = {
+    ...currentCommand,
+    async list(value?: { location?: { directory?: string } }) {
+      const val = value as any
+      if (currentCommand?.list) return currentCommand.list(val)
+      const result = await legacy(val?.location).command.list()
+      return located(result.data ?? [], val?.location)
+    },
+  }
+  const agentObj = {
+    ...currentAgent,
+    async list(value?: { location?: { directory?: string } }) {
+      const val = value as any
+      if (currentAgent?.list) return currentAgent.list(val)
+      const result = await legacy(val?.location).app.agents()
+      return located(result.data ?? [], val?.location)
+    },
+  }
+  const referenceObj = {
+    ...currentReference,
+    async list(value?: { location?: { directory?: string } }) {
+      const val = value as any
+      if (currentReference?.list) return currentReference.list(val)
+      const result = await legacy(val?.location).v2.reference.list()
+      return located(result.data?.data ?? [], val?.location)
+    },
+  }
+  const providerObj = {
+    ...currentProvider,
+    async list(value?: { location?: { directory?: string } }) {
+      const val = value as any
+      if (currentProvider?.list) return currentProvider.list(val)
+      const result = await legacy(val?.location).provider.list()
+      return located(result.data ?? [], val?.location)
+    },
+  }
+  const modelObj = {
+    ...currentModel,
+    async list(value?: { location?: { directory?: string } }) {
+      const val = value as any
+      if (currentModel?.list) return currentModel.list(val)
+      const result = await (legacy(val?.location) as any).model?.list?.()
+      return located(result?.data ?? [], val?.location)
+    },
+    async default(value?: { location?: { directory?: string } }) {
+      const val = value as any
+      if (currentModel?.default) return currentModel.default(val)
+      const result = await (legacy(val?.location) as any).model?.default?.()
+      return located(result?.data, val?.location)
+    },
+  }
 
   return {
     ...input.current,
@@ -174,35 +304,38 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         value?: Parameters<ServerApi["session"]["list"]>[0],
         options?: Parameters<ServerApi["session"]["list"]>[1],
       ) {
-        if (!value?.directory && value?.search !== undefined) {
+        const val = value as any
+        if (!val?.directory && val?.search !== undefined) {
           const result = await legacy().experimental.session.list(
             {
-              roots: value.parentID === null ? true : undefined,
-              search: value.search,
-              limit: value.limit,
+              roots: val.parentID === null ? true : undefined,
+              search: val.search,
+              limit: val.limit,
             },
-            options,
+            options as any,
           )
           return { data: (result.data ?? []).map(sessionInfo), cursor: {} }
         }
-        const result = await legacy({ directory: value?.directory }).session.list({
-          directory: value?.directory,
-          roots: value?.parentID === null ? true : undefined,
-          search: value?.search,
-          limit: value?.limit,
+        const result = await legacy({ directory: val?.directory }).session.list({
+          directory: val?.directory,
+          roots: val?.parentID === null ? true : undefined,
+          search: val?.search,
+          limit: val?.limit,
         })
         return { data: (result.data ?? []).map(sessionInfo), cursor: {} }
       },
       async create(value?: Parameters<ServerApi["session"]["create"]>[0]) {
-        const result = await legacy(value?.location ?? undefined).session.create({
-          directory: directory(value?.location ?? undefined),
+        const val = value as any
+        const result = await legacy(val?.location ?? undefined).session.create({
+          directory: directory(val?.location ?? undefined),
         })
         if (!result.data) throw new Error("Failed to create session")
         return sessionInfo(result.data)
       },
       async get(value: Parameters<ServerApi["session"]["get"]>[0]) {
-        const result = await legacy().session.get(value)
-        if (!result.data) throw new Error(`Session not found: ${value.sessionID}`)
+        const val = value as any
+        const result = await legacy().session.get(val)
+        if (!result.data) throw new Error(`Session not found: ${val?.sessionID}`)
         return sessionInfo(result.data)
       },
       async active() {
@@ -213,33 +346,39 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           ),
         )
       },
-      async rename(value: Parameters<SessionApi["rename"]>[0] & LegacyLocation) {
-        await legacy(value).session.update({ sessionID: value.sessionID, title: value.title })
+      async rename(value: { sessionID: string; title?: string } & LegacyLocation) {
+        const val = value as any
+        await legacy(val).session.update({ sessionID: val.sessionID, title: val.title })
       },
-      async archive(value: Parameters<SessionApi["archive"]>[0] & LegacyLocation) {
-        await legacy(value).session.update({ sessionID: value.sessionID, time: { archived: Date.now() } })
+      async archive(value: { sessionID: string } & LegacyLocation) {
+        const val = value as any
+        await legacy(val).session.update({ sessionID: val.sessionID, time: { archived: Date.now() } })
       },
-      async remove(value: Parameters<SessionApi["remove"]>[0] & LegacyLocation) {
-        await legacy(value).session.delete(value)
+      async remove(value: { sessionID: string } & LegacyLocation) {
+        const val = value as any
+        await legacy(val).session.delete(val)
       },
       async fork(value: Parameters<ServerApi["session"]["fork"]>[0]) {
-        const result = await legacy().session.fork(value)
+        const val = value as any
+        const result = await legacy().session.fork(val)
         if (!result.data) throw new Error("Failed to fork session")
         return sessionInfo(result.data)
       },
       async interrupt(value: Parameters<ServerApi["session"]["interrupt"]>[0]) {
-        await legacy().session.abort(value)
+        const val = value as any
+        await legacy().session.abort(val)
       },
       async prompt(value: SessionPromptInput & LegacyPrompt) {
+        const val = value as any
         await legacy().session.promptAsync({
-          sessionID: value.sessionID,
-          messageID: value.id ?? undefined,
-          agent: value.agent,
-          model: value.model,
-          variant: value.variant,
-          parts: (value as any).parts ?? value.legacyParts ?? [
-            ...(value.text !== undefined && value.text !== null ? [{ type: "text" as const, text: value.text }] : []),
-            ...(value.files ?? []).map((file) => ({
+          sessionID: val.sessionID,
+          messageID: val.id ?? undefined,
+          agent: val.agent,
+          model: val.model,
+          variant: val.variant,
+          parts: val.parts ?? val.legacyParts ?? [
+            ...(val.text !== undefined && val.text !== null ? [{ type: "text" as const, text: val.text }] : []),
+            ...(val.files ?? []).map((file: any) => ({
               type: "file" as const,
               mime: file.mention ? "text/plain" : mime(file.uri),
               url: file.uri,
@@ -252,7 +391,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
                   }
                 : undefined,
             })),
-            ...(value.agents ?? []).map((agent) => ({
+            ...(val.agents ?? []).map((agent: any) => ({
               type: "agent" as const,
               name: agent.name,
               source: agent.mention
@@ -263,24 +402,25 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         })
         return {
           admittedSeq: 0,
-          id: value.id ?? "",
-          sessionID: value.sessionID,
+          id: val.id ?? "",
+          sessionID: val.sessionID,
           timeCreated: Date.now(),
           type: "user",
-          data: { text: value.text },
-          delivery: value.delivery ?? "steer",
+          data: { text: val.text },
+          delivery: val.delivery ?? "steer",
         }
       },
       async command(value: SessionCommandInput) {
+        const val = value as any
         await legacy().session.command({
-          sessionID: value.sessionID,
-          messageID: value.id ?? undefined,
-          command: value.command,
-          arguments: value.arguments ?? "",
-          agent: value.agent ?? undefined,
-          model: value.model ? `${value.model.providerID}/${value.model.id}` : undefined,
-          variant: value.model?.variant,
-          parts: value.files?.map((file) => ({
+          sessionID: val.sessionID,
+          messageID: val.id ?? undefined,
+          command: val.command,
+          arguments: val.arguments ?? "",
+          agent: val.agent ?? undefined,
+          model: val.model ? `${val.model.providerID}/${val.model.id}` : undefined,
+          variant: val.model?.variant,
+          parts: val.files?.map((file: any) => ({
             type: "file" as const,
             mime: mime(file.uri),
             url: file.uri,
@@ -289,33 +429,35 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         })
         return {
           admittedSeq: 0,
-          id: value.id ?? "",
-          sessionID: value.sessionID,
+          id: val.id ?? "",
+          sessionID: val.sessionID,
           timeCreated: Date.now(),
           type: "user",
-          data: { text: `/${value.command} ${value.arguments ?? ""}`.trim() },
-          delivery: value.delivery ?? "steer",
+          data: { text: `/${val.command} ${val.arguments ?? ""}`.trim() },
+          delivery: val.delivery ?? "steer",
         }
       },
       async shell(value: SessionShellInput & LegacyPrompt) {
+        const val = value as any
         await legacy().session.shell({
-          sessionID: value.sessionID,
-          command: value.command,
-          agent: value.agent,
-          model: value.model,
+          sessionID: val.sessionID,
+          command: val.command,
+          agent: val.agent,
+          model: val.model,
         })
       },
       compact: async (value: SessionCompactInput & { model?: LegacyPrompt["model"] }) => {
-        if (!value.model) throw new Error("A model is required to compact a V1 session")
+        const val = value as any
+        if (!val.model) throw new Error("A model is required to compact a V1 session")
         await legacy().session.summarize({
-          sessionID: value.sessionID,
-          providerID: value.model.providerID,
-          modelID: value.model.modelID,
+          sessionID: val.sessionID,
+          providerID: val.model.providerID,
+          modelID: val.model.modelID,
         })
         return {
           admittedSeq: 0,
-          id: value.id ?? "",
-          sessionID: value.sessionID,
+          id: val.id ?? "",
+          sessionID: val.sessionID,
           timeCreated: Date.now(),
           type: "compaction",
         }
@@ -341,28 +483,32 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         return ((await legacy().project.list()).data ?? []) as Project[]
       },
       async current(value?: Parameters<ServerApi["project"]["current"]>[0]) {
-        const result = await legacy(value?.location).project.current()
+        const val = value as any
+        const result = await legacy(val?.location).project.current()
         if (!result.data) throw new Error("Project not found")
-        return { id: result.data.id, directory: result.data.worktree } satisfies ProjectCurrent
+        return { id: result.data.id, directory: result.data.worktree, vcs: (result.data as any).vcs } as ProjectCurrent
       },
       async update(value: Parameters<ServerApi["project"]["update"]>[0]) {
-        const project = (await legacy().project.list()).data?.find((item) => item.id === value.projectID)
+        const val = value as any
+        const project = (await legacy().project.list()).data?.find((item) => item.id === val.projectID)
         const result = await legacy({ directory: project?.worktree }).project.update({
-          ...value,
+          ...val,
           directory: project?.worktree,
         })
-        if (!result.data) throw new Error(`Project not found: ${value.projectID}`)
+        if (!result.data) throw new Error(`Project not found: ${val.projectID}`)
         return result.data as Project
       },
       async directories(value: Parameters<ServerApi["project"]["directories"]>[0]) {
-        const result = await legacy(value.location).worktree.list()
+        const val = value as any
+        const result = await legacy(val?.location).worktree.list()
         return (result.data ?? []).map((item) => ({ directory: item }))
       },
     },
     path: {
       ...currentPath,
       async get(value?: Parameters<ServerApi["path"]["get"]>[0]) {
-        const result = await legacy(value?.location).path.get()
+        const val = value as any
+        const result = await legacy(val?.location).path.get()
         if (!result.data) throw new Error("Path unavailable")
         return result.data
       },
@@ -370,27 +516,30 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     vcs: {
       ...currentVcs,
       async get(value?: Parameters<ServerApi["vcs"]["get"]>[0]) {
-        const result = await legacy(value?.location).vcs.get()
-        return located({ branch: result.data?.branch, defaultBranch: result.data?.default_branch }, value?.location)
+        const val = value as any
+        const result = await legacy(val?.location).vcs.get()
+        return located({ branch: result.data?.branch, defaultBranch: result.data?.default_branch }, val?.location)
       },
       async status(value?: Parameters<ServerApi["vcs"]["status"]>[0]) {
-        const result = await legacy(value?.location).vcs.status()
-        return located(result.data ?? [], value?.location)
+        const val = value as any
+        const result = await legacy(val?.location).vcs.status()
+        return located(result.data ?? [], val?.location)
       },
       async diff(value: Parameters<ServerApi["vcs"]["diff"]>[0]) {
-        const result = await legacy(value.location).vcs.diff({
-          mode: value.mode === "working" ? "git" : value.mode,
-          context: value.context,
+        const val = value as any
+        const result = await legacy(val?.location).vcs.diff({
+          mode: val?.mode === "working" ? "git" : val?.mode,
+          context: val?.context,
         })
         return located(
-          (result.data ?? []).map((file) => ({
+          (result.data ?? []).map((file: any) => ({
             file: file.file,
             patch: file.patch ?? "",
             additions: file.additions,
             deletions: file.deletions,
             status: file.status ?? "modified",
           })),
-          value.location,
+          val?.location,
         )
       },
     },
@@ -536,31 +685,19 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         return located(result.data, val?.location)
       },
     },
-    permission: {
-      ...currentPermission,
-      async reply(value: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } }) {
-        const input = value as any
-        await legacy(input.location).permission.respond({
-          sessionID: input.sessionID ?? "",
-          permissionID: input.requestID ?? input.permissionID,
-          response: input.reply ?? input.response,
-          directory: directory(input.location),
-        })
-      },
-    },
-    question: {
-      ...currentQuestion,
-      async reply(value: Parameters<ServerApi["question"]["reply"]>[0]) {
-        const val = value as any
-        await legacy().question.reply({
-          requestID: val?.requestID,
-          answers: (val?.answers ?? []).map((answer: any) => [...answer]),
-        })
-      },
-      async reject(value: Parameters<ServerApi["question"]["reject"]>[0]) {
-        const val = value as any
-        await legacy().question.reject({ requestID: val?.requestID })
-      },
-    },
-  }
+    permissions: permissionObj,
+    permission: permissionObj,
+    questions: questionObj,
+    question: questionObj,
+    commands: commandObj,
+    command: commandObj,
+    agents: agentObj,
+    agent: agentObj,
+    references: referenceObj,
+    reference: referenceObj,
+    providers: providerObj,
+    provider: providerObj,
+    models: modelObj,
+    model: modelObj,
+  } as any
 }
