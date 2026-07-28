@@ -173,7 +173,7 @@ export function SessionTabs() {
           const pulseBackground = () => background()
           const pulseColor = () => tint(pulseBackground(), themeV2.text.default, 0.45)
           const title = () => tab.title ?? "Untitled session"
-          const availableTitleWidth = () => Math.max(1, width() - 4)
+          const availableTitleWidth = () => Math.max(1, width() - 3)
           const visibleTitle = () => title().slice(0, availableTitleWidth())
           const titleFades = () => title().length > availableTitleWidth() && availableTitleWidth() > 4
           const foreground = () => {
@@ -208,7 +208,7 @@ export function SessionTabs() {
                 backgroundColor={pulseBackground()}
               />
               <box zIndex={1} width="100%" flexDirection="row">
-                <text width={2}> </text>
+                <text width={1}> </text>
                 <text width={2} fg={numberColor()}>
                   {tabs.tabs().findIndex((item) => item.sessionID === tab.sessionID) + 1}
                 </text>
