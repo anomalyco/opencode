@@ -36,6 +36,7 @@ export function SessionTabs() {
   const hueStep = () => (mode() === "light" ? 800 : 200)
   const accent = () => themeV2.hue.accent[hueStep()]
   const activeNumber = () => tint(themeV2.hue.interactive[hueStep()], themeV2.background.default, 0.25)
+  const idleRail = () => tint(themeV2.border.default, themeV2.background.default, 0.8)
   const idleNumber = () => tint(themeV2.text.subdued, themeV2.background.default, 0.35)
   let windowStart = 0
   const layout = createMemo(() => {
@@ -157,7 +158,7 @@ export function SessionTabs() {
         </text>
       </Show>
       <For each={layout().tabs}>
-        {(tab) => {
+        {(tab, index) => {
           const selected = () => tabs.current() === tab.sessionID
           const unread = () => tabs.unread(tab.sessionID)
           const width = () => visuals().get(tab.sessionID)?.width ?? targets().get(tab.sessionID)!
@@ -173,7 +174,7 @@ export function SessionTabs() {
           const pulseBackground = () => background()
           const pulseColor = () => tint(pulseBackground(), themeV2.text.default, 0.45)
           const title = () => tab.title ?? "Untitled session"
-          const availableTitleWidth = () => Math.max(1, width() - 4)
+          const availableTitleWidth = () => Math.max(1, width() - 3)
           const visibleTitle = () => title().slice(0, availableTitleWidth())
           const titleFades = () => title().length > availableTitleWidth() && availableTitleWidth() > 4
           const foreground = () => {
@@ -208,7 +209,9 @@ export function SessionTabs() {
                 backgroundColor={pulseBackground()}
               />
               <box zIndex={1} width="100%" flexDirection="row">
-                <text width={2}> </text>
+                <text width={1} fg={idleRail()}>
+                  {index() === 0 ? " " : "▏"}
+                </text>
                 <text width={2} fg={numberColor()}>
                   {tabs.tabs().findIndex((item) => item.sessionID === tab.sessionID) + 1}
                 </text>
