@@ -20,12 +20,12 @@ export function SessionTabs() {
     visibleSessionTabs(
       tabs.tabs(),
       tabs.current(),
-      Math.max(1, Math.floor((dimensions().width - 4) / (tabWidth() + 1))),
+      Math.max(1, Math.floor((dimensions().width - 4) / tabWidth())),
     ),
   )
 
   return (
-    <box height={1} flexShrink={0} flexDirection="row" paddingLeft={1} paddingRight={1} gap={1}>
+    <box height={1} flexShrink={0} flexDirection="row" paddingLeft={1} paddingRight={1}>
       <For each={visible()}>
         {(tab) => {
           const selected = () => tabs.current() === tab.sessionID
