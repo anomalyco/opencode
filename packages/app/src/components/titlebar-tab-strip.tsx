@@ -49,7 +49,7 @@ function SessionTabSlot(props: {
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active()}
-      class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
+      class="relative flex w-56 min-w-7 max-w-56 shrink-0"
     >
       <TabNavItem
         ref={(el) => {
@@ -192,7 +192,7 @@ function DraftTabSlot(props: {
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active()}
-      class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
+      class="relative flex w-56 min-w-7 max-w-56 shrink-0"
     >
       <DraftTabItem
         ref={(el) => {
