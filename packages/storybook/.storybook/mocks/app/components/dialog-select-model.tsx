@@ -1,9 +1,10 @@
-import { splitProps } from "solid-js"
+import { splitProps, type JSX } from "solid-js"
 
-export function ModelSelectorPopover(props: { triggerAs: any; triggerProps?: Record<string, unknown>; children: any }) {
-  const [local] = splitProps(props, ["triggerAs", "triggerProps", "children"])
-  const Trigger = local.triggerAs
-  return <Trigger {...(local.triggerProps ?? {})}>{local.children}</Trigger>
+export function ModelSelectorPopover(props: {
+  trigger: JSX.Element | ((props: Record<string, unknown>) => JSX.Element)
+}) {
+  const [local] = splitProps(props, ["trigger"])
+  return <>{typeof local.trigger === "function" ? local.trigger({}) : local.trigger}</>
 }
 
 export const ModelSelectorPopoverV2 = ModelSelectorPopover

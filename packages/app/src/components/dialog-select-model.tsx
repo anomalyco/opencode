@@ -7,7 +7,6 @@ import {
   For,
   JSX,
   Show,
-  ValidComponent,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
@@ -28,6 +27,7 @@ import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
 import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
+import { createMenuDismissController } from "@/utils/menu-dismiss-controller"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./dialog-select-model-search"
 
@@ -121,14 +121,13 @@ const ModelList: Component<{
 }
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
+type ModelSelectorTrigger = JSX.Element | ((props: ModelSelectorTriggerProps) => JSX.Element)
 type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
 
 export function ModelSelectorPopover(props: {
   provider?: string
   model?: ModelState
-  children?: JSX.Element
-  triggerAs?: ValidComponent
-  triggerProps?: ModelSelectorTriggerProps
+  trigger: ModelSelectorTrigger
   onClose?: (cause: "escape" | "select") => void
 }) {
   const [store, setStore] = createStore<{
@@ -173,8 +172,8 @@ export function ModelSelectorPopover(props: {
       placement="top-start"
       gutter={4}
     >
-      <Kobalte.Trigger as={props.triggerAs ?? "div"} {...props.triggerProps}>
-        {props.children}
+      <Kobalte.Trigger as={typeof props.trigger === "function" ? props.trigger : "div"}>
+        {typeof props.trigger === "function" ? undefined : props.trigger}
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
@@ -236,11 +235,10 @@ export function ModelSelectorPopover(props: {
 export function ModelSelectorPopoverV2(props: {
   provider?: string
   model?: ModelState
-  children?: JSX.Element
-  triggerAs?: ValidComponent
-  triggerProps?: ModelSelectorTriggerProps
+  trigger: ModelSelectorTrigger
   onClose?: () => void
 }) {
+  const dialog = useDialog()
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
@@ -249,15 +247,16 @@ export function ModelSelectorPopoverV2(props: {
 
   return (
     <ModelSelectorPopoverV2View
-      children={props.children}
-      triggerAs={props.triggerAs}
-      triggerProps={props.triggerProps}
+      trigger={props.trigger}
       models={controller.models}
       groups={controller.groups}
       current={controller.current}
       select={controller.select}
-      openManageModelsDialog={controller.openManageModelsDialog}
-      labels={controller.labels}
+      onManage={() => {
+        void import("./dialog-manage-models").then((module) => {
+          void dialog.show(() => <module.DialogManageModelsV2 />)
+        })
+      }}
       onClose={() => props.onClose?.()}
     />
   )
@@ -269,8 +268,6 @@ function createModelSelectorController(input: {
   onSelect: () => void
 }) {
   const model = input.model ?? useLocal().model
-  const dialog = useDialog()
-  const language = useLanguage()
   const allModels = createMemo(() =>
     model
       .list()
@@ -301,45 +298,23 @@ function createModelSelectorController(input: {
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
       input.onSelect()
     },
-    openManageModelsDialog: () => {
-      void import("./dialog-manage-models").then((module) => {
-        void dialog.show(() => <module.DialogManageModelsV2 />)
-      })
-    },
-    labels: {
-      search: () => language.t("dialog.model.search.placeholder"),
-      empty: () => language.t("dialog.model.empty"),
-      clear: () => language.t("common.clear"),
-      free: () => language.t("model.tag.free"),
-      latest: () => language.t("model.tag.latest"),
-      manage: () => language.t("dialog.model.manage"),
-    },
   }
 }
 
 function ModelSelectorPopoverV2View(props: {
-  children?: JSX.Element
-  triggerAs?: ValidComponent
-  triggerProps?: ModelSelectorTriggerProps
+  trigger: ModelSelectorTrigger
   models: (search: string) => ModelItem[]
   groups: (models: ModelItem[]) => { category: string; items: ModelItem[] }[]
   current: () => string | undefined
   select: (item: ModelItem) => void
-  openManageModelsDialog: () => void
-  labels: {
-    search: () => string
-    empty: () => string
-    clear: () => string
-    free: () => string
-    latest: () => string
-    manage: () => string
-  }
+  onManage: () => void
   onClose: () => void
 }) {
+  const language = useLanguage()
   const [store, setStore] = createStore({ open: false, search: "", active: "" })
   let searchRef: HTMLInputElement | undefined
   let contentRef: HTMLDivElement | undefined
-  let restoreTrigger = true
+  const dismiss = createMenuDismissController(() => contentRef)
 
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
@@ -352,19 +327,9 @@ function ModelSelectorPopoverV2View(props: {
   }
   const activeItem = () =>
     store.active ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(store.active)}"]`) : undefined
-  const afterClose = (callback: () => void) => {
-    const complete = () => {
-      if (contentRef?.isConnected) {
-        requestAnimationFrame(complete)
-        return
-      }
-      requestAnimationFrame(() => requestAnimationFrame(callback))
-    }
-    requestAnimationFrame(complete)
-  }
   const setOpen = (open: boolean) => {
     if (open) {
-      restoreTrigger = true
+      dismiss.allowTriggerRestore()
       setStore({ open: true, active: initialActive() })
       setTimeout(() =>
         requestAnimationFrame(() => {
@@ -377,14 +342,14 @@ function ModelSelectorPopoverV2View(props: {
     setStore({ open: false, search: "", active: "" })
   }
   const selectModel = (item: ModelItem) => {
-    restoreTrigger = false
+    dismiss.preventTriggerRestore()
     setOpen(false)
-    afterClose(() => props.select(item))
+    dismiss.afterClose(() => props.select(item))
   }
   const manage = () => {
-    restoreTrigger = false
+    dismiss.preventTriggerRestore()
     setOpen(false)
-    afterClose(props.openManageModelsDialog)
+    dismiss.afterClose(props.onManage)
   }
   const selectActive = () => {
     const item = models().find((item) => modelKey(item) === store.active)
@@ -419,18 +384,16 @@ function ModelSelectorPopoverV2View(props: {
 
   return (
     <MenuV2 open={store.open} modal={false} placement="top-start" gutter={6} onOpenChange={setOpen}>
-      <MenuV2.Trigger as={props.triggerAs ?? "div"} {...props.triggerProps}>
-        {props.children}
+      <MenuV2.Trigger as={typeof props.trigger === "function" ? props.trigger : "div"}>
+        {typeof props.trigger === "function" ? undefined : props.trigger}
       </MenuV2.Trigger>
       <MenuV2.Portal>
         <MenuV2.Content
-          ref={(el: HTMLDivElement) => (contentRef = el)}
+          ref={(element: HTMLDivElement) => (contentRef = element)}
           class="w-[284px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
-          onPointerDownOutside={() => (restoreTrigger = false)}
-          onFocusOutside={() => (restoreTrigger = false)}
-          onCloseAutoFocus={(event) => {
-            if (!restoreTrigger) event.preventDefault()
-          }}
+          onPointerDownOutside={dismiss.preventTriggerRestore}
+          onFocusOutside={dismiss.preventTriggerRestore}
+          onCloseAutoFocus={dismiss.onCloseAutoFocus}
         >
           <div class="flex flex-col p-0.5">
             <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
@@ -438,7 +401,7 @@ function ModelSelectorPopoverV2View(props: {
               <input
                 ref={(el) => (searchRef = el)}
                 value={store.search}
-                placeholder={props.labels.search()}
+                placeholder={language.t("dialog.model.search.placeholder")}
                 class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
                 spellcheck={false}
                 autocorrect="off"
@@ -450,9 +413,9 @@ function ModelSelectorPopoverV2View(props: {
                   event.stopPropagation()
                   if (event.key === "Escape") {
                     event.preventDefault()
-                    restoreTrigger = false
+                    dismiss.preventTriggerRestore()
                     setOpen(false)
-                    afterClose(props.onClose)
+                    dismiss.afterClose(props.onClose)
                     return
                   }
                   if (event.altKey || event.metaKey) return
@@ -478,7 +441,7 @@ function ModelSelectorPopoverV2View(props: {
                   class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => setSearch("")}
-                  aria-label={props.labels.clear()}
+                  aria-label={language.t("common.clear")}
                 >
                   <Icon name="close" size="small" />
                 </button>
@@ -492,7 +455,7 @@ function ModelSelectorPopoverV2View(props: {
                 when={models().length > 0}
                 fallback={
                   <div class="flex h-12 items-center px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
-                    {props.labels.empty()}
+                    {language.t("dialog.model.empty")}
                   </div>
                 }
               >
@@ -533,10 +496,10 @@ function ModelSelectorPopoverV2View(props: {
                               >
                                 <span class="min-w-0 truncate leading-5">{item.name}</span>
                                 <Show when={isFree(item.provider.id, item.cost)}>
-                                  <TagV2 class="shrink-0">{props.labels.free()}</TagV2>
+                                  <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
                                 </Show>
                                 <Show when={item.latest}>
-                                  <TagV2 class="shrink-0">{props.labels.latest()}</TagV2>
+                                  <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
                                 </Show>
                               </MenuV2.RadioItem>
                             </TooltipV2>
@@ -561,7 +524,7 @@ function ModelSelectorPopoverV2View(props: {
               onSelect={manage}
             >
               <Icon name="outline-sliders" size="small" />
-              <span class="min-w-0 flex-1 truncate leading-5">{props.labels.manage()}</span>
+              <span class="min-w-0 flex-1 truncate leading-5">{language.t("dialog.model.manage")}</span>
             </MenuV2.Item>
           </div>
         </MenuV2.Content>
