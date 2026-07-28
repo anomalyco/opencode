@@ -859,6 +859,20 @@
         "vite": "catalog:",
       },
     },
+    "packages/theme": {
+      "name": "@opencode-ai/theme",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opentui/core": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/tui": {
       "name": "@opencode-ai/tui",
       "version": "1.18.4",
@@ -868,6 +882,7 @@
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/simulation": "workspace:*",
+        "@opencode-ai/theme": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@opencode-ai/util": "workspace:*",
         "@opentui/core": "catalog:",
@@ -1030,6 +1045,7 @@
       },
       "devDependencies": {
         "@astrojs/cloudflare": "14.1.4",
+        "@opencode-ai/theme": "workspace:*",
         "@types/bun": "catalog:",
         "astro": "7.1.3",
         "effect": "catalog:",
@@ -2074,6 +2090,8 @@
     "@opencode-ai/stats-server": ["@opencode-ai/stats-server@workspace:packages/stats/server"],
 
     "@opencode-ai/storybook": ["@opencode-ai/storybook@workspace:packages/storybook"],
+
+    "@opencode-ai/theme": ["@opencode-ai/theme@workspace:packages/theme"],
 
     "@opencode-ai/tui": ["@opencode-ai/tui@workspace:packages/tui"],
 

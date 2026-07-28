@@ -1,8 +1,8 @@
 import { RGBA } from "@opentui/core"
 import { Schema } from "effect"
-import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults"
-import { expandTheme, expandTokens, mergeTheme } from "./expand"
-import { fallback } from "./fallback"
+import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
+import { expandTheme, expandTokens, mergeTheme } from "./expand.js"
+import { fallback } from "./fallback.js"
 import {
   ActionState,
   ActionVariant,
@@ -12,7 +12,7 @@ import {
   HueStep,
   ThemeDefinition,
   ThemeDocument,
-} from "./schema"
+} from "./schema.js"
 import type {
   ActionStateKey,
   HueDefinition,
@@ -22,8 +22,8 @@ import type {
   ResolvedThemeView,
   StatefulColorDefinition,
   ThemeTokensDefinition,
-} from "./index"
-import { selectTheme, selectThemeMode } from "./select"
+} from "./index.js"
+import { selectTheme, selectThemeMode } from "./select.js"
 
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition)
 

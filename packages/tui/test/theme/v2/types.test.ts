@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { BackgroundDefinition, TextDefinition, ThemeDefinition, ThemeDocument } from "../../../src/theme/v2"
+import type { BackgroundDefinition, TextDefinition, ThemeDefinition, ThemeDocument } from "@opencode-ai/theme/tui"
 
 const text = {
   default: "$hue.neutral.900",

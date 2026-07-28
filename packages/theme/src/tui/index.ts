@@ -29,7 +29,7 @@ export {
   type ContextKey,
   type TextDefinition,
   type ThemeTokensDefinition,
-} from "./schema"
+} from "./schema.js"
 
 export type {
   Categorical,
@@ -42,7 +42,9 @@ export type {
   ResolvedTheme,
   ResolvedThemeView,
   StatefulColor,
-} from "./types"
-export { DEFAULT_CATEGORICAL } from "./defaults"
-export { migrateV1 } from "./v1-migrate"
-export { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "./select"
+} from "./types.js"
+export { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
+export { migrateV1 } from "./v1-migrate.js"
+export { resolveTheme, resolveThemeDocument, themeDecodeError } from "./resolve.js"
+export { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "./select.js"
+export { generateSyntax } from "./syntax.js"

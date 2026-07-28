@@ -1,9 +1,13 @@
 import { expect, test } from "bun:test"
+import {
+  DEFAULT_CATEGORICAL,
+  DEFAULT_THEME,
+  migrateV1,
+  resolveThemeDocument,
+  selectThemeMode,
+  themeModes,
+} from "@opencode-ai/theme/tui"
 import { DEFAULT_THEMES, resolveTheme as resolveV1 } from "../../../src/theme"
-import { resolveThemeDocument } from "../../../src/theme/v2/resolve"
-import { selectThemeMode, themeModes } from "../../../src/theme/v2/select"
-import { migrateV1 } from "../../../src/theme/v2/v1-migrate"
-import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "../../../src/theme/v2/defaults"
 
 test("migrates resolved V1 modes into V2 tokens", () => {
   const migrated = migrateV1(DEFAULT_THEMES.opencode)

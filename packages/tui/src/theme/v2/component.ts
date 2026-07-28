@@ -1,6 +1,6 @@
 import type { RGBA } from "@opentui/core"
 import type { Accessor } from "solid-js"
-import type { Mode, ResolvedThemeView } from "./index"
+import type { Mode, ResolvedThemeView } from "@opencode-ai/theme/tui"
 
 export function createComponentTheme(current: Accessor<ResolvedThemeView>, mode: Accessor<Mode>) {
   return {

@@ -1,4 +1,4 @@
-import type { HueName, ThemeDocument } from "./schema"
+import type { HueName, ThemeDocument } from "./schema.js"
 
 export const DEFAULT_CATEGORICAL = [
   "blue",

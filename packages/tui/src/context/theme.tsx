@@ -1,5 +1,6 @@
 import { CliRenderEvents, SyntaxStyle, type TerminalColors } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
+import { generateSyntax, resolveThemeDocument, themeModes } from "@opencode-ai/theme/tui"
 import {
   DEFAULT_THEMES,
   addTheme,
@@ -14,12 +15,9 @@ import {
   type Theme,
   type ThemeDocumentSource,
 } from "../theme"
-import { generateSyntax } from "../theme/v2/syntax"
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes, themeDirectories } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
-import { resolveThemeDocument } from "../theme/v2/resolve"
-import { themeModes } from "../theme/v2/select"
 import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"

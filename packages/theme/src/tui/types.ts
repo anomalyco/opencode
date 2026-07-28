@@ -9,7 +9,7 @@ import type {
   MarkdownToken,
   ContextKey,
   SyntaxToken,
-} from "./schema"
+} from "./schema.js"
 
 export type ResolvedActionState = "default" | ActionState
 export type ResolvedFormfieldState = ResolvedActionState

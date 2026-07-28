@@ -83,6 +83,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/simulation": "workspace:*",
+    "@opencode-ai/theme": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@opentui/core": "catalog:",

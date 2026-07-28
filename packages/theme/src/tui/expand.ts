@@ -4,8 +4,8 @@ import type {
   StatefulColorDefinition,
   TextDefinition,
   ThemeTokensDefinition,
-} from "./index"
-import { ActionState } from "./schema"
+} from "./index.js"
+import { ActionState } from "./schema.js"
 
 export function expandTheme<Definition extends ModeDefinition>(definition: Definition): Definition {
   return {

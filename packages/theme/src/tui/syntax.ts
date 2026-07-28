@@ -1,5 +1,5 @@
 import { SyntaxStyle, type RGBA, type ThemeTokenStyle } from "@opentui/core"
-import type { Mode, ResolvedThemeView } from "./index"
+import type { Mode, ResolvedThemeView } from "./index.js"
 
 export function generateSyntax(theme: ResolvedThemeView, mode: Mode) {
   const step = mode === "light" ? 800 : 200

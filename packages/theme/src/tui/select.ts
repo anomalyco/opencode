@@ -1,4 +1,4 @@
-import { expandTheme, mergeTheme } from "./expand"
+import { expandTheme, mergeTheme } from "./expand.js"
 import type {
   FileThemeDefinition,
   MergeModeDefinition,
@@ -6,7 +6,7 @@ import type {
   ModeDefinition,
   ThemeDefinition,
   ThemeDocument,
-} from "./index"
+} from "./index.js"
 
 export function selectTheme(
   document: ThemeDocument & { light: ThemeDefinition; dark: ThemeDefinition },

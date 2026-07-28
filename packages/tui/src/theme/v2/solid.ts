@@ -1,6 +1,6 @@
 import { createComponent, createContext, useContext, type Accessor, type ParentProps } from "solid-js"
 import { createComponentTheme, type ComponentTheme } from "./component"
-import type { ContextKey, Mode, ResolvedTheme } from "./index"
+import type { ContextKey, Mode, ResolvedTheme } from "@opencode-ai/theme/tui"
 
 type ThemeRuntime = {
   readonly resolved: Accessor<ResolvedTheme>

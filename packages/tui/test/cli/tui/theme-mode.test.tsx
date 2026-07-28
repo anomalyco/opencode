@@ -2,10 +2,9 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
+import { DEFAULT_THEME, selectTheme } from "@opencode-ai/theme/tui"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
-import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
-import { selectTheme } from "../../../src/theme/v2/select"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider, useTheme, type ThemeError } from "../../../src/context/theme"
 
