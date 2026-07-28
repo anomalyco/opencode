@@ -49,7 +49,7 @@ export function openSessionTab(current: SessionTabState, tab: string): SessionTa
     }
   }
 
-  if (tab === "context") {
+  if (tab === "context" || tab === "agents") {
     return {
       tabs: { all: [tab, ...current.tabs.all.filter((item) => item !== tab)], active: tab },
       preview,
