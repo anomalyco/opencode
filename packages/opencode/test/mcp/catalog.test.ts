@@ -28,7 +28,10 @@ describe("McpCatalog.convertTool", () => {
   test("preserves content when structuredContent is also present", async () => {
     const content = [{ type: "image" as const, mimeType: "image/png", data: "AAAA" }]
     const structuredContent = { image: { mimeType: "image/png", data: "AAAA" } }
-    const converted = McpCatalog.convertTool(mcpTool(), clientReturning({ content, structuredContent }))
+    const converted = McpCatalog.convertTool({
+      def: mcpTool(),
+      client: clientReturning({ content, structuredContent }),
+    })
 
     const output = await converted.execute?.({}, options)
 
@@ -37,7 +40,10 @@ describe("McpCatalog.convertTool", () => {
 
   test("falls back to structuredContent only when content is absent", async () => {
     const structuredContent = { results: [{ title: "one" }] }
-    const converted = McpCatalog.convertTool(mcpTool(), clientReturning({ content: [], structuredContent }))
+    const converted = McpCatalog.convertTool({
+      def: mcpTool(),
+      client: clientReturning({ content: [], structuredContent }),
+    })
 
     const output = await converted.execute?.({}, options)
 
@@ -45,6 +51,40 @@ describe("McpCatalog.convertTool", () => {
       structuredContent,
       content: [{ type: "text", text: JSON.stringify(structuredContent) }],
     })
+  })
+})
+
+describe("McpCatalog.callTool", () => {
+  test("forwards the request options", async () => {
+    const controller = new AbortController()
+    let request: unknown
+    let options: unknown
+    const client = {
+      callTool: async (input: unknown, config: unknown) => {
+        request = input
+        options = config
+        return { content: [] }
+      },
+    } as unknown as Client
+
+    await McpCatalog.callTool({ def: mcpTool(), client, timeout: 123 }, { value: true }, controller.signal)
+
+    expect(request).toEqual({ name: "screenshot", arguments: { value: true } })
+    expect(options).toMatchObject({ resetTimeoutOnProgress: true, signal: controller.signal, timeout: 123 })
+    expect(typeof (options as { onprogress?: unknown }).onprogress).toBe("function")
+  })
+
+  test("throws text returned by an MCP tool error", async () => {
+    const client = clientReturning({
+      isError: true,
+      content: [
+        { type: "image", data: "AAAA", mimeType: "image/png" },
+        { type: "text", text: "first" },
+        { type: "text", text: "second" },
+      ],
+    })
+
+    await expect(McpCatalog.callTool({ def: mcpTool(), client }, {})).rejects.toThrow("first\n\nsecond")
   })
 })
 

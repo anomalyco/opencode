@@ -1,44 +1,57 @@
-import { Client, type Tool as MCPToolDef } from "@modelcontextprotocol/client"
+import { Client, type CallToolResult, type Tool as MCPToolDef } from "@modelcontextprotocol/client"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
 import { Effect } from "effect"
 
 const DEFAULT_TIMEOUT = 30_000
+
+export interface McpTool {
+  readonly def: MCPToolDef
+  readonly client: Client
+  readonly timeout?: number
+}
+
+export async function callTool(
+  tool: McpTool,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<CallToolResult> {
+  const result = await tool.client.callTool(
+    { name: tool.def.name, arguments: args },
+    {
+      resetTimeoutOnProgress: true,
+      signal,
+      timeout: tool.timeout,
+      // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
+      onprogress: () => {},
+    },
+  )
+  if (result.isError)
+    throw new Error(
+      result.content
+        .flatMap((item) => (item.type === "text" ? [item.text] : []))
+        .filter((text) => text.trim())
+        .join("\n\n") || "MCP tool returned an error",
+    )
+  return result
+}
+
 export function defs(client: Client, timeout?: number) {
   return listTools(client, timeout ?? DEFAULT_TIMEOUT).pipe(Effect.catch(() => Effect.void))
 }
 
-export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: number): Tool {
+export function convertTool(tool: McpTool): Tool {
   const inputSchema: JSONSchema7 = {
-    ...(mcpTool.inputSchema as JSONSchema7),
+    ...(tool.def.inputSchema as JSONSchema7),
     type: "object",
-    properties: (mcpTool.inputSchema.properties ?? {}) as JSONSchema7["properties"],
+    properties: (tool.def.inputSchema.properties ?? {}) as JSONSchema7["properties"],
     additionalProperties: false,
   }
 
   return dynamicTool({
-    description: mcpTool.description ?? "",
+    description: tool.def.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
-      const result = await client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        {
-          resetTimeoutOnProgress: true,
-          signal: options.abortSignal,
-          timeout,
-          // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
-          onprogress: () => {},
-        },
-      )
-      if (result.isError)
-        throw new Error(
-          result.content
-            .flatMap((item) => (item.type === "text" ? [item.text] : []))
-            .filter((text) => text.trim())
-            .join("\n\n") || "MCP tool returned an error",
-        )
+      const result = await callTool(tool, (args || {}) as Record<string, unknown>, options.abortSignal)
       if (result.content.length > 0 || result.structuredContent === undefined || result.structuredContent === null)
         return result
       return {
