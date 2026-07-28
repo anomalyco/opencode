@@ -201,9 +201,11 @@ export const Plugin = {
                 const settleShell = Effect.fn("ShellTool.settleShell")(function* () {
                   const final = yield* shell.wait(info.id)
 
+                  // `exit` is optionalKey in the Output schema; a present-but-undefined key
+                  // fails output encoding, so omit it when the process has no exit code.
                   if (final.status === "timeout") {
                     return {
-                      exit: final.exit,
+                      ...(final.exit !== undefined ? { exit: final.exit } : {}),
                       output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
                       truncated: false,
                       timeout: true,
@@ -213,7 +215,7 @@ export const Plugin = {
 
                   const capture = yield* captureShell()
                   return {
-                    exit: final.exit,
+                    ...(final.exit !== undefined ? { exit: final.exit } : {}),
                     output: capture.output,
                     truncated: capture.truncated,
                     status: "completed" as const,
