@@ -5,6 +5,7 @@ import { rm } from "fs/promises"
 import path from "path"
 import { Script } from "@opencode-ai/script"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import type { BunPlugin } from "bun"
 import pkg from "../package.json"
 import { modelsData } from "./generate"
 
@@ -22,7 +23,7 @@ await rm(outdir, { recursive: true, force: true })
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
-const plugin = createSolidTransformPlugin()
+const solidPlugin = createSolidTransformPlugin()
 
 const allTargets: {
   os: string
@@ -55,6 +56,16 @@ const targets = singleFlag
 if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
 
 for (const item of targets) {
+  const parcelWatcherPackage = `@parcel/watcher-${item.os}-${item.arch}${item.os === "linux" ? `-${item.abi ?? "glibc"}` : ""}`
+  const parcelWatcherPlugin: BunPlugin = {
+    name: "parcel-watcher-binding",
+    setup(build) {
+      build.onLoad({ filter: /filesystem\/watcher-binding\.ts$/ }, () => ({
+        contents: `import binding from ${JSON.stringify(parcelWatcherPackage)}; export default () => binding`,
+        loader: "js",
+      }))
+    },
+  }
   const target = [
     binary,
     item.os === "win32" ? "windows" : item.os,
@@ -69,7 +80,7 @@ for (const item of targets) {
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: [solidPlugin, parcelWatcherPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
