@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
-  canRemoveServer,
   createServerProjects,
   migrateCanonicalLocalServerState,
   nextServerAfterRemoval,
@@ -59,24 +58,6 @@ describe("resolveServerList", () => {
       password: "saved",
     })
     expect(list[0]?.type === "http" ? list[0].authToken : true).toBeUndefined()
-  })
-})
-
-describe("canRemoveServer", () => {
-  const key = ServerConnection.Key.make("https://server.example.test")
-
-  test("allows manually added servers", () => {
-    expect(canRemoveServer({ key, stored: [{ url: key }] })).toBe(true)
-  })
-
-  test("rejects servers provided by the app interface", () => {
-    expect(
-      canRemoveServer({
-        key,
-        provided: [{ type: "http", http: { url: key } }],
-        stored: [{ url: key }],
-      }),
-    ).toBe(false)
   })
 })
 

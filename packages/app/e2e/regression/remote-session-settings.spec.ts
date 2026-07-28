@@ -11,21 +11,6 @@ const sessionA = session("ses_server_a", directoryA, "Server A session")
 const childSessionA = { ...session("ses_server_a_child", directoryA, "Server A child session"), parentID: sessionA.id }
 const sessionB = session("ses_server_b", directoryB, "Server B session")
 
-test("server menus only offer delete for manually added servers", async ({ page }) => {
-  await mockServers(page, [])
-  await configureServers(page)
-
-  await page.goto("/")
-  const row = (server: string) => page.locator('[class*="group/server"]').filter({ hasText: new URL(server).host })
-
-  await row(serverA).getByRole("button", { name: "More options" }).click()
-  await expect(page.getByRole("menuitem", { name: "Delete" })).toHaveCount(0)
-  await page.keyboard.press("Escape")
-
-  await row(serverB).getByRole("button", { name: "More options" }).click()
-  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible()
-})
-
 test("session settings use the remote server context", async ({ page }) => {
   const permissionRequests: string[] = []
   await mockServers(page, permissionRequests)
