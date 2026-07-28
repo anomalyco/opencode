@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "so
 import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
+import { useRoute } from "../context/route"
 import { useTheme } from "../context/theme"
 import { adaptiveSessionTabLayout, SESSION_TAB_OVERFLOW_WIDTH } from "../context/session-tabs-model"
 import { TabPulse } from "./tab-pulse"
@@ -9,6 +10,9 @@ import { drawTabShadow } from "./tab-shadow"
 import { tint } from "../theme/color"
 
 const ADAPTIVE_SPRING = { visualDuration: 0.1, bounce: 0 } as const
+const NEW_SESSION_TAB_ID = "$new"
+const NEW_SESSION_BUTTON_ID = "$new-button"
+const NEW_SESSION_BUTTON_WIDTH = 7
 const spring = (value: number, velocity: number, target: number, frequency: number, delta: number) => {
   const offset = value - target
   const decay = Math.exp(-frequency * delta)
@@ -29,6 +33,7 @@ const initialState = (width: number, selection: number, activity: number) => ({
 
 export function SessionTabs() {
   const tabs = useSessionTabs()
+  const route = useRoute()
   const dimensions = useTerminalDimensions()
   const { themeV2, mode } = useTheme()
   const config = useConfig().data
@@ -37,9 +42,23 @@ export function SessionTabs() {
   const accent = () => themeV2.hue.accent[hueStep()]
   const activeNumber = () => tint(themeV2.hue.interactive[hueStep()], themeV2.background.default, 0.25)
   const idleNumber = () => tint(themeV2.text.subdued, themeV2.background.default, 0.35)
+  const activeID = () => (route.data.type === "home" ? NEW_SESSION_TAB_ID : tabs.current())
+  const items = createMemo(() =>
+    route.data.type === "home"
+      ? [...tabs.tabs(), { sessionID: NEW_SESSION_TAB_ID, title: "New session" }]
+      : tabs.tabs(),
+  )
+  const isNew = (sessionID: string) => sessionID === NEW_SESSION_TAB_ID
+  const unread = (sessionID: string) => (isNew(sessionID) ? undefined : tabs.unread(sessionID))
+  const newButtonWidth = () => (route.data.type === "home" ? 0 : NEW_SESSION_BUTTON_WIDTH)
   let windowStart = 0
   const layout = createMemo(() => {
-    const next = adaptiveSessionTabLayout(tabs.tabs(), tabs.current(), dimensions().width, windowStart)
+    const next = adaptiveSessionTabLayout(
+      items(),
+      activeID(),
+      Math.max(1, dimensions().width - newButtonWidth()),
+      windowStart,
+    )
     windowStart = next.start
     return next
   })
@@ -57,8 +76,8 @@ export function SessionTabs() {
     signature = nextSignature
     total = layout().total
     for (const [sessionID, width] of next) {
-      const selection = Number(sessionID === tabs.current())
-      const activity = Number(tabs.unread(sessionID) === "activity")
+      const selection = Number(sessionID === activeID())
+      const activity = Number(unread(sessionID) === "activity")
       if (reset) state.set(sessionID, initialState(width, selection, activity))
       if (!state.has(sessionID)) state.set(sessionID, initialState(width, selection, activity))
     }
@@ -88,8 +107,8 @@ export function SessionTabs() {
     let moving = false
 
     for (const [sessionID, target] of targets()) {
-      const selectionTarget = Number(sessionID === tabs.current())
-      const activityTarget = Number(tabs.unread(sessionID) === "activity")
+      const selectionTarget = Number(sessionID === activeID())
+      const activityTarget = Number(unread(sessionID) === "activity")
       const current = state.get(sessionID) ?? initialState(target, selectionTarget, activityTarget)
       const width = spring(current.width, current.velocity, target, frequency, delta)
       current.width = width.value
@@ -119,15 +138,15 @@ export function SessionTabs() {
     const widths = layout().tabs.map((tab) =>
       Math.max(1, Math.round(state.get(tab.sessionID)?.width ?? targets().get(tab.sessionID)!)),
     )
-    const active = layout().tabs.findIndex((tab) => tab.sessionID === tabs.current())
+    const active = layout().tabs.findIndex((tab) => tab.sessionID === activeID())
     if (active !== -1) widths[active]! += layout().total - widths.reduce((sum, width) => sum + width, 0)
     return new Map(
       layout().tabs.map((tab, index) => [
         tab.sessionID,
         {
           width: widths[index]!,
-          selection: state.get(tab.sessionID)?.selection ?? Number(tab.sessionID === tabs.current()),
-          activity: state.get(tab.sessionID)?.activity ?? Number(tabs.unread(tab.sessionID) === "activity"),
+          selection: state.get(tab.sessionID)?.selection ?? Number(tab.sessionID === activeID()),
+          activity: state.get(tab.sessionID)?.activity ?? Number(unread(tab.sessionID) === "activity"),
         },
       ]),
     )
@@ -158,11 +177,11 @@ export function SessionTabs() {
       </Show>
       <For each={layout().tabs}>
         {(tab) => {
-          const selected = () => tabs.current() === tab.sessionID
-          const unread = () => tabs.unread(tab.sessionID)
+          const selected = () => activeID() === tab.sessionID
+          const tabUnread = () => unread(tab.sessionID)
           const width = () => visuals().get(tab.sessionID)?.width ?? targets().get(tab.sessionID)!
           const selection = () => visuals().get(tab.sessionID)?.selection ?? Number(selected())
-          const activity = () => visuals().get(tab.sessionID)?.activity ?? Number(unread() === "activity")
+          const activity = () => visuals().get(tab.sessionID)?.activity ?? Number(tabUnread() === "activity")
           const background = () => {
             const base =
               hovered() === tab.sessionID && !selected()
@@ -181,8 +200,8 @@ export function SessionTabs() {
             return tint(themeV2.text.subdued, themeV2.text.default, selection())
           }
           const numberColor = () => {
-            if (tabs.attention(tab.sessionID)) return themeV2.text.feedback.warning.default
-            if (unread() === "error") return themeV2.text.feedback.error.default
+            if (!isNew(tab.sessionID) && tabs.attention(tab.sessionID)) return themeV2.text.feedback.warning.default
+            if (tabUnread() === "error") return themeV2.text.feedback.error.default
             const base =
               hovered() === tab.sessionID && !selected()
                 ? foreground()
@@ -197,12 +216,15 @@ export function SessionTabs() {
               backgroundColor={background()}
               onMouseOver={() => setHovered(tab.sessionID)}
               onMouseOut={() => setHovered(undefined)}
-              onMouseUp={() => tabs.select(tab.sessionID)}
+              onMouseUp={() => {
+                if (isNew(tab.sessionID)) return route.navigate({ type: "home" })
+                tabs.select(tab.sessionID)
+              }}
             >
               <TabPulse
                 enabled={config.animations ?? true}
-                active={tabs.running(tab.sessionID)}
-                complete={unread() === "activity"}
+                active={!isNew(tab.sessionID) && tabs.running(tab.sessionID)}
+                complete={tabUnread() === "activity"}
                 color={pulseColor()}
                 completionColor={accent()}
                 backgroundColor={pulseBackground()}
@@ -210,7 +232,7 @@ export function SessionTabs() {
               <box zIndex={1} width="100%" flexDirection="row">
                 <text width={1}> </text>
                 <text width={2} fg={numberColor()}>
-                  {tabs.tabs().findIndex((item) => item.sessionID === tab.sessionID) + 1}
+                  {items().findIndex((item) => item.sessionID === tab.sessionID) + 1}
                 </text>
                 <Show
                   when={titleFades()}
@@ -242,10 +264,12 @@ export function SessionTabs() {
                   fg={foreground()}
                   onMouseUp={(event) => {
                     event.stopPropagation()
-                    tabs.close(tab.sessionID)
+                    if (!isNew(tab.sessionID)) return tabs.close(tab.sessionID)
+                    const previous = tabs.tabs().at(-1)
+                    if (previous) tabs.select(previous.sessionID)
                   }}
                 >
-                  {hovered() === tab.sessionID ? "×" : ""}
+                  {hovered() === tab.sessionID && (!isNew(tab.sessionID) || tabs.tabs().length > 0) ? "×" : ""}
                 </text>
               </box>
             </box>
@@ -256,6 +280,19 @@ export function SessionTabs() {
         <text width={SESSION_TAB_OVERFLOW_WIDTH} fg={themeV2.text.subdued}>
           {layout().after}›
         </text>
+      </Show>
+      <Show when={route.data.type !== "home"}>
+        <box
+          width={NEW_SESSION_BUTTON_WIDTH}
+          backgroundColor={
+            hovered() === NEW_SESSION_BUTTON_ID ? themeV2.background.action.primary.hovered : themeV2.background.default
+          }
+          onMouseOver={() => setHovered(NEW_SESSION_BUTTON_ID)}
+          onMouseOut={() => setHovered(undefined)}
+          onMouseUp={() => route.navigate({ type: "home" })}
+        >
+          <text fg={hovered() === NEW_SESSION_BUTTON_ID ? themeV2.text.default : themeV2.text.subdued}> + New</text>
+        </box>
       </Show>
     </box>
   )
