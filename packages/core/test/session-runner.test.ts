@@ -13,6 +13,7 @@ import {
   RateLimitReason,
 } from "@opencode-ai/ai"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
+import { TestLLM } from "@opencode-ai/ai/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -72,27 +73,62 @@ import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, S
 import { TestClock } from "effect/testing"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
-import { TestLLM } from "./lib/llm"
 import { agentHost, catalogHost, host } from "./plugin/host"
 import PROMPT_DEFAULT from "../src/session/runner/prompt/base.txt"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
 let requests: LLMRequest[] = []
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
-let toolExecutionGate: Deferred.Deferred<void> | undefined
-let toolExecutionsStarted: Deferred.Deferred<void> | undefined
-let toolExecutionsReady = 5
-let activeToolExecutions = 0
-let maxActiveToolExecutions = 0
-const testLLM = TestLLM.layer((request) =>
-  LLMRequest.update(request, {
-    system: request.system.map((part) => ({
-      ...part,
-      text: part.text.replace(emptyCodeMode, ""),
+type ToolBarrier = {
+  readonly count: number
+  readonly started: Deferred.Deferred<void>
+  readonly release: Deferred.Deferred<void>
+  active: number
+  maxActive: number
+}
+let toolBarrier: ToolBarrier | undefined
+const releaseTools = (barrier: ToolBarrier) =>
+  Effect.sync(() => {
+    if (toolBarrier === barrier) toolBarrier = undefined
+  }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
+const blockTools = (count = 1) =>
+  Effect.acquireRelease(
+    Effect.all({ started: Deferred.make<void>(), release: Deferred.make<void>() }).pipe(
+      Effect.map((deferreds) => {
+        const barrier = { count, ...deferreds, active: 0, maxActive: 0 }
+        toolBarrier = barrier
+        return barrier
+      }),
+    ),
+    releaseTools,
+  ).pipe(
+    Effect.map((barrier) => ({
+      started: Deferred.await(barrier.started),
+      release: releaseTools(barrier),
+      maxActive: Effect.sync(() => barrier.maxActive),
     })),
-    tools: request.tools.filter((tool) => tool.name !== "execute"),
-  }),
-)
+  )
+const awaitToolBarrier = Effect.suspend(() => {
+  const barrier = toolBarrier
+  if (!barrier) return Effect.void
+  barrier.active++
+  barrier.maxActive = Math.max(barrier.maxActive, barrier.active)
+  return (barrier.active === barrier.count ? Deferred.succeed(barrier.started, undefined) : Effect.void).pipe(
+    Effect.andThen(Deferred.await(barrier.release)),
+    Effect.ensuring(Effect.sync(() => barrier.active--)),
+  )
+})
+const testLLM = TestLLM.layer({
+  fallback: [],
+  transformRequest: (request) =>
+    LLMRequest.update(request, {
+      system: request.system.map((part) => ({
+        ...part,
+        text: part.text.replace(emptyCodeMode, ""),
+      })),
+      tools: request.tools.filter((tool) => tool.name !== "execute"),
+    }),
+})
 const client = TestLLM.clientLayer
 const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const defaultSystem = PROMPT_DEFAULT
@@ -212,24 +248,16 @@ const echo = Layer.effectDiscard(
             Effect.gen(function* () {
               authorizations.push(context)
               executions.push(text)
-              activeToolExecutions++
-              maxActiveToolExecutions = Math.max(maxActiveToolExecutions, activeToolExecutions)
-              if (activeToolExecutions === toolExecutionsReady && toolExecutionsStarted) {
-                yield* Deferred.succeed(toolExecutionsStarted, undefined)
-              }
-              if (toolExecutionGate) yield* Deferred.await(toolExecutionGate)
+              yield* awaitToolBarrier
               return { output: { text }, content: text }
-            }).pipe(Effect.ensuring(Effect.sync(() => activeToolExecutions--))),
+            }),
         },
         defect: {
           name: "defect",
           description: "Fail unexpectedly",
           input: Schema.Struct({}),
           output: Schema.Struct({}),
-          execute: () =>
-            (toolExecutionGate ? Deferred.await(toolExecutionGate) : Effect.void).pipe(
-              Effect.andThen(Effect.die("unexpected tool defect")),
-            ),
+          execute: () => awaitToolBarrier.pipe(Effect.andThen(Effect.die("unexpected tool defect"))),
         },
         storefail: {
           name: "storefail",
@@ -464,11 +492,7 @@ const setup = Effect.gen(function* () {
   pluginFlushHook = Effect.void
   currentModel = model
   skillBaselines.clear()
-  toolExecutionGate = undefined
-  toolExecutionsStarted = undefined
-  toolExecutionsReady = 5
-  activeToolExecutions = 0
-  maxActiveToolExecutions = 0
+  toolBarrier = undefined
   yield* agents.transform((draft) =>
     draft.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
@@ -520,6 +544,7 @@ const messageTexts = (request: LLMRequest, role: "user" | "system") =>
   )
 const userTexts = (request: LLMRequest) => messageTexts(request, "user")
 const systemTexts = (request: LLMRequest) => messageTexts(request, "system")
+const messageRoles = (request: LLMRequest | undefined) => request?.messages.map((message) => message.role)
 
 const recordedEventTypes = (id: Session.ID) =>
   Effect.gen(function* () {
@@ -557,6 +582,9 @@ const recordedStepSettlementEvents = (id: Session.ID, assistantMessageID: Sessio
       (event) => settlementTypes.has(event.type) && event.data.assistantMessageID === assistantMessageID,
     )
   })
+
+const recordedStepSettlementTypes = (id: Session.ID, assistantMessageID: SessionMessage.ID) =>
+  recordedStepSettlementEvents(id, assistantMessageID).pipe(Effect.map((events) => events.map((event) => event.type)))
 
 const hostedCall = (id: string, query: string) =>
   LLMEvent.toolCall({ id, name: "web_search", input: { query }, providerExecuted: true })
@@ -708,7 +736,7 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
     const fixture = fragmentFixture(kind, fragmentID(kind, "partial"), ["Partial"])
     const failure = providerUnavailable()
     yield* admit(session, prompt)
-    yield* TestLLM.push(Stream.concat(Stream.fromIterable(fixture.partialEvents), Stream.fail(failure)))
+    yield* TestLLM.push(TestLLM.failAfter(failure, ...fixture.partialEvents))
 
     expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
     expect(yield* session.context(sessionID)).toMatchObject([
@@ -1042,7 +1070,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.wait(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user"])
+      expect(messageRoles(requests[0])).toEqual(["user"])
     }),
   )
 
@@ -1164,7 +1192,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(1)
       expect(requests[0]?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
-      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "user"])
+      expect(messageRoles(requests[0])).toEqual(["user", "user"])
       expect(
         yield* db
           .select({ id: EventTable.id })
@@ -1196,7 +1224,7 @@ describe("SessionRunnerLLM", () => {
         [defaultSystem, "Initial context"],
         [defaultSystem, "Initial context"],
       ])
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
+      expect(messageRoles(requests[1])).toEqual(["user", "system", "user"])
       expect(requests[1]?.messages.at(1)?.content).toEqual([{ type: "text", text: "Changed context" }])
       expect(yield* session.messages({ sessionID })).toHaveLength(2)
       const { db } = yield* Database.Service
@@ -1480,7 +1508,7 @@ describe("SessionRunnerLLM", () => {
       systemRemoved = true
       yield* runPrompt(session, "Second")
 
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
+      expect(messageRoles(requests[1])).toEqual(["user", "system", "user"])
       expect(requests[1]?.messages.at(1)?.content).toEqual([
         { type: "text", text: "System context source removed: test/context" },
       ])
@@ -1505,7 +1533,7 @@ describe("SessionRunnerLLM", () => {
       yield* contextEntries.put({ sessionID, key: "deploy-target", value: { region: "us-east-1" } })
       yield* runPrompt(session, "Second")
 
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
+      expect(messageRoles(requests[1])).toEqual(["user", "system", "user"])
       expect(requests[1]?.messages.at(1)?.content).toEqual([
         {
           type: "text",
@@ -1525,7 +1553,7 @@ describe("SessionRunnerLLM", () => {
       yield* contextEntries.remove({ sessionID, key: "deploy-target" })
       yield* runPrompt(session, "Third")
 
-      expect(requests[2]?.messages.map((message) => message.role)).toEqual(["user", "system", "user", "system", "user"])
+      expect(messageRoles(requests[2])).toEqual(["user", "system", "user", "system", "user"])
       expect(requests[2]?.messages.at(-2)?.content).toEqual([
         { type: "text", text: 'The context under "deploy-target" no longer applies. Disregard it.' },
       ])
@@ -1592,7 +1620,7 @@ describe("SessionRunnerLLM", () => {
         [defaultSystem, "Initial context"],
         [defaultSystem, "Initial context"],
       ])
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
+      expect(messageRoles(requests[1])).toEqual(["user", "system", "user"])
       expect(requests[2]?.messages.filter((message) => message.role === "system")).toHaveLength(2)
       expect((yield* session.context(sessionID)).map((message) => message.type)).toEqual([
         "user",
@@ -1652,7 +1680,7 @@ describe("SessionRunnerLLM", () => {
         [defaultSystem, "Initial context"],
         [defaultSystem, "Initial context"],
       ])
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "system", "user"])
+      expect(messageRoles(requests[1])).toEqual(["user", "system", "user"])
       expect(requests[1]?.messages.at(1)?.content).toEqual([{ type: "text", text: "Replacement context" }])
       yield* replaySessionProjection(sessionID)
       yield* runPrompt(session, "Third")
@@ -2180,50 +2208,49 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* admit(session, "Use tools")
 
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.reasoningStart({ id: "reasoning-1" }),
-        LLMEvent.reasoningDelta({ id: "reasoning-1", text: "Think" }),
-        LLMEvent.reasoningEnd({ id: "reasoning-1" }),
-        LLMEvent.toolInputStart({ id: "call-error", name: "write" }),
-        LLMEvent.toolInputDelta({ id: "call-error", name: "write", text: '{"path":"README.md"}' }),
-        LLMEvent.toolInputEnd({ id: "call-error", name: "write" }),
-        LLMEvent.toolCall({ id: "call-error", name: "write", input: { path: "README.md" }, providerExecuted: true }),
-        LLMEvent.toolError({ id: "call-error", name: "write", message: "Denied" }),
-        LLMEvent.toolResult({ id: "call-error", name: "write", result: { type: "error", value: "Denied" } }),
-        LLMEvent.toolCall({
-          id: "call-provider",
-          name: "web_search",
-          input: { query: "hello" },
-          providerExecuted: true,
-          providerMetadata: { openai: { source: "provider" } },
-        }),
-        LLMEvent.toolResult({
-          id: "call-provider",
-          name: "web_search",
-          result: {
-            type: "content",
-            value: [
-              { type: "text", text: "Hello" },
-              { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" },
-            ],
+      yield* TestLLM.push(
+        TestLLM.complete(
+          {
+            reason: { normalized: "tool-calls" },
+            usage: {
+              inputTokens: 10,
+              nonCachedInputTokens: 8,
+              outputTokens: 4,
+              reasoningTokens: 1,
+              cacheReadInputTokens: 2,
+            },
           },
-          providerExecuted: true,
-          providerMetadata: { openai: { source: "provider" } },
-        }),
-        LLMEvent.stepFinish({
-          index: 0,
-          reason: { normalized: "tool-calls" },
-          usage: {
-            inputTokens: 10,
-            nonCachedInputTokens: 8,
-            outputTokens: 4,
-            reasoningTokens: 1,
-            cacheReadInputTokens: 2,
-          },
-        }),
-        LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
-      ])
+          LLMEvent.reasoningStart({ id: "reasoning-1" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-1", text: "Think" }),
+          LLMEvent.reasoningEnd({ id: "reasoning-1" }),
+          LLMEvent.toolInputStart({ id: "call-error", name: "write" }),
+          LLMEvent.toolInputDelta({ id: "call-error", name: "write", text: '{"path":"README.md"}' }),
+          LLMEvent.toolInputEnd({ id: "call-error", name: "write" }),
+          LLMEvent.toolCall({ id: "call-error", name: "write", input: { path: "README.md" }, providerExecuted: true }),
+          LLMEvent.toolError({ id: "call-error", name: "write", message: "Denied" }),
+          LLMEvent.toolResult({ id: "call-error", name: "write", result: { type: "error", value: "Denied" } }),
+          LLMEvent.toolCall({
+            id: "call-provider",
+            name: "web_search",
+            input: { query: "hello" },
+            providerExecuted: true,
+            providerMetadata: { openai: { source: "provider" } },
+          }),
+          LLMEvent.toolResult({
+            id: "call-provider",
+            name: "web_search",
+            result: {
+              type: "content",
+              value: [
+                { type: "text", text: "Hello" },
+                { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" },
+              ],
+            },
+            providerExecuted: true,
+            providerMetadata: { openai: { source: "provider" } },
+          }),
+        ),
+      )
 
       yield* session.resume(sessionID)
 
@@ -2280,7 +2307,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(2)
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+      expect(messageRoles(requests[1])).toEqual(["user", "assistant", "tool"])
       expect(authorizations).toMatchObject([{ sessionID, callID: "call-echo" }])
       expect(executions).toEqual(["hello"])
       const context = yield* session.context(sessionID)
@@ -2305,7 +2332,7 @@ describe("SessionRunnerLLM", () => {
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Done" }] },
       ])
       const assistant = requireAssistant(context)
-      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
+      expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.success.2",
@@ -2321,17 +2348,15 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Echo this")
 
       yield* TestLLM.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.stop())
-      toolExecutionGate = yield* Deferred.make<void>()
-      toolExecutionsStarted = yield* Deferred.make<void>()
-      toolExecutionsReady = 1
+      const tools = yield* blockTools()
       const run = yield* Effect.forkChild(session.resume(sessionID))
-      yield* Deferred.await(toolExecutionsStarted)
+      yield* tools.started
       yield* bus.publish(SessionEvent.ModelSelected, {
         sessionID,
         model: { id: ID.make("replacement"), providerID: Provider.ID.make("fake") },
       })
       systemBaseline = "Replacement context"
-      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* tools.release
       yield* Fiber.join(run)
 
       expect(requests.map((request) => request.model)).toEqual([model, replacementModel])
@@ -2348,32 +2373,31 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* admit(session, "Think first")
 
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.reasoningStart({ id: "reasoning-anthropic" }),
-        LLMEvent.reasoningDelta({ id: "reasoning-anthropic", text: "Signed thought" }),
-        LLMEvent.reasoningEnd({
-          id: "reasoning-anthropic",
-          providerMetadata: { openai: { signature: "sig_1" }, anthropic: { ignored: true } },
-        }),
-        LLMEvent.reasoningStart({
-          id: "reasoning-openai",
-          providerMetadata: {
-            openai: { itemId: "rs_1", reasoningEncryptedContent: null },
-            anthropic: { ignored: true },
-          },
-        }),
-        LLMEvent.reasoningDelta({ id: "reasoning-openai", text: "Encrypted thought" }),
-        LLMEvent.reasoningEnd({
-          id: "reasoning-openai",
-          providerMetadata: {
-            openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
-            anthropic: { ignored: true },
-          },
-        }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
+      yield* TestLLM.push(
+        TestLLM.stop(
+          LLMEvent.reasoningStart({ id: "reasoning-anthropic" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-anthropic", text: "Signed thought" }),
+          LLMEvent.reasoningEnd({
+            id: "reasoning-anthropic",
+            providerMetadata: { openai: { signature: "sig_1" }, anthropic: { ignored: true } },
+          }),
+          LLMEvent.reasoningStart({
+            id: "reasoning-openai",
+            providerMetadata: {
+              openai: { itemId: "rs_1", reasoningEncryptedContent: null },
+              anthropic: { ignored: true },
+            },
+          }),
+          LLMEvent.reasoningDelta({ id: "reasoning-openai", text: "Encrypted thought" }),
+          LLMEvent.reasoningEnd({
+            id: "reasoning-openai",
+            providerMetadata: {
+              openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+              anthropic: { ignored: true },
+            },
+          }),
+        ),
+      )
       yield* session.resume(sessionID)
       yield* replaySessionProjection(sessionID)
 
@@ -2420,17 +2444,16 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* admit(session, "Check first")
 
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.textStart({ id: "commentary", providerMetadata: { openai: { phase: "commentary" } } }),
-        LLMEvent.textDelta({ id: "commentary", text: "Checking." }),
-        LLMEvent.textEnd({
-          id: "commentary",
-          providerMetadata: { openai: { phase: "commentary" }, anthropic: { ignored: true } },
-        }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
+      yield* TestLLM.push(
+        TestLLM.stop(
+          LLMEvent.textStart({ id: "commentary", providerMetadata: { openai: { phase: "commentary" } } }),
+          LLMEvent.textDelta({ id: "commentary", text: "Checking." }),
+          LLMEvent.textEnd({
+            id: "commentary",
+            providerMetadata: { openai: { phase: "commentary" }, anthropic: { ignored: true } },
+          }),
+        ),
+      )
       yield* session.resume(sessionID)
       yield* replaySessionProjection(sessionID)
 
@@ -2461,25 +2484,24 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* admit(session, "Search first")
 
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({
-          id: "hosted-search",
-          name: "web_search",
-          input: { query: "Effect" },
-          providerExecuted: true,
-          providerMetadata: { openai: { itemId: "hosted-search" }, fake: { ignored: true } },
-        }),
-        LLMEvent.toolResult({
-          id: "hosted-search",
-          name: "web_search",
-          result: { type: "json", value: [{ title: "Effect" }] },
-          providerExecuted: true,
-          providerMetadata: { openai: { blockType: "web_search_tool_result" }, anthropic: { ignored: true } },
-        }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
+      yield* TestLLM.push(
+        TestLLM.stop(
+          LLMEvent.toolCall({
+            id: "hosted-search",
+            name: "web_search",
+            input: { query: "Effect" },
+            providerExecuted: true,
+            providerMetadata: { openai: { itemId: "hosted-search" }, fake: { ignored: true } },
+          }),
+          LLMEvent.toolResult({
+            id: "hosted-search",
+            name: "web_search",
+            result: { type: "json", value: [{ title: "Effect" }] },
+            providerExecuted: true,
+            providerMetadata: { openai: { blockType: "web_search_tool_result" }, anthropic: { ignored: true } },
+          }),
+        ),
+      )
       yield* session.resume(sessionID)
       yield* replaySessionProjection(sessionID)
 
@@ -2487,7 +2509,7 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push([])
       yield* session.resume(sessionID)
 
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
+      expect(messageRoles(requests[1])).toEqual(["user", "assistant", "user"])
       expect(requests[1]?.messages[1]?.content).toMatchObject([
         {
           type: "tool-call",
@@ -2515,8 +2537,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* admit(session, "Echo five times")
 
-      toolExecutionGate = yield* Deferred.make<void>()
-      toolExecutionsStarted = yield* Deferred.make<void>()
+      const tools = yield* blockTools(5)
       const providerGate = yield* Deferred.make<void>()
       const initial = Stream.fromIterable([
         LLMEvent.stepStart({ index: 0 }),
@@ -2533,10 +2554,10 @@ describe("SessionRunnerLLM", () => {
       )
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(toolExecutionsStarted)
+      yield* tools.started
 
       expect(executions).toHaveLength(5)
-      expect(maxActiveToolExecutions).toBe(5)
+      expect(yield* tools.maxActive).toBe(5)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Echo five times" },
         {
@@ -2553,13 +2574,11 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.yieldNow
       expect(requests).toHaveLength(1)
 
-      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* tools.release
       yield* Fiber.join(run)
-      toolExecutionGate = undefined
-      toolExecutionsStarted = undefined
 
       expect(executions).toHaveLength(5)
-      expect(maxActiveToolExecutions).toBe(5)
+      expect(yield* tools.maxActive).toBe(5)
       expect(requests).toHaveLength(2)
     }),
   )
@@ -2577,9 +2596,7 @@ describe("SessionRunnerLLM", () => {
 
       yield* session.resume(sessionID)
 
-      expect(executions).toEqual(["first", "second"])
-      expect(requests).toHaveLength(3)
-      expect(yield* session.context(sessionID)).toMatchObject([
+      const expected = [
         { type: "user", text: "Echo twice" },
         {
           type: "assistant",
@@ -2601,33 +2618,14 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
-      ])
+      ]
+      expect(executions).toEqual(["first", "second"])
+      expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject(expected)
 
       yield* replaySessionProjection(sessionID)
 
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user", text: "Echo twice" },
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "tool",
-              id: "tool_0",
-              state: { status: "completed", content: [{ type: "text", text: "first" }] },
-            },
-          ],
-        },
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "tool",
-              id: "tool_0",
-              state: { status: "completed", content: [{ type: "text", text: "second" }] },
-            },
-          ],
-        },
-      ])
+      expect(yield* session.context(sessionID)).toMatchObject(expected)
     }),
   )
 
@@ -2943,7 +2941,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+      expect(messageRoles(requests[0])).toEqual(["user", "assistant", "tool"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Recover interrupted tool" },
         {
@@ -3001,7 +2999,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant"])
+      expect(messageRoles(requests[0])).toEqual(["user", "assistant"])
       expect(requests[0]?.messages[1]?.content).toMatchObject([
         {
           type: "tool-call",
@@ -3038,7 +3036,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+      expect(messageRoles(requests[0])).toEqual(["user", "assistant", "tool"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Recover interrupted tool input" },
         { type: "assistant", content: [{ type: "tool", id: "call-pending-interrupted", state: { status: "error" } }] },
@@ -3258,7 +3256,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(2)
-      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+      expect(messageRoles(requests[1])).toEqual(["user", "assistant", "tool"])
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
         { type: "user", text: "Call defect" },
@@ -3278,7 +3276,7 @@ describe("SessionRunnerLLM", () => {
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
       const assistant = requireAssistant(context)
-      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
+      expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.2",
@@ -3495,23 +3493,19 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       yield* admit(session, "Settle before failing")
       const failure = providerUnavailable()
-      toolExecutionGate = yield* Deferred.make<void>()
+      const tools = yield* blockTools()
       yield* TestLLM.push(
-        Stream.concat(
-          Stream.fromIterable([
-            LLMEvent.stepStart({ index: 0 }),
-            LLMEvent.toolCall({ id: "call-before-failure", name: "echo", input: { text: "settle" } }),
-          ]),
-          Stream.fail(failure),
+        TestLLM.failAfter(
+          failure,
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-before-failure", name: "echo", input: { text: "settle" } }),
         ),
       )
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      while (executions.length === 0) yield* Effect.yieldNow
-      yield* Effect.yieldNow
-      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* tools.started
+      yield* tools.release
       expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
-      toolExecutionGate = undefined
 
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
@@ -3528,7 +3522,7 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const assistant = requireAssistant(context)
-      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
+      expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.success.2",
@@ -3541,21 +3535,17 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Interrupt blocked tool")
-      toolExecutionGate = yield* Deferred.make<void>()
+      const tools = yield* blockTools()
       yield* TestLLM.push(
-        Stream.concat(
-          Stream.fromIterable([
-            LLMEvent.stepStart({ index: 0 }),
-            LLMEvent.toolCall({ id: "call-before-interrupt", name: "echo", input: { text: "blocked" } }),
-          ]),
-          Stream.never,
+        TestLLM.hangAfter(
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-before-interrupt", name: "echo", input: { text: "blocked" } }),
         ),
       )
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      while (executions.length === 0) yield* Effect.yieldNow
+      yield* tools.started
       yield* session.interrupt(sessionID)
-      toolExecutionGate = undefined
 
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
       yield* session.interrupt(sessionID)
@@ -3574,7 +3564,7 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const assistant = requireAssistant(context)
-      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
+      expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.2",
@@ -3590,7 +3580,7 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       yield* TestLLM.push([])
       yield* session.resume(sessionID)
-      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+      expect(messageRoles(requests[0])).toEqual(["user", "assistant", "tool"])
     }),
   )
 
@@ -3620,16 +3610,13 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Interrupt tool settlement")
-      toolExecutionGate = yield* Deferred.make<void>()
-      toolExecutionsStarted = yield* Deferred.make<void>()
-      toolExecutionsReady = 1
+      const tools = yield* blockTools()
       yield* TestLLM.push(TestLLM.tool("call-await-interrupt", "echo", { text: "blocked" }))
 
       const runner = yield* SessionRunner.Service
       const run = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
-      yield* Deferred.await(toolExecutionsStarted)
+      yield* tools.started
       yield* Fiber.interrupt(run)
-      toolExecutionGate = undefined
 
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
       expect(yield* session.context(sessionID)).toMatchObject([
@@ -3757,17 +3744,16 @@ describe("SessionRunnerLLM", () => {
   it.effect("projects content-filter finishes as visible terminal failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.textStart({ id: "partial" }),
-        LLMEvent.textDelta({ id: "partial", text: "Partial" }),
-        LLMEvent.stepFinish({
-          index: 0,
-          reason: { normalized: "content-filter" },
-          usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
-        }),
-        LLMEvent.finish({ reason: { normalized: "content-filter" } }),
-      ])
+      yield* TestLLM.push(
+        TestLLM.complete(
+          {
+            reason: { normalized: "content-filter" },
+            usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
+          },
+          LLMEvent.textStart({ id: "partial" }),
+          LLMEvent.textDelta({ id: "partial", text: "Partial" }),
+        ),
+      )
 
       expect((yield* runPrompt(session, "Blocked response").pipe(Effect.flip)).message).toBe(
         "Provider blocked the response",
@@ -3795,22 +3781,18 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Tool before blocked response")
-      toolExecutionGate = yield* Deferred.make<void>()
-      toolExecutionsStarted = yield* Deferred.make<void>()
-      toolExecutionsReady = 1
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({ id: "call-before-content-filter", name: "echo", input: { text: "settled" } }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "content-filter" } }),
-        LLMEvent.finish({ reason: { normalized: "content-filter" } }),
-      ])
+      const tools = yield* blockTools()
+      yield* TestLLM.push(
+        TestLLM.complete(
+          { reason: { normalized: "content-filter" } },
+          LLMEvent.toolCall({ id: "call-before-content-filter", name: "echo", input: { text: "settled" } }),
+        ),
+      )
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(toolExecutionsStarted)
-      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* tools.started
+      yield* tools.release
       expect((yield* Fiber.join(run).pipe(Effect.flip)).message).toBe("Provider blocked the response")
-      toolExecutionGate = undefined
-      toolExecutionsStarted = undefined
 
       const assistant = requireAssistant(yield* session.context(sessionID))
       const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
@@ -3915,11 +3897,12 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setup
       const failure = rateLimited()
       yield* TestLLM.push(
-        Stream.fromIterable([
+        TestLLM.failAfter(
+          failure,
           LLMEvent.stepStart({ index: 0 }),
           LLMEvent.textStart({ id: "partial-rate-limit" }),
           LLMEvent.textDelta({ id: "partial-rate-limit", text: "Partial" }),
-        ]).pipe(Stream.concat(Stream.fail(failure))),
+        ),
       )
 
       expect(yield* runPrompt(session, "Do not replay partial output").pipe(Effect.flip)).toBe(failure)
@@ -4044,11 +4027,12 @@ describe("SessionRunnerLLM", () => {
         reason: new InvalidProviderOutputReason({ message: "Invalid JSON input for tool call echo" }),
       })
       yield* TestLLM.push(
-        Stream.fromIterable([
+        TestLLM.failAfter(
+          failure,
           LLMEvent.stepStart({ index: 0 }),
           LLMEvent.toolInputStart({ id: "call-malformed", name: "echo" }),
           LLMEvent.toolInputDelta({ id: "call-malformed", name: "echo", text: '{"text":"partial' }),
-        ]).pipe(Stream.concat(Stream.fail(failure))),
+        ),
       )
 
       expect(yield* runPrompt(session, "Call a malformed tool").pipe(Effect.flip)).toBe(failure)
@@ -4080,8 +4064,7 @@ describe("SessionRunnerLLM", () => {
       const marker = "raw-malformed-marker"
       const raw = `{"text":"${marker}`
       yield* TestLLM.push(
-        [
-          LLMEvent.stepStart({ index: 0 }),
+        TestLLM.toolCalls(
           LLMEvent.toolInputStart({ id: "call-malformed", name: "echo" }),
           LLMEvent.toolInputDelta({ id: "call-malformed", name: "echo", text: raw }),
           LLMEvent.toolInputEnd({ id: "call-malformed", name: "echo" }),
@@ -4090,9 +4073,7 @@ describe("SessionRunnerLLM", () => {
             name: "echo",
             raw,
           }),
-          LLMEvent.stepFinish({ index: 0, reason: { normalized: "tool-calls" } }),
-          LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
-        ],
+        ),
         TestLLM.stop(),
       )
 
@@ -4152,7 +4133,7 @@ describe("SessionRunnerLLM", () => {
       })
       if (!failed) throw new Error("Malformed tool assistant missing")
       expect(failed.error).toBeUndefined()
-      expect((yield* recordedStepSettlementEvents(sessionID, failed.id)).map((event) => event.type)).toEqual([
+      expect(yield* recordedStepSettlementTypes(sessionID, failed.id)).toEqual([
         "session.step.started.1",
         "session.tool.failed.2",
         "session.step.ended.1",
@@ -4175,31 +4156,24 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Run parallel tools")
-      toolExecutionGate = yield* Deferred.make<void>()
-      toolExecutionsStarted = yield* Deferred.make<void>()
-      toolExecutionsReady = 1
+      const tools = yield* blockTools()
       yield* TestLLM.push(
-        [
-          LLMEvent.stepStart({ index: 0 }),
+        TestLLM.toolCalls(
           LLMEvent.toolCall({ id: "call-valid", name: "echo", input: { text: "valid" } }),
           LLMEvent.toolInputError({
             id: "call-malformed",
             name: "echo",
             raw: '{"text":"partial',
           }),
-          LLMEvent.stepFinish({ index: 0, reason: { normalized: "tool-calls" } }),
-          LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
-        ],
+        ),
         TestLLM.stop(),
       )
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(toolExecutionsStarted)
+      yield* tools.started
       expect(requests).toHaveLength(1)
-      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* tools.release
       yield* Fiber.join(run)
-      toolExecutionGate = undefined
-      toolExecutionsStarted = undefined
 
       expect(requests).toHaveLength(2)
       expect(executions).toEqual(["valid"])
@@ -4218,23 +4192,20 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Interrupt malformed recovery")
-      toolExecutionGate = yield* Deferred.make<void>()
-      toolExecutionsStarted = yield* Deferred.make<void>()
-      toolExecutionsReady = 1
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({ id: "call-valid", name: "echo", input: { text: "blocked" } }),
-        LLMEvent.toolInputError({
-          id: "call-malformed",
-          name: "echo",
-          raw: '{"text":"partial',
-        }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "tool-calls" } }),
-        LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
-      ])
+      const tools = yield* blockTools()
+      yield* TestLLM.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({ id: "call-valid", name: "echo", input: { text: "blocked" } }),
+          LLMEvent.toolInputError({
+            id: "call-malformed",
+            name: "echo",
+            raw: '{"text":"partial',
+          }),
+        ),
+      )
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(toolExecutionsStarted)
+      yield* tools.started
       while (
         !(yield* session.context(sessionID)).some(
           (message) =>
@@ -4244,8 +4215,6 @@ describe("SessionRunnerLLM", () => {
       )
         yield* Effect.yieldNow
       yield* session.interrupt(sessionID)
-      toolExecutionGate = undefined
-      toolExecutionsStarted = undefined
 
       expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
       expect(requests).toHaveLength(1)
@@ -4272,11 +4241,12 @@ describe("SessionRunnerLLM", () => {
         reason: new InvalidProviderOutputReason({ message: "Invalid hosted tool input" }),
       })
       yield* TestLLM.push(
-        Stream.fromIterable([
+        TestLLM.failAfter(
+          failure,
           LLMEvent.stepStart({ index: 0 }),
           LLMEvent.toolInputStart({ id: "call-hosted", name: "web_search", providerExecuted: true }),
           LLMEvent.toolInputDelta({ id: "call-hosted", name: "web_search", text: '{"query":"partial' }),
-        ]).pipe(Stream.concat(Stream.fail(failure))),
+        ),
       )
 
       expect(yield* runPrompt(session, "Fail malformed hosted input").pipe(Effect.flip)).toBe(failure)
@@ -4303,14 +4273,15 @@ describe("SessionRunnerLLM", () => {
         reason: new InvalidProviderOutputReason({ message: "Provider failed after malformed input" }),
       })
       yield* TestLLM.push(
-        Stream.fromIterable([
+        TestLLM.failAfter(
+          failure,
           LLMEvent.stepStart({ index: 0 }),
           LLMEvent.toolInputError({
             id: "call-malformed",
             name: "echo",
             raw: '{"text":"partial',
           }),
-        ]).pipe(Stream.concat(Stream.fail(failure))),
+        ),
       )
 
       expect(yield* runPrompt(session, "Fail after malformed input").pipe(Effect.flip)).toBe(failure)
@@ -4332,16 +4303,14 @@ describe("SessionRunnerLLM", () => {
   it.effect("continues after repeated malformed tool input", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const malformed = (id: string) => [
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolInputError({
-          id,
-          name: "echo",
-          raw: '{"text":"partial',
-        }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "tool-calls" } }),
-        LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
-      ]
+      const malformed = (id: string) =>
+        TestLLM.toolCalls(
+          LLMEvent.toolInputError({
+            id,
+            name: "echo",
+            raw: '{"text":"partial',
+          }),
+        )
       yield* TestLLM.push(
         malformed("call-first"),
         TestLLM.tool("call-valid-between", "echo", { text: "valid" }),
@@ -4366,16 +4335,14 @@ describe("SessionRunnerLLM", () => {
           agent.steps = 2
         }),
       )
-      const malformed = (id: string) => [
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolInputError({
-          id,
-          name: "echo",
-          raw: '{"text":"partial',
-        }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "tool-calls" } }),
-        LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
-      ]
+      const malformed = (id: string) =>
+        TestLLM.toolCalls(
+          LLMEvent.toolInputError({
+            id,
+            name: "echo",
+            raw: '{"text":"partial',
+          }),
+        )
       yield* TestLLM.push(malformed("call-first"), malformed("call-at-limit"))
 
       yield* runPrompt(session, "Stop malformed tools at the step limit")
@@ -4391,9 +4358,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Do not continue failed provider")
-      toolExecutionGate = yield* Deferred.make<void>()
-      toolExecutionsStarted = yield* Deferred.make<void>()
-      toolExecutionsReady = 1
+      const tools = yield* blockTools()
       yield* TestLLM.push([
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.toolCall({ id: "call-before-provider-error", name: "echo", input: { text: "settled" } }),
@@ -4401,17 +4366,15 @@ describe("SessionRunnerLLM", () => {
       ])
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(toolExecutionsStarted)
-      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* tools.started
+      yield* tools.release
       expect((yield* Fiber.join(run).pipe(Effect.flip)).message).toBe("Provider unavailable")
-      toolExecutionGate = undefined
-      toolExecutionsStarted = undefined
 
       expect(requests).toHaveLength(1)
       expect(executions).toEqual(["settled"])
       const context = yield* session.context(sessionID)
       const assistant = requireAssistant(context)
-      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
+      expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.success.2",
@@ -4443,7 +4406,7 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const assistant = requireAssistant(context)
-      expect((yield* recordedStepSettlementEvents(sessionID, assistant.id)).map((event) => event.type)).toEqual([
+      expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.2",
@@ -4534,12 +4497,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("fails an unresolved hosted tool before one clean step end", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        hostedCall("call-hosted-clean-end", "effect"),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
+      yield* TestLLM.push(TestLLM.stop(hostedCall("call-hosted-clean-end", "effect")))
 
       yield* runPrompt(session, "Settle hosted tool before ending")
 
@@ -4563,7 +4521,7 @@ describe("SessionRunnerLLM", () => {
       yield* admit(session, "Fail unresolved tools")
       const failure = invalidRequest()
       const providerFailed = yield* Deferred.make<void>()
-      toolExecutionGate = yield* Deferred.make<void>()
+      const tools = yield* blockTools()
       yield* TestLLM.push(
         Stream.concat(
           Stream.fromIterable([
@@ -4579,9 +4537,8 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(providerFailed)
-      yield* Deferred.succeed(toolExecutionGate, undefined)
+      yield* tools.release
       expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
-      toolExecutionGate = undefined
 
       const assistant = requireAssistant(yield* session.context(sessionID))
       const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
@@ -4655,17 +4612,16 @@ describe("SessionRunnerLLM", () => {
   it.effect("projects sequential text fragments as separate content parts", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.textStart({ id: "text-1" }),
-        LLMEvent.textDelta({ id: "text-1", text: "First" }),
-        LLMEvent.textEnd({ id: "text-1" }),
-        LLMEvent.textStart({ id: "text-2" }),
-        LLMEvent.textDelta({ id: "text-2", text: "Second" }),
-        LLMEvent.textEnd({ id: "text-2" }),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
+      yield* TestLLM.push(
+        TestLLM.stop(
+          LLMEvent.textStart({ id: "text-1" }),
+          LLMEvent.textDelta({ id: "text-1", text: "First" }),
+          LLMEvent.textEnd({ id: "text-1" }),
+          LLMEvent.textStart({ id: "text-2" }),
+          LLMEvent.textDelta({ id: "text-2", text: "Second" }),
+          LLMEvent.textEnd({ id: "text-2" }),
+        ),
+      )
 
       yield* runPrompt(session, "Two blocks")
 
@@ -4709,15 +4665,14 @@ describe("SessionRunnerLLM", () => {
   it.effect("transitions streamed raw tool input to parsed called input", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolInputStart({ id: "call-parsed", name: "web_search" }),
-        LLMEvent.toolInputDelta({ id: "call-parsed", name: "web_search", text: '{"query":"hello"}' }),
-        LLMEvent.toolInputEnd({ id: "call-parsed", name: "web_search" }),
-        hostedCall("call-parsed", "hello"),
-        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
+      yield* TestLLM.push(
+        TestLLM.stop(
+          LLMEvent.toolInputStart({ id: "call-parsed", name: "web_search" }),
+          LLMEvent.toolInputDelta({ id: "call-parsed", name: "web_search", text: '{"query":"hello"}' }),
+          LLMEvent.toolInputEnd({ id: "call-parsed", name: "web_search" }),
+          hostedCall("call-parsed", "hello"),
+        ),
+      )
 
       yield* runPrompt(session, "Call provider tool")
 
