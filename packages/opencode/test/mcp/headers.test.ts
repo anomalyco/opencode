@@ -36,6 +36,11 @@ const serve = Effect.acquireRelease(
   (server) => Effect.promise(server.close),
 )
 
+const serveUnauthorized = Effect.acquireRelease(
+  Effect.sync(() => Bun.serve({ port: 0, fetch: () => new Response("Unauthorized", { status: 401 }) })),
+  (server) => Effect.sync(() => server.stop(true)),
+)
+
 describe("mcp.headers", () => {
   it.instance("headers are passed to transports when oauth is enabled (default)", () =>
     Effect.gen(function* () {
@@ -95,6 +100,20 @@ describe("mcp.headers", () => {
         expect(headers.has("authorization")).toBe(false)
         expect(headers.has("x-custom-header")).toBe(false)
       }
+    }),
+  )
+
+  it.instance("reports 401 as failed when oauth is explicitly disabled", () =>
+    Effect.gen(function* () {
+      const server = yield* serveUnauthorized
+      const mcp = yield* MCP.Service
+      const result = yield* mcp.add("unauthorized-no-oauth", {
+        type: "remote",
+        url: server.url.toString(),
+        oauth: false,
+      })
+
+      expect(result.status).toMatchObject({ "unauthorized-no-oauth": { status: "failed" } })
     }),
   )
 })

@@ -310,7 +310,7 @@ const layer = Layer.effect(
             const isAuthError =
               error instanceof UnauthorizedError ||
               registrationRejected ||
-              (error instanceof SdkHttpError && error.status === 401) ||
+              (authProvider && error instanceof SdkHttpError && error.status === 401) ||
               (authProvider && lastError.message.includes("OAuth"))
 
             if (isAuthError) {
