@@ -2328,6 +2328,17 @@ function GenericTool(props: ToolProps) {
   )
 }
 
+function useToolPermission(part: () => SessionMessageAssistantTool | undefined) {
+  const ctx = use()
+  const data = useData()
+  const local = useLocal()
+  return createMemo(() => {
+    if (local.permission.mode === "auto") return false
+    const request = data.session.permission.list(ctx.sessionID)?.[0]
+    return request?.source?.type === "tool" && request.source.callID === part()?.id
+  })
+}
+
 function InlineTool(props: {
   icon: string
   iconColor?: RGBA
@@ -2342,18 +2353,10 @@ function InlineTool(props: {
   onClick?: () => void
 }) {
   const { themeV2 } = useTheme()
-  const ctx = use()
-  const data = useData()
-  const local = useLocal()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const [errorExpanded, setErrorExpanded] = createSignal(false)
-
-  const permission = createMemo(() => {
-    if (local.permission.mode === "auto") return false
-    const request = data.session.permission.list(ctx.sessionID)?.[0]
-    return request?.source?.type === "tool" && request.source.callID === props.part.id
-  })
+  const permission = useToolPermission(() => props.part)
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
 
@@ -2532,17 +2535,10 @@ function BlockTool(props: BlockToolProps) {
 function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
   const { themeV2 } = useTheme()
   const ctx = use()
-  const data = useData()
-  const local = useLocal()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error.message : undefined))
-  const permission = createMemo(() => {
-    if (local.permission.mode === "auto") return false
-    if (!props.part) return false
-    const request = data.session.permission.list(ctx.sessionID)?.[0]
-    return request?.source?.type === "tool" && request.source.callID === props.part.id
-  })
+  const permission = useToolPermission(() => props.part)
   return (
     <box
       border={["left"]}
@@ -2618,13 +2614,8 @@ function Shell(props: ToolProps) {
   const ctx = use()
   const client = useClient()
   const data = useData()
-  const local = useLocal()
   const pathFormatter = usePathFormatter()
-  const permission = createMemo(() => {
-    if (local.permission.mode === "auto") return false
-    const request = data.session.permission.list(ctx.sessionID)?.[0]
-    return request?.source?.type === "tool" && request.source.callID === props.part.id
-  })
+  const permission = useToolPermission(() => props.part)
   const color = createMemo(() => (permission() ? themeV2.text.feedback.warning.default : themeV2.text.default))
   const shellID = createMemo(() => stringValue(props.metadata.shellID))
   const background = createMemo(() => Boolean(shellID()) && props.part.state.status !== "running")
