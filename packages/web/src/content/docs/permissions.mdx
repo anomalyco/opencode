@@ -49,6 +49,20 @@ Static rules keep precedence and are never seen by the validator:
 - `"allow"` rules still run without approval.
 - Only requests that evaluate to `"ask"` go to the validator.
 
+That last point matters with the default configuration: the default ruleset is `{"*": "allow"}`, so almost nothing ever reaches the validator. To have it actually review the risky tools, mark them as `"ask"` — a recommended minimum:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "ask",
+    "edit": "ask"
+  }
+}
+```
+
+Do not combine the **auto** agent with the `--auto` flag: the flag blanket-approves every pending ask before anyone reads it, so an `UNCERTAIN` escalation gets approved without a human ever seeing the validator's reason.
+
 The validator answers one of three verdicts:
 
 - `ALLOW` — the tool call runs.

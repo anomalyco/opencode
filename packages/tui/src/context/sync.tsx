@@ -303,6 +303,12 @@ export const {
               }),
             )
           }
+          setStore(
+            "decision",
+            produce((draft) => {
+              delete draft[event.properties.info.id]
+            }),
+          )
           break
         }
         case "session.updated": {

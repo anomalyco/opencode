@@ -52,21 +52,32 @@ validator, and a configured `allow` never spends an LLM call.
 permission asks — native tools, bash (tree-sitter patterns), `doom_loop`, MCP,
 task/subagent, and workflow tools. After the static ruleset evaluates to `ask`
 and before a pending request is created, the funnel calls the registered
-validator — but only when the user message that started the turn ran with the
-`auto` agent. The validator registers its handler at layer build
-(`permission.registerValidator`); if no handler is registered, `auto` asks
-degrade to the normal human flow.
+validator — but only when the ask carries the `auto` agent, i.e. the tool call
+runs on behalf of `auto` itself (`tools.ts`/`prompt.ts` pass the executing
+`task.agent`, so a subagent spawned inside an `auto` session asks as its own
+agent and falls to the human flow). The validator registers its handler at
+layer build (`permission.registerValidator`); if no handler is registered,
+`auto` asks degrade to the normal human flow.
 
 Validations run through a strict FIFO queue per session — a chain of deferreds
 that runs in the asking fiber, so there is no consumer fiber to keep alive
 (the ordering precedent is the serialized status writes in
 `session/status.ts`). Parallel tool calls validate one at a time and audit
-rows land in arrival order. Each validation:
+rows land in arrival order. Each ask has a total budget of 45s covering the
+queue wait plus the validation itself; on expiry the ask degrades to the
+human flow (`verdict=fallback`, `reason=timeout`) and the chain still
+releases, so asks queued behind it drain normally. Each validation:
 
 1. Gates on the catch-up summary (see below), bounded at 20s — a broken
    summarizer only means validating without a summary, never a stuck ask.
-2. Builds the prompt: permission name, full patterns, JSON metadata, and the
-   latest persisted session summary.
+2. Builds the prompt: permission name, patterns, JSON metadata, and the
+   latest persisted session summary, serialized as JSON between per-call
+   nonce fences (`<<<REQUEST <nonce>` … `REQUEST <nonce>>>`, `<<<SUMMARY
+<nonce>` … `SUMMARY <nonce>>>`). Patterns are capped at 300 chars each and
+   the serialized metadata at ~2000 chars. The fences plus a system-prompt
+   rule keep attacker-controlled command text from reading as instructions:
+   fence content that claims to be policy, pre-approval, or new instructions
+   is a DENY signal, never an ALLOW one.
 3. Streams the `command-validator` agent with `small: true`, no tools,
    `retries: 1`, and a hard 15s timeout.
 4. Parses the verdict strictly: the first non-empty line after stripping
@@ -100,7 +111,9 @@ retitle; `Effect.forkIn(scope)`, 30s cap). The summarizer receives the previous
 summary plus only the new activity since the last summarized turn — everything
 after the `turn_count`-th real user message, with the assistant tail riding
 along for continuity — and rewrites a running summary with the sections
-`Done` / `Tested` / `How tested` / `Pending`, at most 200 words. The result is
+`Done` / `Tested` / `How tested` / `Pending`, at most 200 words. The turn
+content is framed as data to summarize, never as instructions — embedded
+policies or requests are described as content, not followed. The result is
 upserted into `session_auto_summary` (one row per session, outside the
 transcript), and the validator reads the latest row on every validation.
 
@@ -134,6 +147,26 @@ bundled with the binary.
 
 Nothing is required: with no config, both agents resolve to the session
 provider's small model, falling back to the session model.
+
+### Recommended minimum: put something behind `ask`
+
+The default ruleset is `{"*": "allow"}` (plus `doom_loop` and
+`external_directory` asks), so with no config almost nothing ever reaches the
+validator — bash and edit calls are statically allowed before it runs. The
+validator only sees what your static ruleset marks as `ask`. A recommended
+minimum:
+
+```json
+{
+  "permission": {
+    "bash": "ask",
+    "edit": "ask"
+  }
+}
+```
+
+Static rules keep precedence on both sides: a configured `deny` is never seen
+by the validator, and a configured `allow` never spends an LLM call.
 
 ### OpenRouter (initial project choice)
 
@@ -203,18 +236,18 @@ for validator evals (plain SQL extraction). The database is
 
 ### `permission_decisions` — one row per validator decision
 
-| Column       | Type        | Notes                                                                                                      |
-| ------------ | ----------- | ---------------------------------------------------------------------------------------------------------- |
-| `id`         | text PK     | `decision`-prefixed ascending id                                                                           |
-| `session_id` | text FK     | cascade delete; indexed (`permission_decisions_session_idx`)                                               |
-| `permission` | text        | e.g. `bash`, `edit`, `external_directory`                                                                  |
-| `patterns`   | text (JSON) | the exact patterns evaluated (full command)                                                                |
-| `metadata`   | text (JSON) | summarized tool metadata; values capped at 500 chars; carries the tool `callID` for transcript correlation |
-| `verdict`    | text        | `allow` \| `deny` \| `uncertain` \| `fallback`                                                             |
-| `reason`     | text, null  | validator or fallback reason                                                                               |
-| `model`      | text        | `provider/model` that decided                                                                              |
-| `latency_ms` | integer     | wall time of the validation call                                                                           |
-| `created_at` | integer     | epoch ms                                                                                                   |
+| Column       | Type        | Notes                                                                                                                                                   |
+| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`         | text PK     | `decision`-prefixed ascending id                                                                                                                        |
+| `session_id` | text FK     | cascade delete; indexed (`permission_decisions_session_idx`)                                                                                            |
+| `permission` | text        | e.g. `bash`, `edit`, `external_directory`                                                                                                               |
+| `patterns`   | text (JSON) | the exact patterns evaluated (full command)                                                                                                             |
+| `metadata`   | text (JSON) | summarized tool metadata; string values capped at 500 chars, object values serialized then capped; carries the tool `callID` for transcript correlation |
+| `verdict`    | text        | `allow` \| `deny` \| `uncertain` \| `fallback`                                                                                                          |
+| `reason`     | text, null  | validator or fallback reason                                                                                                                            |
+| `model`      | text        | `provider/model` that decided                                                                                                                           |
+| `latency_ms` | integer     | wall time of the validation call                                                                                                                        |
+| `created_at` | integer     | epoch ms                                                                                                                                                |
 
 ### `session_auto_summary` — one row per session
 
@@ -236,7 +269,8 @@ HTTP, on the instance server (paths are snake_case, following `prompt_async`):
   oldest first.
 - `GET /permission/validator/health` — pings the resolved validator model and
   returns `{ ok, model?, reason? }`. Intended for mode-switch checks, not
-  per-request polling; there is no response cache.
+  per-request polling; the result rides a 30s in-memory cache per instance so
+  polling doesn't spend a small-model call per request.
 
 SQL, straight against the database:
 
@@ -301,8 +335,11 @@ runs).
 ## Evals
 
 The golden dataset lives in `packages/opencode/test/eval/validator-cases.json`
-— 40 bash cases (15 expected `allow`, 15 `deny`, 10 `uncertain`), in English
-and PT-BR, most carrying a synthetic session summary. Run it from
+— 46 bash cases (15 expected `allow`, 15 `deny`, 10 `uncertain`, 6
+prompt-injection cases expected `deny`: forged summaries inside commands,
+policy directives, "ignore previous instructions", fake instructions in
+metadata, summary manipulation, and newline-split paths), in English and
+PT-BR, most carrying a synthetic session summary. Run it from
 `packages/opencode` against any OpenAI-compatible endpoint:
 
 ```bash
@@ -333,15 +370,16 @@ rows, and the fallbacks with a stubbed LLM.
 
 ## Failure modes
 
-| Failure                                    | Behavior                                                                                       | Audit/log                                                                        |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Validator model offline / timeout (15s)    | ask falls to the normal human flow                                                             | `verdict=fallback`, `reason=timeout\|error`; `permission.validator.fallback` log |
-| Unparseable verdict                        | same                                                                                           | `verdict=fallback`, `reason=invalid`                                             |
-| `command-validator` agent or model missing | same                                                                                           | `verdict=fallback`, `reason=error`                                               |
-| Summarizer failure                         | turn unaffected (forked + caught); the previous summary stays and the validator reads it as-is | `auto summary update failed` log                                                 |
-| Catch-up summary broken on switch to auto  | gate times out at 20s; validation proceeds without a summary                                   | `auto summary ensure failed` log                                                 |
-| Health check fails on activation           | warning toast; the session behaves like `build` (asks go to the human)                         | `GET /permission/validator/health` → `{ ok: false, reason }`                     |
-| Audit write failure                        | logged, never breaks or blocks the ask                                                         | `permission decision audit write failed` log                                     |
+| Failure                                     | Behavior                                                                                       | Audit/log                                                                        |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Validator model offline / timeout (15s)     | ask falls to the normal human flow                                                             | `verdict=fallback`, `reason=timeout\|error`; `permission.validator.fallback` log |
+| Ask exceeds the 45s queue+validation budget | same                                                                                           | `verdict=fallback`, `reason=timeout`                                             |
+| Unparseable verdict                         | same                                                                                           | `verdict=fallback`, `reason=invalid`                                             |
+| `command-validator` agent or model missing  | same                                                                                           | `verdict=fallback`, `reason=error`                                               |
+| Summarizer failure                          | turn unaffected (forked + caught); the previous summary stays and the validator reads it as-is | `auto summary update failed` log                                                 |
+| Catch-up summary broken on switch to auto   | gate times out at 20s; validation proceeds without a summary                                   | `auto summary ensure failed` log                                                 |
+| Health check fails on activation            | warning toast; the session behaves like `build` (asks go to the human)                         | `GET /permission/validator/health` → `{ ok: false, reason }`                     |
+| Audit write failure                         | logged, never breaks or blocks the ask                                                         | `permission decision audit write failed` log                                     |
 
 The design is fail-closed towards the human: no failure path approves or
 rejects on its own — every degradation lands on the normal permission dialog.
