@@ -21,6 +21,7 @@
     "test": "bun run test:unit && bun run test:browser",
     "test:unit": "bun test --only-failures --preload ./happydom.ts ./src",
     "test:browser": "bun test --conditions=browser --preload ./happydom.ts ./test-browser",
+    "test:solid": "bun test --conditions=browser --preload ./happydom.ts --preload ./test/solid-preload.ts ./test",
     "test:unit:watch": "bun test --watch --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test",
