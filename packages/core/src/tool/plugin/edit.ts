@@ -86,15 +86,6 @@ export const Plugin = {
               input: Input,
               output: Output,
               execute: (input, context) => {
-                const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-                  effect.pipe(
-                    Effect.mapError((error) =>
-                      error instanceof ToolFailure
-                        ? error
-                        : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
-                    ),
-                  )
-
                 return Effect.gen(function* () {
                   const permissionSource = {
                     type: "tool" as const,
@@ -112,40 +103,34 @@ export const Plugin = {
                     })
                   }
 
-                  const target = yield* unableToEdit(mutation.resolve({ path: input.path, kind: "file" }))
+                  const target = yield* mutation.resolve({ path: input.path, kind: "file" })
                   const external = target.externalDirectory
                   if (external) {
-                    yield* unableToEdit(
-                      permission.assert({
-                        ...LocationMutation.externalDirectoryPermission(external),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source: permissionSource,
-                      }),
-                    )
-                  }
-
-                  yield* unableToEdit(
-                    permission.assert({
-                      action: "edit",
-                      resources: [target.resource],
-                      save: ["*"],
+                    yield* permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(external),
                       sessionID: context.sessionID,
                       agent: context.agent,
                       source: permissionSource,
-                    }),
-                  )
-                  const info = yield* unableToEdit(
-                    fs.stat(target.canonical).pipe(
-                      Effect.catchReason("PlatformError", "NotFound", () =>
-                        Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
-                      ),
+                    })
+                  }
+
+                  yield* permission.assert({
+                    action: "edit",
+                    resources: [target.resource],
+                    save: ["*"],
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: permissionSource,
+                  })
+                  const info = yield* fs.stat(target.canonical).pipe(
+                    Effect.catchReason("PlatformError", "NotFound", () =>
+                      Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
                     ),
                   )
                   if (info.type === "Directory") {
                     return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
                   }
-                  const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
+                  const source = decodeUtf8(yield* fs.readFile(target.canonical))
                   const ending = detectLineEnding(source.text)
                   const oldString = convertToLineEnding(input.oldString, ending)
                   const newString = convertToLineEnding(input.newString, ending)
@@ -173,12 +158,10 @@ export const Plugin = {
                     { additions: 0, deletions: 0 },
                   )
                   const next = splitBom(replaced)
-                  const result = yield* unableToEdit(
-                    files.write({
-                      target,
-                      content: joinBom(next.text, source.bom || next.bom),
-                    }),
-                  )
+                  const result = yield* files.write({
+                    target,
+                    content: joinBom(next.text, source.bom || next.bom),
+                  })
                   return {
                     files: [
                       {
@@ -196,6 +179,11 @@ export const Plugin = {
                     content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
                     metadata: { files: output.files },
                   })),
+                  Effect.mapError((error) =>
+                    error instanceof ToolFailure
+                      ? error
+                      : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
+                  ),
                 )
               },
             }),
