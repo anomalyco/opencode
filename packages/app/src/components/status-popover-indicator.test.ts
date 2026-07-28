@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { hasNonBlockingServiceIssue, serverStatusDotClass } from "./status-popover-indicator"
+import { hasServiceNeedingAttention, serverStatusDotClass } from "./status-popover-indicator"
 
 describe("serverStatusDotClass", () => {
   test("uses the success token while the server and services are healthy", () => {
@@ -21,16 +21,14 @@ describe("serverStatusDotClass", () => {
   })
 })
 
-describe("hasNonBlockingServiceIssue", () => {
-  test("detects MCP failures that do not block chatting", () => {
-    expect(hasNonBlockingServiceIssue({ mcp: ["failed"], lsp: [] })).toBe(true)
-    expect(hasNonBlockingServiceIssue({ mcp: ["needs_auth"], lsp: [] })).toBe(true)
-    expect(hasNonBlockingServiceIssue({ mcp: ["needs_client_registration"], lsp: [] })).toBe(true)
-    expect(hasNonBlockingServiceIssue({ mcp: ["connected", "pending", "disabled"], lsp: [] })).toBe(false)
+describe("hasServiceNeedingAttention", () => {
+  test("detects MCP states that need user attention", () => {
+    expect(hasServiceNeedingAttention({ mcp: ["needs_auth"] })).toBe(true)
+    expect(hasServiceNeedingAttention({ mcp: ["needs_client_registration"] })).toBe(true)
   })
 
-  test("detects LSP failures that do not block chatting", () => {
-    expect(hasNonBlockingServiceIssue({ mcp: [], lsp: ["error"] })).toBe(true)
-    expect(hasNonBlockingServiceIssue({ mcp: [], lsp: ["connected"] })).toBe(false)
+  test("ignores states that do not need user attention", () => {
+    expect(hasServiceNeedingAttention({ mcp: ["failed"] })).toBe(false)
+    expect(hasServiceNeedingAttention({ mcp: ["connected", "pending", "disabled"] })).toBe(false)
   })
 })

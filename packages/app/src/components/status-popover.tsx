@@ -9,7 +9,7 @@ import { ServerConnection, useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSync } from "@/context/sync"
 import { useGlobal } from "@/context/global"
-import { hasNonBlockingServiceIssue, serverStatusDotClass } from "./status-popover-indicator"
+import { hasServiceNeedingAttention, serverStatusDotClass } from "./status-popover-indicator"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverServerBody })))
@@ -23,9 +23,8 @@ export function StatusPopover() {
   const serverHealth = () => global.servers.health[server.key]?.healthy
   const ready = createMemo(() => serverHealth() === false || (sync().data.mcp_ready && sync().data.lsp_ready))
   const issue = createMemo(() =>
-    hasNonBlockingServiceIssue({
+    hasServiceNeedingAttention({
       mcp: Object.values(sync().data.mcp ?? {}).map((item) => item.status),
-      lsp: (sync().data.lsp ?? []).map((item) => item.status),
     }),
   )
 
@@ -86,9 +85,8 @@ function DirectoryStatusPopover() {
   const serverHealth = () => global.servers.health[ServerConnection.key(server().server)]?.healthy
   const ready = createMemo(() => serverHealth() === false || (sync().data.mcp_ready && sync().data.lsp_ready))
   const issue = createMemo(() =>
-    hasNonBlockingServiceIssue({
+    hasServiceNeedingAttention({
       mcp: Object.values(sync().data.mcp ?? {}).map((item) => item.status),
-      lsp: (sync().data.lsp ?? []).map((item) => item.status),
     }),
   )
   const state = createMemo<StatusPopoverState>(() => ({
