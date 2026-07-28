@@ -982,4 +982,58 @@ describe("tool.task", () => {
       expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
     }),
   )
+
+  it.instance("execute passes images to subagent when provided", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ text: "analyzed", onPrompt: (input) => (seen = input) })
+
+      const images = [
+        { mime: "image/png", url: "https://example.com/image1.png", filename: "test1.png" },
+        { mime: "image/jpeg", url: "https://example.com/image2.jpg" },
+      ]
+
+      const result = yield* def.execute(
+        {
+          description: "analyze images",
+          prompt: "analyze the provided images",
+          subagent_type: "general",
+          images,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
+      expect(seen?.parts).toBeDefined()
+      expect(seen?.parts).toHaveLength(3) // 1 text part + 2 image parts
+
+      // Check image parts
+      const imageParts = seen?.parts.filter((p) => p.type === "file")
+      expect(imageParts).toHaveLength(2)
+      expect(imageParts?.[0]).toEqual({
+        type: "file",
+        mime: "image/png",
+        url: "https://example.com/image1.png",
+        filename: "test1.png",
+      })
+      expect(imageParts?.[1]).toEqual({
+        type: "file",
+        mime: "image/jpeg",
+        url: "https://example.com/image2.jpg",
+        filename: undefined,
+      })
+    }),
+  )
 })

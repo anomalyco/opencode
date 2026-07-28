@@ -49,6 +49,15 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  images: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        mime: Schema.String.annotate({ description: "The MIME type of the image (e.g., image/png, image/jpeg)" }),
+        url: Schema.String.annotate({ description: "The URL of the image file" }),
+        filename: Schema.optional(Schema.String).annotate({ description: "Optional filename for the image" }),
+      }),
+    ),
+  ).annotate({ description: "Optional array of images to pass to the subagent for analysis" }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -199,6 +208,18 @@ export const TaskTool = Tool.define(
 
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
+        
+        // Add images to parts if provided
+        if (params.images && params.images.length > 0) {
+          const imageParts: SessionV1.FilePartInput[] = params.images.map((image) => ({
+            type: "file",
+            mime: image.mime,
+            url: image.url,
+            filename: image.filename,
+          }))
+          parts.push(...imageParts)
+        }
+        
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,
