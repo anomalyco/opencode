@@ -200,7 +200,7 @@ export function SubagentsTab(props: { sessionID: string }) {
         id: "composer.subagent.toggle-activity",
         title: "Toggle active subagents",
         group: "Composer",
-        bind: "tab",
+        bind: "ctrl+a",
         run() {
           setStore({ selected: 0, active: !store.active })
           scroll?.scrollTo(0)
