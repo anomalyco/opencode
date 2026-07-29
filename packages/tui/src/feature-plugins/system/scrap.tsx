@@ -2,6 +2,7 @@ import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createSignal } from "solid-js"
 import { SessionTabs, type SessionTabsController } from "../../component/session-tabs"
+import { moveSessionTab, type SessionTab } from "../../context/session-tabs-model"
 
 type FixtureStatus = ReturnType<SessionTabsController["status"]>
 
@@ -45,7 +46,7 @@ function Scrap(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme
   const elevatedTheme = theme.contextual.elevated
-  const [tabs, setTabs] = createSignal(FIXTURE_TABS.slice(0, 6))
+  const [tabs, setTabs] = createSignal<SessionTab[]>(FIXTURE_TABS.slice(0, 6))
   const [active, setActive] = createSignal<string | undefined>("fixture-2")
   const [animations, setAnimations] = createSignal(true)
   const [statuses, setStatuses] = createSignal<Record<string, FixtureStatus>>({
@@ -60,6 +61,9 @@ function Scrap(props: { context: Plugin.Context }) {
     current: active,
     status(sessionID) {
       return statuses()[sessionID] ?? EMPTY_STATUS
+    },
+    move(sessionID, index) {
+      setTabs((current) => moveSessionTab(current, sessionID, index))
     },
     select(sessionID) {
       setActive(sessionID)
@@ -82,7 +86,7 @@ function Scrap(props: { context: Plugin.Context }) {
     const items = tabs()
     if (items.length === 0) return
     const index = items.findIndex((tab) => tab.sessionID === active())
-    controller.select(items[(index + direction + items.length) % items.length]!.sessionID)
+    controller.select(items[(index + direction + items.length) % items.length].sessionID)
   }
   const updateStatus = (update: (status: FixtureStatus) => FixtureStatus) => {
     const sessionID = active()

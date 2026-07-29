@@ -10,6 +10,7 @@ import { useTuiPaths } from "./runtime"
 import {
   closeSessionTab,
   cycleSessionTab,
+  moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
   recordSessionTabHistory,
@@ -39,11 +40,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const config = useConfig().data
     const paths = useTuiPaths()
     const enabled = () => config.tabs?.enabled ?? false
+    // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
+    // mutating in place, which per-row animations and drag state depend on.
     const [store, updateStore] = useStorage().store<PersistedState>("tabs", {
       initial: {
         global: empty(),
         cwd: {},
       },
+      key: "sessionID",
     })
     const fallback = empty()
     let history: SessionTabHistory = { entries: [], index: -1 }
@@ -176,6 +180,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           return
         }
         remove(target, true)
+      },
+      move(sessionID: string, index: number) {
+        if (!enabled()) return
+        const session = root(sessionID)
+        if (moveSessionTab(state().tabs, session, index) === state().tabs) return
+        update((draft) => {
+          draft.tabs = moveSessionTab(draft.tabs, session, index)
+        })
       },
       cycle(direction: 1 | -1) {
         if (!enabled()) return

@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
-import { blendTabPulseColor, completionPulseOpacity, unreadGlowIntensity } from "../../src/component/tab-pulse"
+import {
+  blendTabPulseColor,
+  completionPulseOpacity,
+  glowIgnitionLevel,
+  unreadGlowIntensity,
+} from "../../src/component/tab-pulse"
 import { tint } from "../../src/theme/color"
 
 test("completion pulse rises quickly and fades over the remaining duration", () => {
@@ -9,6 +14,13 @@ test("completion pulse rises quickly and fades over the remaining duration", () 
   expect(completionPulseOpacity(0.16)).toBe(1)
   expect(completionPulseOpacity(0.58)).toBeCloseTo(0.5)
   expect(completionPulseOpacity(1)).toBe(0)
+})
+
+test("glow ignition overshoots the resting level and settles back to it", () => {
+  expect(glowIgnitionLevel(0)).toBe(0)
+  expect(glowIgnitionLevel(0.3)).toBeCloseTo(1.5)
+  expect(glowIgnitionLevel(0.6)).toBeGreaterThan(1)
+  expect(glowIgnitionLevel(1)).toBe(1)
 })
 
 test("unread glow peaks behind the tab number and fades to the normal background", () => {

@@ -8,6 +8,8 @@ import { useTuiApp, useTuiPaths } from "./runtime"
 
 type Options<Value extends object> = {
   readonly initial: Value
+  /** Reconcile key for arrays inside the stored value, preserving item identity across updates. Defaults to "id". */
+  readonly key?: string
 }
 
 type Entry<Value extends object> = readonly [Store<Value>, (mutation: (draft: Value) => void) => Promise<void>]
@@ -53,7 +55,8 @@ function createStorage(root: string, channel: string) {
         }
       }
       const [store, setStore] = createStore(load())
-      const reload = () => batch(() => setStore(reconcile(load())))
+      const merge = (next: Value) => reconcile(next, { key: options.key })
+      const reload = () => batch(() => setStore(merge(load())))
       const update = (mutation: (draft: Value) => void) =>
         Flock.withLock(
           file,
@@ -62,7 +65,7 @@ function createStorage(root: string, channel: string) {
             mutation(draft)
             const next = clone(draft)
             await writeJsonAtomic(file, next)
-            batch(() => setStore(reconcile(next)))
+            batch(() => setStore(merge(next)))
           },
           { dir: locks },
         )
