@@ -290,16 +290,18 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
       if (filter.length > 0) resetSelection = true
-      setTimeout(() => {
-        if (filter.length > 0) {
-          moveTo(0, true, false)
-        } else if (current && props.focusCurrent !== false) {
-          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
-          if (currentIndex >= 0) {
-            moveTo(currentIndex, true)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (filter.length > 0) {
+            moveTo(0, true, false)
+            return
           }
-        }
-      }, 0)
+          if (current && props.focusCurrent !== false) {
+            const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+            if (currentIndex >= 0) moveTo(currentIndex, true)
+          }
+        })
+      })
     }),
   )
 
