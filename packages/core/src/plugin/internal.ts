@@ -16,6 +16,7 @@ import { ConfigSkillPlugin } from "../config/plugin/skill"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch"
 import { Bus } from "../bus"
 import { FileMutation } from "../file-mutation"
+import { Formatter } from "../formatter"
 import { Form } from "../form"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -68,6 +69,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const config = yield* Config.Service
   const bus = yield* Bus.Service
   const mutation = yield* FileMutation.Service
+  const formatter = yield* Formatter.Service
   const filesystem = yield* FileSystem.Service
   const fs = yield* FSUtil.Service
   const global = yield* Global.Service
@@ -98,6 +100,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Config.Service, config),
     Context.make(Bus.Service, bus),
     Context.make(FileMutation.Service, mutation),
+    Context.make(Formatter.Service, formatter),
     Context.make(FileSystem.Service, filesystem),
     Context.make(FSUtil.Service, fs),
     Context.make(Global.Service, global),

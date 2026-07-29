@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
+import { Formatter } from "@opencode-ai/core/formatter"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
@@ -22,7 +23,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
-  deps: [Tool.node, LocationMutation.node, FileMutation.node, FSUtil.node, Permission.node],
+  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")
@@ -31,6 +32,7 @@ const writes: string[] = []
 let reads = 0
 let denyAction: string | undefined
 let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
+let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
 const permission = Layer.succeed(
   Permission.Service,
@@ -57,12 +59,17 @@ const permission = Layer.succeed(
   }),
 )
 
+const formatter = Layer.mock(Formatter.Service, {
+  file: (target) => formatFile(target),
+})
+
 const reset = () => {
   assertions.length = 0
   writes.length = 0
   reads = 0
   denyAction = undefined
   afterRead = () => Effect.void
+  formatFile = () => Effect.succeed(false)
 }
 
 const filesystem = Layer.effect(
@@ -109,6 +116,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
         [
           [FSUtil.node, filesystem],
           [Location.node, activeLocation],
+          [Formatter.node, formatter],
           [Permission.node, permission],
         ],
       ),
@@ -172,6 +180,39 @@ describe("EditTool", () => {
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
                 expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
                 expect(writes).toEqual([yield* Effect.promise(() => fs.realpath(target))])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("returns the diff for final formatted content", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "formatted.txt")
+        formatFile = (file) =>
+          Effect.promise(async () => {
+            await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace("after", "AFTER"))
+            return true
+          })
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const settled = yield* executeTool(
+                  registry,
+                  call({ path: "formatted.txt", oldString: "before", newString: "after" }),
+                )
+                expect(settled.status).toBe("completed")
+                if (settled.status !== "completed") return
+                expect(settled.output.files[0]?.patch).toContain("-before\n+AFTER")
+                expect(settled.metadata?.files?.[0]?.patch).toContain("-before\n+AFTER")
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("AFTER\n")
               }),
             ),
           ),

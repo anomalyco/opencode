@@ -8,6 +8,7 @@ import { Effect, Schema } from "effect"
 import { PlatformError } from "effect/PlatformError"
 import path from "path"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Formatter } from "../../formatter"
 import { Location } from "../../location"
 import { Patch } from "@opencode-ai/util/patch"
 import { Permission } from "../../permission"
@@ -68,6 +69,7 @@ export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
     const fs = yield* FSUtil.Service
+    const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
@@ -217,7 +219,7 @@ export const Plugin = {
                     )
                   }
 
-                  const patchFiles = prepared.map(patchFile)
+                  const patchFiles = prepared.map((change) => patchFile(change))
                   yield* permission.assert({
                     action: "edit",
                     resources: [...new Set(targets.map((target) => target.resource))],
@@ -295,7 +297,25 @@ export const Plugin = {
                       }),
                     { discard: true },
                   )
-                  return { applied, files: patchFiles }
+                  yield* Effect.forEach(
+                    [...new Set(applied.filter((item) => item.type !== "delete").map((item) => item.target))],
+                    (target) => formatter.file(target),
+                    { discard: true },
+                  )
+                  const files = yield* Effect.forEach(prepared, (change) => {
+                    if (change.type === "delete") return Effect.succeed(patchFile(change))
+                    const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
+                    return fs.readFile(target.canonical).pipe(
+                      Effect.map((content) =>
+                        patchFile(
+                          change,
+                          new TextDecoder("utf-8", { ignoreBOM: true }).decode(content).replace(/^\uFEFF/, ""),
+                        ),
+                      ),
+                      Effect.mapError((error) => fail(`Failed to read formatted ${target.resource}`, error)),
+                    )
+                  })
+                  return { applied, files }
                 }).pipe(
                   Effect.map((output) => ({
                     output,
@@ -337,15 +357,15 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-function patchFile(change: Prepared): typeof FileDiff.Info.Type {
+function patchFile(change: Prepared, after = change.after): typeof FileDiff.Info.Type {
   const target = (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource
   const patch = trimDiff(
-    createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, change.after),
+    createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, after),
   )
   const counts =
     change.type === "delete"
       ? { additions: 0, deletions: change.before.split("\n").length }
-      : diffLines(change.before, change.after).reduce(
+      : diffLines(change.before, after).reduce(
           (result, item) => ({
             additions: result.additions + (item.added ? (item.count ?? 0) : 0),
             deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),

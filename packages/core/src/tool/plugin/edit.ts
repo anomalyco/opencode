@@ -12,6 +12,7 @@ import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { FileMutation } from "../../file-mutation"
+import { Formatter } from "../../formatter"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
@@ -99,7 +100,6 @@ const findLineOccurrences = (content: string, search: string) => {
 }
 
 /** Deferred edit behavior and UX integrations remain visible at the model-facing seam. */
-// TODO: Add formatter integration after formatter runtime exists.
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
 // TODO: Add LSP notification and diagnostics after LSP runtime exists.
@@ -109,6 +109,7 @@ export const Plugin = {
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
+    const formatter = yield* Formatter.Service
     const fs = yield* FSUtil.Service
     const permission = yield* Permission.Service
 
@@ -201,23 +202,28 @@ export const Plugin = {
                         `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
                       source,
                     )
-                  const counts = diffLines(source, replaced).reduce(
+                  const replacementBom = replaced.startsWith("\uFEFF")
+                  const result = yield* files.write({
+                    target,
+                    content: `${bom || replacementBom ? "\uFEFF" : ""}${replacementBom ? replaced.slice(1) : replaced}`,
+                  })
+                  yield* formatter.file(target.canonical)
+                  const formattedBytes = yield* fs.readFile(target.canonical)
+                  const formattedBom =
+                    formattedBytes[0] === 0xef && formattedBytes[1] === 0xbb && formattedBytes[2] === 0xbf
+                  const formatted = new TextDecoder().decode(formattedBom ? formattedBytes.slice(3) : formattedBytes)
+                  const counts = diffLines(source, formatted).reduce(
                     (result, item) => ({
                       additions: result.additions + (item.added ? (item.count ?? 0) : 0),
                       deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
                     }),
                     { additions: 0, deletions: 0 },
                   )
-                  const replacementBom = replaced.startsWith("\uFEFF")
-                  const result = yield* files.write({
-                    target,
-                    content: `${bom || replacementBom ? "\uFEFF" : ""}${replacementBom ? replaced.slice(1) : replaced}`,
-                  })
                   return {
                     files: [
                       {
                         file: result.resource,
-                        patch: createTwoFilesPatch(result.resource, result.resource, source, replaced),
+                        patch: createTwoFilesPatch(result.resource, result.resource, source, formatted),
                         status: "modified" as const,
                         ...counts,
                       },
