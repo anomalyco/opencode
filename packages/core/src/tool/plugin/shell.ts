@@ -146,34 +146,40 @@ export const Plugin = {
                   messageID: context.messageID,
                   callID: context.callID,
                 }
-                const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
-                const external = target.externalDirectory
-                if (external)
-                  yield* permission.assert({
-                    ...LocationMutation.externalDirectoryPermission(external),
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
-                  })
-                yield* permission.assert({
-                  action: name,
-                  resources: [input.command],
-                  save: [input.command],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
-
-                if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
-                  return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
-
                 const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
-                const info = yield* shell.create({
-                  command: input.command,
-                  cwd: target.canonical,
-                  timeout,
-                  metadata: { sessionID: context.sessionID },
-                })
+                let finalTimeout = timeout
+                const info = yield* shell.create(
+                  {
+                    command: input.command,
+                    cwd: input.workdir,
+                    timeout,
+                    metadata: { sessionID: context.sessionID },
+                  },
+                  (invocation) =>
+                    Effect.gen(function* () {
+                      const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+                      invocation.cwd = target.canonical
+                      finalTimeout = invocation.timeout
+                      const external = target.externalDirectory
+                      if (external)
+                        yield* permission.assert({
+                          ...LocationMutation.externalDirectoryPermission(external),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                      yield* permission.assert({
+                        action: name,
+                        resources: [invocation.command],
+                        save: [invocation.command],
+                        sessionID: context.sessionID,
+                        agent: context.agent,
+                        source,
+                      })
+                      if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
+                        return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
+                    }),
+                )
                 yield* context.progress({ shellID: info.id })
 
                 const captureShell = Effect.fn("ShellTool.captureShell")(function* () {
@@ -198,7 +204,7 @@ export const Plugin = {
                   if (final.status === "timeout") {
                     return {
                       ...(final.exit !== undefined ? { exit: final.exit } : {}),
-                      output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
+                      output: `Command exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
                       truncated: false,
                       timeout: true,
                       status: "completed" as const,
@@ -223,14 +229,14 @@ export const Plugin = {
                 const job = yield* runtime.job.start({
                   id: context.callID,
                   type: name,
-                  title: input.command,
+                  title: info.command,
                   metadata: { sessionID: context.sessionID, shellID: info.id },
                   run,
                 })
 
                 if (input.background === true) {
                   yield* runtime.job.background(job.id)
-                  yield* notifyWhenDone(context.sessionID, context.callID, input.command)
+                  yield* notifyWhenDone(context.sessionID, context.callID, info.command)
                   return {
                     output: BACKGROUND_STARTED,
                     shellID: info.id,
@@ -244,7 +250,7 @@ export const Plugin = {
                 )
                 if (result?.type === "backgrounded") {
                   yield* shell.timeout(info.id, 0)
-                  yield* notifyWhenDone(context.sessionID, context.callID, input.command)
+                  yield* notifyWhenDone(context.sessionID, context.callID, info.command)
                   return {
                     output: BACKGROUND_STARTED,
                     shellID: info.id,
