@@ -132,7 +132,6 @@ export function SessionTabs() {
             return tint(base, theme.raise(theme.background.surface.offset), selection())
           }
           const pulseBackground = () => background()
-          const pulseColor = () => tint(pulseBackground(), theme.text.default, 0.45)
           const title = () => tab.title ?? "Untitled session"
           const availableTitleWidth = () => Math.max(1, width() - 3)
           const visibleTitle = createMemo(() => Locale.takeWidth(title(), availableTitleWidth()))
@@ -170,7 +169,7 @@ export function SessionTabs() {
                 enabled={config.animations ?? true}
                 active={status().busy}
                 complete={status().complete}
-                color={pulseColor()}
+                color={accent()}
                 completionColor={accent()}
                 backgroundColor={pulseBackground()}
               />
