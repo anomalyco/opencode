@@ -3196,6 +3196,10 @@ export type SessionInterruptInput = { readonly sessionID: { readonly sessionID: 
 
 export type SessionInterruptOutput = void
 
+export type SessionResumeInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionResumeOutput = void
+
 export type SessionBackgroundInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionBackgroundOutput = void

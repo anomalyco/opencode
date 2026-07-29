@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   createPromptHistory,
   isExitCommand,
+  isReconnectCommand,
   isNewCommand,
   movePromptHistory,
   pushPromptHistory,
@@ -97,5 +98,14 @@ describe("run prompt shared", () => {
     expect(isNewCommand("/new")).toBe(true)
     expect(isNewCommand(" /NEW ")).toBe(true)
     expect(isNewCommand("/new now")).toBe(false)
+  })
+
+  test("recognizes the reconnect command", () => {
+    expect(isReconnectCommand("/reconnect")).toBe(true)
+    expect(isReconnectCommand(" /RECONNECT ")).toBe(true)
+    expect(isReconnectCommand("/retry")).toBe(true)
+    expect(isReconnectCommand(" /RETRY ")).toBe(true)
+    expect(isReconnectCommand("/reconnect now")).toBe(false)
+    expect(isReconnectCommand("/retry now")).toBe(false)
   })
 })

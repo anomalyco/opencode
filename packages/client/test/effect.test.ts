@@ -200,6 +200,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
       .pipe(Stream.runCollect)
     yield* client.session.interrupt({ sessionID: Session.ID.make("ses_test") })
+    yield* client.session.resume({ sessionID: Session.ID.make("ses_test") })
     const message = yield* client.session.message({
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),

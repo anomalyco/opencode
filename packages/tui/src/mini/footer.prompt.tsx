@@ -19,6 +19,7 @@ import {
   displayCharAt,
   displaySlice,
   isExitCommand,
+  isReconnectCommand,
   mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
@@ -395,6 +396,12 @@ export function createPromptState(input: PromptInput): PromptState {
         name: "compact",
         display: "/compact",
         description: "summarize the session to reduce context usage",
+      } satisfies SlashOption,
+      {
+        kind: "slash",
+        name: "reconnect",
+        display: "/reconnect",
+        description: "resume the session after a halted agent loop",
       } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
@@ -838,7 +845,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
       const cursor = area.cursorOffset
       const head = parseSlashHead(area.plainText)
-      const local = !shell() && (next.name === "new" || next.name === "exit")
+      const local = !shell() && (next.name === "new" || next.name === "exit" || next.name === "reconnect")
       const separator = !shell() && !local && head && /\s/.test(area.plainText[head.end] ?? "") ? "" : " "
       const text = `/${next.name}${separator}`
 
@@ -1148,7 +1155,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const parsed =
-      command || next.mode === "shell" || isNewCommand(next.text)
+      command || next.mode === "shell" || isNewCommand(next.text) || isReconnectCommand(next.text)
         ? undefined
         : parseSlashCommand(next.text, input.commands())
     if (parsed?.type === "pending") {

@@ -72,6 +72,8 @@ import type {
   Endpoint5_26Output,
   Endpoint5_27Input,
   Endpoint5_27Output,
+  Endpoint5_27bInput,
+  Endpoint5_27bOutput,
   Endpoint5_28Input,
   Endpoint5_28Output,
   Endpoint5_29Input,
@@ -537,6 +539,11 @@ const Endpoint5_27 = (raw: RawClient["server.session"]) => (input: Endpoint5_27I
     raw["session.interrupt"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const Endpoint5_27b = (raw: RawClient["server.session"]) => (input: Endpoint5_27bInput) =>
+  preserveEffect<Endpoint5_27bOutput>()(
+    raw["session.resume"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const Endpoint5_28 = (raw: RawClient["server.session"]) => (input: Endpoint5_28Input) =>
   preserveEffect<Endpoint5_28Output>()(
     raw["session.background"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
@@ -575,6 +582,7 @@ const adaptGroup5 = (raw: RawClient["server.session"]) => ({
   generate: Endpoint5_25(raw),
   log: Endpoint5_26(raw),
   interrupt: Endpoint5_27(raw),
+  resume: Endpoint5_27b(raw),
   background: Endpoint5_28(raw),
   message: Endpoint5_29(raw),
 })

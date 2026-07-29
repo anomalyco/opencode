@@ -597,7 +597,23 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             description: "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
           }),
         ),
-    )
+      )
+      .add(
+        HttpApiEndpoint.post("session.resume", "/api/session/:sessionID/resume", {
+          params: { sessionID: Session.ID },
+          success: HttpApiSchema.NoContent,
+          error: SessionNotFoundError,
+        })
+          .middleware(sessionLocationMiddleware)
+          .annotateMerge(
+            OpenApi.annotations({
+              identifier: "v2.session.resume",
+              summary: "Resume session execution",
+              description:
+                "Resume or start the agent loop for a session. Forces one model call even without pending input, allowing reconnection after a failure.",
+            }),
+          ),
+      )
     .add(
       HttpApiEndpoint.post("session.background", "/api/session/:sessionID/background", {
         params: { sessionID: Session.ID },

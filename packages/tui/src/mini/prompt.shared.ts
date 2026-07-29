@@ -58,6 +58,11 @@ export function isCompactCommand(input: string): boolean {
   return text === "/compact" || text === "/summarize"
 }
 
+export function isReconnectCommand(input: string): boolean {
+  const text = input.trim().toLowerCase()
+  return text === "/reconnect" || text === "/retry"
+}
+
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
   const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(promptCopy)
   const next: RunPrompt[] = []

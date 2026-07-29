@@ -66,6 +66,8 @@ import type {
   SessionLogOutput,
   SessionInterruptInput,
   SessionInterruptOutput,
+  SessionResumeInput,
+  SessionResumeOutput,
   SessionBackgroundInput,
   SessionBackgroundOutput,
   SessionMessageInput,
@@ -800,6 +802,17 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      resume: (input: SessionResumeInput, requestOptions?: RequestOptions) =>
+        request<SessionResumeOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/resume`,
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
