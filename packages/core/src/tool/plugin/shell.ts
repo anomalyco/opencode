@@ -76,16 +76,6 @@ const modelOutput = (output: Output): string | undefined => {
   return `Command exited with code ${output.exit}.`
 }
 
-/**
- * Minimal core shell boundary. Keep parity debt visible without pulling the
- * legacy shell runtime into core.
- */
-// TODO: Add plugin shell.env environment augmentation once plugin hooks exist.
-// TODO: Persist job status and define restart recovery before exposing remote observation.
-// TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
-// TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
-// TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
-
 export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
