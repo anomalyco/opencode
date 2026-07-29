@@ -104,7 +104,9 @@ export const configure = (input: Config) => {
       .model<OpenAIProviderOptionsInput>({ id: modelID })
 
   const chat = (modelID: string | ModelID) =>
-    configuredChatRoute.with(withOpenAIOptions(modelID, modelDefaults)).model<OpenAIProviderOptionsInput>({ id: modelID })
+    configuredChatRoute
+      .with(withOpenAIOptions(modelID, modelDefaults))
+      .model<OpenAIProviderOptionsInput>({ id: modelID })
 
   return {
     id,
@@ -138,11 +140,9 @@ const config = (settings: Settings): Config => {
 export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
   modelID,
   settings,
-) =>
-  configure(config(settings)).responses(modelID)
+) => configure(config(settings)).responses(modelID)
 export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
   modelID,
   settings,
-) =>
-  configure(config(settings)).chat(modelID)
+) => configure(config(settings)).chat(modelID)
 export const model = responsesModel
