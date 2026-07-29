@@ -22,18 +22,39 @@ export type MemSnapshot = {
 /**
  * Recommended ctx_size from real hardware data.
  *
- * `kvEstMb` is the KV cache pre-allocated for the *current* ctx_size; `freeMb`
- * is genuinely-available VRAM (already excludes driver/OS overhead). The KV
- * budget is what's allocated now plus what's free to expand into, scaled
- * linearly by current ctx, rounded to 4k, and clamped to the workflow range.
- * Returns null when there isn't enough signal to compute.
+ * `kvEstMb` is the KV cache pre-allocated for the *current* ctx_size, so
+ * `currentCtx` must be the backend's **hard n_ctx** (`/api/fit` `configured_ctx`)
+ * — not `max_safe_ctx`, which is a prompt budget with the output reserve already
+ * subtracted and skews the ratio. `freeMb` is genuinely-available VRAM (already
+ * excludes driver/OS overhead). The KV budget is what's allocated now plus what's
+ * free to expand into, scaled linearly by current ctx, rounded to 4k, and clamped
+ * to the workflow range. Returns null when there isn't enough signal to compute.
+ *
+ * `maxFitCtx` is llama-skein's `/api/fit` `max_fit_ctx`: the largest hard n_ctx
+ * that fits this host's VRAM, already capped at the model's TRAINED context. It
+ * is a hard ceiling — without it this returned ~250k for a 32k-trained model.
+ * 0/undefined means "ceiling unknown", in which case nothing is capped.
  */
-export function computeRecommendedCtx(m: MemSnapshot, currentCtx: number): number | null {
+export function computeRecommendedCtx(m: MemSnapshot, currentCtx: number, maxFitCtx?: number): number | null {
   if (m.kvEstMb <= 0 || currentCtx <= 0) return null
   const kvBudgetMb = m.kvEstMb + m.freeMb
   const tokens = Math.floor((kvBudgetMb * currentCtx) / m.kvEstMb)
   const rounded = Math.floor(tokens / 4096) * 4096
-  return Math.max(MIN_WORKFLOW_CTX, Math.min(MAX_CTX, rounded))
+  const clamped = Math.max(MIN_WORKFLOW_CTX, Math.min(MAX_CTX, rounded))
+  if (!maxFitCtx || maxFitCtx <= 0) return clamped
+  // The ceiling outranks MIN_WORKFLOW_CTX: on a 32k-trained model the workflow
+  // floor is simply unreachable, and recommending 64k there writes a --ctx-size
+  // the backend cannot load.
+  return Math.min(clamped, maxFitCtx)
+}
+
+/**
+ * True when a ctx_size is above what the model can actually load on this host.
+ * `maxFitCtx` 0/undefined means the ceiling is unknown (non-llama-skein backend,
+ * VRAM unreadable) — never block on missing data.
+ */
+export function aboveCeiling(ctx: number, maxFitCtx?: number): boolean {
+  return !!maxFitCtx && maxFitCtx > 0 && ctx > maxFitCtx
 }
 
 export const PRESETS = [

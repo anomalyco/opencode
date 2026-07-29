@@ -78,8 +78,12 @@ export const LoopCommand = effectCmd({
       .option("interval", {
         type: "number",
         alias: "i",
-        describe: "seconds between iterations (omit for back-to-back ralph style)",
+        describe: `seconds between iterations (default: ${LoopArgDefaults.intervalSeconds})`,
       })
+      // NOTE: --completion-token is intentionally absent until the v2 SDK is
+      // regenerated to carry the field (the server already accepts it and
+      // defaults it). A flag that parses but never reaches the server is worse
+      // than no flag.
       .option("no-progress-limit", {
         type: "number",
         describe: `consecutive no-progress iterations before stopping (default: ${LoopArgDefaults.noProgressLimit}, 0 disables)`,

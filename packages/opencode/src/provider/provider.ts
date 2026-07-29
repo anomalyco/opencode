@@ -16,6 +16,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
 import { ThemeState } from "@opencode-ai/core/local/theme-state"
 import { SkeinLoading } from "@/local/skein-loading"
+import { LocalProviderSync } from "@/local/sync"
 // fork: control-plane client used to auto-lower ctx on a local "context too large" 413.
 import { createClient as createLocalClient, createConfig as createLocalConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
@@ -1448,11 +1449,15 @@ async function fetchLocalModelFit(
   return out
 }
 
-function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): Model {
+export function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): Model {
   if (!existing) return discovered
   return {
     ...discovered,
     ...existing,
+    // fork: `...existing` above wins on every key, including one present but
+    // explicitly `undefined` — which would silently erase a freshly
+    // discovered size. Prefer whichever side actually has a value.
+    sizeBytes: existing.sizeBytes ?? discovered.sizeBytes,
     api: {
       ...discovered.api,
       ...existing.api,
@@ -2378,6 +2383,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(LocalProviderSync.defaultLayer),
   ),
 )
 

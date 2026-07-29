@@ -53,3 +53,21 @@ When merging a discovered model entry with an existing one, an absent or undefin
 #### Scenario: Config-declared entry with no size
 - **WHEN** an existing model entry carries an undefined size and a discovered entry carries a real size
 - **THEN** the merged entry retains the discovered size
+
+### Requirement: Local providers show their total VRAM in the picker
+For each local provider (one with a configured base URL), the picker SHALL display the provider's total VRAM or unified memory, sourced from its hardware endpoint, when that data is available. The picker SHALL NOT block opening on this fetch, and a provider that does not answer SHALL simply show no VRAM label.
+
+#### Scenario: Browsing or filtering a local provider's models
+- **WHEN** the hardware fetch for a local provider has completed successfully
+- **THEN** its total VRAM (or unified memory) is shown alongside its name, in both the unfiltered group header and the filtered provenance text
+
+#### Scenario: Provider does not support the hardware endpoint
+- **WHEN** a provider's hardware fetch fails or the provider does not support it
+- **THEN** the picker renders normally with no VRAM label for that provider
+
+### Requirement: A model can be set as the default
+The picker SHALL offer an action to set the currently selected model as the default for the workspace, persisting the selection so it is used on the next session without requiring a restart.
+
+#### Scenario: Setting a default model
+- **WHEN** the user triggers "Set as default" on a model
+- **THEN** the workspace configuration is updated with that model and a subsequent session uses it as the fallback model

@@ -4,9 +4,13 @@
 // but reads its defaults from LoopArgDefaults below; the TUI has no
 // arg-parsing library for a single `/loop <rest of line>` string, so it
 // calls parseLoopArgs directly.
+// Mirrors the server-side defaults in packages/opencode/src/loop/loop.ts —
+// these two must be kept in step by hand (the server cannot import the SDK).
 export const LoopArgDefaults = {
 	maxIterations: 50,
 	noProgressLimit: 3,
+	intervalSeconds: 2,
+	completionToken: "<promise>COMPLETE</promise>",
 } as const;
 
 export interface ParsedLoopArgs {

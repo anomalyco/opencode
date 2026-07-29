@@ -6,7 +6,9 @@ import { useToast } from "../ui/toast"
 import { DialogSelect } from "../ui/dialog-select"
 import { createClient, createConfig } from "../local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "../local/llama-skein/gen/sdk.gen"
+import type { ModelFit } from "../local/llama-skein/gen/types.gen"
 import {
+  aboveCeiling,
   computeRecommendedCtx,
   extractMem,
   fmtCtxK,
@@ -24,10 +26,20 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
   const toast = useToast()
   const [busy, setBusy] = createSignal(false)
   const [mem, setMem] = createSignal<MemSnapshot | null>(null)
+  const [fit, setFit] = createSignal<ModelFit | null>(null)
 
   const provider = createMemo(() => sync.data.provider.find((p) => p.id === props.providerID))
 
-  const current = createMemo(() => provider()?.models[props.modelID]?.limit.context ?? 0)
+  // fork: the backend's *hard* n_ctx — the KV allocation every number here is
+  // scaled against. `limit.context` is `max_safe_ctx`, a prompt budget that has
+  // already had the output reserve and safety margin subtracted, so using it
+  // skewed every recommendation. Prefer `/api/fit` `configured_ctx`; fall back to
+  // `limit.contextMax`, which provider discovery also fills from `configured_ctx`.
+  const current = createMemo(() => fit()?.configured_ctx ?? provider()?.models[props.modelID]?.limit.contextMax ?? 0)
+
+  // Largest hard n_ctx this host can load, already capped at the model's TRAINED
+  // context by llama-skein. 0 = unknown (non-llama-skein backend, VRAM unreadable).
+  const maxFit = createMemo(() => fit()?.max_fit_ctx ?? 0)
 
   const modelName = createMemo(() => provider()?.models[props.modelID]?.name ?? props.modelID)
 
@@ -44,6 +56,12 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
       } catch {
         // backend may not support /api/hardware — ignore silently
       }
+      try {
+        const res = await llamaClient.getModelFit({ model: props.modelID })
+        if (res.data) setFit(res.data)
+      } catch {
+        // backend may not support /api/fit — ceiling stays unknown, nothing is capped
+      }
     }
     poll()
     const id = setInterval(poll, 15_000)
@@ -54,7 +72,7 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
     const m = mem()
     const cur = current()
     if (!m || cur <= 0) return null
-    return computeRecommendedCtx(m, cur)
+    return computeRecommendedCtx(m, cur, maxFit())
   })
 
   const options = createMemo(() => {
@@ -65,9 +83,18 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
     const extra = new Set(cur > 0 ? [cur] : [])
     if (rec) extra.add(rec)
     const sizes = [...new Set([...PRESETS, ...extra])].sort((a, b) => a - b)
+    const ceiling = maxFit()
     return sizes.map((n) => {
       let description: string | undefined
-      if (n === cur && n === rec) {
+      // fork: PRESETS is hand-authored and runs to 1M, so it offers sizes no
+      // model can load — this is how `--ctx-size 98304` got written onto a
+      // 32k-trained model. Annotate loudly instead of hiding the row (a model
+      // already misconfigured above the ceiling needs its `current` row visible),
+      // and refuse the selection in apply().
+      if (aboveCeiling(n, ceiling)) {
+        description = `⚠ above ceiling (${fmtCtxK(ceiling)}) — backend cannot load this`
+        if (n === cur) description = `current · ${description}`
+      } else if (n === cur && n === rec) {
         description = "current · recommended"
       } else if (n === cur) {
         description = "current"
@@ -88,12 +115,25 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
 
   const titleSuffix = createMemo(() => {
     const m = mem()
-    if (!m) return ""
-    return ` · ${fmtGB(m.freeMb)}/${fmtGB(m.totalMb)} GB ${m.label} free`
+    const ceiling = maxFit()
+    const parts: string[] = []
+    if (m) parts.push(`${fmtGB(m.freeMb)}/${fmtGB(m.totalMb)} GB ${m.label} free`)
+    if (ceiling > 0) parts.push(`max ${fmtCtxK(ceiling)}`)
+    return parts.length ? ` · ${parts.join(" · ")}` : ""
   })
 
   function apply(ctx_size: number) {
     if (busy()) return
+    const ceiling = maxFit()
+    if (aboveCeiling(ctx_size, ceiling)) {
+      // Refuse without closing so a valid size can still be picked. Server-side
+      // this is enforced again in local.model.setCtxSize.
+      toast.show({
+        variant: "error",
+        message: `${fmtCtxK(ctx_size)} exceeds what this model can load here (max ${fmtCtxK(ceiling)})`,
+      })
+      return
+    }
     setBusy(true)
     // Close immediately so the UI feels responsive; the model reload is slow.
     dialog.clear()
@@ -110,7 +150,10 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
       )
       .then((res) => {
         if (res.data === false) {
-          toast.show({ variant: "error", message: "Provider not found or has no base URL" })
+          toast.show({
+            variant: "error",
+            message: "Context size rejected — provider has no base URL, or the size is above the model's ceiling",
+          })
           return
         }
         void sync.refreshProviders()

@@ -1200,6 +1200,12 @@ export const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            // force: true bypasses summary.ts's per-session throttle so the turn's
+            // final diff is always persisted accurately, even if the last few
+            // steps' calls were skipped for landing inside the throttle window.
+            yield* summary
+              .summarize({ sessionID, messageID: lastUser.id, force: true })
+              .pipe(Effect.ignore, Effect.forkIn(scope))
             break
           }
 

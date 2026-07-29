@@ -15,7 +15,14 @@ import { SessionPrompt } from "@/session/prompt";
 import { SessionID } from "@/session/schema";
 import { Session } from "@/session/session";
 
-export const COMPLETE_SIGNAL = "<promise>COMPLETE</promise>";
+import {
+	contractPart,
+	DEFAULT_COMPLETION_TOKEN,
+	matchesCompletion,
+	promptDisablesCompletion,
+} from "./completion";
+
+export const COMPLETE_SIGNAL = DEFAULT_COMPLETION_TOKEN;
 
 export const DefaultMaxIterations = 50;
 export const DefaultNoProgressLimit = 3;
@@ -71,6 +78,7 @@ export const Info = Schema.Struct({
 	maxIterations: Schema.Int,
 	interval: Schema.optional(Schema.Finite),
 	noProgressLimit: Schema.Int,
+	completionToken: Schema.String,
 	iteration: Schema.Int,
 	iterations: Schema.Array(IterationInfo),
 	startedAt: Schema.Finite,
@@ -85,6 +93,7 @@ export const CreateInput = Schema.Struct({
 	maxIterations: Schema.optional(Schema.Int),
 	interval: Schema.optional(Schema.Finite),
 	noProgressLimit: Schema.optional(Schema.Int),
+	completionToken: Schema.optional(Schema.String),
 });
 export type CreateInput = Schema.Schema.Type<typeof CreateInput>;
 
@@ -158,10 +167,25 @@ export const layer = Layer.effect(
 			Effect.gen(function* () {
 				const iterationNumber = record.info.iteration + 1;
 				const startedAt = Date.now();
+				// The user's prompt stays first and verbatim; the contract is a
+				// separate trailing part so the model is actually told the token it
+				// is expected to emit. Injected per iteration rather than into the
+				// system prompt so the iteration counter stays accurate and no
+				// non-loop session ever sees it.
 				const outcome = yield* promptSvc
 					.prompt({
 						sessionID: record.info.sessionID,
-						parts: [{ type: "text", text: record.info.prompt }],
+						parts: [
+							{ type: "text", text: record.info.prompt },
+							{
+								type: "text",
+								text: contractPart(
+									record.info.completionToken,
+									iterationNumber,
+									record.info.maxIterations,
+								),
+							},
+						],
 					})
 					.pipe(Effect.result);
 				const finishedAt = Date.now();
@@ -204,7 +228,11 @@ export const layer = Layer.effect(
 					toolCalls,
 					outputLength: output.length,
 					output,
-					complete: output.includes(COMPLETE_SIGNAL),
+					complete: matchesCompletion(
+						output,
+						record.info.completionToken,
+						record.info.prompt,
+					),
 					error: false,
 					aborted,
 					startedAt,
@@ -359,6 +387,17 @@ export const layer = Layer.effect(
 					parentSessionID = undefined;
 					directory = parent.directory;
 				}
+				const completionToken =
+					input.completionToken?.trim() || DEFAULT_COMPLETION_TOKEN;
+				// A token that already appears in the user's prompt cannot be told
+				// apart from the model quoting its instructions back, so
+				// matchesCompletion refuses to fire on it. Say so up front rather
+				// than letting the loop silently run to max_reached.
+				if (promptDisablesCompletion(prompt, completionToken))
+					yield* Effect.logWarning(
+						"loop prompt contains the completion token; token-based completion is disabled for this loop",
+						{ "loop.id": id, "loop.completionToken": completionToken },
+					);
 				const info: Info = {
 					id,
 					directory,
@@ -369,6 +408,7 @@ export const layer = Layer.effect(
 					maxIterations: input.maxIterations ?? DefaultMaxIterations,
 					interval: input.interval,
 					noProgressLimit: input.noProgressLimit ?? DefaultNoProgressLimit,
+					completionToken,
 					iteration: 0,
 					iterations: [],
 					startedAt: now,

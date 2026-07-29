@@ -278,8 +278,21 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const config = yield* configSvc.get()
       const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
       if (!baseURL) return false
+      const client = llamaClient(baseURL)
+      // fork: last line of defence against writing a --ctx-size the model cannot
+      // load. The TUI dialog annotates and refuses over-ceiling sizes, but this
+      // endpoint is reachable directly, and a 98304 patched onto a 32k-trained
+      // model is what wedged the backend. `max_fit_ctx` is llama-skein's
+      // VRAM-achievable hard n_ctx, already capped at the trained context. When it
+      // is unknown (0 — non-llama-skein backend, VRAM unreadable) there is nothing
+      // to judge against, so let the patch through rather than block a valid change.
+      const fit = yield* Effect.tryPromise(() => client.getModelFit({ model: modelID })).pipe(
+        Effect.orElseSucceed(() => null),
+      )
+      const maxFit = fit?.data?.max_fit_ctx ?? 0
+      if (maxFit > 0 && ctx_size > maxFit) return false
       const res = yield* Effect.tryPromise(() =>
-        llamaClient(baseURL).patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size } }),
+        client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size } }),
       ).pipe(Effect.orElseSucceed(() => null))
       const ok = res !== null && !res.error
       // fork: llama-skein reloads the model on a ctx change; sync our cached

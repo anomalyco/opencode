@@ -63,7 +63,16 @@ export type ModelProbeResult = {
   mtpMetadata: Record<string, MtpMetadata | undefined>
 }
 
-export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<ModelProbeResult | null> {
+// Default probe budget. 2s is right for a LAN fleet, but a provider reached
+// over a VPN can legitimately take far longer to answer /v1/models — a slow
+// answer is not the same as being offline. Override with
+// OPENCODE_LOCAL_PROBE_TIMEOUT_MS when the fleet is behind a high-latency link.
+const DEFAULT_PROBE_TIMEOUT_MS = Number(process.env["OPENCODE_LOCAL_PROBE_TIMEOUT_MS"]) || 2000
+
+export async function probeModelIDs(
+  baseURL: string,
+  timeoutMs = DEFAULT_PROBE_TIMEOUT_MS,
+): Promise<ModelProbeResult | null> {
   return withTimeout(
     llamaSkeinClient(baseURL)
       .listModels()
@@ -346,7 +355,7 @@ export async function scanLlamaSwap(
 
   return Promise.all(
     raw.map(async (svc) => {
-      const probe = await probeModelIDs(svc.baseURL, 750)
+      const probe = await probeModelIDs(svc.baseURL)
       return {
         ...svc,
         models: probe?.ids ?? [],

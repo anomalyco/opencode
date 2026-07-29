@@ -174,10 +174,11 @@ const syncLocalProviders = Effect.gen(function* () {
   )
 })
 
+// Run synchronously so Provider (which reads cfg.provider) gets the discovered
+// entries. The 1–2 s mDNS + LAN scan is bounded and only runs once at startup.
 export const layer = Layer.effectDiscard(
   syncLocalProviders.pipe(
     Effect.catch((err) => Effect.sync(() => log.error("sync failed", { error: String(err) }))),
-    Effect.forkScoped,
   ),
 )
 

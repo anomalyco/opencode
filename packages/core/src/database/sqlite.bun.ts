@@ -162,6 +162,15 @@ const nativeLayer = (config: Config) =>
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
       if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
+      // fork: this DB file is shared by every concurrent opencode process across
+      // every project (one file per build channel). With no busy_timeout, a
+      // writer that loses the race on a locked page fails SQLITE_BUSY
+      // immediately instead of waiting a bounded amount for the holder to
+      // finish — observed 2026-07-26: multiple processes pegged at 100%+ CPU
+      // against a 17GB shared db with zero forward progress and no surfaced
+      // error. 5s tolerates a slow writer (e.g. a large snapshot row) without
+      // turning a transient conflict into an unbounded, silent stall.
+      native.run("PRAGMA busy_timeout = 5000;")
       return native
     }),
   )

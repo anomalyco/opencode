@@ -1,4 +1,4 @@
-## Fix loop reliability: per-iteration sessions, adaptive continuation, pause Deferred
+# Fix loop reliability with per-iteration sessions and adaptive continuation
 
 ## Why
 

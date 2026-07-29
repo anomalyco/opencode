@@ -10,20 +10,56 @@ import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useToast } from "../ui/toast"
 import { useSync } from "../context/sync"
+import { useSDK } from "../context/sdk"
+import { useProject } from "../context/project"
+import { createClient, createConfig } from "../local/llama-skein/gen/client"
+import { LlamaSkeinClient } from "../local/llama-skein/gen/sdk.gen"
+import { extractMem, fmtGB, normalizeBaseURL } from "../local/model-fit"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
+  const sdk = useSDK()
+  const project = useProject()
   const dialog = useDialog()
   const toast = useToast()
   const [query, setQuery] = createSignal("")
+  const [settingDefault, setSettingDefault] = createSignal(false)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
 
+  // Total VRAM (or unified memory) per local provider, fetched once per dialog
+  // lifetime — never blocks dialog open, and a provider that doesn't answer
+  // /api/hardware (non-local, or an older backend) simply has no label.
+  const [vram, setVram] = createSignal<Record<string, string>>({})
+
   onMount(() => {
     void sync.refreshProviders().catch(() => undefined)
+    for (const item of sync.data.provider) {
+      const baseURL = item.options?.["baseURL"] as string | undefined
+      if (!baseURL) continue
+      const llamaClient = new LlamaSkeinClient({
+        client: createClient(createConfig({ baseUrl: normalizeBaseURL(baseURL) })),
+      })
+      llamaClient
+        .getHardware()
+        .then((res) => {
+          if (!res.data) return
+          const mem = extractMem(res.data)
+          if (!mem || mem.totalMb <= 0) return
+          setVram((prev) => ({ ...prev, [item.id]: `${fmtGB(mem.totalMb)} GB ${mem.label}` }))
+        })
+        .catch(() => {
+          // backend may not support /api/hardware — no VRAM label, nothing else changes
+        })
+    }
   })
+
+  function providerLabel(providerID: string, name: string) {
+    const label = vram()[providerID]
+    return label ? `${name} · ${label}` : name
+  }
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 
@@ -47,6 +83,7 @@ export function DialogModel(props: { providerID?: string }) {
             title: model.name ?? item.modelID,
             description: provider.name,
             category,
+            provenance: providerLabel(provider.id, provider.name),
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             // sizeBytes rides on the runtime provider Model (llama-skein
             // size_bytes) but isn't in the generated SDK type yet — read it
@@ -89,7 +126,8 @@ export function DialogModel(props: { providerID?: string }) {
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
-            category: connected() ? provider.name : undefined,
+            category: connected() ? providerLabel(provider.id, provider.name) : undefined,
+            provenance: providerLabel(provider.id, provider.name),
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer:
               formatModelSize((info as { sizeBytes?: number }).sizeBytes) ??
@@ -196,6 +234,30 @@ export function DialogModel(props: { providerID?: string }) {
               return
             }
             dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
+          },
+        },
+        {
+          command: "model.dialog.default",
+          title: "Set as default",
+          hidden: !connected(),
+          disabled: settingDefault(),
+          onTrigger: async (option) => {
+            const { providerID, modelID } = option.value as { providerID: string; modelID: string }
+            setSettingDefault(true)
+            try {
+              const workspace = project.workspace.current()
+              await sdk.client.config.update(
+                { workspace, config: { model: `${providerID}/${modelID}` } },
+                { throwOnError: true },
+              )
+              const refreshed = await sdk.client.config.get({ workspace }, { throwOnError: true })
+              sync.set("config", refreshed.data!)
+              toast.show({ variant: "success", message: "Default model updated" })
+            } catch {
+              toast.show({ variant: "warning", message: "Failed to set default model" })
+            } finally {
+              setSettingDefault(false)
+            }
           },
         },
       ]}

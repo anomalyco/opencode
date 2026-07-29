@@ -130,6 +130,10 @@ export type Model = {
     context_length?: number;
     max_output_tokens?: number;
     /**
+     * On-disk size of the model weights in bytes: the GGUF file size for llama.cpp, or the summed safetensors size for MLX. Lets clients show a human-readable size (e.g. GB) when picking between similar quantizations. Omitted when the size can't be determined (peer models, un-resolvable path).
+     */
+    size_bytes?: number;
+    /**
      * Current --n-cpu-moe value parsed from the model command, when set (llama.cpp MoE expert CPU offload).
      */
     n_cpu_moe?: number;
@@ -160,6 +164,10 @@ export type Model = {
         mtp?: MtpMetadata;
         [key: string]: unknown | MtpMetadata | undefined;
     };
+    /**
+     * True if the model emits reasoning/thinking output (reasoning_content) before its answer. Resolved from the model config; omitted when not declared. Clients use it to enable reasoning-stream rendering.
+     */
+    reasoning?: boolean;
 };
 
 export type ConfigInfoResponse = {
@@ -438,9 +446,17 @@ export type ModelFit = {
      */
     backend: 'llamacpp' | 'mlx' | 'vllm';
     /**
-     * How well the model fits this host.
+     * How well the model fits this host. "unknown" means host VRAM could not be read yet (not that the model does not fit); max_safe_ctx is 0 in that case.
      */
-    fit_level: 'perfect' | 'good' | 'tight' | 'marginal' | 'no';
+    fit_level: 'perfect' | 'good' | 'tight' | 'marginal' | 'no' | 'unknown';
+    /**
+     * True when a configured model's --ctx-size is materially below the context VRAM could safely hold. Signals a starved config that the fit report would otherwise hide behind the small configured_ctx.
+     */
+    under_configured?: boolean;
+    /**
+     * Largest --ctx-size (hard n_ctx) that fits this host's VRAM, capped at the trained context. The grow target for an under-configured model. 0 when VRAM is unknown.
+     */
+    max_fit_ctx?: number;
     /**
      * How the model would run given memory.
      */
@@ -579,6 +595,12 @@ export type TuningStatus = {
      * User-supplied flags appended at launch.
      */
     extra_args?: Array<string>;
+    /**
+     * Effective glibc allocator env vars injected into each llama.cpp backend process on this host (e.g. MALLOC_MMAP_THRESHOLD_). Empty/absent on non-Linux hosts or when disabled. Recommended defaults, overridable per-model or via backend_env=false.
+     */
+    backend_env?: {
+        [key: string]: string;
+    };
 };
 
 export type TuningProfilesResponse = {
@@ -613,6 +635,10 @@ export type TuningPatchRequest = {
      * Override GPU detection.
      */
     gfx_target?: string | null;
+    /**
+     * Toggle glibc allocator-env injection (MALLOC_* caps) on Linux llama.cpp backends. false disables it while leaving GPU flag tuning active; true or null defers to the built-in default (enabled on Linux).
+     */
+    backend_env?: boolean | null;
 };
 
 export type GetSystemVersionData = {
