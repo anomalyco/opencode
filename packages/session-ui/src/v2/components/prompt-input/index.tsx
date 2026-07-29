@@ -39,6 +39,7 @@ export type PromptInputV2Props = {
   borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
+  variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
 }
@@ -232,7 +233,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             >
               {props.modelControl}
             </Show>
-            <Show when={view.variant}>
+            <Show when={(props.variantControlVisible ?? true) && view.variant}>
               {(control) => (
                 <Show when={control().options().length > 1}>
                   <PromptInputV2ConfiguredSelect

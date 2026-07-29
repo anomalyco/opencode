@@ -84,6 +84,7 @@ test("stages a submitted line comment in the prompt context", async ({ page }) =
 async function openReview(page: Page) {
   await page.setViewportSize({ width: 700, height: 900 })
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: "proj_review_line_comment_regression",
@@ -143,9 +144,9 @@ async function openReview(page: Page) {
 
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
-  const diffResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/vcs/diff")
+  const diffResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/vcs/diff")
   await page.getByRole("tab", { name: "Changes" }).click()
-  expect(await (await diffResponse).json()).toHaveLength(1)
+  expect((await (await diffResponse).json()).data).toHaveLength(1)
 
   const review = page.locator('[data-component="session-review"]')
   await expectAppVisible(review)

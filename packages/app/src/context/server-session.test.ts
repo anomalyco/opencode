@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
-import type { MessageApi, OpenCodeEvent, SessionApi } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionApi } from "@opencode-ai/client/promise"
 import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
+import type { ServerApi } from "@/utils/server"
+
+type MessageApi = ServerApi["message"]
 
 const session = (id: string, parentID?: string): Session => ({
   id,
@@ -263,7 +266,7 @@ describe("server session", () => {
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
 
-  test("reprojects current assistants when an older page supplies their user", async () => {
+  test("extends a current page to include the user for split assistant turns", async () => {
     const user = { id: "msg_1_user", type: "user", text: "hello", time: { created: 1 } } as const
     const assistant = (id: string, created: number) => ({
       id,
@@ -282,17 +285,22 @@ describe("server session", () => {
       { data: assistants.slice(1).toReversed(), cursor: { previous: null, next: "older" } },
       { data: [assistants[0], user], cursor: { previous: null, next: null } },
     ]
+    const requests: unknown[] = []
     const messageApi = {
-      list: async () => pages.shift()!,
+      list: async (input: unknown) => {
+        requests.push(input)
+        return pages.shift()!
+      },
     } as unknown as MessageApi
     const store = createServerSession({} as OpencodeClient, {} as SessionApi, messageApi)
     store.remember(session("root"))
 
     await store.sync("root")
-    expect(store.data.message.root).toEqual([])
 
-    await store.history.loadMore("root")
-
+    expect(requests).toEqual([
+      { sessionID: "root", limit: 20, order: "desc" },
+      { sessionID: "root", limit: 20, cursor: "older" },
+    ])
     expect(store.data.message.root.map((message) => message.id)).toEqual([
       user.id,
       ...assistants.map((item) => item.id),

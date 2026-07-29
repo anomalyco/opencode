@@ -1,6 +1,6 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
-import type { MessageApi, OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
   Message,
   OpencodeClient,
@@ -21,6 +21,9 @@ import { normalizeSessionInfo } from "@/utils/session"
 import { normalizeSessionMessages } from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
+import type { ServerApi } from "@/utils/server"
+
+type MessageApi = ServerApi["message"]
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const cmpMessage = (a: Message, b: Message) => a.time.created - b.time.created || cmp(a.id, b.id)
@@ -29,6 +32,17 @@ const initialMessagePageSize = 20
 const historyMessagePageSize = 200
 const sessionInfoLimit = 2_048
 const emptyIDs: ReadonlySet<string> = new Set()
+
+function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
+  const boundary = source.find(
+    (message) =>
+      message.type === "user" ||
+      message.type === "shell" ||
+      message.type === "assistant" ||
+      (message.type === "synthetic" && message.description?.trim()),
+  )
+  return boundary?.type === "assistant"
+}
 
 type OptimisticItem = {
   message: Message
@@ -525,11 +539,20 @@ export function createServerSession(
 
   const fetchMessages = async (sessionID: string, limit: number, before?: string, onAttempt?: () => void) => {
     if (messageApi && (await options?.protocol) !== "v1") {
-      const response = await (options?.retry ?? retry)(() => {
-        onAttempt?.()
-        return messageApi.list(before ? { sessionID, limit, cursor: before } : { sessionID, limit, order: "desc" })
-      })
-      const source = [...response.data].reverse()
+      const request = (cursor?: string) =>
+        (options?.retry ?? retry)(() => {
+          onAttempt?.()
+          return messageApi.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
+        })
+      const first = await request(before)
+      const pages = [first]
+      while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
+        const response = await request(pages.at(-1)!.cursor.next ?? undefined)
+        pages.push(response)
+        if (!response.data.length) break
+      }
+      const response = pages.at(-1)!
+      const source = pages.flatMap((page) => page.data).toReversed()
       const normalized = normalizeSessionMessages(sessionID, source)
       return {
         session: normalized.messages.sort((a, b) => cmp(a.id, b.id)),
@@ -934,10 +957,10 @@ export function createServerSession(
       })
     if (event.type === "session.usage.updated" && info)
       remember({ ...info, cost: event.data.cost, tokens: event.data.tokens })
-    if (event.type === "session.archived") {
-      if (info) remember({ ...info, time: { ...info.time, archived: event.created, updated: event.created } })
-      evict([sessionID])
-    }
+    // if (event.type === "session.archived") {
+    //   if (info) remember({ ...info, time: { ...info.time, archived: event.created, updated: event.created } })
+    //   evict([sessionID])
+    // }
     if (event.type === "session.execution.started") setData("session_status", sessionID, { type: "busy" })
     if (
       event.type === "session.execution.succeeded" ||
