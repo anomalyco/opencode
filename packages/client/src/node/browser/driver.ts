@@ -1,4 +1,5 @@
 import type { Browser } from "@opencode-ai/schema/browser"
+import { chromiumDriver, type ChromiumDriver, type ChromiumPort } from "./chromium.js"
 export interface BrowserProxy {
   readonly url: string
   readonly host: string
@@ -39,6 +40,11 @@ export type BrowserDriver<Resource> = BrowserDriverFactory<Resource>
 export const BrowserDriver = {
   define<Resource>(create: BrowserDriverFactory<Resource>): BrowserDriver<Resource> {
     return create
+  },
+  chromium<Resource>(
+    create: (context: BrowserDriverContext) => PromiseLike<ChromiumPort<Resource>> | ChromiumPort<Resource>,
+  ): ChromiumDriver<Resource> {
+    return chromiumDriver(create)
   },
 }
 

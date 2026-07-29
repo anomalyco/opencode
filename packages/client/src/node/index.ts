@@ -23,6 +23,7 @@ export type {
   BrowserDriverInstance,
   BrowserProxy,
 } from "./browser/driver.js"
+export type { ChromiumController, ChromiumDriver, ChromiumPort } from "./browser/chromium.js"
 export type {
   BrowserAttachment,
   BrowserAttachOptions,
