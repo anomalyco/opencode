@@ -42,7 +42,7 @@ describe("acp subagent wire contract", () => {
     })
   })
 
-  test("rejects a node whose root does not match its parent", () => {
+  test("rejects a cross-root parent", () => {
     const snapshot = structuredClone(fixture.snapshot)
     snapshot.nodes[1].rootSessionId = "other-root"
 
@@ -56,14 +56,14 @@ describe("acp subagent wire contract", () => {
     expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
   })
 
-  test("rejects a snapshot without a parentless root", () => {
+  test("accepts an empty collection of root graphs", () => {
     const snapshot = structuredClone(fixture.snapshot)
     snapshot.nodes = []
 
-    expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
+    expect(Subagent.decodeSnapshot(snapshot)).toEqual(snapshot)
   })
 
-  test("rejects a snapshot with multiple parentless roots", () => {
+  test("accepts multiple valid root graphs", () => {
     const snapshot = structuredClone(fixture.snapshot)
     snapshot.nodes.push({
       runId: "other-root",
@@ -72,6 +72,21 @@ describe("acp subagent wire contract", () => {
       phase: "completed",
       cwd: "/workspace/other-repo",
     })
+
+    expect(Subagent.decodeSnapshot(snapshot)).toEqual(snapshot)
+  })
+
+  test("rejects a root group without its canonical root", () => {
+    const snapshot = structuredClone(fixture.snapshot)
+    snapshot.nodes = [
+      {
+        runId: "root-alias",
+        sessionId: "root-alias",
+        rootSessionId: "root",
+        phase: "completed",
+        cwd: "/workspace/repo",
+      },
+    ]
 
     expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
   })

@@ -138,10 +138,6 @@ function validateSnapshot(input: Schema.Schema.Type<typeof Snapshot>): Snapshot 
   const runIDs = new Set(snapshot.nodes.map((node) => node.runId))
   if (runIDs.size !== snapshot.nodes.length) throw new Error("subagent run IDs must be unique")
 
-  if (snapshot.nodes.filter((node) => !node.parentSessionId).length !== 1) {
-    throw new Error("subagent snapshot must contain exactly one root node")
-  }
-
   snapshot.nodes.forEach((node) => {
     if (!node.parentSessionId) {
       if (node.rootSessionId !== node.sessionId) throw new Error("root node must match its root session ID")
@@ -153,18 +149,23 @@ function validateSnapshot(input: Schema.Schema.Type<typeof Snapshot>): Snapshot 
     if (parent.rootSessionId !== node.rootSessionId) throw new Error("subagent parent must share its root session ID")
   })
 
-  snapshot.nodes.forEach((node) => {
-    const depth = depthOf(node, bySession, new Set())
-    if (depth > maxDepth) throw new Error(`subagent depth must not exceed ${maxDepth}`)
-  })
-
-  const descendants = snapshot.nodes.reduce((result, node) => {
-    result.set(node.rootSessionId, (result.get(node.rootSessionId) ?? 0) + 1)
+  const nodesByRoot = snapshot.nodes.reduce((result, node) => {
+    result.set(node.rootSessionId, [...(result.get(node.rootSessionId) ?? []), node])
     return result
-  }, new Map<string, number>())
-  if ([...descendants.values()].some((count) => count - 1 > maxDescendants)) {
-    throw new Error(`subagent descendants must not exceed ${maxDescendants}`)
-  }
+  }, new Map<string, Node[]>())
+
+  nodesByRoot.forEach((nodes, rootSessionId) => {
+    const roots = nodes.filter((node) => !node.parentSessionId)
+    if (roots.length !== 1 || roots[0]?.sessionId !== rootSessionId) {
+      throw new Error("subagent root group must contain exactly one canonical root")
+    }
+    if (nodes.length - 1 > maxDescendants) throw new Error(`subagent descendants must not exceed ${maxDescendants}`)
+
+    nodes.forEach((node) => {
+      const depth = depthOf(node, bySession, new Set())
+      if (depth > maxDepth) throw new Error(`subagent depth must not exceed ${maxDepth}`)
+    })
+  })
 
   return snapshot
 }
