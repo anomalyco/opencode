@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { useConfig } from "../config"
 import { FilePath } from "./file-path"
 
-const DURATION = 500
+const DURATION = 300
 
 // FilePath that crossfades when its value changes: the old path fades to the
 // background, the text swaps at the midpoint, and the new path fades back in.
