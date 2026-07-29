@@ -24,6 +24,7 @@ import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
+import { createInterface } from "node:readline"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
@@ -413,7 +414,8 @@ export const RunCommand = effectCmd({
         }
       }
 
-      const piped = process.stdin.isTTY ? undefined : await Bun.stdin.text()
+      // In --format json mode, keep stdin open for permission replies from cc-connect
+      const piped = (process.stdin.isTTY || args.format === "json") ? undefined : await Bun.stdin.text()
       message = resolveRunInput(message, piped) ?? ""
       const initialInput = resolveRunInput(rawMessage, piped)
 
@@ -802,6 +804,25 @@ export const RunCommand = effectCmd({
                   requestID: permission.id,
                   reply: "once",
                 })
+              } else if (args.format === "json") {
+                emit("permission_asked", {
+                  permission: {
+                    id: permission.id,
+                    sessionID: permission.sessionID,
+                    permission: permission.permission,
+                    patterns: permission.patterns,
+                    metadata: permission.metadata,
+                    always: permission.always,
+                    tool: permission.tool,
+                  },
+                })
+                // Wait for permission reply from cc-connect via stdin
+                const reply = await readPermissionReply()
+                if (reply === "always") {
+                  await client.permission.reply({ requestID: permission.id, reply: "always" })
+                } else {
+                  await client.permission.reply({ requestID: permission.id, reply: reply === "once" ? "once" : "reject" })
+                }
               } else {
                 UI.println(
                   UI.Style.TEXT_WARNING_BOLD + "!",
@@ -816,6 +837,35 @@ export const RunCommand = effectCmd({
             }
           }
           return error
+        }
+
+        // Read a single JSON reply line from stdin and return the "reply" field.
+        // Used in --format json mode to receive permission responses from cc-connect.
+        // Times out after 120s if no valid reply received, defaulting to "reject".
+        async function readPermissionReply(): Promise<string> {
+          return new Promise((resolve) => {
+            const rl = createInterface({ input: process.stdin })
+            let resolved = false
+            const timeout = setTimeout(() => {
+              if (!resolved) {
+                resolved = true
+                rl.close()
+                resolve("reject")
+              }
+            }, 120000)
+            rl.on("line", (line: string) => {
+              if (resolved || !line.trim()) return
+              try {
+                const parsed = JSON.parse(line)
+                resolved = true
+                clearTimeout(timeout)
+                rl.close()
+                resolve(parsed.reply || "reject")
+              } catch {
+                // ignore invalid JSON, wait for next line
+              }
+            })
+          })
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
