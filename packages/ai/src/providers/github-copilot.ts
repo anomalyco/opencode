@@ -50,9 +50,11 @@ export const configure = (options: ModelOptions) => {
   const responsesRoute = configuredResponsesRoute(options)
   const chatRoute = configuredChatRoute(options)
   const responses = (modelID: string | ModelID) =>
-    responsesRoute.with(withOpenAIOptions(modelID, defaults(options))).model({ id: modelID })
+    responsesRoute
+      .with(withOpenAIOptions(modelID, defaults(options)))
+      .model<OpenAIProviderOptionsInput>({ id: modelID })
   const chat = (modelID: string | ModelID) =>
-    chatRoute.with(withOpenAIOptions(modelID, defaults(options))).model({ id: modelID })
+    chatRoute.with(withOpenAIOptions(modelID, defaults(options))).model<OpenAIProviderOptionsInput>({ id: modelID })
   return {
     id,
     model: (modelID: string | ModelID) =>
