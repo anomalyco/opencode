@@ -59,7 +59,11 @@ export interface Options<State, DraftApi> {
   readonly initial: () => State
   /** Wraps mutable state in a domain-specific draft API. */
   readonly draft: MakeDraft<State, DraftApi>
-  /** Runs after all active transforms and before the rebuilt state becomes visible. */
+  /**
+   * Runs after the rebuilt state becomes visible. Update events published here
+   * act as read barriers: subscribers refetching on the event observe the
+   * committed state.
+   */
   readonly finalize?: (draft: DraftApi) => Effect.Effect<void>
 }
 
@@ -81,9 +85,8 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   const semaphore = Semaphore.makeUnsafe(1)
 
   const commit = Effect.fn("State.commit")(function* (next: State) {
-    const api = options.draft(next)
-    if (options.finalize) yield* options.finalize(api)
     state = next
+    if (options.finalize) yield* options.finalize(options.draft(next))
   })
 
   const apply = (transform: TransformCallback<DraftApi>, draft: DraftApi) =>

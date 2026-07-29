@@ -1,4 +1,4 @@
-import type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/tui/context"
+import type { KeymapActive, KeymapCommand, KeymapLayer, KeymapPending } from "@opencode-ai/plugin/tui/context"
 import { InputRenderable, TextareaRenderable, type KeyEvent, type Renderable } from "@opentui/core"
 import { stringifyKeyStroke, type Binding, type CommandContext } from "@opentui/keymap"
 import {
@@ -255,13 +255,19 @@ function useShortcuts() {
     const commands = keymap.getCommands({ visibility: "registered" }).map((command) => command.name)
     const bindings = keymap.getCommandBindings({ visibility: "registered", commands })
     return new Map(
-      commands.map((id) => [
-        id,
-        {
-          first: formatKeySequence(bindings.get(id)?.[0]?.sequence, formatOptions(value.config)),
-          all: formatCommandBindings(bindings.get(id) ?? [], formatOptions(value.config)),
-        },
-      ]),
+      commands.map((id) => {
+        const current = bindings.get(id) ?? []
+        return [
+          id,
+          {
+            first: formatKeySequence(current[0]?.sequence, formatOptions(value.config)),
+            all: formatCommandBindings(current, formatOptions(value.config)),
+            list: current
+              .map((binding) => formatKeySequence(binding.sequence, formatOptions(value.config)))
+              .filter((shortcut): shortcut is string => shortcut !== undefined),
+          },
+        ]
+      }),
     )
   })
   return {
@@ -270,6 +276,9 @@ function useShortcuts() {
     },
     all(id: string) {
       return shortcuts().get(id)?.all
+    },
+    list(id: string) {
+      return shortcuts().get(id)?.list ?? []
     },
   }
 }
@@ -328,6 +337,41 @@ function useActiveKeys() {
   return useKeymapSelector((keymap) => keymap.getActiveKeys({ includeMetadata: true }))
 }
 
+function useState() {
+  const value = useValue()
+  const commands = useCommands()
+  const pending = usePendingSequence()
+  const active = useActiveKeys()
+  return {
+    commands,
+    pending: (): readonly KeymapPending[] =>
+      pending().map((item) => ({
+        key: formatKeySequence([item], formatOptions(value.config)) ?? "",
+        ...(item.tokenName ? { token: item.tokenName } : {}),
+      })),
+    active: (): readonly KeymapActive[] =>
+      active().map((item) => ({
+        key:
+          formatKeySequence(
+            [{ stroke: item.stroke, display: item.display, tokenName: item.tokenName }],
+            formatOptions(value.config),
+          ) ?? "",
+        ...(typeof item.commandAttrs?.title === "string" ? { title: item.commandAttrs.title } : {}),
+        ...(typeof item.bindingAttrs?.desc === "string"
+          ? { description: item.bindingAttrs.desc }
+          : typeof item.commandAttrs?.desc === "string"
+            ? { description: item.commandAttrs.desc }
+            : {}),
+        ...(typeof item.commandAttrs?.category === "string"
+          ? { group: item.commandAttrs.category }
+          : typeof item.bindingAttrs?.group === "string"
+            ? { group: item.bindingAttrs.group }
+            : {}),
+        continues: item.continues,
+      })),
+  }
+}
+
 function useValue() {
   const value = useContext(Context)
   if (!value) throw new Error("Keymap.Provider is missing")
@@ -344,6 +388,7 @@ export const Keymap = {
   useCommands,
   usePendingSequence,
   useActiveKeys,
+  useState,
 } as const
 
 function createMode(keymap: OpenTuiKeymap) {

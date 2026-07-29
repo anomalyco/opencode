@@ -5,7 +5,10 @@ const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mc
 
 export interface MockServerConfig {
   protocol?: "v1" | "v2"
-  provider: unknown
+  provider: unknown | (() => unknown)
+  integrationMethods?: Record<string, unknown[]>
+  onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  onInstanceDispose?: () => void
   directory: string
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
@@ -18,19 +21,19 @@ export interface MockServerConfig {
   onMessage?: (input: { sessionID: string; messageID: string }) => void
   events?: () => unknown[]
   eventRetry?: number
+  todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
-  sessionStatus?: unknown
+  sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
   const staticRoutes: Record<string, unknown> = {
-    "/provider": config.provider,
     "/path": {
       state: config.directory,
       config: config.directory,
@@ -60,7 +63,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         route,
         path === "/api/event"
           ? [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])]
-          : events,
+          : [
+              ...(path === "/global/event"
+                ? [{ payload: { id: "evt_mock_connected", type: "server.connected", properties: {} } }]
+                : []),
+              ...(events ?? []),
+            ],
         config.eventRetry,
       )
     }
@@ -69,11 +77,27 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (path === "/api/health" && config.protocol === "v2")
       return json(route, { healthy: true, version: "2.0.0", pid: 1 })
     if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })
+    if (path === "/provider")
+      return json(route, typeof config.provider === "function" ? config.provider() : config.provider)
+    if (path === "/provider/auth") return json(route, config.integrationMethods ?? {})
+    const legacyAuth = path.match(/^\/auth\/([^/]+)$/)?.[1]
+    if (legacyAuth && route.request().method() === "PUT") {
+      config.onConnectKey?.({ integrationID: legacyAuth, body: route.request().postDataJSON() })
+      return json(route, true)
+    }
+    if (path === "/instance/dispose" && route.request().method() === "POST") {
+      config.onInstanceDispose?.()
+      return json(route, true)
+    }
     if (path === "/permission")
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
     if (path === "/question")
       return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
-    if (path === "/session/status") return json(route, config.sessionStatus ?? {})
+    if (path === "/session/status")
+      return json(
+        route,
+        typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {}),
+      )
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
     if (path === "/file" && config.fileList)
       return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
@@ -120,8 +144,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         location: location(config),
         data: { id: integration, name: integration, methods: [{ type: "key", label: "API key" }], connections: [] },
       })
-    if (/^\/api\/integration\/[^/]+\/connect\/key$/.test(path) && route.request().method() === "POST")
+    const integrationConnect = path.match(/^\/api\/integration\/([^/]+)\/connect\/key$/)?.[1]
+    if (integrationConnect && route.request().method() === "POST") {
+      config.onConnectKey?.({ integrationID: integrationConnect, body: route.request().postDataJSON() })
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
     if (path === "/api/project") return json(route, [config.project])
     if (path === "/api/project/current")
       return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
@@ -199,6 +226,12 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
+      return json(route, true)
+    }
+    if (/^\/session\/[^/]+\/permissions\/[^/]+$/.test(path) && route.request().method() === "POST") {
+      return json(route, true)
+    }
     if (
       /^\/api\/session\/[^/]+\/(archive|rename|interrupt|revert\/clear|revert\/commit)$/.test(path) &&
       route.request().method() === "POST"
@@ -237,6 +270,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, message)
     }
 
+    const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
+    if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
     if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
 
     const currentMessagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)

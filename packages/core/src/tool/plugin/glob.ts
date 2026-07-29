@@ -16,7 +16,7 @@ export const name = "glob"
 
 export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
-  path: RelativePath.pipe(Schema.optional).annotate({
+  path: Schema.optionalKey(RelativePath).annotate({
     description: "Directory to search. Defaults to the current working directory.",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
@@ -104,6 +104,15 @@ export const Plugin = {
                     limit: limit + 1,
                   })
                   .pipe(
+                    Effect.timeoutOrElse({
+                      duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
+                      orElse: () =>
+                        Effect.fail(
+                          new ToolFailure({
+                            message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
+                          }),
+                        ),
+                    }),
                     Effect.map((result) =>
                       result.map((entry) =>
                         FileSystem.Entry.make({

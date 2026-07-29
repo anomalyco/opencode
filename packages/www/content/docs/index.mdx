@@ -8,6 +8,11 @@ description: "Get started with OpenCode."
   wipe your data, things may break, and APIs, configuration, and plugin APIs may change.
 </Callout>
 
+<Callout type="note">
+  OpenCode 2 installs and runs as `opencode2`. It does not replace OpenCode 1's `opencode` binary, so you can keep both
+  versions installed and run them side by side.
+</Callout>
+
 ## Install
 
 <Callout type="note">The curl install script is not available in beta.</Callout>
@@ -37,10 +42,8 @@ You can also install it with the following package managers.
   </Tab>
 </Tabs>
 
-The package uses a trusted postinstall script to select the native binary for your platform. The Bun and pnpm commands
-above explicitly allow that script to run.
-
-<Callout type="note">During beta, the binary is called `opencode2`.</Callout>
+The package uses a trusted postinstall script to select the native `opencode2` binary for your platform. The Bun and pnpm
+commands above explicitly allow that script to run.
 
 ### Homebrew
 

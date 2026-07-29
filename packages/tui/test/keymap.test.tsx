@@ -76,6 +76,32 @@ test("formats navigation keys as arrows", async () => {
   }
 })
 
+test("returns every formatted command shortcut", async () => {
+  let read = () => [] as readonly string[]
+
+  function Harness() {
+    const shortcuts = Keymap.useShortcuts()
+    Keymap.createLayer(() => ({
+      commands: [{ id: "demo.command", bind: "x,y", run() {} }],
+    }))
+    read = () => shortcuts.list("demo.command")
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    expect(read()).toEqual(["x", "y"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("global commands stay reachable when the mode changes", async () => {
   const calls: string[] = []
   let exercise = () => {}

@@ -14,10 +14,23 @@ const ServerParams = {
   ),
 }
 
+const PermissionParams = {
+  auto: Flag.boolean("auto").pipe(
+    Flag.withDescription("Auto-approve permissions that are not explicitly denied"),
+    Flag.withDefault(false),
+  ),
+  yolo: Flag.boolean("yolo").pipe(Flag.withDefault(false), Flag.withHidden),
+  dangerouslySkipPermissions: Flag.boolean("dangerously-skip-permissions").pipe(
+    Flag.withDefault(false),
+    Flag.withHidden,
+  ),
+}
+
 export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
   description: "OpenCode 2.0 preview command line interface",
   params: {
     ...ServerParams,
+    ...PermissionParams,
     directory: Argument.string("directory").pipe(
       Argument.withDescription("Directory to start OpenCode in"),
       Argument.optional,
@@ -196,11 +209,7 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         ),
         title: Flag.string("title").pipe(Flag.withDescription("Session title"), Flag.optional),
         thinking: Flag.boolean("thinking").pipe(Flag.withDescription("Show thinking blocks"), Flag.withDefault(false)),
-        auto: Flag.boolean("auto").pipe(
-          Flag.withDescription("Auto-approve permissions that are not explicitly denied"),
-          Flag.withDefault(false),
-        ),
-        yolo: Flag.boolean("yolo").pipe(Flag.withDefault(false), Flag.withHidden),
+        ...PermissionParams,
       },
     }),
     Spec.make("service", {

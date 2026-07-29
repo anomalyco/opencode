@@ -19,6 +19,7 @@ import {
   OpenResponses,
 } from "@opencode-ai/ai/protocols"
 import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
+import { TestLLM } from "@opencode-ai/ai/testing"
 
 describe("public exports", () => {
   test("root exposes app-facing runtime APIs", () => {
@@ -28,6 +29,7 @@ describe("public exports", () => {
     expect(ImageInput.bytes).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
+    expect(TestLLM.layer).toBeFunction()
   })
 
   test("route barrel exposes route-authoring APIs", () => {

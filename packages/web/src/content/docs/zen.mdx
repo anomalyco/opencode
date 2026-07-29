@@ -81,6 +81,7 @@ You can also access our models through the following API endpoints.
 | GPT 5 Codex            | gpt-5-codex            | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5 Nano             | gpt-5-nano             | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Claude Fable 5         | claude-fable-5         | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 5          | claude-opus-5          | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.8        | claude-opus-4-8        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.7        | claude-opus-4-7        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6        | claude-opus-4-6        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -111,9 +112,11 @@ You can also access our models through the following API endpoints.
 | Kimi K2.5              | kimi-k2.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Kimi K2.6              | kimi-k2.6              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code         | kimi-k2.7-code         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K3                | kimi-k3                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Laguna S 2.1 Free      | laguna-s-2.1-free      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Ling-3.0-flash Free    | ling-3.0-flash-free    | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | North Mini Code Free   | north-mini-code-free   | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -144,6 +147,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | DeepSeek V4 Flash Free            | Free   | Free    | Free        | -            |
 | MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
 | Laguna S 2.1 Free                 | Free   | Free    | Free        | -            |
+| Ling-3.0-flash Free               | Free   | Free    | Free        | -            |
 | North Mini Code Free              | Free   | Free    | Free        | -            |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | MiniMax M3                        | $0.30  | $1.20   | $0.06       | -            |
@@ -153,6 +157,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | GLM 5.1                           | $1.40  | $4.40   | $0.26       | -            |
 | GLM 5                             | $1.00  | $3.20   | $0.20       | -            |
 | Kimi K2.7 Code                    | $0.95  | $4.00   | $0.19       | -            |
+| Kimi K3                           | $3.00  | $15.00  | $0.30       | -            |
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16       | -            |
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10       | -            |
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50       | $3.125       |
@@ -162,6 +167,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145      | -            |
 | DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028      | -            |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
+| Claude Opus 5                     | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.7                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.6                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -217,6 +223,7 @@ The free models:
 - DeepSeek V4 Flash Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - MiMo-V2.5 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Laguna S 2.1 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- Ling-3.0-flash Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - North Mini Code Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3 Ultra Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
@@ -277,6 +284,7 @@ All our models are hosted in the US. Our providers follow a zero-retention polic
 - DeepSeek V4 Flash Free: During its free period, collected data may be used to improve the model.
 - MiMo-V2.5 Free: During its free period, collected data may be used to improve the model.
 - Laguna S 2.1 Free: During its free period, collected data may be used to improve the model.
+- Ling-3.0-flash Free: During its free period, collected data may be used to improve the model.
 - North Mini Code Free: During its free period, collected data may be retained and used to improve the model. Do not submit personal or confidential data. See our [Terms of Use](https://cohere.com/terms-of-use) and [Privacy Policy](https://cohere.com/privacy).
 - Nemotron 3 Ultra Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - OpenAI APIs: Requests are retained for 30 days in accordance with [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).

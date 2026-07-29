@@ -20,7 +20,7 @@ export const Input = Schema.Struct({
   ).annotate({
     description: "Regular expression to search for in file contents (ripgrep syntax)",
   }),
-  path: RelativePath.pipe(Schema.optional).annotate({
+  path: Schema.optionalKey(RelativePath).annotate({
     description: "File or directory to search. Defaults to the current working directory.",
   }),
   include: FileSystem.GrepInput.fields.include.annotate({
@@ -118,6 +118,15 @@ export const Plugin = {
                     limit: limit + 1,
                   })
                   .pipe(
+                    Effect.timeoutOrElse({
+                      duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
+                      orElse: () =>
+                        Effect.fail(
+                          new ToolFailure({
+                            message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
+                          }),
+                        ),
+                    }),
                     Effect.map((result) =>
                       result.map((match) =>
                         FileSystem.Match.make({

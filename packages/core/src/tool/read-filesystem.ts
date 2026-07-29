@@ -6,7 +6,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { AbsolutePath, PositiveInt, RelativePath } from "../schema"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema"
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
@@ -70,8 +70,8 @@ export type ReadError =
   | PathKindError
 
 export const PageInput = Schema.Struct({
-  offset: PositiveInt.pipe(Schema.optional),
-  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES)).pipe(Schema.optional),
+  offset: Schema.optionalKey(NonNegativeInt),
+  limit: Schema.optionalKey(NonNegativeInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES))),
 })
 export type PageInput = typeof PageInput.Type
 
@@ -87,14 +87,14 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   mime: Schema.String,
   offset: PositiveInt,
   truncated: Schema.Boolean,
-  next: PositiveInt.pipe(Schema.optional),
+  next: Schema.optionalKey(PositiveInt),
 }) {}
 
 export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
   type: Schema.Literal("list-page"),
   entries: Schema.Array(FileSystem.Entry),
   truncated: Schema.Boolean,
-  next: PositiveInt.pipe(Schema.optional),
+  next: Schema.optionalKey(PositiveInt),
 }) {}
 
 export interface Interface {
@@ -140,12 +140,13 @@ const extensions = new Set([
   ".pyo",
 ])
 const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
-const imageMime = (bytes: Uint8Array) => {
+const mediaMime = (bytes: Uint8Array) => {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
   if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif"
   if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50]))
     return "image/webp"
+  if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"
 }
 const binary = (resource: string, bytes: Uint8Array) => {
   if (extensions.has(path.extname(resource).toLowerCase())) return true
@@ -191,7 +192,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         yield* file.readAlloc(Math.min(64 * 1024, Number(info.size) || 4 * 1024)),
         () => new Uint8Array(),
       )
-      const mime = imageMime(first)
+      const mime = mediaMime(first)
       if (mime) {
         if (info.size > MAX_MEDIA_INGEST_BYTES)
           return yield* Effect.fail(new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES }))
@@ -217,7 +218,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
           mime,
         }
       }
-      if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || extensions.has(path.extname(resource).toLowerCase()))
+      if (extensions.has(path.extname(resource).toLowerCase()))
         return yield* Effect.fail(new BinaryFileError({ resource }))
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {
@@ -239,8 +240,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
           mime: FSUtil.mimeType(real),
         }
       }
-      const offset = page.offset ?? 1
-      const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
+      const offset = page.offset || 1
+      const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
       const lines: string[] = []
       const decoder = new TextDecoder("utf-8", { fatal: true })
       let pending = ""
@@ -333,8 +334,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
 export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, input: string, page: PageInput = {}) {
   const real = yield* fs.realPath(input)
   const items = yield* fs.readDirectoryEntries(real)
-  const offset = page.offset ?? 1
-  const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
+  const offset = page.offset || 1
+  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const entries = yield* Effect.forEach(
     items,
     (item) =>

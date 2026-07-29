@@ -110,7 +110,7 @@ export type SessionMessageToolStateRunning = {
 
 export type ToolTextContent = { type: "text"; text: string }
 
-export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string }
+export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string | null }
 
 export type SessionStructuredError = { type: string; message: string }
 
@@ -162,6 +162,8 @@ export type SessionMessageProviderState5 = { [x: string]: any }
 export type SessionMessageProviderState6 = { [x: string]: any }
 
 export type SessionMessageProviderState7 = { [x: string]: any }
+
+export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
 
 export type SessionMessageProviderState8 = { [x: string]: any }
 
@@ -1226,7 +1228,7 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
-export type LLMToolContent = ToolTextContent | ToolFileContent
+export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
 
@@ -1387,6 +1389,8 @@ export type SessionToolCalled = {
     state?: SessionMessageProviderState7
   }
 }
+
+export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type ModelCompatibility = { reasoningField?: ModelReasoningField }
 
@@ -1801,7 +1805,7 @@ export type SessionPendingUserData1 = {
 export type SessionMessageToolStateCompleted = {
   status: "completed"
   input: { [x: string]: JsonValue }
-  content: [LLMToolContent, ...Array<LLMToolContent>]
+  content: [ToolContent, ...Array<ToolContent>]
   metadata?: { [x: string]: JsonValue }
 }
 
@@ -1809,9 +1813,14 @@ export type SessionMessageToolStateError = {
   status: "error"
   input: { [x: string]: JsonValue }
   error: SessionStructuredError
-  content?: [LLMToolContent, ...Array<LLMToolContent>]
+  content?: [ToolContent, ...Array<ToolContent>]
   metadata?: { [x: string]: JsonValue }
 }
+
+export type SessionMessageCompaction =
+  | SessionMessageCompactionRunning
+  | SessionMessageCompactionCompleted
+  | SessionMessageCompactionFailed
 
 export type SessionToolSuccess = {
   id: string
@@ -1824,7 +1833,7 @@ export type SessionToolSuccess = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    content: [LLMToolContent, ...Array<LLMToolContent>]
+    content: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
     resultState?: SessionMessageProviderState8
@@ -1843,17 +1852,12 @@ export type SessionToolFailed = {
     assistantMessageID: string
     callID: string
     error: SessionStructuredError
-    content?: [LLMToolContent, ...Array<LLMToolContent>]
+    content?: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
     resultState?: SessionMessageProviderState9
   }
 }
-
-export type SessionMessageCompaction =
-  | SessionMessageCompactionRunning
-  | SessionMessageCompactionCompleted
-  | SessionMessageCompactionFailed
 
 export type ModelInfo = {
   id: string

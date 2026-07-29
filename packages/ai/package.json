@@ -15,6 +15,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
+    "./testing": "./src/testing.ts",
     "./*": "./src/*.ts"
   },
   "devDependencies": {

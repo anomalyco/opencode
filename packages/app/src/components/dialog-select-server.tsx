@@ -16,6 +16,7 @@ import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { detectServerProtocol } from "@/utils/server-protocol"
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
@@ -263,6 +264,13 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         setStore("addServer", { error: language.t("dialog.server.add.error") })
         return
       }
+      if (
+        !settings.general.newLayoutDesigns() &&
+        (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
+      ) {
+        setStore("addServer", { error: language.t("dialog.server.add.error") })
+        return
+      }
 
       resetAdd()
       if (options.navigateOnAdd === false) {
@@ -307,6 +315,13 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         setStore("editServer", { error: language.t("dialog.server.add.error") })
         return
       }
+      if (
+        !settings.general.newLayoutDesigns() &&
+        (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
+      ) {
+        setStore("editServer", { error: language.t("dialog.server.add.error") })
+        return
+      }
       if (normalized === input.original.http.url) {
         server.add(conn)
       } else {
@@ -344,7 +359,10 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   )
 
   const sortedItems = createMemo(() => {
-    const list = items()
+    const raw = items()
+    const list = settings.general.newLayoutDesigns()
+      ? raw
+      : raw.filter((x) => global.ensureServerCtx(x).sdk.protocolKind() !== "v2")
     if (!list.length) return list
     const active = current()
     const order = new Map(list.map((url, index) => [url, index] as const))
@@ -544,6 +562,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     startEdit,
     resetForm,
     submitForm,
+    canRemove: server.canRemove,
     handleRemove,
     handleFormChange: () => (isAddMode() ? handleAddChange : handleEditChange),
     handleFormNameChange: () => (isAddMode() ? handleAddNameChange : handleEditNameChange),
@@ -631,13 +650,15 @@ export function ServerConnectionList(props: { controller: ReturnType<typeof useS
                             </DropdownMenu.ItemLabel>
                           </DropdownMenu.Item>
                         </Show>
-                        <DropdownMenu.Separator />
-                        <DropdownMenu.Item
-                          onSelect={() => props.controller.handleRemove(ServerConnection.key(i))}
-                          class="text-text-on-critical-base hover:bg-surface-critical-weak"
-                        >
-                          <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
+                        <Show when={props.controller.canRemove(key)}>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onSelect={() => props.controller.handleRemove(ServerConnection.key(i))}
+                            class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                          >
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>

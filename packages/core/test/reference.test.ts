@@ -47,7 +47,7 @@ describe("Reference", () => {
       expect(yield* references.list()).toEqual([
         Reference.Info.make({
           name: "sdk",
-          path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)),
+          path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository, "main")),
           source,
         }),
       ])

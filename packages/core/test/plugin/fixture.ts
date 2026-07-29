@@ -21,7 +21,7 @@ import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
 import { Tool } from "@opencode-ai/core/tool"
 import { WebSearch } from "@opencode-ai/core/websearch"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 
 const npmLayer = Layer.succeed(
@@ -60,6 +60,6 @@ export const PluginTestLayer = AppNodeBuilder.build(
   [
     [Location.node, tempLocationLayer],
     [Npm.node, npmLayer],
-    [Config.node, Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))],
+    [Config.node, Config.testLayer()],
   ],
 ) as unknown as Layer.Layer<unknown, never>

@@ -244,7 +244,7 @@ describe("acp event behavior", () => {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
             callID: "call_fail",
-            input: { filePath: "/workspace/missing.ts" },
+            input: { path: "/workspace/missing.ts" },
             executed: false,
           }),
         )
@@ -638,7 +638,7 @@ function replayFixtureMessages(): SessionMessageInfo[] {
           time: { created: 2, completed: 3 },
           state: {
             status: "error",
-            input: { filePath: "/workspace/missing.ts" },
+            input: { path: "/workspace/missing.ts" },
             metadata: { bytes: 0 },
             content: [{ type: "text", text: "partial" }],
             error: { type: "tool.error", message: "failed hard" },

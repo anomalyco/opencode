@@ -44,6 +44,7 @@ type Active = {
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  */
 export interface Interface {
+  readonly name: () => Effect.Effect<string>
   readonly create: (input: Shell.CreateInput) => Effect.Effect<Shell.Info>
   // Currently running commands only; exited shells are retained for get/output but excluded here.
   readonly list: () => Effect.Effect<Shell.Info[]>
@@ -134,6 +135,13 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       return session.info
     })
 
+    const resolve = () =>
+      config
+        .entries()
+        .pipe(Effect.map((entries) => ShellSelect.preferred(Config.latest(entries, "shell"), options)))
+
+    const name = () => resolve().pipe(Effect.map(ShellSelect.name))
+
     const output = Effect.fn("Shell.output")(function* (id: Shell.ID, input?: Shell.OutputInput) {
       const session = yield* require(id)
       const cursor = input?.cursor ?? 0
@@ -167,8 +175,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
     const create = Effect.fn("Shell.create")(function* (input: Shell.CreateInput) {
       const id = Shell.ID.ascending()
       const cwd = input.cwd ?? location.directory
-      const configShell = Config.latest(yield* config.entries(), "shell")
-      const shell = ShellSelect.preferred(configShell, options)
+      const shell = yield* resolve()
       const args = ShellSelect.args(shell, input.command)
       const file = path.join(outputDir, `${id}.out`)
       const env = {
@@ -312,7 +319,7 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       return session.info
     })
 
-    return Service.of({ create, list, get, wait, timeout, output, remove })
+    return Service.of({ name, create, list, get, wait, timeout, output, remove })
   }),
 )
 

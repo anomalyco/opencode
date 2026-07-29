@@ -23,6 +23,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Integration } from "@opencode-ai/schema/integration"
+import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -30,44 +31,12 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(Layer.empty)
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
 
-const emptyCredentialNode = makeGlobalNode({
-  service: Credential.Service,
-  layer: Layer.succeed(
-    Credential.Service,
-    Credential.Service.of({
-      all: () => Effect.succeed([]),
-      list: () => Effect.succeed([]),
-      get: () => Effect.succeed(undefined),
-      create: () => Effect.die("unused Credential.create"),
-      update: () => Effect.die("unused Credential.update"),
-      remove: () => Effect.die("unused Credential.remove"),
-    }),
-  ),
-  deps: [],
-})
-
-const emptyWellknownNode = makeGlobalNode({
-  service: WellKnown.Service,
-  layer: Layer.succeed(
-    WellKnown.Service,
-    WellKnown.Service.of({
-      entries: () => Effect.succeed([]),
-      snapshot: () => [],
-      refresh: () => Effect.succeed(false),
-      add: () => Effect.die("unused Wellknown.add"),
-      remove: () => Effect.die("unused Wellknown.remove"),
-      resolve: () => Effect.die("unused Wellknown.resolve"),
-    }),
-  ),
-  deps: [],
-})
-
 function testLayer(
   directory: string,
   globalDirectory = path.join(directory, "global"),
   projectDirectory = directory,
   vcs?: Project.Vcs,
-  watcher?: Layer.Layer<Watcher.Service>,
+  watcher: Layer.Layer<Watcher.Service | Watcher.Test> = Watcher.testLayer,
   credentialNode = emptyCredentialNode,
   wellknownNode = emptyWellknownNode,
   options?: Config.Options,
@@ -81,14 +50,17 @@ function testLayer(
       ),
     ),
   )
-  return AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+  const built = AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
     [Config.node, Config.configured(options)],
     [Location.node, locationLayer],
     [Global.node, Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })],
     [Credential.node, credentialNode],
     [WellKnown.node, wellknownNode],
-    ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
+    [Watcher.node, watcher],
   ])
+  // Merge the watcher layer by reference so Watcher.Test resolves to the same
+  // memoized instance the built graph uses.
+  return Layer.mergeAll(built, watcher)
 }
 
 const provider = {
@@ -184,35 +156,134 @@ describe("Config", () => {
             await fs.mkdir(project, { recursive: true })
             await fs.writeFile(file, JSON.stringify({ shell: "first" }))
           })
-          const updates = yield* PubSub.unbounded<Watcher.Update>()
-          const watcher = Layer.succeed(
-            Watcher.Service,
-            Watcher.Service.of({
-              subscribe: () => Stream.fromPubSub(updates),
-            }),
-          )
-
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
             const bus = yield* Bus.Service
+            const watcher = yield* Watcher.Test
             const changed = yield* bus
               .subscribe(ConfigSchema.Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.sleep("10 millis")
 
-            yield* PubSub.publish(updates, {
-              type: "update",
-              path: path.join(global, "commands", "review.md"),
-            } satisfies Watcher.Update)
+            yield* watcher.emit({ type: "update", path: path.join(global, "commands", "review.md") })
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "second" })))
-            yield* PubSub.publish(updates, { type: "update", path: file } satisfies Watcher.Update)
+            yield* watcher.emit({ type: "update", path: file })
 
             expect(yield* Fiber.join(changed)).toHaveLength(1)
             expect(Config.latest(yield* config.entries(), "shell")).toBe("second")
-          }).pipe(Effect.provide(testLayer(project, global, project, undefined, watcher)))
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
         }),
       ),
     ),
+  )
+
+  it.live("exposes filesystem updates under config roots through changes", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(global, "commands"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+          })
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            const received = yield* config
+              .changes()
+              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* Effect.sleep("10 millis")
+
+            const file = path.join(global, "commands", "review.md")
+            yield* watcher.emit({ type: "update", path: file })
+
+            const collected = yield* Fiber.join(received).pipe(Effect.timeout("1 second"))
+            expect(Array.from(collected)).toEqual([{ type: "update", path: file }])
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
+        }),
+      ),
+    ),
+  )
+
+  // Real watcher on purpose: the regression this pins (a deleted config file's
+  // watch being torn down, making recreation invisible) only reproduces with
+  // path-faithful event delivery.
+  it.live("keeps watching a deleted config file so recreating it reloads", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(project, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            yield* Effect.sleep("10 millis")
+
+            const removed = yield* bus
+              .subscribe(ConfigSchema.Event.Updated)
+              .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+            yield* Effect.promise(() => fs.rm(file))
+            yield* Fiber.join(removed).pipe(Effect.timeout("5 seconds"))
+            expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+
+            const recreated = yield* bus
+              .subscribe(ConfigSchema.Event.Updated)
+              .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            yield* Fiber.join(recreated).pipe(Effect.timeout("5 seconds"))
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("two")
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+                [
+                  Location.node,
+                  Layer.succeed(
+                    Location.Service,
+                    Location.Service.of(location({ directory: AbsolutePath.make(project) })),
+                  ),
+                ],
+                [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
+                [Credential.node, emptyCredentialNode],
+                [WellKnown.node, emptyWellknownNode],
+              ]),
+            ),
+          )
+        }),
+      ),
+    ),
+  )
+
+  it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.Service
+      const test = yield* Config.Test
+      expect(yield* config.entries()).toEqual([])
+
+      const entry = new Config.Document({ type: "document", info: new Config.Info({}) })
+      yield* test.setEntries([entry])
+      expect(yield* config.entries()).toEqual([entry])
+
+      const received = yield* config
+        .changes()
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* Effect.yieldNow
+      yield* test.emitChange({ type: "create", path: "/root/commands/review.md" })
+      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "create", path: "/root/commands/review.md" }])
+    }).pipe(Effect.provide(Config.testLayer())),
   )
 
   it.effect("returns the latest defined scalar from priority-ordered documents", () =>
@@ -505,23 +576,19 @@ describe("Config", () => {
               fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
             ]),
           )
-          const targets: Watcher.WatchInput[] = []
-          const watcher = Layer.succeed(
-            Watcher.Service,
-            Watcher.Service.of({
-              subscribe: (input) => {
-                targets.push(input)
-                return Stream.never
-              },
-            }),
-          )
-
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
             yield* config.entries()
 
-            expect(targets).toEqual([{ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }])
-          }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, watcher)))
+            expect(yield* watcher.subscriptions()).toEqual([
+              {
+                type: "directory",
+                path: AbsolutePath.make(path.join(tmp.path, "global")),
+                ignore: ["**/{node_modules,.git}/**", ".git", "node_modules"],
+              },
+            ])
+          }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, Watcher.testLayer)))
         }),
       ),
     ),

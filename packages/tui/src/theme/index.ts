@@ -1,9 +1,7 @@
 import { Schema } from "effect"
+import { migrateV1, resolveThemeDocument, ThemeDocument, themeDecodeError } from "@opencode-ai/theme/tui"
 import { resolveThemeColors } from "./resolve"
 import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
-import { resolveThemeDocument, themeDecodeError } from "./v2/resolve"
-import { ThemeDocument } from "./v2/schema"
-import { migrateV1 } from "./v2/v1-migrate"
 
 export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
 export { resolveThemeDocument, type ThemeDocument }

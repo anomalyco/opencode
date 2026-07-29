@@ -1,9 +1,10 @@
-import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { Message } from "@opencode-ai/sdk/v2/client"
 
-export type SessionDiff = SnapshotFileDiff & { file: string; patch: string }
+type Diff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
 
-function diff(value: unknown): value is SessionDiff {
+function diff(value: unknown): value is Diff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   if (!("file" in value) || typeof value.file !== "string") return false
   if (!("patch" in value) || typeof value.patch !== "string") return false
@@ -17,7 +18,7 @@ function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
-export function diffs(value: unknown): SessionDiff[] {
+export function diffs(value: unknown): Diff[] {
   if (Array.isArray(value) && value.every(diff)) return value
   if (Array.isArray(value)) return value.filter(diff)
   if (diff(value)) return [value]

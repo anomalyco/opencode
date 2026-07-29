@@ -24,7 +24,7 @@ test("renders a completed single-file patch", async ({ page }) => {
       assistantMessage([
         toolPart(
           id,
-          "patch",
+          "apply_patch",
           "completed",
           { files: ["src/a.ts"] },
           {

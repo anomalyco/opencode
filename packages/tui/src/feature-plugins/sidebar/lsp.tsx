@@ -1,14 +1,14 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
-import { useTheme } from "../../context/theme"
+import { Plugin, usePlugin } from "@opencode-ai/plugin/tui"
 
 function View() {
-  const { themeV2 } = useTheme()
+  const context = usePlugin()
+  const theme = context.theme
   return (
     <box>
-      <text fg={themeV2.text.default}>
+      <text fg={theme.text.default}>
         <b>LSP</b>
       </text>
-      <text fg={themeV2.text.subdued}>LSP status unavailable</text>
+      <text fg={theme.text.subdued}>LSP status unavailable</text>
     </box>
   )
 }

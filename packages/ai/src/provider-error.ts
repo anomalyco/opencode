@@ -135,7 +135,7 @@ export function classifyProviderFailure(input: ProviderFailure): LLMError["reaso
       rateLimit: input.rateLimit,
     })
   }
-  if (input.status !== undefined && input.status >= 500)
+  if (input.status === 408 || input.status === 409 || (input.status !== undefined && input.status >= 500))
     return new ProviderInternalReason({
       ...common,
       status: input.status,
@@ -145,7 +145,6 @@ export function classifyProviderFailure(input: ProviderFailure): LLMError["reaso
   if (
     input.status === 400 ||
     input.status === 404 ||
-    input.status === 409 ||
     input.status === 413 ||
     input.status === 422
   )

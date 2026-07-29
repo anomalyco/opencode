@@ -131,6 +131,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
 
   const saveMutation = useMutation(() => ({
     mutationFn: async (result: NonNullable<ReturnType<typeof validate>>) => {
+      if ((await serverSDK().protocol) !== "v1") throw new Error("Custom providers are unavailable on this server")
       const disabledProviders = serverSync().data.config.disabled_providers ?? []
       const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
@@ -177,7 +178,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   return (
     <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
       <div class="px-2.5 flex gap-4 items-center">
-        <ProviderIcon id="session.synthetic" class="size-5 shrink-0 icon-strong-base" />
+        <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
         <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
       </div>
 

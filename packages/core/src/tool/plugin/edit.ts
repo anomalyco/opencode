@@ -20,13 +20,13 @@ export const name = "edit"
 
 export const Input = Schema.Struct({
   path: Schema.String.annotate({
-    description:
-      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
+    description: "File to edit",
   }),
-  oldString: Schema.String.annotate({ description: "Exact text to replace" }),
-  newString: Schema.String.annotate({ description: "Replacement text, which must differ from oldString" }),
-  replaceAll: Schema.Boolean.pipe(Schema.optional).annotate({
-    description: "Replace all exact occurrences of oldString (default false)",
+  oldString: Schema.String.annotate({ description: "Exact text to find and replace" }),
+  newString: Schema.String.annotate({ description: "Text to replace oldString with (must differ from oldString)" }),
+  replaceAll: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Whether to replace every occurrence of oldString. When false, oldString must match exactly once. Defaults to false.",
   }),
 })
 
@@ -36,49 +36,69 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-const normalizeLineEndings = (text: string) => text.replaceAll("\r\n", "\n")
-const detectLineEnding = (text: string): "\n" | "\r\n" => (text.includes("\r\n") ? "\r\n" : "\n")
-const convertToLineEnding = (text: string, ending: "\n" | "\r\n") =>
-  ending === "\n" ? normalizeLineEndings(text) : normalizeLineEndings(text).replaceAll("\n", "\r\n")
+const crlf = "\r\n"
 
-const splitBom = (text: string) =>
-  text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }
-const joinBom = (text: string, bom: boolean) => (bom ? `\uFEFF${text}` : text)
-const decodeUtf8 = (content: Uint8Array) => {
-  const bom = content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
-  return { bom, content, text: new TextDecoder().decode(bom ? content.slice(3) : content) }
+interface Match {
+  readonly start: number
+  readonly end: number
 }
 
-const countOccurrences = (content: string, search: string) => {
-  if (search === "") return content.length + 1
-  let count = 0
+const normalizeForMatch = (value: string) =>
+  value
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[“”„‟]/g, '"')
+    .replace(/[‐‑‒–—―−]/g, "-")
+    .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
+
+const findOccurrences = (content: string, search: string) => {
+  const result: Match[] = []
   let offset = 0
   while ((offset = content.indexOf(search, offset)) !== -1) {
-    count++
+    result.push({ start: offset, end: offset + search.length })
     offset += search.length
   }
-  return count
+  return result
 }
 
-const previewLines = (value: string, prefix: "+" | "-") => {
-  const lines = normalizeLineEndings(value).split("\n")
-  const shown = lines.slice(0, 6).map((line) => `${prefix}${line.length > 240 ? `${line.slice(0, 240)}...` : line}`)
-  if (lines.length > shown.length) shown.push(`${prefix}...`)
-  return shown
+const findLineOccurrences = (content: string, search: string) => {
+  const trailingNewline = search.endsWith("\n")
+  const expected = search.split("\n")
+  if (trailingNewline) expected.pop()
+  const lines = [...content.matchAll(/[^\n]*(?:\n|$)/g)]
+    .filter((match) => match[0] !== "")
+    .map((match) => {
+      const newline = match[0].endsWith("\n")
+      const text = newline ? match[0].slice(0, -1) : match[0]
+      return {
+        start: match.index,
+        end: match.index + match[0].length,
+        text,
+        contentEnd: match.index + text.length - (text.endsWith("\r") ? 1 : 0),
+        newline,
+      }
+    })
+  const candidates = lines.flatMap((line, index) => {
+    const actual = lines.slice(index, index + expected.length)
+    if (actual.length !== expected.length) return []
+    if (
+      !actual.every(
+        (item, lineIndex) =>
+          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex]!.trimEnd()),
+      )
+    )
+      return []
+    const last = actual.at(-1)!
+    if (trailingNewline && !last.newline) return []
+    return [{ start: line.start, end: trailingNewline ? last.end : last.contentEnd }]
+  })
+  return candidates.reduce<Match[]>((result, candidate) => {
+    if (result.some((match) => match.end > candidate.start && match.start < candidate.end)) return result
+    result.push(candidate)
+    return result
+  }, [])
 }
-
-export const toModelOutput = (output: Output, oldString: string, newString: string) =>
-  [
-    `Edited file successfully: ${output.files[0]?.file}`,
-    `Replacements: ${output.replacements}`,
-    "```diff",
-    ...previewLines(oldString, "-"),
-    ...previewLines(newString, "+"),
-    "```",
-  ].join("\n")
 
 /** Deferred edit behavior and UX integrations remain visible at the model-facing seam. */
-// TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
 // TODO: Add formatter integration after formatter runtime exists.
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
@@ -99,22 +119,10 @@ export const Plugin = {
               name,
               options: { codemode: false, permission: "edit" },
               description:
-                "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
+                "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
               input: Input,
               output: Output,
               execute: (input, context) => {
-                const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-                  effect.pipe(
-                    Effect.mapError((error) =>
-                      error instanceof FileMutation.StaleContentError
-                        ? new ToolFailure({
-                            message: "File changed after permission approval. Read it again before editing.",
-                            error,
-                          })
-                        : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
-                    ),
-                  )
-
                 return Effect.gen(function* () {
                   const permissionSource = {
                     type: "tool" as const,
@@ -132,71 +140,84 @@ export const Plugin = {
                     })
                   }
 
-                  const target = yield* unableToEdit(mutation.resolve({ path: input.path, kind: "file" }))
+                  const target = yield* mutation.resolve({ path: input.path, kind: "file" })
                   const external = target.externalDirectory
                   if (external) {
-                    yield* unableToEdit(
-                      permission.assert({
-                        ...LocationMutation.externalDirectoryPermission(external),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source: permissionSource,
-                      }),
-                    )
-                  }
-
-                  yield* unableToEdit(
-                    permission.assert({
-                      action: "edit",
-                      resources: [target.resource],
-                      save: ["*"],
+                    yield* permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(external),
                       sessionID: context.sessionID,
                       agent: context.agent,
                       source: permissionSource,
-                    }),
+                    })
+                  }
+
+                  yield* permission.assert({
+                    action: "edit",
+                    resources: [target.resource],
+                    save: ["*"],
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: permissionSource,
+                  })
+                  const info = yield* fs.stat(target.canonical).pipe(
+                    Effect.catchReason("PlatformError", "NotFound", () =>
+                      Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
+                    ),
                   )
-                  const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
-                  const ending = detectLineEnding(source.text)
-                  const oldString = convertToLineEnding(input.oldString, ending)
-                  const newString = convertToLineEnding(input.newString, ending)
-                  const replacements = countOccurrences(source.text, oldString)
+                  if (info.type === "Directory") {
+                    return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
+                  }
+                  const bytes = yield* fs.readFile(target.canonical)
+                  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
+                  const source = new TextDecoder().decode(bom ? bytes.slice(3) : bytes)
+                  const ending = source.includes(crlf) ? crlf : "\n"
+                  const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+                  const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+                  const exact = findOccurrences(source, oldString)
+                  // These one-to-one mappings preserve offsets into the original source.
+                  const unicode =
+                    exact.length > 0 ? [] : findOccurrences(normalizeForMatch(source), normalizeForMatch(oldString))
+                  const trailing =
+                    exact.length > 0 || unicode.length > 0
+                      ? []
+                      : findLineOccurrences(source, oldString)
+                  const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
+                  const replacements = matches.length
                   if (replacements === 0) {
                     return yield* new ToolFailure({
-                      message:
-                        "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                      message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
                     })
                   }
                   if (replacements > 1 && input.replaceAll !== true) {
                     return yield* new ToolFailure({
-                      message:
-                        "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                      message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
                     })
                   }
 
-                  const replaced =
-                    input.replaceAll === true
-                      ? source.text.replaceAll(oldString, newString)
-                      : source.text.replace(oldString, newString)
-                  const counts = diffLines(source.text, replaced).reduce(
+                  const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
+                    .toReversed()
+                    .reduce(
+                      (content, match) =>
+                        `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
+                      source,
+                    )
+                  const counts = diffLines(source, replaced).reduce(
                     (result, item) => ({
                       additions: result.additions + (item.added ? (item.count ?? 0) : 0),
                       deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
                     }),
                     { additions: 0, deletions: 0 },
                   )
-                  const next = splitBom(replaced)
-                  const result = yield* unableToEdit(
-                    files.writeIfUnchanged({
-                      target,
-                      expected: source.content,
-                      content: joinBom(next.text, source.bom || next.bom),
-                    }),
-                  )
+                  const replacementBom = replaced.startsWith("\uFEFF")
+                  const result = yield* files.write({
+                    target,
+                    content: `${bom || replacementBom ? "\uFEFF" : ""}${replacementBom ? replaced.slice(1) : replaced}`,
+                  })
                   return {
                     files: [
                       {
                         file: result.resource,
-                        patch: createTwoFilesPatch(result.resource, result.resource, source.text, replaced),
+                        patch: createTwoFilesPatch(result.resource, result.resource, source, replaced),
                         status: "modified" as const,
                         ...counts,
                       },
@@ -206,9 +227,14 @@ export const Plugin = {
                 }).pipe(
                   Effect.map((output) => ({
                     output,
-                    content: toModelOutput(output, input.oldString, input.newString),
+                    content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
                     metadata: { files: output.files },
                   })),
+                  Effect.mapError((error) =>
+                    error instanceof ToolFailure
+                      ? error
+                      : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
+                  ),
                 )
               },
             }),

@@ -150,7 +150,7 @@ describe("EditTool", () => {
                 expect(settled.content).toEqual([
                   {
                     type: "text",
-                    text: "Edited file successfully: hello.txt\nReplacements: 1\n```diff\n-before\n+after\n```",
+                    text: "Edited hello.txt (1 replacement)",
                   },
                 ])
                 // Compact UI metadata carries the file diffs the TUI renders.
@@ -385,7 +385,7 @@ describe("EditTool", () => {
                   error: {
                     type: "tool.execution",
                     message:
-                      "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                      "Could not find oldString in matches.txt. It must match exactly, including whitespace and indentation.",
                   },
                 })
                 expect(
@@ -395,8 +395,43 @@ describe("EditTool", () => {
                   error: {
                     type: "tool.execution",
                     message:
-                      "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                      "Found 2 matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.",
                   },
+                })
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("returns specific missing file and directory errors", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const directory = path.join(tmp.path, "src")
+        return Effect.promise(() => fs.mkdir(directory)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call({ path: "missing.ts", oldString: "before", newString: "after" }),
+                  ),
+                ).toEqual({
+                  status: "error",
+                  error: { type: "tool.execution", message: "File not found: missing.ts" },
+                })
+                expect(
+                  yield* executeTool(registry, call({ path: "src", oldString: "before", newString: "after" })),
+                ).toEqual({
+                  status: "error",
+                  error: { type: "tool.execution", message: "Path is a directory, not a file: src" },
                 })
                 expect(writes).toEqual([])
               }),
@@ -425,8 +460,106 @@ describe("EditTool", () => {
               expect(settled.status).toBe("completed")
               if (settled.status !== "completed") return
               expect(settled.output).toMatchObject({ replacements: 3 })
+              expect(settled.content).toEqual([{ type: "text", text: "Edited all.txt (3 replacements)" }])
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after after after")
               expect(writes).toHaveLength(1)
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("normalizes Unicode typography only after exact matching fails", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "unicode.txt")
+        return Effect.promise(() =>
+          fs.writeFile(target, "exact - match\ncurly “quotes”\nminus − one\nspace\u00A0here\nexact − match\n"),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const normalized = yield* executeTool(
+                  registry,
+                  call({
+                    path: "unicode.txt",
+                    oldString: 'curly "quotes"\nminus - one\nspace here',
+                    newString: "normalized",
+                  }),
+                )
+                expect(normalized.status).toBe("completed")
+
+                const exact = yield* executeTool(
+                  registry,
+                  call({ path: "unicode.txt", oldString: "exact - match", newString: "selected" }),
+                )
+                expect(exact.status).toBe("completed")
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
+                  "selected\nnormalized\nexact − match\n",
+                )
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("ignores trailing whitespace while preserving untouched lines", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "whitespace.txt")
+        return Effect.promise(() => fs.writeFile(target, "before  \nmatch  \nnext\t\nafter  \n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(registry, call({ path: "whitespace.txt", oldString: "match\nnext", newString: "changed" })),
+            ),
+          ),
+          Effect.tap((result) => Effect.sync(() => expect(result.status).toBe("completed"))),
+          Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
+          Effect.tap((content) => Effect.sync(() => expect(content).toBe("before  \nchanged\nafter  \n"))),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("uses non-overlapping trailing-whitespace matches and preserves CRLF", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const overlap = path.join(tmp.path, "overlap.txt")
+        const windows = path.join(tmp.path, "windows.txt")
+        return Effect.promise(() =>
+          Promise.all([fs.writeFile(overlap, "a  \na  \na  \n"), fs.writeFile(windows, "a  \r\nb\t\r\n")]),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const replaced = yield* executeTool(
+                  registry,
+                  call({ path: "overlap.txt", oldString: "a\na", newString: "x", replaceAll: true }),
+                )
+                expect(replaced).toMatchObject({ status: "completed", output: { replacements: 1 } })
+                yield* executeTool(registry, call({ path: "windows.txt", oldString: "a\nb", newString: "x" }))
+              }),
+            ),
+          ),
+          Effect.andThen(
+            Effect.promise(() => Promise.all([fs.readFile(overlap, "utf8"), fs.readFile(windows, "utf8")])),
+          ),
+          Effect.tap(([overlapContent, windowsContent]) =>
+            Effect.sync(() => {
+              expect(overlapContent).toBe("x\na  \n")
+              expect(windowsContent).toBe("x\r\n")
             }),
           ),
         )
@@ -455,7 +588,7 @@ describe("EditTool", () => {
     ),
   )
 
-  it.live("rejects an in-place content change after matching but before conditional commit", () =>
+  it.live("applies the edit when content changes after matching", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -470,17 +603,9 @@ describe("EditTool", () => {
           ),
           Effect.andThen((result) =>
             Effect.gen(function* () {
-              // The message-less StaleContentError cause must not erase the tool's
-              // curated failure message; the canonical error is the sole authority.
-              expect(result).toEqual({
-                status: "error",
-                error: {
-                  type: "tool.execution",
-                  message: "File changed after permission approval. Read it again before editing.",
-                },
-              })
-              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
-              expect(writes).toEqual([])
+              expect(result).toMatchObject({ status: "completed", output: { replacements: 1 } })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
+              expect(writes).toEqual([target])
             }),
           ),
         )

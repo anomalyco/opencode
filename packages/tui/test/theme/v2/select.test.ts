@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test"
-import type { HueDefinition, ThemeDefinition, ThemeDocument } from "../../../src/theme/v2"
-import { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "../../../src/theme/v2/select"
+import {
+  selectTheme,
+  selectThemeMode,
+  supportsThemeMode,
+  themeModes,
+  type HueDefinition,
+  type ThemeDefinition,
+  type ThemeDocument,
+} from "@opencode-ai/theme/tui"
 
 const hue = {} as HueDefinition
 const light = { hue, categorical: ["blue"], text: { default: "#111111", subdued: "#222222" } } satisfies ThemeDefinition

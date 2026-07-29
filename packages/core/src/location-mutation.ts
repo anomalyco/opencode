@@ -120,6 +120,8 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
       const absolute = path.resolve(location.directory, input.path)
+      // External access follows the requested path boundary. Symlinks reached through an
+      // internal path intentionally retain internal permission semantics after canonicalization.
       const lexicallyInternal = FSUtil.contains(location.directory, absolute)
 
       const resolved = yield* resolvePath(absolute)

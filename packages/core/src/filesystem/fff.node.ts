@@ -1,71 +1,52 @@
+import type {
+  DirItem,
+  DirSearchResult,
+  FileItem,
+  GrepCursor,
+  GrepMatch,
+  GrepResult,
+  InitOptions,
+  MixedItem,
+  MixedSearchResult,
+  SearchResult,
+} from "@ff-labs/fff-node"
+
+const { FileFinder } = await import("@ff-labs/fff-node").catch(() => ({ FileFinder: undefined }))
+
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
-export interface Init {
-  basePath: string
-  frecencyDbPath?: string
-  historyDbPath?: string
-  useUnsafeNoLock?: boolean
-  disableMmapCache?: boolean
-  disableContentIndexing?: boolean
-  disableWatch?: boolean
-  aiMode?: boolean
-  logFilePath?: string
-  logLevel?: "trace" | "debug" | "info" | "warn" | "error"
-  enableFsRootScanning?: boolean
-  enableHomeDirScanning?: boolean
-}
-
-export interface File {
-  relativePath: string
-  fileName: string
-  modified: number
-}
-
-export interface Directory {
-  relativePath: string
-  dirName: string
-  maxAccessFrecency: number
-}
-
-export type Mixed = { type: "file"; item: File } | { type: "directory"; item: Directory }
+export type Init = InitOptions
 
 export interface Search {
-  items: File[]
-  scores: Array<{ total: number }>
+  items: FileItem[]
+  scores: SearchResult["scores"]
   totalMatched: number
   totalFiles: number
 }
 
 export interface DirSearch {
-  items: Directory[]
-  scores: Array<{ total: number }>
+  items: DirItem[]
+  scores: DirSearchResult["scores"]
   totalMatched: number
   totalDirs: number
 }
 
 export interface MixedSearch {
-  items: Mixed[]
-  scores: Array<{ total: number }>
+  items: MixedItem[]
+  scores: MixedSearchResult["scores"]
   totalMatched: number
   totalFiles: number
   totalDirs: number
 }
 
-export type Cursor = null
-
-export interface Hit {
-  relativePath: string
-  fileName: string
-  lineNumber: number
-  byteOffset: number
-  lineContent: string
-  matchRanges: [number, number][]
-  contextBefore?: string[]
-  contextAfter?: string[]
-}
+export type File = FileItem
+export type Directory = DirItem
+export type Mixed = MixedItem
+export type Cursor = GrepCursor | null
+export type Hit = GrepMatch
 
 export interface Grep {
-  items: Hit[]
+  items: GrepResult["items"]
   totalMatched: number
   totalFilesSearched: number
   totalFiles: number
@@ -128,11 +109,30 @@ export interface Picker {
 }
 
 export function available() {
-  return false
+  return FileFinder?.isAvailable() ?? false
 }
 
-export function create(_opts: Init): Result<Picker> {
-  return { ok: false, error: "fff unavailable on node runtime" }
+export function create(opts: Init): Result<Picker> {
+  if (!FileFinder) return { ok: false, error: "fff unavailable on node runtime" }
+  const made = FileFinder.create(opts)
+  if (!made.ok) return made
+  const pick = made.value
+  return {
+    ok: true,
+    value: {
+      destroy: () => pick.destroy(),
+      isScanning: () => pick.isScanning(),
+      waitForScan: (timeoutMs) => pick.waitForScan(timeoutMs),
+      refreshGitStatus: () => pick.refreshGitStatus(),
+      fileSearch: (query, next) => pick.fileSearch(query, next),
+      glob: (pattern, next) => pick.glob(pattern, next),
+      directorySearch: (query, next) => pick.directorySearch(query, next),
+      mixedSearch: (query, next) => pick.mixedSearch(query, next),
+      grep: (query, next) => pick.grep(query, next),
+      trackQuery: (query, file) => pick.trackQuery(query, file),
+      getHistoricalQuery: (offset) => pick.getHistoricalQuery(offset),
+    },
+  }
 }
 
 export * as Fff from "./fff.node"

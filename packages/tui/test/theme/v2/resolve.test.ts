@@ -1,10 +1,14 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
+import {
+  DEFAULT_THEME,
+  resolveTheme,
+  resolveThemeDocument,
+  selectTheme,
+  type Mode,
+  type ThemeDefinition,
+} from "@opencode-ai/theme/tui"
 import { parseTheme, type ThemeDocumentSource } from "../../../src/theme"
-import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
-import type { Mode, ThemeDefinition } from "../../../src/theme/v2"
-import { resolveTheme, resolveThemeDocument } from "../../../src/theme/v2/resolve"
-import { selectTheme } from "../../../src/theme/v2/select"
 
 const light = selectTheme(DEFAULT_THEME, "light")
 const dark = selectTheme(DEFAULT_THEME, "dark")

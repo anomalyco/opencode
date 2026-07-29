@@ -4,7 +4,7 @@ import type { VcsFileStatus } from "@opencode-ai/client"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FilePath } from "../ui/file-path"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { useConfig } from "../config"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
@@ -31,8 +31,8 @@ export function DialogWorkspaceFileChanges(props: {
   message?: string
 }) {
   const dialog = useDialog()
-  const { themeV2 } = useTheme().contextual("elevated")
-  const { themeV2: overlayTheme } = useTheme().contextual("overlay")
+  const theme = useThemes().contextual("elevated")
+  const overlayTheme = useThemes().contextual("overlay")
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -72,15 +72,15 @@ export function DialogWorkspaceFileChanges(props: {
   return (
     <box gap={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           {props.title ?? "File Changes Found"}
         </text>
-        <text fg={themeV2.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={themeV2.text.subdued} wrapMode="word">
+        <text fg={theme.text.subdued} wrapMode="word">
           {props.message ?? "Do you want to move these changes with the session?"}
         </text>
       </box>
@@ -118,16 +118,14 @@ export function DialogWorkspaceFileChanges(props: {
             <box
               paddingLeft={2}
               paddingRight={2}
-              backgroundColor={item === store.active ? themeV2.background.action.primary.focused : undefined}
+              backgroundColor={item === store.active ? theme.background.action.primary.focused : undefined}
               onMouseUp={() => {
                 setStore("active", item)
                 props.onSelect(item)
                 dialog.clear()
               }}
             >
-              <text fg={item === store.active ? themeV2.text.action.primary.focused : themeV2.text.subdued}>
-                {item}
-              </text>
+              <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.subdued}>{item}</text>
             </box>
           )}
         </For>
