@@ -55,6 +55,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         controller={props.controller}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
+        modelControlsVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         modelControl={
@@ -388,15 +389,11 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
             }
           : undefined
       },
-      get variant() {
-        if (props.controls.model.loading) return
-        return {
-          options: () => variants().map((value) => ({ id: value, label: value })),
-          current: () => props.controls.model.selection.variant.current() ?? "default",
-          onSelect: (value: string) =>
-            props.controls.model.selection.variant.set(value === "default" ? undefined : value),
-          keybind: () => command.keybindParts("model.variant.cycle"),
-        }
+      variant: {
+        options: () => variants().map((value) => ({ id: value, label: value })),
+        current: () => props.controls.model.selection.variant.current() ?? "default",
+        onSelect: (value) => props.controls.model.selection.variant.set(value === "default" ? undefined : value),
+        keybind: () => command.keybindParts("model.variant.cycle"),
       },
       submit: {
         stopping,

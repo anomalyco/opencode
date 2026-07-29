@@ -39,6 +39,7 @@ export type PromptInputV2Props = {
   borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
+  modelControlsVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
 }
@@ -215,33 +216,35 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 <PromptInputV2ConfiguredSelect title="Choose agent" keybind={["Mod", "."]} control={control()} />
               )}
             </Show>
-            <Show
-              when={props.modelControl}
-              fallback={
-                <Show when={view.model}>
-                  {(control) => (
+            <Show when={props.modelControlsVisible ?? true}>
+              <Show
+                when={props.modelControl}
+                fallback={
+                  <Show when={view.model}>
+                    {(control) => (
+                      <PromptInputV2ConfiguredSelect
+                        title="Choose model"
+                        keybind={["Mod", "M"]}
+                        control={control()}
+                        model
+                      />
+                    )}
+                  </Show>
+                }
+              >
+                {props.modelControl}
+              </Show>
+              <Show when={view.variant}>
+                {(control) => (
+                  <Show when={control().options().length > 1}>
                     <PromptInputV2ConfiguredSelect
-                      title="Choose model"
-                      keybind={["Mod", "M"]}
+                      title="Choose model variant"
+                      keybind={["Shift", "Mod", "D"]}
                       control={control()}
-                      model
                     />
-                  )}
-                </Show>
-              }
-            >
-              {props.modelControl}
-            </Show>
-            <Show when={view.variant}>
-              {(control) => (
-                <Show when={control().options().length > 1}>
-                  <PromptInputV2ConfiguredSelect
-                    title="Choose model variant"
-                    keybind={["Shift", "Mod", "D"]}
-                    control={control()}
-                  />
-                </Show>
-              )}
+                  </Show>
+                )}
+              </Show>
             </Show>
           </div>
           <PromptInputV2SubmitButton
