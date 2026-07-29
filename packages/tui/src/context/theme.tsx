@@ -121,7 +121,7 @@ type Themes = {
 }
 
 type ThemeContextValue = {
-  current: ComponentTheme["contexts"][ContextName]
+  current: ComponentTheme["contextual"][ContextName]
   themes: Themes
   readonly ready: boolean
 }
@@ -373,7 +373,7 @@ export function useThemes() {
   return themeContext.use().themes
 }
 export function useTheme(): ComponentTheme
-export function useTheme(context: ContextName): ComponentTheme["contexts"][ContextName]
+export function useTheme(context: ContextName): ComponentTheme["contextual"][ContextName]
 export function useTheme(context?: ContextName) {
   const value = themeContext.use()
   return context ? value.themes.current.contextual[context] : value.current
