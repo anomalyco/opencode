@@ -44,7 +44,7 @@ function Commands(props: { context: Plugin.Context }) {
 function Scrap(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme
-  const elevatedTheme = theme.contextual.elevated ?? theme
+  const elevatedTheme = theme.contextual.elevated
   const [tabs, setTabs] = createSignal(FIXTURE_TABS.slice(0, 6))
   const [active, setActive] = createSignal<string | undefined>("fixture-2")
   const [animations, setAnimations] = createSignal(true)

@@ -15,6 +15,7 @@ import {
 } from "./schema.js"
 import type {
   ActionStateKey,
+  ContextName,
   HueDefinition,
   HueScale,
   ResolvedActionState,
@@ -64,14 +65,15 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const hueSteps = compileHueSteps(hue)
   const base = tokens(definition)
   const resolved = resolveView(base, hue, categorical, hueSteps)
-  const contextual = Object.fromEntries(
-    Object.entries(definition)
-      .filter(([key]) => key.startsWith("@context:"))
-      .map(([key, override]) => {
-        const contextual = contextualize(base, override as ThemeTokensDefinition)
-        return [key.slice("@context:".length), resolveView(contextual, hue, categorical, hueSteps)]
-      }),
-  )
+  const context = (name: ContextName) => {
+    const override = definition[`@context:${name}`]
+    if (!override) return resolved
+    return resolveView(contextualize(base, override), hue, categorical, hueSteps)
+  }
+  const contextual = {
+    elevated: context("elevated"),
+    overlay: context("overlay"),
+  }
 
   return { ...resolved, contextual } as ResolvedTheme
 }

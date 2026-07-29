@@ -39,8 +39,8 @@ export function createComponentTheme(current: Accessor<ResolvedTheme>, mode: Acc
 
   return Object.assign(create(current), {
     contextual: {
-      elevated: create(() => current().contextual.elevated ?? current()),
-      overlay: create(() => current().contextual.overlay ?? current()),
+      elevated: create(() => current().contextual.elevated),
+      overlay: create(() => current().contextual.overlay),
     },
   })
 }

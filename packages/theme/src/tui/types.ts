@@ -65,5 +65,5 @@ export type ResolvedThemeTokens = {
 export type ContextName = "elevated" | "overlay"
 
 export type ResolvedTheme = ResolvedThemeTokens & {
-  readonly contextual: Readonly<Partial<Record<ContextName, ResolvedThemeTokens>>>
+  readonly contextual: Readonly<Record<ContextName, ResolvedThemeTokens>>
 }

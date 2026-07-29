@@ -54,18 +54,18 @@ test("provides reactive properties, states, contexts, and color operations", () 
   setContext("elevated")
   expect("contexts" in current()).toBeFalse()
   expect(current().categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
-  expect(current().text.default).toBe(resolved().contextual.elevated!.text.default)
+  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
   expect(current().background.action.primary.focused).toBe(
-    resolved().contextual.elevated!.background.action.primary.focused,
+    resolved().contextual.elevated.background.action.primary.focused,
   )
   expect(current().background.action.primary.hovered).toBe(resolved().background.surface.overlay)
   expect(current().background.formfield.selected).toBe(
-    resolved().contextual.elevated!.background.formfield.selected,
+    resolved().contextual.elevated.background.formfield.selected,
   )
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
   setMode("dark")
-  expect(current().text.default).toBe(resolved().contextual.elevated!.text.default)
+  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
   expect(current().decrease(current().background.surface.offset, 1)).toBe(resolved().hue.neutral[600])
   expect(current().raise(current().background.surface.offset)).toBe(resolved().hue.neutral[600])
 })

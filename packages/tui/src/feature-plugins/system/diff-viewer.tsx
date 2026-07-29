@@ -943,7 +943,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
 }
 
 function DiffViewerHelpDialog(props: { context: Plugin.Context }) {
-  const theme = props.context.theme.contextual.elevated ?? props.context.theme
+  const theme = props.context.theme.contextual.elevated
   const shortcut = (id: string) => () => props.context.keymap.shortcuts(id)[0]
   const rows = [
     {
