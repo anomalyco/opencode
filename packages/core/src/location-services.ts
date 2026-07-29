@@ -42,6 +42,7 @@ import { InstructionBuiltIns } from "./instructions/builtins"
 import { InstructionEntry } from "./session/instruction-entry"
 import { SessionInstructions } from "./session/instructions"
 import { SessionGenerateNode } from "./session/generate-node"
+import { BrowserTool } from "./tool/browser"
 import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { Tool } from "./tool"
@@ -76,6 +77,7 @@ const locationServiceNodes = [
   MCP.node,
   Permission.node,
   Tool.node,
+  BrowserTool.node,
   Image.node,
   SkillInstructions.node,
   ReferenceInstructions.node,

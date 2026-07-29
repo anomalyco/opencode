@@ -1,9 +1,9 @@
 import { ServerAuth } from "../auth"
 import { UnauthorizedError } from "@opencode-ai/protocol/errors"
-import { Authorization } from "@opencode-ai/protocol/middleware/authorization"
+import { Authorization, HeaderOnlyAuthorization } from "@opencode-ai/protocol/middleware/authorization"
 export { Authorization } from "@opencode-ai/protocol/middleware/authorization"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
-import { Effect, Encoding, Layer, Redacted } from "effect"
+import { Context, Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 
 const AUTH_TOKEN_QUERY = "auth_token"
@@ -26,9 +26,9 @@ function decodeCredential(input: string) {
   )
 }
 
-function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
-  const url = new URL(request.url, "http://localhost")
-  const token = url.searchParams.get(AUTH_TOKEN_QUERY)
+function credentialFromRequest(request: HttpServerRequest.HttpServerRequest, headerOnly = false) {
+  const url = new URL(request.url, "http://opencode.invalid")
+  const token = headerOnly ? undefined : url.searchParams.get(AUTH_TOKEN_QUERY)
   if (token) return decodeCredential(token)
   const match = /^Basic\s+(.+)$/i.exec(request.headers.authorization ?? "")
   if (match) return decodeCredential(match[1])
@@ -44,13 +44,17 @@ export const authorizationLayer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* ServerAuth.Config
     if (!ServerAuth.required(config)) return Authorization.of((effect) => effect)
-    return Authorization.of((effect) =>
+    return Authorization.of((effect, options) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
         // Browsers cannot set headers on WebSocket upgrades, so a ticketed PTY connect skips
         // credential checks here; the connect handler consumes and validates the ticket.
-        if (hasPtyConnectTicketURL(new URL(request.url, "http://localhost"))) return yield* effect
-        if (yield* authorizedRequest(request, config)) return yield* effect
+        if (hasPtyConnectTicketURL(new URL(request.url, "http://opencode.invalid"))) return yield* effect
+        const headerOnly = Context.get(options.endpoint.annotations, HeaderOnlyAuthorization)
+        const authorized = yield* credentialFromRequest(request, headerOnly).pipe(
+          Effect.map((credential) => ServerAuth.authorized(credential, config)),
+        )
+        if (authorized) return yield* effect
         yield* HttpEffect.appendPreResponseHandler((_request, response) =>
           Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
         )
