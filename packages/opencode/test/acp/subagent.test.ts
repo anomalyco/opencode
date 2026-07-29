@@ -77,6 +77,29 @@ describe("acp subagent wire contract", () => {
     expect(Subagent.decodeSnapshot(snapshot).nodes[1]?.directCost?.amount).toBe(amount)
     expect(Subagent.decodeUpdate(update).upsert[0]?.directCost?.amount).toBe(amount)
   })
+
+  test.each(["", " ", "\t\n"])("rejects a blank direct cost currency from every public codec", (currency) => {
+    const snapshot = structuredClone(fixture.snapshot)
+    snapshot.nodes[1].directCost.currency = currency
+    const update = structuredClone(fixture.update)
+    update.upsert = [structuredClone(snapshot.nodes[1])]
+    update.removedSessionIds = []
+
+    expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
+    expect(() => Subagent.decodeUpdate(update)).toThrow()
+    expect(() => Subagent.serializeDirectCost(1.2, currency)).toThrow()
+  })
+
+  test("rejects a non-string direct cost currency as a schema error", () => {
+    const snapshot = structuredClone(fixture.snapshot)
+    snapshot.nodes[1].directCost.currency = 123
+    const update = structuredClone(fixture.update)
+    update.upsert = [structuredClone(snapshot.nodes[1])]
+    update.removedSessionIds = []
+
+    expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
+    expect(() => Subagent.decodeUpdate(update)).toThrow()
+  })
   ;[
     { amount: 0, expected: "0" },
     { amount: 1.2, expected: "1.2" },
@@ -272,6 +295,50 @@ describe("acp subagent snapshots", () => {
     const service = Subagent.make({ sdk: descendantSDK(301) })
 
     await expect(service.list({})).rejects.toThrow("subagent descendants must not exceed 300")
+  })
+
+  test.each([
+    { label: "negative", cost: -0.35 },
+    { label: "nonfinite", cost: Number.POSITIVE_INFINITY },
+    { label: "out-of-contract", cost: 1e128 },
+  ])("retains list and subscription graphs while omitting a child with $label cost", async ({ cost }) => {
+    const root = session({ id: "root", directory: "/workspace/root", cost: 1.2, created: 1, updated: 3 })
+    const child = session({
+      id: "child",
+      parentID: "root",
+      directory: "/workspace/child",
+      cost,
+      created: 2,
+      updated: 2,
+    })
+    const grandchild = session({
+      id: "grandchild",
+      parentID: "child",
+      directory: "/workspace/grandchild",
+      cost: 0.1,
+      created: 3,
+      updated: 1,
+    })
+    const harness = await subscriptionHarness({
+      sessions: [root, child, grandchild],
+      status: { root: { type: "busy" }, child: { type: "idle" }, grandchild: { type: "idle" } },
+    })
+    const service = Subagent.make({ sdk: harness.sdk, events: harness.events, notify: () => Promise.resolve() })
+
+    const listed = await service.list({})
+    const subscribed = await service.subscribe({})
+
+    for (const snapshot of [listed, subscribed]) {
+      expect(snapshot.nodes.map((node) => node.sessionId)).toEqual(["root", "child", "grandchild"])
+      expect(snapshot.nodes.map((node) => node.directCost)).toEqual([
+        { amount: "1.2", currency: "USD" },
+        undefined,
+        { amount: "0.1", currency: "USD" },
+      ])
+    }
+
+    service.close()
+    harness.close()
   })
 })
 

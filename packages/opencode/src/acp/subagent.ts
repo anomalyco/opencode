@@ -127,10 +127,11 @@ export function encodeUpdate(input: Update): Update {
 
 export function serializeDirectCost(amount: number, currency: string): DirectCost {
   if (!Number.isFinite(amount) || amount < 0 || Object.is(amount, -0)) {
-    throw new Error("direct cost must be finite and nonnegative")
+    throw new InvalidDirectCostError("direct cost must be finite and nonnegative")
   }
   const serialized = new Decimal(amount).toString()
   parseDirectCostAmount(serialized)
+  validateDirectCostCurrency(currency)
   return { amount: serialized, currency }
 }
 
@@ -463,6 +464,7 @@ async function readSession(input: {
     }
   }
 
+  const directCost = serializeSessionDirectCost(input.session.cost)
   input.nodes.push({
     runId: input.session.id,
     sessionId: input.session.id,
@@ -474,7 +476,7 @@ async function readSession(input: {
     createdAt: new Date(input.session.time.created).toISOString(),
     updatedAt: new Date(input.session.time.updated).toISOString(),
     cwd: input.session.directory,
-    ...(input.session.cost === undefined ? {} : { directCost: serializeDirectCost(input.session.cost, "USD") }),
+    ...(directCost ? { directCost } : {}),
   })
 
   const children = await input.sdk.session.children({ sessionID: input.session.id })
@@ -576,6 +578,21 @@ function validateDirectCost(node: Node) {
   if (!node.directCost) return
 
   parseDirectCostAmount(node.directCost.amount)
+  validateDirectCostCurrency(node.directCost.currency)
+}
+
+function serializeSessionDirectCost(amount: number | undefined) {
+  if (amount === undefined) return
+  try {
+    return serializeDirectCost(amount, "USD")
+  } catch (error) {
+    if (error instanceof InvalidDirectCostError) return
+    throw error
+  }
+}
+
+function validateDirectCostCurrency(currency: string) {
+  if (!currency.trim().length) throw new InvalidDirectCostError("direct cost currency must not be blank")
 }
 
 function parseDirectCostAmount(amount: string) {
@@ -617,8 +634,10 @@ function parseDirectCostAmount(amount: string) {
   }
 }
 
+class InvalidDirectCostError extends Error {}
+
 function invalidDirectCostAmount(): never {
-  throw new Error("direct cost must be an exactly representable nonnegative decimal")
+  throw new InvalidDirectCostError("direct cost must be an exactly representable nonnegative decimal")
 }
 
 function depthOf(node: Node, bySession: ReadonlyMap<string, Node>, visited: ReadonlySet<string>): number {
