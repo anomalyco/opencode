@@ -31,6 +31,11 @@ const WHEEL_PINCH_END_DELAY = 160
 
 const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
 
+void window.api.getZoomFactor().then((factor) => {
+  requestedZoom = clamp(factor)
+  setWebviewZoom(requestedZoom)
+})
+
 const applyZoom = (next: number) => {
   requestedZoom = next
   void window.api

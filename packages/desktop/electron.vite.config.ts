@@ -48,7 +48,10 @@ const require = __cjs_mod__.createRequire(import.meta.url);
 `,
         },
       },
-      externalizeDeps: { include: [nodePtyPkg] },
+      externalizeDeps: {
+        include: [nodePtyPkg, "bufferutil", "utf-8-validate"],
+        exclude: ["@opencode-ai/client"],
+      },
     },
     plugins: [
       {
