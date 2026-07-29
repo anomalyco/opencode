@@ -1197,7 +1197,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
-              <Show when={sessionTabs.enabled() && sessionTabs.tabs().length > 1 && route.data.type !== "plugin"}>
+              <Show when={sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"}>
                 <SessionTabs />
               </Show>
               <Switch>
