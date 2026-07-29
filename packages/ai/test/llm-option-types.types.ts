@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { LLM, Model, type ModelProviderOptions, type ProviderOptions } from "../src"
+import { LLM, type Model, type ModelProviderOptions, type ProviderOptions } from "../src"
 import { OpenAIChat } from "../src/protocols"
 
 interface ExampleOptions {
@@ -45,18 +45,3 @@ LLM.request({ model: generic, prompt: "Hello", providerOptions: { arbitrary: { o
 
 const options: ModelProviderOptions<typeof model> = { example: { mode: "fast" } }
 void options
-
-model.route.model<ExampleProviderOptions>({
-  id: "example-with-defaults",
-  defaults: {
-    // @ts-expect-error Low-level model defaults preserve known provider option types.
-    providerOptions: { example: { mode: 1 } },
-  },
-})
-
-Model.update(model, {
-  defaults: {
-    // @ts-expect-error Updating a model cannot contradict its provider option type.
-    providerOptions: { example: { mode: "slow" } },
-  },
-})

@@ -139,17 +139,15 @@ export class ModelDefaults extends Schema.Class<ModelDefaults>("LLM.ModelDefault
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _ModelDefaults: void
-}
+}) {}
 
 export namespace ModelDefaults {
-  export type Input<Options extends ProviderOptions = ProviderOptions> =
+  export type Input =
     | ModelDefaults
     | {
         readonly limits?: ModelLimits.Input
         readonly generation?: GenerationOptions.Input
-        readonly providerOptions?: Options
+        readonly providerOptions?: ProviderOptions
         readonly http?: HttpOptions.Input
       }
 
@@ -196,7 +194,7 @@ export class Model<Options extends ProviderOptions = ProviderOptions> {
     this.compatibility = input.compatibility
   }
 
-  static make<Options extends ProviderOptions = ProviderOptions>(input: Model.Input<Options>) {
+  static make<Options extends ProviderOptions = ProviderOptions>(input: Model.Input) {
     return new Model<Options>({
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
@@ -216,7 +214,7 @@ export class Model<Options extends ProviderOptions = ProviderOptions> {
     }
   }
 
-  static update<Options extends ProviderOptions>(model: Model<Options>, patch: Partial<Model.Input<Options>>) {
+  static update<Options extends ProviderOptions>(model: Model<Options>, patch: Partial<Model.Input>) {
     if (Object.keys(patch).length === 0) return model
     return Model.make<Options>({
       ...Model.input(model),
@@ -234,18 +232,15 @@ export namespace Model {
     readonly compatibility?: ModelCompatibility
   }
 
-  export type Input<Options extends ProviderOptions = ProviderOptions> = Omit<
-    ConstructorInput,
-    "id" | "provider" | "defaults" | "compatibility"
-  > & {
+  export type Input = Omit<ConstructorInput, "id" | "provider" | "defaults" | "compatibility"> & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
-    readonly defaults?: ModelDefaults.Input<Options>
+    readonly defaults?: ModelDefaults.Input
     readonly compatibility?: ModelCompatibility.Input
   }
 }
 
-export type ModelInput<Options extends ProviderOptions = ProviderOptions> = Model.Input<Options>
+export type ModelInput = Model.Input
 
 export type ModelProviderOptions<SelectedModel> = SelectedModel extends Model<infer Options> ? Options : never
 
