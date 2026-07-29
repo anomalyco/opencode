@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { Client, InMemoryTransport } from "@modelcontextprotocol/client"
-import { Server } from "@modelcontextprotocol/server"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
+import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 import { McpCatalog } from "@/mcp/catalog"
 import { Effect } from "effect"
 
@@ -28,10 +30,7 @@ describe("McpCatalog.convertTool", () => {
   test("preserves content when structuredContent is also present", async () => {
     const content = [{ type: "image" as const, mimeType: "image/png", data: "AAAA" }]
     const structuredContent = { image: { mimeType: "image/png", data: "AAAA" } }
-    const converted = McpCatalog.convertTool({
-      def: mcpTool(),
-      client: clientReturning({ content, structuredContent }),
-    })
+    const converted = McpCatalog.convertTool(mcpTool(), clientReturning({ content, structuredContent }))
 
     const output = await converted.execute?.({}, options)
 
@@ -40,10 +39,7 @@ describe("McpCatalog.convertTool", () => {
 
   test("falls back to structuredContent only when content is absent", async () => {
     const structuredContent = { results: [{ title: "one" }] }
-    const converted = McpCatalog.convertTool({
-      def: mcpTool(),
-      client: clientReturning({ content: [], structuredContent }),
-    })
+    const converted = McpCatalog.convertTool(mcpTool(), clientReturning({ content: [], structuredContent }))
 
     const output = await converted.execute?.({}, options)
 
@@ -54,52 +50,18 @@ describe("McpCatalog.convertTool", () => {
   })
 })
 
-describe("McpCatalog.callTool", () => {
-  test("forwards the request options", async () => {
-    const controller = new AbortController()
-    let request: unknown
-    let options: unknown
-    const client = {
-      callTool: async (input: unknown, config: unknown) => {
-        request = input
-        options = config
-        return { content: [] }
-      },
-    } as unknown as Client
-
-    await McpCatalog.callTool({ def: mcpTool(), client, timeout: 123 }, { value: true }, controller.signal)
-
-    expect(request).toEqual({ name: "screenshot", arguments: { value: true } })
-    expect(options).toMatchObject({ resetTimeoutOnProgress: true, signal: controller.signal, timeout: 123 })
-    expect(typeof (options as { onprogress?: unknown }).onprogress).toBe("function")
-  })
-
-  test("throws text returned by an MCP tool error", async () => {
-    const client = clientReturning({
-      isError: true,
-      content: [
-        { type: "image", data: "AAAA", mimeType: "image/png" },
-        { type: "text", text: "first" },
-        { type: "text", text: "second" },
-      ],
-    })
-
-    await expect(McpCatalog.callTool({ def: mcpTool(), client }, {})).rejects.toThrow("first\n\nsecond")
-  })
-})
-
 test("preserves output schema validation across paginated tool discovery", async () => {
   const server = new Server({ name: "pagination", version: "1.0.0" }, { capabilities: { tools: {} } })
-  server.setRequestHandler("tools/list", ({ params }) =>
+  server.setRequestHandler(ListToolsRequestSchema, ({ params }) =>
     Promise.resolve(
       params?.cursor === "page-2"
         ? {
             tools: [
               {
                 name: "second",
-                inputSchema: { type: "object" as const },
+                inputSchema: { type: "object" },
                 outputSchema: {
-                  type: "object" as const,
+                  type: "object",
                   properties: { value: { type: "number" } },
                   required: ["value"],
                 },
@@ -110,9 +72,9 @@ test("preserves output schema validation across paginated tool discovery", async
             tools: [
               {
                 name: "first",
-                inputSchema: { type: "object" as const },
+                inputSchema: { type: "object" },
                 outputSchema: {
-                  type: "object" as const,
+                  type: "object",
                   properties: { value: { type: "string" } },
                   required: ["value"],
                 },
@@ -122,7 +84,7 @@ test("preserves output schema validation across paginated tool discovery", async
           },
     ),
   )
-  server.setRequestHandler("tools/call", ({ params }) =>
+  server.setRequestHandler(CallToolRequestSchema, ({ params }) =>
     Promise.resolve({
       content: [],
       structuredContent: { value: params.name === "first" ? 42 : 1 },
@@ -136,7 +98,9 @@ test("preserves output schema validation across paginated tool discovery", async
   try {
     const tools = await Effect.runPromise(McpCatalog.defs(client))
     expect(tools?.map((tool) => tool.name)).toEqual(["first", "second"])
-    await expect(client.callTool({ name: "first", arguments: {} })).rejects.toThrow(/output schema/i)
+    await expect(client.callTool({ name: "first", arguments: {} })).rejects.toThrow(
+      "Structured content does not match the tool's output schema",
+    )
   } finally {
     await Promise.all([client.close(), server.close()])
   }

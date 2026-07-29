@@ -9,13 +9,8 @@ const OAUTH_CALLBACK_HOST = "127.0.0.1"
 let currentPort = OAUTH_CALLBACK_PORT
 let currentPath = OAUTH_CALLBACK_PATH
 
-export interface AuthorizationCallback {
-  code: string
-  iss?: string
-}
-
 interface PendingAuth {
-  resolve: (callback: AuthorizationCallback) => void
+  resolve: (code: string) => void
   reject: (error: Error) => void
   timeout: ReturnType<typeof setTimeout>
 }
@@ -54,7 +49,6 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   }
 
   const code = url.searchParams.get("code")
-  const iss = url.searchParams.get("iss") ?? undefined
   const state = url.searchParams.get("state")
   const error = url.searchParams.get("error")
   const errorDescription = url.searchParams.get("error_description")
@@ -101,7 +95,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   clearTimeout(pending.timeout)
   pendingAuths.delete(state)
   cleanupStateIndex(state)
-  pending.resolve({ code, iss })
+  pending.resolve(code)
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
   res.end(OauthCallbackPage.success({ provider: "MCP" }))
@@ -136,7 +130,7 @@ export async function ensureRunning(redirectUri?: string): Promise<void> {
   })
 }
 
-export function waitForCallback(oauthState: string, mcpName?: string): Promise<AuthorizationCallback> {
+export function waitForCallback(oauthState: string, mcpName?: string): Promise<string> {
   if (mcpName) mcpNameToState.set(mcpName, oauthState)
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {

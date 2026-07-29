@@ -1,12 +1,18 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect } from "bun:test"
+import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import {
-  Server,
-  WebStandardStreamableHTTPServerTransport,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type ServerCapabilities,
   type Tool,
-} from "@modelcontextprotocol/server"
+} from "@modelcontextprotocol/sdk/types.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
@@ -60,35 +66,35 @@ function lifecycleServer(input?: { capabilities?: ServerCapabilities; instructio
         })
 
         if (capabilities.tools) {
-          protocol.setRequestHandler("tools/list", (request) => {
+          protocol.setRequestHandler(ListToolsRequestSchema, (request) => {
             if (state.listToolsError) throw new Error(state.listToolsError)
             const page = state.toolPages?.[request.params?.cursor ?? "initial"]
             return Promise.resolve({ tools: page?.items ?? state.tools, nextCursor: page?.nextCursor })
           })
         }
         if (capabilities.prompts) {
-          protocol.setRequestHandler("prompts/list", (request) => {
+          protocol.setRequestHandler(ListPromptsRequestSchema, (request) => {
             const page = state.promptPages?.[request.params?.cursor ?? "initial"]
             return Promise.resolve({ prompts: page?.items ?? state.prompts, nextCursor: page?.nextCursor })
           })
-          protocol.setRequestHandler("prompts/get", async () => {
+          protocol.setRequestHandler(GetPromptRequestSchema, async () => {
             if (state.requestDelay) await Bun.sleep(state.requestDelay)
             return { messages: [{ role: "user", content: { type: "text", text: "prompt result" } }] }
           })
         }
         if (capabilities.resources) {
-          protocol.setRequestHandler("resources/list", (request) => {
+          protocol.setRequestHandler(ListResourcesRequestSchema, (request) => {
             const page = state.resourcePages?.[request.params?.cursor ?? "initial"]
             return Promise.resolve({ resources: page?.items ?? state.resources, nextCursor: page?.nextCursor })
           })
-          protocol.setRequestHandler("resources/templates/list", (request) => {
+          protocol.setRequestHandler(ListResourceTemplatesRequestSchema, (request) => {
             const page = state.resourceTemplatePages?.[request.params?.cursor ?? "initial"]
             return Promise.resolve({
               resourceTemplates: page?.items ?? state.resourceTemplates,
               nextCursor: page?.nextCursor,
             })
           })
-          protocol.setRequestHandler("resources/read", async (request) => {
+          protocol.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             if (state.requestDelay) await Bun.sleep(state.requestDelay)
             return { contents: [{ uri: request.params.uri, text: "resource result" }] }
           })
@@ -139,7 +145,7 @@ function hangingLifecycleServer() {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const protocol = new Server({ name: "mcp-lifecycle-hanging", version: "1.0.0" }, { capabilities: { tools: {} } })
-      protocol.setRequestHandler("tools/list", () => Promise.resolve({ tools: [] }))
+      protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
       const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
         enableJsonResponse: true,
@@ -278,7 +284,7 @@ it.instance("follows cursors when listing tools, prompts, resources, and templat
   }),
 )
 
-it.instance("accepts empty cursors and terminates on repeated cursors", () =>
+it.instance("accepts empty cursors and rejects repeated cursors", () =>
   Effect.gen(function* () {
     const empty = yield* lifecycleServer({ capabilities: { prompts: {} } })
     empty.state.promptPages = {
@@ -295,8 +301,7 @@ it.instance("accepts empty cursors and terminates on repeated cursors", () =>
     const result = yield* mcp.add("looping-cursor", remote(looping.url))
 
     expect(Object.keys(yield* mcp.prompts())).toEqual(["empty-cursor:prompt-one", "empty-cursor:prompt-two"])
-    expect(statusName(result.status, "looping-cursor")).toBe("connected")
-    expect(Object.keys(yield* mcp.tools())).toEqual([])
+    expect(statusName(result.status, "looping-cursor")).toBe("failed")
   }),
 )
 

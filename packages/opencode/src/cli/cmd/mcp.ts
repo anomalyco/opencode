@@ -2,10 +2,13 @@ import { cmd } from "./cmd"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { effectCmd } from "../effect-cmd"
 import { Cause } from "effect"
-import { Client, StreamableHTTPClientTransport, UnauthorizedError } from "@modelcontextprotocol/client"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { CLIENT_OPTIONS, MCP } from "../../mcp"
+import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
@@ -728,53 +731,107 @@ export const McpDebugCommand = effectCmd({
       const spinner = prompts.spinner()
       spinner.start("Testing connection...")
 
-      const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
-      let authorizationUrl: URL | undefined
-      const authProvider = new McpOAuthProvider(
-        serverName,
-        serverConfig.url,
-        {
-          clientId: oauthConfig?.clientId,
-          clientSecret: oauthConfig?.clientSecret,
-          scope: oauthConfig?.scope,
-          callbackPort: oauthConfig?.callbackPort,
-          redirectUri: oauthConfig?.redirectUri,
-        },
-        {
-          onRedirect: async (url) => {
-            authorizationUrl = url
-          },
-        },
-        auth,
-      )
-      const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
-        authProvider,
-        requestInit: serverConfig.headers ? { headers: serverConfig.headers } : undefined,
-      })
-      const client = new Client({ name: "opencode-debug", version: InstallationVersion }, CLIENT_OPTIONS)
-
+      // Test basic HTTP connectivity first
       try {
-        await client.connect(transport)
-        spinner.stop("SDK connection successful")
-        prompts.log.success(
-          `Connected using MCP ${client.getNegotiatedProtocolVersion() ?? "unknown"} (${client.getProtocolEra() ?? "unknown"})`,
-        )
-        const serverInfo = client.getServerVersion()
-        if (serverInfo) prompts.log.info(`Server info: ${JSON.stringify(serverInfo)}`)
-      } catch (error) {
-        if (error instanceof UnauthorizedError) {
-          spinner.stop("OAuth required")
-          prompts.log.info(`OAuth flow triggered: ${error.message}`)
-          if (authorizationUrl) prompts.log.info(`Authorization URL: ${authorizationUrl}`)
-          const clientInfo = await authProvider.clientInformation()
-          if (clientInfo) prompts.log.info(`Client ID available: ${clientInfo.client_id}`)
-          if (!clientInfo) prompts.log.info("No client ID - dynamic registration will be attempted")
-        } else {
-          spinner.stop("Connection failed", 1)
-          prompts.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
+        const response = await fetch(serverConfig.url, {
+          method: "POST",
+          headers: {
+            ...serverConfig.headers,
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "initialize",
+            params: {
+              protocolVersion: LATEST_PROTOCOL_VERSION,
+              capabilities: {},
+              clientInfo: { name: "opencode-debug", version: InstallationVersion },
+            },
+            id: 1,
+          }),
+        })
+
+        spinner.stop(`HTTP response: ${response.status} ${response.statusText}`)
+
+        // Check for WWW-Authenticate header
+        const wwwAuth = response.headers.get("www-authenticate")
+        if (wwwAuth) {
+          prompts.log.info(`WWW-Authenticate: ${wwwAuth}`)
         }
-      } finally {
-        await client.close().catch(() => {})
+
+        if (response.status === 401) {
+          prompts.log.info("Initial unauthenticated check returned 401, so this server requires OAuth")
+
+          // Try to discover OAuth metadata
+          const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
+          const authProvider = new McpOAuthProvider(
+            serverName,
+            serverConfig.url,
+            {
+              clientId: oauthConfig?.clientId,
+              clientSecret: oauthConfig?.clientSecret,
+              scope: oauthConfig?.scope,
+              redirectUri: oauthConfig?.redirectUri,
+            },
+            {
+              onRedirect: async () => {},
+            },
+            auth,
+          )
+
+          prompts.log.info("Testing OAuth flow (without completing authorization)...")
+
+          // Try creating transport with auth provider to trigger discovery
+          const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
+            authProvider,
+            requestInit: serverConfig.headers ? { headers: serverConfig.headers } : undefined,
+          })
+
+          try {
+            const client = new Client({
+              name: "opencode-debug",
+              version: InstallationVersion,
+            })
+            await client.connect(transport)
+            prompts.log.success("Connection successful (already authenticated)")
+            await client.close()
+          } catch (error) {
+            if (error instanceof UnauthorizedError) {
+              prompts.log.info(`OAuth flow triggered: ${error.message}`)
+
+              // Check if dynamic registration would be attempted
+              const clientInfo = await authProvider.clientInformation()
+              if (clientInfo) {
+                prompts.log.info(`Client ID available: ${clientInfo.client_id}`)
+              } else {
+                prompts.log.info("No client ID - dynamic registration will be attempted")
+              }
+            } else {
+              prompts.log.error(`Connection error: ${error instanceof Error ? error.message : String(error)}`)
+            }
+          }
+        } else if (response.status >= 200 && response.status < 300) {
+          prompts.log.success("Server responded successfully (no auth required or already authenticated)")
+          const body = await response.text()
+          try {
+            const json = JSON.parse(body)
+            if (json.result?.serverInfo) {
+              prompts.log.info(`Server info: ${JSON.stringify(json.result.serverInfo)}`)
+            }
+          } catch {
+            // Not JSON, ignore
+          }
+        } else {
+          prompts.log.warn(`Unexpected status: ${response.status}`)
+          const body = await response.text().catch(() => "")
+          if (body) {
+            prompts.log.info(`Response body: ${body.substring(0, 500)}`)
+          }
+        }
+      } catch (error) {
+        spinner.stop("Connection failed", 1)
+        prompts.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
       }
 
       prompts.outro("Debug complete")

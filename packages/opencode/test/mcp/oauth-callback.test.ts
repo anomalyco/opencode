@@ -74,7 +74,7 @@ describe("McpOAuthCallback.ensureRunning", () => {
     const response = await fetch(`${redirectUri}?code=code&state=success`)
 
     expect(response.status).toBe(200)
-    expect(await callback).toEqual({ code: "code", iss: undefined })
+    expect(await callback).toBe("code")
     expect(McpOAuthCallback.isRunning()).toBe(false)
   })
 
