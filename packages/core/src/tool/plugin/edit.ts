@@ -9,6 +9,7 @@ export * as EditTool from "./edit"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
+import { Bom } from "@opencode-ai/util/bom"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { FileMutation } from "../../file-mutation"
@@ -168,9 +169,8 @@ export const Plugin = {
                   if (info.type === "Directory") {
                     return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
                   }
-                  const bytes = yield* fs.readFile(target.canonical)
-                  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
-                  const source = new TextDecoder().decode(bom ? bytes.slice(3) : bytes)
+                  const original = yield* Bom.readFile(fs, target.canonical)
+                  const source = original.text
                   const ending = source.includes(crlf) ? crlf : "\n"
                   const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
                   const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
@@ -205,13 +205,12 @@ export const Plugin = {
                   const replacementBom = replaced.startsWith("\uFEFF")
                   const result = yield* files.write({
                     target,
-                    content: `${bom || replacementBom ? "\uFEFF" : ""}${replacementBom ? replaced.slice(1) : replaced}`,
+                    content: Bom.join(replaced, original.bom || replacementBom),
                   })
-                  yield* formatter.file(target.canonical)
-                  const formattedBytes = yield* fs.readFile(target.canonical)
-                  const formattedBom =
-                    formattedBytes[0] === 0xef && formattedBytes[1] === 0xbb && formattedBytes[2] === 0xbf
-                  const formatted = new TextDecoder().decode(formattedBom ? formattedBytes.slice(3) : formattedBytes)
+                  const bom = original.bom || replacementBom
+                  const formatted = (yield* formatter.file(target.canonical))
+                    ? yield* Bom.syncFile(fs, target.canonical, bom)
+                    : (yield* Bom.readFile(fs, target.canonical)).text
                   const counts = diffLines(source, formatted).reduce(
                     (result, item) => ({
                       additions: result.additions + (item.added ? (item.count ?? 0) : 0),

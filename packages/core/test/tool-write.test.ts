@@ -23,7 +23,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, Permission.node],
+  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_write_tool_test")
@@ -206,6 +206,11 @@ describe("WriteTool", () => {
         reset()
         const preserved = path.join(tmp.path, "preserved.txt")
         const deduplicated = path.join(tmp.path, "deduplicated.txt")
+        formatFile = (target) =>
+          Effect.promise(async () => {
+            await fs.writeFile(target, `\uFEFF\uFEFF\uFEFF${(await fs.readFile(target, "utf8")).replace(/^\uFEFF+/, "")}`)
+            return true
+          })
         return Effect.promise(() =>
           Promise.all([fs.writeFile(preserved, "\uFEFFbefore"), fs.writeFile(deduplicated, "\uFEFFbefore")]),
         ).pipe(

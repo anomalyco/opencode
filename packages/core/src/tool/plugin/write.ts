@@ -9,6 +9,8 @@ export * as WriteTool from "./write"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
+import { Bom } from "@opencode-ai/util/bom"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { FileMutation } from "../../file-mutation"
 import { Formatter } from "../../formatter"
 import { LocationMutation } from "../../location-mutation"
@@ -47,6 +49,7 @@ export const Plugin = {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
+    const fs = yield* FSUtil.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
@@ -84,7 +87,8 @@ export const Plugin = {
                     source,
                   })
                   const result = yield* files.writeTextPreservingBom({ target, content: input.content })
-                  yield* formatter.file(target.canonical)
+                  const bom = (yield* Bom.readFile(fs, target.canonical)).bom
+                  if (yield* formatter.file(target.canonical)) yield* Bom.syncFile(fs, target.canonical, bom)
                   return result
                 }).pipe(
                   Effect.map((output) => ({ output, content: toModelOutput(output) })),

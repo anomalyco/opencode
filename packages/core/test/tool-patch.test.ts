@@ -582,6 +582,11 @@ describe("PatchTool", () => {
         const bom = "\uFEFF"
         const target = path.join(directory, "example.cs")
         yield* Effect.promise(() => fs.writeFile(target, `${bom}using System;\n\nclass Test {}\n`))
+        formatFile = (file) =>
+          Effect.promise(async () => {
+            await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace(/^\uFEFF/, ""))
+            return true
+          })
         const settled = yield* executeTool(
           registry,
           call("*** Begin Patch\n*** Update File: example.cs\n@@\n class Test {}\n+class Next {}\n*** End Patch"),

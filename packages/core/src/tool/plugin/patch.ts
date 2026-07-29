@@ -7,6 +7,7 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { PlatformError } from "effect/PlatformError"
 import path from "path"
+import { Bom } from "@opencode-ai/util/bom"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Formatter } from "../../formatter"
 import { Location } from "../../location"
@@ -131,15 +132,16 @@ export const Plugin = {
                           ...hunk,
                           target,
                           before: "",
-                          after: (hunk.contents.endsWith("\n") || hunk.contents === ""
-                            ? hunk.contents
-                            : `${hunk.contents}\n`
-                          ).replace(/^\uFEFF/, ""),
+                          after: Bom.split(
+                            hunk.contents.endsWith("\n") || hunk.contents === ""
+                              ? hunk.contents
+                              : `${hunk.contents}\n`,
+                          ).text,
                         })
                         return
                       }
                       if (hunk.type === "delete") {
-                        const content = yield* fs.readFile(target.canonical).pipe(
+                        const content = yield* Bom.readFile(fs, target.canonical).pipe(
                           Effect.mapError(
                             (error) =>
                               new ToolFailure({
@@ -147,8 +149,7 @@ export const Plugin = {
                               }),
                           ),
                         )
-                        const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content)
-                        prepared.push({ ...hunk, target, before: original.replace(/^\uFEFF/, ""), after: "" })
+                        prepared.push({ ...hunk, target, before: content.text, after: "" })
                         return
                       }
                       const previous = updates.get(target.canonical)
@@ -168,18 +169,17 @@ export const Plugin = {
                               message: `patch verification failed: Failed to read file to update ${target.canonical}: path is a directory`,
                             })
                           }
-                          return new TextDecoder("utf-8", { ignoreBOM: true }).decode(
-                            yield* fs.readFile(target.canonical).pipe(
-                              Effect.mapError(
-                                (error) =>
-                                  new ToolFailure({
-                                    message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
-                                  }),
-                              ),
+                          const content = yield* Bom.readFile(fs, target.canonical).pipe(
+                            Effect.mapError(
+                              (error) =>
+                                new ToolFailure({
+                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
+                                }),
                             ),
                           )
+                          return Bom.join(content.text, content.bom)
                         }))
-                      const before = original.replace(/^\uFEFF/, "")
+                      const before = Bom.split(original).text
                       const update = yield* Effect.try({
                         try: () => Patch.derive(hunk.path, hunk.chunks, original),
                         catch: (error) =>
@@ -297,23 +297,29 @@ export const Plugin = {
                       }),
                     { discard: true },
                   )
+                  const formatted = new Map<string, string>()
                   yield* Effect.forEach(
                     [...new Set(applied.filter((item) => item.type !== "delete").map((item) => item.target))],
-                    (target) => formatter.file(target),
+                    (target) =>
+                      Effect.gen(function* () {
+                        const current = yield* Bom.readFile(fs, target).pipe(
+                          Effect.mapError((error) => fail(`Failed to read ${target}`, error)),
+                        )
+                        formatted.set(
+                          target,
+                          (yield* formatter.file(target))
+                            ? yield* Bom.syncFile(fs, target, current.bom).pipe(
+                                Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
+                              )
+                            : current.text,
+                        )
+                      }),
                     { discard: true },
                   )
                   const files = yield* Effect.forEach(prepared, (change) => {
                     if (change.type === "delete") return Effect.succeed(patchFile(change))
                     const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
-                    return fs.readFile(target.canonical).pipe(
-                      Effect.map((content) =>
-                        patchFile(
-                          change,
-                          new TextDecoder("utf-8", { ignoreBOM: true }).decode(content).replace(/^\uFEFF/, ""),
-                        ),
-                      ),
-                      Effect.mapError((error) => fail(`Failed to read formatted ${target.resource}`, error)),
-                    )
+                    return Effect.succeed(patchFile(change, formatted.get(target.canonical)))
                   })
                   return { applied, files }
                 }).pipe(

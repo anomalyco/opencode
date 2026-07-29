@@ -615,6 +615,11 @@ describe("EditTool", () => {
       (tmp) => {
         reset()
         const target = path.join(tmp.path, "windows.txt")
+        formatFile = (file) =>
+          Effect.promise(async () => {
+            await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace(/^\uFEFF/, ""))
+            return true
+          })
         return Effect.promise(() => fs.writeFile(target, "\uFEFFbefore\r\nrest\r\n")).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
