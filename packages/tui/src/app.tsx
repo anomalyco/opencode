@@ -327,7 +327,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                               <TuiStartupProvider
                                 value={{
                                   initialRoute: process.env.OPENCODE_SCRAP
-                                    ? { type: "plugin", id: "scrap", name: "scrap" }
+                                    ? { type: "plugin", id: "opencode.scrap", name: "scrap" }
                                     : process.env.OPENCODE_ROUTE
                                       ? JSON.parse(process.env.OPENCODE_ROUTE)
                                       : undefined,
