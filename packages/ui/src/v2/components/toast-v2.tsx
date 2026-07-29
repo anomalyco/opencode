@@ -1,24 +1,70 @@
+import { Toaster, toast, type ToasterProps } from "solid-sonner"
 import type { ComponentProps, JSX } from "solid-js"
-import { Show, children, createContext, splitProps, useContext } from "solid-js"
+import { createContext, onCleanup, onMount, splitProps, useContext } from "solid-js"
 import { Portal } from "solid-js/web"
-import { ButtonV2 } from "./button-v2"
-import { ToastV2StackRegion, toastV2Stack, type ToastV2StackRegionProps } from "./toast-v2-stack"
+import "./button-v2.css"
 import "./toast-v2.css"
 
-export interface ToastV2RegionProps extends ToastV2StackRegionProps {}
+export interface ToastV2RegionProps extends ToasterProps {}
 
 function ToastV2Region(props: ToastV2RegionProps) {
+  const [local, rest] = splitProps(props, ["class", "className", "style", "toastOptions"])
+  onMount(() => {
+    const sync = () => {
+      document.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
+        const hidden = element.dataset.visible === "false"
+        element.inert = hidden
+        element.tabIndex = hidden ? -1 : 0
+      })
+    }
+    let connected = false
+    const connect = () => {
+      const regions = document.querySelectorAll(".toast-v2-region")
+      if (!regions.length) return
+      observer.disconnect()
+      regions.forEach((region) => {
+        observer.observe(region, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          attributeFilter: ["data-visible"],
+        })
+      })
+      connected = true
+      sync()
+    }
+    const observer = new MutationObserver(() => {
+      if (!connected) connect()
+      else sync()
+    })
+    observer.observe(document.body, { subtree: true, childList: true })
+    queueMicrotask(connect)
+    onCleanup(() => observer.disconnect())
+  })
   return (
     <Portal>
-      <ToastV2StackRegion {...props} />
+      <Toaster
+        position="bottom-right"
+        offset={{ right: 32, bottom: 48 }}
+        mobileOffset={16}
+        gap={12}
+        duration={5000}
+        className={["toast-v2-region", local.className, local.class].filter(Boolean).join(" ")}
+        style={{ "--width": "320px", ...local.style } as JSX.CSSProperties}
+        toastOptions={{
+          ...local.toastOptions,
+          unstyled: true,
+          closeButton: true,
+          closeButtonAriaLabel: local.toastOptions?.closeButtonAriaLabel ?? "Dismiss",
+        }}
+        {...rest}
+      />
     </Portal>
   )
 }
 
 const ToastV2Context = createContext<number>()
 
-// The stack owns the toast card element, so the root only scopes the toast id for
-// subcomponents. Lifetime lives on `toasterV2.show` and `showToastV2`.
 export interface ToastV2RootComponentProps {
   toastId: number
   children?: JSX.Element
@@ -62,20 +108,17 @@ function ToastV2CloseButton(props: ComponentProps<"button">) {
         if (!event.defaultPrevented && toastId !== undefined) toasterV2.dismiss(toastId)
       }}
     >
-      {local.children ?? (
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path d="M4.25 11.75L11.75 4.25" stroke="currentColor" />
-          <path d="M11.75 11.75L4.25 4.25" stroke="currentColor" />
-        </svg>
-      )}
+      {local.children ?? <CloseIcon />}
     </button>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M4.25 11.75L11.75 4.25" stroke="currentColor" />
+      <path d="M11.75 11.75L4.25 4.25" stroke="currentColor" />
+    </svg>
   )
 }
 
@@ -94,12 +137,11 @@ let toastV2Id = 0
 export const toasterV2 = {
   show(render: (props: { toastId: number }) => JSX.Element, options?: { duration?: number; persistent?: boolean }) {
     const toastId = --toastV2Id
-    toastV2Stack.show({
+    toast.custom((id) => render({ toastId: Number(id) }), {
       id: toastId,
-      revision: 1,
-      duration: options?.duration,
-      persistent: options?.persistent,
-      render: () => render({ toastId }),
+      className: "toast-v2",
+      duration: options?.persistent ? Number.POSITIVE_INFINITY : options?.duration,
+      unstyled: true,
     })
     return toastId
   },
@@ -110,23 +152,9 @@ export const toasterV2 = {
     } else {
       releaseToastV2(activeToastV2ById.get(toastId))
     }
-    return toastV2Stack.dismiss(toastId)
+    return toast.dismiss(toastId)
   },
 }
-
-interface ActiveToastV2 {
-  id: number
-  key: string
-  revision: number
-  options: ToastV2Options
-  // Stable across repeats so coalescing only bumps `revision` instead of
-  // replacing the rendered card, which would drop focus inside it.
-  render: () => JSX.Element
-  release: () => void
-}
-
-const activeToastV2ByKey = new Map<string, ActiveToastV2>()
-const activeToastV2ById = new Map<number, ActiveToastV2>()
 
 export interface ToastV2Action {
   label: string
@@ -144,6 +172,16 @@ export interface ToastV2Options {
   actions?: ToastV2Action[]
 }
 
+interface ActiveToastV2 {
+  id: number
+  key: string
+  options: ToastV2Options
+  actions?: JSX.Element
+}
+
+const activeToastV2ByKey = new Map<string, ActiveToastV2>()
+const activeToastV2ById = new Map<number, ActiveToastV2>()
+
 export function showToastV2(options: ToastV2Options | string) {
   const opts: ToastV2Options = typeof options === "string" ? { description: options } : options
   const key = JSON.stringify({
@@ -155,26 +193,20 @@ export function showToastV2(options: ToastV2Options | string) {
     actions: opts.actions?.map((action) => [action.label, action.variant]),
   })
   const active = activeToastV2ByKey.get(key)
-  const toasts = toastV2Stack.getToasts()
+  const toasts = toast.getToasts()
 
-  if (active && toasts[0]?.id === active.id) {
+  if (active && toasts.at(-1)?.id === active.id) {
     active.options = opts
-    active.revision++
     publishToastV2(active)
+    pulseToastV2(active.id)
     return active.id
   }
 
   if (active && toasts.some((item) => item.id === active.id)) toasterV2.dismiss(active.id)
   releaseToastV2(active)
 
-  const entry: ActiveToastV2 = {
-    id: --toastV2Id,
-    key,
-    revision: 1,
-    options: opts,
-    render: () => renderToastV2(entry),
-    release: () => releaseToastV2(entry),
-  }
+  const entry: ActiveToastV2 = { id: --toastV2Id, key, options: opts }
+  entry.actions = createToastV2Actions(entry)
   activeToastV2ByKey.set(key, entry)
   activeToastV2ById.set(entry.id, entry)
   publishToastV2(entry)
@@ -182,62 +214,53 @@ export function showToastV2(options: ToastV2Options | string) {
 }
 
 function publishToastV2(entry: ActiveToastV2) {
-  // Everything except `revision` is identical whenever an existing toast is reused,
-  // because the dedupe key covers variant, duration, persistence, and action labels.
-  toastV2Stack.show({
+  const release = () => releaseToastV2(entry)
+  toast(entry.options.title ?? "", {
     id: entry.id,
-    revision: entry.revision,
-    variant: entry.options.variant,
-    duration: entry.options.duration,
-    persistent: entry.options.persistent,
-    render: entry.render,
-    onDismiss: entry.release,
-    onAutoClose: entry.release,
+    description: entry.options.description,
+    icon: entry.options.icon,
+    action: entry.actions,
+    closeButton: true,
+    duration: entry.options.persistent ? Number.POSITIVE_INFINITY : entry.options.duration,
+    className: `toast-v2 toast-v2--${entry.options.variant ?? "default"}`,
+    testId: `toast-v2-${entry.id}`,
+    unstyled: true,
+    onDismiss: release,
+    onAutoClose: release,
   })
 }
 
-function renderToastV2(entry: ActiveToastV2) {
-  const opts = entry.options
-  const resolvedIcon = children(() => opts.icon)
-  const icon = resolvedIcon()
-  // A caller-provided element is a live node, so reuse it only through a copy;
-  // the region can render an item again after remounting.
-  const renderedIcon = typeof Node !== "undefined" && icon instanceof Node ? icon.cloneNode(true) : icon
+function createToastV2Actions(entry: ActiveToastV2) {
+  if (!entry.options.actions?.length) return undefined
   return (
-    <ToastV2 toastId={entry.id}>
-      <div data-slot="toast-v2-header">
-        <Show when={renderedIcon}>
-          <ToastV2.Icon>{renderedIcon}</ToastV2.Icon>
-        </Show>
-        <ToastV2.Content>
-          <Show when={opts.title}>
-            <ToastV2.Title>{opts.title}</ToastV2.Title>
-          </Show>
-          <Show when={opts.description}>
-            <ToastV2.Description>{opts.description}</ToastV2.Description>
-          </Show>
-        </ToastV2.Content>
-        <ToastV2.CloseButton />
-      </div>
-      <Show when={opts.actions?.length}>
-        <ToastV2.Actions>
-          {opts.actions!.map((action) => (
-            <ButtonV2
-              variant={action.variant === "secondary" ? "ghost" : "neutral"}
-              size="small"
-              data-action-variant={action.variant ?? "primary"}
-              onClick={() => {
-                if (typeof action.onClick === "function") action.onClick()
-                toasterV2.dismiss(entry.id)
-              }}
-            >
-              {action.label}
-            </ButtonV2>
-          ))}
-        </ToastV2.Actions>
-      </Show>
-    </ToastV2>
+    <ToastV2.Actions>
+      {entry.options.actions.map((action, index) => (
+        <button
+          type="button"
+          data-component="button-v2"
+          data-variant={action.variant === "secondary" ? "ghost" : "neutral"}
+          data-size="small"
+          data-action-variant={action.variant ?? "primary"}
+          onClick={() => {
+            const onClick = entry.options.actions?.[index]?.onClick
+            if (typeof onClick === "function") onClick()
+            toasterV2.dismiss(entry.id)
+          }}
+        >
+          {action.label}
+        </button>
+      ))}
+    </ToastV2.Actions>
   )
+}
+
+function pulseToastV2(toastId: number) {
+  if (typeof document === "undefined" || typeof requestAnimationFrame === "undefined") return
+  requestAnimationFrame(() => {
+    const element = document.querySelector<HTMLElement>(`[data-testid="toast-v2-${toastId}"]`)
+    if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    element.animate([{ scale: 1 }, { scale: 1.025 }, { scale: 1 }], { duration: 160, easing: "ease-out" })
+  })
 }
 
 function releaseToastV2(entry: ActiveToastV2 | undefined) {
