@@ -1,181 +1,296 @@
-import { Component, Show, createMemo, createResource, onMount } from "solid-js"
+import { Component, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
-import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
-import { useServerSync } from "@/context/server-sync"
-import { useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "../updater-action"
-import {
-  monoDefault,
-  monoFontFamily,
-  monoInput,
-  sansDefault,
-  sansFontFamily,
-  sansInput,
-  terminalDefault,
-  terminalFontFamily,
-  terminalInput,
-  useSettings,
-} from "@/context/settings"
-import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { useSettings } from "@/context/settings"
 import { Link } from "../link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import { LayoutRetirementNotice, LayoutTransitionToggle } from "./interface-transition"
+import {
+  createAppearanceSettingsController,
+  createPermissionScopeController,
+  createShellOptions,
+  createShellSettingsController,
+  createSoundSettingsController,
+  soundOptions,
+  type AppearanceSettingsController,
+  type PermissionScopeController,
+  type ShellSettingsController,
+  type SoundSettingsController,
+} from "./general-controllers"
 import "./settings-v2.css"
 
-let demoSoundState = {
-  cleanup: undefined as (() => void) | undefined,
-  timeout: undefined as NodeJS.Timeout | undefined,
-  run: 0,
+const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
+const fontSettings = {
+  ui: {
+    action: "settings-ui-font",
+    title: "settings.general.row.uiFont.title",
+    description: "settings.general.row.uiFont.description",
+    font: "ui",
+    input: "setUI",
+  },
+  code: {
+    action: "settings-code-font",
+    title: "settings.general.row.font.title",
+    description: "settings.general.row.font.description",
+    font: "code",
+    input: "setCode",
+  },
+  terminal: {
+    action: "settings-terminal-font",
+    title: "settings.general.row.terminalFont.title",
+    description: "settings.general.row.terminalFont.description",
+    font: "terminal",
+    input: "setTerminal",
+  },
+} as const
+const soundSettings = {
+  agent: {
+    action: "settings-sounds-agent",
+    title: "settings.general.sounds.agent.title",
+    description: "settings.general.sounds.agent.description",
+  },
+  permissions: {
+    action: "settings-sounds-permissions",
+    title: "settings.general.sounds.permissions.title",
+    description: "settings.general.sounds.permissions.description",
+  },
+  errors: {
+    action: "settings-sounds-errors",
+    title: "settings.general.sounds.errors.title",
+    description: "settings.general.sounds.errors.description",
+  },
+} as const
+
+const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
+  const language = useLanguage()
+  return (
+    <SettingsRowV2
+      title={language.t("command.permissions.autoaccept.enable")}
+      description={language.t("toast.permissions.autoaccept.on.description")}
+    >
+      <div data-action="settings-auto-accept-permissions">
+        <Switch
+          checked={props.controller.accepting()}
+          disabled={!props.controller.enabled()}
+          onChange={props.controller.set}
+        />
+      </div>
+    </SettingsRowV2>
+  )
 }
 
-type ThemeOption = {
-  id: string
-  name: string
+const ShellSetting: Component<{ controller: ShellSettingsController }> = (props) => {
+  const language = useLanguage()
+  const options = createMemo(() =>
+    createShellOptions({
+      shells: props.controller.shells(),
+      current: props.controller.current(),
+    }),
+  )
+  return (
+    <SettingsRowV2
+      title={language.t("settings.general.row.shell.title")}
+      description={language.t("settings.general.row.shell.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-shell"
+        options={options()}
+        current={options().find((option) => option.value === props.controller.current()) ?? options()[0]}
+        placement="bottom-end"
+        gutter={6}
+        value={(option) => option.id}
+        label={(option) => {
+          if (option.id === "auto") return language.t("settings.general.row.shell.autoDefault")
+          if (!option.terminalOnly) return option.name
+          return `${option.name} (${language.t("settings.general.row.shell.terminalOnly")})`
+        }}
+        onSelect={(option) => option && props.controller.select(option.value)}
+      />
+    </SettingsRowV2>
+  )
 }
 
-type ShellOption = {
-  path: string
-  name: string
-  acceptable: boolean
+const AppearanceSection: Component<{ controller: AppearanceSettingsController }> = (props) => {
+  const language = useLanguage()
+  return (
+    <div class="settings-v2-section">
+      <h3 class="settings-v2-section-title">{language.t("settings.general.section.appearance")}</h3>
+      <SettingsListV2>
+        <SettingsRowV2
+          title={language.t("settings.general.row.colorScheme.title")}
+          description={language.t("settings.general.row.colorScheme.description")}
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-color-scheme"
+            options={schemeOptions}
+            current={schemeOptions.find((option) => option === props.controller.scheme.current())}
+            placement="bottom-end"
+            gutter={6}
+            label={(option) => {
+              if (option === "system") return language.t("theme.scheme.system")
+              if (option === "light") return language.t("theme.scheme.light")
+              return language.t("theme.scheme.dark")
+            }}
+            onSelect={(option) => option && props.controller.scheme.select(option)}
+          />
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.theme.title")}
+          description={
+            <>
+              {language.t("settings.general.row.theme.description")}{" "}
+              <Link class="settings-v2-link" href="https://opencode.ai/docs/themes/">
+                {language.t("common.learnMore")}
+              </Link>
+            </>
+          }
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-theme"
+            options={props.controller.theme.options()}
+            current={props.controller.theme.current()}
+            placement="bottom-end"
+            gutter={6}
+            value={(option) => option.id}
+            label={(option) => option.name}
+            onSelect={props.controller.theme.select}
+          />
+        </SettingsRowV2>
+
+        <FontSetting kind="ui" fonts={props.controller.fonts} />
+        <FontSetting kind="code" fonts={props.controller.fonts} />
+        <FontSetting kind="terminal" fonts={props.controller.fonts} />
+      </SettingsListV2>
+    </div>
+  )
 }
 
-type ShellSelectOption = {
-  id: string
-  value: string
-  label: string
+const FontSetting: Component<{
+  kind: "ui" | "code" | "terminal"
+  fonts: AppearanceSettingsController["fonts"]
+}> = (props) => {
+  const language = useLanguage()
+  const config = () => fontSettings[props.kind]
+  return (
+    <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
+      <div class="w-full sm:w-[220px]">
+        <TextInputV2
+          data-action={config().action}
+          type="text"
+          appearance="base"
+          value={props.fonts[config().font]().value}
+          onInput={(event) => props.fonts[config().input](event.currentTarget.value)}
+          placeholder={props.fonts[config().font]().placeholder}
+          spellcheck={false}
+          autocorrect="off"
+          autocomplete="off"
+          autocapitalize="off"
+          aria-label={language.t(config().title)}
+          style={{ "font-family": props.fonts[config().font]().family }}
+        />
+      </div>
+    </SettingsRowV2>
+  )
 }
 
-// To prevent audio from overlapping/playing very quickly when navigating the settings menus,
-// delay the playback by 100ms during quick selection changes and pause existing sounds.
-const stopDemoSound = () => {
-  demoSoundState.run += 1
-  if (demoSoundState.cleanup) {
-    demoSoundState.cleanup()
-  }
-  clearTimeout(demoSoundState.timeout)
-  demoSoundState.cleanup = undefined
+const SoundsSection: Component<{ controller: SoundSettingsController }> = (props) => {
+  const language = useLanguage()
+  return (
+    <div class="settings-v2-section">
+      <h3 class="settings-v2-section-title">{language.t("settings.general.section.sounds")}</h3>
+      <SettingsListV2>
+        <SoundSetting kind="agent" channel={props.controller.agent} />
+        <SoundSetting kind="permissions" channel={props.controller.permissions} />
+        <SoundSetting kind="errors" channel={props.controller.errors} />
+      </SettingsListV2>
+    </div>
+  )
 }
 
-const playDemoSound = (id: string | undefined) => {
-  stopDemoSound()
-  if (!id) return
+const SoundSetting: Component<{
+  kind: "agent" | "permissions" | "errors"
+  channel: SoundSettingsController["agent"]
+}> = (props) => {
+  const language = useLanguage()
+  const config = () => soundSettings[props.kind]
+  return (
+    <SettingsRowV2 title={language.t(config().title)} description={language.t(config().description)}>
+      <SelectV2
+        appearance="inline"
+        data-action={config().action}
+        options={soundOptions}
+        current={props.channel.current()}
+        value={(option) => option.id}
+        label={(option) => language.t(option.label)}
+        onHighlight={props.channel.highlight}
+        onSelect={props.channel.select}
+        placement="bottom-end"
+        gutter={6}
+      />
+    </SettingsRowV2>
+  )
+}
 
-  const run = ++demoSoundState.run
-  demoSoundState.timeout = setTimeout(() => {
-    void playSoundById(id).then((cleanup) => {
-      if (demoSoundState.run !== run) {
-        cleanup?.()
-        return
-      }
-      demoSoundState.cleanup = cleanup
-    })
-  }, 100)
+const LanguageSetting = () => {
+  const language = useLanguage()
+  const options = createMemo(() =>
+    language.locales.map((locale) => ({
+      value: locale,
+      label: language.label(locale),
+    })),
+  )
+  return (
+    <SettingsRowV2
+      title={language.t("settings.general.row.language.title")}
+      description={language.t("settings.general.row.language.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-language"
+        options={options()}
+        placement="bottom-end"
+        gutter={6}
+        current={options().find((option) => option.value === language.locale())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        onSelect={(option) => option && language.setLocale(option.value)}
+      />
+    </SettingsRowV2>
+  )
 }
 
 export const SettingsGeneralV2: Component<{
   sessionID?: string
 }> = (props) => {
-  const theme = useTheme()
   const language = useLanguage()
-  const permission = usePermission()
   const platform = usePlatform()
   const dialog = useDialog()
   const settings = useSettings()
-  const serverSync = useServerSync()
-  const serverSdk = useServerSDK()
   const mobile = createMediaQuery("(max-width: 767px)")
-
   const updater = useUpdaterAction()
-
-  const dir = createMemo(() => {
-    if (!props.sessionID) return undefined
-    return serverSync().session.lineage.peek(props.sessionID)?.session.directory
-  })
-  const accepting = createMemo(() => {
-    const value = dir()
-    if (!value || !props.sessionID) return false
-    return permission.isAutoAccepting(props.sessionID, value)
-  })
-
-  const toggleAccept = (checked: boolean) => {
-    const value = dir()
-    if (!value || !props.sessionID) return
-
-    if (checked) {
-      permission.enableAutoAccept(props.sessionID, value)
-      return
-    }
-
-    permission.disableAutoAccept(props.sessionID, value)
-  }
+  const permissionScope = createPermissionScopeController(() => props.sessionID)
+  const shell = createShellSettingsController()
+  const appearance = createAppearanceSettingsController()
+  const sounds = createSoundSettingsController()
   const desktop = createMemo(() => platform.platform === "desktop")
 
-  const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
-
-  const [shells] = createResource(
-    async () => {
-      const sdk = serverSdk()
-      if ((await sdk.protocol) === "v1") {
-        return (await sdk.client.pty.shells()).data ?? []
-      }
-      // return (await sdk.api.pty.shells()).data
-      return [] as ShellOption[]
-    },
-    { initialValue: [] as ShellOption[] },
-  )
-
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(
-    () => (desktop() && platform.getPinchZoomEnabled ? true : false),
+    () => desktop() && "getPinchZoomEnabled" in platform,
     () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
     { initialValue: false },
   )
-
-  onMount(() => {
-    void theme.loadThemes()
-  })
-
-  const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
-  const currentShell = createMemo(() => serverSync().data.config.shell ?? "")
-
-  const shellOptions = createMemo<ShellSelectOption[]>(() => {
-    const list = shells.latest
-    const current = serverSync().data.config.shell
-
-    const nameCounts = new Map<string, number>()
-    for (const s of list) {
-      nameCounts.set(s.name, (nameCounts.get(s.name) || 0) + 1)
-    }
-
-    const options = [
-      autoOption,
-      ...list.map((s) => {
-        const ambiguousName = (nameCounts.get(s.name) || 0) > 1
-        const text = ambiguousName ? s.path : s.name
-        const label = s.acceptable ? text : `${text} (${language.t("settings.general.row.shell.terminalOnly")})`
-        return {
-          id: s.path,
-          // Prefer name over path - "bash" is much cleaner than the explicit full route even when it may change due to PATH.
-          value: ambiguousName ? s.path : s.name,
-          label,
-        }
-      }),
-    ]
-
-    if (current && !options.some((o) => o.value === current)) {
-      options.push({ id: current, value: current, label: current })
-    }
-
-    return options
-  })
 
   const onPinchZoomChange = (checked: boolean) => {
     setPinchZoom(checked)
@@ -183,52 +298,6 @@ export const SettingsGeneralV2: Component<{
     if (!update) return
     void update.catch(() => setPinchZoom(!checked))
   }
-
-  const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
-    { value: "system", label: language.t("theme.scheme.system") },
-    { value: "light", label: language.t("theme.scheme.light") },
-    { value: "dark", label: language.t("theme.scheme.dark") },
-  ])
-
-  const languageOptions = createMemo(() =>
-    language.locales.map((locale) => ({
-      value: locale,
-      label: language.label(locale),
-    })),
-  )
-
-  const noneSound = { id: "none", label: "sound.option.none" } as const
-  const soundOptions = [noneSound, ...SOUND_OPTIONS]
-  const mono = () => monoInput(settings.appearance.font())
-  const sans = () => sansInput(settings.appearance.uiFont())
-  const terminal = () => terminalInput(settings.appearance.terminalFont())
-
-  const soundSelectProps = (
-    enabled: () => boolean,
-    current: () => string,
-    setEnabled: (value: boolean) => void,
-    set: (id: string) => void,
-  ) => ({
-    options: soundOptions,
-    current: enabled() ? (soundOptions.find((o) => o.id === current()) ?? noneSound) : noneSound,
-    value: (o: (typeof soundOptions)[number]) => o.id,
-    label: (o: (typeof soundOptions)[number]) => language.t(o.label),
-    onHighlight: (option: (typeof soundOptions)[number] | undefined) => {
-      if (!option) return
-      playDemoSound(option.id === "none" ? undefined : option.id)
-    },
-    onSelect: (option: (typeof soundOptions)[number] | null) => {
-      if (!option) return
-      if (option.id === "none") {
-        setEnabled(false)
-        stopDemoSound()
-        return
-      }
-      setEnabled(true)
-      set(option.id)
-      playDemoSound(option.id)
-    },
-  })
 
   const InterfaceSection = () => (
     <LayoutTransitionToggle
@@ -251,59 +320,18 @@ export const SettingsGeneralV2: Component<{
       title={language.t("settings.general.row.newInterfaceNotice.title")}
       description={language.t("settings.general.row.newInterfaceNotice.description")}
       dismiss={language.t("settings.general.row.newInterfaceNotice.dismiss")}
-      onDismiss={settings.general.dismissNewInterfaceNotice}
+      onDismiss={() => settings.general.dismissNewInterfaceNotice()}
     />
   )
 
   const GeneralSection = () => (
     <div class="settings-v2-section">
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.language.title")}
-          description={language.t("settings.general.row.language.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-language"
-            options={languageOptions()}
-            placement="bottom-end"
-            gutter={6}
-            current={languageOptions().find((o) => o.value === language.locale())}
-            value={(o) => o.value}
-            label={(o) => o.label}
-            onSelect={(option) => option && language.setLocale(option.value)}
-          />
-        </SettingsRowV2>
+        <LanguageSetting />
 
-        <SettingsRowV2
-          title={language.t("command.permissions.autoaccept.enable")}
-          description={language.t("toast.permissions.autoaccept.on.description")}
-        >
-          <div data-action="settings-auto-accept-permissions">
-            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
-          </div>
-        </SettingsRowV2>
+        <PermissionScopeSetting controller={permissionScope} />
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.shell.title")}
-          description={language.t("settings.general.row.shell.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-shell"
-            options={shellOptions()}
-            current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
-            placement="bottom-end"
-            gutter={6}
-            value={(o) => o.id}
-            label={(o) => o.label}
-            onSelect={(option) => {
-              if (!option) return
-              if (option.value === currentShell()) return
-              serverSync().updateConfig({ shell: option.value })
-            }}
-          />
-        </SettingsRowV2>
+        <ShellSetting controller={shell} />
 
         <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}
@@ -414,124 +442,6 @@ export const SettingsGeneralV2: Component<{
     </div>
   )
 
-  const AppearanceSection = () => (
-    <div class="settings-v2-section">
-      <h3 class="settings-v2-section-title">{language.t("settings.general.section.appearance")}</h3>
-
-      <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.colorScheme.title")}
-          description={language.t("settings.general.row.colorScheme.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-color-scheme"
-            options={colorSchemeOptions()}
-            current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
-            placement="bottom-end"
-            gutter={6}
-            value={(o) => o.value}
-            label={(o) => o.label}
-            onSelect={(option) => option && theme.setColorScheme(option.value)}
-          />
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.general.row.theme.title")}
-          description={
-            <>
-              {language.t("settings.general.row.theme.description")}{" "}
-              <Link class="settings-v2-link" href="https://opencode.ai/docs/themes/">
-                {language.t("common.learnMore")}
-              </Link>
-            </>
-          }
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-theme"
-            options={themeOptions()}
-            current={themeOptions().find((o) => o.id === theme.themeId())}
-            placement="bottom-end"
-            gutter={6}
-            value={(o) => o.id}
-            label={(o) => o.name}
-            onSelect={(option) => {
-              if (!option) return
-              theme.setTheme(option.id)
-            }}
-          />
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.general.row.uiFont.title")}
-          description={language.t("settings.general.row.uiFont.description")}
-        >
-          <div class="w-full sm:w-[220px]">
-            <TextInputV2
-              data-action="settings-ui-font"
-              type="text"
-              appearance="base"
-              value={sans()}
-              onInput={(event) => settings.appearance.setUIFont(event.currentTarget.value)}
-              placeholder={sansDefault}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              aria-label={language.t("settings.general.row.uiFont.title")}
-              style={{ "font-family": sansFontFamily(settings.appearance.uiFont()) }}
-            />
-          </div>
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.general.row.font.title")}
-          description={language.t("settings.general.row.font.description")}
-        >
-          <div class="w-full sm:w-[220px]">
-            <TextInputV2
-              data-action="settings-code-font"
-              type="text"
-              appearance="base"
-              value={mono()}
-              onInput={(event) => settings.appearance.setFont(event.currentTarget.value)}
-              placeholder={monoDefault}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              aria-label={language.t("settings.general.row.font.title")}
-              style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
-            />
-          </div>
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.general.row.terminalFont.title")}
-          description={language.t("settings.general.row.terminalFont.description")}
-        >
-          <div class="w-full sm:w-[220px]">
-            <TextInputV2
-              data-action="settings-terminal-font"
-              type="text"
-              appearance="base"
-              value={terminal()}
-              onInput={(event) => settings.appearance.setTerminalFont(event.currentTarget.value)}
-              placeholder={terminalDefault}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              aria-label={language.t("settings.general.row.terminalFont.title")}
-              style={{ "font-family": terminalFontFamily(settings.appearance.terminalFont()) }}
-            />
-          </div>
-        </SettingsRowV2>
-      </SettingsListV2>
-    </div>
-  )
-
   const NotificationsSection = () => (
     <div class="settings-v2-section">
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.notifications")}</h3>
@@ -576,68 +486,6 @@ export const SettingsGeneralV2: Component<{
     </div>
   )
 
-  const SoundsSection = () => (
-    <div class="settings-v2-section">
-      <h3 class="settings-v2-section-title">{language.t("settings.general.section.sounds")}</h3>
-
-      <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.sounds.agent.title")}
-          description={language.t("settings.general.sounds.agent.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-sounds-agent"
-            {...soundSelectProps(
-              () => settings.sounds.agentEnabled(),
-              () => settings.sounds.agent(),
-              (value) => settings.sounds.setAgentEnabled(value),
-              (id) => settings.sounds.setAgent(id),
-            )}
-            placement="bottom-end"
-            gutter={6}
-          />
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.general.sounds.permissions.title")}
-          description={language.t("settings.general.sounds.permissions.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-sounds-permissions"
-            {...soundSelectProps(
-              () => settings.sounds.permissionsEnabled(),
-              () => settings.sounds.permissions(),
-              (value) => settings.sounds.setPermissionsEnabled(value),
-              (id) => settings.sounds.setPermissions(id),
-            )}
-            placement="bottom-end"
-            gutter={6}
-          />
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.general.sounds.errors.title")}
-          description={language.t("settings.general.sounds.errors.description")}
-        >
-          <SelectV2
-            appearance="inline"
-            data-action="settings-sounds-errors"
-            {...soundSelectProps(
-              () => settings.sounds.errorsEnabled(),
-              () => settings.sounds.errors(),
-              (value) => settings.sounds.setErrorsEnabled(value),
-              (id) => settings.sounds.setErrors(id),
-            )}
-            placement="bottom-end"
-            gutter={6}
-          />
-        </SettingsRowV2>
-      </SettingsListV2>
-    </div>
-  )
-
   const UpdatesSection = () => (
     <div class="settings-v2-section">
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.updates")}</h3>
@@ -659,7 +507,7 @@ export const SettingsGeneralV2: Component<{
           title={language.t("settings.updates.row.check.title")}
           description={language.t("settings.updates.row.check.description")}
         >
-          <ButtonV2 size="normal" variant="neutral" disabled={!updater.action().run} onClick={updater.run}>
+          <ButtonV2 size="normal" variant="neutral" disabled={!updater.action().run} onClick={() => updater.run()}>
             {language.t(updater.action().label)}
           </ButtonV2>
         </SettingsRowV2>
@@ -704,11 +552,11 @@ export const SettingsGeneralV2: Component<{
 
         <GeneralSection />
 
-        <AppearanceSection />
+        <AppearanceSection controller={appearance} />
 
         <NotificationsSection />
 
-        <SoundsSection />
+        <SoundsSection controller={sounds} />
 
         <Show when={desktop()}>
           <UpdatesSection />
