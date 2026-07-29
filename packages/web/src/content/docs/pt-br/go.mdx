@@ -74,6 +74,7 @@ A lista atual de modelos inclui:
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
+- **Hy3**
 
 A lista de modelos pode mudar conforme testamos e adicionamos novos.
 
@@ -97,7 +98,7 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | GLM-5.2           | 880                     | 2,150                  | 4,300               |
 | GLM-5.1           | 880                     | 2,150                  | 4,300               |
 | Kimi K3           | 110                     | 250                    | 490                 |
-| Kimi K2.7 Code    | 1,350                   | 4,630                  | 9,250               |
+| Kimi K2.7 Code    | 1,350                   | 3,380                  | 6,750               |
 | Kimi K2.6         | 1,150                   | 2,880                  | 5,750               |
 | MiMo-V2.5         | 30,100                  | 75,200                 | 150,400             |
 | MiMo-V2.5-Pro     | 3,250                   | 8,150                  | 16,300              |
@@ -108,6 +109,7 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | Qwen3.6 Plus      | 3,300                   | 8,200                  | 16,300              |
 | DeepSeek V4 Pro   | 3,450                   | 8,550                  | 17,150              |
 | DeepSeek V4 Flash | 31,650                  | 79,050                 | 158,150             |
+| Hy3               | 4,300                   | 10,750                 | 21,500              |
 
 As estimativas se baseiam nos padrões de requisições observados:
 
@@ -122,6 +124,7 @@ As estimativas se baseiam nos padrões de requisições observados:
 - Qwen3.7 Max — 420 tokens de entrada, 66.000 em cache, 200 tokens de saída por requisição
 - Qwen3.7 Plus — 500 tokens de entrada, 57.000 em cache, 190 tokens de saída por requisição
 - Qwen3.6 Plus — 500 tokens de entrada, 57.000 em cache, 190 tokens de saída por requisição
+- Hy3 — 830 tokens de entrada, 71.500 em cache, 295 tokens de saída por requisição
 - MiMo-V2.5 — 830 tokens de entrada, 71.500 em cache, 295 tokens de saída por requisição
 - MiMo-V2.5-Pro — 790 tokens de entrada, 86.000 em cache, 305 tokens de saída por requisição
 
@@ -147,6 +150,7 @@ As estimativas também se baseiam nos seguintes preços por 1M tokens e no uso m
 | Qwen3.6 Plus (> 256K tokens) | $2.00   | $6.00  | $0.20            | $2.50            | $60 |
 | DeepSeek V4 Pro              | $0.435  | $0.87  | $0.003625        | -                | $15 |
 | DeepSeek V4 Flash            | $0.14   | $0.28  | $0.0028          | -                | $60 |
+| Hy3                          | $0.14   | $0.58  | $0.035           | -                | $60 |
 
 Você pode acompanhar o seu uso atual no **<a href={console}>console</a>**.
 
@@ -200,6 +204,7 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy3               | hy3               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 O [ID do modelo](/docs/config/#models) na sua configuração do OpenCode
 usa o formato `opencode-go/<model-id>`. Por exemplo, para o Kimi K3, você usaria

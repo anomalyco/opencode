@@ -76,7 +76,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
       </DialogHeader>
       <DialogBody class="max-h-[calc(100vh_-_68px)] min-h-0 flex-none gap-0 overflow-y-auto px-2 pb-2">
         <div ref={listEl} class="flex min-h-0 flex-col">
-          <div class="flex w-full flex-col items-start pb-3">
+          <div data-section="free-models" class="flex w-full flex-col items-start pb-3">
             <div class="flex h-8 w-full flex-none select-none flex-row items-center px-3 pb-2">
               <div class="flex h-5 items-center text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
                 {language.t("dialog.model.unpaid.freeModels.title")}
@@ -134,6 +134,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                   {(provider) => (
                     <button
                       type="button"
+                      data-provider-id={provider.id}
                       class="flex min-h-11 w-full scroll-my-3.5 flex-row items-start gap-2 rounded-md bg-v2-background-bg-base px-3 py-2.5 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-background-bg-layer-01 focus:bg-v2-background-bg-layer-01 focus:outline-none"
                       classList={{
                         "border-[0.5px] border-transparent shadow-[var(--v2-elevation-raised)]":
