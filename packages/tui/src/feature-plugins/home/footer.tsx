@@ -3,15 +3,26 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { FilePath } from "../../ui/file-path"
 import { stringWidth } from "../../util/string-width"
+import { createTypewriter } from "../../ui/typewriter"
 
 function Directory(props: { context: Plugin.Context; maxWidth: number }) {
   const directory = createMemo(() =>
     props.context.location ? props.context.ui.format.path(props.context.location.directory) : undefined,
   )
+  const typed = createTypewriter(directory)
 
   return (
-    <Show when={directory()}>
-      {(value) => <FilePath value={value()} maxWidth={props.maxWidth} fg={props.context.theme.text.subdued} />}
+    <Show when={typed.text !== undefined}>
+      <box flexDirection="row" flexShrink={1}>
+        <FilePath
+          value={typed.text ?? ""}
+          maxWidth={props.maxWidth}
+          fg={typed.active ? props.context.theme.text.default : props.context.theme.text.subdued}
+        />
+        <Show when={typed.active}>
+          <text fg={props.context.theme.text.default}>│</text>
+        </Show>
+      </box>
     </Show>
   )
 }
