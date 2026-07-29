@@ -17,6 +17,7 @@
   ],
   "exports": {
     ".": "./src/promise/index.ts",
+    "./node": "./src/node/index.ts",
     "./promise": "./src/promise/index.ts",
     "./promise/api": "./src/promise/api.ts",
     "./service": "./src/promise/service.ts",
@@ -28,12 +29,14 @@
     "build": "bun run script/build-package.ts",
     "generate": "bun run script/build.ts",
     "check:generated": "bun run generate && git diff --exit-code -- src/promise/generated src/effect/generated src/effect/api",
-    "test": "bun test --timeout 5000",
-    "typecheck": "tsgo --noEmit"
+    "test": "bun test --timeout 5000 && bun run test:node-package",
+    "test:node-package": "bun test ./test/node/package-smoke.ts --timeout 60000",
+    "typecheck": "tsgo --noEmit && tsgo -p test/types/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*"
+    "@opencode-ai/protocol": "workspace:*",
+    "ws": "8.21.0"
   },
   "peerDependencies": {
     "effect": "4.0.0-beta.101"
@@ -48,6 +51,7 @@
     "@opencode-ai/httpapi-codegen": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
+    "@types/ws": "8.18.1",
     "@typescript/native-preview": "catalog:",
     "effect": "catalog:"
   }

@@ -28,6 +28,10 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "@opencode-ai/desktop#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "@opencode-ai/ui#test": {
       "dependsOn": ["^build"],
       "outputs": []

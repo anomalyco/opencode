@@ -5,6 +5,7 @@ import { join, resolve, sep } from "node:path"
 
 const directory = resolve(import.meta.dir, "..")
 const effect = realpathSync(resolve(import.meta.dir, "../node_modules/effect"))
+const ws = realpathSync(resolve(import.meta.dir, "../node_modules/ws"))
 const schema = resolve(import.meta.dir, "../../schema")
 const protocol = resolve(import.meta.dir, "../../protocol")
 const core = resolve(import.meta.dir, "../../core")
@@ -17,6 +18,7 @@ describe("public import boundaries", () => {
     expect(within(root, effect)).toEqual([])
     expect(within(root, schema)).toEqual([])
     expect(within(root, protocol)).toEqual([])
+    expect(within(root, ws)).toEqual([])
     expect(within(root, core)).toEqual([])
     expect(within(root, server)).toEqual([])
 
@@ -27,6 +29,15 @@ describe("public import boundaries", () => {
     expect(within(network, protocol).length).toBeGreaterThan(0)
     expect(within(network, core)).toEqual([])
     expect(within(network, server)).toEqual([])
+
+    const node = await bundleInputs("@opencode-ai/client/node", "node")
+
+    expect(within(node, effect).length).toBeGreaterThan(0)
+    expect(within(node, schema).length).toBeGreaterThan(0)
+    expect(within(node, protocol).length).toBeGreaterThan(0)
+    expect(within(node, ws).length).toBeGreaterThan(0)
+    expect(within(node, core)).toEqual([])
+    expect(within(node, server)).toEqual([])
 
     const promiseService = await bundleInputs("@opencode-ai/client/service", "bun")
 
@@ -45,7 +56,7 @@ describe("public import boundaries", () => {
   })
 })
 
-async function bundleInputs(specifier: string, target: "browser" | "bun") {
+async function bundleInputs(specifier: string, target: "browser" | "bun" | "node") {
   const temporary = await mkdtemp(join(import.meta.dir, ".import-boundary-"))
   const entrypoint = join(temporary, "index.ts")
   const metafile = join(temporary, "meta.json")
