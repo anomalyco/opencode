@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import { realpathSync } from "node:fs"
+import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
@@ -372,6 +373,25 @@ describe("ShellTool", () => {
         Effect.promise(() =>
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
         ),
+    ),
+  )
+
+  it.live("approves an expanded external home directory", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const command = isWindows ? "Set-Location $HOME; (Get-Location).Path" : "cd ~ && pwd"
+        return withSession(tmp.path, (registry) => executeTool(registry, call({ command }, "call-external-home"))).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+              expect(assertions[0]?.resources[0]).toStartWith(os.homedir().replaceAll("\\", "/"))
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
   )
 

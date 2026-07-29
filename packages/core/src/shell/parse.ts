@@ -2,6 +2,8 @@ export * as ShellParse from "./parse"
 
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
+import os from "os"
+import path from "path"
 import type { Node } from "web-tree-sitter"
 import { ShellSelect } from "./select"
 
@@ -149,7 +151,7 @@ const ARITY: Record<string, number> = {
   "yarn run": 3,
 }
 
-export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string) {
+export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string, cwd: string) {
   const parsers = yield* Effect.promise(load)
   const powershell = ShellSelect.ps(shell)
   const tree = (powershell ? parsers.ps : parsers.bash).parse(command)
@@ -167,7 +169,7 @@ export const scan = Effect.fn("ShellParse.scan")(function* (command: string, she
             if (tokens.length === 0) return result
             const name = powershell ? tokens[0].toLowerCase() : tokens[0]
             if (CWD.has(name)) {
-              result.directories.push(...directoryArgs(command, powershell))
+              result.directories.push(...directoryArgs(command, powershell, cwd, shell))
               return result
             }
             result.commands.push({
@@ -199,19 +201,19 @@ function parts(node: Node) {
   })
 }
 
-function directoryArgs(command: Part[], powershell: boolean) {
+function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell: string) {
   if (!powershell)
     return command
       .slice(1)
       .filter((part) => !part.text.startsWith("-"))
-      .map((part) => literal(part.text))
-      .filter((part): part is string => part !== undefined)
+      .map((part) => directory(part.text, powershell, cwd, shell))
+      .filter((part) => part !== undefined)
 
   const directories: string[] = []
   let path = false
   for (const part of command.slice(1)) {
     if (path) {
-      const value = literal(part.text)
+      const value = directory(part.text, powershell, cwd, shell)
       if (value) directories.push(value)
       path = false
       continue
@@ -220,17 +222,35 @@ function directoryArgs(command: Part[], powershell: boolean) {
       path = POWERSHELL_PATH_FLAGS.has(part.text.toLowerCase())
       continue
     }
-    const value = literal(part.text)
+    const value = directory(part.text, powershell, cwd, shell)
     if (value) directories.push(value)
   }
   return directories
 }
 
-function literal(value: string) {
-  if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
+function directory(value: string, powershell: boolean, cwd: string, shell: string) {
   const quote = value[0]
-  if ((quote === '"' || quote === "'") && value.at(-1) === quote) return value.slice(1, -1)
-  return value
+  const unquoted = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
+  const expanded = powershell
+    ? unquoted
+        .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")
+        .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(key) ?? "")
+        .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => {
+          if (key.toUpperCase() === "HOME") return os.homedir()
+          if (key.toUpperCase() === "PWD") return cwd
+          return path.dirname(shell)
+        })
+    : unquoted
+  if (expanded.includes("$") || expanded.includes("`") || expanded.startsWith("(")) return
+  if (expanded === "~") return os.homedir()
+  if (expanded.startsWith("~/") || expanded.startsWith("~\\")) return path.join(os.homedir(), expanded.slice(2))
+  return expanded
+}
+
+function environment(key: string) {
+  if (process.platform !== "win32") return process.env[key]
+  const name = Object.keys(process.env).find((item) => item.toLowerCase() === key.toLowerCase())
+  return name ? process.env[name] : undefined
 }
 
 function prefix(tokens: string[]) {

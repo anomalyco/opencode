@@ -147,8 +147,8 @@ export const Plugin = {
                   },
                   (invocation) =>
                     Effect.gen(function* () {
-                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell)
                       const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.canonical)
                       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
                         mutation.resolve({ path: path.resolve(target.canonical, directory), kind: "directory" }),
                       )
