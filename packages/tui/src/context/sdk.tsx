@@ -132,7 +132,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
       // Pre-warm the opencode server so plugins/config are ready before
       // the first bootstrap HTTP call hits /config/providers
-      void fetch(`${props.url.replace("ws://", "http://").replace("wss://", "https://")}/health`, { signal: AbortSignal.timeout(2000) }).catch(() => {})
+      const healthUrl = props.url.replace("ws://", "http://").replace("wss://", "https://") + "/health"
+      const healthFetch = props.fetch ?? fetch
+      const healthHeaders = props.headers
+      void healthFetch(healthUrl, { signal: AbortSignal.timeout(2000), headers: healthHeaders }).catch(() => {})
     })
 
     onCleanup(() => {
