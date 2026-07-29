@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test"
 import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
-const entry = (path: string, description: string, signature?: string): CodeModeCatalog.Entry => ({
+const entry = (path: string, description: string, signature?: string, pinned = false): CodeModeCatalog.Entry => ({
   path,
   description,
   signature: signature ?? `tools.${path}(input: {\n  q: string,\n}): Promise<string>`,
+  pinned,
 })
 
 const lookup = entry(
@@ -44,6 +45,30 @@ describe("CodeModeCatalog.summarize", () => {
     )
     expect(catalog.namespaces.map((namespace) => namespace.name)).toEqual(["alpha", "beta", "gamma"])
     expect(catalog.namespaces.every((namespace) => namespace.entries.length === 0)).toBe(true)
+  })
+
+  test("always retains pinned tools beyond the inline budget", () => {
+    const pinned = [
+      entry("alpha.first", "First", undefined, true),
+      entry("beta.second", "Second", undefined, true),
+    ]
+    const catalog = CodeModeCatalog.summarize([...pinned, entry("alpha.unpinned", "Unpinned")], 0)
+
+    expect(catalog.shown).toBe(2)
+    expect(catalog.namespaces.flatMap((namespace) => namespace.entries.map((item) => item.path))).toEqual([
+      "alpha.first",
+      "beta.second",
+    ])
+  })
+
+  test("spends the budget remaining after pinned tools on unpinned tools", () => {
+    const pinned = entry("alpha.pinned", "Pinned", undefined, true)
+    const unpinned = entry("beta.unpinned", "Unpinned")
+    const pinCost = Math.round(`  - ${pinned.signature} // Pinned`.length / 4)
+    const unpinnedCost = Math.round(`  - ${unpinned.signature} // Unpinned`.length / 4)
+
+    expect(CodeModeCatalog.summarize([pinned, unpinned], pinCost + unpinnedCost).shown).toBe(2)
+    expect(CodeModeCatalog.summarize([pinned, unpinned], pinCost + unpinnedCost - 1).shown).toBe(1)
   })
 
   test("retains only the rendered portion of inline descriptions", () => {

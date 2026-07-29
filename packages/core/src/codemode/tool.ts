@@ -138,7 +138,14 @@ export const create = (
 }
 
 export const catalog = (registrations: ReadonlyMap<string, Info>) => {
-  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable"))).catalog()
+  const pinned = new Set(
+    Array.from(registrations.values())
+      .filter((registration) => registration.options?.pinned === true)
+      .map(qualifiedName),
+  )
+  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable")))
+    .catalog()
+    .map((entry) => ({ ...entry, pinned: pinned.has(entry.path) }))
 }
 
 function runtime(
@@ -149,11 +156,7 @@ function runtime(
   const tools: Record<string, Tool.Tool<never>> = {}
   for (const [name, registration] of registrations) {
     const child = definition(registration)
-    const normalized = registration.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-    const path =
-      registration.options?.namespace === undefined
-        ? normalized
-        : `${registration.options.namespace}.${normalized}`
+    const path = qualifiedName(registration)
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
@@ -162,6 +165,12 @@ function runtime(
     })
   }
   return CodeMode.make<typeof tools>({ tools, ...hooks })
+}
+
+function qualifiedName(registration: Info) {
+  const normalized = registration.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+  if (registration.options?.namespace === undefined) return normalized
+  return `${registration.options.namespace}.${normalized}`
 }
 
 // Tool inputs arrive as parsed JSON, so the JSON value cast is a boundary fact.

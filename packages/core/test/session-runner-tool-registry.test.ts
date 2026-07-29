@@ -67,7 +67,7 @@ const transform = (
 ) =>
   service.transform((draft) =>
     Object.entries(tools).forEach(([name, tool]) =>
-      draft.add({ ...tool, name, options: { ...tool.options, ...options } }),
+      draft.add({ ...tool, name, options: options ?? tool.options }),
     ),
   )
 
