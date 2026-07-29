@@ -103,7 +103,7 @@ type State = {
 
 type Themes = {
   current: ComponentTheme
-  resolved: Accessor<ResolvedTheme>
+  currentTokens: Accessor<ResolvedTheme>
   readonly selected: string
   all: typeof allThemes
   has: typeof hasTheme
@@ -326,7 +326,7 @@ const themeContext = createSimpleContext({
     const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
     const service: Themes = {
       current,
-      resolved: valuesV2,
+      currentTokens: valuesV2,
       currentSyntax,
       get selected() {
         return store.active

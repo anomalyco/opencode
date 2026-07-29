@@ -157,7 +157,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
     })
   }, createEventStream())
   function Harness() {
-    let theme: ReturnType<ReturnType<typeof useThemes>["resolved"]>
+    let theme: ReturnType<ReturnType<typeof useThemes>["currentTokens"]>
     const context = {
       options: {},
       client: createApi(transport.fetch),
@@ -206,7 +206,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
 
     void diffViewerPlugin.setup(context)
     function Content() {
-      theme = useThemes().resolved()
+      theme = useThemes().currentTokens()
       const commandView = renderCommands?.({})
       if (current.type !== "plugin") commands.get("diff.open")?.run()
       return (

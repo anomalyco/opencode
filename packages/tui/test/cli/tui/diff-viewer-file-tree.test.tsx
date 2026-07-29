@@ -129,7 +129,7 @@ describe("DiffViewerFileTree", () => {
 })
 
 function ThemedDiffViewerFileTree(props: Omit<DiffViewerFileTreeProps, "context">) {
-  return <DiffViewerFileTree {...props} context={{ theme: useThemes().resolved() } as Plugin.Context} />
+  return <DiffViewerFileTree {...props} context={{ theme: useThemes().currentTokens() } as Plugin.Context} />
 }
 
 async function renderFrame(component: () => JSX.Element) {

@@ -223,7 +223,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       data,
       attention,
       get theme() {
-        return themes.resolved()
+        return themes.currentTokens()
       },
       keymap: {
         layer: Keymap.createLayer,
