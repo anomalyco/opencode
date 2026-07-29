@@ -45,7 +45,9 @@ export interface Route<Body, Prepared = unknown> {
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
-  readonly model: (input: RouteMappedModelInput) => Model
+  readonly model: <Options extends ProviderOptions = ProviderOptions>(
+    input: RouteMappedModelInput<Options>,
+  ) => Model<Options>
   readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
@@ -62,9 +64,15 @@ export type AnyRoute = Route<any, any>
 
 export type HttpOptionsInput = HttpOptions.Input
 
-export type RouteModelInput = Omit<Model.Input, "provider" | "route">
+export type RouteModelInput<Options extends ProviderOptions = ProviderOptions> = Omit<
+  Model.Input<Options>,
+  "provider" | "route"
+>
 
-export type RouteRoutedModelInput = Omit<Model.Input, "route">
+export type RouteRoutedModelInput<Options extends ProviderOptions = ProviderOptions> = Omit<
+  Model.Input<Options>,
+  "route"
+>
 
 export interface RouteDefaults {
   readonly headers?: Record<string, string>
@@ -90,14 +98,19 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly endpoint?: EndpointPatch<Body>
 }
 
-type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
+type RouteMappedModelInput<Options extends ProviderOptions = ProviderOptions> =
+  | RouteModelInput<Options>
+  | RouteRoutedModelInput<Options>
 
-const makeRouteModel = (route: AnyRoute, mapped: RouteMappedModelInput) => {
+const makeRouteModel = <Options extends ProviderOptions = ProviderOptions>(
+  route: AnyRoute,
+  mapped: RouteMappedModelInput<Options>,
+) => {
   const provider = route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
   if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
   if (!endpointBaseURL(route.endpoint))
     throw new Error(`Route.model(${route.id}) requires an endpoint baseURL — configure it on the route first`)
-  return Model.make({
+  return Model.make<Options>({
     ...mapped,
     provider,
     route,
@@ -284,7 +297,8 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           defaults: mergeRouteDefaults(route.defaults, defaults),
         })
       },
-      model: (input) => makeRouteModel(route, input),
+      model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedModelInput<Options>) =>
+        makeRouteModel<Options>(route, input),
       prepareTransport: (body, request) =>
         routeInput.transport.prepare({
           body,
