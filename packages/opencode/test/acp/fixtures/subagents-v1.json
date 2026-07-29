@@ -1,0 +1,40 @@
+{
+  "snapshot": {
+    "generation": "generation-a",
+    "revision": 7,
+    "nodes": [
+      {
+        "runId": "root",
+        "sessionId": "root",
+        "rootSessionId": "root",
+        "title": "Root",
+        "phase": "running",
+        "createdAt": "2026-07-29T00:00:00.000Z",
+        "updatedAt": "2026-07-29T00:01:00.000Z",
+        "cwd": "/workspace/repo",
+        "repository": "kosnet/repo",
+        "directCost": { "amount": "1.20", "currency": "USD" }
+      },
+      {
+        "runId": "child",
+        "sessionId": "child",
+        "rootSessionId": "root",
+        "parentSessionId": "root",
+        "agent": "explore",
+        "title": "Inspect ACP",
+        "phase": "completed",
+        "createdAt": "2026-07-29T00:00:10.000Z",
+        "updatedAt": "2026-07-29T00:00:50.000Z",
+        "completedAt": "2026-07-29T00:00:50.000Z",
+        "cwd": "/workspace/repo",
+        "directCost": { "amount": "0.35", "currency": "USD" }
+      }
+    ]
+  },
+  "update": {
+    "generation": "generation-a",
+    "revision": 8,
+    "upsert": [],
+    "removedSessionIds": ["child"]
+  }
+}
