@@ -121,7 +121,6 @@ type Themes = {
 }
 
 type ThemeContextValue = {
-  root: ComponentTheme
   current: ComponentTheme["contexts"][ContextName]
   themes: Themes
   readonly ready: boolean
@@ -361,7 +360,6 @@ const themeContext = createSimpleContext({
       },
     }
     return {
-      root: current,
       current,
       themes: service,
       get ready() {
@@ -378,7 +376,7 @@ export function useTheme(): ComponentTheme
 export function useTheme(context: ContextName): ComponentTheme["contexts"][ContextName]
 export function useTheme(context?: ContextName) {
   const value = themeContext.use()
-  return context ? value.root.contexts[context] : value.current
+  return context ? value.themes.current.contexts[context] : value.current
 }
 export const ThemeProvider = themeContext.provider
 
@@ -386,7 +384,7 @@ export function ThemeContextProvider(props: ParentProps<{ context: ContextName }
   const value = themeContext.use()
   return (
     <themeContext.context.Provider
-      value={{ root: value.root, current: value.root.contexts[props.context], themes: value.themes, ready: value.ready }}
+      value={{ current: value.themes.current.contexts[props.context], themes: value.themes, ready: value.ready }}
     >
       {props.children}
     </themeContext.context.Provider>
