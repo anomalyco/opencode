@@ -83,6 +83,10 @@ export class Agent implements ACPAgent {
   cancel(params: CancelNotification) {
     return run(this.service.cancel(params))
   }
+
+  extMethod(method: string, params: Record<string, unknown>) {
+    return run(this.service.extension(method, params))
+  }
 }
 
 function run<A>(effect: Effect.Effect<A, ACPService.Error>) {

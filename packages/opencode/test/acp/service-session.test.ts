@@ -14,8 +14,10 @@ import type { AssistantMessage, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Effect } from "effect"
+import { Agent } from "@/acp/agent"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
+import { Subagent } from "@/acp/subagent"
 import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
 
@@ -196,6 +198,11 @@ describe("ACP service sessions", () => {
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
           }),
         messages: () => Promise.resolve({ data: messages }),
+        children: () => Promise.resolve({ data: [] }),
+        status: () =>
+          Promise.resolve({
+            data: Object.fromEntries(sessions.map((item) => [item.id, { type: "idle" as const }])),
+          }),
         prompt:
           options?.prompt ??
           ((input: unknown) => {
@@ -245,13 +252,17 @@ describe("ACP service sessions", () => {
           return Promise.resolve({ data: {} })
         },
       },
+      global: {
+        event: () => new Promise(() => {}),
+      },
     } as unknown as OpencodeClient
     const connection = {
       sessionUpdate: (update: SessionNotification) => {
         updates.push(update)
         return Promise.resolve()
       },
-    } as Pick<AgentSideConnection, "sessionUpdate">
+      extNotification: () => Promise.resolve(),
+    } as Pick<AgentSideConnection, "sessionUpdate" | "extNotification">
     const usage = UsageService.Service.of({
       buildUsage: UsageService.buildUsage,
       latestAssistantMessage: UsageService.latestAssistantMessage,
@@ -275,6 +286,29 @@ describe("ACP service sessions", () => {
       usageUpdates,
     }
   }
+
+  it("advertises and dispatches the version-1 subagent extension", async () => {
+    const { service } = makeService()
+    const agent = new Agent(service)
+
+    const initialized = await agent.initialize({ protocolVersion: 1 })
+    expect(initialized._meta).toEqual({
+      "opencode.dev/subagents": {
+        version: 1,
+        list: true,
+        subscribe: true,
+      },
+    })
+
+    const listed = Subagent.decodeSnapshot(await agent.extMethod("_opencode/subagents/list", {}))
+    const subscribed = Subagent.decodeSnapshot(await agent.extMethod("_opencode/subagents/subscribe", {}))
+    expect(listed.nodes).toHaveLength(102)
+    expect(subscribed.nodes).toHaveLength(102)
+
+    await expect(agent.extMethod("_opencode/subagents/missing", {})).rejects.toMatchObject({
+      code: -32601,
+    })
+  })
 
   it("creates a backed session with config options and command update", async () => {
     const { service, updates, mcpAdds } = makeService()

@@ -41,6 +41,7 @@ import { ACPEvent } from "./event"
 import { ACPSession } from "./session"
 import { UsageService } from "./usage"
 import { ACPProfile } from "./profile"
+import { Subagent } from "./subagent"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
@@ -50,7 +51,7 @@ export const AuthMethodID = "opencode-login"
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
-  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "extNotification" | "requestPermission" | "writeTextFile">>
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -68,6 +69,7 @@ export type Interface = {
   readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
+  readonly extension: (method: string, params: Record<string, unknown>) => Effect.Effect<Record<string, unknown>, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACP/Service") {}
@@ -84,10 +86,18 @@ export function make(input: {
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
-  const events = input.connection
-    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
-    : undefined
+  const connection = input.connection
+  const extNotification = connection?.extNotification?.bind(connection)
+  const events = connection ? ACPEvent.start({ sdk: input.sdk, connection, session }) : undefined
   if (events) input.eventSubscription?.(events)
+  const subagents =
+    extNotification && events
+      ? Subagent.make({
+          sdk: input.sdk,
+          events,
+          notify: (update) => extNotification("_opencode/subagents/update", update),
+        })
+      : undefined
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
@@ -131,6 +141,17 @@ export function make(input: {
         name: "OpenCode",
         version: InstallationVersion,
       },
+      ...(subagents
+        ? {
+            _meta: {
+              "opencode.dev/subagents": {
+                version: 1,
+                list: true,
+                subscribe: true,
+              },
+            },
+          }
+        : {}),
     }
     ACPProfile.duration("acp.initialize", started)
     return response
@@ -477,6 +498,21 @@ export function make(input: {
     return {}
   })
 
+  const extension = Effect.fn("ACP.extension")(function* (method: string, params: Record<string, unknown>) {
+    if (!subagents) return yield* new ACPError.UnsupportedOperationError({ method })
+    if (method === "_opencode/subagents/list") {
+      const decoded = yield* decodeSubagentParams(params)
+      const snapshot = yield* subagentRequest(() => subagents.list(decoded))
+      return { ...Subagent.encodeSnapshot(snapshot) }
+    }
+    if (method === "_opencode/subagents/subscribe") {
+      const decoded = yield* decodeSubagentParams(params)
+      const snapshot = yield* subagentRequest(() => subagents.subscribe(decoded))
+      return { ...Subagent.encodeSnapshot(snapshot) }
+    }
+    return yield* new ACPError.UnsupportedOperationError({ method })
+  })
+
   return {
     initialize,
     authenticate,
@@ -566,7 +602,22 @@ export function make(input: {
       return yield* promptResponse(undefined, params.messageId)
     }),
     cancel,
+    extension,
   }
+}
+
+function decodeSubagentParams(params: Record<string, unknown>) {
+  return Effect.try({
+    try: () => Subagent.decodeListParams(params),
+    catch: (error) => ACPError.fromUnknownDefect(error, "Invalid subagent extension params"),
+  })
+}
+
+function subagentRequest<A>(run: () => Promise<A>) {
+  return Effect.tryPromise({
+    try: run,
+    catch: (error) => ACPError.fromUnknownDefect(error, "Subagent service failure"),
+  })
 }
 
 function makeSessionService() {
