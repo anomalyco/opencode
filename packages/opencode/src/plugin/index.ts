@@ -141,8 +141,12 @@ const layer = Layer.effect(
         const { Server } = yield* Effect.promise(() => import("../server/server"))
 
         const serverUrl = Server.url
+        // When no HTTP listener is bound (the default in-process TUI transport),
+        // there is no reachable loopback URL. Report the in-process placeholder
+        // ("http://opencode.internal") rather than a fabricated localhost:4096,
+        // which would falsely imply a live TCP server that plugins can dial.
         const client = createOpencodeClient({
-          baseUrl: serverUrl?.toString() ?? "http://localhost:4096",
+          baseUrl: serverUrl?.toString() ?? "http://opencode.internal",
           directory: ctx.directory,
           headers: ServerAuth.headers(),
           ...(serverUrl ? {} : { fetch: async (...args) => Server.Default().app.fetch(...args) }),
@@ -159,7 +163,10 @@ const layer = Layer.effect(
             },
           },
           get serverUrl(): URL {
-            return Server.url ?? new URL("http://localhost:4096")
+            // Reflect the bound listener when one exists; otherwise surface the
+            // in-process placeholder so plugins can detect there is no external
+            // TCP server instead of being handed a dead localhost:4096 URL.
+            return Server.url ?? new URL("http://opencode.internal")
           },
           // @ts-expect-error
           $: typeof Bun === "undefined" ? undefined : Bun.$,
