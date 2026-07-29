@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { Event, OpencodeClient, Session, SessionStatus } from "@opencode-ai/sdk/v2"
 import { Subagent } from "@/acp/subagent"
 
 const fixture = await Bun.file(`${import.meta.dir}/fixtures/subagents-v1.json`).json()
@@ -134,3 +135,203 @@ describe("acp subagent wire contract", () => {
     ).toThrow()
   })
 })
+
+describe("acp subagent snapshots", () => {
+  test("reads every root graph with direct costs and authoritative phases", async () => {
+    const fixture = recursiveSDK()
+    const service = Subagent.make({ sdk: fixture.sdk })
+    await service.handle(sessionError("child-completed"))
+
+    const snapshot = await service.list({})
+
+    expect(snapshot.nodes.map((node) => node.sessionId)).toEqual([
+      "root-a",
+      "child-running",
+      "grandchild-completed",
+      "child-completed",
+      "root-b",
+    ])
+    expect(snapshot.nodes.map((node) => node.runId)).toEqual([
+      "root-a",
+      "child-running",
+      "grandchild-completed",
+      "child-completed",
+      "root-b",
+    ])
+    expect(snapshot.nodes.map((node) => [node.sessionId, node.rootSessionId, node.parentSessionId])).toEqual([
+      ["root-a", "root-a", undefined],
+      ["child-running", "root-a", "root-a"],
+      ["grandchild-completed", "root-a", "child-running"],
+      ["child-completed", "root-a", "root-a"],
+      ["root-b", "root-b", undefined],
+    ])
+    expect(snapshot.nodes.map((node) => [node.sessionId, node.cwd])).toEqual([
+      ["root-a", "/workspace/root-a"],
+      ["child-running", "/workspace/child-running"],
+      ["grandchild-completed", "/workspace/grandchild-completed"],
+      ["child-completed", "/workspace/child-completed"],
+      ["root-b", "/workspace/root-b"],
+    ])
+    expect(snapshot.nodes.map((node) => [node.sessionId, node.phase])).toEqual([
+      ["root-a", "running"],
+      ["child-running", "running"],
+      ["grandchild-completed", "completed"],
+      ["child-completed", "failed"],
+      ["root-b", "completed"],
+    ])
+    expect(snapshot.nodes.find((node) => node.sessionId === "root-a")?.directCost).toEqual({
+      amount: "1.2",
+      currency: "USD",
+    })
+    expect(snapshot.nodes.find((node) => node.sessionId === "child-running")?.directCost).toEqual({
+      amount: "0.35",
+      currency: "USD",
+    })
+    expect(fixture.statusReads).toBe(1)
+  })
+
+  test("filters snapshots to the requested root graph", async () => {
+    const service = Subagent.make({ sdk: recursiveSDK().sdk })
+
+    const snapshot = await service.list({ rootSessionId: "root-a" })
+
+    expect(snapshot.nodes.map((node) => node.sessionId)).toEqual([
+      "root-a",
+      "child-running",
+      "grandchild-completed",
+      "child-completed",
+    ])
+  })
+
+  test("rejects a ninth descendant while reading the SDK graph", async () => {
+    const service = Subagent.make({ sdk: chainSDK(9) })
+
+    await expect(service.list({})).rejects.toThrow("subagent depth must not exceed 8")
+  })
+
+  test("rejects a root with 301 descendants while reading the SDK graph", async () => {
+    const service = Subagent.make({ sdk: descendantSDK(301) })
+
+    await expect(service.list({})).rejects.toThrow("subagent descendants must not exceed 300")
+  })
+})
+
+function recursiveSDK() {
+  const sessions = [
+    session({ id: "root-a", directory: "/workspace/root-a", cost: 1.2, created: 1, updated: 10 }),
+    session({
+      id: "child-running",
+      parentID: "root-a",
+      directory: "/workspace/child-running",
+      cost: 0.35,
+      created: 2,
+      updated: 9,
+    }),
+    session({
+      id: "grandchild-completed",
+      parentID: "child-running",
+      directory: "/workspace/grandchild-completed",
+      cost: 0.1,
+      created: 3,
+      updated: 8,
+    }),
+    session({
+      id: "child-completed",
+      parentID: "root-a",
+      directory: "/workspace/child-completed",
+      cost: 0.5,
+      created: 4,
+      updated: 7,
+    }),
+    session({ id: "root-b", directory: "/workspace/root-b", cost: 2, created: 5, updated: 6 }),
+  ]
+  const status: Record<string, SessionStatus> = {
+    "root-a": { type: "busy" },
+    "child-running": { type: "retry", attempt: 1, message: "retry", next: 11 },
+    "grandchild-completed": { type: "idle" },
+    "child-completed": { type: "busy" },
+    "root-b": { type: "idle" },
+  }
+  let statusReads = 0
+
+  return {
+    sdk: sdk({ sessions, status, onStatus: () => statusReads++ }),
+    get statusReads() {
+      return statusReads
+    },
+  }
+}
+
+function chainSDK(descendantDepth: number) {
+  const sessions = Array.from({ length: descendantDepth + 1 }, (_, index) =>
+    session({
+      id: `node-${index}`,
+      ...(index > 0 ? { parentID: `node-${index - 1}` } : {}),
+      directory: `/workspace/node-${index}`,
+      created: index,
+      updated: index,
+    }),
+  )
+  return sdk({ sessions, status: Object.fromEntries(sessions.map((item) => [item.id, { type: "idle" }])) })
+}
+
+function descendantSDK(count: number) {
+  const sessions = [
+    session({ id: "root", directory: "/workspace/root", created: 0, updated: 0 }),
+    ...Array.from({ length: count }, (_, index) =>
+      session({
+        id: `child-${index}`,
+        parentID: "root",
+        directory: `/workspace/child-${index}`,
+        created: index + 1,
+        updated: index + 1,
+      }),
+    ),
+  ]
+  return sdk({ sessions, status: Object.fromEntries(sessions.map((item) => [item.id, { type: "idle" }])) })
+}
+
+function sdk(input: { sessions: Session[]; status: Record<string, SessionStatus>; onStatus?: () => void }) {
+  return {
+    session: {
+      list: (params?: { roots?: boolean }) =>
+        Promise.resolve({ data: params?.roots ? input.sessions.filter((item) => !item.parentID) : input.sessions }),
+      children: ({ sessionID }: { sessionID: string }) =>
+        Promise.resolve({ data: input.sessions.filter((item) => item.parentID === sessionID) }),
+      status: () => {
+        input.onStatus?.()
+        return Promise.resolve({ data: input.status })
+      },
+    },
+  } as unknown as Pick<OpencodeClient, "session">
+}
+
+function session(input: {
+  id: string
+  directory: string
+  created: number
+  updated: number
+  parentID?: string
+  cost?: number
+}): Session {
+  return {
+    id: input.id,
+    slug: input.id,
+    projectID: "project",
+    directory: input.directory,
+    ...(input.parentID ? { parentID: input.parentID } : {}),
+    ...(input.cost === undefined ? {} : { cost: input.cost }),
+    title: input.id,
+    agent: "build",
+    version: "1",
+    time: { created: input.created, updated: input.updated },
+  }
+}
+
+function sessionError(sessionID: string): Event {
+  return {
+    id: `event-${sessionID}`,
+    type: "session.error",
+    properties: { sessionID },
+  }
+}
