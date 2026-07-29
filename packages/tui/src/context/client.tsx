@@ -1,6 +1,6 @@
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode-ai/client"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { onCleanup, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { errorMessage } from "../util/error"
 import { createSimpleContext } from "./helper"
@@ -25,6 +25,7 @@ type ManagedService = {
 type ClientEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 const connectTimeout = 2_000
 const connectionHistoryLimit = 50
+const eventFlushInterval = 10
 
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
@@ -34,6 +35,8 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     const history: ClientConnectionEvent[] = []
     let api = props.api
     const events = createGlobalEmitter<ClientEventMap>()
+    let pending: OpenCodeEvent[] = []
+    let flushTimer: ReturnType<typeof setTimeout> | undefined
     const [connection, setConnection] = createStore<{
       status: ClientConnectionStatus
       attempt: number
@@ -47,6 +50,19 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     function record(status: ClientConnectionEvent["data"]["status"], attempt: number, error?: string) {
       history.push({ type: "client.connection", created: Date.now(), data: { status, attempt, error } })
       if (history.length > connectionHistoryLimit) history.shift()
+    }
+
+    function flushEvents() {
+      flushTimer = undefined
+      const queued = pending
+      pending = []
+      batch(() => queued.forEach((event) => events.emit(event.type, event)))
+    }
+
+    function emit(event: OpenCodeEvent) {
+      pending.push(event)
+      if (flushTimer) return
+      flushTimer = setTimeout(flushEvents, eventFlushInterval)
     }
 
     async function connect(signal: AbortSignal, attempt: number) {
@@ -80,7 +96,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
         record("connected", attempt)
         connectedAt = Date.now()
         log.info("event stream connected")
-        events.emit(first.value.type, first.value)
+        emit(first.value)
         setConnection({ status: "connected", attempt: 0, error: undefined })
 
         // Forward events until the stream closes or this connection is cancelled.
@@ -97,7 +113,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
               seq: event.value.durable.seq,
             })
 
-          events.emit(event.value.type, event.value)
+          emit(event.value)
         }
 
         return { error: undefined, connectedAt }
@@ -154,6 +170,8 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     onCleanup(() => {
       abort.abort()
       stream?.abort()
+      if (flushTimer) clearTimeout(flushTimer)
+      pending = []
       events.clear()
     })
 

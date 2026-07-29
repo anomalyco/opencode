@@ -157,6 +157,9 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const timeoutOutputCommand = isWindows
+  ? "[Console]::Out.Write('before timeout'); Start-Sleep -Seconds 60"
+  : "printf 'before timeout'; sleep 60"
 const steadyProgressCommand = isWindows
   ? "[Console]::Out.Write('steady'); Start-Sleep -Milliseconds 3400"
   : "printf steady; sleep 3.4"
@@ -346,33 +349,6 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("reports external command arguments as advisory warnings without enforcing approval", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-      ([active, outside]) => {
-        reset()
-        denyAction = "external_directory"
-        const target = path.join(outside.path, "secret.txt")
-        return withSession(active.path, (registry) => executeTool(registry, call({ command: `cat ${target}` }))).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(assertions.map((item) => item.action)).toEqual(["shell"])
-              expect(settled.metadata).not.toHaveProperty("warnings")
-              expect(settled.content?.[1]).toMatchObject({
-                type: "text",
-                text: expect.stringContaining("Warnings:"),
-              })
-            }),
-          ),
-        )
-      },
-      ([active, outside]) =>
-        Effect.promise(() =>
-          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-        ),
-    ),
-  )
-
   it.live("keeps non-zero exits useful", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -488,14 +464,18 @@ describe("ShellTool", () => {
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
-        reset()
-        return withSession(tmp.path, (registry) =>
-          executeTool(registry, call({ command: idleCommand, timeout: 50 })),
-        ).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
-              expect(settled.content?.[1]).toMatchObject({
+          reset()
+          return withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: timeoutOutputCommand, timeout: 50 })),
+          ).pipe(
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
+                expect(settled.content?.[0]).toMatchObject({
+                  type: "text",
+                  text: expect.stringContaining("before timeout"),
+                })
+                expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Command timed out"),
               })

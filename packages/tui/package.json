@@ -20,6 +20,7 @@
     "./context/exit": "./src/context/exit.tsx",
     "./context/log": "./src/context/log.tsx",
     "./context/runtime": "./src/context/runtime.tsx",
+    "./context/storage": "./src/context/storage.tsx",
     "./context/client": "./src/context/client.tsx",
     "./context/theme": "./src/context/theme.tsx",
     "./theme/discovery": "./src/theme/discovery.ts",
@@ -71,6 +72,11 @@
       "bun": "./src/editor-zed-sqlite.bun.ts",
       "node": "./src/editor-zed-sqlite.node.ts",
       "default": "./src/editor-zed-sqlite.bun.ts"
+    },
+    "#runtime-plugin-support": {
+      "bun": "./src/plugin/runtime-plugin-support.bun.ts",
+      "node": "./src/plugin/runtime-plugin-support.node.ts",
+      "default": "./src/plugin/runtime-plugin-support.node.ts"
     }
   },
   "dependencies": {

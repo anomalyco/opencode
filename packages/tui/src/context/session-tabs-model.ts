@@ -17,7 +17,8 @@ export function sessionTabComplete(unread: SessionTabUnread | undefined, busy: b
 export const SESSION_TAB_WIDTH = 22
 export const SESSION_TAB_MAX_WIDTH = 32
 export const SESSION_TAB_MIN_WIDTH = 8
-export const SESSION_TAB_OVERFLOW_WIDTH = 3
+// Overflow markers reserve one gap cell beside the arrow and count, e.g. "‹12 " and " 12›".
+export const sessionTabOverflowWidth = (count: number) => String(count).length + 2
 
 export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[] {
   const index = tabs.findIndex((item) => item.sessionID === tab.sessionID)
@@ -33,6 +34,15 @@ export function closeSessionTab(tabs: readonly SessionTab[], sessionID: string) 
     tabs: tabs.filter((tab) => tab.sessionID !== sessionID),
     next: tabs[index + 1]?.sessionID ?? tabs[index - 1]?.sessionID,
   }
+}
+
+export function moveSessionTab(tabs: SessionTab[], sessionID: string, index: number): SessionTab[] {
+  const from = tabs.findIndex((tab) => tab.sessionID === sessionID)
+  const to = Math.max(0, Math.min(tabs.length - 1, index))
+  if (from === -1 || from === to) return tabs
+  const next = tabs.filter((tab) => tab.sessionID !== sessionID)
+  next.splice(to, 0, tabs[from])
+  return next
 }
 
 export function cycleSessionTab(tabs: readonly SessionTab[], active: string | undefined, direction: 1 | -1) {
@@ -65,6 +75,38 @@ export function moveSessionTabHistory(
   )
   if (!target) return { history, sessionID: undefined }
   return { history: { ...history, index: target.index }, sessionID: target.sessionID }
+}
+
+export type SessionTabMotionValues = {
+  widths: number[]
+  selections: number[]
+  activities: number[]
+}
+
+/**
+ * Seed width motion for a visible-tab membership change: retained tabs keep their current animated
+ * values and first-seen tabs grow in from zero width. Returns undefined when nothing is retained,
+ * meaning the window was fully replaced and the strip should jump.
+ */
+export function seedSessionTabMotion(
+  previous: readonly string[],
+  ids: readonly string[],
+  current: SessionTabMotionValues,
+  next: SessionTabMotionValues,
+): SessionTabMotionValues | undefined {
+  const positions = ids.map((id) => previous.indexOf(id))
+  if (positions.every((position) => position === -1)) return undefined
+  return {
+    widths: positions.map((position, index) =>
+      position === -1 ? 0 : (current.widths[position] ?? next.widths[index] ?? 0),
+    ),
+    selections: positions.map(
+      (position, index) => (position === -1 ? next.selections[index] : current.selections[position]) ?? 0,
+    ),
+    activities: positions.map(
+      (position, index) => (position === -1 ? next.activities[index] : current.activities[position]) ?? 0,
+    ),
+  }
 }
 
 export function adaptiveSessionTabLayout(
@@ -102,8 +144,8 @@ export function adaptiveSessionTabLayout(
       tabs.length - count,
     )
     const markers =
-      (nextStart > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0) +
-      (nextStart + count < tabs.length ? SESSION_TAB_OVERFLOW_WIDTH : 0)
+      (nextStart > 0 ? sessionTabOverflowWidth(nextStart) : 0) +
+      (nextStart + count < tabs.length ? sessionTabOverflowWidth(tabs.length - nextStart - count) : 0)
     const nextCount = fit(available - markers)
     if (nextCount === count || attempts === 0) return { count, start: nextStart }
     return solve(nextCount, nextStart, attempts - 1)
@@ -114,7 +156,7 @@ export function adaptiveSessionTabLayout(
   const after = tabs.length - solved.start - solved.count
   const contentWidth = Math.max(
     1,
-    available - (before > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0) - (after > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0),
+    available - (before > 0 ? sessionTabOverflowWidth(before) : 0) - (after > 0 ? sessionTabOverflowWidth(after) : 0),
   )
   const roomy = contentWidth >= SESSION_TAB_WIDTH * visible.length
   const total = roomy ? Math.min(contentWidth, SESSION_TAB_MAX_WIDTH * visible.length) : contentWidth

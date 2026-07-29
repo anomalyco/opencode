@@ -11,7 +11,7 @@ import type {
   Route,
   Slot,
 } from "@opencode-ai/plugin/tui/context"
-import { ThemeProvider, useTheme, useThemes } from "../../../src/context/theme"
+import { ThemeProvider, useThemes } from "../../../src/context/theme"
 import { ConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
 import { Keymap } from "../../../src/context/keymap"
@@ -21,7 +21,6 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
-import { createPluginTheme } from "../../../src/plugin/context"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
@@ -158,7 +157,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
     })
   }, createEventStream())
   function Harness() {
-    let theme: ReturnType<typeof createPluginTheme>
+    let theme: ReturnType<ReturnType<typeof useThemes>["currentTokens"]>
     const context = {
       options: {},
       client: createApi(transport.fetch),
@@ -207,7 +206,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
 
     void diffViewerPlugin.setup(context)
     function Content() {
-      theme = createPluginTheme(useTheme(), useThemes())
+      theme = useThemes().currentTokens()
       const commandView = renderCommands?.({})
       if (current.type !== "plugin") commands.get("diff.open")?.run()
       return (

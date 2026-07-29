@@ -216,17 +216,32 @@ export function Prompt(props: PromptProps) {
   })
   Keymap.createLayer(() => ({
     mode: "global",
-    enabled: props.sessionID !== undefined,
     commands: [
       {
         id: "session.cd",
         title: "Change working directory",
         slash: { name: "cd", arguments: true },
         run: async (input) => {
-          const sessionID = props.sessionID
-          if (!sessionID) return
           if (!input?.trim()) {
             toast.show({ message: "Directory is required", variant: "error" })
+            return
+          }
+          const sessionID = props.sessionID
+          if (!sessionID) {
+            const value = input.trim()
+            const expanded =
+              value === "~" ? paths.home : value.startsWith("~/") ? path.join(paths.home, value.slice(2)) : value
+            const directory = path.resolve(
+              currentLocation.current?.directory ?? data.location.default().directory,
+              expanded,
+            )
+            const location = await client.api.location.get({ location: { directory } }).catch((error) => {
+              toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
+              return undefined
+            })
+            if (!location) return
+            move.setDirectory(location.directory, location.directory !== location.project.directory)
+            currentLocation.set(location)
             return
           }
           await client.api.session

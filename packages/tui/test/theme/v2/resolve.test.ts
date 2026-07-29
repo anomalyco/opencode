@@ -37,7 +37,7 @@ test("validates and resolves categorical hues in configured order", () => {
   expect(theme.categorical[0]).toBe(theme.hue.accent)
   expect(theme.categorical[1]).toBe(theme.hue.red)
   expect(theme.categorical[2]).toBe(theme.hue.interactive)
-  expect(theme.contexts["@context:elevated"]?.categorical).toBe(theme.categorical)
+  expect(theme.contextual.elevated.categorical).toBe(theme.categorical)
   expect(() => resolveSource({ version: 2, light: { categorical: [] } }, "light")).toThrow("Invalid theme")
   expect(() => resolveSource({ version: 2, light: { categorical: ["magenta"] } }, "light")).toThrow("Invalid theme")
 })
@@ -65,29 +65,29 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 300 })
   expect(lightTheme.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.decrease(lightTheme.hue.red[200])).toBe(lightTheme.hue.red[100])
-  expect(lightTheme.contexts["@context:elevated"]?.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
+  expect(lightTheme.contextual.elevated.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.text.default).toBeInstanceOf(RGBA)
   expect(darkTheme.background.default).toBeInstanceOf(RGBA)
   expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[300])
   expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
   expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
-  expect(lightTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
+  expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(
     lightTheme.hue.interactive[500],
   )
-  expect(lightTheme.contexts["@context:elevated"]?.background.default).toBe(lightTheme.background.surface.offset)
-  expect(lightTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(lightTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
+  expect(lightTheme.contextual.elevated.background.default).toBe(lightTheme.background.surface.offset)
+  expect(lightTheme.contextual.elevated.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
+  expect(lightTheme.contextual.overlay.background.action.primary.default).toBe(
     lightTheme.hue.interactive[500],
   )
-  expect(lightTheme.contexts["@context:overlay"]?.background.default).toBe(lightTheme.background.surface.overlay)
-  expect(lightTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(darkTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
+  expect(lightTheme.contextual.overlay.background.default).toBe(lightTheme.background.surface.overlay)
+  expect(lightTheme.contextual.overlay.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
+  expect(darkTheme.contextual.elevated.background.action.primary.default).toBe(
     darkTheme.hue.interactive[400],
   )
-  expect(darkTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
-  expect(darkTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
-  expect(darkTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
+  expect(darkTheme.contextual.elevated.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
+  expect(darkTheme.contextual.overlay.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
+  expect(darkTheme.contextual.overlay.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
 })
 
 test("resolves base hue aliases and rejects circular hue aliases", () => {
@@ -228,8 +228,8 @@ test("resolves elevated hover surfaces from direct colors", () => {
     "light",
   )
 
-  expect(theme.contexts["@context:elevated"]?.background.default.toInts()).toEqual([18, 52, 86, 255])
-  expect(theme.contexts["@context:elevated"]?.background.action.primary.hovered.toInts()).toEqual([35, 69, 103, 255])
+  expect(theme.contextual.elevated.background.default.toInts()).toEqual([18, 52, 86, 255])
+  expect(theme.contextual.elevated.background.action.primary.hovered.toInts()).toEqual([35, 69, 103, 255])
 })
 
 test("resolves transparent colors", () => {
@@ -271,7 +271,7 @@ test("context overrides rewire semantic references and apply state precedence", 
     },
   })
   const theme = resolveTheme(definition)
-  const overlay = theme.contexts["@context:elevated"]!
+  const overlay = theme.contextual.elevated
 
   expect(overlay.text.default.toInts()).toEqual([51, 51, 51, 255])
   expect(overlay.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])

@@ -296,6 +296,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           })
         }),
     },
+    shell: {
+      hook: (name, callback) => hooks.register("shell", name, callback),
+    },
     tool: {
       transform: (callback) =>
         tools

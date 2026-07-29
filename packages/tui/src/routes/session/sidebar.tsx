@@ -1,6 +1,6 @@
 import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
-import { useThemes } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
 import { PluginSlot } from "../../plugin/context"
 
@@ -8,7 +8,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const data = useData()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))

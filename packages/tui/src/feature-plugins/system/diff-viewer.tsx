@@ -18,6 +18,7 @@ import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "../../ui/dialog-select"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
+import { useThemes } from "../../context/theme"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -83,6 +84,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
   const config = useConfig()
   const dialog = props.context.ui.dialog
   const theme = props.context.theme
+  const currentSyntax = useThemes().currentSyntax
   const params = () => {
     const route = props.context.ui.router.current()
     return (route.type === "plugin" ? route.data : undefined) as
@@ -834,7 +836,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
                                     diff={patch()}
                                     view={view()}
                                     filetype={reviewed() ? PLAIN_TEXT_FILETYPE : filetype(entry.file.file)}
-                                    syntaxStyle={theme.syntaxStyle()}
+                                    syntaxStyle={currentSyntax()}
                                     showLineNumbers={true}
                                     width="100%"
                                     wrapMode="char"
@@ -941,7 +943,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
 }
 
 function DiffViewerHelpDialog(props: { context: Plugin.Context }) {
-  const theme = props.context.theme.contextual("elevated")
+  const theme = props.context.theme.contextual.elevated
   const shortcut = (id: string) => () => props.context.keymap.shortcuts(id)[0]
   const rows = [
     {

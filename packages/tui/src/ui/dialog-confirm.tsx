@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
@@ -21,7 +21,7 @@ export type DialogConfirmResult = boolean | undefined
 
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const [store, setStore] = createStore({
     active: "confirm" as "confirm" | "cancel",
   })

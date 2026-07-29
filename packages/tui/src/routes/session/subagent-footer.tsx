@@ -1,7 +1,7 @@
 import { createMemo, createSignal, Show } from "solid-js"
 import { useRouteData } from "../../context/route"
 import { useData } from "../../context/data"
-import { useThemes } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -42,7 +42,7 @@ export function SubagentFooter() {
     }
   })
 
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const keymap = Keymap.use()
   const shortcuts = Keymap.useShortcuts()
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)

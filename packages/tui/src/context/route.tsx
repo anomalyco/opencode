@@ -55,6 +55,11 @@ function initialRoute(value: unknown): Route | undefined {
     "name" in value &&
     typeof value.name === "string"
   ) {
+    const data =
+      "data" in value && typeof value.data === "object" && value.data !== null && !Array.isArray(value.data)
+        ? (value.data as Record<string, unknown>)
+        : undefined
+    if (data) return { type: "plugin", id: value.id, name: value.name, data }
     return { type: "plugin", id: value.id, name: value.name }
   }
 }

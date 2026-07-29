@@ -231,7 +231,7 @@ const permission = Layer.succeed(
 const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, Info>>, options?: Tool.Options) =>
   registry.transform((draft) =>
     Object.entries(tools).forEach(([name, tool]) =>
-      draft.add({ ...tool, name, options: { ...tool.options, ...options } }),
+      draft.add({ ...tool, name, options: options ?? tool.options }),
     ),
   )
 const echo = Layer.effectDiscard(

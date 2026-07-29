@@ -6,7 +6,7 @@ import { DEFAULT_THEME, selectTheme } from "@opencode-ai/theme/tui"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
 import { ConfigProvider } from "../../../src/config"
-import { ThemeContextProvider, ThemeProvider, useTheme, useThemes, type ThemeError } from "../../../src/context/theme"
+import { ThemeContextProvider, ThemeProvider, type ThemeError, useTheme, useThemes } from "../../../src/context/theme"
 
 async function wait(fn: () => boolean) {
   const started = Date.now()
@@ -129,9 +129,11 @@ test("contextual hooks resolve overrides and fall back to a standalone theme's b
   } as const
   let themes: ReturnType<typeof useThemes> | undefined
   let theme: ReturnType<typeof useTheme> | undefined
+  let explicit: ReturnType<typeof useTheme> | undefined
 
   function ContextProbe() {
     theme = useTheme()
+    explicit = useTheme("elevated")
     return <text>{theme.text.default.toString()}</text>
   }
 
@@ -160,9 +162,11 @@ test("contextual hooks resolve overrides and fall back to a standalone theme's b
     await wait(() => themes?.ready === true)
     if (!themes) throw new Error("Theme provider is not mounted")
     if (!theme) throw new Error("Contextual theme is not mounted")
+    if (!explicit) throw new Error("Explicit contextual theme is not mounted")
     expect(theme.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
-    expect(theme.text.default).toBe(themes.contextual("elevated").text.default)
-    expect(themes.contextual("overlay").background.default).toBe(themes.current.background.default)
+    expect(theme).toBe(explicit)
+    expect(theme.text.default).toBe(themes.current.contextual.elevated.text.default)
+    expect(themes.current.contextual.overlay.background.default).toBe(themes.current.background.default)
   } finally {
     app.renderer.destroy()
   }

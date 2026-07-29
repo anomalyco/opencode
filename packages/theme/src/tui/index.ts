@@ -33,6 +33,7 @@ export {
 
 export type {
   Categorical,
+  ContextName,
   FormfieldColor,
   Hue,
   HueSource,
@@ -40,7 +41,7 @@ export type {
   ResolvedActionState,
   ResolvedFormfieldState,
   ResolvedTheme,
-  ResolvedThemeView,
+  ResolvedThemeTokens,
   StatefulColor,
 } from "./types.js"
 export { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"

@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 
 export type DialogAlertProps = {
@@ -11,7 +11,7 @@ export type DialogAlertProps = {
 
 export function DialogAlert(props: DialogAlertProps) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
 
   Keymap.createLayer(() => ({
     mode: "modal",

@@ -158,6 +158,10 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setCreating(false)
   }
 
+  function setDirectory(directory: string, subdirectory: boolean) {
+    setDestination({ type: "directory", directory, subdirectory })
+  }
+
   createEffect(() => {
     if (!creating()) {
       setCreatingDots(3)
@@ -176,6 +180,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     pending,
     pendingNew,
     progress,
+    setDirectory,
     startSubmit,
   }
 }

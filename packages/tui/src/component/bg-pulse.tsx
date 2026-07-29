@@ -7,7 +7,7 @@ import {
 } from "@opentui/core"
 import { extend, useRenderer } from "@opentui/solid"
 import { onCleanup, onMount } from "solid-js"
-import { useThemes } from "../context/theme"
+import { useTheme, useThemes } from "../context/theme"
 import { tint } from "../theme/color"
 import { GoUpsellArtPainter } from "./bg-pulse-render"
 
@@ -71,7 +71,7 @@ extend({ go_upsell_art: GoUpsellArtRenderable })
 
 export function BgPulse() {
   const themes = useThemes()
-  const theme = themes.contextual("elevated")
+  const theme = useTheme("elevated")
   const mode = themes.mode
   const renderer = useRenderer()
   let targetFps = renderer.targetFps

@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "url"
 import type { Context, Dialog, Page, Slot, SlotMap, SlotName, Toast } from "@opencode-ai/plugin/tui/context"
 import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
 import { useRenderer } from "@opentui/solid"
-import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
+import "#runtime-plugin-support"
 import { useConfig } from "../config"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
@@ -24,7 +24,7 @@ import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
 import { useTuiApp, useTuiLifecycle, useTuiPaths } from "../context/runtime"
 import { useLocation } from "../context/location"
-import { useTheme, useThemes } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -32,11 +32,10 @@ import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
+import { useStorage } from "../context/storage"
 import { abbreviateHome } from "../util/path-format"
 import { builtins } from "./builtins"
 import { discoverTuiPlugins } from "./discovery"
-
-ensureRuntimePluginSupport()
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
@@ -90,12 +89,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const app = useTuiApp()
   const paths = useTuiPaths()
   const location = useLocation()
-  const theme = useTheme()
   const themes = useThemes()
-  const pluginTheme = createPluginTheme(theme, themes)
   const dialog = useDialog()
   const toast = useToast()
   const attention = useAttention()
+  const storage = useStorage()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
@@ -224,7 +222,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       client: client.api,
       data,
       attention,
-      theme: pluginTheme,
+      get theme() {
+        return themes.currentTokens()
+      },
       keymap: {
         layer: Keymap.createLayer,
         dispatch: keymap.dispatch,
@@ -233,6 +233,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         pending: keymapState.pending,
         active: keymapState.active,
         mode: keymap.mode,
+      },
+      storage: {
+        store: (key, options) => storage.store(`plugin.${item.plugin.id}.${key}`, options),
       },
       ui: {
         dialog: dialogApi,
@@ -523,24 +526,6 @@ function isPlugin(value: unknown): value is Plugin.Definition {
     "setup" in value &&
     typeof value.setup === "function"
   )
-}
-
-type PluginTheme = ReturnType<typeof useTheme> & {
-  contextual(context: "elevated" | "overlay"): PluginTheme
-  syntaxStyle(): ReturnType<ReturnType<typeof useThemes>["currentSyntax"]>
-}
-
-export function createPluginTheme(theme: ReturnType<typeof useTheme>, themes: ReturnType<typeof useThemes>): PluginTheme {
-  return new Proxy(theme as PluginTheme, {
-    get(target, property, receiver) {
-      if (property === "contextual") {
-        return (context: "elevated" | "overlay") => createPluginTheme(themes.contextual(context), themes)
-      }
-      if (property === "syntaxStyle") return themes.currentSyntax
-      if (Reflect.has(target, property)) return Reflect.get(target, property, receiver)
-      return Reflect.get(themes, property, themes)
-    },
-  })
 }
 
 export function usePlugin() {

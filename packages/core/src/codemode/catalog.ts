@@ -6,6 +6,7 @@ export const Entry = Schema.Struct({
   path: Schema.String,
   description: Schema.String,
   signature: Schema.String,
+  pinned: Schema.optionalKey(Schema.Boolean),
 })
 export type Entry = typeof Entry.Type
 
@@ -56,26 +57,39 @@ export function summarize(entries: ReadonlyArray<Entry>, budget = INLINE_BUDGET)
           if (left.path > right.path) return 1
           return 0
         })
+      const ranked = rankListings(listings)
+      const pinned = new Set(
+        namespaceEntries
+          .filter((entry) => entry.pinned)
+          .map((entry) => listings.find((listing) => listing.path === entry.path))
+          .filter((listing) => listing !== undefined),
+      )
       return {
         name,
         listings,
-        selectionOrder: rankListings(listings),
-        selectedListings: new Set<typeof Listing.Type>(),
+        selectionOrder: ranked.filter((candidate) => !pinned.has(candidate.listing)),
+        selectedListings: pinned,
+        selectionIndex: 0,
       }
     })
 
   const active = new Set(namespaces)
-  let remaining = budget
+  let remaining =
+    budget -
+    namespaces
+      .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selectedListings.has(listing)))
+      .reduce((total, listing) => total + Math.round(listing.line.length / CHARACTERS_PER_TOKEN), 0)
   while (active.size > 0) {
     for (const namespace of active) {
-      const candidate = namespace.selectionOrder[namespace.selectedListings.size]
+      const candidate = namespace.selectionOrder[namespace.selectionIndex]
       if (!candidate || candidate.cost > remaining) {
         active.delete(namespace)
         continue
       }
       namespace.selectedListings.add(candidate.listing)
+      namespace.selectionIndex += 1
       remaining -= candidate.cost
-      if (namespace.selectedListings.size === namespace.selectionOrder.length) active.delete(namespace)
+      if (namespace.selectionIndex === namespace.selectionOrder.length) active.delete(namespace)
     }
   }
 

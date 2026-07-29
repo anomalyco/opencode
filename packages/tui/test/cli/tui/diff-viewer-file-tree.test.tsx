@@ -4,7 +4,7 @@ import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
 import { onMount, type ParentProps } from "solid-js"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { ThemeProvider, useTheme, useThemes } from "../../../src/context/theme"
+import { ThemeProvider, useThemes } from "../../../src/context/theme"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { ConfigProvider } from "../../../src/config"
 import {
@@ -12,7 +12,6 @@ import {
   type DiffViewerFileTreeProps,
 } from "../../../src/feature-plugins/system/diff-viewer-file-tree"
 import { TestTuiContexts } from "../../fixture/tui-environment"
-import { createPluginTheme } from "../../../src/plugin/context"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -130,7 +129,7 @@ describe("DiffViewerFileTree", () => {
 })
 
 function ThemedDiffViewerFileTree(props: Omit<DiffViewerFileTreeProps, "context">) {
-  return <DiffViewerFileTree {...props} context={{ theme: createPluginTheme(useTheme(), useThemes()) } as Plugin.Context} />
+  return <DiffViewerFileTree {...props} context={{ theme: useThemes().currentTokens() } as Plugin.Context} />
 }
 
 async function renderFrame(component: () => JSX.Element) {

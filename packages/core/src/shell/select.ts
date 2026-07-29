@@ -173,7 +173,7 @@ export function args(file: string, command: string) {
   if (n === "nu" || n === "fish") return ["-c", command]
   if (n === "zsh" || n === "bash") return ["-c", command]
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
   return ["-c", command]
 }
 

@@ -19,8 +19,19 @@ import type {
   ShellInfo,
   SkillInfo,
 } from "@opencode-ai/client"
+import type { ResolvedTheme } from "@opencode-ai/theme/tui"
 import type { CliRenderer, KeyEvent, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
+import type { Store } from "solid-js/store"
+
+export interface Storage {
+  store<Value extends object>(
+    key: string,
+    options: {
+      readonly initial: Value
+    },
+  ): readonly [Store<Value>, (mutation: (draft: Value) => void) => Promise<void>]
+}
 
 interface LocationCollection<Value> {
   list(location?: LocationRef): Value[] | undefined
@@ -346,7 +357,8 @@ export interface Context {
   readonly client: OpenCodeClient
   readonly data: Data
   readonly attention: Attention
-  readonly theme: any
+  readonly theme: ResolvedTheme
   readonly keymap: Keymap
+  readonly storage: Storage
   readonly ui: UI
 }

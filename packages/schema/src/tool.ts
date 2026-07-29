@@ -19,11 +19,22 @@ export interface Context {
   readonly progress: (update: Metadata) => Effect.Effect<void>
 }
 
-export interface Options {
+interface BaseOptions {
   readonly namespace?: string
-  readonly codemode?: boolean
   readonly permission?: string
 }
+
+export type Options = BaseOptions &
+  (
+    | {
+        readonly codemode?: true
+        readonly pinned?: boolean
+      }
+    | {
+        readonly codemode: boolean
+        readonly pinned?: never
+      }
+  )
 
 export type ValueSchema<A = unknown> =
   | Schema.Codec<A, any>

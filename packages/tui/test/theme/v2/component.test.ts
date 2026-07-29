@@ -1,17 +1,18 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextKey } from "@opencode-ai/theme/tui"
+import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextName } from "@opencode-ai/theme/tui"
 import { createComponentTheme } from "../../../src/theme/component"
 
 test("provides reactive properties, states, contexts, and color operations", () => {
   const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
   const [mode, setMode] = createSignal<"light" | "dark">("light")
-  const [context, setContext] = createSignal<ContextKey>()
-  const theme = createComponentTheme(() => {
-    const key = context()
-    return key ? (resolved().contexts[key] ?? resolved()) : resolved()
-  }, mode)
+  const theme = createComponentTheme(resolved, mode)
+  const [context, setContext] = createSignal<ContextName>()
+  const current = () => {
+    const name = context()
+    return name ? theme.contextual[name] : theme
+  }
 
   expect(theme.text.default).toBe(resolved().text.default)
   expect(theme.hue.accent[500]).toBe(resolved().hue.accent[500])
@@ -50,20 +51,21 @@ test("provides reactive properties, states, contexts, and color operations", () 
   expect(theme.scrollbar.default).toBe(resolved().scrollbar.default)
   expect(theme.diff.text.added).toBe(resolved().diff.text.added)
 
-  setContext("@context:elevated")
-  expect(theme.categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
-  expect(theme.text.default).toBe(resolved().contexts["@context:elevated"]!.text.default)
-  expect(theme.background.action.primary.focused).toBe(
-    resolved().contexts["@context:elevated"]!.background.action.primary.focused,
+  setContext("elevated")
+  expect("contexts" in current()).toBeFalse()
+  expect(current().categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
+  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
+  expect(current().background.action.primary.focused).toBe(
+    resolved().contextual.elevated.background.action.primary.focused,
   )
-  expect(theme.background.action.primary.hovered).toBe(resolved().background.surface.overlay)
-  expect(theme.background.formfield.selected).toBe(
-    resolved().contexts["@context:elevated"]!.background.formfield.selected,
+  expect(current().background.action.primary.hovered).toBe(resolved().background.surface.overlay)
+  expect(current().background.formfield.selected).toBe(
+    resolved().contextual.elevated.background.formfield.selected,
   )
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
   setMode("dark")
-  expect(theme.text.default).toBe(resolved().contexts["@context:elevated"]!.text.default)
-  expect(theme.decrease(theme.background.surface.offset, 1)).toBe(resolved().hue.neutral[600])
-  expect(theme.raise(theme.background.surface.offset)).toBe(resolved().hue.neutral[600])
+  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
+  expect(current().decrease(current().background.surface.offset, 1)).toBe(resolved().hue.neutral[600])
+  expect(current().raise(current().background.surface.offset)).toBe(resolved().hue.neutral[600])
 })

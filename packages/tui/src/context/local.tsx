@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createMemo } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -287,14 +287,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
-            if (!isModelValid(model)) {
-              toast.show({
-                message: `Model ${model.providerID}/${model.modelID} is not valid`,
-                variant: "warning",
-                duration: 3000,
-              })
-              return
-            }
+            if (!isModelValid(model)) return
             const a = agent.current()
             if (!a) return
             setModelStore("model", a.id, model)
@@ -306,14 +299,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
-            if (!isModelValid(model)) {
-              toast.show({
-                message: `Model ${model.providerID}/${model.modelID} is not valid`,
-                variant: "warning",
-                duration: 3000,
-              })
-              return
-            }
+            if (!isModelValid(model)) return
             const exists = modelStore.favorite.some(
               (x) => x.providerID === model.providerID && x.modelID === model.modelID,
             )
@@ -461,17 +447,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const session = createSession()
-
-    createEffect(() => {
-      const value = agent.current()
-      if (!value?.model) return
-      if (isModelValid({ providerID: value.model.providerID, modelID: value.model.id })) return
-      toast.show({
-        variant: "warning",
-        message: `Agent ${value.id}'s configured model ${value.model.providerID}/${value.model.id} is not valid`,
-        duration: 3000,
-      })
-    })
 
     const result = {
       model,

@@ -7,7 +7,7 @@ import SidebarMcp from "../feature-plugins/sidebar/mcp"
 import DiffViewer from "../feature-plugins/system/diff-viewer"
 import Notifications from "../feature-plugins/system/notifications"
 import Plugins from "../feature-plugins/system/plugins"
-import Scrap from "../feature-plugins/system/scrap"
+import Storybook from "../feature-plugins/system/storybook"
 
 export const builtins = [
   HomeFooter,
@@ -18,6 +18,6 @@ export const builtins = [
   SidebarFooter,
   Notifications,
   Plugins,
-  Scrap,
+  Storybook,
   DiffViewer,
 ]

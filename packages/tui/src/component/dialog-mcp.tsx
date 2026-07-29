@@ -5,7 +5,7 @@ import { Keymap } from "../context/keymap"
 import { pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import type { McpServer } from "@opencode-ai/client"
 import { useClipboard } from "../context/clipboard"
@@ -20,7 +20,7 @@ function statusError(status: McpServer["status"]) {
 }
 
 function Status(props: { enabled: boolean; loading: boolean }) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   if (props.loading) return <span style={{ fg: theme.text.subdued }}>⋯ Loading</span>
   if (props.enabled) {
     return <span style={{ fg: theme.text.feedback.success.default, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
@@ -33,7 +33,7 @@ export function DialogMcp() {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<McpServer>()
   const [loading, setLoading] = createSignal<string | null>(null)
@@ -134,8 +134,8 @@ function DialogMcpError(props: { server: McpServer; onBack: () => void }) {
   const dialog = useDialog()
   const clipboard = useClipboard()
   const toast = useToast()
-  const theme = useThemes().contextual("elevated")
-  const overlayTheme = useThemes().contextual("overlay")
+  const theme = useTheme("elevated")
+  const overlayTheme = useTheme("overlay")
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal(false)

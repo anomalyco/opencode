@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useData } from "../context/data"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
@@ -8,7 +8,7 @@ export type DialogStatusProps = {}
 
 export function DialogStatus() {
   const data = useData()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const dialog = useDialog()
 
   const mcp = createMemo(() => data.location.mcp.server.list() ?? [])

@@ -326,6 +326,10 @@ export function fromPromise(plugin: Plugin) {
               ),
             interrupt: (input) => run(host.session.interrupt({ sessionID: Session.ID.make(input.sessionID) })),
           },
+          shell: {
+            hook: (name, callback) =>
+              register(host.shell.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
         }
 
         const cleanup = yield* Effect.promise(() => Promise.resolve(plugin.setup(context2)))

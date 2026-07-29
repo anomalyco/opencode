@@ -36,7 +36,7 @@ export function DevToolsBar() {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const { current: theme, mode, supports, setMode } = themes
-  const elevatedTheme = themes.contextual("elevated")
+  const elevatedTheme = useTheme("elevated")
   const [panel, setPanel] = createSignal<Panel>()
   const [dumping, setDumping] = createSignal(false)
   const [dumpPath, setDumpPath] = createSignal<string>()
@@ -435,7 +435,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
 }
 
 function PanelBox(props: ParentProps) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const renderer = useRenderer()
   return (
     <box
@@ -461,7 +461,7 @@ function PanelBox(props: ParentProps) {
 }
 
 function PanelTitle(props: ParentProps) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   return (
     <text fg={theme.text.default} attributes={TextAttributes.BOLD} marginBottom={1}>
       {props.children}
@@ -470,7 +470,7 @@ function PanelTitle(props: ParentProps) {
 }
 
 function Row(props: { label: string; value: string }) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   return (
     <box flexDirection="row">
       <text fg={theme.text.subdued}>{props.label}</text>
@@ -481,7 +481,7 @@ function Row(props: { label: string; value: string }) {
 }
 
 function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; hoverBackground?: boolean }>) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const [hovered, setHovered] = createSignal(false)
   return (
     <box
@@ -506,7 +506,7 @@ function cpuPercent(microseconds: number, milliseconds: number) {
 }
 
 function ProcessStat(props: { label: string; values: readonly number[]; unit: string; decimals?: number }) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const value = () => {
     const value = props.values.at(-1)
     if (value === undefined) return "--"
