@@ -62,7 +62,6 @@ describe("fromPromise", () => {
             seen = value
             return Effect.succeed(
               SessionPending.Synthetic.make({
-                admittedSeq: 1,
                 id: SessionMessage.ID.make(input.id),
                 sessionID: Session.ID.make(input.sessionID),
                 timeCreated: DateTime.makeUnsafe(0),

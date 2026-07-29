@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, asc, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { Database } from "../database/database"
 import { Bus } from "../bus"
@@ -174,25 +174,28 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!parent) return yield* Effect.die(new Error(`Fork parent session not found: ${event.data.parentID}`))
-  const boundary = event.data.from
-    ? yield* db
-        .select({ seq: SessionMessageTable.seq })
-        .from(SessionMessageTable)
-        .where(
-          and(eq(SessionMessageTable.session_id, event.data.parentID), eq(SessionMessageTable.id, event.data.from)),
-        )
-        .get()
-        .pipe(Effect.orDie)
-    : undefined
-  if (event.data.from && !boundary)
-    return yield* Effect.die(new Error(`Fork boundary message not found: ${event.data.from}`))
+  const boundary = yield* db
+    .select({ seq: SessionMessageTable.seq })
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, event.data.parentID),
+        eq(SessionMessageTable.id, event.data.boundary.messageID),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
+  if (!boundary)
+    return yield* Effect.die(new Error(`Fork boundary message not found: ${event.data.boundary.messageID}`))
   const copied = yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
     .where(
       and(
         eq(SessionMessageTable.session_id, event.data.parentID),
-        boundary === undefined ? undefined : lt(SessionMessageTable.seq, boundary.seq),
+        event.data.boundary.type === "before"
+          ? lt(SessionMessageTable.seq, boundary.seq)
+          : lte(SessionMessageTable.seq, boundary.seq),
       ),
     )
     .orderBy(desc(SessionMessageTable.seq))
@@ -207,8 +210,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       id: event.data.sessionID,
       parent_id: null,
       fork_session_id: event.data.parentID,
-      fork_message_id: event.data.from,
-      fork_seq: event.data.parentSeq,
+      fork_boundary: event.data.boundary,
       project_id: parent.project_id,
       workspace_id: parent.workspace_id,
       slug: Slug.create(),
@@ -314,8 +316,9 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
     cursor = rows.at(-1)!.seq
   }
-  yield* Bus.reserveSequence(db, event.data.sessionID, event.data.parentSeq)
-  yield* InstructionState.rebuild(db, event.data.sessionID)
+  if (copiedSeq !== undefined) yield* Bus.reserveSequence(db, event.data.sessionID, copiedSeq)
+  if (event.data.instructions)
+    yield* InstructionState.initialize(db, event.data.sessionID, event.durable.seq, event.data.instructions)
 })
 
 function run(db: DatabaseService, event: MessageEvent) {

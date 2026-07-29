@@ -229,7 +229,6 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           ],
         })
         return {
-          admittedSeq: 0,
           id: value.id ?? "",
           sessionID: value.sessionID,
           timeCreated: Date.now(),
@@ -255,7 +254,6 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           })),
         })
         return {
-          admittedSeq: 0,
           id: value.id ?? "",
           sessionID: value.sessionID,
           timeCreated: Date.now(),
@@ -280,7 +278,6 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           modelID: value.model.modelID,
         })
         return {
-          admittedSeq: 0,
           id: value.id ?? "",
           sessionID: value.sessionID,
           timeCreated: Date.now(),

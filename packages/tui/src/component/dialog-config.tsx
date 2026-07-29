@@ -94,9 +94,9 @@ export const settings: Setting[] = [
     keywords: ["transcript", "messages"],
   },
   {
-    title: "Tabs",
-    category: "Session",
-    path: ["session", "tabs"],
+    title: "Enabled",
+    category: "Tabs",
+    path: ["tabs", "enabled"],
     default: false,
     values: [false, true],
     labels: ["off", "on"],

@@ -3,7 +3,8 @@ import { Effect } from "effect"
 import { LLM } from "../src"
 import { OpenAIChat } from "../src/protocols"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema"
-import { Auth, LLMClient } from "../src/route"
+import { Auth } from "../src/route"
+import { compileRequest } from "../src/route/client"
 import { it } from "./lib/effect"
 
 describe("tool schema projections", () => {
@@ -79,7 +80,7 @@ describe("tool schema projections", () => {
       const model = OpenAIChat.route
         .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
         .model({ id: "kimi-k2", compatibility: { toolSchema: "moonshot" } })
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "Use the tool.",

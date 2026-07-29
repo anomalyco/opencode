@@ -199,7 +199,7 @@ describe("Session.create", () => {
       yield* session.synthetic({ sessionID: parent.id, text: "parent note", resume: false })
       yield* SessionPending.promote(db, bus, parent.id, "steer")
 
-      const forked = yield* session.fork({ sessionID: parent.id })
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
       const parentContext = yield* session.context(parent.id)
       const forkContext = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
@@ -252,6 +252,17 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("rejects forking an empty session", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+
+      expect(
+        yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.ForkEmptyError", sessionID: parent.id })
+    }),
+  )
+
   it.effect("forks before the selected boundary message", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -286,16 +297,27 @@ describe("Session.create", () => {
         tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
       })
 
-      const forked = yield* session.fork({ sessionID: parent.id, messageID: second.id })
-      const beforeFirst = yield* session.fork({ sessionID: parent.id, messageID: first.id })
-      const complete = yield* session.fork({ sessionID: parent.id })
+      const forked = yield* session.fork({
+        sessionID: parent.id,
+        boundary: { type: "before", messageID: second.id },
+      })
+      const beforeFirst = yield* session.fork({
+        sessionID: parent.id,
+        boundary: { type: "before", messageID: first.id },
+      })
+      const complete = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
 
       const context = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
-      expect(forked.fork).toEqual({ sessionID: parent.id, messageID: second.id })
+      expect(forked.fork).toEqual({
+        sessionID: parent.id,
+        boundary: { type: "before", messageID: second.id },
+      })
       expect(context).toMatchObject([{ text: "First" }])
       expect(context[0]?.id).not.toBe(first.id)
-      expect(history[0]).toMatchObject({ data: { from: second.id } })
+      expect(history[0]).toMatchObject({
+        data: { boundary: { type: "before", messageID: second.id } },
+      })
       expect(forked).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
       expect(yield* session.context(beforeFirst.id)).toEqual([])
       expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
@@ -484,7 +506,6 @@ describe("Session.create", () => {
           type: "user",
           data: { text: "Replay lifecycle" },
           delivery: "steer",
-          admittedSeq: 1,
         })
         expect(yield* store.context(created.id)).toEqual([])
 

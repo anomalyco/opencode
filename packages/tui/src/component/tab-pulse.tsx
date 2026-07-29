@@ -1,12 +1,13 @@
 import { OptimizedBuffer, Renderable, RGBA, type RenderableOptions, type RenderContext } from "@opentui/core"
 import { extend } from "@opentui/solid"
-import { tint } from "../theme/color"
 
 type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
   enabled?: boolean
   active?: boolean
   complete?: boolean
+  glow?: boolean
   color?: RGBA
+  glowColor?: RGBA
   completionColor?: RGBA
   backgroundColor?: RGBA
 }
@@ -19,6 +20,9 @@ const RUN_TAIL = 18
 const RUN_FADE_OUT = 500
 const COMPLETION_DURATION = 900
 const COMPLETION_ATTACK = 0.16
+const GLOW_TAIL = 12
+const GLOW_OPACITY = 0.16
+const DEFAULT_FOREGROUND = RGBA.defaultForeground()
 const intensityAt = (index: number, front: number, head: number, tail: number) => {
   const distance = front - index
   return distance < 0 ? smootherstep(clamp(1 + distance / head)) : smootherstep(clamp(1 - distance / tail))
@@ -33,17 +37,44 @@ export const completionPulseOpacity = (progress: number) =>
   progress < COMPLETION_ATTACK
     ? smootherstep(clamp(progress / COMPLETION_ATTACK))
     : 1 - smootherstep(clamp((progress - COMPLETION_ATTACK) / (1 - COMPLETION_ATTACK)))
+export const unreadGlowIntensity = (index: number, width: number) => {
+  const tail = Math.min(GLOW_TAIL, Math.max(1, width - 2))
+  return smootherstep(clamp(1 - Math.max(0, index - 1) / tail))
+}
+export function blendTabPulseColor(
+  output: RGBA,
+  background: RGBA,
+  glowColor: RGBA,
+  runningColor: RGBA,
+  completionColor: RGBA,
+  glow: number,
+  running: number,
+  completion: number,
+) {
+  output.r = background.r + (glowColor.r - background.r) * glow
+  output.g = background.g + (glowColor.g - background.g) * glow
+  output.b = background.b + (glowColor.b - background.b) * glow
+  output.r += (runningColor.r - output.r) * running
+  output.g += (runningColor.g - output.g) * running
+  output.b += (runningColor.b - output.b) * running
+  output.r += (completionColor.r - output.r) * completion
+  output.g += (completionColor.g - output.g) * completion
+  output.b += (completionColor.b - output.b) * completion
+}
 class TabPulseRenderable extends Renderable {
   private _enabled: boolean
   private _active: boolean
   private _complete: boolean
+  private _glow: boolean
   private _color: RGBA
+  private _glowColor: RGBA
   private _completionColor: RGBA
   private _backgroundColor: RGBA
   private clock = 0
   private fadeClock: number | undefined
   private completionClock: number | undefined
   private completionPending = false
+  private renderColor = RGBA.fromInts(0, 0, 0)
 
   constructor(ctx: RenderContext, options: TabPulseOptions = {}) {
     const enabled = options.enabled ?? true
@@ -52,7 +83,9 @@ class TabPulseRenderable extends Renderable {
     this._enabled = enabled
     this._active = active
     this._complete = options.complete ?? false
+    this._glow = options.glow ?? false
     this._color = options.color ?? RGBA.defaultForeground()
+    this._glowColor = options.glowColor ?? this._color
     this._completionColor = options.completionColor ?? this._color
     this._backgroundColor = options.backgroundColor ?? RGBA.defaultBackground()
   }
@@ -103,9 +136,21 @@ class TabPulseRenderable extends Renderable {
     this.requestRender()
   }
 
+  set glow(value: boolean) {
+    if (value === this._glow) return
+    this._glow = value
+    this.requestRender()
+  }
+
   set color(value: RGBA) {
     if (value.equals(this._color)) return
     this._color = value
+    this.requestRender()
+  }
+
+  set glowColor(value: RGBA) {
+    if (value.equals(this._glowColor)) return
+    this._glowColor = value
     this.requestRender()
   }
 
@@ -144,15 +189,19 @@ class TabPulseRenderable extends Renderable {
   }
 
   protected override renderSelf(buffer: OptimizedBuffer): void {
-    if (!this.visible || this.isDestroyed || !this._enabled || this.width <= 0) return
-    const runningOpacity = this._active
-      ? 1
-      : this.fadeClock === undefined
-        ? 0
-        : 1 - smootherstep(clamp(this.fadeClock / RUN_FADE_OUT))
+    if (!this.visible || this.isDestroyed || this.width <= 0) return
+    const runningOpacity = !this._enabled
+      ? 0
+      : this._active
+        ? 1
+        : this.fadeClock === undefined
+          ? 0
+          : 1 - smootherstep(clamp(this.fadeClock / RUN_FADE_OUT))
     const completionOpacity =
-      this.completionClock === undefined ? 0 : completionPulseOpacity(this.completionClock / COMPLETION_DURATION)
-    if (runningOpacity === 0 && completionOpacity === 0) return
+      !this._enabled || this.completionClock === undefined
+        ? 0
+        : completionPulseOpacity(this.completionClock / COMPLETION_DURATION)
+    if (!this._glow && runningOpacity === 0 && completionOpacity === 0) return
     const progress = (this.clock % RUN_DURATION) / RUN_DURATION
     const start = -RUN_HEAD
     const end = this.width - 1 + RUN_TAIL
@@ -163,14 +212,20 @@ class TabPulseRenderable extends Renderable {
         intensityAt(index, front, RUN_HEAD, RUN_TAIL),
         intensityAt(index, secondFront, RUN_HEAD, RUN_TAIL),
       )
-      const running = tint(this._backgroundColor, this._color, intensity * 0.14 * runningOpacity)
-      buffer.setCell(
-        this.screenX + index,
-        this.screenY,
-        " ",
-        RGBA.defaultForeground(),
-        tint(running, this._completionColor, completionOpacity * 0.18),
+      const glow = this._glow ? unreadGlowIntensity(index, this.width) * GLOW_OPACITY : 0
+      const running = intensity * 0.14 * runningOpacity
+      const completion = completionOpacity * 0.18
+      blendTabPulseColor(
+        this.renderColor,
+        this._backgroundColor,
+        this._glowColor,
+        this._color,
+        this._completionColor,
+        glow,
+        running,
+        completion,
       )
+      buffer.setCell(this.screenX + index, this.screenY, " ", DEFAULT_FOREGROUND, this.renderColor)
     }
   }
 }
@@ -187,7 +242,9 @@ export function TabPulse(props: {
   enabled?: boolean
   active: boolean
   complete?: boolean
+  glow?: boolean
   color: RGBA
+  glowColor?: RGBA
   completionColor?: RGBA
   backgroundColor: RGBA
 }) {
@@ -199,7 +256,9 @@ export function TabPulse(props: {
       enabled={props.enabled ?? true}
       active={props.active}
       complete={props.complete ?? false}
+      glow={props.glow ?? false}
       color={props.color}
+      glowColor={props.glowColor ?? props.color}
       completionColor={props.completionColor ?? props.color}
       backgroundColor={props.backgroundColor}
     />

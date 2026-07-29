@@ -116,6 +116,10 @@ export interface Page {
 export interface SlotMap {
   readonly app: Readonly<Record<string, never>>
   readonly "home.footer": Readonly<Record<string, never>>
+  readonly "prompt.footer.end": {
+    readonly sessionID?: string
+    readonly mode: "normal" | "shell"
+  }
   readonly "sidebar.content": {
     readonly sessionID: string
   }
@@ -230,11 +234,11 @@ export interface DialogSelectOptions<Value> {
 }
 
 export interface Dialog {
-  /** Shows a dialog and returns a function that closes it. */
-  show(render: () => JSX.Element, onClose?: () => void): () => void
-  /** Sets the presentation options for this plugin's active dialog. */
+  /** Shows a dialog. */
+  show(render: () => JSX.Element, onClose?: () => void): void
+  /** Sets the active dialog's presentation options. */
   set(options: DialogOptions): void
-  /** Closes this plugin's active dialog. */
+  /** Closes the active dialog. */
   clear(): void
   alert(options: DialogAlertOptions): Promise<void>
   confirm(options: DialogConfirmOptions): Promise<boolean | undefined>

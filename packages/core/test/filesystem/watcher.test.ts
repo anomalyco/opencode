@@ -30,9 +30,12 @@ describe("Watcher.testLayer", () => {
     Effect.gen(function* () {
       const watcher = yield* Watcher.Service
       const test = yield* Watcher.Test
-      const received = yield* watcher
-        .subscribe({ path: "/root", type: "directory" })
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      const updates = yield* watcher.subscribe({ path: "/root", type: "directory" })
+      const received = yield* updates.pipe(
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
       yield* Effect.yieldNow
 
       yield* test.emit({ type: "update", path: "/root/file.md" })
@@ -72,9 +75,10 @@ describe("Watcher lifecycle", () => {
       const interrupted = yield* Deferred.make<void>()
       yield* Effect.gen(function* () {
         const watcher = yield* Watcher.Service
-        const consumer = yield* watcher
-          .subscribe({ path: "/pending", type: "directory" })
-          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        const consumer = yield* watcher.subscribe({ path: "/pending", type: "directory" }).pipe(
+          Effect.flatMap(Stream.runDrain),
+          Effect.forkScoped({ startImmediately: true }),
+        )
         yield* Deferred.await(started)
         yield* Fiber.interrupt(consumer)
         expect(yield* Deferred.isDone(interrupted)).toBe(true)
@@ -95,9 +99,10 @@ describe("Watcher lifecycle", () => {
     return Effect.gen(function* () {
       const watcher = yield* Watcher.Service
       const consume = () =>
-        watcher
-          .subscribe({ path: "/shared", type: "directory" })
-          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        watcher.subscribe({ path: "/shared", type: "directory" }).pipe(
+          Effect.flatMap(Stream.runDrain),
+          Effect.forkScoped({ startImmediately: true }),
+        )
       const first = yield* consume()
       const second = yield* consume()
       yield* Effect.yieldNow
@@ -117,9 +122,8 @@ describe("Watcher lifecycle", () => {
     return Effect.gen(function* () {
       const consumer = yield* Effect.gen(function* () {
         const watcher = yield* Watcher.Service
-        const consumer = yield* watcher
-          .subscribe({ path: "/active", type: "directory" })
-          .pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+        const updates = yield* watcher.subscribe({ path: "/active", type: "directory" })
+        const consumer = yield* updates.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
         yield* Effect.yieldNow
         expect(counts.subscribes).toBe(1)
         expect(counts.unsubscribes).toBe(0)
@@ -250,9 +254,12 @@ describeWatcher("LocationWatcher", () => {
         const watcher = yield* Watcher.Service
         const target = path.join(directory, "opencode.json")
         const sibling = path.join(directory, "other.json")
-        const update = yield* watcher
-          .subscribe({ path: target, type: "file" })
-          .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+        const updates = yield* watcher.subscribe({ path: target, type: "file" })
+        const update = yield* updates.pipe(
+          Stream.take(1),
+          Stream.runHead,
+          Effect.forkScoped({ startImmediately: true }),
+        )
         yield* fs.writeFileString(sibling, "sibling")
         const writes = yield* Effect.suspend(() => fs.writeFileString(target, `target-${Math.random()}`)).pipe(
           Effect.repeat(Schedule.spaced("10 millis")),

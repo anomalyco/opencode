@@ -1107,7 +1107,7 @@ describe("SessionRunnerLLM", () => {
       systemBaseline = "Latest context"
       yield* runPrompt(session, "Third")
 
-      const forked = yield* session.fork({ sessionID, messageID: second.id })
+      const forked = yield* session.fork({ sessionID, boundary: { type: "before", messageID: second.id } })
       expect(
         yield* (yield* Database.Service).db
           .select()
@@ -1115,14 +1115,13 @@ describe("SessionRunnerLLM", () => {
           .where(eq(InstructionStateTable.session_id, forked.id))
           .get(),
       ).toMatchObject({
-        initial_values: { "test/context": Instructions.hash("Initial context") },
+        initial_values: { "test/context": Instructions.hash("Changed context") },
         current_values: { "test/context": Instructions.hash("Changed context") },
       })
       yield* session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
       yield* session.resume(forked.id)
 
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
-      expect(systemTexts(requests.at(-1)!)).toContain("Changed context")
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Changed context"])
       expect(systemTexts(requests.at(-1)!)).toContain("Latest context")
 
       const { db } = yield* Database.Service
@@ -1151,19 +1150,22 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("caps nested fork instruction ancestry at the selected message", () =>
+  it.effect("keeps nested forks self-contained", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* runPrompt(session, "First")
       systemBaseline = "Changed context"
       const second = yield* runPrompt(session, "Second")
 
-      const child = yield* session.fork({ sessionID, messageID: second.id })
+      const child = yield* session.fork({ sessionID, boundary: { type: "before", messageID: second.id } })
       const inheritedFirst = (yield* session.messages({ sessionID: child.id })).find(
         (message) => message.type === "user" && message.text === "First",
       )
       if (!inheritedFirst) return yield* Effect.die(new Error("Nested fork boundary message not found"))
-      const grandchild = yield* session.fork({ sessionID: child.id, messageID: inheritedFirst.id })
+      const grandchild = yield* session.fork({
+        sessionID: child.id,
+        boundary: { type: "before", messageID: inheritedFirst.id },
+      })
 
       expect(
         yield* (yield* Database.Service).db
@@ -1172,8 +1174,8 @@ describe("SessionRunnerLLM", () => {
           .where(eq(InstructionStateTable.session_id, grandchild.id))
           .get(),
       ).toMatchObject({
-        initial_values: { "test/context": Instructions.hash("Initial context") },
-        current_values: { "test/context": Instructions.hash("Initial context") },
+        initial_values: { "test/context": Instructions.hash("Changed context") },
+        current_values: { "test/context": Instructions.hash("Changed context") },
       })
       return undefined
     }),

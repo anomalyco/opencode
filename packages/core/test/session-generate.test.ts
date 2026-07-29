@@ -49,7 +49,6 @@ const sessionID = SessionSchema.ID.make("ses_generate_test")
 
 const model = Model.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
 const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die(new Error("unused")),
   stream: () => Stream.die(new Error("unused")),
   generate: (request) =>
     Effect.sync(() => {

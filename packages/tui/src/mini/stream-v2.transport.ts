@@ -186,7 +186,6 @@ function pendingPrompt(item: SessionPendingInfo): FooterQueuedPrompt | undefined
     messageID: item.id,
     prompt: { messageID: item.id, text: item.data.text, parts: [] },
     delivery: item.delivery,
-    admittedSeq: item.admittedSeq,
   }
 }
 
@@ -517,7 +516,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   const syncPending = () => {
-    const prompts = [...state.pending.values()].toSorted((left, right) => left.admittedSeq - right.admittedSeq)
+    const prompts = [...state.pending.values()]
     input.trace?.write("ui.patch", { pending: prompts.length })
     input.footer.event({ type: "queued.prompts", prompts })
   }
@@ -905,7 +904,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (event.type === "session.input.admitted") {
       if (event.data.input.type !== "user") return
       mergePending({
-        admittedSeq: event.durable.seq,
         id: event.data.inputID,
         sessionID: event.data.sessionID,
         timeCreated: event.created,

@@ -9,23 +9,14 @@ import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "ef
 import { lazy } from "../util/lazy"
 import { watch as watchFileSystem } from "node:fs"
 import path from "path"
-import { createRequire } from "node:module"
-
-declare const OPENCODE_LIBC: string | undefined
+import loadBinding from "./watcher-binding"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
-const require = createRequire(import.meta.url)
-
 export const Event = { Updated: FileSystem.Event.Changed }
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
   try {
-    const libc = typeof OPENCODE_LIBC === "undefined" ? undefined : OPENCODE_LIBC
-    const binding = require(
-      process.env.OPENCODE_PARCEL_WATCHER_PATH ??
-        `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${libc || "glibc"}` : ""}`,
-    )
-    return createWrapper(binding) as typeof import("@parcel/watcher")
+    return createWrapper(loadBinding()) as typeof import("@parcel/watcher")
   } catch {
     return
   }
@@ -68,7 +59,7 @@ export interface NativeInterface {
 export class Native extends Context.Service<Native, NativeInterface>()("@opencode/Watcher/Native") {}
 
 export interface Interface {
-  readonly subscribe: (input: WatchInput) => Stream.Stream<Update>
+  readonly subscribe: (input: WatchInput) => Effect.Effect<Stream.Stream<Update>>
 }
 
 export const Options = Schema.Struct({
@@ -92,7 +83,7 @@ export const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       if (options?.enabled === false) {
-        return Service.of({ subscribe: () => Stream.empty })
+        return Service.of({ subscribe: () => Effect.succeed(Stream.empty) })
       }
       const native = yield* Native
 
@@ -140,11 +131,19 @@ export const layer = (options?: Options) =>
       const subscribe = (input: WatchInput) => {
         const target = path.resolve(input.path)
         const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
-        return Stream.unwrap(
-          RcMap.get(watchers, { type: input.type, target, ignore }).pipe(
-            Effect.map((pubsub) => Stream.fromPubSub(pubsub)),
-          ),
-        )
+        return Effect.gen(function* () {
+          yield* Effect.logInfo("watcher subscribe", {
+            path: target,
+            type: input.type,
+            ignores: ignore.length,
+          })
+          return Stream.unwrap(
+            Effect.gen(function* () {
+              const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore })
+              return Stream.fromPubSub(pubsub)
+            }),
+          )
+        })
       }
 
       return Service.of({ subscribe })

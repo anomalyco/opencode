@@ -10,11 +10,12 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionSchema } from "./schema"
-import { InstructionBlobTable, InstructionStateTable, SessionTable } from "./sql"
+import { InstructionBlobTable, InstructionStateTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
 const decodeInstructionsUpdated = Schema.decodeUnknownSync(SessionEvent.InstructionsUpdated.data)
+const decodeForked = Schema.decodeUnknownSync(SessionEvent.Forked.data)
 
 export interface Observation extends Instructions.Admission {
   readonly sessionID: SessionSchema.ID
@@ -90,6 +91,26 @@ export const apply = Effect.fn("InstructionState.apply")(function* (
     .update(InstructionStateTable)
     .set({ through_seq: seq, current_values: current })
     .where(eq(InstructionStateTable.session_id, sessionID))
+    .run()
+    .pipe(Effect.orDie)
+})
+
+export const initialize = Effect.fn("InstructionState.initialize")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  seq: number,
+  values: Instructions.Values,
+) {
+  yield* db
+    .insert(InstructionStateTable)
+    .values({
+      session_id: sessionID,
+      epoch_start: seq,
+      through_seq: seq,
+      initial_values: values,
+      current_values: values,
+    })
+    .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
 })
@@ -255,6 +276,14 @@ const stateFromEvents = Effect.fnUntraced(function* (db: DatabaseService, sessio
   return folded ? foldedState(sessionID, folded) : undefined
 })
 
+export const valuesAt = Effect.fn("InstructionState.valuesAt")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  through: number,
+) {
+  return fold(yield* instructionEvents(db, sessionID, through))?.current
+})
+
 const latestRelevantSequence = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* db
     .select({ seq: EventTable.seq })
@@ -324,15 +353,23 @@ const revertedEventType = Bus.versionedType(
   SessionEvent.RevertEvent.Committed.type,
   SessionEvent.RevertEvent.Committed.durable.version,
 )
-const relevantEventTypes = [instructionEventType, compactionEventType, movedEventType, revertedEventType]
+const forkedEventType = Bus.versionedType(SessionEvent.Forked.type, SessionEvent.Forked.durable.version)
+const relevantEventTypes = [
+  forkedEventType,
+  instructionEventType,
+  compactionEventType,
+  movedEventType,
+  revertedEventType,
+]
 
 type InstructionEventRow = typeof EventTable.$inferSelect
 
 const instructionEvents = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
+  through?: number,
 ): Effect.fn.Return<ReadonlyArray<InstructionEventRow>> {
-  return yield* eventRows(db, sessionID, relevantEventTypes)
+  return yield* eventRows(db, sessionID, relevantEventTypes, undefined, through)
 })
 
 const instructionUpdatesAfter = Effect.fnUntraced(function* (
@@ -348,48 +385,22 @@ const eventRows = Effect.fnUntraced(function* (
   sessionID: SessionSchema.ID,
   types: ReadonlyArray<string>,
   after?: number,
-): Effect.fn.Return<ReadonlyArray<InstructionEventRow>> {
-  const segments = (yield* lineage(db, sessionID)).filter(
-    (segment) => after === undefined || segment.through === undefined || segment.through > after,
-  )
-  return (yield* Effect.forEach(segments, (segment) =>
-    db
-      .select()
-      .from(EventTable)
-      .where(
-        and(
-          eq(EventTable.aggregate_id, segment.sessionID),
-          inArray(EventTable.type, types),
-          segment.through === undefined ? undefined : lte(EventTable.seq, segment.through),
-          after === undefined ? undefined : gt(EventTable.seq, after),
-        ),
-      )
-      .orderBy(asc(EventTable.seq))
-      .all()
-      .pipe(Effect.orDie),
-  )).flat()
-})
-
-const lineage = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
   through?: number,
-): Effect.fn.Return<ReadonlyArray<{ readonly sessionID: SessionSchema.ID; readonly through?: number }>> {
-  const session = yield* db
-    .select({ parentID: SessionTable.fork_session_id, forkSeq: SessionTable.fork_seq })
-    .from(SessionTable)
-    .where(eq(SessionTable.id, sessionID))
-    .get()
+): Effect.fn.Return<ReadonlyArray<InstructionEventRow>> {
+  return yield* db
+    .select()
+    .from(EventTable)
+    .where(
+      and(
+        eq(EventTable.aggregate_id, sessionID),
+        inArray(EventTable.type, types),
+        after === undefined ? undefined : gt(EventTable.seq, after),
+        through === undefined ? undefined : lte(EventTable.seq, through),
+      ),
+    )
+    .orderBy(asc(EventTable.seq))
+    .all()
     .pipe(Effect.orDie)
-  const inherited =
-    session?.parentID && session.forkSeq !== null
-      ? yield* lineage(
-          db,
-          session.parentID,
-          through === undefined ? session.forkSeq : Math.min(session.forkSeq, through),
-        )
-      : []
-  return [...inherited, { sessionID, ...(through === undefined ? {} : { through }) }]
 })
 
 function fold(rows: ReadonlyArray<InstructionEventRow>) {
@@ -402,6 +413,12 @@ function fold(rows: ReadonlyArray<InstructionEventRow>) {
       }
     | undefined
   >((state, row) => {
+    if (row.type === forkedEventType) {
+      const instructions = decodeForked(row.data).instructions
+      return instructions
+        ? { epochStart: row.seq, throughSeq: row.seq, initial: instructions, current: instructions }
+        : undefined
+    }
     if (row.type === movedEventType || row.type === revertedEventType) return undefined
     if (row.type === compactionEventType)
       return state

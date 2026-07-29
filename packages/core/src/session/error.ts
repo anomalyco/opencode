@@ -10,6 +10,14 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
   sessionID: SessionSchema.ID,
 }) {}
 
+export class ForkEmptyError extends Schema.TaggedErrorClass<ForkEmptyError>()("Session.ForkEmptyError", {
+  sessionID: SessionSchema.ID,
+}) {
+  override get message() {
+    return `Cannot fork empty session: ${this.sessionID}`
+  }
+}
+
 export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,

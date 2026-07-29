@@ -52,8 +52,8 @@ import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
-import { contextUsage, formatContextUsage } from "../../util/session"
 import { abbreviateHome } from "../../runtime"
+import { PluginSlot } from "../../plugin/context"
 
 registerOpencodeSpinner()
 
@@ -92,11 +92,6 @@ export type PromptRef = {
   focus(): void
   submit(): void
 }
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
 
 const DRAFT_RETENTION_MIN_CHARS = 20
 
@@ -170,22 +165,9 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
-  const activeSubagents = createMemo(() => {
-    if (!props.sessionID) return 0
-    return data.session
-      .family(props.sessionID)
-      .filter((id) => id !== props.sessionID && data.session.status(id) === "running").length
-  })
-  const runningShells = createMemo(
-    () =>
-      data.shell.list(currentLocation.current).filter((shell) => shell.metadata.sessionID === props.sessionID).length,
-  )
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = Keymap.use()
-  const agentShortcut = Keymap.useShortcut("agent.cycle")
-  const paletteShortcut = Keymap.useShortcut("command.palette.show")
-  const liveWorkShortcut = Keymap.useShortcut("session.child.first")
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
@@ -299,42 +281,6 @@ export function Prompt(props: PromptProps) {
     if (!input || input.isDestroyed) return
     if (props.disabled) input.cursorColor = theme.background.surface.offset
     if (!props.disabled) input.cursorColor = theme.text.default
-  })
-
-  const usage = createMemo(() => {
-    if (!props.sessionID) return
-    const session = data.session.get(props.sessionID)
-    if (!session) return
-    const cost = data.session.cost(props.sessionID)
-    const formattedCost = cost > 0 ? money.format(cost) : undefined
-    const context = contextUsage(
-      data.session.message.list(props.sessionID),
-      data.location.model.list(session.location),
-      session.revert?.messageID,
-    )
-    return {
-      context: context ? formatContextUsage(context.tokens, context.percent) : undefined,
-      cost: formattedCost,
-    }
-  })
-
-  const subagentStatusLabel = createMemo(() => {
-    const agents = activeSubagents()
-    if (!agents) return undefined
-    return `${agents} subagent${agents === 1 ? "" : "s"}`
-  })
-  const shellStatusLabel = createMemo(() => {
-    const shells = runningShells()
-    if (!shells) return undefined
-    return `${shells} shell${shells === 1 ? "" : "s"}`
-  })
-  const liveWorkStatusVisible = createMemo(() => Boolean(subagentStatusLabel() || shellStatusLabel()))
-
-  // Far-right footer cluster: live work counts lead, then context/cost usage.
-  // When empty, the cluster falls back to the hotkey hints.
-  const statusItems = createMemo(() => {
-    const stats = usage()
-    return [stats?.context, stats?.cost].filter(Boolean)
   })
 
   const [store, setStore] = createStore<{
@@ -1603,47 +1549,11 @@ export function Prompt(props: PromptProps) {
               </text>
             )}
           </Show>
-          <Switch>
-            <Match when={store.mode === "normal"}>
-              <Switch>
-                <Match when={liveWorkStatusVisible() || statusItems().length > 0}>
-                  <text fg={theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
-                    <Show when={liveWorkStatusVisible() && liveWorkShortcut()}>
-                      {(shortcut) => <span style={{ fg: theme.text.default }}>{shortcut()} </span>}
-                    </Show>
-                    <Show when={subagentStatusLabel()}>
-                      {(label) => <span style={{ fg: theme.text.subdued }}>{label()}</span>}
-                    </Show>
-                    <Show when={subagentStatusLabel() && shellStatusLabel()}>
-                      <span style={{ fg: theme.text.subdued }}> · </span>
-                    </Show>
-                    <Show when={shellStatusLabel()}>
-                      {(label) => <span style={{ fg: theme.text.subdued }}>{label()}</span>}
-                    </Show>
-                    <Show when={liveWorkStatusVisible() && statusItems().length > 0}>
-                      <span style={{ fg: theme.text.subdued }}> · </span>
-                    </Show>
-                    <Show when={statusItems().length > 0}>
-                      <span style={{ fg: theme.text.subdued }}>{statusItems().join(" · ")}</span>
-                    </Show>
-                  </text>
-                </Match>
-                <Match when={true}>
-                  <text fg={theme.text.default} flexShrink={0}>
-                    {agentShortcut()} <span style={{ fg: theme.text.subdued }}>agents</span>
-                  </text>
-                </Match>
-              </Switch>
-              <text fg={theme.text.default} flexShrink={0}>
-                {paletteShortcut()} <span style={{ fg: theme.text.subdued }}>commands</span>
-              </text>
-            </Match>
-            <Match when={store.mode === "shell"}>
-              <text fg={theme.text.default} flexShrink={0}>
-                esc <span style={{ fg: theme.text.subdued }}>exit shell mode</span>
-              </text>
-            </Match>
-          </Switch>
+          <PluginSlot
+            name="prompt.footer.end"
+            input={{ sessionID: props.sessionID, mode: store.mode }}
+            mode="replace"
+          />
         </box>
       </box>
       <Autocomplete

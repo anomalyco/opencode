@@ -178,7 +178,8 @@ export namespace ModelCompatibility {
   export const make = (input: Input) => (input instanceof ModelCompatibility ? input : new ModelCompatibility(input))
 }
 
-export class Model {
+export class Model<Options extends ProviderOptions = ProviderOptions> {
+  declare protected readonly _ProviderOptions: Options
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute
@@ -193,8 +194,8 @@ export class Model {
     this.compatibility = input.compatibility
   }
 
-  static make(input: Model.Input) {
-    return new Model({
+  static make<Options extends ProviderOptions = ProviderOptions>(input: Model.Input) {
+    return new Model<Options>({
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
@@ -203,7 +204,7 @@ export class Model {
     })
   }
 
-  static input(model: Model): Model.ConstructorInput {
+  static input<Options extends ProviderOptions>(model: Model<Options>): Model.ConstructorInput {
     return {
       id: model.id,
       provider: model.provider,
@@ -213,9 +214,9 @@ export class Model {
     }
   }
 
-  static update(model: Model, patch: Partial<Model.Input>) {
+  static update<Options extends ProviderOptions>(model: Model<Options>, patch: Partial<Model.Input>) {
     if (Object.keys(patch).length === 0) return model
-    return Model.make({
+    return Model.make<Options>({
       ...Model.input(model),
       ...patch,
     })
@@ -240,6 +241,8 @@ export namespace Model {
 }
 
 export type ModelInput = Model.Input
+
+export type ModelProviderOptions<SelectedModel> = SelectedModel extends Model<infer Options> ? Options : never
 
 export const ModelSchema = Schema.declare((value): value is Model => value instanceof Model, { expected: "LLM.Model" })
 

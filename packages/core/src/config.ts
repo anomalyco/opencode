@@ -393,7 +393,8 @@ export const layer = (options?: Options) => Layer.effect(
         const key = JSON.stringify(target)
         if (watched.has(key)) continue
         watched.add(key)
-        yield* watcher.subscribe(target).pipe(
+        const stream = yield* watcher.subscribe(target)
+        yield* stream.pipe(
           Stream.runForEach((update) => PubSub.publish(updates, update)),
           Effect.forkScoped({ startImmediately: true }),
         )

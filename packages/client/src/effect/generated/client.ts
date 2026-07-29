@@ -329,7 +329,7 @@ const Endpoint5_4 = (raw: RawClient["server.session"]) => (input: Endpoint5_4Inp
 
 const Endpoint5_5 = (raw: RawClient["server.session"]) => (input: Endpoint5_5Input) =>
   preserveEffect<Endpoint5_5Output>()(
-    raw["session.fork"]({ params: { sessionID: input["sessionID"] }, payload: { messageID: input["messageID"] } }).pipe(
+    raw["session.fork"]({ params: { sessionID: input["sessionID"] }, payload: { boundary: input["boundary"] } }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),

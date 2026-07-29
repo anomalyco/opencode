@@ -131,7 +131,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.fork",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID }).pipe(
+            data: yield* session.fork({ sessionID: ctx.params.sessionID, boundary: ctx.payload.boundary }).pipe(
               Effect.catchTag(
                 "Session.NotFoundError",
                 (error) =>
@@ -148,6 +148,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     messageID: error.messageID,
                     message: `Message not found: ${error.messageID}`,
                   }),
+              ),
+              Effect.catchTag(
+                "Session.ForkEmptyError",
+                (error) => new InvalidRequestError({ message: error.message, kind: "empty_session" }),
               ),
             ),
           }

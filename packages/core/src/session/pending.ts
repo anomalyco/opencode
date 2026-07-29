@@ -53,7 +53,6 @@ export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict
 
 const fromRow = (row: typeof SessionPendingTable.$inferSelect): Info => {
   const base = {
-    admittedSeq: row.admitted_seq,
     id: SessionMessage.ID.make(row.id),
     sessionID: SessionSchema.ID.make(row.session_id),
     timeCreated: DateTime.makeUnsafe(row.time_created),
@@ -134,7 +133,6 @@ const promotedFromHistory = Effect.fn("SessionPending.promotedFromHistory")(func
     const decoded = decodeAdmittedEvent(row.data)
     if (decoded._tag !== "Some" || decoded.value.inputID !== id) continue
     const base = {
-      admittedSeq: row.seq,
       id,
       sessionID,
       timeCreated: DateTime.makeUnsafe(row.created),
@@ -172,10 +170,7 @@ export const admit = Effect.fn("SessionPending.admit")(function* (
     })
     .pipe(
       Effect.flatMap((event) => {
-        if (event.durable === undefined)
-          return Effect.die(new Error("Session input admission event is missing aggregate sequence"))
         const base = {
-          admittedSeq: event.durable.seq,
           id: request.id,
           sessionID: request.sessionID,
           timeCreated: event.created,

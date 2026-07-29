@@ -50,14 +50,14 @@ export const configure = (input: Config = {}) => {
     })
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
     image,
     configure,
   }
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsInput>["model"] = (modelID, settings) =>
   configure({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL,

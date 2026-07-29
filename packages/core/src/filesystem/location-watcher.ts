@@ -47,13 +47,12 @@ const layer = Layer.effect(
       const home = path.resolve(location.directory) === path.resolve(os.homedir())
 
       if (!home && location.vcs) {
-        yield* watcher
-          .subscribe({
-            path: location.directory,
-            type: "directory",
-            ignore: [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)],
-          })
-          .pipe(Stream.runForEach(publish), Effect.forkScoped)
+        const updates = yield* watcher.subscribe({
+          path: location.directory,
+          type: "directory",
+          ignore: [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)],
+        })
+        yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
       }
       if (home) {
         yield* Effect.logInfo("location watcher skipped home directory", { directory: location.directory })
@@ -68,9 +67,8 @@ const layer = Layer.effect(
           const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
             (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
           )
-          yield* watcher
-            .subscribe({ path: vcs, type: "directory", ignore })
-            .pipe(Stream.runForEach(publish), Effect.forkScoped)
+          const updates = yield* watcher.subscribe({ path: vcs, type: "directory", ignore })
+          yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
         }
       }
     }).pipe(

@@ -22,6 +22,7 @@ import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
 import { SessionPending } from "./session-pending.js"
 import { Project } from "./project.js"
+import { SessionFork } from "./session-fork.js"
 
 export { FileAttachment }
 
@@ -127,8 +128,8 @@ export const Forked = Event.durable({
   schema: {
     ...Base,
     parentID: SessionID,
-    parentSeq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)),
-    from: SessionMessage.ID.pipe(optional),
+    boundary: SessionFork.Boundary,
+    instructions: Instruction.Values.pipe(optional),
   },
 })
 export type Forked = typeof Forked.Type

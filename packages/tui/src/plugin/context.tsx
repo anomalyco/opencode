@@ -48,9 +48,16 @@ type State =
   | { readonly target: string; readonly status: "unsupported" }
   | { readonly target: string; readonly status: "failed"; readonly error: string }
 
+type RegisteredPlugin = {
+  readonly id: string
+  readonly source: "builtin" | "external"
+  readonly active: boolean
+}
+
 type Value = {
   readonly ready: () => boolean
   readonly list: () => ReadonlyArray<State>
+  readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
   readonly slot: <Name extends SlotName>(name: Name) => ReadonlyArray<Slot<Name>>
   readonly activate: (id: string) => Promise<boolean>
@@ -59,8 +66,8 @@ type Value = {
 
 type Dispose = () => Promise<void>
 type Registration = {
-  target: string
   plugin: Plugin.Definition
+  source: RegisteredPlugin["source"]
   options?: Readonly<Record<string, any>>
   active: boolean
   routes: Record<string, Page>
@@ -107,28 +114,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     })
     const owned: Dispose[] = []
     let context: Context
-    let activeDialog: symbol | undefined
     const dialogApi: Dialog = {
       show(render, onClose) {
-        const token = Symbol()
-        let closed = false
-        activeDialog = token
-        dialog.replace(
-          () => <PluginContextProvider value={context}>{render()}</PluginContextProvider>,
-          () => {
-            if (closed) return
-            closed = true
-            if (activeDialog === token) activeDialog = undefined
-            onClose?.()
-          },
-        )
-        return () => {
-          if (closed || activeDialog !== token) return
-          dialog.clear()
-        }
+        dialog.replace(() => <PluginContextProvider value={context}>{render()}</PluginContextProvider>, onClose)
       },
       set(options) {
-        if (!activeDialog) return
         dialog.setSize(options.size ?? "medium")
         dialog.setCentered(options.centered ?? false)
       },
@@ -224,7 +214,6 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         toast.show({ ...options, variant: options.variant ?? "info" })
       },
     }
-    owned.push(async () => dialogApi.clear())
     context = {
       options: item.options ?? {},
       get location() {
@@ -365,8 +354,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
 
     for (const plugin of builtins) {
       setStore("registrations", plugin.id, {
-        target: plugin.id,
         plugin,
+        source: "builtin",
         active: false,
         routes: {},
         slots: {},
@@ -410,23 +399,24 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         continue
       }
 
-      const item = { target, plugin, options }
-      setStore("registrations", item.plugin.id, {
-        ...item,
+      setStore("registrations", plugin.id, {
+        plugin,
+        source: "external",
+        options,
         active: false,
         routes: {},
         slots: {},
         cleanups: [],
       })
-      const error = await activate(item.plugin.id).then(
+      const error = await activate(plugin.id).then(
         () => undefined,
         (error) => (error instanceof Error ? error.message : String(error)),
       )
       setStore("states", (items) => [
-        ...items.filter((state) => state.target !== item.target && (!("id" in state) || state.id !== item.plugin.id)),
+        ...items.filter((state) => state.target !== target && (!("id" in state) || state.id !== plugin.id)),
         error
-          ? { target: item.target, status: "failed", error }
-          : { target: item.target, id: item.plugin.id, status: "active" },
+          ? { target, status: "failed", error }
+          : { target, id: plugin.id, status: "active" },
       ])
     }
   }
@@ -460,6 +450,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       value={{
         ready: () => store.ready,
         list: () => store.states,
+        registered: () =>
+          Object.entries(store.registrations).map(([id, plugin]) => ({ id, source: plugin.source, active: plugin.active })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slot: (name) =>
           Object.values(store.registrations).flatMap((registration) =>

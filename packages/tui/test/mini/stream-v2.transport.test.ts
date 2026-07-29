@@ -77,7 +77,6 @@ function durable(sessionID: string, seq = 0, version: 1 | 2 = 1) {
 
 function promptAdmission(input: Parameters<OpenCodeClient["session"]["prompt"]>[0], sessionID = "ses_1") {
   return {
-    admittedSeq: 1,
     id: input.id ?? "msg_prompt",
     sessionID,
     type: "user" as const,
@@ -659,7 +658,6 @@ describe("V2 mini transport", () => {
       pending: {
         ses_1: [
           {
-            admittedSeq: 1,
             id: "msg_queued",
             sessionID: "ses_1",
             timeCreated: 1,
@@ -680,9 +678,9 @@ describe("V2 mini transport", () => {
     const pending = () =>
       ui.events
         .findLast((item) => item.type === "queued.prompts")
-        ?.prompts.map((item) => [item.messageID, item.delivery, item.admittedSeq])
+        ?.prompts.map((item) => [item.messageID, item.delivery])
 
-    expect(pending()).toEqual([["msg_queued", "queue", 1]])
+    expect(pending()).toEqual([["msg_queued", "queue"]])
     events.push({
       id: "evt_promoted",
       created: 2,
@@ -697,7 +695,7 @@ describe("V2 mini transport", () => {
     )
     expect(pending()).toEqual([])
     const prompt = spyOn(client.session, "prompt").mockImplementation(
-      (request) => ok({ ...promptAdmission(request), admittedSeq: 2 }) as never,
+      (request) => ok(promptAdmission(request)) as never,
     )
     await transport.queuePromptTurn({
       agent: "review",
@@ -726,8 +724,8 @@ describe("V2 mini transport", () => {
       await Bun.sleep(0)
     }
     expect(pending()).toEqual([
-      ["msg_earlier", "steer", 1],
-      ["msg_next", "queue", 2],
+      ["msg_next", "queue"],
+      ["msg_earlier", "steer"],
     ])
     await transport.close()
   })
@@ -2694,7 +2692,6 @@ describe("V2 mini transport", () => {
         })
       })
       return ok({
-        admittedSeq: 1,
         id: input.id ?? "msg_cmd",
         sessionID: "ses_1",
         type: "user" as const,

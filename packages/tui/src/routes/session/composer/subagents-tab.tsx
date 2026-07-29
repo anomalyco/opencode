@@ -27,6 +27,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   const shortcuts = Keymap.useShortcuts()
 
   const session = createMemo(() => data.session.get(props.sessionID))
+  const [store, setStore] = createStore({ selected: 0, active: true })
 
   const entries = createMemo<SubagentEntry[]>(() => {
     const current = session()
@@ -72,10 +73,9 @@ export function SubagentsTab(props: { sessionID: string }) {
       }
     }
 
-    return result
+    return result.filter((entry) => (store.active ? entry.status === "running" : entry.status !== "running"))
   })
 
-  const [store, setStore] = createStore({ selected: 0 })
   let selectedSessionID = ""
   let wasActive = false
   let scroll: ScrollBoxRenderable | undefined
@@ -90,7 +90,7 @@ export function SubagentsTab(props: { sessionID: string }) {
     if (!active) {
       if (wasActive) {
         selectedSessionID = ""
-        setStore("selected", 0)
+        setStore({ selected: 0, active: true })
       }
       wasActive = false
       return
@@ -140,8 +140,15 @@ export function SubagentsTab(props: { sessionID: string }) {
       label: "Subagents",
       hints: () => {
         const entry = selectedEntry()
-        if (!entry || entry.status !== "running") return []
-        return [{ label: "interrupt", shortcut: shortcuts.get("composer.subagent.interrupt") ?? "" }]
+        return [
+          ...(entry?.status === "running"
+            ? [{ label: "interrupt", shortcut: shortcuts.get("composer.subagent.interrupt") ?? "" }]
+            : []),
+          {
+            label: `show ${store.active ? "inactive" : "active"}`,
+            shortcut: shortcuts.get("composer.subagent.toggle-activity") ?? "",
+          },
+        ]
       },
       onClose: () => {
         const parentID = session()?.parentID
@@ -190,6 +197,16 @@ export function SubagentsTab(props: { sessionID: string }) {
         },
       },
       {
+        id: "composer.subagent.toggle-activity",
+        title: "Toggle active subagents",
+        group: "Composer",
+        bind: "ctrl+a",
+        run() {
+          setStore({ selected: 0, active: !store.active })
+          scroll?.scrollTo(0)
+        },
+      },
+      {
         id: "composer.subagent.interrupt",
         title: "Interrupt subagent",
         group: "Composer",
@@ -206,7 +223,10 @@ export function SubagentsTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("subagents")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={theme.text.subdued}> No subagents</text>}>
+        <Show
+          when={entries().length > 0}
+          fallback={<text fg={theme.text.subdued}> No {store.active ? "active" : "inactive"} subagents</text>}
+        >
           <For each={entries()}>
             {(entry, index) => {
               const active = createMemo(() => index() === selected())

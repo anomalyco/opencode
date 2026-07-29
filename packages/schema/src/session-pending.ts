@@ -3,7 +3,7 @@ export * as SessionPending from "./session-pending.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Prompt } from "./prompt.js"
-import { DateTimeUtcFromMillis, NonNegativeInt } from "./schema.js"
+import { DateTimeUtcFromMillis } from "./schema.js"
 import { SessionDelivery } from "./session-delivery.js"
 import { SessionID } from "./session-id.js"
 import { SessionMessage } from "./session-message.js"
@@ -45,7 +45,6 @@ export const Message = Schema.Union([UserMessage, SyntheticMessage]).pipe(
 export type Message = typeof Message.Type
 
 const Admitted = {
-  admittedSeq: NonNegativeInt,
   id: SessionMessage.ID,
   sessionID: SessionID,
   timeCreated: DateTimeUtcFromMillis,

@@ -407,7 +407,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           addPending({
             id: event.data.inputID,
             sessionID: event.data.sessionID,
-            admittedSeq: event.durable.seq,
             timeCreated: event.created,
             ...event.data.input,
           })
@@ -702,7 +701,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           addPending({
             id: event.data.inputID,
             sessionID: event.data.sessionID,
-            admittedSeq: event.durable.seq,
             timeCreated: event.created,
             type: "compaction",
           })

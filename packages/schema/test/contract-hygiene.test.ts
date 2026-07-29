@@ -54,6 +54,29 @@ describe("contract hygiene", () => {
     ).toEqual({ text: "completed" })
   })
 
+  test("pending session items omit the internal admission sequence", () => {
+    expect(
+      Schema.encodeSync(SessionPending.Info)(
+        Schema.decodeUnknownSync(SessionPending.Info)({
+          admittedSeq: 3,
+          id: "msg_pending",
+          sessionID: "ses_pending",
+          timeCreated: 1,
+          type: "user",
+          data: { text: "hello" },
+          delivery: "steer",
+        }),
+      ),
+    ).toEqual({
+      id: "msg_pending",
+      sessionID: "ses_pending",
+      timeCreated: 1,
+      type: "user",
+      data: { text: "hello" },
+      delivery: "steer",
+    })
+  })
+
   test("forms require at least one field", () => {
     expect(() =>
       Schema.decodeUnknownSync(Form.Info)({

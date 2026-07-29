@@ -9,25 +9,28 @@ import {
   LLMRequest,
   LLMResponse,
   Message,
+  Model,
   SystemPart,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
+  type ModelProviderOptions,
 } from "./schema"
 import { make as makeTool, toDefinitions, type ToolSchema } from "./tool"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
-export type RequestInput = Omit<
+export type RequestInput<SelectedModel extends Model = Model> = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
-  "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
+  "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
 > & {
+  readonly model: SelectedModel
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
   readonly messages?: ReadonlyArray<Message | Message.Input>
   readonly tools?: ReadonlyArray<ToolDefinition.Input>
   readonly toolChoice?: ToolChoice.Input
   readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: ConstructorParameters<typeof LLMRequest>[0]["providerOptions"]
+  readonly providerOptions?: NoInfer<ModelProviderOptions<SelectedModel>>
   readonly http?: HttpOptions.Input
 }
 
@@ -35,7 +38,7 @@ export const generate = LLMClient.generate
 
 export const stream = LLMClient.stream
 
-export const request = (input: RequestInput) => {
+export const request = <const SelectedModel extends Model>(input: RequestInput<SelectedModel>) => {
   const {
     system: requestSystem,
     prompt,
@@ -63,7 +66,7 @@ const GENERATE_OBJECT_TOOL_NAME = "generate_object"
 
 const GENERATE_OBJECT_TOOL_DESCRIPTION = "Return the structured result by calling this tool."
 
-type GenerateObjectBase = Omit<RequestInput, "tools" | "toolChoice">
+type GenerateObjectBase<SelectedModel extends Model = Model> = Omit<RequestInput<SelectedModel>, "tools" | "toolChoice">
 
 export class GenerateObjectResponse<T> {
   constructor(
@@ -80,11 +83,13 @@ export class GenerateObjectResponse<T> {
   }
 }
 
-export interface GenerateObjectOptions<S extends ToolSchema<any>> extends GenerateObjectBase {
+export interface GenerateObjectOptions<S extends ToolSchema<any>, SelectedModel extends Model = Model>
+  extends GenerateObjectBase<SelectedModel> {
   readonly schema: S
 }
 
-export interface GenerateObjectDynamicOptions extends GenerateObjectBase {
+export interface GenerateObjectDynamicOptions<SelectedModel extends Model = Model>
+  extends GenerateObjectBase<SelectedModel> {
   /** Raw JSON Schema object describing the expected output shape. */
   readonly jsonSchema: JsonSchema.JsonSchema
 }
@@ -137,11 +142,11 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
  * 2. `jsonSchema: JsonSchema.JsonSchema` — `.object` is `unknown`. Use when
  *    the schema is only available at runtime (MCP, plugin manifests). Caller validates.
  */
-export function generateObject<S extends ToolSchema<any>>(
-  options: GenerateObjectOptions<S>,
+export function generateObject<const SelectedModel extends Model, S extends ToolSchema<any>>(
+  options: GenerateObjectOptions<S, SelectedModel>,
 ): Effect.Effect<GenerateObjectResponse<Schema.Schema.Type<S>>, LLMError>
-export function generateObject(
-  options: GenerateObjectDynamicOptions,
+export function generateObject<const SelectedModel extends Model>(
+  options: GenerateObjectDynamicOptions<SelectedModel>,
 ): Effect.Effect<GenerateObjectResponse<unknown>, LLMError>
 export function generateObject(options: GenerateObjectOptions<ToolSchema<any>> | GenerateObjectDynamicOptions) {
   if ("schema" in options) {

@@ -244,7 +244,10 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       return {}
     },
     forkSession: async (params) => {
-      const forked = await input.client.session.fork({ sessionID: params.sessionId })
+      const forked = await input.client.session.fork({
+        sessionID: params.sessionId,
+        boundary: { type: "through" },
+      })
       const state = await attach(forked, forked.location.directory, params.mcpServers ?? [])
       await replay(state)
       return { sessionId: state.id, configOptions: configOptions(state) }

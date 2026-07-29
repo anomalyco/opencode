@@ -76,7 +76,6 @@ import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
-import { usePluginRuntime } from "../../plugin/runtime"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
@@ -124,7 +123,6 @@ export function Session() {
     await mkdir(path.dirname(file), { recursive: true })
     await writeFile(file, content)
   }
-  const pluginRuntime = usePluginRuntime()
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const data = useData()
@@ -986,26 +984,15 @@ export function Session() {
                   </Show>
                 </Match>
                 <Match when={!disabled()}>
-                  <pluginRuntime.Slot
-                    name="session_prompt"
-                    mode="replace"
-                    session_id={route.sessionID}
+                  <Prompt
                     visible={true}
-                    disabled={false}
-                    on_submit={toBottom}
                     ref={bind}
-                  >
-                    <Prompt
-                      visible={true}
-                      ref={bind}
-                      disabled={false}
-                      onSubmit={() => {
-                        toBottom()
-                      }}
-                      sessionID={route.sessionID}
-                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
-                    />
-                  </pluginRuntime.Slot>
+                    disabled={false}
+                    onSubmit={() => {
+                      toBottom()
+                    }}
+                    sessionID={route.sessionID}
+                  />
                 </Match>
               </Switch>
             </box>

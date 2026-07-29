@@ -107,7 +107,7 @@ export const configure = (input: ModelOptions = {}) => {
   const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<OpenRouterProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }

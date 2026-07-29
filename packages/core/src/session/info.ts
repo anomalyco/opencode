@@ -8,7 +8,6 @@ import { AbsolutePath, RelativePath } from "../schema"
 import { Workspace } from "../workspace"
 import { SessionSchema } from "./schema"
 import { SessionTable } from "./sql"
-import { SessionMessage } from "./message"
 import { PersistedRevert } from "@opencode-ai/schema/session-revert"
 import { Money } from "@opencode-ai/schema/money"
 
@@ -20,12 +19,13 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
     projectID: Project.ID.make(row.project_id),
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
-    fork: row.fork_session_id
-      ? {
-          sessionID: SessionSchema.ID.make(row.fork_session_id),
-          messageID: row.fork_message_id ? SessionMessage.ID.make(row.fork_message_id) : undefined,
-        }
-      : undefined,
+    fork:
+      row.fork_session_id && row.fork_boundary
+        ? {
+            sessionID: SessionSchema.ID.make(row.fork_session_id),
+            boundary: row.fork_boundary,
+          }
+        : undefined,
     agent: row.agent ? Agent.ID.make(row.agent) : undefined,
     model: row.model
       ? {

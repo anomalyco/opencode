@@ -304,7 +304,6 @@ test("session.pending.list uses the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string }> = []
   const pending = [
     {
-      admittedSeq: 3,
       id: "msg_pending",
       sessionID: "ses_test",
       timeCreated: 1_717_171_717_000,
@@ -547,7 +546,6 @@ const session = {
 
 const admission = {
   data: {
-    admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",
     type: "user",
@@ -559,7 +557,6 @@ const admission = {
 
 const syntheticAdmission = {
   data: {
-    admittedSeq: 1,
     id: "msg_synthetic",
     sessionID: "ses_test",
     type: "synthetic",
@@ -572,7 +569,6 @@ const syntheticAdmission = {
 const compactionAdmission = {
   data: {
     type: "compaction",
-    admittedSeq: 1,
     id: "msg_compaction",
     sessionID: "ses_test",
     timeCreated: 1_717_171_717_000,

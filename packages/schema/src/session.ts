@@ -8,10 +8,10 @@ import { Project } from "./project.js"
 import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionID } from "./session-id.js"
-import { SessionMessage } from "./session-message.js"
 import { Money } from "./money.js"
 import { TokenUsage } from "./token-usage.js"
 import { Revert } from "./session-revert.js"
+import { SessionFork } from "./session-fork.js"
 
 export const ID = SessionID
 export type ID = SessionID
@@ -19,6 +19,10 @@ export type ID = SessionID
 export const Event = SessionEvent
 
 export { Revert }
+export const ForkBoundary = SessionFork.Boundary
+export type ForkBoundary = SessionFork.Boundary
+export const ForkRequestBoundary = SessionFork.RequestBoundary
+export type ForkRequestBoundary = SessionFork.RequestBoundary
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
@@ -26,8 +30,7 @@ export const Info = Schema.Struct({
   parentID: ID.pipe(optional),
   fork: Schema.Struct({
     sessionID: ID,
-    /** Messages before this exclusive boundary are copied into the fork. */
-    messageID: SessionMessage.ID.pipe(optional),
+    boundary: ForkBoundary,
   }).pipe(optional),
   projectID: Project.ID,
   agent: Agent.ID.pipe(optional),

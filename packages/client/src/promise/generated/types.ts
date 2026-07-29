@@ -14,6 +14,8 @@ export type PermissionEffect = "allow" | "deny" | "ask"
 
 export type PluginInfo = { id: string }
 
+export type SessionForkBoundary = { type: "before"; messageID: string } | { type: "through"; messageID: string }
+
 export type MoneyUSD = number
 
 export type TokenUsageInfo = {
@@ -43,13 +45,7 @@ export type PromptMention = { start: number; end: number; text: string }
 
 export type SessionPendingSyntheticData = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
 
-export type SessionPendingCompaction = {
-  admittedSeq: number
-  id: string
-  sessionID: string
-  timeCreated: number
-  type: "compaction"
-}
+export type SessionPendingCompaction = { id: string; sessionID: string; timeCreated: number; type: "compaction" }
 
 export type SessionMessageAgentSelected = {
   id: string
@@ -628,7 +624,7 @@ export type SessionForked = {
   type: "session.forked"
   durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
-  data: { sessionID: string; parentID: string; parentSeq: number; from?: string }
+  data: { sessionID: string; parentID: string; boundary: SessionForkBoundary; instructions?: { [x: string]: string } }
 }
 
 export type SessionInputPromoted = {
@@ -1210,7 +1206,6 @@ export type PromptFileAttachment = {
 export type PromptAgentAttachment = { name: string; mention?: PromptMention }
 
 export type SessionPendingSynthetic = {
-  admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
@@ -1755,7 +1750,7 @@ export type PermissionRuleset = Array<PermissionRule>
 export type SessionInfo = {
   id: string
   parentID?: string
-  fork?: { sessionID: string; messageID?: string }
+  fork?: { sessionID: string; boundary: SessionForkBoundary }
   projectID: string
   agent?: string
   model?: ModelRef
@@ -1966,7 +1961,6 @@ export type AgentInfo = {
 export type SessionsResponse = { data: Array<SessionInfo>; cursor: { previous?: string | null; next?: string | null } }
 
 export type SessionPendingUser = {
-  admittedSeq: number
   id: string
   sessionID: string
   timeCreated: number
@@ -2702,7 +2696,9 @@ export type SessionRemoveOutput = void
 
 export type SessionForkInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly messageID?: { readonly messageID?: string | undefined }["messageID"]
+  readonly boundary: {
+    readonly boundary: { readonly type: "before"; readonly messageID: string } | { readonly type: "through" }
+  }["boundary"]
 }
 
 export type SessionForkOutput = { data: SessionInfo }["data"]

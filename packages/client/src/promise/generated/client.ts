@@ -510,7 +510,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/fork`,
-            body: { messageID: input["messageID"] },
+            body: { boundary: input["boundary"] },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,

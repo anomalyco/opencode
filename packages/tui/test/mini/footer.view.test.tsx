@@ -820,7 +820,7 @@ test("direct command panel keeps completed subagents available", async () => {
   }
 })
 
-test("direct subagent panel renders active subagents", async () => {
+test("direct subagent panel toggles between active and inactive subagents", async () => {
   const [tabs] = createSignal([
     subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" }),
     subagent({ sessionID: "s-2", label: "General", description: "Write migration plan", status: "completed" }),
@@ -856,12 +856,22 @@ test("direct subagent panel renders active subagents", async () => {
 
     expect(frame).toContain("Select subagent")
     expect(frame).toContain("Inspect auth flow")
-    expect(frame).toContain("Write migration plan")
-    expect(frame).toContain("done")
+    expect(frame).not.toContain("Write migration plan")
+    expect(frame).not.toContain("done")
+    expect(frame).toContain("tab show inactive")
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
-    expect(rows).toBe(8)
+    expect(rows).toBe(7)
+
+    app.mockInput.pressKey("TAB")
+    await app.renderOnce()
+    const inactive = app.captureCharFrame()
+
+    expect(inactive).not.toContain("Inspect auth flow")
+    expect(inactive).toContain("Write migration plan")
+    expect(inactive).toContain("done")
+    expect(inactive).toContain("tab show active")
   } finally {
     app.renderer.destroy()
   }
@@ -909,7 +919,6 @@ test("direct pending panel shows durable delivery without edit actions", async (
       messageID: "m-1",
       prompt: { text: "fix the auth test", parts: [] },
       delivery: "queue" as const,
-      admittedSeq: 1,
     },
   ])
 
@@ -1274,7 +1283,6 @@ test("direct footer shows authoritative pending work while running", async () =>
               messageID: "m-queued",
               prompt: { text: "follow up", parts: [] },
               delivery: "queue",
-              admittedSeq: 1,
             },
           ]}
           theme={() => RUN_THEME_FALLBACK}

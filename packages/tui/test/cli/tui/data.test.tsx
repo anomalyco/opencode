@@ -1346,14 +1346,12 @@ test("restores queued compaction from durable pending input", async () => {
   const sessionID = "session-compaction-queued"
   let pending = [
     {
-      admittedSeq: 3,
       id: "message-compaction-queued",
       sessionID,
       timeCreated: 1,
       type: "compaction" as const,
     },
     {
-      admittedSeq: 4,
       id: "message-compaction-later",
       sessionID,
       timeCreated: 2,
@@ -2474,7 +2472,6 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
       {
         id: messageID,
         sessionID,
-        admittedSeq: 0,
         timeCreated: 0,
         type: "user",
         data: { text: "hello" },

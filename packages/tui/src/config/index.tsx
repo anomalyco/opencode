@@ -120,11 +120,15 @@ export const Info = Schema.Struct({
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
-      tabs: Schema.optional(Schema.Boolean).annotate({
+    }),
+  ).annotate({ description: "Session transcript presentation settings" }),
+  tabs: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
         description: "Use a persistent session tab strip instead of pinned quick-switch sessions",
       }),
     }),
-  ).annotate({ description: "Session transcript presentation settings" }),
+  ).annotate({ description: "Session tab settings" }),
   mini: Schema.optional(
     Schema.Struct({
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({

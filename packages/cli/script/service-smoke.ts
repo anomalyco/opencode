@@ -13,7 +13,7 @@ const directory = path.join(import.meta.dir, "..", "dist", ...(nodeBuild ? ["nod
 const binary = path.join(directory, `opencode2${nodeBuild ? "-node" : ""}${process.platform === "win32" ? ".exe" : ""}`)
 if (!(await Bun.file(binary).exists())) throw new Error(`Missing compiled CLI in ${directory}`)
 
-const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-smoke-"))
+const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-smoke-")))
 const env = {
   ...process.env,
   HOME: root,
@@ -29,6 +29,7 @@ const processes: Array<ReturnType<typeof Bun.spawn>> = []
 const errors: Array<Promise<string>> = []
 let failure: unknown
 try {
+  await fs.mkdir(path.join(root, ".opencode"))
   spawnService()
   spawnService()
   const registration = await waitForRegistration()
@@ -49,6 +50,11 @@ try {
     { signal: AbortSignal.timeout(5_000) },
   )
   if (tokenOpenApi.status !== 200) throw new Error("Compiled application rejected query authentication")
+  if ((await pluginIDs(info.url, headers)).includes("smoke")) throw new Error("Smoke plugin existed before creation")
+  const plugin = path.join(root, ".opencode", "plugins", "smoke.ts")
+  await fs.mkdir(path.dirname(plugin), { recursive: true })
+  await fs.writeFile(plugin, pluginSource())
+  await waitForPlugin(info.url, headers)
 
   const unauthorizedHealth = await fetch(new URL("/api/health", info.url), {
     signal: AbortSignal.timeout(5_000),
@@ -88,6 +94,7 @@ try {
 } finally {
   processes.forEach((process) => process.kill())
   await Promise.all(processes.map((process) => process.exited))
+  if (failure) errors.push(fs.readFile(path.join(root, "data", "opencode", "log", "opencode.log"), "utf8").catch(() => ""))
 }
 
 const output = await Promise.all(errors)
@@ -132,4 +139,32 @@ async function waitForReady(url: string, headers: HeadersInit) {
 
 function exitsWithin(process: Bun.Subprocess, milliseconds: number) {
   return Promise.race([process.exited.then(() => true), Bun.sleep(milliseconds).then(() => false)])
+}
+
+function pluginSource() {
+  return 'export default { id: "smoke", setup: async () => {} }\n'
+}
+
+async function pluginIDs(url: string, headers: HeadersInit) {
+  const endpoint = new URL("/api/plugin", url)
+  endpoint.searchParams.set("location[directory]", root)
+  const response = await fetch(endpoint, { headers, signal: AbortSignal.timeout(5_000) })
+  const body: unknown = await response.json()
+  if (typeof body !== "object" || body === null || !("data" in body) || !Array.isArray(body.data)) {
+    throw new Error("Compiled service returned an invalid plugin list")
+  }
+  return body.data.flatMap((plugin) =>
+    typeof plugin === "object" && plugin !== null && "id" in plugin && typeof plugin.id === "string"
+      ? [plugin.id]
+      : [],
+  )
+}
+
+async function waitForPlugin(url: string, headers: HeadersInit) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    if ((await pluginIDs(url, headers)).includes("smoke")) return
+    await Bun.sleep(25)
+  }
+  throw new Error("Compiled service did not discover the created plugin")
 }

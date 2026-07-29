@@ -136,7 +136,7 @@ export type Endpoint5_4Input = { readonly sessionID: Session.ID }
 export type Endpoint5_4Output = void
 export type SessionRemoveOperation<E = never> = (input: Endpoint5_4Input) => Effect.Effect<Endpoint5_4Output, E>
 
-export type Endpoint5_5Input = { readonly sessionID: Session.ID; readonly messageID?: SessionMessage.ID | undefined }
+export type Endpoint5_5Input = { readonly sessionID: Session.ID; readonly boundary: Session.ForkRequestBoundary }
 export type Endpoint5_5Output = Session.Info
 export type SessionForkOperation<E = never> = (input: Endpoint5_5Input) => Effect.Effect<Endpoint5_5Output, E>
 
@@ -342,8 +342,10 @@ export type Endpoint5_26Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly parentID: Session.ID
-            readonly parentSeq: number
-            readonly from?: SessionMessage.ID | undefined
+            readonly boundary: Session.ForkBoundary
+            readonly instructions?:
+              | { readonly [x: string & Brand.Brand<"Instruction.Key">]: string & Brand.Brand<"Instruction.Hash"> }
+              | undefined
           }
         }
       | {

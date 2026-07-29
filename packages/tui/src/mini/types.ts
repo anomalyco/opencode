@@ -88,7 +88,6 @@ export type FooterQueuedPrompt = {
   messageID: string
   prompt: RunPrompt
   delivery: "steer" | "queue"
-  admittedSeq: number
 }
 
 export type RunAgent = {

@@ -2,13 +2,11 @@ import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useThemes } from "../../context/theme"
 import { useConfig } from "../../config"
-import { usePluginRuntime } from "../../plugin/runtime"
 import { PluginSlot } from "../../plugin/context"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
-  const pluginRuntime = usePluginRuntime()
   const data = useData()
   const theme = useThemes().contextual("elevated")
   const config = useConfig().data
@@ -38,21 +36,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           }}
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <pluginRuntime.Slot
-              name="sidebar_title"
-              mode="single_winner"
-              session_id={props.sessionID}
-              title={session()!.title}
-            >
-              <box paddingRight={1}>
-                <text fg={theme.text.default}>
-                  <b>{session()!.title}</b>
-                </text>
-                <Show when={session()!.location.workspaceID}>
-                  <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>
-                </Show>
-              </box>
-            </pluginRuntime.Slot>
+            <box paddingRight={1}>
+              <text fg={theme.text.default}>
+                <b>{session()!.title}</b>
+              </text>
+              <Show when={session()!.location.workspaceID}>
+                <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>
+              </Show>
+            </box>
             <PluginSlot name="sidebar.content" input={{ sessionID: props.sessionID }} mode="all" />
           </box>
         </scrollbox>

@@ -81,7 +81,6 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
-import { createPluginRuntime, PluginRuntimeProvider, usePluginRuntime } from "./plugin/runtime"
 import { PluginProvider, PluginRoute, PluginSlot, usePlugin, type PackageResolver } from "./plugin/context"
 import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
@@ -275,8 +274,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
       renderer.once("destroy", () => Deferred.doneUnsafe(shutdown, Effect.void))
-      const pluginRuntime = createPluginRuntime()
-
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
@@ -354,49 +351,47 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                               : undefined
                                           }
                                         >
-                                          <PluginRuntimeProvider value={pluginRuntime}>
-                                            <ClientProvider api={api} service={service}>
-                                              <PermissionProvider>
-                                                <DataProvider>
-                                                  <LocationProvider>
-                                                    <SessionTabsProvider>
-                                                      <ThemeProvider mode={mode}>
-                                                        <ThemeErrorToast />
-                                                        <LocalProvider>
-                                                          <PromptStashProvider>
-                                                            <DialogProvider>
-                                                              <FrecencyProvider>
-                                                                <PromptHistoryProvider>
-                                                                  <PromptRefProvider>
-                                                                    <EditorContextProvider>
-                                                                      <AttentionProvider>
-                                                                        <PluginProvider packages={input.packages}>
-                                                                          <App
-                                                                            pair={
-                                                                              input.server.endpoint.auth
-                                                                                ? input.server.endpoint.auth
-                                                                                : {
-                                                                                    username: "opencode",
-                                                                                    password: "",
-                                                                                  }
-                                                                            }
-                                                                          />
-                                                                        </PluginProvider>
-                                                                      </AttentionProvider>
-                                                                    </EditorContextProvider>
-                                                                  </PromptRefProvider>
-                                                                </PromptHistoryProvider>
-                                                              </FrecencyProvider>
-                                                            </DialogProvider>
-                                                          </PromptStashProvider>
-                                                        </LocalProvider>
-                                                      </ThemeProvider>
-                                                    </SessionTabsProvider>
-                                                  </LocationProvider>
-                                                </DataProvider>
-                                              </PermissionProvider>
-                                            </ClientProvider>
-                                          </PluginRuntimeProvider>
+                                          <ClientProvider api={api} service={service}>
+                                            <PermissionProvider>
+                                              <DataProvider>
+                                                <LocationProvider>
+                                                  <SessionTabsProvider>
+                                                    <ThemeProvider mode={mode}>
+                                                      <ThemeErrorToast />
+                                                      <LocalProvider>
+                                                        <PromptStashProvider>
+                                                          <DialogProvider>
+                                                            <FrecencyProvider>
+                                                              <PromptHistoryProvider>
+                                                                <PromptRefProvider>
+                                                                  <EditorContextProvider>
+                                                                    <AttentionProvider>
+                                                                      <PluginProvider packages={input.packages}>
+                                                                        <App
+                                                                          pair={
+                                                                            input.server.endpoint.auth
+                                                                              ? input.server.endpoint.auth
+                                                                              : {
+                                                                                  username: "opencode",
+                                                                                  password: "",
+                                                                                }
+                                                                          }
+                                                                        />
+                                                                      </PluginProvider>
+                                                                    </AttentionProvider>
+                                                                  </EditorContextProvider>
+                                                                </PromptRefProvider>
+                                                              </PromptHistoryProvider>
+                                                            </FrecencyProvider>
+                                                          </DialogProvider>
+                                                        </PromptStashProvider>
+                                                      </LocalProvider>
+                                                    </ThemeProvider>
+                                                  </SessionTabsProvider>
+                                                </LocationProvider>
+                                              </DataProvider>
+                                            </PermissionProvider>
+                                          </ClientProvider>
                                         </RouteProvider>
                                       </ToastProvider>
                                     </Keymap.Provider>
@@ -453,7 +448,6 @@ function App(props: { pair?: DialogPairCredentials }) {
   const location = useLocation()
   const exit = useExit()
   const promptRef = usePromptRef()
-  const pluginRuntime = usePluginRuntime()
   const plugins = usePlugin()
   const clipboard = useClipboard()
 
@@ -589,7 +583,7 @@ function App(props: { pair?: DialogPairCredentials }) {
           return
         }
         void client.api.session
-          .fork({ sessionID: match })
+          .fork({ sessionID: match, boundary: { type: "through" } })
           .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
           .catch(toast.error)
       })
@@ -602,7 +596,7 @@ function App(props: { pair?: DialogPairCredentials }) {
     if (forked || !args.sessionID || !args.fork) return
     forked = true
     void client.api.session
-      .fork({ sessionID: args.sessionID })
+      .fork({ sessionID: args.sessionID, boundary: { type: "through" } })
       .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
       .catch(toast.error)
   })
@@ -1203,7 +1197,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
-              <Show when={sessionTabs.enabled() && sessionTabs.tabs().length > 1 && route.data.type !== "plugin"}>
+              <Show when={sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"}>
                 <SessionTabs />
               </Show>
               <Switch>

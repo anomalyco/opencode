@@ -4,6 +4,7 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../../src"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers"
 import { LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import { it } from "../lib/effect"
 import { dynamicResponse } from "../lib/http"
 import { deltaChunk, finishChunk } from "../lib/openai-chunks"
@@ -182,7 +183,7 @@ describe("Google Vertex providers", () => {
 
   it.effect("protects the Vertex Messages API version from body overlays", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model: GoogleVertexMessages.configure({
             accessToken: "vertex-token",

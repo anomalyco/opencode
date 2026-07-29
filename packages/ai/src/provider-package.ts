@@ -1,4 +1,4 @@
-import type { Model } from "./schema"
+import type { Model, ProviderOptions } from "./schema"
 
 export interface Settings extends Readonly<Record<string, unknown>> {
   readonly headers?: Readonly<Record<string, string>>
@@ -9,8 +9,11 @@ export interface Settings extends Readonly<Record<string, unknown>> {
   }
 }
 
-export interface Definition<ProviderSettings extends Settings = Settings> {
-  readonly model: (modelID: string, settings: ProviderSettings) => Model
+export interface Definition<
+  ProviderSettings extends Settings = Settings,
+  Options extends ProviderOptions = ProviderOptions,
+> {
+  readonly model: (modelID: string, settings: ProviderSettings) => Model<Options>
 }
 
 export * as ProviderPackage from "./provider-package"

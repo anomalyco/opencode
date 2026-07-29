@@ -230,24 +230,9 @@ export const Definitions = {
   "permission.prompt.fullscreen": keybind("ctrl+f", "Toggle permission prompt fullscreen"),
   "plugins.toggle": keybind("space", "Toggle plugin"),
   "dialog.mcp.toggle": keybind("space", "Toggle MCP server"),
-  "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
 
   terminal_suspend: keybind("ctrl+z", "Suspend terminal"),
   terminal_title_toggle: keybind("none", "Toggle terminal title"),
-  plugin_manager: keybind("none", "Open plugin manager dialog"),
-  plugin_install: keybind("none", "Install plugin"),
-
-  which_key_toggle: keybind("ctrl+alt+k", "Toggle which-key panel"),
-  which_key_layout_toggle: keybind("ctrl+alt+shift+k", "Switch which-key layout"),
-  which_key_pending_toggle: keybind("ctrl+alt+shift+p", "Toggle which-key pending preview"),
-  which_key_group_previous: keybind("ctrl+alt+left,ctrl+alt+[", "Previous which-key group"),
-  which_key_group_next: keybind("ctrl+alt+right,ctrl+alt+]", "Next which-key group"),
-  which_key_scroll_up: keybind("ctrl+alt+up,ctrl+alt+p", "Scroll which-key up"),
-  which_key_scroll_down: keybind("ctrl+alt+down,ctrl+alt+n", "Scroll which-key down"),
-  which_key_page_up: keybind("ctrl+alt+pageup", "Page which-key up"),
-  which_key_page_down: keybind("ctrl+alt+pagedown", "Page which-key down"),
-  which_key_home: keybind("ctrl+alt+home", "Jump to first which-key binding"),
-  which_key_end: keybind("ctrl+alt+end", "Jump to last which-key binding"),
 } satisfies Record<string, Definition>
 
 type KeybindName = keyof typeof Definitions
@@ -425,19 +410,6 @@ export const CommandMap = {
   history_next: "prompt.history.next",
   terminal_suspend: "terminal.suspend",
   terminal_title_toggle: "terminal.title.toggle",
-  plugin_manager: "plugins.list",
-  plugin_install: "plugins.install",
-  which_key_toggle: "which-key.toggle",
-  which_key_layout_toggle: "which-key.layout.toggle",
-  which_key_pending_toggle: "which-key.pending.toggle",
-  which_key_group_previous: "which-key.group.previous",
-  which_key_group_next: "which-key.group.next",
-  which_key_scroll_up: "which-key.scroll.up",
-  which_key_scroll_down: "which-key.scroll.down",
-  which_key_page_up: "which-key.page.up",
-  which_key_page_down: "which-key.page.down",
-  which_key_home: "which-key.home",
-  which_key_end: "which-key.end",
 } satisfies BindingCommandMap
 const CommandDescriptions = Object.fromEntries(
   Object.entries(Definitions).map(([name, item]) => [

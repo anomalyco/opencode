@@ -7,6 +7,7 @@ import { OpenResponses } from "../../src/protocols/open-responses"
 import { OpenAICompatibleResponses } from "../../src/protocols/openai-compatible-responses"
 import { OpenAIResponses } from "../../src/protocols/openai-responses"
 import { LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
@@ -23,7 +24,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
         provider: "example",
       }).model("example-model")
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           system: "You are concise.",
@@ -61,7 +62,7 @@ describe("Open Responses-compatible route", () => {
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({ model, prompt: "Draw.", tools: [OpenAI.imageGeneration()] }),
       ).pipe(Effect.flip)
 
@@ -76,7 +77,7 @@ describe("Open Responses-compatible route", () => {
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -102,7 +103,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
         providerOptions: { openresponses: { reasoningEffort: "low", store: true } },
       }).model("example-model")
-      const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Think." }))
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Think." }))
 
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "low" },

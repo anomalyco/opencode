@@ -99,7 +99,6 @@ export const layer = (options: LayerOptions = {}) =>
         )
       }) as LLMClientShape["stream"]
       const client = LLMClient.Service.of({
-        prepare: () => Effect.die("TestLLM does not prepare provider-native requests"),
         stream,
         generate: (request) =>
           stream(request).pipe(

@@ -11,7 +11,6 @@
   },
   "exports": {
     ".": "./src/index.tsx",
-    "./builtins": "./src/feature-plugins/builtins.ts",
     "./config": "./src/config/index.tsx",
     "./config/keybind": "./src/config/keybind.ts",
     "./config/v1": "./src/config/v1/index.tsx",
@@ -37,9 +36,6 @@
     "./context/keymap": "./src/context/keymap.tsx",
     "./prompt/content": "./src/prompt/content.ts",
     "./prompt/display": "./src/prompt/display.ts",
-    "./plugin/runtime": "./src/plugin/runtime.tsx",
-    "./plugin/slots": "./src/plugin/slots.tsx",
-    "./plugin/command-shim": "./src/plugin/command-shim.ts",
     "./parsers-config": "./src/parsers-config.ts",
     "./util/error": "./src/util/error.ts",
     "./util/filetype": "./src/util/filetype.ts",

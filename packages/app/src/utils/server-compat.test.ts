@@ -26,7 +26,6 @@ function setup(
         return new Response(undefined, { status: 204 })
       if (request.method === "POST" && request.url.endsWith("/prompt")) {
         return Response.json({
-          admittedSeq: 1,
           id: "msg_1",
           sessionID: "ses_1",
           timeCreated: 1,

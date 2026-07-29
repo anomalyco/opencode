@@ -42,7 +42,6 @@ const cost = [
   },
 ]
 const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die("unused"),
   stream: (request: LLMRequest) => {
     requests.push(request)
     return Stream.make(

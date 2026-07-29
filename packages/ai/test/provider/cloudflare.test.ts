@@ -3,7 +3,7 @@ import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMEvent } from "../../src"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
-import { LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import { it } from "../lib/effect"
 import { dynamicResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
@@ -34,7 +34,7 @@ describe("Cloudflare", () => {
       })
       expect(model.route.endpoint.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat")
 
-      const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Say hello." }))
 
       expect(prepared.route).toBe("cloudflare-ai-gateway")
       expect(prepared.body).toMatchObject({
@@ -129,7 +129,7 @@ describe("Cloudflare", () => {
         openai: { reasoningField: "reasoning", reasoningDetails: merged },
       })
 
-      const replay = yield* LLMClient.prepare(LLM.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "Thinking", reasoning_details: merged },
       ])
@@ -180,7 +180,7 @@ describe("Cloudflare", () => {
 
   it.effect("allows a fully configured baseURL override", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: CloudflareAIGateway.configure({
             baseURL: "https://gateway.proxy.test/v1/custom/compat",
@@ -208,7 +208,7 @@ describe("Cloudflare", () => {
       })
       expect(model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
 
-      const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Say hello." }))
 
       expect(prepared.route).toBe("cloudflare-workers-ai")
       expect(prepared.body).toMatchObject({

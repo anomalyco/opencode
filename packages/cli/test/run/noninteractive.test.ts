@@ -267,7 +267,7 @@ async function run(input: {
     values.push(...input.turn(messageID))
     wake?.()
     wake = undefined
-    return ok({ admittedSeq: 1, id: messageID, sessionID: "ses_1", timeCreated: 1 }) as never
+    return ok({ id: messageID, sessionID: "ses_1", timeCreated: 1 }) as never
   })
   await runNonInteractivePrompt({
     client: sdk,

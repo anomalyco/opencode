@@ -767,19 +767,23 @@ export function RunSubagentSelectBody(props: {
   onRows?: (rows: number) => void
   mono?: boolean
 }) {
+  const [active, setActive] = createSignal(true)
   const entries = createMemo<SubagentEntry[]>(() =>
-    props.tabs().map((item) => {
-      const title = item.description || item.title || item.label
-      return {
-        category: "",
-        display: title,
-        description: title === item.label ? undefined : item.label,
-        footer: subagentStatusLabel(item.status),
-        keywords: `${item.label} ${item.description} ${item.title ?? ""} ${item.status}`,
-        sessionID: item.sessionID,
-        current: props.current() === item.sessionID,
-      }
-    }),
+    props
+      .tabs()
+      .filter((item) => (active() ? item.status === "running" : item.status !== "running"))
+      .map((item) => {
+        const title = item.description || item.title || item.label
+        return {
+          category: "",
+          display: title,
+          description: title === item.label ? undefined : item.label,
+          footer: subagentStatusLabel(item.status),
+          keywords: `${item.label} ${item.description} ${item.title ?? ""} ${item.status}`,
+          sessionID: item.sessionID,
+          current: props.current() === item.sessionID,
+        }
+      }),
   )
   const controller = createSearchablePanelController({
     entries,
@@ -788,6 +792,12 @@ export function RunSubagentSelectBody(props: {
     onSelect: (item) => props.onSelect(item.sessionID),
     isCurrent: (item) => item.current,
     closeOnFirstUp: true,
+    onKey(event) {
+      if (event.name.toLowerCase() !== "tab") return false
+      event.preventDefault()
+      setActive((value) => !value)
+      return true
+    },
     onRows: props.onRows,
   })
 
@@ -801,6 +811,7 @@ export function RunSubagentSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
+      hint={`tab show ${active() ? "inactive" : "active"}`}
       mono={props.mono}
     >
       <RunFooterMenu
