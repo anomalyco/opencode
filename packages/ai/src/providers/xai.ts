@@ -5,12 +5,14 @@ import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { XAIImages } from "../protocols/xai-images"
+import type { OpenAIProviderOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("xai")
 
-export type ModelOptions = RouteDefaultsInput &
+export type ModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
+    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 export type { XAIImageOptions } from "../protocols/xai-images"
@@ -42,8 +44,8 @@ const configuredChatRoute = (input: ModelOptions) => {
 export const configure = (input: ModelOptions = {}) => {
   const responsesRoute = configuredResponsesRoute(input)
   const chatRoute = configuredChatRoute(input)
-  const responses = (modelID: string | ModelID) => responsesRoute.model({ id: modelID })
-  const chat = (modelID: string | ModelID) => chatRoute.model({ id: modelID })
+  const responses = (modelID: string | ModelID) => responsesRoute.model<OpenAIProviderOptionsInput>({ id: modelID })
+  const chat = (modelID: string | ModelID) => chatRoute.model<OpenAIProviderOptionsInput>({ id: modelID })
   const image = (modelID: string | ModelID) =>
     XAIImages.model({
       id: modelID,
