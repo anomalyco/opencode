@@ -34,7 +34,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const event = useEvent()
     const config = useConfig().data
     const filePath = path.join(useTuiPaths().state, "session-tabs.json")
-    const enabled = () => config.session?.tabs ?? false
+    const enabled = () => config.tabs?.enabled ?? false
     const state: {
       pending: boolean
       saving: boolean
