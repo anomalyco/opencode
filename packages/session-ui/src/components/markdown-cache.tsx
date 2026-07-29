@@ -9,6 +9,11 @@ export type MarkdownCacheEntry = {
 }
 
 const max = 200
+const maxPreloadEntries = 120
+const maxPreloadMarkdownCharacters = 40_000
+const maxParseMarkdownCharacters = 200_000
+const maxParseMarkdownLineBreaks = 4_000
+const longMarkdownLine = /[^\n]{8001,}/
 const cache = new Map<string, MarkdownCacheEntry>()
 const config = {
   USE_PROFILES: { html: true, mathMl: true },
@@ -52,16 +57,25 @@ export function touchCachedMarkdown(key: string, value: MarkdownCacheEntry) {
   cache.delete(first)
 }
 
+export function canParseMarkdown(text: string) {
+  if (text.length > maxParseMarkdownCharacters) return false
+  if ((text.match(/\n/g)?.length ?? 0) > maxParseMarkdownLineBreaks) return false
+  return !longMarkdownLine.test(text)
+}
+
 export async function preloadMarkdown(
   text: string,
   cacheKey: string,
   parser: { parse(text: string): string | Promise<string> },
 ) {
+  if (text.length > maxPreloadMarkdownCharacters) return
   await Promise.all(
     project(undefined, text, false).blocks.map(async (block, index) => {
       if (block.mode === "code") return
+      if (!canParseMarkdown(block.src)) return
       const key = `${cacheKey}:${index}:${block.mode}`
       const cached = getCachedMarkdown(key)
+      if (!cached && cache.size >= maxPreloadEntries) return
       if (cached?.raw === block.raw) {
         touchCachedMarkdown(key, cached)
         return

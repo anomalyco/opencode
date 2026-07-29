@@ -29,7 +29,13 @@ import {
 } from "./markdown-worker"
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
-import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
+import {
+  canParseMarkdown,
+  getCachedMarkdown,
+  sanitizeMarkdown,
+  touchCachedMarkdown,
+  type MarkdownCacheEntry,
+} from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 
 type RenderedBlock =
@@ -426,7 +432,9 @@ export function Markdown(
           }
 
           const hash = checksum(block.raw)
-          const safe = sanitizeMarkdown(await Promise.resolve(marked.parse(block.src)))
+          const safe = canParseMarkdown(block.src)
+            ? sanitizeMarkdown(await Promise.resolve(marked.parse(block.src)))
+            : fallback(block.src)
           if (key && hash) touchCachedMarkdown(key, { raw: block.raw, hash, html: safe })
           return { key: blockKey, mode: block.mode, raw: block.raw, hash: hash ?? "", html: safe }
         }),
