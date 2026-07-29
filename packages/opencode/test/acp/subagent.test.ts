@@ -56,6 +56,26 @@ describe("acp subagent wire contract", () => {
     expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
   })
 
+  test("rejects a snapshot without a parentless root", () => {
+    const snapshot = structuredClone(fixture.snapshot)
+    snapshot.nodes = []
+
+    expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
+  })
+
+  test("rejects a snapshot with multiple parentless roots", () => {
+    const snapshot = structuredClone(fixture.snapshot)
+    snapshot.nodes.push({
+      runId: "other-root",
+      sessionId: "other-root",
+      rootSessionId: "other-root",
+      phase: "completed",
+      cwd: "/workspace/other-repo",
+    })
+
+    expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
+  })
+
   test("rejects a ninth descendant depth", () => {
     expect(() =>
       Subagent.decodeSnapshot({

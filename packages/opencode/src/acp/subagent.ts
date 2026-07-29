@@ -138,6 +138,10 @@ function validateSnapshot(input: Schema.Schema.Type<typeof Snapshot>): Snapshot 
   const runIDs = new Set(snapshot.nodes.map((node) => node.runId))
   if (runIDs.size !== snapshot.nodes.length) throw new Error("subagent run IDs must be unique")
 
+  if (snapshot.nodes.filter((node) => !node.parentSessionId).length !== 1) {
+    throw new Error("subagent snapshot must contain exactly one root node")
+  }
+
   snapshot.nodes.forEach((node) => {
     if (!node.parentSessionId) {
       if (node.rootSessionId !== node.sessionId) throw new Error("root node must match its root session ID")
