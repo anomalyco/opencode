@@ -29,18 +29,75 @@ describe("acp subagent wire contract", () => {
     expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
   })
 
-  test.each(["-0.35", "NaN", "Infinity"])("rejects a non-serializable direct cost of %s", (amount) => {
+  test.each([
+    "-0.35",
+    "-0",
+    "NaN",
+    "Infinity",
+    "9".repeat(39),
+    "9".repeat(40),
+    "0".repeat(257),
+    "1e128",
+    "1.2e-128",
+    "1e-129",
+    "0e128",
+    "0e-129",
+    "1e9007199254740992",
+  ])("rejects an out-of-contract direct cost of %s from snapshots and updates", (amount) => {
     const snapshot = structuredClone(fixture.snapshot)
     snapshot.nodes[1].directCost.amount = amount
+    const update = structuredClone(fixture.update)
+    update.upsert = [structuredClone(snapshot.nodes[1])]
+    update.removedSessionIds = []
 
     expect(() => Subagent.decodeSnapshot(snapshot)).toThrow()
+    expect(() => Subagent.decodeUpdate(update)).toThrow()
   })
 
-  test("serializes a finite direct cost as a decimal string", () => {
-    expect(Subagent.serializeDirectCost(1.2, "USD")).toEqual({ amount: "1.2", currency: "USD" })
+  test.each([
+    "12345678901234567890123456789012345678",
+    "1e127",
+    "1e-128",
+    "1.20",
+    "+1.20",
+    "12e-1",
+    "000001.2000",
+    "10e-129",
+    "0",
+    "0".repeat(256),
+    "0e127",
+    "0e-128",
+  ])("accepts an exactly representable direct cost of %s in snapshots and updates", (amount) => {
+    const snapshot = structuredClone(fixture.snapshot)
+    snapshot.nodes[1].directCost.amount = amount
+    const update = structuredClone(fixture.update)
+    update.upsert = [structuredClone(snapshot.nodes[1])]
+    update.removedSessionIds = []
+
+    expect(Subagent.decodeSnapshot(snapshot).nodes[1]?.directCost?.amount).toBe(amount)
+    expect(Subagent.decodeUpdate(update).upsert[0]?.directCost?.amount).toBe(amount)
   })
-  ;[-0.35, Number.NaN, Number.POSITIVE_INFINITY].forEach((amount) => {
-    test(`rejects an unrepresentable direct cost of ${amount}`, () => {
+  ;[
+    { amount: 0, expected: "0" },
+    { amount: 1.2, expected: "1.2" },
+    { amount: 1e127, expected: "1e+127" },
+    { amount: 1e-128, expected: "1e-128" },
+  ].forEach(({ amount, expected }) => {
+    test(`serializes the finite direct cost ${amount} as ${expected}`, () => {
+      expect(Subagent.serializeDirectCost(amount, "USD")).toEqual({ amount: expected, currency: "USD" })
+    })
+  })
+  ;[
+    { label: "negative zero", amount: -0 },
+    { label: "-0.35", amount: -0.35 },
+    { label: "NaN", amount: Number.NaN },
+    { label: "positive infinity", amount: Number.POSITIVE_INFINITY },
+    { label: "1e+128", amount: 1e128 },
+    { label: "1.2e-128", amount: 1.2e-128 },
+    { label: "Number.MAX_VALUE (1.7976931348623157e+308)", amount: Number.MAX_VALUE },
+    { label: "Number.MIN_VALUE (5e-324)", amount: Number.MIN_VALUE },
+  ].forEach(({ label, amount }) => {
+    test(`rejects an unrepresentable direct cost of ${label}`, () => {
       expect(() => Subagent.serializeDirectCost(amount, "USD")).toThrow()
     })
   })

@@ -96,6 +96,11 @@ type Notify = (update: Update) => Promise<void>
 
 const maxDepth = 8
 const maxDescendants = 300
+const maxDirectCostAmountLength = 256
+const maxDirectCostSignificantDigits = 38
+const minDirectCostPower = -128
+const maxDirectCostPower = 127
+const directCostAmountPattern = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/
 const decodeListParamsSchema = Schema.decodeUnknownSync(ListParams)
 const decodeSnapshotSchema = Schema.decodeUnknownSync(Snapshot)
 const decodeUpdateSchema = Schema.decodeUnknownSync(Update)
@@ -121,10 +126,12 @@ export function encodeUpdate(input: Update): Update {
 }
 
 export function serializeDirectCost(amount: number, currency: string): DirectCost {
-  if (!Number.isFinite(amount) || amount < 0) {
+  if (!Number.isFinite(amount) || amount < 0 || Object.is(amount, -0)) {
     throw new Error("direct cost must be finite and nonnegative")
   }
-  return { amount: new Decimal(amount).toString(), currency }
+  const serialized = new Decimal(amount).toString()
+  parseDirectCostAmount(serialized)
+  return { amount: serialized, currency }
 }
 
 export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify }): Service {
@@ -568,8 +575,50 @@ function validateUpdate(input: Schema.Schema.Type<typeof Update>): Update {
 function validateDirectCost(node: Node) {
   if (!node.directCost) return
 
-  const amount = new Decimal(node.directCost.amount)
-  if (!amount.isFinite() || amount.isNegative()) throw new Error("direct cost must be finite and nonnegative")
+  parseDirectCostAmount(node.directCost.amount)
+}
+
+function parseDirectCostAmount(amount: string) {
+  if (!amount.length || amount.length > maxDirectCostAmountLength) {
+    invalidDirectCostAmount()
+  }
+
+  const match = directCostAmountPattern.exec(amount)
+  const integer = match?.[2] ?? ""
+  const fraction = match?.[3] ?? ""
+  if (!match || match[1] === "-" || (!integer.length && !fraction.length)) {
+    invalidDirectCostAmount()
+  }
+
+  const exponent = Number(match[4] ?? "0")
+  if (!Number.isSafeInteger(exponent)) {
+    invalidDirectCostAmount()
+  }
+
+  const coefficient = integer + fraction
+  const firstNonzero = coefficient.search(/[1-9]/)
+  if (firstNonzero === -1) {
+    if (exponent < minDirectCostPower || exponent > maxDirectCostPower) {
+      invalidDirectCostAmount()
+    }
+    return
+  }
+
+  const trailingZeroCount = coefficient.match(/0*$/)?.[0].length ?? 0
+  const significantDigits = coefficient.length - firstNonzero - trailingZeroCount
+  const power = exponent - fraction.length + trailingZeroCount
+  if (
+    significantDigits > maxDirectCostSignificantDigits ||
+    !Number.isSafeInteger(power) ||
+    power < minDirectCostPower ||
+    power > maxDirectCostPower
+  ) {
+    invalidDirectCostAmount()
+  }
+}
+
+function invalidDirectCostAmount(): never {
+  throw new Error("direct cost must be an exactly representable nonnegative decimal")
 }
 
 function depthOf(node: Node, bySession: ReadonlyMap<string, Node>, visited: ReadonlySet<string>): number {
