@@ -17,7 +17,6 @@ import { PluginRuntime } from "./plugin/runtime"
 import { WebSearch } from "./websearch"
 import { Reference } from "./reference"
 import { Skill } from "./skill"
-import { Shell } from "./shell"
 import { State } from "./state"
 import { Tool } from "./tool"
 import { PluginHooks } from "./plugin/hooks"
@@ -153,7 +152,6 @@ export const node = makeLocationNode({
     Location.node,
     Reference.node,
     Skill.node,
-    Shell.node,
     Tool.node,
     PluginHooks.node,
     PluginRuntime.node,
