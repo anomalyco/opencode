@@ -99,6 +99,8 @@ const appGlobalBindingCommands = ["session.list", "session.new"] as const
 const sessionTabBindingCommands = [
   "session.tab.next",
   "session.tab.previous",
+  "session.tab.history.back",
+  "session.tab.history.forward",
   "session.tab.next_unread",
   "session.tab.previous_unread",
   "session.tab.close",
@@ -665,6 +667,22 @@ function App(props: { pair?: DialogPairCredentials }) {
         run: () => sessionTabs.cycle(-1),
       },
       {
+        name: "session.tab.history.back",
+        title: "Back in session tab history",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.history(-1),
+      },
+      {
+        name: "session.tab.history.forward",
+        title: "Forward in session tab history",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.history(1),
+      },
+      {
         name: "session.tab.next_unread",
         title: "Next unread session tab",
         category: "Session",
@@ -1185,7 +1203,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
-              <Show when={sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"}>
+              <Show when={sessionTabs.enabled() && sessionTabs.tabs().length > 1 && route.data.type !== "plugin"}>
                 <SessionTabs />
               </Show>
               <Switch>

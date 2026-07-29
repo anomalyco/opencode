@@ -3,7 +3,9 @@ import {
   adaptiveSessionTabLayout,
   closeSessionTab,
   cycleSessionTab,
+  moveSessionTabHistory,
   openSessionTab,
+  recordSessionTabHistory,
   sessionTabComplete,
 } from "../../src/context/session-tabs-model"
 
@@ -32,6 +34,56 @@ describe("session tabs", () => {
     expect(cycleSessionTab(tabs, "b", 1)?.sessionID).toBe("a")
   })
 
+  test("moves backward and forward through selection history", () => {
+    const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b", "c", "d"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+    const backToC = moveSessionTabHistory(history, tabs, "d", -1)
+    const backToB = moveSessionTabHistory(backToC.history, tabs, "c", -1)
+    const forwardToC = moveSessionTabHistory(backToB.history, tabs, "b", 1)
+    const forwardToD = moveSessionTabHistory(forwardToC.history, tabs, "c", 1)
+
+    expect([backToC.sessionID, backToB.sessionID, forwardToC.sessionID, forwardToD.sessionID]).toEqual([
+      "c",
+      "b",
+      "c",
+      "d",
+    ])
+  })
+
+  test("truncates forward history after a new selection", () => {
+    const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b", "c"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+    const back = moveSessionTabHistory(history, tabs, "c", -1)
+    const branched = recordSessionTabHistory(back.history, "d")
+
+    expect(branched).toEqual({ entries: ["a", "b", "d"], index: 2 })
+    expect(moveSessionTabHistory(branched, tabs, "d", 1).sessionID).toBeUndefined()
+  })
+
+  test("skips closed tabs and duplicate entries for the active tab", () => {
+    const tabs = ["a", "b"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b", "c", "b"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+
+    expect(moveSessionTabHistory(history, tabs, "b", -1).sessionID).toBe("a")
+    expect(recordSessionTabHistory(history, "b")).toBe(history)
+  })
+
+  test("returns to the latest history entry when no tab is active", () => {
+    const tabs = ["a", "b"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "b"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+
+    expect(moveSessionTabHistory(history, tabs, undefined, -1).sessionID).toBe("b")
+  })
+
+  test("returns to the previous selected open tab after closing the active tab", () => {
+    const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "c"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+    const closed = closeSessionTab(tabs, "b")
+    const current = recordSessionTabHistory(history, "b")
+
+    expect(moveSessionTabHistory(current, closed.tabs, "b", -1).sessionID).toBe("c")
+  })
+
   test("reveals completion activity only after session work becomes idle", () => {
     expect(sessionTabComplete("activity", true)).toBe(false)
     expect(sessionTabComplete("activity", false)).toBe(true)
@@ -45,6 +97,24 @@ describe("session tabs", () => {
     expect(layout).toMatchObject({ before: 0, after: 0, start: 0, total: 76 })
     expect(layout.widths).toEqual([9, 9, 9, 22, 9, 9, 9])
     expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(76)
+  })
+
+  test("does not reserve an active tab slot on the new session page", () => {
+    const tabs = ["a", "b", "c", "d", "e"].map((sessionID) => ({ sessionID }))
+    const layout = adaptiveSessionTabLayout(tabs, "dummy", 40)
+
+    expect(layout.tabs).toEqual(tabs)
+    expect(layout.widths).toEqual([8, 8, 8, 8, 8])
+    expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(layout.total)
+  })
+
+  test("keeps the visible tab window stable on the new session page", () => {
+    const tabs = Array.from({ length: 10 }, (_, index) => ({ sessionID: String(index) }))
+    const selected = adaptiveSessionTabLayout(tabs, "7", 70)
+    const home = adaptiveSessionTabLayout(tabs, undefined, 70, selected.start)
+
+    expect(selected.start).toBeGreaterThan(0)
+    expect(home.start).toBe(selected.start)
   })
 
   test("only swaps old and new active width inside a sticky window", () => {

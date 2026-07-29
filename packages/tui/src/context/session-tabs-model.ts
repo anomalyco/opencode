@@ -5,6 +5,11 @@ export type SessionTab = {
 
 export type SessionTabUnread = "activity" | "error"
 
+export type SessionTabHistory = {
+  entries: readonly string[]
+  index: number
+}
+
 export function sessionTabComplete(unread: SessionTabUnread | undefined, busy: boolean) {
   return unread === "activity" && !busy
 }
@@ -37,6 +42,31 @@ export function cycleSessionTab(tabs: readonly SessionTab[], active: string | un
   return tabs[(start + direction + tabs.length) % tabs.length]
 }
 
+export function recordSessionTabHistory(history: SessionTabHistory, sessionID: string): SessionTabHistory {
+  if (history.entries[history.index] === sessionID) return history
+  const entries = [...history.entries.slice(0, history.index + 1), sessionID]
+  return { entries, index: entries.length - 1 }
+}
+
+export function moveSessionTabHistory(
+  history: SessionTabHistory,
+  tabs: readonly SessionTab[],
+  active: string | undefined,
+  direction: 1 | -1,
+) {
+  if (!active) {
+    const sessionID = history.entries[history.index]
+    return tabs.some((tab) => tab.sessionID === sessionID) ? { history, sessionID } : { history, sessionID: undefined }
+  }
+  const entries = history.entries.map((sessionID, index) => ({ sessionID, index }))
+  const candidates = direction === -1 ? entries.slice(0, history.index).reverse() : entries.slice(history.index + 1)
+  const target = candidates.find(
+    (entry) => entry.sessionID !== active && tabs.some((tab) => tab.sessionID === entry.sessionID),
+  )
+  if (!target) return { history, sessionID: undefined }
+  return { history: { ...history, index: target.index }, sessionID: target.sessionID }
+}
+
 export function adaptiveSessionTabLayout(
   tabs: readonly SessionTab[],
   active: string | undefined,
@@ -45,15 +75,30 @@ export function adaptiveSessionTabLayout(
 ) {
   if (tabs.length === 0) return { tabs: [], widths: [], before: 0, after: 0, start: 0, total: 0 }
 
-  const activeIndex = Math.max(
-    0,
-    tabs.findIndex((tab) => tab.sessionID === active),
-  )
+  const activeIndex = tabs.findIndex((tab) => tab.sessionID === active)
   const fit = (width: number) =>
-    Math.min(tabs.length, Math.max(1, 1 + Math.floor((Math.max(0, width) - SESSION_TAB_WIDTH) / SESSION_TAB_MIN_WIDTH)))
+    Math.min(
+      tabs.length,
+      Math.max(
+        1,
+        activeIndex === -1
+          ? Math.floor(Math.max(0, width) / SESSION_TAB_MIN_WIDTH)
+          : 1 + Math.floor((Math.max(0, width) - SESSION_TAB_WIDTH) / SESSION_TAB_MIN_WIDTH),
+      ),
+    )
   const solve = (count: number, start: number, attempts: number): { count: number; start: number } => {
+    const boundedStart = Math.min(Math.max(0, start), tabs.length - count)
     const nextStart = Math.min(
-      Math.max(0, activeIndex < start ? activeIndex : activeIndex >= start + count ? activeIndex - count + 1 : start),
+      Math.max(
+        0,
+        activeIndex === -1
+          ? boundedStart
+          : activeIndex < boundedStart
+            ? activeIndex
+            : activeIndex >= boundedStart + count
+              ? activeIndex - count + 1
+              : boundedStart,
+      ),
       tabs.length - count,
     )
     const markers =
@@ -73,7 +118,7 @@ export function adaptiveSessionTabLayout(
   )
   const roomy = contentWidth >= SESSION_TAB_WIDTH * visible.length
   const total = roomy ? Math.min(contentWidth, SESSION_TAB_MAX_WIDTH * visible.length) : contentWidth
-  if (roomy) {
+  if (roomy || activeIndex === -1) {
     const width = Math.floor(total / visible.length)
     const remainder = total - width * visible.length
     return {

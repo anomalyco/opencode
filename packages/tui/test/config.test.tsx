@@ -108,6 +108,8 @@ test("navigates session tabs with leader arrows", () => {
 
   expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,<leader>right" }])
   expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,<leader>left" }])
+  expect(config.keybinds.get("session.tab.history.back")).toMatchObject([{ key: "ctrl+o" }])
+  expect(config.keybinds.get("session.tab.history.forward")).toMatchObject([{ key: "ctrl+i" }])
   expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "<leader>down" }])
   expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "<leader>up" }])
 })
