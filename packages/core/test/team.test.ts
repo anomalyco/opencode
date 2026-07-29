@@ -1,0 +1,159 @@
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { AgentV2 } from "@opencode-ai/core/agent"
+import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionStore } from "@opencode-ai/core/session/store"
+import { AgentTeam } from "@opencode-ai/core/team"
+import { testEffect } from "./lib/effect"
+
+const projects = Layer.succeed(
+  ProjectV2.Service,
+  ProjectV2.Service.of({
+    resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
+    directories: () => Effect.succeed([]),
+    commit: () => Effect.void,
+  }),
+)
+const it = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionProjector.node,
+      SessionStore.node,
+      SessionV2.node,
+      AgentTeam.node,
+    ]),
+    [
+      [ProjectV2.node, projects],
+      [SessionExecution.node, SessionExecution.noopLayer],
+    ],
+  ),
+)
+const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+const model = ModelV2.Ref.make({ id: ModelV2.ID.make("qwen"), providerID: ProviderV2.ID.make("local") })
+
+describe("AgentTeam", () => {
+  it.effect("persists a team and its named members", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const teams = yield* AgentTeam.Service
+      const lead = yield* session.create({ location, agent: AgentV2.ID.make("mark1"), model })
+      const reviewer = yield* session.create({ location, agent: AgentV2.ID.make("spencer2"), model })
+      const team = yield* teams.create({ name: "ProjectCombo", leadSessionID: lead.id })
+
+      yield* teams.addMember({
+        teamID: team.id,
+        member: {
+          name: "Mark1",
+          sessionID: lead.id,
+          agent: AgentV2.ID.make("mark1"),
+          model,
+          role: "lead",
+          permission: "writer",
+          status: "busy",
+        },
+      })
+      yield* teams.addMember({
+        teamID: team.id,
+        member: {
+          name: "Spencer2",
+          sessionID: reviewer.id,
+          agent: AgentV2.ID.make("spencer2"),
+          model,
+          role: "teammate",
+          permission: "reviewer",
+          status: "idle",
+        },
+      })
+
+      expect(yield* teams.get(team.id)).toMatchObject({
+        name: "ProjectCombo",
+        leadSessionID: lead.id,
+        members: [
+          { name: "Mark1", permission: "writer", sessionID: lead.id },
+          { name: "Spencer2", permission: "reviewer", sessionID: reviewer.id },
+        ],
+      })
+      expect(yield* teams.forSession(reviewer.id)).toMatchObject({ id: team.id })
+    }),
+  )
+
+  it.effect("persists and delivers named messages", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const teams = yield* AgentTeam.Service
+      const lead = yield* session.create({ location })
+      const team = yield* teams.create({ name: "messages", leadSessionID: lead.id })
+      const message = yield* teams.send({ teamID: team.id, from: "Spencer2", to: "Mark1", text: "Review ready" })
+
+      expect(yield* teams.messages({ teamID: team.id, to: "Mark1", undelivered: true })).toMatchObject([
+        { id: message.id, text: "Review ready", delivered: false },
+      ])
+      yield* teams.deliver(message.id)
+      expect(yield* teams.messages({ teamID: team.id, to: "Mark1", undelivered: true })).toEqual([])
+      expect(yield* teams.messages({ teamID: team.id })).toMatchObject([{ id: message.id, delivered: true }])
+    }),
+  )
+
+  it.effect("allows only one concurrent claimant for a shared task", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const teams = yield* AgentTeam.Service
+      const lead = yield* session.create({ location })
+      const team = yield* teams.create({ name: "tasks", leadSessionID: lead.id })
+      const task = yield* teams.addTask({
+        teamID: team.id,
+        task: { title: "Review", description: "Inspect the diff", status: "pending", dependencies: [] },
+      })
+      const claims = yield* Effect.all(
+        [
+          teams.claimTask({ teamID: team.id, taskID: task.id, assignee: "Mark1" }),
+          teams.claimTask({ teamID: team.id, taskID: task.id, assignee: "Spencer2" }),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      expect(claims.filter(Boolean)).toHaveLength(1)
+      expect(yield* teams.tasks(team.id)).toMatchObject([{ id: task.id, status: "in_progress" }])
+    }),
+  )
+
+  it.effect("marks active teammates interrupted during restart recovery", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const teams = yield* AgentTeam.Service
+      const lead = yield* session.create({ location })
+      const team = yield* teams.create({ name: "recovery", leadSessionID: lead.id })
+      yield* teams.addMember({
+        teamID: team.id,
+        member: {
+          name: "Mark1",
+          sessionID: lead.id,
+          agent: AgentV2.ID.make("mark1"),
+          model,
+          role: "lead",
+          permission: "writer",
+          status: "busy",
+        },
+      })
+
+      expect(yield* teams.recover).toBe(1)
+      expect(yield* teams.get(team.id)).toMatchObject({
+        members: [{ name: "Mark1", status: "interrupted", error: expect.stringContaining("restarted") }],
+      })
+      expect(yield* teams.recover).toBe(0)
+    }),
+  )
+})
