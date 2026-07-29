@@ -442,6 +442,23 @@ export const {
     const exit = useExit()
     const args = useArgs()
 
+    const BOOTSTRAP_TIMEOUT = 8_000
+
+    async function timed<T>(promise: Promise<T>, label: string): Promise<T> {
+      try {
+        return await Promise.race([
+          promise,
+          new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${BOOTSTRAP_TIMEOUT}ms`)), BOOTSTRAP_TIMEOUT)),
+        ])
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("timed out")) {
+          console.warn(`Bootstrap ${label} timed out, proceeding without data`, e.message)
+          throw e
+        }
+        throw e
+      }
+    }
+
     async function bootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
@@ -462,11 +479,11 @@ export const {
       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
       await Promise.all([
-        providersPromise,
-        providerListPromise,
+        timed(providersPromise, "providers"),
+        timed(providerListPromise, "provider-list"),
         capabilitiesPromise,
-        agentsPromise,
-        configPromise,
+        timed(agentsPromise, "agents"),
+        timed(configPromise, "config"),
         projectPromise,
         ...(args.continue ? [sessionListPromise] : []),
       ])
@@ -512,11 +529,11 @@ export const {
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           void Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
+            ...(args.continue ? [] : [timed(sessionListPromise, "session-list").catch(() => null).then((sessions) => sessions && setStore("session", reconcile(sessions)))]),
             consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
-            sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
-            sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
-            sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
+            timed(sdk.client.command.list({ workspace }), "commands").catch(() => ({ data: [] })).then((x) => setStore("command", reconcile(x.data ?? []))),
+            timed(sdk.client.lsp.status({ workspace }), "lsp").catch(() => ({ data: [] })).then((x) => setStore("lsp", reconcile(x.data ?? []))),
+            timed(sdk.client.mcp.status({ workspace }), "mcp").catch(() => ({ data: {} })).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
             sdk.client.experimental.resource
               .list({ workspace })
               .then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
@@ -532,6 +549,13 @@ export const {
           })
         })
         .catch(async (e) => {
+          const errMessage = e instanceof Error ? e.message : String(e)
+          // On timeout, don't kill the TUI — just surface what we got
+          if (errMessage.includes("timed out")) {
+            console.warn(`Bootstrap partially failed due to timeout, continuing with available data`, errMessage)
+            setStore("status", store.status === "complete" ? "complete" : "partial")
+            return
+          }
           console.error("tui bootstrap failed", {
             error: e instanceof Error ? e.message : String(e),
             name: e instanceof Error ? e.name : undefined,
