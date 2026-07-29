@@ -17,6 +17,7 @@ const RUN_DURATION = 2_800
 const RUN_HEAD = 4
 const RUN_TAIL = 18
 const RUN_FADE_OUT = 500
+const RUN_OPACITY = 0.1
 const COMPLETION_DURATION = 900
 const COMPLETION_ATTACK = 0.16
 const intensityAt = (index: number, front: number, head: number, tail: number) => {
@@ -163,7 +164,7 @@ class TabPulseRenderable extends Renderable {
         intensityAt(index, front, RUN_HEAD, RUN_TAIL),
         intensityAt(index, secondFront, RUN_HEAD, RUN_TAIL),
       )
-      const running = tint(this._backgroundColor, this._color, intensity * 0.14 * runningOpacity)
+      const running = tint(this._backgroundColor, this._color, intensity * RUN_OPACITY * runningOpacity)
       buffer.setCell(
         this.screenX + index,
         this.screenY,

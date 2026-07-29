@@ -169,7 +169,7 @@ export function SessionTabs() {
                 enabled={config.animations ?? true}
                 active={status().busy}
                 complete={status().complete}
-                color={accent()}
+                color={theme.text.default}
                 completionColor={accent()}
                 backgroundColor={pulseBackground()}
               />
