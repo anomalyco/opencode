@@ -3,12 +3,18 @@ import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
+import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 
 const workspaceID = Workspace.ID.make("wrk_test")
 const ref = { directory: AbsolutePath.make("/repo/packages/app"), workspaceID }
+const repository = new Git.Repository({
+  worktree: AbsolutePath.make("/repo"),
+  gitDirectory: AbsolutePath.make("/repo/.git"),
+  commonDirectory: AbsolutePath.make("/repo/.git"),
+})
 const projectLayer = Layer.succeed(
   Project.Service,
   Project.Service.of({
@@ -19,6 +25,7 @@ const projectLayer = Layer.succeed(
         id: Project.ID.make("project"),
         directory: AbsolutePath.make("/repo"),
         vcs: { type: "git", store: AbsolutePath.make("/repo/.git") },
+        repository,
       }),
     commit: () => Effect.void,
   }),
@@ -38,6 +45,7 @@ describe("Location", () => {
         type: "git",
         store: AbsolutePath.make("/repo/.git"),
       })
+      expect(location.repository).toBe(repository)
     }),
   )
 })

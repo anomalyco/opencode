@@ -95,7 +95,7 @@ const layer = Layer.effect(
     // Cache a scope-owned fiber so caller cancellation stops waiting without poisoning shared initialization.
     const repositoryFiber = yield* Effect.cached(
       Effect.gen(function* () {
-        const source = yield* git.repo.discover(location.project.directory)
+        const source = location.repository ?? (yield* git.repo.discover(location.project.directory))
         if (!source) return yield* new Error({ operation: "capture", message: "Project is not a Git repository" })
         const worktree = AbsolutePath.make(yield* fs.realPath(source.worktree).pipe(Effect.orDie))
         const gitDirectory = AbsolutePath.make(

@@ -7,6 +7,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Git } from "@opencode-ai/core/git"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
+import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Hash } from "@opencode-ai/util/hash"
@@ -14,7 +15,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 describe("Snapshot", () => {
-  testEffect(Layer.empty).live("keeps lazy repository discovery after the first caller is interrupted", () =>
+  testEffect(Layer.empty).live("reuses the Location repository after the first caller is interrupted", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -65,18 +66,74 @@ describe("Snapshot", () => {
 
             const interrupted = yield* snapshot.capture().pipe(Effect.forkChild)
             yield* Deferred.await(started)
-            expect(discoveries).toBe(1)
+            expect(discoveries).toBe(0)
             expect(creations).toBe(1)
             yield* Fiber.interrupt(interrupted)
 
             const capture = yield* snapshot.capture().pipe(Effect.forkChild)
-            expect(discoveries).toBe(1)
+            expect(discoveries).toBe(0)
             expect(creations).toBe(1)
             yield* Deferred.succeed(release, undefined)
             expect(yield* Fiber.join(capture)).toBeDefined()
-            expect(discoveries).toBe(1)
+            expect(discoveries).toBe(0)
             expect(creations).toBe(1)
           }).pipe(Effect.provide(layer))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("discovers the repository for a manually supplied Location", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+
+          const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+          let discoveries = 0
+          const layer = AppNodeBuilder.build(Snapshot.node, [
+            [
+              Location.node,
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of({
+                  directory: AbsolutePath.make(project),
+                  project: { id: Project.ID.global, directory: AbsolutePath.make(project) },
+                  vcs: { type: "git", store: AbsolutePath.make(path.join(project, ".git")) },
+                }),
+              ),
+            ],
+            [Global.node, Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })],
+            [
+              Git.node,
+              Layer.succeed(
+                Git.Service,
+                Git.Service.of({
+                  ...git,
+                  repo: {
+                    ...git.repo,
+                    discover: (input) => {
+                      discoveries++
+                      return git.repo.discover(input)
+                    },
+                  },
+                }),
+              ),
+            ],
+          ])
+
+          expect(
+            yield* Effect.gen(function* () {
+              return yield* (yield* Snapshot.Service).capture()
+            }).pipe(Effect.provide(layer)),
+          ).toBeDefined()
+          expect(discoveries).toBe(1)
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
