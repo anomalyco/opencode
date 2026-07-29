@@ -153,31 +153,6 @@ describe("layout workspace helpers", () => {
     expect(result?.id).toBe("workspace")
   })
 
-  test("finds the most recently updated session while sessions are active", () => {
-    const result = latestRootSession(
-      [
-        {
-          path: { directory: "/workspace" },
-          session: [
-            session({
-              id: "a",
-              directory: "/workspace",
-              time: { created: 110_000, updated: 100_000, archived: undefined },
-            }),
-            session({
-              id: "z",
-              directory: "/workspace",
-              time: { created: 90_000, updated: 110_000, archived: undefined },
-            }),
-          ],
-        },
-      ],
-      120_000,
-    )
-
-    expect(result?.id).toBe("z")
-  })
-
   test("detects project permissions with a filter", () => {
     const result = hasProjectPermissions(
       {

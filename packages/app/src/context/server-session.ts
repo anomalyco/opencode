@@ -944,8 +944,6 @@ export function createServerSession(
     }
 
     const info = data.info[sessionID]
-    if (event.type === "session.input.admitted" && info)
-      remember({ ...info, time: { ...info.time, updated: event.created } })
     if (event.type === "session.renamed" && info)
       remember({ ...info, title: event.data.title, time: { ...info.time, updated: event.created } })
     if (event.type === "session.moved" && info)
