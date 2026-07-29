@@ -41,6 +41,11 @@
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
     },
+    "#shell-parser-wasm": {
+      "bun": "./src/shell/parser-wasm.bun.ts",
+      "node": "./src/shell/parser-wasm.node.ts",
+      "default": "./src/shell/parser-wasm.bun.ts"
+    },
     "#process-lock-ffi": {
       "bun": "./src/util/process-lock-ffi.bun.ts",
       "node": "./src/util/process-lock-ffi.node.ts",

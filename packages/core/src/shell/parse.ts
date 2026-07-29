@@ -5,6 +5,7 @@ import { fileURLToPath } from "url"
 import os from "os"
 import path from "path"
 import type { Node } from "web-tree-sitter"
+import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellSelect } from "./select"
 
 type Part = { type: string; text: string }
@@ -206,14 +207,14 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
     return command
       .slice(1)
       .filter((part) => !part.text.startsWith("-"))
-      .map((part) => directory(part.text, powershell, cwd, shell))
+      .map((part) => directoryArgument(part.text, powershell, cwd, shell))
       .filter((part) => part !== undefined)
 
   const directories: string[] = []
   let path = false
   for (const part of command.slice(1)) {
     if (path) {
-      const value = directory(part.text, powershell, cwd, shell)
+      const value = directoryArgument(part.text, powershell, cwd, shell)
       if (value) directories.push(value)
       path = false
       continue
@@ -222,18 +223,20 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
       path = POWERSHELL_PATH_FLAGS.has(part.text.toLowerCase())
       continue
     }
-    const value = directory(part.text, powershell, cwd, shell)
+    const value = directoryArgument(part.text, powershell, cwd, shell)
     if (value) directories.push(value)
   }
   return directories
 }
 
-function directory(value: string, powershell: boolean, cwd: string, shell: string) {
+function directoryArgument(value: string, powershell: boolean, cwd: string, shell: string) {
   const quote = value[0]
   const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
-  if (!powershell) return staticDirectory(text)
+  if (!powershell) return expandKnownDirectory(text)
 
-  return staticDirectory(
+  // PowerShell exposes environment variables through $env:NAME and provides these
+  // automatic directory variables. Expand only values we can determine without executing code.
+  return expandKnownDirectory(
     text
       .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")
       .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(key) ?? "")
@@ -245,7 +248,8 @@ function directory(value: string, powershell: boolean, cwd: string, shell: strin
   )
 }
 
-function staticDirectory(value: string) {
+function expandKnownDirectory(value: string) {
+  // Unknown shell expressions cannot be resolved safely during permission analysis.
   if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
   if (value === "~") return os.homedir()
   if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))
@@ -279,15 +283,10 @@ const load = (() => {
 
 async function initialize() {
   const { Parser, Language } = await import("web-tree-sitter")
-  const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, { with: { type: "wasm" } })
-  await Parser.init({ locateFile: () => resolve(treeWasm) })
-  const [{ default: bashWasm }, { default: psWasm }] = await Promise.all([
-    import("tree-sitter-bash/tree-sitter-bash.wasm" as string, { with: { type: "wasm" } }),
-    import("tree-sitter-powershell/tree-sitter-powershell.wasm" as string, { with: { type: "wasm" } }),
-  ])
+  await Parser.init({ locateFile: () => resolve(shellParserWasm.runtime) })
   const [bashLanguage, psLanguage] = await Promise.all([
-    Language.load(resolve(bashWasm)),
-    Language.load(resolve(psWasm)),
+    Language.load(resolve(shellParserWasm.bash)),
+    Language.load(resolve(shellParserWasm.powershell)),
   ])
   const bash = new Parser()
   bash.setLanguage(bashLanguage)
