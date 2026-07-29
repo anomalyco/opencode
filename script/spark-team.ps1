@@ -1,6 +1,7 @@
 param(
   [Parameter(Position = 0)]
   [string]$Mission,
+  [string]$MissionFile,
   [ValidateRange(1, 3)]
   [int]$MaxReviewRounds = 3,
   [switch]$NonInteractive
@@ -8,12 +9,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not $Mission) {
-  $Mission = Read-Host "ProjectCombo mission"
+if ($MissionFile) {
+  $Mission = Get-Content -LiteralPath $MissionFile -Raw
+} elseif (-not $Mission) {
+  Write-Host "Copy your COMPLETE multi-line mission to the Windows clipboard." -ForegroundColor Yellow
+  Write-Host "Return here only after it is copied." -ForegroundColor Yellow
+  $null = Read-Host "Press Enter to import the full prompt from clipboard"
+  $Mission = Get-Clipboard -Raw -Format Text
 }
 if (-not $Mission.Trim()) {
-  throw "A mission is required."
+  throw "The clipboard does not contain a text mission. Copy the full prompt and try again."
 }
+
+$missionLines = $Mission -split "`r?`n"
+$lineCount = $missionLines.Count
+Write-Host "Imported $lineCount lines ($($Mission.Length) characters)." -ForegroundColor Green
+Write-Host "Mission preview: $($missionLines[0])" -ForegroundColor DarkGray
 
 $projectRoot = "F:\ProjectCombo"
 $knowledgeRoot = "F:\ProjectCombo_Builds\ProjectKnowledge"
