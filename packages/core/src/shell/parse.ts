@@ -230,21 +230,26 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
 
 function directory(value: string, powershell: boolean, cwd: string, shell: string) {
   const quote = value[0]
-  const unquoted = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
-  const expanded = powershell
-    ? unquoted
-        .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")
-        .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(key) ?? "")
-        .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => {
-          if (key.toUpperCase() === "HOME") return os.homedir()
-          if (key.toUpperCase() === "PWD") return cwd
-          return path.dirname(shell)
-        })
-    : unquoted
-  if (expanded.includes("$") || expanded.includes("`") || expanded.startsWith("(")) return
-  if (expanded === "~") return os.homedir()
-  if (expanded.startsWith("~/") || expanded.startsWith("~\\")) return path.join(os.homedir(), expanded.slice(2))
-  return expanded
+  const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
+  if (!powershell) return staticDirectory(text)
+
+  return staticDirectory(
+    text
+      .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")
+      .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(key) ?? "")
+      .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => {
+        if (key.toUpperCase() === "HOME") return os.homedir()
+        if (key.toUpperCase() === "PWD") return cwd
+        return path.dirname(shell)
+      }),
+  )
+}
+
+function staticDirectory(value: string) {
+  if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
+  if (value === "~") return os.homedir()
+  if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))
+  return value
 }
 
 function environment(key: string) {
