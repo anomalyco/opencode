@@ -4,19 +4,33 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useTheme, useThemes } from "../context/theme"
-import { adaptiveSessionTabLayout, sessionTabComplete, SESSION_TAB_OVERFLOW_WIDTH } from "../context/session-tabs-model"
+import {
+  adaptiveSessionTabLayout,
+  sessionTabComplete,
+  SESSION_TAB_OVERFLOW_WIDTH,
+  type SessionTabUnread,
+} from "../context/session-tabs-model"
 import { createAnimatable, spring } from "../ui/animation"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 import { TabPulse } from "./tab-pulse"
 import { tint } from "../theme/color"
 
-export function SessionTabs() {
-  const tabs = useSessionTabs()
+type ContextController = ReturnType<typeof useSessionTabs>
+export type SessionTabsStatus = Omit<ReturnType<ContextController["status"]>, "unread"> & {
+  unread: SessionTabUnread | undefined
+}
+export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close"> & {
+  status(sessionID: string): SessionTabsStatus
+}
+
+export function SessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
+  const tabs = props.controller ?? useSessionTabs()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const { mode } = useThemes()
   const config = useConfig().data
+  const animations = () => props.animations ?? config.animations ?? true
   const [hovered, setHovered] = createSignal<string>()
   const hueStep = () => (mode() === "light" ? 800 : 200)
   const accent = () => theme.hue.accent[hueStep()]
@@ -48,7 +62,7 @@ export function SessionTabs() {
     activities: layout().tabs.map((tab) => Number(statuses().get(tab.sessionID)!.complete)),
   }))
   const motion = createAnimatable(targets(), {
-    enabled: () => config.animations ?? true,
+    enabled: animations,
     transition: spring({ visualDuration: 0.1 }),
   })
   const identity = createMemo(() =>
@@ -167,7 +181,7 @@ export function SessionTabs() {
               onMouseUp={() => tabs.select(tab.sessionID)}
             >
               <TabPulse
-                enabled={config.animations ?? true}
+                enabled={animations()}
                 active={status().busy}
                 complete={status().complete}
                 glow={status().unread === "activity" && !status().busy && !selected() && !status().attention}
