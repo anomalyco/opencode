@@ -122,6 +122,14 @@ export function findContextLimit(
   return providers[providerID]?.models[modelID]?.limit.context
 }
 
+export function findCurrency(
+  providers: Record<ProviderV2.ID, Provider.Info>,
+  providerID: ProviderV2.ID,
+  modelID: ModelV2.ID,
+): string {
+  return providers[providerID]?.models[modelID]?.cost.currency ?? "USD"
+}
+
 export const contextLimitLoaderLayer = Layer.effect(
   ContextLimitLoader,
   Effect.gen(function* () {
@@ -180,6 +188,38 @@ const layer = Layer.effect(
       return yield* yield* cachedLimit(input)
     })
 
+    const currencies = yield* SynchronizedRef.make(new Map<string, Effect.Effect<string>>())
+
+    const cachedCurrency = Effect.fnUntraced(function* (input: {
+      readonly directory: string
+      readonly providerID: ProviderV2.ID
+      readonly modelID: ModelV2.ID
+    }) {
+      return yield* SynchronizedRef.modifyEffect(
+        currencies,
+        Effect.fnUntraced(function* (items) {
+          const key = `${input.directory}\u0000${input.providerID}\u0000${input.modelID}`
+          const current = items.get(key)
+          if (current) return [current, items] as const
+          const next = yield* Effect.cached(
+            contextLimitLoader.providers(input.directory).pipe(
+              Effect.map((providers) => findCurrency(providers, input.providerID, input.modelID)),
+              Effect.catch(() => Effect.succeed("USD")),
+            ),
+          )
+          return [next, new Map(items).set(key, next)] as const
+        }),
+      )
+    })
+
+    const modelCurrency = Effect.fn("ACPUsage.modelCurrency")(function* (input: {
+      readonly directory: string
+      readonly providerID: ProviderV2.ID
+      readonly modelID: ModelV2.ID
+    }) {
+      return yield* yield* cachedCurrency(input)
+    })
+
     const sendUpdate = Effect.fn("ACPUsage.sendUpdate")(function* (input: {
       readonly connection: UsageConnection
       readonly sessionID: string
@@ -205,6 +245,12 @@ const layer = Layer.effect(
       })
       if (!size) return
 
+      const currency = yield* modelCurrency({
+        directory: input.directory,
+        providerID: ProviderV2.ID.make(message.providerID),
+        modelID: ModelV2.ID.make(message.modelID),
+      })
+
       yield* Effect.promise(() =>
         input.connection
           .sessionUpdate({
@@ -213,7 +259,7 @@ const layer = Layer.effect(
               sessionUpdate: "usage_update",
               used: contextTokens(message),
               size,
-              cost: { amount: totalSessionCost(messages), currency: "USD" },
+              cost: { amount: totalSessionCost(messages), currency },
             },
           })
           .catch(() => {}),

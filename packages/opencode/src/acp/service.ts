@@ -601,6 +601,7 @@ function makeDirectoryService(sdk: OpencodeClient) {
 
 function makeUsageService(sdk: OpencodeClient) {
   const limits = new Map<string, Promise<number | undefined>>()
+  const currencies = new Map<string, Promise<string>>()
   const contextLimit: UsageService.Interface["contextLimit"] = Effect.fn("ACP.promptUsage.contextLimit")(
     function* (params) {
       const key = `${params.directory}\u0000${params.providerID}\u0000${params.modelID}`
@@ -617,6 +618,26 @@ function makeUsageService(sdk: OpencodeClient) {
         })
         .catch(() => undefined)
       limits.set(key, next)
+      return yield* Effect.promise(() => next)
+    },
+  )
+
+  const modelCurrency = Effect.fn("ACP.promptUsage.modelCurrency")(
+    function* (params: { readonly directory: string; readonly providerID: ProviderV2.ID; readonly modelID: ModelV2.ID }) {
+      const key = `${params.directory}\u0000${params.providerID}\u0000${params.modelID}`
+      const current = currencies.get(key)
+      if (current) return yield* Effect.promise(() => current)
+
+      const next = sdk.config
+        .providers({ directory: params.directory }, { throwOnError: true })
+        .then((response) => {
+          const providers = Object.fromEntries(
+            (response.data?.providers ?? []).map((provider) => [provider.id, provider]),
+          ) as Record<ProviderV2.ID, Provider.Info>
+          return UsageService.findCurrency(providers, params.providerID, params.modelID)
+        })
+        .catch(() => "USD")
+      currencies.set(key, next)
       return yield* Effect.promise(() => next)
     },
   )
@@ -650,6 +671,12 @@ function makeUsageService(sdk: OpencodeClient) {
     })
     if (!size) return
 
+    const currency = yield* modelCurrency({
+      directory: params.directory,
+      providerID: ProviderV2.ID.make(message.providerID),
+      modelID: ModelV2.ID.make(message.modelID),
+    })
+
     yield* Effect.promise(() =>
       params.connection
         .sessionUpdate({
@@ -658,7 +685,7 @@ function makeUsageService(sdk: OpencodeClient) {
             sessionUpdate: "usage_update",
             used: UsageService.contextTokens(message),
             size,
-            cost: { amount: UsageService.totalSessionCost(messages), currency: "USD" },
+            cost: { amount: UsageService.totalSessionCost(messages), currency },
           },
         })
         .catch(() => {}),
