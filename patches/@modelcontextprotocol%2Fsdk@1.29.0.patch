@@ -112,6 +112,31 @@ index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c1
      /**
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
+@@ -541,9 +547,11 @@ class Client extends protocol_js_1.Protocol {
+      * Called after listTools() to pre-compile validators for better performance.
+      */
+-    cacheToolMetadata(tools) {
+-        this._cachedToolOutputValidators.clear();
+-        this._cachedKnownTaskTools.clear();
+-        this._cachedRequiredTaskTools.clear();
++    cacheToolMetadata(tools, reset = true) {
++        if (reset) {
++            this._cachedToolOutputValidators.clear();
++            this._cachedKnownTaskTools.clear();
++            this._cachedRequiredTaskTools.clear();
++        }
+         for (const tool of tools) {
+             // If the tool has an outputSchema, create and cache the validator
+             if (tool.outputSchema) {
+@@ -569,7 +577,7 @@ class Client extends protocol_js_1.Protocol {
+     async listTools(params, options) {
+         const result = await this.request({ method: 'tools/list', params }, types_js_1.ListToolsResultSchema, options);
+         // Cache the tools and their output schemas for future validation
+-        this.cacheToolMetadata(result.tools);
++        this.cacheToolMetadata(result.tools, params?.cursor === undefined);
+         return result;
+     }
+     /**
 diff --git a/dist/cjs/client/streamableHttp.js b/dist/cjs/client/streamableHttp.js
 index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eedff5443c9 100644
 --- a/dist/cjs/client/streamableHttp.js
@@ -461,6 +486,31 @@ index 49b12c6cd918c457420fef7ad5528a9443d1a191..2afe2e22e960f26c9d516ef135d89f8e
      /**
       * After initialization has completed, this will be populated with the server's reported capabilities.
       */
+@@ -537,9 +543,11 @@ export class Client extends Protocol {
+      * Called after listTools() to pre-compile validators for better performance.
+      */
+-    cacheToolMetadata(tools) {
+-        this._cachedToolOutputValidators.clear();
+-        this._cachedKnownTaskTools.clear();
+-        this._cachedRequiredTaskTools.clear();
++    cacheToolMetadata(tools, reset = true) {
++        if (reset) {
++            this._cachedToolOutputValidators.clear();
++            this._cachedKnownTaskTools.clear();
++            this._cachedRequiredTaskTools.clear();
++        }
+         for (const tool of tools) {
+             // If the tool has an outputSchema, create and cache the validator
+             if (tool.outputSchema) {
+@@ -565,7 +573,7 @@ export class Client extends Protocol {
+     async listTools(params, options) {
+         const result = await this.request({ method: 'tools/list', params }, ListToolsResultSchema, options);
+         // Cache the tools and their output schemas for future validation
+-        this.cacheToolMetadata(result.tools);
++        this.cacheToolMetadata(result.tools, params?.cursor === undefined);
+         return result;
+     }
+     /**
 diff --git a/dist/esm/client/streamableHttp.js b/dist/esm/client/streamableHttp.js
 index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da884fcc627a 100644
 --- a/dist/esm/client/streamableHttp.js

@@ -7,6 +7,7 @@ import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { mediaKindFromPath } from "../../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
 import type { FileContent, SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -22,11 +23,12 @@ import type {
 } from "../../components/session-review"
 import type { SessionReviewExpandMode } from "./session-review-v2"
 import { createLineCommentControllerV2 } from "./line-comment-annotations-v2"
+import { shouldVirtualizeReviewDiff } from "./session-review-file-preview-v2-virtualize"
 import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import "./session-review-v2.css"
 
-type ReviewDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
+type ReviewDiff = (SnapshotFileDiff & { file: string }) | FileDiffInfo | VcsFileDiff
 
 export type SessionReviewFilePreviewV2Props = {
   file: string
@@ -219,6 +221,10 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       preloadedDiff={view().preloaded}
       diffStyle={props.diffStyle}
       expandUnchanged={expandUnchanged()}
+      virtualize={shouldVirtualizeReviewDiff({
+        additionLines: view().fileDiff.additionLines.length,
+        deletionLines: view().fileDiff.deletionLines.length,
+      })}
       hunkSeparators={view().fileDiff.isPartial ? "simple" : "line-info-basic"}
       enableLineSelection={lineCommentsEnabled()}
       enableGutterUtility={lineCommentsEnabled()}
@@ -258,7 +264,9 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
             <span data-slot="session-review-v2-file-path">{getDirectory(props.file)}</span>
           </Show>
         </div>
-        <DiffChanges changes={view()} />
+        <div data-slot="session-review-v2-file-diff">
+          <DiffChanges changes={view()} />
+        </div>
       </div>
       <div
         ref={(el) => {

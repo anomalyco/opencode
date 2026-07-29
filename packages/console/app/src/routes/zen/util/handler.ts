@@ -86,7 +86,7 @@ export async function handler(
   type CostInfo = ReturnType<typeof calculateCost>
 
   const MAX_FAILOVER_RETRIES = 3
-  const MAX_429_RETRIES = 3
+  const MAX_RETRYABLE_STATUS_RETRIES = 3
   const dict = i18n(localeFromRequest(input.request))
   const t = (key: Key, params?: Record<string, string | number>) => resolve(dict[key], params)
   const ADMIN_WORKSPACES = [
@@ -213,7 +213,7 @@ export async function handler(
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
       const isNewInference = providerInfo.id.startsWith("console.") || providerInfo.id.startsWith("console-go.")
-      const res = await fetchWith429Retry(
+      const res = await fetchWithRetryableStatus(
         reqUrl,
         {
           method: "POST",
@@ -246,7 +246,7 @@ export async function handler(
           // abandoned Console requests do not leave orphaned inference work open.
           signal: input.request.signal,
         },
-        { count: isNewInference ? MAX_429_RETRIES : 0 },
+        { count: isNewInference ? MAX_RETRYABLE_STATUS_RETRIES : 0 },
       )
 
       if (isNewInference) {
@@ -307,7 +307,7 @@ export async function handler(
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
     // Handle non-streaming response
-    if (!isStream || [400, 404, 429].includes(res.status)) {
+    if (!isStream || [400, 404, 429, 529].includes(res.status)) {
       const json = await res.json()
       await rateLimiter?.track()
       const usage = providerInfo.extractUsage(json)
@@ -697,6 +697,9 @@ export async function handler(
           workspace: {
             id: WorkspaceTable.id,
             region: WorkspaceTable.region,
+            isBlocked: WorkspaceTable.is_blocked,
+            isFlaggedByAnthropic: WorkspaceTable.is_flagged_by_anthropic,
+            isFlaggedByOpenAI: WorkspaceTable.is_flagged_by_openai,
           },
           billing: {
             balance: BillingTable.balance,
@@ -772,6 +775,12 @@ export async function handler(
     )
 
     if (!data) throw new AuthError(t("zen.api.error.invalidApiKey"))
+    if (
+      data.workspace.isBlocked ||
+      (data.workspace.isFlaggedByAnthropic && modelInfo.id.startsWith("claude-")) ||
+      (data.workspace.isFlaggedByOpenAI && modelInfo.id.startsWith("gpt-"))
+    )
+      throw new AuthError(t("zen.api.error.requestBlockedByUpstreamProvider"))
     if (
       modelInfo.id.startsWith("alpha-") &&
       Resource.App.stage === "production" &&
@@ -999,11 +1008,11 @@ export async function handler(
     providerInfo.apiKey = authInfo.provider.credentials
   }
 
-  async function fetchWith429Retry(url: string, options: RequestInit, retry = { count: 0 }) {
+  async function fetchWithRetryableStatus(url: string, options: RequestInit, retry = { count: 0 }) {
     const res = await fetch(url, options)
-    if (res.status === 429 && retry.count < MAX_429_RETRIES) {
+    if ([429, 529].includes(res.status) && retry.count < MAX_RETRYABLE_STATUS_RETRIES) {
       await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retry.count) * 500))
-      return fetchWith429Retry(url, options, { count: retry.count + 1 })
+      return fetchWithRetryableStatus(url, options, { count: retry.count + 1 })
     }
     return res
   }
@@ -1168,28 +1177,29 @@ export async function handler(
             const week = getWeekBounds(new Date())
             const month = getMonthlyBounds(new Date(), authInfo.lite!.timeCreated)
             const rollingWindowSeconds = lite.rollingWindow * 3600
+            const quotaCost = Math.round(cost * modelInfo.costMultiplier)
             return [
               db
                 .update(LiteTable)
                 .set({
                   monthlyUsage: sql`
               CASE
-                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeMonthlyUpdated: sql`now()`,
                   weeklyUsage: sql`
               CASE
-                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeWeeklyUpdated: sql`now()`,
                   rollingUsage: sql`
               CASE
-                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${cost}
-                ELSE ${cost}
+                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeRollingUpdated: sql`

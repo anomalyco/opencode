@@ -1,152 +1,138 @@
-import { expect, mock, beforeEach } from "bun:test"
-import { EventEmitter } from "events"
+import { expect } from "bun:test"
+import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect, Layer, Option } from "effect"
+import { Config } from "../../src/config/config"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { McpAuth } from "../../src/mcp/auth"
+import { McpBrowser } from "../../src/mcp/browser"
+import { MCP } from "../../src/mcp/index"
+import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
-import type { MCP as MCPNS } from "../../src/mcp/index"
 
-// Track open() calls and control failure behavior
-let openShouldFail = false
-let openCalledWith: string | undefined
-let openDeferred: Deferred.Deferred<string> | undefined
+const browsers = new Map<string, { opened: Deferred.Deferred<string>; fail: boolean }>()
 
-void mock.module("open", () => ({
-  default: async (url: string) => {
-    openCalledWith = url
-    if (openDeferred) Effect.runSync(Deferred.succeed(openDeferred, url).pipe(Effect.ignore))
-
-    // Return a mock subprocess that emits an error if openShouldFail is true
-    const subprocess = new EventEmitter()
-    if (openShouldFail) {
-      // Emit error asynchronously like a real subprocess would
-      setTimeout(() => {
-        subprocess.emit("error", new Error("spawn xdg-open ENOENT"))
-      }, 10)
-    }
-    return subprocess
-  },
-}))
-
-// Mock UnauthorizedError
-class MockUnauthorizedError extends Error {
-  constructor() {
-    super("Unauthorized")
-    this.name = "UnauthorizedError"
-  }
-}
-
-// Track what options were passed to each transport constructor
-const transportCalls: Array<{
-  type: "streamable" | "sse"
-  url: string
-  options: { authProvider?: unknown; requestInit?: RequestInit }
-}> = []
-
-// Mock the transport constructors
-void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
-  StreamableHTTPClientTransport: class MockStreamableHTTP {
-    url: string
-    authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
-    constructor(
-      url: URL,
-      options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> }; requestInit?: RequestInit },
-    ) {
-      this.url = url.toString()
-      this.authProvider = options?.authProvider
-      transportCalls.push({
-        type: "streamable",
-        url: url.toString(),
-        options: options ?? {},
-      })
-    }
-    async start() {
-      // Simulate OAuth redirect by calling the authProvider's redirectToAuthorization
-      if (this.authProvider?.redirectToAuthorization) {
-        await this.authProvider.redirectToAuthorization(new URL("https://auth.example.com/authorize?client_id=test"))
-      }
-      throw new MockUnauthorizedError()
-    }
-    async finishAuth(_code: string) {
-      // Mock successful auth completion
-    }
-  },
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
-  SSEClientTransport: class MockSSE {
-    constructor(url: URL) {
-      transportCalls.push({
-        type: "sse",
-        url: url.toString(),
-        options: {},
-      })
-    }
-    async start() {
-      throw new Error("Mock SSE transport cannot connect")
-    }
-  },
-}))
-
-// Mock the MCP SDK Client to trigger OAuth flow
-void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
-  Client: class MockClient {
-    setRequestHandler() {}
-
-    async connect(transport: { start: () => Promise<void> }) {
-      await transport.start()
-    }
-
-    getServerCapabilities() {
-      return { tools: {} }
-    }
-  },
-}))
-
-// Mock UnauthorizedError in the auth module
-void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
-  UnauthorizedError: MockUnauthorizedError,
-}))
-
-beforeEach(() => {
-  openShouldFail = false
-  openCalledWith = undefined
-  openDeferred = undefined
-  transportCalls.length = 0
-})
-
-// Import modules after mocking
-const { MCP } = await import("../../src/mcp/index")
-const { EventV2Bridge } = await import("../../src/event-v2-bridge")
-const { Config } = await import("../../src/config/config")
-const { McpAuth } = await import("../../src/mcp/auth")
-const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
-const { FSUtil } = await import("@opencode-ai/core/fs-util")
-const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
-const mcpTest = testEffect(
-  LayerNode.compile(
-    LayerNode.group([MCP.node, McpAuth.node, EventV2Bridge.node, Config.node, CrossSpawnSpawner.node, FSUtil.node]),
-  ),
+const browserLayer = Layer.succeed(
+  McpBrowser.Service,
+  McpBrowser.Service.of({
+    open: (url) =>
+      Effect.gen(function* () {
+        const browser = browsers.get(new URL(url).origin)
+        if (!browser) return yield* Effect.fail(new Error(`Unexpected browser URL: ${url}`))
+        Deferred.doneUnsafe(browser.opened, Effect.succeed(url))
+        if (browser.fail) return yield* Effect.fail(new Error("spawn xdg-open ENOENT"))
+        yield* Effect.tryPromise({
+          try: () => fetch(url).then((response) => response.body?.cancel()),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+      }),
+  }),
 )
-const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
-const config = (name: string, headers?: Record<string, string>) => ({
-  mcp: {
-    [name]: {
-      type: "remote" as const,
-      url: "https://example.com/mcp",
-      headers,
-    },
-  },
-})
+const mcpTest = testEffect(
+  LayerNode.compile(LayerNode.group([MCP.node, McpAuth.node, EventV2Bridge.node, Config.node]), [
+    [McpBrowser.node, browserLayer],
+  ]),
+)
+
+const serveOAuthMcp = Effect.acquireRelease(
+  Effect.promise(async () => {
+    const requests: Array<{ pathname: string; headers: Headers }> = []
+    const protocol = new Server({ name: "oauth-browser", version: "1.0.0" }, { capabilities: { tools: {} } })
+    protocol.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [] }))
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+      enableJsonResponse: true,
+    })
+    await protocol.connect(transport)
+
+    const http = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        requests.push({ pathname: url.pathname, headers: new Headers(request.headers) })
+
+        if (url.pathname === "/mcp") {
+          if (request.headers.get("authorization") === "Bearer test-access-token") {
+            return transport.handleRequest(request)
+          }
+          return new Response("Unauthorized", {
+            status: 401,
+            headers: {
+              "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp", scope="mcp"`,
+            },
+          })
+        }
+
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp") {
+          return Response.json({
+            resource: `${url.origin}/mcp`,
+            authorization_servers: [url.origin],
+            scopes_supported: ["mcp"],
+          })
+        }
+
+        if (url.pathname === "/.well-known/oauth-authorization-server") {
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            registration_endpoint: `${url.origin}/register`,
+            scopes_supported: ["mcp"],
+            response_types_supported: ["code"],
+            grant_types_supported: ["authorization_code"],
+            token_endpoint_auth_methods_supported: ["none"],
+            code_challenge_methods_supported: ["S256"],
+          })
+        }
+
+        if (url.pathname === "/register") {
+          const metadata = await request.json()
+          if (!metadata || typeof metadata !== "object") return new Response("Invalid metadata", { status: 400 })
+          return Response.json({ ...metadata, client_id: "test-client" }, { status: 201 })
+        }
+
+        if (url.pathname === "/authorize") {
+          const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
+          redirect.searchParams.set("code", "test-code")
+          const state = url.searchParams.get("state")
+          if (state) redirect.searchParams.set("state", state)
+          return Response.redirect(redirect, 302)
+        }
+
+        if (url.pathname === "/token") {
+          return Response.json({ access_token: "test-access-token", token_type: "Bearer", scope: "mcp" })
+        }
+
+        return new Response("Not found", { status: 404 })
+      },
+    })
+
+    return {
+      requests,
+      url: new URL("/mcp", http.url).toString(),
+      close: async () => {
+        await http.stop(true)
+        await protocol.close()
+      },
+    }
+  }),
+  (server) => Effect.promise(server.close),
+)
 
 const withCallbackStop = Effect.addFinalizer(() => Effect.promise(() => McpOAuthCallback.stop()).pipe(Effect.ignore))
 
-const trackBrowserOpen = Effect.gen(function* () {
-  const opened = yield* Deferred.make<string>()
-  openDeferred = opened
-  yield* Effect.addFinalizer(() => Effect.sync(() => (openDeferred = undefined)))
-  return opened
-})
+const trackBrowserOpen = (url: string, fail = false) =>
+  Effect.gen(function* () {
+    const origin = new URL(url).origin
+    const opened = yield* Deferred.make<string>()
+    browsers.set(origin, { opened, fail })
+    yield* Effect.addFinalizer(() => Effect.sync(() => browsers.delete(origin)))
+    return opened
+  })
 
 const trackBrowserOpenFailed = Effect.gen(function* () {
   const events = yield* EventV2Bridge.Service
@@ -160,84 +146,80 @@ const trackBrowserOpenFailed = Effect.gen(function* () {
   return event
 })
 
-const authenticateScoped = (name: string, onAuthorization?: (authorizationUrl: string) => void) =>
+const addServer = Effect.fnUntraced(function* (name: string, url: string, headers?: Record<string, string>) {
+  const mcp = yield* MCP.Service
+  const result = yield* mcp.add(name, { type: "remote", url, headers })
+  expect(result.status).toMatchObject({ [name]: { status: "needs_auth" } })
+  return mcp
+})
+
+mcpTest.instance("BrowserOpenFailed event is published when browser launch fails", () =>
   Effect.gen(function* () {
-    const mcp = yield* service
-    yield* mcp.authenticate(name, onAuthorization).pipe(
-      Effect.ignore,
-      Effect.catchCause(() => Effect.void),
-      Effect.forkScoped,
+    yield* withCallbackStop
+    const server = yield* serveOAuthMcp
+    yield* trackBrowserOpen(server.url, true)
+
+    const event = yield* trackBrowserOpenFailed
+    const mcp = yield* addServer("test-oauth-server", server.url)
+    yield* mcp.authenticate("test-oauth-server").pipe(Effect.ignore, Effect.forkScoped)
+
+    const failure = yield* awaitWithTimeout(
+      Deferred.await(event),
+      "Timed out waiting for BrowserOpenFailed event",
+      "5 seconds",
     )
-  })
 
-mcpTest.instance(
-  "BrowserOpenFailed event is published when open() throws",
-  () =>
-    Effect.gen(function* () {
-      yield* withCallbackStop
-      openShouldFail = true
-
-      const event = yield* trackBrowserOpenFailed
-      yield* authenticateScoped("test-oauth-server")
-
-      const failure = yield* awaitWithTimeout(
-        Deferred.await(event),
-        "Timed out waiting for BrowserOpenFailed event",
-        "5 seconds",
-      )
-
-      expect(failure.mcpName).toBe("test-oauth-server")
-      expect(failure.url).toContain("https://")
-    }),
-  { config: config("test-oauth-server") },
+    expect(failure.mcpName).toBe("test-oauth-server")
+    expect(failure.url).toStartWith(new URL("/authorize", server.url).toString())
+  }),
 )
 
-mcpTest.instance(
-  "BrowserOpenFailed event is NOT published when open() succeeds",
-  () =>
-    Effect.gen(function* () {
-      yield* withCallbackStop
-      openShouldFail = false
+mcpTest.instance("BrowserOpenFailed event is not published when browser launch succeeds", () =>
+  Effect.gen(function* () {
+    yield* withCallbackStop
+    const server = yield* serveOAuthMcp
 
-      const opened = yield* trackBrowserOpen
-      const event = yield* trackBrowserOpenFailed
-      yield* authenticateScoped("test-oauth-server-2")
+    const opened = yield* trackBrowserOpen(server.url)
+    const event = yield* trackBrowserOpenFailed
+    const mcp = yield* addServer("test-oauth-server-2", server.url)
+    const status = yield* awaitWithTimeout(
+      mcp.authenticate("test-oauth-server-2"),
+      "Timed out completing OAuth authentication",
+      "5 seconds",
+    )
+    const url = yield* Deferred.await(opened)
+    const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
 
-      yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()", "5 seconds")
-      const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
-
-      expect(failure).toEqual(Option.none())
-      expect(openCalledWith).toBeDefined()
-    }),
-  { config: config("test-oauth-server-2") },
+    expect(status).toEqual({ status: "connected" })
+    expect(failure).toEqual(Option.none())
+    expect(new URL(url).origin).toBe(new URL(server.url).origin)
+  }),
 )
 
-mcpTest.instance(
-  "open() is called with the authorization URL",
-  () =>
-    Effect.gen(function* () {
-      yield* withCallbackStop
-      openShouldFail = false
-      openCalledWith = undefined
+mcpTest.instance("browser launch receives the discovered authorization URL", () =>
+  Effect.gen(function* () {
+    yield* withCallbackStop
+    const server = yield* serveOAuthMcp
 
-      const opened = yield* trackBrowserOpen
-      const event = yield* trackBrowserOpenFailed
-      const authorization = yield* Deferred.make<string>()
-      yield* authenticateScoped("test-oauth-server-3", (url) => Deferred.doneUnsafe(authorization, Effect.succeed(url)))
+    const opened = yield* trackBrowserOpen(server.url)
+    const authorization = yield* Deferred.make<string>()
+    const mcp = yield* addServer("test-oauth-server-3", server.url, { "X-Custom-Header": "custom-value" })
+    const status = yield* awaitWithTimeout(
+      mcp.authenticate("test-oauth-server-3", (url) => Deferred.doneUnsafe(authorization, Effect.succeed(url))),
+      "Timed out completing OAuth authentication",
+      "5 seconds",
+    )
+    const url = yield* Deferred.await(opened)
+    const authorizationUrl = yield* Deferred.await(authorization)
 
-      const url = yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()", "5 seconds")
-      const authorizationUrl = yield* awaitWithTimeout(
-        Deferred.await(authorization),
-        "Timed out waiting for authorization URL",
-        "5 seconds",
-      )
-      const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
-
-      expect(failure).toEqual(Option.none())
-      expect(authorizationUrl).toBe(url)
-      expect(typeof url).toBe("string")
-      expect(url).toContain("https://")
-      expect(transportCalls.at(-1)?.options.requestInit?.headers).toEqual({ "X-Custom-Header": "custom-value" })
-    }),
-  { config: config("test-oauth-server-3", { "X-Custom-Header": "custom-value" }) },
+    expect(status).toEqual({ status: "connected" })
+    expect(authorizationUrl).toBe(url)
+    expect(new URL(url).pathname).toBe("/authorize")
+    expect(new URL(url).searchParams.get("client_id")).toBe("test-client")
+    expect(
+      server.requests.some(
+        (request) => request.pathname === "/mcp" && request.headers.get("x-custom-header") === "custom-value",
+      ),
+    ).toBe(true)
+  }),
 )

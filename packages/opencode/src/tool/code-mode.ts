@@ -1,14 +1,7 @@
 import * as Tool from "./tool"
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Schema } from "effect"
-import {
-  CodeMode,
-  Tool as SandboxTool,
-  toolError,
-  type ExecuteResult,
-  type JsonSchema,
-  type ToolDefinition,
-} from "@opencode-ai/codemode"
+import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
@@ -18,18 +11,11 @@ import { Plugin } from "@/plugin"
 
 export const CODE_MODE_TOOL = "execute"
 
-const DESCRIPTION = [
-  "Execute a JavaScript/TypeScript program that orchestrates the connected MCP tools inside a confined runtime.",
-  "The full usage guide and the catalog of available tools follow below.",
-].join("\n")
+const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
-    description: [
-      "JavaScript source to execute.",
-      "Inside CodeMode, `tools` contains only the MCP/CodeMode tools listed in this execute tool's description; top-level opencode tools like bash, read, or lsp are not available unless listed there.",
-      "Call available tools using the exact signatures shown in this execute tool's description, compose the results, and `return` the final value.",
-    ].join(" "),
+    description: "Script body executed by the confined interpreter.",
   }),
 })
 
@@ -132,13 +118,13 @@ function projectMcpResult(result: CallToolResult, collect: (attachment: Attachme
 type Run = (input: unknown) => Effect.Effect<unknown, unknown>
 
 function toolTree(catalog: readonly CatalogEntry[], run: (entry: CatalogEntry) => Run) {
-  const tree: Record<string, Record<string, ToolDefinition>> = {}
+  const tree: Record<string, Record<string, SandboxTool.Definition>> = {}
   for (const entry of catalog) {
     const namespace = (tree[entry.server] ??= {})
     namespace[entry.local] = SandboxTool.make({
       description: entry.tool.def.description ?? "",
-      input: entry.tool.def.inputSchema as JsonSchema,
-      output: entry.tool.def.outputSchema as JsonSchema | undefined,
+      input: entry.tool.def.inputSchema as SandboxTool.JsonSchema,
+      output: entry.tool.def.outputSchema as SandboxTool.JsonSchema | undefined,
       run: run(entry),
     })
   }
@@ -279,7 +265,7 @@ export const CodeModeTool = Tool.define(
           ctx.abort.addEventListener("abort", handler, { once: true })
           return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
         })
-        const cancelled = (): ExecuteResult => ({
+        const cancelled = (): CodeMode.Result => ({
           ok: false,
           error: { kind: "ExecutionFailure", message: "Execution cancelled." },
           toolCalls: calls.map((call) => ({ name: call.tool })),
@@ -287,35 +273,37 @@ export const CodeModeTool = Tool.define(
 
         const result = yield* Effect.raceFirst(runtime.execute(params.code), abort.pipe(Effect.map(cancelled)))
         const logs = result.logs ?? []
-        const attached = attachments.length > 0 ? { attachments } : {}
-        const hints = result.ok
-          ? []
-          : (result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))
-        const metadata: Metadata = result.ok ? { toolCalls: calls } : { toolCalls: calls, error: true }
-        let output: string
-        if (result.ok) {
-          if (typeof result.value === "string") output = result.value
-          else if (result.value === undefined) output = "undefined"
-          else {
-            try {
-              output = JSON.stringify(result.value, null, 2) ?? String(result.value)
-            } catch {
-              output = String(result.value)
-            }
-          }
-        } else {
-          output = [result.error.message, ...hints].join("\n")
+        const withLogs = (text: string) => {
+          if (logs.length === 0) return text
+          return text.length > 0 ? `${text}\n\nLogs:\n${logs.join("\n")}` : `Logs:\n${logs.join("\n")}`
         }
-        if (logs.length > 0)
-          output = output.length > 0 ? `${output}\n\nLogs:\n${logs.join("\n")}` : `Logs:\n${logs.join("\n")}`
+
+        if (!result.ok) {
+          if (ctx.abort.aborted) {
+            return {
+              title: CODE_MODE_TOOL,
+              metadata: { toolCalls: calls, error: true },
+              output: "Execution cancelled.",
+            } satisfies Tool.ExecuteResult<Metadata>
+          }
+          const hints = (result.error.suggestions ?? []).filter((hint) => !result.error.message.includes(hint))
+          return yield* Effect.fail(new Error(withLogs([result.error.message, ...hints].join("\n"))))
+        }
+
+        // The interpreter validates returned values as plain JSON, so stringify cannot throw;
+        // it yields undefined only for a program that returns undefined.
+        const output =
+          typeof result.value === "string"
+            ? result.value
+            : (JSON.stringify(result.value, null, 2) ?? String(result.value))
 
         return {
           title: CODE_MODE_TOOL,
-          metadata,
-          output,
-          ...attached,
+          metadata: { toolCalls: calls },
+          output: withLogs(output),
+          ...(attachments.length > 0 ? { attachments } : {}),
         } satisfies Tool.ExecuteResult<Metadata>
-      }),
+      }, Effect.orDie),
     }
     return init
   }),

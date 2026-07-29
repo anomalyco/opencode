@@ -48,6 +48,40 @@ test("does not reverse visible rows when the user wheels during shell remeasurem
   await reportVisualStability(testInfo, "wheel-during-resize", trace, rowPairPlan(regions, 1))
 })
 
+test("keeps moving upward while drag-selecting above the timeline", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: history(80),
+    viewport: { width: 1400, height: 700 },
+    reducedMotion: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const text = page.getByText("History 79.", { exact: false })
+  await expect(text).toBeVisible()
+  await scroller.evaluate((element) => {
+    element.dataset.selectionLength = "0"
+    document.addEventListener("selectionchange", () => {
+      element.dataset.selectionLength = String(
+        Math.max(Number(element.dataset.selectionLength), window.getSelection()?.toString().length ?? 0),
+      )
+    })
+  })
+  const textBox = await text.boundingBox()
+  const scrollBox = await scroller.boundingBox()
+  expect(textBox).not.toBeNull()
+  expect(scrollBox).not.toBeNull()
+  if (!textBox || !scrollBox) return
+
+  await page.mouse.move(textBox.x + textBox.width - 10, textBox.y + textBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(textBox.x + 20, scrollBox.y - 120, { steps: 30 })
+
+  await expect.poll(() => scroller.evaluate((element) => Number(element.dataset.selectionLength))).toBeGreaterThan(0)
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeGreaterThan(500)
+  await page.mouse.up()
+})
+
 test("does not pull a keyboard-scrolled user during shell remeasurement", async ({ page }, testInfo) => {
   const shellID = "prt_keyboard_01_shell"
   const followingID = "prt_keyboard_02_following"

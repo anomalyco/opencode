@@ -1,0 +1,43 @@
+@keyframes prompt-attachments-fade-left {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
+
+@keyframes prompt-attachments-fade-right {
+  from {
+    visibility: visible;
+  }
+  to {
+    visibility: hidden;
+  }
+}
+
+[data-slot="prompt-attachments"] {
+  timeline-scope: --prompt-attachments-scroll;
+
+  [data-slot^="prompt-attachments-fade-"] {
+    visibility: hidden;
+  }
+}
+
+@supports (animation-timeline: --prompt-attachments-scroll) and (timeline-scope: --prompt-attachments-scroll) {
+  [data-slot="prompt-attachments-scroll"] {
+    scroll-timeline: --prompt-attachments-scroll x;
+  }
+
+  [data-slot="prompt-attachments-fade-left"] {
+    animation: prompt-attachments-fade-left linear both;
+    animation-timeline: --prompt-attachments-scroll;
+    animation-range: 0 0.1px;
+  }
+
+  [data-slot="prompt-attachments-fade-right"] {
+    animation: prompt-attachments-fade-right linear both;
+    animation-timeline: --prompt-attachments-scroll;
+    animation-range: calc(100% - 1.1px) calc(100% - 1px);
+  }
+}
