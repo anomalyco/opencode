@@ -47,7 +47,7 @@ export const configure = (input: Config) => {
   })
   return {
     id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -57,7 +57,10 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => {
   if (settings.apiKey !== undefined && settings.authToken !== undefined)
     throw new Error("Anthropic-compatible apiKey cannot be combined with authToken")
   return configure({
