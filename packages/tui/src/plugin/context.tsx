@@ -24,7 +24,7 @@ import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
 import { useTuiApp, useTuiLifecycle, useTuiPaths } from "../context/runtime"
 import { useLocation } from "../context/location"
-import { useTheme, useThemes } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -90,9 +90,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const app = useTuiApp()
   const paths = useTuiPaths()
   const location = useLocation()
-  const theme = useTheme()
   const themes = useThemes()
-  const pluginTheme = createPluginTheme(theme, themes)
   const dialog = useDialog()
   const toast = useToast()
   const attention = useAttention()
@@ -224,7 +222,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       client: client.api,
       data,
       attention,
-      theme: pluginTheme,
+      get theme() {
+        return themes.resolved()
+      },
       keymap: {
         layer: Keymap.createLayer,
         dispatch: keymap.dispatch,
@@ -523,24 +523,6 @@ function isPlugin(value: unknown): value is Plugin.Definition {
     "setup" in value &&
     typeof value.setup === "function"
   )
-}
-
-type PluginTheme = ReturnType<typeof useTheme> & {
-  contextual(context: "elevated" | "overlay"): PluginTheme
-  syntaxStyle(): ReturnType<ReturnType<typeof useThemes>["currentSyntax"]>
-}
-
-export function createPluginTheme(theme: ReturnType<typeof useTheme>, themes: ReturnType<typeof useThemes>): PluginTheme {
-  return new Proxy(theme as PluginTheme, {
-    get(target, property, receiver) {
-      if (property === "contextual") {
-        return (context: "elevated" | "overlay") => createPluginTheme(themes.contextual(context), themes)
-      }
-      if (property === "syntaxStyle") return themes.currentSyntax
-      if (Reflect.has(target, property)) return Reflect.get(target, property, receiver)
-      return Reflect.get(themes, property, themes)
-    },
-  })
 }
 
 export function usePlugin() {

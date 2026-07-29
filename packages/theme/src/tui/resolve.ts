@@ -19,7 +19,7 @@ import type {
   HueScale,
   ResolvedActionState,
   ResolvedTheme,
-  ResolvedThemeView,
+  ResolvedThemeTokens,
   StatefulColorDefinition,
   ThemeTokensDefinition,
 } from "./index.js"
@@ -132,15 +132,15 @@ function contextualActions(
 
 function resolveView(
   definition: ThemeTokensDefinition,
-  hue: ResolvedThemeView["hue"],
-  categorical: ResolvedThemeView["categorical"],
-  hueSteps: Pick<ResolvedThemeView, "source" | "increase" | "decrease">,
-): ResolvedThemeView {
+  hue: ResolvedThemeTokens["hue"],
+  categorical: ResolvedThemeTokens["categorical"],
+  hueSteps: Pick<ResolvedThemeTokens, "source" | "increase" | "decrease">,
+): ResolvedThemeTokens {
   const source: Record<string, unknown> = { hue, ...definition }
-  return { ...(createResolver(source)(source, "theme") as ResolvedThemeView), hue, categorical, ...hueSteps }
+  return { ...(createResolver(source)(source, "theme") as ResolvedThemeTokens), hue, categorical, ...hueSteps }
 }
 
-function compileHueSteps(hue: ResolvedThemeView["hue"]): Pick<ResolvedThemeView, "source" | "increase" | "decrease"> {
+function compileHueSteps(hue: ResolvedThemeTokens["hue"]): Pick<ResolvedThemeTokens, "source" | "increase" | "decrease"> {
   const index = new WeakMap<RGBA, { hue: keyof typeof hue; step: HueStep; position: number }>()
   for (const [name, scale] of Object.entries(hue) as [keyof typeof hue, HueScale][]) {
     HueStep.literals.forEach((step, position) => index.set(scale[step], { hue: name, step, position }))
@@ -201,7 +201,7 @@ function resolveHue(definition: HueDefinition) {
 
   return Object.fromEntries(
     [...BaseHue.literals, ...HueAlias.literals].map((name) => [name, resolve(name, [])]),
-  ) as ResolvedThemeView["hue"]
+  ) as ResolvedThemeTokens["hue"]
 }
 
 function createResolver(source: Record<string, unknown>) {

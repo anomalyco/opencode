@@ -1,7 +1,7 @@
 import { createEffect, createMemo, For, onCleanup, Show, useContext, createContext } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
-import { useThemes } from "../../../context/theme"
+import { useTheme } from "../../../context/theme"
 import { SplitBorder } from "../../../ui/border"
 import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
@@ -39,7 +39,7 @@ export type ComposerProps = {
 }
 
 export function Composer(props: ComposerProps) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
 
   const [store, setStore] = createStore({
     tabs: {} as Record<string, Tab>,

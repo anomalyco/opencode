@@ -3,7 +3,7 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import open from "open"
-import { useThemes } from "../../context/theme"
+import { useTheme, useThemes } from "../../context/theme"
 import type { FormField, FormValue } from "@opencode-ai/client"
 import type { FormWithLocation } from "../../context/data"
 import { useClient } from "../../context/client"
@@ -45,7 +45,7 @@ function requestOptions(form: FormWithLocation) {
 export function FormPrompt(props: { form: FormWithLocation }) {
   const client = useClient()
   const themes = useThemes()
-  const theme = themes.contextual("elevated")
+  const theme = useTheme("elevated")
   const themeMode = themes.mode
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()

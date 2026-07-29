@@ -1,6 +1,12 @@
 import { CliRenderEvents, SyntaxStyle, type TerminalColors } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
-import { generateSyntax, resolveThemeDocument, themeModes } from "@opencode-ai/theme/tui"
+import {
+  generateSyntax,
+  resolveThemeDocument,
+  themeModes,
+  type ResolvedTheme,
+  type ThemeContext,
+} from "@opencode-ai/theme/tui"
 import {
   DEFAULT_THEMES,
   addTheme,
@@ -95,10 +101,9 @@ type State = {
   ready: boolean
 }
 
-type ContextName = "elevated" | "overlay"
 type Themes = {
   current: ComponentTheme
-  contextual(context: ContextName): ComponentTheme
+  resolved: Accessor<ResolvedTheme>
   readonly selected: string
   all: typeof allThemes
   has: typeof hasTheme
@@ -115,6 +120,13 @@ type Themes = {
   readonly ready: boolean
 }
 
+type ThemeContextValue = {
+  root: ComponentTheme
+  current: ComponentTheme["contexts"][ThemeContext]
+  themes: Themes
+  readonly ready: boolean
+}
+
 const [store, setStore] = createStore<State>({
   themes: allThemes(),
   mode: "dark",
@@ -127,7 +139,7 @@ subscribeThemes((themes) => setStore("themes", themes))
 
 const themeContext = createSimpleContext({
   name: "Theme",
-  init: (props: { mode: "dark" | "light"; source?: ThemeSource }) => {
+  init: (props: { mode: "dark" | "light"; source?: ThemeSource }): ThemeContextValue => {
     const renderer = useRenderer()
     const configState = useConfig()
     const config = configState.data
@@ -309,21 +321,14 @@ const themeContext = createSimpleContext({
     valuesV2()
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const current = createComponentTheme(valuesV2, mode)
-    const contextsV2 = {
-      elevated: createComponentTheme(() => valuesV2().contexts["@context:elevated"] ?? valuesV2(), mode),
-      overlay: createComponentTheme(() => valuesV2().contexts["@context:overlay"] ?? valuesV2(), mode),
-    }
 
     createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
 
     const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
-    function contextual(context: ContextName) {
-      return contextsV2[context]
-    }
     const service: Themes = {
       current,
+      resolved: valuesV2,
       currentSyntax,
-      contextual,
       get selected() {
         return store.active
       },
@@ -356,6 +361,7 @@ const themeContext = createSimpleContext({
       },
     }
     return {
+      root: current,
       current,
       themes: service,
       get ready() {
@@ -368,15 +374,20 @@ const themeContext = createSimpleContext({
 export function useThemes() {
   return themeContext.use().themes
 }
-export function useTheme() {
-  return themeContext.use().current
+export function useTheme(): ComponentTheme
+export function useTheme(context: ThemeContext): ComponentTheme["contexts"][ThemeContext]
+export function useTheme(context?: ThemeContext) {
+  const value = themeContext.use()
+  return context ? value.root.contexts[context] : value.current
 }
 export const ThemeProvider = themeContext.provider
 
-export function ThemeContextProvider(props: ParentProps<{ context: ContextName }>) {
-  const themes = useThemes()
+export function ThemeContextProvider(props: ParentProps<{ context: ThemeContext }>) {
+  const value = themeContext.use()
   return (
-    <themeContext.context.Provider value={{ current: themes.contextual(props.context), themes, ready: themes.ready }}>
+    <themeContext.context.Provider
+      value={{ root: value.root, current: value.root.contexts[props.context], themes: value.themes, ready: value.ready }}
+    >
       {props.children}
     </themeContext.context.Provider>
   )

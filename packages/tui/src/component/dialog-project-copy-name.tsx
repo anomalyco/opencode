@@ -2,12 +2,12 @@ import { InputRenderable, TextAttributes } from "@opentui/core"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { createSignal, onMount } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
 
 export function DialogProjectCopyName(props: { onConfirm: (name: string) => void }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
   const [inputTarget, setInputTarget] = createSignal<InputRenderable>()
   let input: InputRenderable

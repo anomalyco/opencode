@@ -40,8 +40,9 @@ export type {
   ResolvedActionState,
   ResolvedFormfieldState,
   ResolvedTheme,
-  ResolvedThemeView,
+  ResolvedThemeTokens,
   StatefulColor,
+  ThemeContext,
 } from "./types.js"
 export { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
 export { migrateV1 } from "./v1-migrate.js"

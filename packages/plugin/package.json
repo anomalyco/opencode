@@ -30,12 +30,16 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
+    "@opencode-ai/theme": "workspace:*",
     "@opentui/core": ">=0.4.5",
     "@opentui/keymap": ">=0.4.5",
     "@opentui/solid": ">=0.4.5",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
+    "@opencode-ai/theme": {
+      "optional": true
+    },
     "@opentui/core": {
       "optional": true
     },
@@ -50,6 +54,7 @@
     }
   },
   "devDependencies": {
+    "@opencode-ai/theme": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",

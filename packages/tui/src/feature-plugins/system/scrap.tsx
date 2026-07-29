@@ -2,6 +2,7 @@ import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createSignal } from "solid-js"
 import { SessionTabs, type SessionTabsController } from "../../component/session-tabs"
+import { useTheme } from "../../context/theme"
 
 type FixtureStatus = ReturnType<SessionTabsController["status"]>
 
@@ -44,7 +45,7 @@ function Commands(props: { context: Plugin.Context }) {
 function Scrap(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme
-  const elevatedTheme = props.context.theme.contextual("elevated")
+  const elevatedTheme = useTheme("elevated")
   const [tabs, setTabs] = createSignal(FIXTURE_TABS.slice(0, 6))
   const [active, setActive] = createSignal<string | undefined>("fixture-2")
   const [animations, setAnimations] = createSignal(true)

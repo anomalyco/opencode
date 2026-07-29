@@ -19,6 +19,7 @@ import type {
   ShellInfo,
   SkillInfo,
 } from "@opencode-ai/client"
+import type { ResolvedTheme } from "@opencode-ai/theme/tui"
 import type { CliRenderer, KeyEvent, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 
@@ -346,7 +347,7 @@ export interface Context {
   readonly client: OpenCodeClient
   readonly data: Data
   readonly attention: Attention
-  readonly theme: any
+  readonly theme: ResolvedTheme
   readonly keymap: Keymap
   readonly ui: UI
 }
