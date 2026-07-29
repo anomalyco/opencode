@@ -1,6 +1,11 @@
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
+import type {
+  BrowserPaneBinding,
+  BrowserPaneLayout,
+} from "@opencode-ai/app/browser-pane"
+import type { BrowserPaneOpenEvent } from "../browser-pane-ipc"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
@@ -27,6 +32,12 @@ export type UpdaterAPI = {
   check: () => Promise<UpdaterState>
   install: () => Promise<void>
 }
+export type BrowserPaneAPI = {
+  register: (binding: BrowserPaneBinding) => Promise<void>
+  unregister: (bindingID: string) => Promise<void>
+  setLayout: (bindingID: string, layout?: BrowserPaneLayout) => void
+  onOpen: (callback: (event: BrowserPaneOpenEvent) => void) => () => void
+}
 
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
@@ -47,6 +58,7 @@ export type ElectronAPI = {
   awaitInitialization: () => Promise<ServerReadyData>
   wslServers: WslServersAPI
   updater: UpdaterAPI
+  browserPane: BrowserPaneAPI
   consumeInitialDeepLinks: () => Promise<string[]>
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>

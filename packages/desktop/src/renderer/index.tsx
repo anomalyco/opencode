@@ -233,6 +233,26 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
     storage,
 
+    browserPane: {
+      register: (binding, onOpen) => {
+        let closed = false
+        const ready = window.api.browserPane.register(binding)
+        const disposeOpen = window.api.browserPane.onOpen((event) => {
+          if (!closed && event.bindingID === binding.bindingID) onOpen()
+        })
+        return {
+          setLayout: (layout) =>
+            void ready.then(() => window.api.browserPane.setLayout(binding.bindingID, layout)).catch(() => undefined),
+          close: () => {
+            if (closed) return
+            closed = true
+            disposeOpen()
+            void ready.then(() => window.api.browserPane.unregister(binding.bindingID)).catch(() => undefined)
+          },
+        }
+      },
+    },
+
     updater: {
       state: updaterState,
       check: () => window.api.updater.check(),

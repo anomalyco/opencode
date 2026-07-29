@@ -5,6 +5,17 @@ import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
+import type { BrowserPanePlatform } from "../browser-pane"
+export type {
+  BrowserPaneBinding,
+  BrowserPaneBounds,
+  BrowserPaneEndpoint,
+  BrowserPaneLayout,
+  BrowserPanePlatform,
+  BrowserPaneRegistration,
+  BrowserPaneTarget,
+} from "../browser-pane"
+export { browserPaneAvailable, createBrowserPaneBinding } from "../browser-pane"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -123,6 +134,9 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Native browser pane hosted by the platform (desktop only). */
+  browserPane?: BrowserPanePlatform
 }
 
 export type Platform = PlatformBase &
