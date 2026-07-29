@@ -387,6 +387,67 @@ describe("ProviderTransform.options - minimax m3 thinking", () => {
   })
 })
 
+describe("NVIDIA NIM GLM thinking", () => {
+  const sessionID = "test-session-123"
+
+  const nvidiaGlmModel = {
+    providerID: "nvidia",
+    id: "nvidia/z-ai/glm-5.2",
+    api: {
+      id: "z-ai/glm-5.2",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    capabilities: { reasoning: true },
+  } as any
+
+  test("variants() returns chat_template_kwargs for NVIDIA NIM GLM", () => {
+    const variants = ProviderTransform.variants(nvidiaGlmModel)
+    expect(variants.high).toEqual({
+      chat_template_kwargs: {
+        enable_thinking: true,
+        reasoning_effort: "high",
+      },
+    })
+  })
+
+  test("options() injects chat_template_kwargs.enable_thinking", () => {
+    const opts = ProviderTransform.options({
+      model: nvidiaGlmModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(opts.chat_template_kwargs).toEqual({
+      enable_thinking: true,
+      clear_thinking: false,
+    })
+  })
+
+  test("does NOT inject for non-GLM NVIDIA models", () => {
+    const nemotron = {
+      ...nvidiaGlmModel,
+      id: "nvidia/nemotron-3-super",
+      api: {
+        id: "nvidia/nemotron-3-super",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const opts = ProviderTransform.options({ model: nemotron, sessionID, providerOptions: {} })
+    expect(opts.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("does NOT inject for GLM on other providers", () => {
+    const zaiGlm = { ...nvidiaGlmModel, providerID: "zai" }
+    const opts = ProviderTransform.options({ model: zaiGlm, sessionID, providerOptions: {} })
+    expect(opts.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("returns empty variants when model has no reasoning capability", () => {
+    const plainModel = { ...nvidiaGlmModel, capabilities: {} }
+    const variants = ProviderTransform.variants(plainModel as any)
+    expect(variants).toEqual({})
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
