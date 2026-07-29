@@ -4,15 +4,24 @@ import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import { BrowserPaneIPC } from "../browser-pane-ipc"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
-import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import {
+  getPinchZoomEnabled,
+  getWindowID,
+  isTrustedRendererUrl,
+  setPinchZoomEnabled,
+  setTitlebar,
+  updateTitlebar,
+} from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import type { BrowserPane } from "./browser-pane"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -41,6 +50,7 @@ type Deps = {
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
+  browser: BrowserPane.Controller
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -88,6 +98,20 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
+  ipcMain.handle(BrowserPaneIPC.register, (event, binding: unknown) => {
+    return deps.browser.register(requireTrustedWindow(event), binding)
+  })
+  ipcMain.handle(BrowserPaneIPC.unregister, (event, bindingID: unknown) => {
+    if (typeof bindingID !== "string") throw new TypeError("Invalid browser pane binding ID")
+    return deps.browser.unregister(requireTrustedWindow(event), bindingID)
+  })
+  ipcMain.on(BrowserPaneIPC.layout, (event, input: unknown) => {
+    const win = trustedWindow(event)
+    if (!win) return
+    try {
+      deps.browser.setLayout(win, input)
+    } catch {}
+  })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)
@@ -268,6 +292,17 @@ export function registerIpcHandlers(deps: Deps) {
       relaunch: deps.relaunch,
     })
   })
+}
+
+function trustedWindow(event: IpcMainEvent | IpcMainInvokeEvent) {
+  if (!isTrustedRendererUrl(event.senderFrame?.url)) return undefined
+  return BrowserWindow.fromWebContents(event.sender) ?? undefined
+}
+
+function requireTrustedWindow(event: IpcMainInvokeEvent) {
+  const win = trustedWindow(event)
+  if (!win) throw new Error("Untrusted browser pane IPC sender")
+  return win
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {

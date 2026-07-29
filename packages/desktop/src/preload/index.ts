@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { ElectronAPI, WslServersEvent } from "./types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
+import { BrowserPaneIPC, type BrowserPaneOpenEvent } from "../browser-pane-ipc"
 
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
 let updaterState: UpdaterState | undefined
@@ -55,6 +56,16 @@ const api: ElectronAPI = {
     },
     check: () => ipcRenderer.invoke("updater-check"),
     install: () => ipcRenderer.invoke("updater-install"),
+  },
+  browserPane: {
+    register: (binding) => ipcRenderer.invoke(BrowserPaneIPC.register, binding),
+    unregister: (bindingID) => ipcRenderer.invoke(BrowserPaneIPC.unregister, bindingID),
+    setLayout: (bindingID, layout) => ipcRenderer.send(BrowserPaneIPC.layout, { bindingID, layout }),
+    onOpen: (callback) => {
+      const handler = (_event: unknown, input: BrowserPaneOpenEvent) => callback(input)
+      ipcRenderer.on(BrowserPaneIPC.open, handler)
+      return () => ipcRenderer.removeListener(BrowserPaneIPC.open, handler)
+    },
   },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),

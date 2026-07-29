@@ -11,6 +11,7 @@ import {
   Match,
   Switch,
   createMemo,
+  createResource,
   createEffect,
   createComputed,
   createSignal,
@@ -50,7 +51,8 @@ import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
 import { PromptProvider, usePrompt } from "@/context/prompt"
-import { usePlatform } from "@/context/platform"
+import { browserPaneAvailable, createBrowserPaneBinding, usePlatform } from "@/context/platform"
+import type { BrowserPaneRegistration } from "@/context/platform"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { ServerConnection, serverName, useServer } from "@/context/server"
@@ -103,6 +105,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
+import { SessionBrowserPane } from "./session/browser-pane"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -352,6 +355,7 @@ function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boo
 
 export default function Page() {
   const serverSync = useServerSync()
+  const server = useServer()
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
@@ -447,12 +451,87 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
+  const [serverProtocol] = createResource(
+    () => serverSDK().protocol,
+    (protocol) => protocol,
+  )
+  const browserAvailable = createMemo(() =>
+    browserPaneAvailable({
+      platform: !!platform.browserPane,
+      sessionID: params.id,
+      protocol: serverProtocol(),
+    }),
+  )
+  const browserServer = createMemo(
+    () => {
+      if (!browserAvailable()) return undefined
+      const routeServer = serverSDK().server
+      const serverKey = ServerConnection.key(routeServer)
+      const connection = server.list.find((item) => ServerConnection.key(item) === serverKey) ?? routeServer
+      return {
+        endpoint: {
+          url: connection.http.url,
+          username: connection.http.username,
+          password: connection.http.password,
+        },
+      }
+    },
+    undefined,
+    {
+      equals: (left, right) => {
+        if (!left || !right) return left === right
+        return (
+          left.endpoint.url === right.endpoint.url &&
+          left.endpoint.username === right.endpoint.username &&
+          left.endpoint.password === right.endpoint.password
+        )
+      },
+    },
+  )
+  const browserBinding = createMemo(() => {
+    if (!params.id) return undefined
+    const target = browserServer()
+    if (!target) return undefined
+    return createBrowserPaneBinding({ sessionID: params.id, endpoint: target.endpoint })
+  })
+  const [browserPane, setBrowserPane] = createStore<{
+    registration?: BrowserPaneRegistration
+    opened: boolean
+  }>({ opened: false })
+  createEffect(() => {
+    const binding = browserBinding()
+    const browser = platform.browserPane
+    if (!binding || !browser) {
+      setBrowserPane({ registration: undefined, opened: false })
+      return
+    }
+    const registration = browser.register(binding, () => {
+      view().reviewPanel.close()
+      layout.fileTree.close()
+      setBrowserPane("opened", true)
+    })
+    setBrowserPane("registration", registration)
+    onCleanup(() => {
+      setBrowserPane({ registration: undefined, opened: false })
+      registration.close()
+    })
+  })
+  createEffect(() => {
+    if (!browserPane.opened) return
+    if (!view().reviewPanel.opened() && !layout.fileTree.opened()) return
+    setBrowserPane("opened", false)
+  })
+  const desktopBrowserBinding = createMemo(() => {
+    if (!isDesktop() || !browserAvailable() || !browserPane.opened) return undefined
+    return browserPane.registration
+  })
+  const desktopBrowserOpen = createMemo(() => !!desktopBrowserBinding())
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
   const terminalOpen = createMemo(() => view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
   const desktopInlineTerminalOnlyOpen = createMemo(
-    () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
+    () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen() && !desktopBrowserOpen(),
   )
   const desktopFileTreeOpen = createMemo(
     () =>
@@ -463,7 +542,9 @@ export default function Page() {
       }),
   )
   const desktopSessionResizeOpen = createMemo(() =>
-    newSessionDesign() ? desktopV2ReviewOpen() || desktopTerminalOpen() : desktopReviewOpen(),
+    newSessionDesign()
+      ? desktopV2ReviewOpen() || desktopBrowserOpen() || desktopTerminalOpen()
+      : desktopReviewOpen() || desktopBrowserOpen(),
   )
   const desktopSidePanelOpen = createMemo(() => desktopSessionResizeOpen() || desktopFileTreeOpen())
   let panelRow: HTMLDivElement | undefined
@@ -505,6 +586,7 @@ export default function Page() {
   const desktopV2PanelLayout = createMemo(() =>
     sessionPanelLayout({
       review: desktopV2ReviewOpen(),
+      browser: desktopBrowserOpen(),
       terminal: desktopTerminalOpen(),
       files: desktopFileTreeOpen(),
     }),
@@ -2298,27 +2380,42 @@ export default function Page() {
         </div>
 
         <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
-          <Suspense>
-            <SessionSidePanel
-              canReview={canReview}
-              diffs={reviewDiffs}
-              diffsReady={reviewReady}
-              empty={reviewEmptyText}
-              hasReview={hasReview}
-              reviewHasFocusableContent={hasReview}
-              reviewCount={reviewCount}
-              reviewPanel={reviewPanel}
-              activeDiff={activeReviewFile()}
-              focusReviewDiff={focusReviewDiff}
-              reviewSnap={ui.reviewSnap}
-              size={size}
-            />
-          </Suspense>
+          <Show
+            when={desktopBrowserBinding()}
+            keyed
+            fallback={
+              <Suspense>
+                <SessionSidePanel
+                  canReview={canReview}
+                  diffs={reviewDiffs}
+                  diffsReady={reviewReady}
+                  empty={reviewEmptyText}
+                  hasReview={hasReview}
+                  reviewHasFocusableContent={hasReview}
+                  reviewCount={reviewCount}
+                  reviewPanel={reviewPanel}
+                  activeDiff={activeReviewFile()}
+                  focusReviewDiff={focusReviewDiff}
+                  reviewSnap={ui.reviewSnap}
+                  size={size}
+                />
+              </Suspense>
+            }
+          >
+            {(registration) => <SessionBrowserPane registration={registration} />}
+          </Show>
         </Show>
         <Show when={newSessionDesign()}>
           <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
             <div class="min-w-0 h-full flex flex-1 flex-col">
-              <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
+              <Show when={desktopBrowserBinding()} keyed>
+                {(registration) => (
+                  <div class="min-h-0 flex-1">
+                    <SessionBrowserPane registration={registration} />
+                  </div>
+                )}
+              </Show>
+              <Show when={isDesktop() && !desktopBrowserOpen() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
                 <div class="min-h-0 flex-1">
                   <Suspense>
                     <SessionSidePanel
