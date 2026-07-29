@@ -179,8 +179,9 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
         })
       }
 
-      const upsert: Node[] = []
-      const removedSessionIds: string[] = []
+      const staged = new Map(nodes)
+      const upsert = new Map<string, Node>()
+      const removed = new Set<string>()
       for (const rootSessionId of roots) {
         const next = await snapshot({
           sdk: input.sdk,
@@ -194,30 +195,29 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
         })
         if (!active) return
 
-        const previous = [...nodes.values()].filter((node) => node.rootSessionId === rootSessionId)
+        const previous = [...staged.values()].filter((node) => node.rootSessionId === rootSessionId)
         const bySession = new Map(next.nodes.map((node) => [node.sessionId, node]))
-        upsert.push(
-          ...next.nodes.filter((node) => {
-            const current = nodes.get(node.sessionId)
-            return !current || !sameNode(current, node)
-          }),
-        )
-        removedSessionIds.push(
-          ...previous.filter((node) => !bySession.has(node.sessionId)).map((node) => node.sessionId),
-        )
-        previous.forEach((node) => nodes.delete(node.sessionId))
-        next.nodes.forEach((node) => nodes.set(node.sessionId, node))
+        next.nodes.forEach((node) => {
+          const current = staged.get(node.sessionId)
+          if (!current || !sameNode(current, node)) upsert.set(node.sessionId, node)
+        })
+        previous.filter((node) => !bySession.has(node.sessionId)).forEach((node) => removed.add(node.sessionId))
+        previous.forEach((node) => staged.delete(node.sessionId))
+        next.nodes.forEach((node) => staged.set(node.sessionId, node))
       }
-      if (!upsert.length && !removedSessionIds.length) continue
+      const removedSessionIds = [...removed].filter((sessionID) => !upsert.has(sessionID))
+      if (!upsert.size && !removedSessionIds.length) continue
 
       const update = encodeUpdate({
         generation,
         revision: revision + 1,
-        upsert,
+        upsert: [...upsert.values()],
         removedSessionIds,
       })
       // Reserve the revision before notification I/O so a failed send can never be reused.
       revision = update.revision
+      nodes.clear()
+      staged.forEach((node) => nodes.set(node.sessionId, node))
       await input.notify?.(update)
     }
   }
@@ -228,27 +228,49 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
       if (!input.events || !input.notify) throw new Error("subagent subscription requires events and notify")
       if (closed) throw new Error("subagent subscription is closed")
 
+      const before = {
+        params,
+        failed: new Set(failed),
+        deleted: new Set(deleted),
+        statuses: new Map(statuses),
+        sessions: new Map(sessions),
+        pending: new Set(pending),
+      }
       params = nextParams
       active = true
       initializing = true
-      removeListener ??= input.events.addListener(handle)
-      const initial = await snapshot({
-        sdk: input.sdk,
-        generation,
-        revision,
-        params,
-        failed,
-        deleted,
-        statuses,
-        sessions,
-      })
-      nodes.clear()
-      initial.nodes.forEach((node) => nodes.set(node.sessionId, node))
-      initializing = false
-      queueMicrotask(() => {
-        process().catch(() => {})
-      })
-      return initial
+      try {
+        removeListener ??= input.events.addListener(handle)
+        const initial = await snapshot({
+          sdk: input.sdk,
+          generation,
+          revision,
+          params,
+          failed,
+          deleted,
+          statuses,
+          sessions,
+        })
+        nodes.clear()
+        initial.nodes.forEach((node) => nodes.set(node.sessionId, node))
+        initializing = false
+        queueMicrotask(() => {
+          process().catch(() => {})
+        })
+        return initial
+      } catch (error) {
+        active = false
+        initializing = false
+        removeListener?.()
+        removeListener = undefined
+        params = before.params
+        replaceSet(failed, before.failed)
+        replaceSet(deleted, before.deleted)
+        replaceMap(statuses, before.statuses)
+        replaceMap(sessions, before.sessions)
+        replaceSet(pending, before.pending)
+        throw error
+      }
     },
     handle,
     close: () => {
@@ -264,6 +286,16 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
       nodes.clear()
     },
   }
+}
+
+function replaceSet<T>(target: Set<T>, source: ReadonlySet<T>) {
+  target.clear()
+  source.forEach((item) => target.add(item))
+}
+
+function replaceMap<K, V>(target: Map<K, V>, source: ReadonlyMap<K, V>) {
+  target.clear()
+  source.forEach((value, key) => target.set(key, value))
 }
 
 async function snapshot(input: {

@@ -348,6 +348,72 @@ describe("acp subagent subscriptions", () => {
     harness.close()
   })
 
+  test("publishes a cross-root move atomically before later updates", async () => {
+    const rootA = session({ id: "root-a", directory: "/workspace/root-a", created: 1, updated: 1 })
+    const rootB = session({ id: "root-b", directory: "/workspace/root-b", created: 2, updated: 2 })
+    const child = session({
+      id: "child",
+      parentID: "root-a",
+      directory: "/workspace/child",
+      created: 3,
+      updated: 3,
+    })
+    const harness = await subscriptionHarness({
+      sessions: [rootA, rootB, child],
+      status: { "root-a": { type: "idle" }, "root-b": { type: "idle" }, child: { type: "idle" } },
+    })
+    const updates: Subagent.Update[] = []
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+      },
+    })
+    const snapshot = await service.subscribe({})
+    const moved = {
+      ...child,
+      parentID: "root-b",
+      title: "moved child",
+      time: { ...child.time, updated: 4 },
+    }
+
+    await harness.send(sessionChanged("session.updated", moved))
+    await harness.send(sessionStatus("child", { type: "busy" }))
+
+    expect(updates.map((update) => update.revision)).toEqual([1, 2])
+    expect(updates[0]).toEqual({
+      generation: snapshot.generation,
+      revision: 1,
+      upsert: [
+        {
+          runId: "child",
+          sessionId: "child",
+          rootSessionId: "root-b",
+          parentSessionId: "root-b",
+          agent: "build",
+          title: "moved child",
+          phase: "completed",
+          createdAt: "1970-01-01T00:00:00.003Z",
+          updatedAt: "1970-01-01T00:00:00.004Z",
+          cwd: "/workspace/child",
+        },
+      ],
+      removedSessionIds: [],
+    })
+    expect(updates[1]?.upsert).toMatchObject([
+      {
+        sessionId: "child",
+        rootSessionId: "root-b",
+        parentSessionId: "root-b",
+        phase: "running",
+      },
+    ])
+
+    service.close()
+    harness.close()
+  })
+
   test("does not reuse a revision after notification failure", async () => {
     const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
     const harness = await subscriptionHarness({ sessions: [root], status: { root: { type: "idle" } } })
@@ -389,6 +455,76 @@ describe("acp subagent subscriptions", () => {
 
     expect(updates).toEqual([])
 
+    harness.close()
+  })
+
+  test("rolls back a failed snapshot before a clean subscription retry", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const attemptChild = session({
+      id: "attempt-child",
+      parentID: "root",
+      directory: "/workspace/attempt-child",
+      created: 2,
+      updated: 2,
+    })
+    const detached = session({ id: "detached", directory: "/workspace/detached", created: 3, updated: 3 })
+    const listStarted = Promise.withResolvers<void>()
+    const rejectList = Promise.withResolvers<void>()
+    let listReads = 0
+    const harness = await subscriptionHarness({
+      sessions: [root],
+      status: { root: { type: "idle" } },
+      list: async (roots) => {
+        listReads += 1
+        if (listReads !== 1) return roots
+        listStarted.resolve()
+        await rejectList.promise
+        throw new Error("snapshot failed")
+      },
+    })
+    const updates: Subagent.Update[] = []
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+      },
+    })
+
+    const first = service.subscribe({})
+    await listStarted.promise
+    const attemptDispatched = harness.afterNextEvent(() => rejectList.resolve())
+    harness.push(sessionChanged("session.created", attemptChild))
+    await attemptDispatched
+    await expect(first).rejects.toThrow("snapshot failed")
+
+    await harness.send(sessionChanged("session.created", detached))
+    const snapshot = await service.subscribe({})
+    await harness.send(sessionStatus("root", { type: "busy" }))
+
+    expect(snapshot.nodes.map((node) => node.sessionId)).toEqual(["root"])
+    expect(updates).toEqual([
+      {
+        generation: snapshot.generation,
+        revision: 1,
+        upsert: [
+          {
+            runId: "root",
+            sessionId: "root",
+            rootSessionId: "root",
+            agent: "build",
+            title: "root",
+            phase: "running",
+            createdAt: "1970-01-01T00:00:00.001Z",
+            updatedAt: "1970-01-01T00:00:00.001Z",
+            cwd: "/workspace/root",
+          },
+        ],
+        removedSessionIds: [],
+      },
+    ])
+
+    service.close()
     harness.close()
   })
 })
@@ -519,6 +655,7 @@ async function subscriptionHarness(input: {
   sessions: Session[]
   status: Record<string, SessionStatus>
   blockChildren?: { rootSessionId: string; started: PromiseWithResolvers<void>; release: Promise<void> }
+  list?: (roots: Session[]) => Promise<Session[]>
 }) {
   const queue: EventEnvelope[] = []
   const waiters: Array<(value: EventEnvelope | undefined) => void> = []
@@ -547,8 +684,10 @@ async function subscriptionHarness(input: {
       event: (options?: { signal?: AbortSignal }) => Promise.resolve({ stream: stream(options?.signal) }),
     },
     session: {
-      list: (params?: { roots?: boolean }) =>
-        Promise.resolve({ data: params?.roots ? input.sessions.filter((item) => !item.parentID) : input.sessions }),
+      list: async (params?: { roots?: boolean }) => {
+        const sessions = params?.roots ? input.sessions.filter((item) => !item.parentID) : input.sessions
+        return { data: input.list ? await input.list(sessions) : sessions }
+      },
       children: async ({ sessionID }: { sessionID: string }) => {
         const data = input.sessions.filter((item) => item.parentID === sessionID)
         if (input.blockChildren && !childrenBlocked && sessionID === input.blockChildren.rootSessionId) {
