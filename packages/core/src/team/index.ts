@@ -24,6 +24,14 @@ export class MemberExistsError extends Schema.TaggedErrorClass<MemberExistsError
 
 type AddMemberInput = Omit<Team.Member, "time">
 type AddTaskInput = Omit<Team.Task, "id" | "teamID" | "time">
+type SpawnInput = {
+  teamID: Team.ID
+  name: string
+  agent: Team.Member["agent"]
+  model: Team.Member["model"]
+  permission: Team.PermissionProfile
+  prompt: string
+}
 
 export interface Interface {
   readonly create: (input: {
@@ -38,6 +46,12 @@ export interface Interface {
     teamID: Team.ID
     member: AddMemberInput
   }) => Effect.Effect<Team.Member, NotFoundError | MemberExistsError | MemberNotFoundError | SessionV2.NotFoundError>
+  readonly spawn: (
+    input: SpawnInput,
+  ) => Effect.Effect<
+    Team.Member,
+    NotFoundError | MemberExistsError | MemberNotFoundError | SessionV2.NotFoundError | SessionV2.PromptConflictError
+  >
   readonly updateMember: (input: {
     teamID: Team.ID
     name: string
@@ -56,6 +70,15 @@ export interface Interface {
     to: string
     text: string
   }) => Effect.Effect<Team.Message, NotFoundError>
+  readonly sendAndWake: (input: {
+    teamID: Team.ID
+    from: string
+    to: string
+    text: string
+  }) => Effect.Effect<
+    Team.Message,
+    NotFoundError | MemberNotFoundError | SessionV2.NotFoundError | SessionV2.PromptConflictError
+  >
   readonly deliver: (messageID: Team.MessageID) => Effect.Effect<void>
   readonly tasks: (teamID: Team.ID) => Effect.Effect<Team.Task[], NotFoundError>
   readonly addTask: (input: { teamID: Team.ID; task: AddTaskInput }) => Effect.Effect<Team.Task, NotFoundError>
@@ -170,6 +193,39 @@ const layer = Layer.effect(
         const row = yield* memberRow(input.teamID, input.member.name)
         return memberFromRow(row)
       }),
+      spawn: Effect.fn("AgentTeam.spawn")(function* (input) {
+        const team = yield* get(input.teamID)
+        const lead = yield* sessions.get(team.leadSessionID)
+        const teammate = yield* sessions.create({
+          parentID: team.leadSessionID,
+          location: lead.location,
+          agent: input.agent,
+          model: input.model,
+        })
+        const member = yield* result.addMember({
+          teamID: input.teamID,
+          member: {
+            name: input.name,
+            sessionID: teammate.id,
+            agent: input.agent,
+            model: input.model,
+            role: "teammate",
+            permission: input.permission,
+            status: "starting",
+          },
+        })
+        yield* sessions.prompt({
+          sessionID: teammate.id,
+          prompt: {
+            text: [
+              `You are ${input.name}, a teammate in ${team.name}.`,
+              "Use team messages to communicate important progress and results.",
+              input.prompt,
+            ].join("\n\n"),
+          },
+        })
+        return yield* result.updateMember({ teamID: input.teamID, name: member.name, status: "busy" })
+      }),
       updateMember: Effect.fn("AgentTeam.updateMember")(function* (input) {
         yield* get(input.teamID)
         const updated = yield* db
@@ -226,6 +282,22 @@ const layer = Layer.effect(
           text: input.text,
           delivered: false,
           time: { created: DateTime.makeUnsafe(now) },
+        })
+      }),
+      sendAndWake: Effect.fn("AgentTeam.sendAndWake")(function* (input) {
+        const team = yield* get(input.teamID)
+        const target = input.to === "lead" ? team.leadSessionID : (yield* memberRow(input.teamID, input.to)).session_id
+        const message = yield* result.send(input)
+        yield* sessions.prompt({
+          sessionID: target,
+          prompt: { text: `[Team message from ${input.from}]\n${input.text}` },
+        })
+        yield* result.deliver(message.id)
+        const delivered = yield* DateTime.now
+        return Team.Message.make({
+          ...message,
+          delivered: true,
+          time: { ...message.time, delivered },
         })
       }),
       deliver: Effect.fn("AgentTeam.deliver")(function* (messageID) {
@@ -314,6 +386,21 @@ const layer = Layer.effect(
           .where(inArray(TeamMemberTable.status, ["starting", "busy"]))
           .run()
           .pipe(Effect.orDie)
+        const interrupted = new Map<Team.ID, string[]>()
+        for (const member of active) {
+          interrupted.set(member.teamID, [...(interrupted.get(member.teamID) ?? []), member.name])
+        }
+        for (const [teamID, names] of interrupted) {
+          const team = yield* get(teamID).pipe(Effect.orDie)
+          yield* sessions
+            .prompt({
+              sessionID: team.leadSessionID,
+              prompt: {
+                text: `[Agent Team recovery]\nOpenCode restarted while these teammates were active: ${names.join(", ")}. Their state is now interrupted. Review their persistent sessions and resume or reassign their tasks.`,
+              },
+            })
+            .pipe(Effect.ignore)
+        }
         return active.length
       }),
     })
@@ -329,6 +416,7 @@ const layer = Layer.effect(
           Effect.flatMap((row) => (row ? Effect.succeed(row) : new MemberNotFoundError({ teamID, name }))),
         )
     }
+    yield* result.recover
     return result
   }),
 )

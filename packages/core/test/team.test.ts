@@ -12,10 +12,12 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionInputTable } from "@opencode-ai/core/session/sql"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { AgentTeam } from "@opencode-ai/core/team"
 import { testEffect } from "./lib/effect"
+import { eq } from "drizzle-orm"
 
 const projects = Layer.succeed(
   ProjectV2.Service,
@@ -104,6 +106,76 @@ describe("AgentTeam", () => {
       yield* teams.deliver(message.id)
       expect(yield* teams.messages({ teamID: team.id, to: "Mark1", undelivered: true })).toEqual([])
       expect(yield* teams.messages({ teamID: team.id })).toMatchObject([{ id: message.id, delivered: true }])
+    }),
+  )
+
+  it.effect("spawns a persistent child session and admits work without waiting for completion", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const teams = yield* AgentTeam.Service
+      const db = (yield* Database.Service).db
+      const lead = yield* session.create({ location, agent: AgentV2.ID.make("mark1"), model })
+      const team = yield* teams.create({ name: "concurrent", leadSessionID: lead.id })
+
+      const member = yield* teams.spawn({
+        teamID: team.id,
+        name: "Spencer2",
+        agent: AgentV2.ID.make("spencer2"),
+        model,
+        permission: "reviewer",
+        prompt: "Review the current change.",
+      })
+
+      expect(member).toMatchObject({ name: "Spencer2", status: "busy", permission: "reviewer" })
+      expect(yield* session.get(member.sessionID)).toMatchObject({ parentID: lead.id, agent: "spencer2", model })
+      expect(
+        yield* db
+          .select()
+          .from(SessionInputTable)
+          .where(eq(SessionInputTable.session_id, member.sessionID))
+          .get()
+          .pipe(Effect.orDie),
+      ).toMatchObject({ prompt: { text: expect.stringContaining("Review the current change.") } })
+    }),
+  )
+
+  it.effect("delivers a named message into the recipient session inbox", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const teams = yield* AgentTeam.Service
+      const db = (yield* Database.Service).db
+      const lead = yield* session.create({ location, agent: AgentV2.ID.make("mark1"), model })
+      const reviewer = yield* session.create({ location, agent: AgentV2.ID.make("spencer2"), model })
+      const team = yield* teams.create({ name: "wake", leadSessionID: lead.id })
+      yield* teams.addMember({
+        teamID: team.id,
+        member: {
+          name: "Spencer2",
+          sessionID: reviewer.id,
+          agent: AgentV2.ID.make("spencer2"),
+          model,
+          role: "teammate",
+          permission: "reviewer",
+          status: "idle",
+        },
+      })
+
+      const message = yield* teams.sendAndWake({
+        teamID: team.id,
+        from: "Mark1",
+        to: "Spencer2",
+        text: "The diff is ready.",
+      })
+
+      expect(message).toMatchObject({ delivered: true, from: "Mark1", to: "Spencer2" })
+      expect(
+        yield* db
+          .select()
+          .from(SessionInputTable)
+          .where(eq(SessionInputTable.session_id, reviewer.id))
+          .get()
+          .pipe(Effect.orDie),
+      ).toMatchObject({ prompt: { text: "[Team message from Mark1]\nThe diff is ready." } })
     }),
   )
 
