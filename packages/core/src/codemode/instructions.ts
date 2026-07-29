@@ -6,7 +6,9 @@ import { Instructions } from "../instructions/index"
 import { CodeModeCatalog } from "./catalog"
 
 // prettier-ignore
-const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.${hasMoreTools ? `
+const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
+
+The Code Mode catalog and \`search\` results are the complete set of tools available within Code Mode. Tools presented elsewhere are not available in this runtime.${hasMoreTools ? `
 
 ## Search
 
