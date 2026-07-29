@@ -202,11 +202,16 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const target = root(sessionID)
       const closed = closeSessionTab(store.tabs, target)
       if (closed.tabs.length === store.tabs.length) return
+      const selected = navigate && current() === target
+      const previous = selected
+        ? moveSessionTabHistory(recordSessionTabHistory(history, target), closed.tabs, target, -1)
+        : { history, sessionID: undefined }
+      const next = previous.sessionID ?? closed.next
+      history = previous.history
       batch(() => {
         setStore("tabs", reconcile(closed.tabs))
         clearUnread(target)
-        if (navigate && current() === target)
-          route.navigate(closed.next ? { type: "session", sessionID: closed.next } : { type: "home" })
+        if (selected) route.navigate(next ? { type: "session", sessionID: next } : { type: "home" })
       })
       save()
     }

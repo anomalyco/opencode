@@ -75,15 +75,30 @@ export function adaptiveSessionTabLayout(
 ) {
   if (tabs.length === 0) return { tabs: [], widths: [], before: 0, after: 0, start: 0, total: 0 }
 
-  const activeIndex = Math.max(
-    0,
-    tabs.findIndex((tab) => tab.sessionID === active),
-  )
+  const activeIndex = tabs.findIndex((tab) => tab.sessionID === active)
   const fit = (width: number) =>
-    Math.min(tabs.length, Math.max(1, 1 + Math.floor((Math.max(0, width) - SESSION_TAB_WIDTH) / SESSION_TAB_MIN_WIDTH)))
+    Math.min(
+      tabs.length,
+      Math.max(
+        1,
+        activeIndex === -1
+          ? Math.floor(Math.max(0, width) / SESSION_TAB_MIN_WIDTH)
+          : 1 + Math.floor((Math.max(0, width) - SESSION_TAB_WIDTH) / SESSION_TAB_MIN_WIDTH),
+      ),
+    )
   const solve = (count: number, start: number, attempts: number): { count: number; start: number } => {
+    const boundedStart = Math.min(Math.max(0, start), tabs.length - count)
     const nextStart = Math.min(
-      Math.max(0, activeIndex < start ? activeIndex : activeIndex >= start + count ? activeIndex - count + 1 : start),
+      Math.max(
+        0,
+        activeIndex === -1
+          ? boundedStart
+          : activeIndex < boundedStart
+            ? activeIndex
+            : activeIndex >= boundedStart + count
+              ? activeIndex - count + 1
+              : boundedStart,
+      ),
       tabs.length - count,
     )
     const markers =
@@ -103,7 +118,7 @@ export function adaptiveSessionTabLayout(
   )
   const roomy = contentWidth >= SESSION_TAB_WIDTH * visible.length
   const total = roomy ? Math.min(contentWidth, SESSION_TAB_MAX_WIDTH * visible.length) : contentWidth
-  if (roomy) {
+  if (roomy || activeIndex === -1) {
     const width = Math.floor(total / visible.length)
     const remainder = total - width * visible.length
     return {

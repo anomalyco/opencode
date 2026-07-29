@@ -75,6 +75,15 @@ describe("session tabs", () => {
     expect(moveSessionTabHistory(history, tabs, undefined, -1).sessionID).toBe("b")
   })
 
+  test("returns to the previous selected open tab after closing the active tab", () => {
+    const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
+    const history = ["a", "c"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
+    const closed = closeSessionTab(tabs, "b")
+    const current = recordSessionTabHistory(history, "b")
+
+    expect(moveSessionTabHistory(current, closed.tabs, "b", -1).sessionID).toBe("c")
+  })
+
   test("reveals completion activity only after session work becomes idle", () => {
     expect(sessionTabComplete("activity", true)).toBe(false)
     expect(sessionTabComplete("activity", false)).toBe(true)
@@ -88,6 +97,24 @@ describe("session tabs", () => {
     expect(layout).toMatchObject({ before: 0, after: 0, start: 0, total: 76 })
     expect(layout.widths).toEqual([9, 9, 9, 22, 9, 9, 9])
     expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(76)
+  })
+
+  test("does not reserve an active tab slot on the new session page", () => {
+    const tabs = ["a", "b", "c", "d", "e"].map((sessionID) => ({ sessionID }))
+    const layout = adaptiveSessionTabLayout(tabs, "dummy", 40)
+
+    expect(layout.tabs).toEqual(tabs)
+    expect(layout.widths).toEqual([8, 8, 8, 8, 8])
+    expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(layout.total)
+  })
+
+  test("keeps the visible tab window stable on the new session page", () => {
+    const tabs = Array.from({ length: 10 }, (_, index) => ({ sessionID: String(index) }))
+    const selected = adaptiveSessionTabLayout(tabs, "7", 70)
+    const home = adaptiveSessionTabLayout(tabs, undefined, 70, selected.start)
+
+    expect(selected.start).toBeGreaterThan(0)
+    expect(home.start).toBe(selected.start)
   })
 
   test("only swaps old and new active width inside a sticky window", () => {
