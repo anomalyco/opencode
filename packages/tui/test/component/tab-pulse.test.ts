@@ -10,9 +10,9 @@ import { tint } from "../../src/theme/color"
 
 test("completion pulse rises quickly and fades over the remaining duration", () => {
   expect(completionPulseOpacity(0)).toBe(0)
-  expect(completionPulseOpacity(0.08)).toBeCloseTo(0.5)
-  expect(completionPulseOpacity(0.16)).toBe(1)
-  expect(completionPulseOpacity(0.58)).toBeCloseTo(0.5)
+  expect(completionPulseOpacity(0.06)).toBeCloseTo(0.5)
+  expect(completionPulseOpacity(0.12)).toBe(1)
+  expect(completionPulseOpacity(0.56)).toBeCloseTo(0.5)
   expect(completionPulseOpacity(1)).toBe(0)
 })
 
@@ -44,15 +44,33 @@ test("reuses a color while preserving the original glow and pulse blend stages",
   const background = RGBA.fromHex("#1a1b26")
   const glowColor = RGBA.fromHex("#82aaff")
   const runningColor = RGBA.fromHex("#c8d3f5")
+  const flashColor = RGBA.fromHex("#e2e8fb")
   const completionColor = RGBA.fromHex("#ff9e64")
 
   for (const glow of [0, 0.08, 0.16]) {
     for (const running of [0, 0.01, 0.07, 0.14]) {
-      for (const completion of [0, 0.03, 0.09, 0.18]) {
-        blendTabPulseColor(output, background, glowColor, runningColor, completionColor, glow, running, completion)
-        expect(output.buffer).toEqual(
-          tint(tint(tint(background, glowColor, glow), runningColor, running), completionColor, completion).buffer,
-        )
+      for (const flash of [0, 0.05, 0.1]) {
+        for (const completion of [0, 0.03, 0.09, 0.18]) {
+          blendTabPulseColor(
+            output,
+            background,
+            glowColor,
+            runningColor,
+            flashColor,
+            completionColor,
+            glow,
+            running,
+            flash,
+            completion,
+          )
+          expect(output.buffer).toEqual(
+            tint(
+              tint(tint(tint(background, glowColor, glow), runningColor, running), flashColor, flash),
+              completionColor,
+              completion,
+            ).buffer,
+          )
+        }
       }
     }
   }

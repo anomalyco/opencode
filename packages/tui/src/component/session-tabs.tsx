@@ -14,7 +14,7 @@ import {
 import { createAnimatable, spring, tween } from "../ui/animation"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
-import { TabPulse } from "./tab-pulse"
+import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 
 // A long title fades out over its last cells instead of cutting hard.
@@ -182,6 +182,9 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
             return tint(base, theme.raise(theme.background.surface.offset), dragged() ? 1 : selection())
           })
           const pulseColor = () => tint(background(), theme.text.default, 0.45)
+          // The edge flash washes toward a brighter stop on the same background-to-text ramp,
+          // so it reads as a lift of the pulse color rather than a different hue.
+          const flashColor = () => tint(background(), theme.text.default, 0.65)
           const feedbackColor = () => {
             if (status().attention) return theme.text.feedback.warning.default
             if (status().unread === "error") return theme.text.feedback.error.default
@@ -222,7 +225,6 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
             const cut = Math.round(front * Math.max(parts.length, previous.length))
             return [...parts.slice(0, cut), ...previous.slice(cut)]
           })
-          const fadedTitleParts = createMemo(() => displayedParts().slice(-FADE_WIDTH))
           const titleFades = createMemo(
             () => stringWidth(title()) >= availableTitleWidth() && availableTitleWidth() > FADE_WIDTH,
           )
@@ -230,6 +232,19 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
             if (hovered() === tab.sessionID) return theme.text.default
             return tint(theme.text.subdued, theme.text.default, selection())
           }
+          // Title characters sitting over the glow tinge toward its color, following the same
+          // spatial falloff as the glow itself; characters beyond the tail stay neutral.
+          const characterColor = (index: number) => {
+            const base = foreground()
+            const color = glows()
+              ? tint(base, glowColor(), 0.12 * unreadGlowIntensity(1 + numberWidth() + index, width()))
+              : base
+            if (!titleFades() || index < displayedParts().length - FADE_WIDTH) return color
+            const position = index - (displayedParts().length - FADE_WIDTH)
+            return tint(color, background(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
+          }
+          // The running sweep's level under the number cell, reported by the pulse renderable.
+          const [sweepLevel, setSweepLevel] = createSignal(0)
           const numberColor = () => {
             const feedback = feedbackColor()
             if (feedback) return feedback
@@ -237,7 +252,9 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
               hovered() === tab.sessionID && !selected()
                 ? foreground()
                 : tint(idleNumber(), activeNumber(), selection())
-            return tint(base, accent(), activity())
+            const color = tint(base, accent(), activity())
+            // The number brightens faintly as the running sweep passes beneath it.
+            return sweepLevel() === 0 ? color : tint(color, theme.text.default, 0.15 * sweepLevel())
           }
           const bold = () => (selected() || dragged() ? TextAttributes.BOLD : undefined)
           const closeColor = () => tint(theme.text.subdued, theme.text.default, 0.6)
@@ -271,8 +288,10 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
                 breathe={status().attention}
                 color={pulseColor()}
                 glowColor={glowColor()}
+                flashColor={flashColor()}
                 completionColor={accent()}
                 backgroundColor={background()}
+                onLevel={setSweepLevel}
               />
               <box zIndex={1} width="100%" flexDirection="row">
                 <text width={1} selectable={false}>
@@ -288,22 +307,9 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
                   selectable={false}
                   attributes={bold()}
                 >
-                  <Show when={titleFades()} fallback={displayedParts().join("")}>
-                    {displayedParts().slice(0, -FADE_WIDTH).join("")}
-                    <For each={fadedTitleParts()}>
-                      {(character, index) => (
-                        <span
-                          style={{
-                            fg: tint(
-                              foreground(),
-                              background(),
-                              0.2 + 0.72 * (index() / Math.max(1, fadedTitleParts().length - 1)),
-                            ),
-                          }}
-                        >
-                          {character}
-                        </span>
-                      )}
+                  <Show when={glows() || titleFades()} fallback={displayedParts().join("")}>
+                    <For each={displayedParts()}>
+                      {(character, index) => <span style={{ fg: characterColor(index()) }}>{character}</span>}
                     </For>
                   </Show>
                 </text>

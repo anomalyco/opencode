@@ -9,8 +9,11 @@ type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
   breathe?: boolean
   color?: RGBA
   glowColor?: RGBA
+  flashColor?: RGBA
   completionColor?: RGBA
   backgroundColor?: RGBA
+  /** Reports the running sweep's intensity at the tab number's cell, quantized; 0 when idle. */
+  onLevel?: (level: number) => void
 }
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value))
@@ -19,10 +22,11 @@ const RUN_DURATION = 2_800
 const RUN_HEAD = 4
 const RUN_TAIL = 18
 const RUN_FADE_OUT = 500
-const COMPLETION_DURATION = 900
-const COMPLETION_ATTACK = 0.16
+const COMPLETION_DURATION = 1_200
+const COMPLETION_ATTACK = 0.12
 const COMPLETION_OPACITY = 0.18
-const EDGE_FLASH_DURATION = 500
+const EDGE_FLASH_DURATION = 800
+const EDGE_FLASH_ATTACK = 0.1
 const EDGE_FLASH_OPACITY = 0.1
 const GLOW_IGNITION_DURATION = 600
 const GLOW_IGNITION_PEAK = 1.5
@@ -61,9 +65,11 @@ export function blendTabPulseColor(
   background: RGBA,
   glowColor: RGBA,
   runningColor: RGBA,
+  flashColor: RGBA,
   completionColor: RGBA,
   glow: number,
   running: number,
+  flash: number,
   completion: number,
 ) {
   output.r = background.r + (glowColor.r - background.r) * glow
@@ -72,6 +78,9 @@ export function blendTabPulseColor(
   output.r += (runningColor.r - output.r) * running
   output.g += (runningColor.g - output.g) * running
   output.b += (runningColor.b - output.b) * running
+  output.r += (flashColor.r - output.r) * flash
+  output.g += (flashColor.g - output.g) * flash
+  output.b += (flashColor.b - output.b) * flash
   output.r += (completionColor.r - output.r) * completion
   output.g += (completionColor.g - output.g) * completion
   output.b += (completionColor.b - output.b) * completion
@@ -123,6 +132,7 @@ class TabPulseRenderable extends Renderable {
   private _breathe: boolean
   private _color: RGBA
   private _glowColor: RGBA
+  private _flashColor: RGBA
   private _completionColor: RGBA
   private _backgroundColor: RGBA
   private clock = 0
@@ -130,11 +140,13 @@ class TabPulseRenderable extends Renderable {
   private completionPending = false
   private runFade = new Envelope(RUN_FADE_OUT, fadeOut)
   private completionPulse = new Envelope(COMPLETION_DURATION, completionPulseOpacity)
-  private edgeFlash = new Envelope(EDGE_FLASH_DURATION, completionPulseOpacity)
+  private edgeFlash = new Envelope(EDGE_FLASH_DURATION, (progress) => attackDecay(progress, EDGE_FLASH_ATTACK, 1, 0))
   private ignition = new Envelope(GLOW_IGNITION_DURATION, glowIgnitionLevel)
   private glowOff = new Envelope(GLOW_FADE_OUT, fadeOut)
   private envelopes = [this.runFade, this.completionPulse, this.edgeFlash, this.ignition, this.glowOff]
   private renderColor = RGBA.fromInts(0, 0, 0)
+  private _onLevel: ((level: number) => void) | undefined
+  private lastLevel = 0
 
   constructor(ctx: RenderContext, options: TabPulseOptions = {}) {
     const enabled = options.enabled ?? true
@@ -147,8 +159,21 @@ class TabPulseRenderable extends Renderable {
     this._breathe = options.breathe ?? false
     this._color = options.color ?? RGBA.defaultForeground()
     this._glowColor = options.glowColor ?? this._color
+    this._flashColor = options.flashColor ?? this._color
     this._completionColor = options.completionColor ?? this._color
     this._backgroundColor = options.backgroundColor ?? RGBA.defaultBackground()
+    this._onLevel = options.onLevel
+  }
+
+  set onLevel(value: ((level: number) => void) | undefined) {
+    this._onLevel = value
+  }
+
+  private emitLevel(value: number) {
+    const quantized = Math.round(value * 32) / 32
+    if (quantized === this.lastLevel) return
+    this.lastLevel = quantized
+    this._onLevel?.(quantized)
   }
 
   private get breathing() {
@@ -248,6 +273,12 @@ class TabPulseRenderable extends Renderable {
     this.requestRender()
   }
 
+  set flashColor(value: RGBA) {
+    if (value.equals(this._flashColor)) return
+    this._flashColor = value
+    this.requestRender()
+  }
+
   set completionColor(value: RGBA) {
     if (value.equals(this._completionColor)) return
     this._completionColor = value
@@ -283,12 +314,21 @@ class TabPulseRenderable extends Renderable {
     // The edge flash is a neutral wash on the running stage; the accent completion stage stays reserved for results.
     const flash = this.edgeFlash.level() * EDGE_FLASH_OPACITY
     const glowLevel = this.glowLevel()
-    if (glowLevel === 0 && running === 0 && completion === 0 && flash === 0) return
+    if (glowLevel === 0 && running === 0 && completion === 0 && flash === 0) {
+      this.emitLevel(0)
+      return
+    }
     const progress = (this.clock % RUN_DURATION) / RUN_DURATION
     const start = -RUN_HEAD
     const end = this.width - 1 + RUN_TAIL
     const front = start + coast(progress) * (end - start)
     const secondFront = start + coast((progress + 0.5) % 1) * (end - start)
+    this.emitLevel(
+      running === 0
+        ? 0
+        : Math.max(intensityAt(1, front, RUN_HEAD, RUN_TAIL), intensityAt(1, secondFront, RUN_HEAD, RUN_TAIL)) *
+            running,
+    )
     for (let index = 0; index < this.width; index++) {
       // Skip per-cell sweep and glow math when that stage is idle, e.g. a steady breathing glow.
       const sweep =
@@ -305,9 +345,11 @@ class TabPulseRenderable extends Renderable {
         this._backgroundColor,
         this._glowColor,
         this._color,
+        this._flashColor,
         this._completionColor,
         glowLevel === 0 ? 0 : unreadGlowIntensity(index, this.width) * GLOW_OPACITY * glowLevel,
-        Math.max(sweep, flash),
+        sweep,
+        flash,
         completion,
       )
       buffer.setCell(this.screenX + index, this.screenY, " ", DEFAULT_FOREGROUND, this.renderColor)
@@ -331,8 +373,10 @@ export function TabPulse(props: {
   breathe?: boolean
   color: RGBA
   glowColor?: RGBA
+  flashColor?: RGBA
   completionColor?: RGBA
   backgroundColor: RGBA
+  onLevel?: (level: number) => void
 }) {
   return (
     <tab_pulse
@@ -346,8 +390,10 @@ export function TabPulse(props: {
       breathe={props.breathe ?? false}
       color={props.color}
       glowColor={props.glowColor ?? props.color}
+      flashColor={props.flashColor ?? props.color}
       completionColor={props.completionColor ?? props.color}
       backgroundColor={props.backgroundColor}
+      onLevel={props.onLevel}
     />
   )
 }
