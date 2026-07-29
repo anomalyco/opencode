@@ -231,7 +231,7 @@ export const dict = {
   "model.tokensSession": "טוקנים / סשן",
   "model.totalSpend": "סה\"כ הוצאה",
   "model.totalSpendLabel": "סה\"כ הוצאה",
-  "model.vsPreviousWeek": "לעומת השבוע הקודם",
+  "model.vsPreviousWeek": "{{change}} לעומת השבוע הקודם",
   "model.worldMap": "מפת עולם",
   "model.average": "ממוצע",
   "model.averageCostSession": "עלות ממוצעת / סשן",
