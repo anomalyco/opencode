@@ -376,7 +376,7 @@ export function useTheme(): ComponentTheme
 export function useTheme(context: ContextName): ComponentTheme["contexts"][ContextName]
 export function useTheme(context?: ContextName) {
   const value = themeContext.use()
-  return context ? value.themes.current.contexts[context] : value.current
+  return context ? value.themes.current.contextual[context] : value.current
 }
 export const ThemeProvider = themeContext.provider
 
@@ -384,7 +384,7 @@ export function ThemeContextProvider(props: ParentProps<{ context: ContextName }
   const value = themeContext.use()
   return (
     <themeContext.context.Provider
-      value={{ current: value.themes.current.contexts[props.context], themes: value.themes, ready: value.ready }}
+      value={{ current: value.themes.current.contextual[props.context], themes: value.themes, ready: value.ready }}
     >
       {props.children}
     </themeContext.context.Provider>

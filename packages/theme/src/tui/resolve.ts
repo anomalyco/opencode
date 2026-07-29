@@ -64,7 +64,7 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const hueSteps = compileHueSteps(hue)
   const base = tokens(definition)
   const resolved = resolveView(base, hue, categorical, hueSteps)
-  const contexts = Object.fromEntries(
+  const contextual = Object.fromEntries(
     Object.entries(definition)
       .filter(([key]) => key.startsWith("@context:"))
       .map(([key, override]) => {
@@ -73,7 +73,7 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
       }),
   )
 
-  return { ...resolved, contexts } as ResolvedTheme
+  return { ...resolved, contextual } as ResolvedTheme
 }
 
 function tokens(definition: ThemeDefinition): ThemeTokensDefinition {

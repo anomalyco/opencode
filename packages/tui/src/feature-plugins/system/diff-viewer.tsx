@@ -18,7 +18,7 @@ import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "../../ui/dialog-select"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
-import { useTheme, useThemes } from "../../context/theme"
+import { useThemes } from "../../context/theme"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -943,7 +943,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
 }
 
 function DiffViewerHelpDialog(props: { context: Plugin.Context }) {
-  const theme = useTheme("elevated")
+  const theme = props.context.theme.contextual.elevated ?? props.context.theme
   const shortcut = (id: string) => () => props.context.keymap.shortcuts(id)[0]
   const rows = [
     {
