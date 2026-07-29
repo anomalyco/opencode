@@ -40,6 +40,8 @@ function createEventStream() {
   const queue: GlobalEventEnvelope[] = []
   const waiters: Array<(value: GlobalEventEnvelope | undefined) => void> = []
   const state = { closed: false }
+  const ready = Promise.withResolvers<void>()
+  let opened = false
 
   const push = (event: GlobalEventEnvelope) => {
     const waiter = waiters.shift()
@@ -58,6 +60,10 @@ function createEventStream() {
   }
 
   const stream = async function* (signal?: AbortSignal) {
+    if (!opened) {
+      opened = true
+      ready.resolve()
+    }
     while (true) {
       if (signal?.aborted) return
       const next = queue.shift()
@@ -75,7 +81,7 @@ function createEventStream() {
     }
   }
 
-  return { push, close, stream }
+  return { push, close, ready: ready.promise, stream }
 }
 
 function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
@@ -319,6 +325,44 @@ async function createKnownSession(
 }
 
 describe("acp event routing", () => {
+  it("delivers transcript and isolated listeners from the single global stream", async () => {
+    const harness = createHarness()
+    await createKnownSession(harness.session, "ses_listener", {
+      messageId: "msg_listener",
+      partId: "part_listener",
+      partType: "text",
+    })
+    const received = Promise.withResolvers<Event>()
+
+    harness.subscription.addListener(async () => {
+      throw new Error("listener failed")
+    })
+    harness.subscription.addListener(async (event) => {
+      received.resolve(event)
+    })
+    harness.subscription.start()
+    await harness.events.ready
+
+    const event = textDelta("ses_listener", "msg_listener", "part_listener", "hello")
+    harness.events.push({ payload: event })
+
+    expect(await received.promise).toEqual(event)
+    expect(harness.updates).toEqual([
+      {
+        sessionId: "ses_listener",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "msg_listener",
+          content: { type: "text", text: "hello" },
+        },
+      },
+    ])
+    expect(harness.calls.eventSubscribe).toBe(1)
+
+    harness.subscription.stop()
+    harness.events.close()
+  })
+
   it("routes message.part.delta by sessionID without cross-session pollution", async () => {
     const harness = createHarness()
     await createKnownSession(harness.session, "ses_a", { messageId: "msg_a", partId: "part_a", partType: "text" })

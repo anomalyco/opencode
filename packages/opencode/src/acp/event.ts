@@ -29,6 +29,7 @@ type GlobalEventEnvelope = {
 type GlobalEventStream = {
   stream: AsyncIterable<GlobalEventEnvelope>
 }
+type Listener = (event: Event) => Promise<void>
 
 export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPSession.Interface }) {
   const subscription = new Subscription(input)
@@ -41,6 +42,7 @@ export class Subscription {
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
   private readonly permission: ACPPermission.Handler
+  private readonly listeners = new Set<Listener>()
   private started = false
 
   constructor(
@@ -63,6 +65,11 @@ export class Subscription {
 
   stop() {
     this.abort.abort()
+  }
+
+  addListener(listener: Listener) {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
   }
 
   async handle(event: Event) {
@@ -123,6 +130,9 @@ export class Subscription {
         if (this.abort.signal.aborted) return
         if (!event.payload) continue
         await this.handle(event.payload).catch(() => {})
+        for (const listener of [...this.listeners]) {
+          await listener(event.payload).catch(() => {})
+        }
       }
       if (!this.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1000))
     }
