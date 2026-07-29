@@ -5,6 +5,9 @@ import * as Tool from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
+import { Config } from "@/config/config"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { fetchRobotsTxt, isAllowed, checkAiOptOut } from "@opencode-ai/core/tool/robots-txt"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -26,6 +29,7 @@ export const WebFetchTool = Tool.define(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
     const httpOk = HttpClient.filterStatusOk(http)
+    const configSvc = yield* Config.Service
 
     return {
       description: DESCRIPTION,
@@ -47,6 +51,22 @@ export const WebFetchTool = Tool.define(
             },
           })
 
+          const cfg = yield* configSvc.get()
+          const userAgent = cfg.fetch_user_agent ?? `OpenCode/${InstallationVersion}`
+          const inputMeansTraining = cfg.does_input_mean_training ?? false
+
+          if (cfg.respect_robots_txt ?? true) {
+            const urlObj = new URL(params.url)
+            const rules = yield* fetchRobotsTxt(http, params.url, userAgent).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            if (rules) {
+              if (!isAllowed(urlObj.pathname, rules, userAgent) || checkAiOptOut(rules, urlObj.pathname, inputMeansTraining, userAgent)) {
+                throw new Error(`${urlObj.origin}/robots.txt forbids this request`)
+              }
+            }
+          }
+
           const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
 
           // Build Accept header based on requested format with q parameters for fallbacks
@@ -67,28 +87,14 @@ export const WebFetchTool = Tool.define(
                 "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
           }
           const headers = {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            "User-Agent": userAgent,
             Accept: acceptHeader,
             "Accept-Language": "en-US,en;q=0.9",
           }
 
           const request = HttpClientRequest.get(params.url).pipe(HttpClientRequest.setHeaders(headers))
 
-          // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
           const response = yield* httpOk.execute(request).pipe(
-            Effect.catchIf(
-              (err) =>
-                err.reason._tag === "StatusCodeError" &&
-                err.reason.response.status === 403 &&
-                err.reason.response.headers["cf-mitigated"] === "challenge",
-              () =>
-                httpOk.execute(
-                  HttpClientRequest.get(params.url).pipe(
-                    HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" }),
-                  ),
-                ),
-            ),
             Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error("Request timed out")) }),
           )
 

@@ -9,11 +9,12 @@ import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
+import { TestConfig } from "../fixture/config"
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([httpClient, Truncate.node, Agent.node]), [
     [httpClient, FetchHttpClient.layer as Layer.Layer<HttpClient.HttpClient>],
-  ]),
+  ]).pipe(Layer.provideMerge(TestConfig.layer())),
 )
 
 const ctx = {

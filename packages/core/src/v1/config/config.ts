@@ -166,6 +166,16 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  fetch_user_agent: Schema.optional(Schema.String).annotate({
+    description: "User-Agent header value for the webfetch tool. Defaults to OpenCode/<version>",
+  }),
+  respect_robots_txt: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether to respect robots.txt when fetching URLs. Defaults to true",
+  }),
+  does_input_mean_training: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Whether user input may be used for AI training. When true, DisallowAITraining, Content-Usage: ai=n, and Content-Signal: ai-train=no in robots.txt are respected as AI opt-out signals. Defaults to false",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
