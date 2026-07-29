@@ -4,24 +4,28 @@ import type { RouteDefaultsInput } from "../route/client"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import type { ProviderPackage } from "../provider-package"
 import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
+import type { OpenAIProviderOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("openai-compatible")
 
-type GenericModelOptions = RouteDefaultsInput &
+type GenericModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string
+    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL: string
   readonly provider?: string
+  readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
-export type FamilyModelOptions = RouteDefaultsInput &
+export type FamilyModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
+    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 export const routes = [OpenAICompatibleChat.route]
@@ -37,7 +41,8 @@ export const configure = (input: GenericModelOptions) => {
   })
   return {
     id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model({ id: modelID, provider: ProviderID.make(provider) }),
+    model: (modelID: string | ModelID) =>
+      route.model<OpenAIProviderOptionsInput>({ id: modelID, provider: ProviderID.make(provider) }),
     configure,
   }
 }
@@ -63,7 +68,7 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
   configure({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL,
@@ -71,6 +76,7 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
     provider: settings.provider,
+    providerOptions: settings.providerOptions,
   }).model(modelID)
 
 export const baseten = define(profiles.baseten)
