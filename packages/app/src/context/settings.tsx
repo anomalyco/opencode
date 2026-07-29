@@ -94,9 +94,13 @@ export function hasExistingWebState(settings: Promise<string> | string | null, p
   return settings !== null || previousVersion !== undefined
 }
 
-export function initialAgentVisibility(initialized: boolean | undefined, existing: boolean) {
+export function initialAgentVisibility(
+  initialized: boolean | undefined,
+  existing: boolean,
+  previousVersion?: string,
+) {
   if (initialized === true) return
-  return existing
+  return existing || previousVersion !== undefined
 }
 
 export function shouldEnableNewLayout(previous: string | undefined, current: string | undefined) {
@@ -278,7 +282,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     })
     const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
     const initializeAgentVisibility = (existing: boolean) => {
-      const initial = initialAgentVisibility(store.general?.agentVisibilityInitialized, existing)
+      const initial = initialAgentVisibility(
+        store.general?.agentVisibilityInitialized,
+        existing,
+        launchState.previous,
+      )
       if (initial === undefined) return
       batch(() => {
         setStore("general", "showCustomAgents", initial)
