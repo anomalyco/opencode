@@ -1,29 +1,21 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
-import { FilePath } from "../../ui/file-path"
 import { stringWidth } from "../../util/string-width"
-import { createTypewriter } from "../../ui/typewriter"
+import { DissolveFilePath } from "../../ui/dissolve-file-path"
 
 function Directory(props: { context: Plugin.Context; maxWidth: number }) {
   const directory = createMemo(() =>
     props.context.location ? props.context.ui.format.path(props.context.location.directory) : undefined,
   )
-  const typed = createTypewriter(directory)
 
   return (
-    <Show when={typed.text !== undefined}>
-      <box flexDirection="row" flexShrink={1}>
-        <FilePath
-          value={typed.text ?? ""}
-          maxWidth={props.maxWidth}
-          fg={typed.active ? props.context.theme.text.default : props.context.theme.text.subdued}
-        />
-        <Show when={typed.active}>
-          <text fg={props.context.theme.text.default}>│</text>
-        </Show>
-      </box>
-    </Show>
+    <DissolveFilePath
+      value={directory()}
+      maxWidth={props.maxWidth}
+      fg={props.context.theme.text.subdued}
+      bg={props.context.theme.background.default}
+    />
   )
 }
 

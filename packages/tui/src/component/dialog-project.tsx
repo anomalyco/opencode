@@ -53,9 +53,10 @@ export function DialogProject() {
       onSelect={(option) => {
         dialog.clear()
         if (option.value === current()) return
+        // Navigating while already home would remount the footer mid-animation.
+        if (route.data.type !== "home") route.navigate({ type: "home" })
         void data.location
           .setDefault(option.value)
-          .then(() => route.navigate({ type: "home" }))
           .catch((error) =>
             toast.show({ variant: "error", title: "Failed to switch project", message: errorMessage(error) }),
           )
