@@ -2,12 +2,7 @@ import type { ComponentProps, JSX } from "solid-js"
 import { Show, children, createContext, splitProps, useContext } from "solid-js"
 import { Portal } from "solid-js/web"
 import { ButtonV2 } from "./button-v2"
-import {
-  ToastV2StackRegion,
-  ToastV2StackRenderContext,
-  toastV2Stack,
-  type ToastV2StackRegionProps,
-} from "./toast-v2-stack"
+import { ToastV2StackRegion, toastV2Stack, type ToastV2StackRegionProps } from "./toast-v2-stack"
 import "./toast-v2.css"
 
 export interface ToastV2RegionProps extends ToastV2StackRegionProps {}
@@ -22,23 +17,15 @@ function ToastV2Region(props: ToastV2RegionProps) {
 
 const ToastV2Context = createContext<number>()
 
-export interface ToastV2RootComponentProps extends ComponentProps<"div"> {
+// The stack owns the toast card element, so the root only scopes the toast id for
+// subcomponents. Lifetime lives on `toasterV2.show` and `showToastV2`.
+export interface ToastV2RootComponentProps {
   toastId: number
-  duration?: number
-  persistent?: boolean
+  children?: JSX.Element
 }
 
 function ToastV2Root(props: ToastV2RootComponentProps) {
-  const [local, rest] = splitProps(props, ["toastId", "duration", "persistent", "children"])
-  const stacked = useContext(ToastV2StackRenderContext)
-  if (stacked) return <ToastV2Context.Provider value={local.toastId}>{local.children}</ToastV2Context.Provider>
-  return (
-    <ToastV2Context.Provider value={local.toastId}>
-      <div data-component="toast-v2" {...rest}>
-        {local.children}
-      </div>
-    </ToastV2Context.Provider>
-  )
+  return <ToastV2Context.Provider value={props.toastId}>{props.children}</ToastV2Context.Provider>
 }
 
 function ToastV2Icon(props: ComponentProps<"div">) {
@@ -105,9 +92,15 @@ export const ToastV2 = Object.assign(ToastV2Root, {
 let toastV2Id = 0
 
 export const toasterV2 = {
-  show(render: (props: { toastId: number }) => JSX.Element) {
+  show(render: (props: { toastId: number }) => JSX.Element, options?: { duration?: number; persistent?: boolean }) {
     const toastId = --toastV2Id
-    toastV2Stack.show({ id: toastId, revision: 1, render: () => render({ toastId }) })
+    toastV2Stack.show({
+      id: toastId,
+      revision: 1,
+      duration: options?.duration,
+      persistent: options?.persistent,
+      render: () => render({ toastId }),
+    })
     return toastId
   },
   dismiss(toastId?: number) {
@@ -125,6 +118,11 @@ interface ActiveToastV2 {
   id: number
   key: string
   revision: number
+  options: ToastV2Options
+  // Stable across repeats so coalescing only bumps `revision` instead of
+  // replacing the rendered card, which would drop focus inside it.
+  render: () => JSX.Element
+  release: () => void
 }
 
 const activeToastV2ByKey = new Map<string, ActiveToastV2>()
@@ -160,71 +158,86 @@ export function showToastV2(options: ToastV2Options | string) {
   const toasts = toastV2Stack.getToasts()
 
   if (active && toasts[0]?.id === active.id) {
+    active.options = opts
     active.revision++
-    publishToastV2(active, opts)
+    publishToastV2(active)
     return active.id
   }
 
   if (active && toasts.some((item) => item.id === active.id)) toasterV2.dismiss(active.id)
   releaseToastV2(active)
 
-  const entry = { id: --toastV2Id, key, revision: 1 }
+  const entry: ActiveToastV2 = {
+    id: --toastV2Id,
+    key,
+    revision: 1,
+    options: opts,
+    render: () => renderToastV2(entry),
+    release: () => releaseToastV2(entry),
+  }
   activeToastV2ByKey.set(key, entry)
   activeToastV2ById.set(entry.id, entry)
-  publishToastV2(entry, opts)
+  publishToastV2(entry)
   return entry.id
 }
 
-function publishToastV2(entry: ActiveToastV2, opts: ToastV2Options) {
+function publishToastV2(entry: ActiveToastV2) {
+  // Everything except `revision` is identical whenever an existing toast is reused,
+  // because the dedupe key covers variant, duration, persistence, and action labels.
   toastV2Stack.show({
     id: entry.id,
     revision: entry.revision,
-    variant: opts.variant,
-    duration: opts.duration,
-    persistent: opts.persistent,
-    render: () => {
-      const resolvedIcon = children(() => opts.icon)
-      const icon = resolvedIcon()
-      const renderedIcon = typeof Node !== "undefined" && icon instanceof Node ? icon.cloneNode(true) : icon
-      return (
-        <ToastV2Context.Provider value={entry.id}>
-          <div data-slot="toast-v2-header">
-            <Show when={renderedIcon}>
-              <ToastV2.Icon>{renderedIcon}</ToastV2.Icon>
-            </Show>
-            <ToastV2.Content>
-              <Show when={opts.title}>
-                <ToastV2.Title>{opts.title}</ToastV2.Title>
-              </Show>
-              <Show when={opts.description}>
-                <ToastV2.Description>{opts.description}</ToastV2.Description>
-              </Show>
-            </ToastV2.Content>
-            <ToastV2.CloseButton />
-          </div>
-          <Show when={opts.actions?.length}>
-            <ToastV2.Actions>
-              {opts.actions!.map((action) => (
-                <ButtonV2
-                  variant={action.variant === "secondary" ? "ghost" : "neutral"}
-                  size="small"
-                  data-action-variant={action.variant ?? "primary"}
-                  onClick={() => {
-                    if (typeof action.onClick === "function") action.onClick()
-                    toasterV2.dismiss(entry.id)
-                  }}
-                >
-                  {action.label}
-                </ButtonV2>
-              ))}
-            </ToastV2.Actions>
-          </Show>
-        </ToastV2Context.Provider>
-      )
-    },
-    onDismiss: () => releaseToastV2(entry),
-    onAutoClose: () => releaseToastV2(entry),
+    variant: entry.options.variant,
+    duration: entry.options.duration,
+    persistent: entry.options.persistent,
+    render: entry.render,
+    onDismiss: entry.release,
+    onAutoClose: entry.release,
   })
+}
+
+function renderToastV2(entry: ActiveToastV2) {
+  const opts = entry.options
+  const resolvedIcon = children(() => opts.icon)
+  const icon = resolvedIcon()
+  // A caller-provided element is a live node, so reuse it only through a copy;
+  // the region can render an item again after remounting.
+  const renderedIcon = typeof Node !== "undefined" && icon instanceof Node ? icon.cloneNode(true) : icon
+  return (
+    <ToastV2 toastId={entry.id}>
+      <div data-slot="toast-v2-header">
+        <Show when={renderedIcon}>
+          <ToastV2.Icon>{renderedIcon}</ToastV2.Icon>
+        </Show>
+        <ToastV2.Content>
+          <Show when={opts.title}>
+            <ToastV2.Title>{opts.title}</ToastV2.Title>
+          </Show>
+          <Show when={opts.description}>
+            <ToastV2.Description>{opts.description}</ToastV2.Description>
+          </Show>
+        </ToastV2.Content>
+        <ToastV2.CloseButton />
+      </div>
+      <Show when={opts.actions?.length}>
+        <ToastV2.Actions>
+          {opts.actions!.map((action) => (
+            <ButtonV2
+              variant={action.variant === "secondary" ? "ghost" : "neutral"}
+              size="small"
+              data-action-variant={action.variant ?? "primary"}
+              onClick={() => {
+                if (typeof action.onClick === "function") action.onClick()
+                toasterV2.dismiss(entry.id)
+              }}
+            >
+              {action.label}
+            </ButtonV2>
+          ))}
+        </ToastV2.Actions>
+      </Show>
+    </ToastV2>
+  )
 }
 
 function releaseToastV2(entry: ActiveToastV2 | undefined) {

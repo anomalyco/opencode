@@ -1,8 +1,13 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { createSignal, type JSX } from "solid-js"
 import { showToastV2, toasterV2 } from "@opencode-ai/ui/v2/toast-v2"
 
 describe("showToastV2", () => {
+  // The toast registry is module state, so each test starts from an empty stack.
+  beforeEach(() => {
+    toasterV2.dismiss()
+  })
+
   test("coalesces exact active content", () => {
     const first = showToastV2({ title: "Repeated error", description: "Try again" })
     const second = showToastV2({ title: "Repeated error", description: "Try again" })

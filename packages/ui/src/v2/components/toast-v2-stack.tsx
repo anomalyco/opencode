@@ -25,10 +25,10 @@
  * SOFTWARE.
  */
 import type { JSX } from "solid-js"
-import { For, createContext, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
+import { For, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 
-const DEFAULT_DURATION = 4000
+const DEFAULT_DURATION = 5000
 const REMOVE_DELAY = 180
 
 export interface ToastV2StackItem {
@@ -51,8 +51,6 @@ type StackEvent = { type: "upsert"; item: ToastV2StackItem } | { type: "dismiss"
 const listeners = new Set<(event: StackEvent) => void>()
 let active: ToastV2StackItem[] = []
 
-export const ToastV2StackRenderContext = createContext(false)
-
 export const toastV2Stack = {
   show(item: ToastV2StackItem) {
     const index = active.findIndex((toast) => toast.id === item.id)
@@ -64,9 +62,8 @@ export const toastV2Stack = {
     const dismissed = id === undefined ? active : active.filter((toast) => toast.id === id)
     active = id === undefined ? [] : active.filter((toast) => toast.id !== id)
     dismissed.forEach((toast) => (auto ? toast.onAutoClose?.() : toast.onDismiss?.()))
-    if (id === undefined)
-      dismissed.forEach((toast) => listeners.forEach((listener) => listener({ type: "dismiss", id: toast.id })))
-    else listeners.forEach((listener) => listener({ type: "dismiss", id }))
+    // Already-dismissed ids must not notify again; the removal timeout is still pending.
+    dismissed.forEach((toast) => listeners.forEach((listener) => listener({ type: "dismiss", id: toast.id })))
     return id
   },
   getToasts() {
@@ -80,7 +77,6 @@ export const toastV2Stack = {
 
 export interface ToastV2StackRegionProps {
   class?: string
-  className?: string
   duration?: number
   gap?: number
   visibleToasts?: number
@@ -164,14 +160,13 @@ export function ToastV2StackRegion(props: ToastV2StackRegionProps) {
       <ol
         ref={list}
         tabindex={-1}
-        class={["toast-v2-region", props.className, props.class].filter(Boolean).join(" ")}
+        class={props.class}
         data-component="toast-v2-region"
         data-expanded={store.expanded}
         style={
           {
             "--toast-v2-gap": `${gap()}px`,
             "--toast-v2-stack-gap": `${Math.max(0, gap() - 3)}px`,
-            "--toast-v2-front-height": `${frontHeight()}px`,
             "--toast-v2-offset-right": `${props.offset?.right ?? 32}px`,
             "--toast-v2-offset-bottom": `${props.offset?.bottom ?? 48}px`,
             "--toast-v2-mobile-offset": `${props.mobileOffset ?? 16}px`,
@@ -184,7 +179,8 @@ export function ToastV2StackRegion(props: ToastV2StackRegionProps) {
         }}
         onFocusIn={() => setStore("expanded", true)}
         onFocusOut={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setStore("expanded", false)
+          const next = event.relatedTarget instanceof Node ? event.relatedTarget : null
+          if (!event.currentTarget.contains(next)) setStore("expanded", false)
         }}
         onPointerDown={() => setStore("interacting", true)}
         onPointerUp={() => setStore("interacting", false)}
@@ -244,11 +240,12 @@ function ToastV2StackToast(props: {
 
   onMount(() => {
     setMounted(true)
-    if (!body) return
+    const node = body
+    if (!node) return
     const measure = () =>
-      props.onHeight(Math.min(Math.ceil(body!.getBoundingClientRect().height + 24), 420, window.innerHeight - 96))
+      props.onHeight(Math.min(Math.ceil(node.getBoundingClientRect().height + 24), 420, window.innerHeight - 96))
     const observer = new ResizeObserver(measure)
-    observer.observe(body)
+    observer.observe(node)
     measure()
     const visibility = () => setHidden(document.hidden)
     document.addEventListener("visibilitychange", visibility)
@@ -306,7 +303,8 @@ function ToastV2StackToast(props: {
   return (
     <li
       ref={element}
-      tabindex={0}
+      tabindex={props.visible ? 0 : -1}
+      inert={!props.visible || undefined}
       data-component="toast-v2"
       data-mounted={mounted()}
       data-removed={props.item.removed}
@@ -328,7 +326,8 @@ function ToastV2StackToast(props: {
         } as JSX.CSSProperties
       }
       onPointerDown={(event) => {
-        if (event.button === 2 || (event.target as HTMLElement).closest("button")) return
+        if (event.button === 2) return
+        if (event.target instanceof Element && event.target.closest("button")) return
         pointer = { x: event.clientX, y: event.clientY, time: Date.now() }
         event.currentTarget.setPointerCapture(event.pointerId)
         setSwiping(true)
@@ -344,8 +343,8 @@ function ToastV2StackToast(props: {
       onPointerUp={finishSwipe}
       onPointerCancel={finishSwipe}
     >
-      <div ref={body} data-slot="toast-v2-body">
-        <ToastV2StackRenderContext.Provider value>{props.item.render()}</ToastV2StackRenderContext.Provider>
+      <div ref={body} data-slot="toast-v2-body" inert={(!props.expanded && props.index !== 0) || undefined}>
+        {props.item.render()}
       </div>
     </li>
   )
