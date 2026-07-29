@@ -171,6 +171,30 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("orders sessions by their latest prompt", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      const active = yield* session.create({ location, title: "active" })
+      const newer = yield* session.create({ location, title: "newer" })
+
+      yield* db
+        .update(SessionTable)
+        .set({ time_created: -2, time_updated: -2 })
+        .where(eq(SessionTable.id, active.id))
+        .run()
+      yield* db
+        .update(SessionTable)
+        .set({ time_created: -1, time_updated: -1 })
+        .where(eq(SessionTable.id, newer.id))
+        .run()
+
+      yield* session.prompt({ sessionID: active.id, text: "continue", resume: false })
+
+      expect((yield* session.list()).data.map((item) => item.id)).toEqual([active.id, newer.id])
+    }),
+  )
+
   it.effect("filters direct child sessions by parent ID", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

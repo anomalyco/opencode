@@ -404,6 +404,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         }
         case "session.input.admitted":
+          if (store.session.info[event.data.sessionID])
+            setStore("session", "info", event.data.sessionID, "time", "updated", event.created)
           addPending({
             id: event.data.inputID,
             sessionID: event.data.sessionID,
