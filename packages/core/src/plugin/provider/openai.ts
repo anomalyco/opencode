@@ -1,9 +1,10 @@
 import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
 import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { Deferred, Effect } from "effect"
+import { Deferred, Effect, Stream } from "effect"
 import type { Scope } from "effect"
 import { Credential } from "../../credential"
+import { EventV2 } from "../../event"
 import { InstallationVersion } from "../../installation/version"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
@@ -154,15 +155,35 @@ const headless = {
 export const OpenAIPlugin = define({
   id: "openai",
   effect: Effect.fn(function* (ctx) {
+    const credentials = yield* Credential.Service
+    const events = yield* EventV2.Service
     yield* ctx.integration.transform((draft) => {
       draft.method.update(browser)
       draft.method.update(headless)
     })
     yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
+        const connection = yield* ctx.integration.connection.active("openai")
+        const credential =
+          connection?.type === "credential" ? yield* credentials.get(Credential.ID.make(connection.id)) : undefined
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue
           if (item.provider.api.package !== "@ai-sdk/openai") continue
+          if (item.provider.id === "openai" && credential?.value.type === "oauth") {
+            // ChatGPT's Codex backend exposes smaller windows than the public API catalog.
+            // Keep these limits aligned with the V1 Codex OAuth provider transform.
+            for (const model of item.models.values()) {
+              const limit = model.id.includes("gpt-5.5")
+                ? { context: 400_000, input: 272_000, output: 128_000 }
+                : model.id.includes("gpt-5.6")
+                  ? { context: 500_000, input: 372_000, output: 128_000 }
+                  : undefined
+              if (!limit) continue
+              evt.model.update(item.provider.id, model.id, (draft) => {
+                draft.limit = limit
+              })
+            }
+          }
           if (!item.models.has(ModelV2.ID.make("gpt-5-chat-latest"))) continue
           evt.model.update(item.provider.id, ModelV2.ID.make("gpt-5-chat-latest"), (model) => {
             // OpenAIPlugin sends OpenAI models through Responses; this alias is a
@@ -171,6 +192,11 @@ export const OpenAIPlugin = define({
           })
         }
       }),
+    )
+    yield* events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+      Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
+      Stream.runForEach(() => ctx.catalog.reload()),
+      Effect.forkScoped({ startImmediately: true }),
     )
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {

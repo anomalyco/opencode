@@ -14,6 +14,7 @@ import { ConfigExternalPlugin } from "../config/plugin/external"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
+import { Credential } from "../credential"
 import { EventV2 } from "../event"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
@@ -39,6 +40,7 @@ export type Requirements =
   | Catalog.Service
   | CommandV2.Service
   | Config.Service
+  | Credential.Service
   | EventV2.Service
   | FileSystem.Service
   | FSUtil.Service
@@ -68,6 +70,7 @@ const layer = Layer.effectDiscard(
     const integration = yield* Integration.Service
     const agents = yield* AgentV2.Service
     const config = yield* Config.Service
+    const credential = yield* Credential.Service
     const location = yield* Location.Service
     const modelsDev = yield* ModelsDev.Service
     const npm = yield* Npm.Service
@@ -90,6 +93,7 @@ const layer = Layer.effectDiscard(
               Effect.provideService(Integration.Service, integration),
               Effect.provideService(AgentV2.Service, agents),
               Effect.provideService(Config.Service, config),
+              Effect.provideService(Credential.Service, credential),
               Effect.provideService(Location.Service, location),
               Effect.provideService(ModelsDev.Service, modelsDev),
               Effect.provideService(Npm.Service, npm),
@@ -139,6 +143,7 @@ export const node = makeLocationNode({
     Integration.node,
     AgentV2.node,
     Config.node,
+    Credential.node,
     Location.node,
     ModelsDev.node,
     Npm.node,

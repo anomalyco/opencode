@@ -3,6 +3,7 @@ import { describe, expect } from "bun:test"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -150,6 +151,76 @@ describe("OpenAIPlugin", () => {
       expect(
         required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
       ).toBe(false)
+    }),
+  )
+
+  it.effect("tracks ChatGPT OAuth context limits", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        const item = ProviderV2.Info.make({
+          ...ProviderV2.Info.empty(ProviderV2.ID.openai),
+          api: { type: "aisdk", package: "@ai-sdk/openai" },
+        })
+        catalog.provider.update(item.id, (draft) => {
+          draft.api = item.api
+        })
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.5"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.6-sol"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5.7-pro"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.Key.make({ type: "key", key: "key" }),
+      })
+      yield* addPlugin()
+      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-sol"))).limit).toEqual({
+        context: 1_050_000,
+        input: 922_000,
+        output: 128_000,
+      })
+
+      const oauth = yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          refresh: "refresh",
+          access: "access",
+          expires: 0,
+        }),
+      })
+      yield* catalog.reload()
+      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.5"))).limit).toEqual({
+        context: 400_000,
+        input: 272_000,
+        output: 128_000,
+      })
+      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-sol"))).limit).toEqual({
+        context: 500_000,
+        input: 372_000,
+        output: 128_000,
+      })
+      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.7-pro"))).limit).toEqual({
+        context: 1_050_000,
+        input: 922_000,
+        output: 128_000,
+      })
+
+      yield* credentials.remove(oauth.id)
+      yield* catalog.reload()
+      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-sol"))).limit).toEqual({
+        context: 1_050_000,
+        input: 922_000,
+        output: 128_000,
+      })
     }),
   )
 
