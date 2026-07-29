@@ -411,28 +411,28 @@ if [[ "$no_modify_path" != "true" ]]; then
 
     if [[ -z $config_file ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
-        print_message info "  export PATH=$INSTALL_DIR:\$PATH"
+        print_message info "  export PATH=\$HOME/.opencode/bin:\$PATH"
     elif [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         case $current_shell in
             fish)
-                add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
+                add_to_path "$config_file" "fish_add_path \$HOME/.opencode/bin"
             ;;
             zsh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=\$HOME/.opencode/bin:\$PATH"
             ;;
             bash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=\$HOME/.opencode/bin:\$PATH"
             ;;
             ash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=\$HOME/.opencode/bin:\$PATH"
             ;;
             sh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=\$HOME/.opencode/bin:\$PATH"
             ;;
             *)
                 export PATH=$INSTALL_DIR:$PATH
                 print_message warning "Manually add the directory to $config_file (or similar):"
-                print_message info "  export PATH=$INSTALL_DIR:\$PATH"
+                print_message info "  export PATH=\$HOME/.opencode/bin:\$PATH"
             ;;
         esac
     fi
