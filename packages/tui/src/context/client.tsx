@@ -35,7 +35,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     const history: ClientConnectionEvent[] = []
     let api = props.api
     const events = createGlobalEmitter<ClientEventMap>()
-    const pending: OpenCodeEvent[] = []
+    let pending: OpenCodeEvent[] = []
     let flushTimer: ReturnType<typeof setTimeout> | undefined
     const [connection, setConnection] = createStore<{
       status: ClientConnectionStatus
@@ -54,7 +54,8 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
 
     function flushEvents() {
       flushTimer = undefined
-      const queued = pending.splice(0)
+      const queued = pending
+      pending = []
       batch(() => queued.forEach((event) => events.emit(event.type, event)))
     }
 
@@ -170,7 +171,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       abort.abort()
       stream?.abort()
       if (flushTimer) clearTimeout(flushTimer)
-      pending.length = 0
+      pending = []
       events.clear()
     })
 
