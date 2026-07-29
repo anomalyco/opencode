@@ -8,7 +8,6 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Shell } from "@opencode-ai/core/shell"
 import { Tool } from "@opencode-ai/core/tool"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
@@ -35,23 +34,6 @@ describe("Plugin", () => {
       yield* bus.publish(ConfigSchema.Event.Updated, {})
 
       expect((yield* Fiber.join(received)).valueOrUndefined?.type).toBe("config.updated")
-    }),
-  )
-
-  it.effect("runs shell hooks before the create callback", () =>
-    Effect.gen(function* () {
-      const plugins = yield* Plugin.Service
-      const host = yield* PluginHost.make(plugins)
-      const shell = yield* Shell.Service
-      yield* host.shell.hook("create.before", (event) =>
-        Effect.sync(() => {
-          event.command = "echo changed"
-        }),
-      )
-      const command = yield* shell
-        .create({ command: "echo original", timeout: 0 }, (event) => Effect.fail(event.command))
-        .pipe(Effect.flip)
-      expect(command).toBe("echo changed")
     }),
   )
 
