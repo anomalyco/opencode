@@ -434,11 +434,13 @@ const layer = Layer.effect(
         }
         for (const [teamID, names] of interrupted) {
           const team = yield* get(teamID).pipe(Effect.orDie)
+          const text = `OpenCode restarted while these teammates were active: ${names.join(", ")}. Their state is now interrupted. Review their persistent sessions and resume or reassign their tasks.`
+          yield* result.send({ teamID, from: "system", to: "lead", text }).pipe(Effect.orDie)
           yield* sessions
             .prompt({
               sessionID: team.leadSessionID,
               prompt: {
-                text: `[Agent Team recovery]\nOpenCode restarted while these teammates were active: ${names.join(", ")}. Their state is now interrupted. Review their persistent sessions and resume or reassign their tasks.`,
+                text: `[Agent Team recovery]\n${text}`,
               },
             })
             .pipe(Effect.ignore)

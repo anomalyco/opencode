@@ -39,9 +39,8 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       SessionV2.node,
-      AgentTeam.node,
       ApplicationTools.node,
-      AgentTeamTools.node,
+      AgentTeamTools.readyNode,
     ]),
     [
       [ProjectV2.node, projects],
@@ -266,6 +265,9 @@ describe("AgentTeam", () => {
       expect(yield* teams.get(team.id)).toMatchObject({
         members: [{ name: "Mark1", status: "interrupted", error: expect.stringContaining("restarted") }],
       })
+      expect(yield* teams.messages({ teamID: team.id })).toMatchObject([
+        { from: "system", to: "lead", text: expect.stringContaining("Mark1") },
+      ])
       expect(yield* teams.recover).toBe(0)
     }),
   )

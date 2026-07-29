@@ -18,11 +18,13 @@ const layer = Layer.effectDiscard(
     const teams = yield* AgentTeam.Service
 
     const current = (sessionID: Team.Member["sessionID"]) =>
-      teams.forSession(sessionID).pipe(
-        Effect.flatMap((team) =>
-          team ? Effect.succeed(team) : Effect.fail(new Error("This session does not belong to an agent team")),
-        ),
-      )
+      teams
+        .forSession(sessionID)
+        .pipe(
+          Effect.flatMap((team) =>
+            team ? Effect.succeed(team) : Effect.fail(new Error("This session does not belong to an agent team")),
+          ),
+        )
 
     const actor = (team: Team.Info, sessionID: Team.Member["sessionID"]) =>
       team.leadSessionID === sessionID
@@ -43,7 +45,11 @@ const layer = Layer.effectDiscard(
       team_status: Tool.make({
         description: "Read this session's persistent team, members, shared tasks, and named messages.",
         input: Schema.Struct({}),
-        output: Schema.Struct({ team: Team.Info, tasks: Schema.Array(Team.Task), messages: Schema.Array(Team.Message) }),
+        output: Schema.Struct({
+          team: Team.Info,
+          tasks: Schema.Array(Team.Task),
+          messages: Schema.Array(Team.Message),
+        }),
         toModelOutput: ({ output }) => text(output),
         execute: (_, context) =>
           current(context.sessionID).pipe(
@@ -122,15 +128,21 @@ const layer = Layer.effectDiscard(
                       dependencies: [],
                     },
                   })
-                  .pipe(Effect.flatMap(() => teams.tasks(team.id)), Effect.map((tasks) => ({ tasks })))
+                  .pipe(
+                    Effect.flatMap(() => teams.tasks(team.id)),
+                    Effect.map((tasks) => ({ tasks })),
+                  )
               }
               if (input.action === "claim")
                 return teams
                   .claimTask({ teamID: team.id, taskID: input.taskID, assignee: member.name })
-                  .pipe(Effect.flatMap((claimed) => teams.tasks(team.id).pipe(Effect.map((tasks) => ({ tasks, claimed })))))
-              return teams
-                .completeTask({ teamID: team.id, taskID: input.taskID })
-                .pipe(Effect.flatMap(() => teams.tasks(team.id)), Effect.map((tasks) => ({ tasks })))
+                  .pipe(
+                    Effect.flatMap((claimed) => teams.tasks(team.id).pipe(Effect.map((tasks) => ({ tasks, claimed })))),
+                  )
+              return teams.completeTask({ teamID: team.id, taskID: input.taskID }).pipe(
+                Effect.flatMap(() => teams.tasks(team.id)),
+                Effect.map((tasks) => ({ tasks })),
+              )
             }),
             Effect.mapError(failed("Unable to update team task")),
           ),
@@ -139,4 +151,16 @@ const layer = Layer.effectDiscard(
   }),
 )
 
-export const node = makeGlobalNode({ name: "agent-team-tools", layer, deps: [ApplicationTools.node, AgentTeam.node] })
+export const node = makeGlobalNode({
+  name: "agent-team-tools",
+  layer: layer.pipe(Layer.orDie),
+  deps: [ApplicationTools.node, AgentTeam.node],
+})
+
+// Re-expose the team service after the side-effect registration layer so consumers
+// receive AgentTeam without allowing the final no-output node to consume it.
+export const readyNode = makeGlobalNode({
+  service: AgentTeam.Service,
+  layer: Layer.effect(AgentTeam.Service, AgentTeam.Service),
+  deps: [node, AgentTeam.node],
+})

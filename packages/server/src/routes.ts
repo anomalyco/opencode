@@ -12,7 +12,6 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { AgentTeam } from "@opencode-ai/core/team"
-import { AgentTeamTools } from "@opencode-ai/core/team/tools"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Layer, Option } from "effect"
@@ -31,8 +30,6 @@ const applicationServices = LayerNode.group([
   httpClient,
   ToolOutputStore.cleanupNode,
   SessionV2.node,
-  AgentTeam.node,
-  AgentTeamTools.node,
   PermissionSaved.node,
   PtyTicket.node,
   Credential.node,
@@ -53,7 +50,9 @@ export function createEmbeddedRoutes() {
 }
 
 function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {
-  const serviceLayer = AppNodeBuilder.build(applicationServices, [[SessionExecution.node, SessionExecutionLocal.node]])
+  const replacements = [[SessionExecution.node, SessionExecutionLocal.node]] as const
+  const serviceLayer = AppNodeBuilder.build(applicationServices, replacements)
+  const teamLayer = AppNodeBuilder.build(AgentTeam.node, replacements)
 
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),
@@ -62,6 +61,7 @@ function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config
     Layer.provide(authorizationLayer),
     Layer.provide(schemaErrorLayer),
     Layer.provide(auth),
+    Layer.provide(teamLayer),
     Layer.provide(serviceLayer),
   )
 }
