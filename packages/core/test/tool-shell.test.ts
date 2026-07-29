@@ -349,6 +349,32 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("approves an external directory used by a directory-change command", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        const command = isWindows
+          ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
+          : `cd '${outside.path}' && pwd`
+        return withSession(active.path, (registry) => executeTool(registry, call({ command }, "call-external-cd"))).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+              expect(assertions[0]).toMatchObject({
+                resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+              })
+            }),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
   it.live("does not execute after external-directory or shell denial", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),

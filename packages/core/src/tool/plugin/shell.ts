@@ -1,5 +1,6 @@
 export * as ShellTool from "./shell"
 
+import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Content } from "@opencode-ai/schema/tool"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
@@ -146,23 +147,31 @@ export const Plugin = {
                   },
                   (invocation) =>
                     Effect.gen(function* () {
+                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell)
                       const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+                      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
+                        mutation.resolve({ path: path.resolve(target.canonical, directory), kind: "directory" }),
+                      )
                       invocation.cwd = target.canonical
                       finalTimeout = invocation.timeout
-                      const external = target.externalDirectory
-                      if (external)
+                      const external = [target, ...directories]
+                        .map((item) => item.externalDirectory)
+                        .filter((item): item is NonNullable<typeof item> => item !== undefined)
+                        .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
+                      if (external.length > 0)
                         yield* permission.assert({
-                          ...LocationMutation.externalDirectoryPermission(external),
+                          action: "external_directory",
+                          resources: external.map((item) => item.resource),
+                          save: external.map((item) => item.save),
                           sessionID: context.sessionID,
                           agent: context.agent,
                           source,
                         })
-                      const commands = yield* ShellParse.permissions(invocation.command, invocation.shell)
-                      if (commands.length > 0)
+                      if (parsed.commands.length > 0)
                         yield* permission.assert({
                           action: name,
-                          resources: commands.map((command) => command.resource),
-                          save: commands.map((command) => command.save),
+                          resources: parsed.commands.map((command) => command.resource),
+                          save: parsed.commands.map((command) => command.save),
                           sessionID: context.sessionID,
                           agent: context.agent,
                           source,

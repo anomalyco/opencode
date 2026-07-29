@@ -6,6 +6,8 @@ import type { Node } from "web-tree-sitter"
 import { ShellSelect } from "./select"
 
 type Part = { type: string; text: string }
+const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
 
 const ARITY: Record<string, number> = {
   cat: 1,
@@ -147,7 +149,7 @@ const ARITY: Record<string, number> = {
   "yarn run": 3,
 }
 
-export const permissions = Effect.fn("ShellParse.permissions")(function* (command: string, shell: string) {
+export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string) {
   const parsers = yield* Effect.promise(load)
   const tree = (ShellSelect.ps(shell) ? parsers.ps : parsers.bash).parse(command)
   if (!tree) return yield* Effect.fail(new Error("Failed to parse shell command"))
@@ -156,12 +158,21 @@ export const permissions = Effect.fn("ShellParse.permissions")(function* (comman
     Effect.succeed(tree),
     (tree) =>
       Effect.sync(() =>
-        tree.rootNode.descendantsOfType("command").flatMap((node) => {
-          if (!node) return []
-          const tokens = parts(node).map((part) => part.text)
-          if (tokens.length === 0 || isChangeDirectory(tokens[0], shell)) return []
-          return [{ resource: source(node), save: `${prefix(tokens).join(" ")} *` }]
-        }),
+        tree.rootNode.descendantsOfType("command").reduce(
+          (result, node) => {
+            if (!node) return result
+            const command = parts(node)
+            const tokens = command.map((part) => part.text)
+            if (tokens.length === 0) return result
+            if (isChangeDirectory(tokens[0], shell)) {
+              result.directories.push(...directoryArgs(command, ShellSelect.ps(shell)))
+              return result
+            }
+            result.commands.push({ resource: source(node), save: `${prefix(tokens).join(" ")} *` })
+            return result
+          },
+          { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[] },
+        ),
       ),
     (tree) => Effect.sync(() => tree.delete()),
   )
@@ -189,7 +200,41 @@ function source(node: Node) {
 
 function isChangeDirectory(command: string, shell: string) {
   const name = ShellSelect.ps(shell) ? command.toLowerCase() : command
-  return new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"]).has(name)
+  return CWD.has(name)
+}
+
+function directoryArgs(command: Part[], powershell: boolean) {
+  if (!powershell)
+    return command
+      .slice(1)
+      .filter((part) => !part.text.startsWith("-"))
+      .map((part) => literal(part.text))
+      .filter((part): part is string => part !== undefined)
+
+  const directories: string[] = []
+  let path = false
+  for (const part of command.slice(1)) {
+    if (path) {
+      const value = literal(part.text)
+      if (value) directories.push(value)
+      path = false
+      continue
+    }
+    if (part.type === "command_parameter") {
+      path = POWERSHELL_PATH_FLAGS.has(part.text.toLowerCase())
+      continue
+    }
+    const value = literal(part.text)
+    if (value) directories.push(value)
+  }
+  return directories
+}
+
+function literal(value: string) {
+  if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
+  const quote = value[0]
+  if ((quote === '"' || quote === "'") && value.at(-1) === quote) return value.slice(1, -1)
+  return value
 }
 
 function prefix(tokens: string[]) {
