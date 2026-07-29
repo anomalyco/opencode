@@ -67,6 +67,7 @@ describe("CodeModeInstructions.render", () => {
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
     expect(instructions).not.toContain("## Search")
     expect(instructions).toContain("The Code Mode tool catalog below is complete.")
+    expect(instructions).toContain("This catalog is the complete set of tools available within Code Mode.")
     expect(instructions).not.toContain("surrounding top-level agent tools")
   })
 
@@ -76,6 +77,9 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain("- orders (1 tool, none shown)")
     expect(partial).toContain("## Search")
     expect(partial).toContain("The Code Mode tool catalog below is partial.")
+    expect(partial).toContain(
+      "The Code Mode catalog and `search` results are the complete set of tools available within Code Mode.",
+    )
     expect(partial).not.toContain("surrounding top-level agent tools")
     expect(partial).toContain("- search(input: {")
     expect(partial).toContain("  limit?: number,\n  offset?: number,")
