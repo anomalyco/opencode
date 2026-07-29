@@ -151,7 +151,8 @@ const ARITY: Record<string, number> = {
 
 export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string) {
   const parsers = yield* Effect.promise(load)
-  const tree = (ShellSelect.ps(shell) ? parsers.ps : parsers.bash).parse(command)
+  const powershell = ShellSelect.ps(shell)
+  const tree = (powershell ? parsers.ps : parsers.bash).parse(command)
   if (!tree) return yield* Effect.fail(new Error("Failed to parse shell command"))
 
   return yield* Effect.acquireUseRelease(
@@ -164,11 +165,15 @@ export const scan = Effect.fn("ShellParse.scan")(function* (command: string, she
             const command = parts(node)
             const tokens = command.map((part) => part.text)
             if (tokens.length === 0) return result
-            if (isChangeDirectory(tokens[0], shell)) {
-              result.directories.push(...directoryArgs(command, ShellSelect.ps(shell)))
+            const name = powershell ? tokens[0].toLowerCase() : tokens[0]
+            if (CWD.has(name)) {
+              result.directories.push(...directoryArgs(command, powershell))
               return result
             }
-            result.commands.push({ resource: source(node), save: `${prefix(tokens).join(" ")} *` })
+            result.commands.push({
+              resource: (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim(),
+              save: `${prefix(tokens).join(" ")} *`,
+            })
             return result
           },
           { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[] },
@@ -192,15 +197,6 @@ function parts(node: Node) {
       return []
     return [{ type: child.type, text: child.text }]
   })
-}
-
-function source(node: Node) {
-  return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
-}
-
-function isChangeDirectory(command: string, shell: string) {
-  const name = ShellSelect.ps(shell) ? command.toLowerCase() : command
-  return CWD.has(name)
 }
 
 function directoryArgs(command: Part[], powershell: boolean) {
