@@ -1,13 +1,12 @@
 import { createHash } from "node:crypto"
 import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises"
-import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { getServerNodeAssets } from "@opencode-ai/server/node-assets"
 import { getNodeAssets } from "@opentui/core/node-assets"
-import { attentionSoundAssets, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "../src/node/target"
+import { attentionSoundAssets, type NodeTarget, photonWasmAsset } from "../src/node/target"
 
 const dir = path.resolve(import.meta.dirname, "..")
-const coreRequire = createRequire(import.meta.resolve("@opencode-ai/core/shell/parse"))
 
 // Bun's compiler discovers file imports and embeds them in its virtual filesystem. Vite only bundles the JavaScript
 // portion of the Node executable, while SEA embeds only the assets explicitly listed in its build configuration.
@@ -45,10 +44,7 @@ export async function collectNodeAssets(target: NodeTarget) {
       key: photonWasmAsset,
       source: fileURLToPath(import.meta.resolve(photonWasmAsset)),
     },
-    ...Object.values(shellParserWasmAssets).map((key) => ({
-      key,
-      source: coreRequire.resolve(key),
-    })),
+    ...getServerNodeAssets(),
     ...attentionSoundAssets.map((key) => ({
       key,
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),
