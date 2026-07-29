@@ -170,7 +170,9 @@ export function SessionTabs() {
                 enabled={config.animations ?? true}
                 active={status().busy}
                 complete={status().complete}
+                glow={status().unread === "activity" && !status().busy && !selected() && !status().attention}
                 color={pulseColor()}
+                glowColor={accent()}
                 completionColor={accent()}
                 backgroundColor={pulseBackground()}
               />
