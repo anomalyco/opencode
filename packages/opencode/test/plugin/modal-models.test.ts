@@ -4,6 +4,7 @@ import { ModalPlugin } from "@/plugin/modal/modal"
 
 const BASE_MODEL_ID = "thinkingmachines/Inkling-NVFP4"
 const RUNTIME_MODEL_ID = "workspace--inkling.us-west.modal.direct"
+const FALLBACK_RUNTIME_MODEL_ID = "workspace--inkling-fallback.us-west.modal.direct"
 
 function makeProvider(baseURL: string): Provider {
   const template: Model = {
@@ -55,6 +56,11 @@ function makeProvider(baseURL: string): Provider {
       },
     },
     release_date: "2026-07-15",
+    variants: {
+      fallback: {
+        reasoningEffort: "fallback",
+      },
+    },
   }
 
   return {
@@ -95,6 +101,19 @@ test("discovers Modal workspace models", async () => {
             },
             supported_sampling_parameters: ["temperature"],
             supported_features: ["tools", "reasoning"],
+            reasoning_options: [
+              {
+                type: "effort",
+                values: ["none", "low", "medium", "high", "xhigh", "max"],
+              },
+            ],
+            interleaved: {
+              field: "reasoning_content",
+            },
+          },
+          {
+            id: FALLBACK_RUNTIME_MODEL_ID,
+            base_model_id: BASE_MODEL_ID,
           },
         ],
       })
@@ -117,7 +136,7 @@ test("discovers Modal workspace models", async () => {
       path: "/v1/models",
     },
   ])
-  expect(Object.keys(models)).toEqual([RUNTIME_MODEL_ID])
+  expect(Object.keys(models)).toEqual([RUNTIME_MODEL_ID, FALLBACK_RUNTIME_MODEL_ID])
   expect(model.api).toEqual({
     id: RUNTIME_MODEL_ID,
     url: `${server.url}v1`,
@@ -143,6 +162,19 @@ test("discovers Modal workspace models", async () => {
   expect(model.limit).toEqual({
     context: 1_048_576,
     output: 262_144,
+  })
+  expect(model.variants).toEqual({
+    none: { reasoningEffort: "none" },
+    low: { reasoningEffort: "low" },
+    medium: { reasoningEffort: "medium" },
+    high: { reasoningEffort: "high" },
+    xhigh: { reasoningEffort: "xhigh" },
+    max: { reasoningEffort: "max" },
+  })
+  expect(models[FALLBACK_RUNTIME_MODEL_ID].variants).toEqual({
+    fallback: {
+      reasoningEffort: "fallback",
+    },
   })
 })
 

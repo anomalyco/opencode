@@ -1,6 +1,11 @@
 import type { Model } from "@opencode-ai/sdk/v2"
 import { Schema } from "effect"
 
+const reasoningOption = Schema.Struct({
+  type: Schema.Literal("effort"),
+  values: Schema.Array(Schema.NullOr(Schema.String)),
+})
+
 const response = Schema.Struct({
   data: Schema.Array(
     Schema.Struct({
@@ -21,6 +26,15 @@ const response = Schema.Struct({
       ),
       supported_sampling_parameters: Schema.optional(Schema.Array(Schema.String)),
       supported_features: Schema.optional(Schema.Array(Schema.String)),
+      reasoning_options: Schema.optional(Schema.Array(reasoningOption)),
+      interleaved: Schema.optional(
+        Schema.Union([
+          Schema.Boolean,
+          Schema.Struct({
+            field: Schema.Literals(["reasoning", "reasoning_content", "reasoning_details"]),
+          }),
+        ]),
+      ),
     }),
   ),
 })
@@ -96,11 +110,21 @@ export async function get(baseURL: string, apiKey: string, existing: Record<stri
             video: item.output_modalities?.includes("video") ?? template?.capabilities.output.video ?? false,
             pdf: item.output_modalities?.includes("pdf") ?? template?.capabilities.output.pdf ?? false,
           },
-          interleaved: template?.capabilities.interleaved ?? false,
+          interleaved: item.interleaved ?? template?.capabilities.interleaved ?? false,
         },
         release_date: template?.release_date ?? "",
-        variants: template?.variants,
       }
+      model.variants =
+        item.reasoning_options === undefined
+          ? template?.variants
+          : Object.fromEntries(
+              item.reasoning_options.flatMap((option) =>
+                option.values.map((value) => {
+                  const effort = value ?? "none"
+                  return [effort, { reasoningEffort: effort }]
+                }),
+              ),
+            )
       return [item.id, model]
     }),
   )
