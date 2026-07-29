@@ -2814,7 +2814,7 @@ export type ProjectCopiesRefreshInput = {
 
 export type ProjectCopiesRefreshOutput = void
 
-export type ServerTeamListOutput = ReadonlyArray<{
+export type TeamsListOutput = ReadonlyArray<{
   readonly id: string
   readonly name: string
   readonly leadSessionID: string
@@ -2834,12 +2834,12 @@ export type ServerTeamListOutput = ReadonlyArray<{
   readonly time: { readonly created: number; readonly updated: number }
 }>
 
-export type ServerTeamCreateInput = {
+export type TeamsCreateInput = {
   readonly name: { readonly name: string; readonly leadSessionID: string }["name"]
   readonly leadSessionID: { readonly name: string; readonly leadSessionID: string }["leadSessionID"]
 }
 
-export type ServerTeamCreateOutput = {
+export type TeamsCreateOutput = {
   readonly id: string
   readonly name: string
   readonly leadSessionID: string
@@ -2859,9 +2859,9 @@ export type ServerTeamCreateOutput = {
   readonly time: { readonly created: number; readonly updated: number }
 }
 
-export type ServerTeamGetInput = { readonly teamID: { readonly teamID: string }["teamID"] }
+export type TeamsGetInput = { readonly teamID: { readonly teamID: string }["teamID"] }
 
-export type ServerTeamGetOutput = {
+export type TeamsGetOutput = {
   readonly id: string
   readonly name: string
   readonly leadSessionID: string
@@ -2881,7 +2881,7 @@ export type ServerTeamGetOutput = {
   readonly time: { readonly created: number; readonly updated: number }
 }
 
-export type ServerTeamSpawnInput = {
+export type TeamsSpawnInput = {
   readonly teamID: { readonly teamID: string }["teamID"]
   readonly name: {
     readonly name: string
@@ -2920,7 +2920,7 @@ export type ServerTeamSpawnInput = {
   }["prompt"]
 }
 
-export type ServerTeamSpawnOutput = {
+export type TeamsSpawnOutput = {
   readonly name: string
   readonly sessionID: string
   readonly agent: string
@@ -2933,9 +2933,9 @@ export type ServerTeamSpawnOutput = {
   readonly time: { readonly created: number; readonly updated: number }
 }
 
-export type ServerTeamMessagesInput = { readonly teamID: { readonly teamID: string }["teamID"] }
+export type TeamsMessagesInput = { readonly teamID: { readonly teamID: string }["teamID"] }
 
-export type ServerTeamMessagesOutput = ReadonlyArray<{
+export type TeamsMessagesOutput = ReadonlyArray<{
   readonly id: string
   readonly teamID: string
   readonly from: string
@@ -2945,14 +2945,14 @@ export type ServerTeamMessagesOutput = ReadonlyArray<{
   readonly time: { readonly created: number; readonly delivered?: number }
 }>
 
-export type ServerTeamSendMessageInput = {
+export type TeamsSendMessageInput = {
   readonly teamID: { readonly teamID: string }["teamID"]
   readonly from: { readonly from: string; readonly to: string; readonly text: string }["from"]
   readonly to: { readonly from: string; readonly to: string; readonly text: string }["to"]
   readonly text: { readonly from: string; readonly to: string; readonly text: string }["text"]
 }
 
-export type ServerTeamSendMessageOutput = {
+export type TeamsSendMessageOutput = {
   readonly id: string
   readonly teamID: string
   readonly from: string
@@ -2962,9 +2962,9 @@ export type ServerTeamSendMessageOutput = {
   readonly time: { readonly created: number; readonly delivered?: number }
 }
 
-export type ServerTeamTasksInput = { readonly teamID: { readonly teamID: string }["teamID"] }
+export type TeamsTasksInput = { readonly teamID: { readonly teamID: string }["teamID"] }
 
-export type ServerTeamTasksOutput = ReadonlyArray<{
+export type TeamsTasksOutput = ReadonlyArray<{
   readonly id: string
   readonly teamID: string
   readonly title: string
@@ -2975,7 +2975,7 @@ export type ServerTeamTasksOutput = ReadonlyArray<{
   readonly time: { readonly created: number; readonly updated: number }
 }>
 
-export type ServerTeamAddTaskInput = {
+export type TeamsAddTaskInput = {
   readonly teamID: { readonly teamID: string }["teamID"]
   readonly title: {
     readonly title: string
@@ -3014,7 +3014,7 @@ export type ServerTeamAddTaskInput = {
   }["dependencies"]
 }
 
-export type ServerTeamAddTaskOutput = {
+export type TeamsAddTaskOutput = {
   readonly id: string
   readonly teamID: string
   readonly title: string
@@ -3025,17 +3025,17 @@ export type ServerTeamAddTaskOutput = {
   readonly time: { readonly created: number; readonly updated: number }
 }
 
-export type ServerTeamClaimTaskInput = {
+export type TeamsClaimTaskInput = {
   readonly teamID: { readonly teamID: string; readonly taskID: string }["teamID"]
   readonly taskID: { readonly teamID: string; readonly taskID: string }["taskID"]
   readonly assignee: { readonly assignee: string }["assignee"]
 }
 
-export type ServerTeamClaimTaskOutput = { readonly claimed: boolean }
+export type TeamsClaimTaskOutput = { readonly claimed: boolean }
 
-export type ServerTeamCompleteTaskInput = {
+export type TeamsCompleteTaskInput = {
   readonly teamID: { readonly teamID: string; readonly taskID: string }["teamID"]
   readonly taskID: { readonly teamID: string; readonly taskID: string }["taskID"]
 }
 
-export type ServerTeamCompleteTaskOutput = void
+export type TeamsCompleteTaskOutput = void

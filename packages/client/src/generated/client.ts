@@ -112,25 +112,25 @@ import type {
   ProjectCopiesRemoveOutput,
   ProjectCopiesRefreshInput,
   ProjectCopiesRefreshOutput,
-  ServerTeamListOutput,
-  ServerTeamCreateInput,
-  ServerTeamCreateOutput,
-  ServerTeamGetInput,
-  ServerTeamGetOutput,
-  ServerTeamSpawnInput,
-  ServerTeamSpawnOutput,
-  ServerTeamMessagesInput,
-  ServerTeamMessagesOutput,
-  ServerTeamSendMessageInput,
-  ServerTeamSendMessageOutput,
-  ServerTeamTasksInput,
-  ServerTeamTasksOutput,
-  ServerTeamAddTaskInput,
-  ServerTeamAddTaskOutput,
-  ServerTeamClaimTaskInput,
-  ServerTeamClaimTaskOutput,
-  ServerTeamCompleteTaskInput,
-  ServerTeamCompleteTaskOutput,
+  TeamsListOutput,
+  TeamsCreateInput,
+  TeamsCreateOutput,
+  TeamsGetInput,
+  TeamsGetOutput,
+  TeamsSpawnInput,
+  TeamsSpawnOutput,
+  TeamsMessagesInput,
+  TeamsMessagesOutput,
+  TeamsSendMessageInput,
+  TeamsSendMessageOutput,
+  TeamsTasksInput,
+  TeamsTasksOutput,
+  TeamsAddTaskInput,
+  TeamsAddTaskOutput,
+  TeamsClaimTaskInput,
+  TeamsClaimTaskOutput,
+  TeamsCompleteTaskInput,
+  TeamsCompleteTaskOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -1006,14 +1006,14 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    "server.team": {
+    teams: {
       list: (requestOptions?: RequestOptions) =>
-        request<ServerTeamListOutput>(
+        request<TeamsListOutput>(
           { method: "GET", path: `/api/team`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
-      create: (input: ServerTeamCreateInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamCreateOutput>(
+      create: (input: TeamsCreateInput, requestOptions?: RequestOptions) =>
+        request<TeamsCreateOutput>(
           {
             method: "POST",
             path: `/api/team`,
@@ -1024,8 +1024,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      get: (input: ServerTeamGetInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamGetOutput>(
+      get: (input: TeamsGetInput, requestOptions?: RequestOptions) =>
+        request<TeamsGetOutput>(
           {
             method: "GET",
             path: `/api/team/${encodeURIComponent(input.teamID)}`,
@@ -1035,8 +1035,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      spawn: (input: ServerTeamSpawnInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamSpawnOutput>(
+      spawn: (input: TeamsSpawnInput, requestOptions?: RequestOptions) =>
+        request<TeamsSpawnOutput>(
           {
             method: "POST",
             path: `/api/team/${encodeURIComponent(input.teamID)}/member`,
@@ -1053,8 +1053,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      messages: (input: ServerTeamMessagesInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamMessagesOutput>(
+      messages: (input: TeamsMessagesInput, requestOptions?: RequestOptions) =>
+        request<TeamsMessagesOutput>(
           {
             method: "GET",
             path: `/api/team/${encodeURIComponent(input.teamID)}/message`,
@@ -1064,8 +1064,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      sendMessage: (input: ServerTeamSendMessageInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamSendMessageOutput>(
+      sendMessage: (input: TeamsSendMessageInput, requestOptions?: RequestOptions) =>
+        request<TeamsSendMessageOutput>(
           {
             method: "POST",
             path: `/api/team/${encodeURIComponent(input.teamID)}/message`,
@@ -1076,8 +1076,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      tasks: (input: ServerTeamTasksInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamTasksOutput>(
+      tasks: (input: TeamsTasksInput, requestOptions?: RequestOptions) =>
+        request<TeamsTasksOutput>(
           {
             method: "GET",
             path: `/api/team/${encodeURIComponent(input.teamID)}/task`,
@@ -1087,8 +1087,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      addTask: (input: ServerTeamAddTaskInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamAddTaskOutput>(
+      addTask: (input: TeamsAddTaskInput, requestOptions?: RequestOptions) =>
+        request<TeamsAddTaskOutput>(
           {
             method: "POST",
             path: `/api/team/${encodeURIComponent(input.teamID)}/task`,
@@ -1105,8 +1105,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      claimTask: (input: ServerTeamClaimTaskInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamClaimTaskOutput>(
+      claimTask: (input: TeamsClaimTaskInput, requestOptions?: RequestOptions) =>
+        request<TeamsClaimTaskOutput>(
           {
             method: "POST",
             path: `/api/team/${encodeURIComponent(input.teamID)}/task/${encodeURIComponent(input.taskID)}/claim`,
@@ -1117,8 +1117,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      completeTask: (input: ServerTeamCompleteTaskInput, requestOptions?: RequestOptions) =>
-        request<ServerTeamCompleteTaskOutput>(
+      completeTask: (input: TeamsCompleteTaskInput, requestOptions?: RequestOptions) =>
+        request<TeamsCompleteTaskOutput>(
           {
             method: "POST",
             path: `/api/team/${encodeURIComponent(input.teamID)}/task/${encodeURIComponent(input.taskID)}/complete`,

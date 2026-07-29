@@ -82,6 +82,7 @@ import {
   sessionPanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { AgentTeamSidebar } from "@/pages/session/agent-team-sidebar"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
@@ -2296,6 +2297,14 @@ export default function Page() {
             </div>
           </Show>
         </div>
+
+        <Show when={isDesktop() && params.id} keyed>
+          {(sessionID) => (
+            <Suspense>
+              <AgentTeamSidebar sessionID={sessionID} />
+            </Suspense>
+          )}
+        </Show>
 
         <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
           <Suspense>

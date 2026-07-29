@@ -16,6 +16,10 @@ import { SessionInputTable } from "@opencode-ai/core/session/sql"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { AgentTeam } from "@opencode-ai/core/team"
+import { AgentTeamTools } from "@opencode-ai/core/team/tools"
+import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
+import { Tool } from "@opencode-ai/core/tool/tool"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { testEffect } from "./lib/effect"
 import { eq } from "drizzle-orm"
 
@@ -36,6 +40,8 @@ const it = testEffect(
       SessionStore.node,
       SessionV2.node,
       AgentTeam.node,
+      ApplicationTools.node,
+      AgentTeamTools.node,
     ]),
     [
       [ProjectV2.node, projects],
@@ -47,6 +53,53 @@ const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = ModelV2.Ref.make({ id: ModelV2.ID.make("qwen"), providerID: ProviderV2.ID.make("local") })
 
 describe("AgentTeam", () => {
+  it.effect("registers native model-callable team tools", () =>
+    Effect.gen(function* () {
+      const tools = yield* ApplicationTools.Service
+      expect([...tools.entries().keys()].sort()).toEqual([
+        "team_create",
+        "team_message",
+        "team_spawn",
+        "team_status",
+        "team_task",
+      ])
+    }),
+  )
+
+  it.effect("executes native team creation and shared-task tools", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionV2.Service
+      const applications = yield* ApplicationTools.Service
+      const lead = yield* sessions.create({ location, agent: AgentV2.ID.make("mark1"), model })
+      const context: Tool.Context = {
+        sessionID: lead.id,
+        agent: AgentV2.ID.make("mark1"),
+        assistantMessageID: SessionMessage.ID.make("msg_team_tools"),
+        toolCallID: "call-team-tools",
+      }
+      const create = applications.entries().get("team_create")!.tool
+      const created = yield* Tool.settle(
+        create,
+        { type: "tool-call", id: "call-create", name: "team_create", input: { name: "ProjectCombo" } },
+        context,
+      )
+      expect(created.structured).toMatchObject({ name: "ProjectCombo", members: [{ name: "Mark1" }] })
+
+      const task = applications.entries().get("team_task")!.tool
+      const added = yield* Tool.settle(
+        task,
+        {
+          type: "tool-call",
+          id: "call-task",
+          name: "team_task",
+          input: { action: "create", title: "Review", description: "Review the implementation" },
+        },
+        context,
+      )
+      expect(added.structured).toMatchObject({ tasks: [{ title: "Review", status: "pending" }] })
+    }),
+  )
+
   it.effect("persists a team and its named members", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
@@ -55,18 +108,6 @@ describe("AgentTeam", () => {
       const reviewer = yield* session.create({ location, agent: AgentV2.ID.make("spencer2"), model })
       const team = yield* teams.create({ name: "ProjectCombo", leadSessionID: lead.id })
 
-      yield* teams.addMember({
-        teamID: team.id,
-        member: {
-          name: "Mark1",
-          sessionID: lead.id,
-          agent: AgentV2.ID.make("mark1"),
-          model,
-          role: "lead",
-          permission: "writer",
-          status: "busy",
-        },
-      })
       yield* teams.addMember({
         teamID: team.id,
         member: {
@@ -84,7 +125,7 @@ describe("AgentTeam", () => {
         name: "ProjectCombo",
         leadSessionID: lead.id,
         members: [
-          { name: "Mark1", permission: "writer", sessionID: lead.id },
+          { name: "Mark1", permission: "lead", sessionID: lead.id },
           { name: "Spencer2", permission: "reviewer", sessionID: reviewer.id },
         ],
       })

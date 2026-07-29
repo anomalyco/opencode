@@ -99,6 +99,7 @@ const layer = Layer.effect(
     const database = yield* Database.Service
     const db = database.db
     const sessions = yield* SessionV2.Service
+    const serviceScope = yield* Effect.scope
 
     const members = Effect.fn("AgentTeam.members")(function* (teamID: Team.ID) {
       const rows = yield* db
@@ -117,9 +118,28 @@ const layer = Layer.effect(
       return teamFromRow(row, yield* members(teamID))
     })
 
+    const track = (teamID: Team.ID, name: string, sessionID: Team.Member["sessionID"]) =>
+      Effect.gen(function* () {
+        let started = false
+        for (let attempt = 0; attempt < 40; attempt++) {
+          if ((yield* sessions.active).has(sessionID)) {
+            started = true
+            break
+          }
+          yield* Effect.sleep("50 millis")
+        }
+        while (started && (yield* sessions.active).has(sessionID)) yield* Effect.sleep("200 millis")
+        yield* db
+          .update(TeamMemberTable)
+          .set({ status: "idle", error: null, time_updated: Date.now() })
+          .where(and(eq(TeamMemberTable.team_id, teamID), eq(TeamMemberTable.name, name)))
+          .run()
+          .pipe(Effect.orDie)
+      })
+
     const result = Service.of({
       create: Effect.fn("AgentTeam.create")(function* (input) {
-        yield* sessions.get(input.leadSessionID)
+        const lead = yield* sessions.get(input.leadSessionID)
         const id = input.id ?? Team.ID.create()
         const existing = yield* db.select().from(TeamTable).where(eq(TeamTable.id, id)).get().pipe(Effect.orDie)
         if (existing) return yield* get(id).pipe(Effect.orDie)
@@ -136,6 +156,23 @@ const layer = Layer.effect(
           })
           .run()
           .pipe(Effect.orDie)
+        if (lead.agent && lead.model)
+          yield* db
+            .insert(TeamMemberTable)
+            .values({
+              team_id: id,
+              name: "Mark1",
+              session_id: lead.id,
+              agent: lead.agent,
+              model: lead.model,
+              role: "lead",
+              permission: "lead",
+              status: "idle",
+              time_created: now,
+              time_updated: now,
+            })
+            .run()
+            .pipe(Effect.orDie)
         return yield* get(id).pipe(Effect.orDie)
       }),
       get,
@@ -224,6 +261,7 @@ const layer = Layer.effect(
             ].join("\n\n"),
           },
         })
+        yield* track(input.teamID, member.name, teammate.id).pipe(Effect.forkIn(serviceScope))
         return yield* result.updateMember({ teamID: input.teamID, name: member.name, status: "busy" })
       }),
       updateMember: Effect.fn("AgentTeam.updateMember")(function* (input) {
@@ -292,6 +330,10 @@ const layer = Layer.effect(
           sessionID: target,
           prompt: { text: `[Team message from ${input.from}]\n${input.text}` },
         })
+        if (input.to !== "lead") {
+          yield* result.updateMember({ teamID: input.teamID, name: input.to, status: "busy", error: null })
+          yield* track(input.teamID, input.to, target).pipe(Effect.forkIn(serviceScope))
+        }
         yield* result.deliver(message.id)
         const delivered = yield* DateTime.now
         return Team.Message.make({

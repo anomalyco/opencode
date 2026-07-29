@@ -1,10 +1,11 @@
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { SessionMessage, Team } from "@opencode-ai/schema"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { type Accessor, batch, createMemo, createResource, onCleanup, onMount } from "solid-js"
-import { createApiForServer, createSdkForServer, type ServerApi } from "@/utils/server"
+import { authTokenFromCredentials, createApiForServer, createSdkForServer, type ServerApi } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { ServerConnection, useServer } from "./server"
@@ -174,6 +175,7 @@ type ServerSDKBase = {
   client: ReturnType<typeof createSdkForServer>
   api: CompatibleApi
   currentApi: ServerApi
+  teams: AgentTeamApi
   event: {
     on: ServerEventEmitter["on"]
     listen: ServerEventEmitter["listen"]
@@ -182,6 +184,13 @@ type ServerSDKBase = {
   createClient: (
     opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">,
   ) => ReturnType<typeof createSdkForServer>
+}
+
+type AgentTeamApi = {
+  list: () => Promise<readonly Team.Info[]>
+  tasks: (teamID: Team.ID) => Promise<readonly Team.Task[]>
+  messages: (teamID: Team.ID) => Promise<readonly Team.Message[]>
+  sessionMessages: (sessionID: string) => Promise<readonly SessionMessage.Message[]>
 }
 
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
@@ -339,6 +348,29 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     throwOnError: true,
   })
   const currentApi: ServerApi = createApiForServer({ server: server.http, fetch: platform.fetch })
+  const teamFetch = platform.fetch ?? globalThis.fetch
+  const teamHeaders = server.http.password
+    ? {
+        Authorization: `Basic ${authTokenFromCredentials({
+          username: server.http.username,
+          password: server.http.password,
+        })}`,
+      }
+    : undefined
+  const teamRequest = async <T,>(path: string): Promise<T> => {
+    const response = await teamFetch(`${server.http.url}${path}`, { headers: teamHeaders })
+    if (!response.ok) throw new Error(`Agent Team API failed (${response.status})`)
+    return response.json() as Promise<T>
+  }
+  const teams: AgentTeamApi = {
+    list: () => teamRequest("/api/team"),
+    tasks: (teamID) => teamRequest(`/api/team/${encodeURIComponent(teamID)}/task`),
+    messages: (teamID) => teamRequest(`/api/team/${encodeURIComponent(teamID)}/message`),
+    sessionMessages: (sessionID) =>
+      teamRequest<{ data: readonly SessionMessage.Message[] }>(
+        `/api/session/${encodeURIComponent(sessionID)}/message?limit=8&order=desc`,
+      ).then((value) => value.data),
+  }
   const legacy = (directory?: string) =>
     createSdkForServer({
       server: server.http,
@@ -357,6 +389,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     client: sdk,
     api,
     currentApi,
+    teams,
     event: {
       on: emitter.on.bind(emitter),
       listen: emitter.listen.bind(emitter),
@@ -427,6 +460,7 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
     protocol: serverSDK.protocol,
     directory,
     client,
+    teams: serverSDK.teams,
     api: createCompatibleApi({
       protocol: serverSDK.protocol,
       current: serverSDK.currentApi,
