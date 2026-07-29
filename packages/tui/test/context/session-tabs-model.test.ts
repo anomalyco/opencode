@@ -3,13 +3,65 @@ import {
   adaptiveSessionTabLayout,
   closeSessionTab,
   cycleSessionTab,
+  moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
   recordSessionTabHistory,
+  seedSessionTabMotion,
   sessionTabComplete,
+  sessionTabOverflowWidth,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
+  test("moves a tab to a clamped index and returns the same tabs for no-ops", () => {
+    const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
+    expect(moveSessionTab(tabs, "a", 2).map((tab) => tab.sessionID)).toEqual(["b", "c", "a"])
+    expect(moveSessionTab(tabs, "c", -5).map((tab) => tab.sessionID)).toEqual(["c", "a", "b"])
+    expect(moveSessionTab(tabs, "b", 99).map((tab) => tab.sessionID)).toEqual(["a", "c", "b"])
+    expect(moveSessionTab(tabs, "b", 1)).toBe(tabs)
+    expect(moveSessionTab(tabs, "missing", 0)).toBe(tabs)
+  })
+
+  test("open seeding keeps survivors and grows the new tab from zero", () => {
+    const seeded = seedSessionTabMotion(
+      ["a", "b"],
+      ["a", "b", "c"],
+      { widths: [35, 35], selections: [1, 0], activities: [0, 1] },
+      { widths: [24, 23, 23], selections: [1, 0, 0], activities: [0, 1, 0] },
+    )
+    expect(seeded).toEqual({ widths: [35, 35, 0], selections: [1, 0, 0], activities: [0, 1, 0] })
+  })
+
+  test("close seeding keeps survivors at their current animated widths", () => {
+    const seeded = seedSessionTabMotion(
+      ["a", "b", "c"],
+      ["a", "c"],
+      { widths: [24, 23, 23], selections: [1, 0, 0], activities: [0, 0, 1] },
+      { widths: [35, 35], selections: [1, 0], activities: [0, 1] },
+    )
+    expect(seeded).toEqual({ widths: [24, 23], selections: [1, 0], activities: [0, 1] })
+  })
+
+  test("window shifts keep retained tabs and grow revealed ones", () => {
+    const seeded = seedSessionTabMotion(
+      ["a", "b", "c"],
+      ["b", "c", "d"],
+      { widths: [22, 8, 8], selections: [1, 0, 0], activities: [0, 0, 0] },
+      { widths: [8, 8, 22], selections: [0, 0, 1], activities: [0, 0, 0] },
+    )
+    expect(seeded).toEqual({ widths: [8, 8, 0], selections: [0, 0, 1], activities: [0, 0, 0] })
+  })
+
+  test("fully replaced windows jump instead of seeding", () => {
+    const values = { widths: [22], selections: [1], activities: [0] }
+    expect(seedSessionTabMotion(["a"], ["z"], values, values)).toBeUndefined()
+  })
+
+  test("overflow markers reserve room for a gap beside their digits", () => {
+    expect(sessionTabOverflowWidth(5)).toBe(3)
+    expect(sessionTabOverflowWidth(12)).toBe(4)
+  })
+
   test("opens each session once and refreshes its title", () => {
     const tabs = openSessionTab([{ sessionID: "a", title: "Old" }], { sessionID: "a", title: "New" })
     expect(tabs).toEqual([{ sessionID: "a", title: "New" }])
