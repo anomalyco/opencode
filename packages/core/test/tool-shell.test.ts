@@ -346,33 +346,6 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("reports external command arguments as advisory warnings without enforcing approval", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-      ([active, outside]) => {
-        reset()
-        denyAction = "external_directory"
-        const target = path.join(outside.path, "secret.txt")
-        return withSession(active.path, (registry) => executeTool(registry, call({ command: `cat ${target}` }))).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(assertions.map((item) => item.action)).toEqual(["shell"])
-              expect(settled.metadata).not.toHaveProperty("warnings")
-              expect(settled.content?.[1]).toMatchObject({
-                type: "text",
-                text: expect.stringContaining("Warnings:"),
-              })
-            }),
-          ),
-        )
-      },
-      ([active, outside]) =>
-        Effect.promise(() =>
-          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-        ),
-    ),
-  )
-
   it.live("keeps non-zero exits useful", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

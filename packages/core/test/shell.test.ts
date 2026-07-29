@@ -59,6 +59,13 @@ describe("shell", () => {
     expect(ShellSelect.args("/usr/bin/fish", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
+    expect(ShellSelect.args("pwsh", "Write-Output hi")).toEqual([
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Write-Output hi",
+    ])
   })
 
   if (process.platform === "win32") {

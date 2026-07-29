@@ -1,6 +1,5 @@
 export * as ShellTool from "./shell"
 
-import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Content } from "@opencode-ai/schema/tool"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
@@ -66,18 +65,14 @@ const Output = Schema.Struct({
   ...StructuredOutput.fields,
   output: Schema.String,
   status: Schema.optionalKey(Schema.Literals(["completed", "running"])),
-  warnings: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 
 type Output = typeof Output.Type
 
 const modelOutput = (output: Output): string | undefined => {
-  const warnings = output.warnings?.length
-    ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
-    : ""
-  if (output.status === "running") return `${warnings.trimStart()}${warnings ? "\n\n" : ""}${BACKGROUND_INSTRUCTION}`
-  if (output.timeout) return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command timed out before completion.`
-  return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command exited with code ${output.exit}.`
+  if (output.status === "running") return BACKGROUND_INSTRUCTION
+  if (output.timeout) return "Command timed out before completion."
+  return `Command exited with code ${output.exit}.`
 }
 
 /**
@@ -86,30 +81,11 @@ const modelOutput = (output: Output): string | undefined => {
  */
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
 // TODO: Port BashArity reusable command-prefix approvals.
-// TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
 // TODO: Add plugin shell.env environment augmentation once plugin hooks exist.
 // TODO: Persist job status and define restart recovery before exposing remote observation.
 // TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
 // TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
-
-const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
-const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
-const externalCommandDirectories = Effect.fn("ShellTool.externalCommandDirectories")(function* (
-  fs: FSUtil.Interface,
-  command: string,
-  cwd: string,
-) {
-  const directories = new Set<string>()
-  for (const token of shellTokens(command)) {
-    const value = unquote(token).replace(/[;,|&]+$/, "")
-    if (!path.isAbsolute(value)) continue
-    const resolved = yield* fs.resolve(value)
-    if (FSUtil.contains(cwd, resolved)) continue
-    directories.add(yield* fs.resolve(path.dirname(resolved)))
-  }
-  return [...directories]
-})
 
 export const Plugin = {
   id: "opencode.tool.shell",
@@ -179,10 +155,6 @@ export const Plugin = {
                     agent: context.agent,
                     source,
                   })
-                const warnings = (yield* externalCommandDirectories(fsUtil, input.command, target.canonical)).map(
-                  (directory) =>
-                    `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Shell runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
-                )
                 yield* permission.assert({
                   action: name,
                   resources: [input.command],
@@ -264,7 +236,6 @@ export const Plugin = {
                     shellID: info.id,
                     truncated: false,
                     status: "running" as const,
-                    ...(warnings.length ? { warnings } : {}),
                   }
                 }
 
@@ -279,14 +250,13 @@ export const Plugin = {
                     shellID: info.id,
                     truncated: false,
                     status: "running" as const,
-                    ...(warnings.length ? { warnings } : {}),
                   }
                 }
                 if (result?.info.status === "error")
                   return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
                 if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
 
-                return { ...(yield* Deferred.await(settled)), ...(warnings.length ? { warnings } : {}) }
+                return yield* Deferred.await(settled)
               }).pipe(
                 Effect.map((output) => {
                   const content: Array<Content> = [{ type: "text", text: output.output }]
