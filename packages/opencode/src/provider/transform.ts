@@ -341,7 +341,7 @@ function normalizeMessages(
             ...msg.providerOptions,
             openaiCompatible: {
               ...msg.providerOptions?.openaiCompatible,
-              [field]: reasoningText,
+              [field]: reasoningText || msg.providerOptions?.openaiCompatible?.[field] || "",
             },
           },
         }
