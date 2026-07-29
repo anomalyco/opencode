@@ -99,10 +99,12 @@ export const configure = (input: Config) => {
   const modelDefaults = defaults(input)
 
   const responses = (modelID: string | ModelID) =>
-    configuredResponsesRoute.with(withOpenAIOptions(modelID, modelDefaults)).model({ id: modelID })
+    configuredResponsesRoute
+      .with(withOpenAIOptions(modelID, modelDefaults))
+      .model<OpenAIProviderOptionsInput>({ id: modelID })
 
   const chat = (modelID: string | ModelID) =>
-    configuredChatRoute.with(withOpenAIOptions(modelID, modelDefaults)).model({ id: modelID })
+    configuredChatRoute.with(withOpenAIOptions(modelID, modelDefaults)).model<OpenAIProviderOptionsInput>({ id: modelID })
 
   return {
     id,
@@ -133,8 +135,14 @@ const config = (settings: Settings): Config => {
   throw new Error("Azure requires resourceName or baseURL")
 }
 
-export const responsesModel: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) =>
   configure(config(settings)).responses(modelID)
-export const chatModel: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) =>
   configure(config(settings)).chat(modelID)
 export const model = responsesModel
