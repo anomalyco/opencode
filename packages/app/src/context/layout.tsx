@@ -711,9 +711,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("fileTree", "tab", tab)
-        },
-        open() {
-          if (!store.fileTree) {
+          },
+          open() {
+            if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
@@ -726,12 +726,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           }
           setStore("fileTree", "opened", false)
         },
-        toggle() {
-          if (!store.fileTree) {
+          toggle() {
+            const next = !(store.fileTree?.opened ?? true)
+            if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
-          setStore("fileTree", "opened", (x) => !x)
+          setStore("fileTree", "opened", next)
         },
         resize(width: number) {
           if (!store.fileTree) {
