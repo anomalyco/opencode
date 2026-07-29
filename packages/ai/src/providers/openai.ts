@@ -144,8 +144,10 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
   throw new Error(`Unsupported OpenAI Responses transport: ${String(settings.transport)}`)
 }
 
-export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
+export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => configure(config(settings)).chat(modelID)
 export const responses = provider.responses
 export const responsesWebSocket = provider.responsesWebSocket
 export const chat = provider.chat
