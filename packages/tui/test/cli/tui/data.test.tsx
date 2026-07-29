@@ -1399,6 +1399,29 @@ test("restores queued compaction from durable pending input", async () => {
     ])
 
     emitEvent(events, {
+      id: "evt_step_started",
+      created: 2,
+      type: "session.step.started",
+      durable: durable(sessionID, 3),
+      data: {
+        sessionID,
+        assistantMessageID: "message-assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_text_started",
+      created: 2,
+      type: "session.text.started",
+      durable: durable(sessionID, 4),
+      data: {
+        sessionID,
+        assistantMessageID: "message-assistant",
+        ordinal: 0,
+      },
+    })
+    emitEvent(events, {
       id: "evt_text_ended",
       created: 2,
       type: "session.text.ended",
@@ -1417,7 +1440,7 @@ test("restores queued compaction from durable pending input", async () => {
       id: "evt_compaction_started",
       created: 2,
       type: "session.compaction.started",
-      durable: durable(sessionID, 4),
+      durable: durable(sessionID, 6),
       data: {
         sessionID,
         reason: "manual",
@@ -1432,7 +1455,7 @@ test("restores queued compaction from durable pending input", async () => {
       id: "evt_compaction_ended",
       created: 3,
       type: "session.compaction.ended",
-      durable: durable(sessionID, 5),
+      durable: durable(sessionID, 7),
       data: { sessionID, reason: "manual", text: "Summary", recent: "" },
     })
     expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-compaction-later"])
