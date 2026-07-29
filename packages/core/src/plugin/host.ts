@@ -20,6 +20,7 @@ import { Provider } from "../provider"
 import { Reference } from "../reference"
 import { AbsolutePath, type DeepMutable } from "../schema"
 import { Skill } from "../skill"
+import { Shell } from "../shell"
 import { Tool } from "../tool"
 import { Workspace } from "../workspace"
 import { WebSearch } from "../websearch"
@@ -37,6 +38,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
   const location = yield* Location.Service
   const reference = yield* Reference.Service
   const skill = yield* Skill.Service
+  const shell = yield* Shell.Service
   const tools = yield* Tool.Service
   const websearch = yield* WebSearch.Service
   const hooks = yield* PluginHooks.Service
@@ -295,6 +297,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             list: draft.list,
           })
         }),
+    },
+    shell: {
+      hook: (_name, callback) => shell.hook.createBefore(callback),
     },
     tool: {
       transform: (callback) =>

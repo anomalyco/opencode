@@ -19,6 +19,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
+import { Shell } from "@opencode-ai/core/shell"
 import { Tool } from "@opencode-ai/core/tool"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Effect, Layer, Stream } from "effect"
@@ -53,6 +54,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     PluginHooks.node,
     Reference.node,
     Skill.node,
+    Shell.node,
     PluginHooks.node,
     Tool.node,
     WebSearch.node,
