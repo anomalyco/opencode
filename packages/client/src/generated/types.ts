@@ -101,6 +101,14 @@ export type ProjectCopyError = {
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
 
+export type TeamNotFoundError = {
+  readonly _tag: "TeamNotFoundError"
+  readonly teamID: string
+  readonly message: string
+}
+export const isTeamNotFoundError = (value: unknown): value is TeamNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "TeamNotFoundError"
+
 export type HealthGetOutput = { readonly healthy: true }
 
 export type LocationGetInput = {
@@ -2805,3 +2813,229 @@ export type ProjectCopiesRefreshInput = {
 }
 
 export type ProjectCopiesRefreshOutput = void
+
+export type ServerTeamListOutput = ReadonlyArray<{
+  readonly id: string
+  readonly name: string
+  readonly leadSessionID: string
+  readonly status: "active" | "paused" | "completed" | "error"
+  readonly members: ReadonlyArray<{
+    readonly name: string
+    readonly sessionID: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly role: "lead" | "teammate"
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly status: "starting" | "busy" | "idle" | "waiting" | "error" | "stopped" | "interrupted"
+    readonly currentTaskID?: string
+    readonly error?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }>
+  readonly time: { readonly created: number; readonly updated: number }
+}>
+
+export type ServerTeamCreateInput = {
+  readonly name: { readonly name: string; readonly leadSessionID: string }["name"]
+  readonly leadSessionID: { readonly name: string; readonly leadSessionID: string }["leadSessionID"]
+}
+
+export type ServerTeamCreateOutput = {
+  readonly id: string
+  readonly name: string
+  readonly leadSessionID: string
+  readonly status: "active" | "paused" | "completed" | "error"
+  readonly members: ReadonlyArray<{
+    readonly name: string
+    readonly sessionID: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly role: "lead" | "teammate"
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly status: "starting" | "busy" | "idle" | "waiting" | "error" | "stopped" | "interrupted"
+    readonly currentTaskID?: string
+    readonly error?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }>
+  readonly time: { readonly created: number; readonly updated: number }
+}
+
+export type ServerTeamGetInput = { readonly teamID: { readonly teamID: string }["teamID"] }
+
+export type ServerTeamGetOutput = {
+  readonly id: string
+  readonly name: string
+  readonly leadSessionID: string
+  readonly status: "active" | "paused" | "completed" | "error"
+  readonly members: ReadonlyArray<{
+    readonly name: string
+    readonly sessionID: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly role: "lead" | "teammate"
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly status: "starting" | "busy" | "idle" | "waiting" | "error" | "stopped" | "interrupted"
+    readonly currentTaskID?: string
+    readonly error?: string
+    readonly time: { readonly created: number; readonly updated: number }
+  }>
+  readonly time: { readonly created: number; readonly updated: number }
+}
+
+export type ServerTeamSpawnInput = {
+  readonly teamID: { readonly teamID: string }["teamID"]
+  readonly name: {
+    readonly name: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly prompt: string
+  }["name"]
+  readonly agent: {
+    readonly name: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly prompt: string
+  }["agent"]
+  readonly model: {
+    readonly name: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly prompt: string
+  }["model"]
+  readonly permission: {
+    readonly name: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly prompt: string
+  }["permission"]
+  readonly prompt: {
+    readonly name: string
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly permission: "lead" | "writer" | "reviewer"
+    readonly prompt: string
+  }["prompt"]
+}
+
+export type ServerTeamSpawnOutput = {
+  readonly name: string
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+  readonly role: "lead" | "teammate"
+  readonly permission: "lead" | "writer" | "reviewer"
+  readonly status: "starting" | "busy" | "idle" | "waiting" | "error" | "stopped" | "interrupted"
+  readonly currentTaskID?: string
+  readonly error?: string
+  readonly time: { readonly created: number; readonly updated: number }
+}
+
+export type ServerTeamMessagesInput = { readonly teamID: { readonly teamID: string }["teamID"] }
+
+export type ServerTeamMessagesOutput = ReadonlyArray<{
+  readonly id: string
+  readonly teamID: string
+  readonly from: string
+  readonly to: string
+  readonly text: string
+  readonly delivered: boolean
+  readonly time: { readonly created: number; readonly delivered?: number }
+}>
+
+export type ServerTeamSendMessageInput = {
+  readonly teamID: { readonly teamID: string }["teamID"]
+  readonly from: { readonly from: string; readonly to: string; readonly text: string }["from"]
+  readonly to: { readonly from: string; readonly to: string; readonly text: string }["to"]
+  readonly text: { readonly from: string; readonly to: string; readonly text: string }["text"]
+}
+
+export type ServerTeamSendMessageOutput = {
+  readonly id: string
+  readonly teamID: string
+  readonly from: string
+  readonly to: string
+  readonly text: string
+  readonly delivered: boolean
+  readonly time: { readonly created: number; readonly delivered?: number }
+}
+
+export type ServerTeamTasksInput = { readonly teamID: { readonly teamID: string }["teamID"] }
+
+export type ServerTeamTasksOutput = ReadonlyArray<{
+  readonly id: string
+  readonly teamID: string
+  readonly title: string
+  readonly description: string
+  readonly status: "pending" | "blocked" | "in_progress" | "completed" | "cancelled"
+  readonly assignee?: string
+  readonly dependencies: ReadonlyArray<string>
+  readonly time: { readonly created: number; readonly updated: number }
+}>
+
+export type ServerTeamAddTaskInput = {
+  readonly teamID: { readonly teamID: string }["teamID"]
+  readonly title: {
+    readonly title: string
+    readonly description: string
+    readonly status: "pending" | "blocked" | "in_progress" | "completed" | "cancelled"
+    readonly assignee?: string | undefined
+    readonly dependencies: ReadonlyArray<string>
+  }["title"]
+  readonly description: {
+    readonly title: string
+    readonly description: string
+    readonly status: "pending" | "blocked" | "in_progress" | "completed" | "cancelled"
+    readonly assignee?: string | undefined
+    readonly dependencies: ReadonlyArray<string>
+  }["description"]
+  readonly status: {
+    readonly title: string
+    readonly description: string
+    readonly status: "pending" | "blocked" | "in_progress" | "completed" | "cancelled"
+    readonly assignee?: string | undefined
+    readonly dependencies: ReadonlyArray<string>
+  }["status"]
+  readonly assignee?: {
+    readonly title: string
+    readonly description: string
+    readonly status: "pending" | "blocked" | "in_progress" | "completed" | "cancelled"
+    readonly assignee?: string | undefined
+    readonly dependencies: ReadonlyArray<string>
+  }["assignee"]
+  readonly dependencies: {
+    readonly title: string
+    readonly description: string
+    readonly status: "pending" | "blocked" | "in_progress" | "completed" | "cancelled"
+    readonly assignee?: string | undefined
+    readonly dependencies: ReadonlyArray<string>
+  }["dependencies"]
+}
+
+export type ServerTeamAddTaskOutput = {
+  readonly id: string
+  readonly teamID: string
+  readonly title: string
+  readonly description: string
+  readonly status: "pending" | "blocked" | "in_progress" | "completed" | "cancelled"
+  readonly assignee?: string
+  readonly dependencies: ReadonlyArray<string>
+  readonly time: { readonly created: number; readonly updated: number }
+}
+
+export type ServerTeamClaimTaskInput = {
+  readonly teamID: { readonly teamID: string; readonly taskID: string }["teamID"]
+  readonly taskID: { readonly teamID: string; readonly taskID: string }["taskID"]
+  readonly assignee: { readonly assignee: string }["assignee"]
+}
+
+export type ServerTeamClaimTaskOutput = { readonly claimed: boolean }
+
+export type ServerTeamCompleteTaskInput = {
+  readonly teamID: { readonly teamID: string; readonly taskID: string }["teamID"]
+  readonly taskID: { readonly teamID: string; readonly taskID: string }["taskID"]
+}
+
+export type ServerTeamCompleteTaskOutput = void

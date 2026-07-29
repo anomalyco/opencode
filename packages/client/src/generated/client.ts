@@ -112,6 +112,25 @@ import type {
   ProjectCopiesRemoveOutput,
   ProjectCopiesRefreshInput,
   ProjectCopiesRefreshOutput,
+  ServerTeamListOutput,
+  ServerTeamCreateInput,
+  ServerTeamCreateOutput,
+  ServerTeamGetInput,
+  ServerTeamGetOutput,
+  ServerTeamSpawnInput,
+  ServerTeamSpawnOutput,
+  ServerTeamMessagesInput,
+  ServerTeamMessagesOutput,
+  ServerTeamSendMessageInput,
+  ServerTeamSendMessageOutput,
+  ServerTeamTasksInput,
+  ServerTeamTasksOutput,
+  ServerTeamAddTaskInput,
+  ServerTeamAddTaskOutput,
+  ServerTeamClaimTaskInput,
+  ServerTeamClaimTaskOutput,
+  ServerTeamCompleteTaskInput,
+  ServerTeamCompleteTaskOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -982,6 +1001,129 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    "server.team": {
+      list: (requestOptions?: RequestOptions) =>
+        request<ServerTeamListOutput>(
+          { method: "GET", path: `/api/team`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ),
+      create: (input: ServerTeamCreateInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamCreateOutput>(
+          {
+            method: "POST",
+            path: `/api/team`,
+            body: { name: input["name"], leadSessionID: input["leadSessionID"] },
+            successStatus: 200,
+            declaredStatuses: [409, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: ServerTeamGetInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamGetOutput>(
+          {
+            method: "GET",
+            path: `/api/team/${encodeURIComponent(input.teamID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      spawn: (input: ServerTeamSpawnInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamSpawnOutput>(
+          {
+            method: "POST",
+            path: `/api/team/${encodeURIComponent(input.teamID)}/member`,
+            body: {
+              name: input["name"],
+              agent: input["agent"],
+              model: input["model"],
+              permission: input["permission"],
+              prompt: input["prompt"],
+            },
+            successStatus: 200,
+            declaredStatuses: [404, 409, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      messages: (input: ServerTeamMessagesInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamMessagesOutput>(
+          {
+            method: "GET",
+            path: `/api/team/${encodeURIComponent(input.teamID)}/message`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      sendMessage: (input: ServerTeamSendMessageInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamSendMessageOutput>(
+          {
+            method: "POST",
+            path: `/api/team/${encodeURIComponent(input.teamID)}/message`,
+            body: { from: input["from"], to: input["to"], text: input["text"] },
+            successStatus: 200,
+            declaredStatuses: [404, 409, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      tasks: (input: ServerTeamTasksInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamTasksOutput>(
+          {
+            method: "GET",
+            path: `/api/team/${encodeURIComponent(input.teamID)}/task`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      addTask: (input: ServerTeamAddTaskInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamAddTaskOutput>(
+          {
+            method: "POST",
+            path: `/api/team/${encodeURIComponent(input.teamID)}/task`,
+            body: {
+              title: input["title"],
+              description: input["description"],
+              status: input["status"],
+              assignee: input["assignee"],
+              dependencies: input["dependencies"],
+            },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      claimTask: (input: ServerTeamClaimTaskInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamClaimTaskOutput>(
+          {
+            method: "POST",
+            path: `/api/team/${encodeURIComponent(input.teamID)}/task/${encodeURIComponent(input.taskID)}/claim`,
+            body: { assignee: input["assignee"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      completeTask: (input: ServerTeamCompleteTaskInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamCompleteTaskOutput>(
+          {
+            method: "POST",
+            path: `/api/team/${encodeURIComponent(input.teamID)}/task/${encodeURIComponent(input.taskID)}/complete`,
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
             empty: true,
           },
           requestOptions,

@@ -681,6 +681,123 @@ const adaptGroup17 = (raw: RawClient["server.projectCopy"]) => ({
   refresh: Endpoint17_2(raw),
 })
 
+const Endpoint18_0 = (raw: RawClient["server.team"]) => () => raw["team.list"]({}).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_1Request = Parameters<RawClient["server.team"]["team.create"]>[0]
+type Endpoint18_1Input = {
+  readonly name: Endpoint18_1Request["payload"]["name"]
+  readonly leadSessionID: Endpoint18_1Request["payload"]["leadSessionID"]
+}
+const Endpoint18_1 = (raw: RawClient["server.team"]) => (input: Endpoint18_1Input) =>
+  raw["team.create"]({ payload: { name: input["name"], leadSessionID: input["leadSessionID"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint18_2Request = Parameters<RawClient["server.team"]["team.get"]>[0]
+type Endpoint18_2Input = { readonly teamID: Endpoint18_2Request["params"]["teamID"] }
+const Endpoint18_2 = (raw: RawClient["server.team"]) => (input: Endpoint18_2Input) =>
+  raw["team.get"]({ params: { teamID: input["teamID"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_3Request = Parameters<RawClient["server.team"]["team.spawn"]>[0]
+type Endpoint18_3Input = {
+  readonly teamID: Endpoint18_3Request["params"]["teamID"]
+  readonly name: Endpoint18_3Request["payload"]["name"]
+  readonly agent: Endpoint18_3Request["payload"]["agent"]
+  readonly model: Endpoint18_3Request["payload"]["model"]
+  readonly permission: Endpoint18_3Request["payload"]["permission"]
+  readonly prompt: Endpoint18_3Request["payload"]["prompt"]
+}
+const Endpoint18_3 = (raw: RawClient["server.team"]) => (input: Endpoint18_3Input) =>
+  raw["team.spawn"]({
+    params: { teamID: input["teamID"] },
+    payload: {
+      name: input["name"],
+      agent: input["agent"],
+      model: input["model"],
+      permission: input["permission"],
+      prompt: input["prompt"],
+    },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_4Request = Parameters<RawClient["server.team"]["team.messages"]>[0]
+type Endpoint18_4Input = { readonly teamID: Endpoint18_4Request["params"]["teamID"] }
+const Endpoint18_4 = (raw: RawClient["server.team"]) => (input: Endpoint18_4Input) =>
+  raw["team.messages"]({ params: { teamID: input["teamID"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_5Request = Parameters<RawClient["server.team"]["team.sendMessage"]>[0]
+type Endpoint18_5Input = {
+  readonly teamID: Endpoint18_5Request["params"]["teamID"]
+  readonly from: Endpoint18_5Request["payload"]["from"]
+  readonly to: Endpoint18_5Request["payload"]["to"]
+  readonly text: Endpoint18_5Request["payload"]["text"]
+}
+const Endpoint18_5 = (raw: RawClient["server.team"]) => (input: Endpoint18_5Input) =>
+  raw["team.sendMessage"]({
+    params: { teamID: input["teamID"] },
+    payload: { from: input["from"], to: input["to"], text: input["text"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_6Request = Parameters<RawClient["server.team"]["team.tasks"]>[0]
+type Endpoint18_6Input = { readonly teamID: Endpoint18_6Request["params"]["teamID"] }
+const Endpoint18_6 = (raw: RawClient["server.team"]) => (input: Endpoint18_6Input) =>
+  raw["team.tasks"]({ params: { teamID: input["teamID"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_7Request = Parameters<RawClient["server.team"]["team.addTask"]>[0]
+type Endpoint18_7Input = {
+  readonly teamID: Endpoint18_7Request["params"]["teamID"]
+  readonly title: Endpoint18_7Request["payload"]["title"]
+  readonly description: Endpoint18_7Request["payload"]["description"]
+  readonly status: Endpoint18_7Request["payload"]["status"]
+  readonly assignee?: Endpoint18_7Request["payload"]["assignee"]
+  readonly dependencies: Endpoint18_7Request["payload"]["dependencies"]
+}
+const Endpoint18_7 = (raw: RawClient["server.team"]) => (input: Endpoint18_7Input) =>
+  raw["team.addTask"]({
+    params: { teamID: input["teamID"] },
+    payload: {
+      title: input["title"],
+      description: input["description"],
+      status: input["status"],
+      assignee: input["assignee"],
+      dependencies: input["dependencies"],
+    },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_8Request = Parameters<RawClient["server.team"]["team.claimTask"]>[0]
+type Endpoint18_8Input = {
+  readonly teamID: Endpoint18_8Request["params"]["teamID"]
+  readonly taskID: Endpoint18_8Request["params"]["taskID"]
+  readonly assignee: Endpoint18_8Request["payload"]["assignee"]
+}
+const Endpoint18_8 = (raw: RawClient["server.team"]) => (input: Endpoint18_8Input) =>
+  raw["team.claimTask"]({
+    params: { teamID: input["teamID"], taskID: input["taskID"] },
+    payload: { assignee: input["assignee"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_9Request = Parameters<RawClient["server.team"]["team.completeTask"]>[0]
+type Endpoint18_9Input = {
+  readonly teamID: Endpoint18_9Request["params"]["teamID"]
+  readonly taskID: Endpoint18_9Request["params"]["taskID"]
+}
+const Endpoint18_9 = (raw: RawClient["server.team"]) => (input: Endpoint18_9Input) =>
+  raw["team.completeTask"]({ params: { teamID: input["teamID"], taskID: input["taskID"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+const adaptGroup18 = (raw: RawClient["server.team"]) => ({
+  list: Endpoint18_0(raw),
+  create: Endpoint18_1(raw),
+  get: Endpoint18_2(raw),
+  spawn: Endpoint18_3(raw),
+  messages: Endpoint18_4(raw),
+  sendMessage: Endpoint18_5(raw),
+  tasks: Endpoint18_6(raw),
+  addTask: Endpoint18_7(raw),
+  claimTask: Endpoint18_8(raw),
+  completeTask: Endpoint18_9(raw),
+})
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
   location: adaptGroup1(raw["server.location"]),
@@ -700,6 +817,7 @@ const adaptClient = (raw: RawClient) => ({
   questions: adaptGroup15(raw["server.question"]),
   references: adaptGroup16(raw["server.reference"]),
   projectCopies: adaptGroup17(raw["server.projectCopy"]),
+  "server.team": adaptGroup18(raw["server.team"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>
