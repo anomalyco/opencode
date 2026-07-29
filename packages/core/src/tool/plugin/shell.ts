@@ -156,7 +156,7 @@ export const Plugin = {
                       finalTimeout = invocation.timeout
                       const external = [target, ...directories]
                         .map((item) => item.externalDirectory)
-                        .filter((item): item is NonNullable<typeof item> => item !== undefined)
+                        .filter((item) => item !== undefined)
                         .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
                       if (external.length > 0)
                         yield* permission.assert({
