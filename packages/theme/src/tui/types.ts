@@ -7,7 +7,6 @@ import type {
   HueAlias,
   HueStep,
   MarkdownToken,
-  ContextKey,
   SyntaxToken,
 } from "./schema.js"
 
@@ -63,8 +62,8 @@ export type ResolvedThemeTokens = {
   readonly markdown: Readonly<Record<MarkdownToken, RGBA>>
 }
 
-export type ResolvedTheme = ResolvedThemeTokens & {
-  readonly contexts: Readonly<Partial<Record<ContextKey, ResolvedThemeTokens>>>
-}
+export type ContextName = "elevated" | "overlay"
 
-export type ThemeContext = ContextKey extends `@context:${infer Name}` ? Name : never
+export type ResolvedTheme = ResolvedThemeTokens & {
+  readonly contexts: Readonly<Partial<Record<ContextName, ResolvedThemeTokens>>>
+}

@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME, resolveTheme, selectTheme, type ThemeContext } from "@opencode-ai/theme/tui"
+import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextName } from "@opencode-ai/theme/tui"
 import { createComponentTheme } from "../../../src/theme/component"
 
 test("provides reactive properties, states, contexts, and color operations", () => {
   const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
   const [mode, setMode] = createSignal<"light" | "dark">("light")
   const theme = createComponentTheme(resolved, mode)
-  const [context, setContext] = createSignal<ThemeContext>()
+  const [context, setContext] = createSignal<ContextName>()
   const current = () => {
     const name = context()
     return name ? theme.contexts[name] : theme
@@ -54,18 +54,18 @@ test("provides reactive properties, states, contexts, and color operations", () 
   setContext("elevated")
   expect("contexts" in current()).toBeFalse()
   expect(current().categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
-  expect(current().text.default).toBe(resolved().contexts["@context:elevated"]!.text.default)
+  expect(current().text.default).toBe(resolved().contexts.elevated!.text.default)
   expect(current().background.action.primary.focused).toBe(
-    resolved().contexts["@context:elevated"]!.background.action.primary.focused,
+    resolved().contexts.elevated!.background.action.primary.focused,
   )
   expect(current().background.action.primary.hovered).toBe(resolved().background.surface.overlay)
   expect(current().background.formfield.selected).toBe(
-    resolved().contexts["@context:elevated"]!.background.formfield.selected,
+    resolved().contexts.elevated!.background.formfield.selected,
   )
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
   setMode("dark")
-  expect(current().text.default).toBe(resolved().contexts["@context:elevated"]!.text.default)
+  expect(current().text.default).toBe(resolved().contexts.elevated!.text.default)
   expect(current().decrease(current().background.surface.offset, 1)).toBe(resolved().hue.neutral[600])
   expect(current().raise(current().background.surface.offset)).toBe(resolved().hue.neutral[600])
 })

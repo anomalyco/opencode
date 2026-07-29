@@ -43,11 +43,11 @@ test("migrates resolved V1 modes into V2 tokens", () => {
   expect(resolved.background.action.primary.selected.toInts()).toEqual([0, 0, 0, 0])
   expect(resolved.text.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
-  expect(resolved.contexts["@context:elevated"]?.background.default.toInts()).toEqual(legacy.backgroundPanel.toInts())
-  expect(resolved.contexts["@context:elevated"]?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
-  expect(resolved.contexts["@context:elevated"]?.text.action.primary.default.toInts()).toEqual(legacy.text.toInts())
-  expect(resolved.contexts["@context:overlay"]?.background.default.toInts()).toEqual(legacy.backgroundMenu.toInts())
-  expect(resolved.contexts["@context:overlay"]?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
+  expect(resolved.contexts.elevated?.background.default.toInts()).toEqual(legacy.backgroundPanel.toInts())
+  expect(resolved.contexts.elevated?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
+  expect(resolved.contexts.elevated?.text.action.primary.default.toInts()).toEqual(legacy.text.toInts())
+  expect(resolved.contexts.overlay?.background.default.toInts()).toEqual(legacy.backgroundMenu.toInts())
+  expect(resolved.contexts.overlay?.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
 })
 
 test("references generated hues from matching token colors", () => {

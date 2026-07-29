@@ -5,7 +5,7 @@ import {
   resolveThemeDocument,
   themeModes,
   type ResolvedTheme,
-  type ThemeContext,
+  type ContextName,
 } from "@opencode-ai/theme/tui"
 import {
   DEFAULT_THEMES,
@@ -122,7 +122,7 @@ type Themes = {
 
 type ThemeContextValue = {
   root: ComponentTheme
-  current: ComponentTheme["contexts"][ThemeContext]
+  current: ComponentTheme["contexts"][ContextName]
   themes: Themes
   readonly ready: boolean
 }
@@ -375,14 +375,14 @@ export function useThemes() {
   return themeContext.use().themes
 }
 export function useTheme(): ComponentTheme
-export function useTheme(context: ThemeContext): ComponentTheme["contexts"][ThemeContext]
-export function useTheme(context?: ThemeContext) {
+export function useTheme(context: ContextName): ComponentTheme["contexts"][ContextName]
+export function useTheme(context?: ContextName) {
   const value = themeContext.use()
   return context ? value.root.contexts[context] : value.current
 }
 export const ThemeProvider = themeContext.provider
 
-export function ThemeContextProvider(props: ParentProps<{ context: ThemeContext }>) {
+export function ThemeContextProvider(props: ParentProps<{ context: ContextName }>) {
   const value = themeContext.use()
   return (
     <themeContext.context.Provider

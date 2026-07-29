@@ -39,8 +39,8 @@ export function createComponentTheme(current: Accessor<ResolvedTheme>, mode: Acc
 
   return Object.assign(create(current), {
     contexts: {
-      elevated: create(() => current().contexts["@context:elevated"] ?? current()),
-      overlay: create(() => current().contexts["@context:overlay"] ?? current()),
+      elevated: create(() => current().contexts.elevated ?? current()),
+      overlay: create(() => current().contexts.overlay ?? current()),
     },
   })
 }
