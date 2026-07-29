@@ -30,7 +30,9 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins, plugins, and MCP install tools through `ToolRegistry.Service.transform`, adding complete tool objects to the draft. A tool may provide a namespace, which flattens direct model names to `<namespace>_<tool>`, and defaults into CodeMode (`codemode` defaults true; `codemode: false` keeps the tool on the provider's native tool list).
+Built-ins, plugins, and MCP install tools through `Tool.Service.transform`, adding complete tool objects to the draft. A tool may provide a namespace, which flattens direct model names to `<namespace>_<tool>`, and defaults into CodeMode (`codemode` defaults true; `codemode: false` keeps the tool on the provider's native tool list).
+
+Privileged Core producers may install a scoped `transformSession` materializer. It runs only when a snapshot supplies a Session ID, overlays Location registrations, and must capture any Session capability in the tools it adds. This capability is not exposed through the plugin tool context.
 
 Registrations are scoped:
 
@@ -40,7 +42,7 @@ Registrations are scoped:
 
 Type safety ends at registration. The registry validates model input and declared output at runtime and should not carry producer schema generics through storage or execution.
 
-`ToolRegistry.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
+`Tool.Service` is Location-scoped. Do not make it process-global or construct a separate application-tool service for each Location.
 
 ## Permissions
 
@@ -56,4 +58,4 @@ Producer capture limits remain local to producers. For example, Bash keeps `AppP
 
 ## Current Gaps
 
-- MCP and future Session-scoped registrations still need an explicit canonical registration design.
+- A broader public design for plugin-owned Session-scoped registrations remains future work.
