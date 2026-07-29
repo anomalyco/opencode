@@ -612,8 +612,13 @@ const layer = Layer.effect(
             yield* status.set(ctx.sessionID, { type: "idle" })
             return
           }
+          // Recovery attempt, not an outcome: auto-compaction will retry, so
+          // nothing is published here. The durable message carries no error
+          // either; announcing one on the error channel made every consumer
+          // (CLI exit code, TUI toast, orchestrators) fail runs that recover.
+          // If compaction cannot shrink the session, compaction.ts publishes
+          // the terminal error.
           ctx.needsCompaction = true
-          yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
         ctx.assistantMessage.error = error

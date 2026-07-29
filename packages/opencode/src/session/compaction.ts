@@ -402,6 +402,9 @@ const layer = Layer.effect(
       })
 
       if (result === "compact") {
+        // Recovery abandoned: this is where overflow becomes an outcome, so
+        // the error event fires here rather than on the recoverable 413 in
+        // processor.halt.
         processor.message.error = new SessionV1.ContextOverflowError({
           message: replay
             ? "Conversation history too large to compact - exceeds model context limit"
@@ -409,6 +412,10 @@ const layer = Layer.effect(
         }).toObject()
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
+        yield* events.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: processor.message.error,
+        })
         return "stop"
       }
 
