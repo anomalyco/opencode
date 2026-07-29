@@ -24,7 +24,15 @@ import * as ACPService from "./service"
 export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
   return {
     create: (connection: AgentSideConnection) => {
-      return new Agent(ACPService.make({ sdk: _sdk, connection }))
+      const service = ACPService.make({ sdk: _sdk, connection })
+      // The SDK invokes this factory before AgentSideConnection finishes assigning
+      // its internal connection, so its lifecycle signal is readable next turn.
+      queueMicrotask(() => {
+        const close = () => service.close()
+        connection.signal.addEventListener("abort", close, { once: true })
+        if (connection.signal.aborted) close()
+      })
+      return new Agent(service)
     },
   }
 }

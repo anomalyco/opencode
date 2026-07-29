@@ -70,6 +70,7 @@ export type Interface = {
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
   readonly extension: (method: string, params: Record<string, unknown>) => Effect.Effect<Record<string, unknown>, Error>
+  readonly close: () => void
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACP/Service") {}
@@ -98,6 +99,13 @@ export function make(input: {
           notify: (update) => extNotification("_opencode/subagents/update", update),
         })
       : undefined
+  let closed = false
+  const close = () => {
+    if (closed) return
+    closed = true
+    subagents?.close()
+    events?.close()
+  }
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
@@ -603,13 +611,14 @@ export function make(input: {
     }),
     cancel,
     extension,
+    close,
   }
 }
 
 function decodeSubagentParams(params: Record<string, unknown>) {
   return Effect.try({
     try: () => Subagent.decodeListParams(params),
-    catch: (error) => ACPError.fromUnknownDefect(error, "Invalid subagent extension params"),
+    catch: () => new ACPError.InvalidExtensionParamsError({ params }),
   })
 }
 

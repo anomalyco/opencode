@@ -43,6 +43,13 @@ export class UnsupportedOperationError extends Schema.TaggedErrorClass<Unsupport
   },
 ) {}
 
+export class InvalidExtensionParamsError extends Schema.TaggedErrorClass<InvalidExtensionParamsError>()(
+  "ACPInvalidExtensionParamsError",
+  {
+    params: Schema.Record(Schema.String, Schema.Unknown),
+  },
+) {}
+
 export class ServiceFailureError extends Schema.TaggedErrorClass<ServiceFailureError>()("ACPServiceFailureError", {
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
@@ -58,6 +65,7 @@ export type Error =
   | AuthRequiredError
   | UnknownAuthMethodError
   | UnsupportedOperationError
+  | InvalidExtensionParamsError
   | ServiceFailureError
 
 export function toRequestError(error: Error) {
@@ -81,6 +89,8 @@ export function toRequestError(error: Error) {
       return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
     case "ACPUnsupportedOperationError":
       return RequestError.methodNotFound(error.method)
+    case "ACPInvalidExtensionParamsError":
+      return RequestError.invalidParams(error.params, "Invalid subagent extension params")
     case "ACPServiceFailureError":
       return RequestError.internalError(
         {

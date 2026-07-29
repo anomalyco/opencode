@@ -64,6 +64,10 @@ export class Subscription {
   }
 
   stop() {
+    this.close()
+  }
+
+  close() {
     this.abort.abort()
   }
 
