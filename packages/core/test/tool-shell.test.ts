@@ -157,6 +157,9 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const timeoutOutputCommand = isWindows
+  ? "[Console]::Out.Write('before timeout'); Start-Sleep -Seconds 60"
+  : "printf 'before timeout'; sleep 60"
 const steadyProgressCommand = isWindows
   ? "[Console]::Out.Write('steady'); Start-Sleep -Milliseconds 3400"
   : "printf steady; sleep 3.4"
@@ -461,14 +464,18 @@ describe("ShellTool", () => {
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
-        reset()
-        return withSession(tmp.path, (registry) =>
-          executeTool(registry, call({ command: idleCommand, timeout: 50 })),
-        ).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
-              expect(settled.content?.[1]).toMatchObject({
+          reset()
+          return withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: timeoutOutputCommand, timeout: 50 })),
+          ).pipe(
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
+                expect(settled.content?.[0]).toMatchObject({
+                  type: "text",
+                  text: expect.stringContaining("before timeout"),
+                })
+                expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Command timed out"),
               })
