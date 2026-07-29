@@ -8,7 +8,7 @@ import "./toast-v2.css"
 export interface ToastV2RegionProps extends ToasterProps {}
 
 function ToastV2Region(props: ToastV2RegionProps) {
-  const [local, rest] = splitProps(props, ["class", "className", "style", "toastOptions"])
+  const [local, rest] = splitProps(props, ["class", "className", "style", "toastOptions", "swipeDirections"])
   onMount(() => {
     const sync = () => {
       document.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
@@ -49,6 +49,7 @@ function ToastV2Region(props: ToastV2RegionProps) {
         mobileOffset={16}
         gap={12}
         duration={5000}
+        swipeDirections={["bottom"]}
         className={["toast-v2-region", local.className, local.class].filter(Boolean).join(" ")}
         style={{ "--width": "320px", ...local.style } as JSX.CSSProperties}
         toastOptions={{
