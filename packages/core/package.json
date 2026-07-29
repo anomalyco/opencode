@@ -119,7 +119,10 @@
     "jsonc-parser": "3.3.1",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
+    "tree-sitter-bash": "0.25.0",
+    "tree-sitter-powershell": "0.25.10",
     "venice-ai-sdk-provider": "2.1.1",
+    "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "zod": "catalog:"
   },

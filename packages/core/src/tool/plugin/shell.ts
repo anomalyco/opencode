@@ -11,6 +11,7 @@ import { PluginRuntime } from "../../plugin/runtime"
 import { NonNegativeInt } from "../../schema"
 import { SessionSchema } from "../../session/schema"
 import { Shell } from "../../shell"
+import { ShellParse } from "../../shell/parse"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -79,8 +80,6 @@ const modelOutput = (output: Output): string | undefined => {
  * Minimal core shell boundary. Keep parity debt visible without pulling the
  * legacy shell runtime into core.
  */
-// TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
-// TODO: Port BashArity reusable command-prefix approvals.
 // TODO: Add plugin shell.env environment augmentation once plugin hooks exist.
 // TODO: Persist job status and define restart recovery before exposing remote observation.
 // TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
@@ -168,14 +167,16 @@ export const Plugin = {
                           agent: context.agent,
                           source,
                         })
-                      yield* permission.assert({
-                        action: name,
-                        resources: [invocation.command],
-                        save: [invocation.command],
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
+                      const commands = yield* ShellParse.permissions(invocation.command, invocation.shell)
+                      if (commands.length > 0)
+                        yield* permission.assert({
+                          action: name,
+                          resources: commands.map((command) => command.resource),
+                          save: commands.map((command) => command.save),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
                       if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
                         return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
                     }),

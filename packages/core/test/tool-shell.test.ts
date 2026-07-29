@@ -223,6 +223,7 @@ describe("ShellTool", () => {
               text: expect.stringContaining("Command exited with code 0."),
             })
             expect(assertions).toMatchObject([{ sessionID, action: "shell", resources: [helloCommand] }])
+            expect(assertions[0]?.save).toEqual(["printf *"])
           }),
         )
       },
@@ -246,6 +247,29 @@ describe("ShellTool", () => {
                 text: expect.stringContaining(realpathSync(path.join(tmp.path, "src"))),
               }),
             ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("permissions compound commands separately", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: "printf one && printf two" }, "call-compound")),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions).toHaveLength(1)
+              expect(assertions[0]).toMatchObject({
+                resources: ["printf one", "printf two"],
+                save: ["printf *", "printf *"],
+              })
+            }),
           ),
         )
       },
