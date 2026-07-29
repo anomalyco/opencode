@@ -30,6 +30,7 @@ export function Home() {
   const editor = useEditorContext()
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
+  const welcomeMessage = createMemo(() => sync.data.config.welcome_message)
   const promptMaxWidth = createMemo(() => {
     const configured = tuiConfig.prompt?.max_width
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
@@ -83,6 +84,11 @@ export function Home() {
             <Prompt ref={bind} right={<pluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
           </pluginRuntime.Slot>
         </box>
+        {welcomeMessage() && (
+          <box flexDirection="column" alignItems="center" paddingTop={1} flexShrink={0}>
+            <text color="secondary">{welcomeMessage()}</text>
+          </box>
+        )}
         <pluginRuntime.Slot name="home_bottom" />
         <box flexGrow={1} minHeight={0} />
         <Toast />

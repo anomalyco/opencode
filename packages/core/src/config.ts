@@ -102,6 +102,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   plugins: ConfigPlugin.Plugins.pipe(Schema.optional).annotate({
     description: "Ordered external plugin packages to load",
   }),
+  welcome_message: Schema.String.pipe(Schema.optional).annotate({
+    description: "Custom message displayed on the TUI home screen below the logo",
+  }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
 }) {}

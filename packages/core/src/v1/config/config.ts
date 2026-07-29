@@ -166,6 +166,9 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  welcome_message: Schema.optional(Schema.String).annotate({
+    description: "Custom message displayed on the TUI home screen below the logo",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
