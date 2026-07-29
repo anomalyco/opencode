@@ -2,6 +2,7 @@
 @import "@opencode-ai/session-ui/styles";
 @import "@opencode-ai/ui/v2/styles/tailwind.css";
 @import "tw-animate-css";
+@import "./rtl.css";
 
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";

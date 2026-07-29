@@ -1,0 +1,635 @@
+---
+title: ספקים
+description: שימוש בכל ספק LLM ב-OpenCode.
+---
+
+import config from "../../../config.mjs"
+export const console = config.console
+
+OpenCode משתמש ב-[AI SDK](https://ai-sdk.dev/) ו-[Models.dev](https://models.dev) כדי לתמוך ב-**75+ ספקי LLM** והוא תומכת בהרצת מודלים מקומיים.
+
+כדי להוסיף ספק אתה צריך:
+
+1. הוסף את מפתחות ה-API עבור הספק באמצעות הפקודה `/connect`.
+2. הגדר את הספק בהגדרות OpenCode שלך.
+
+---
+
+### אישורים
+
+כאשר אתה מוסיף מפתחות API של ספק עם הפקודה `/connect`, הם מאוחסנים
+ב-`~/.local/share/opencode/auth.json`.
+
+---
+
+### הגדרה
+
+אתה יכול להתאים אישית את הספקים דרך הסקציה `provider` בהגדרות OpenCode
+שלך.
+
+---
+
+#### כתובת בסיס
+
+אתה יכול להתאים את כתובת הבסיס עבור כל ספק על ידי הגדרת האפשרות `baseURL`. זה שימושי כאשר משתמשים בשירותי proxy או נקודות מותאמות אישית.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "https://api.anthropic.com/v1"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### הסתרת מודלים
+
+אתה יכול להסתיר מודלים ספציפיים מהבוחר `/models` עבור ספק באמצעות האפשרות `blacklist`. זה שימושי כאשר ספק חושף מודלים שאתה לא רוצה להשתמש בהם או לבחור.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "blacklist": ["claude-opus-4-20250514"]
+    }
+  }
+}
+```
+
+האפשרות ההפוכה `whitelist` מסתירת כל מודל למעט המודלים הרשומים.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "whitelist": ["claude-sonnet-4-20250514"]
+    }
+  }
+}
+```
+
+שתי האפשרויות מקבלות מערך של מזהי מודל — אותם המזהים המופיעים בבוחר `/models`.
+
+- `blacklist` מסיר את המודלים הרשומים מהבוחר.
+- `whitelist` שומר רק את המודלים הרשומים ומסתיר את השאר.
+- אתה יכול לשלב אותם: `whitelist` מצמצם את הקבוצה, לאחר מכן `blacklist` מסיר רשומות ממנה.
+
+---
+
+## OpenCode Zen
+
+OpenCode Zen הוא רשימת מודלים שסופק על ידי צוות OpenCode שנבדקו
+ואומתו שעובדים היטב עם OpenCode. [למד עוד](/docs/zen).
+
+:::tip
+אם אתה חדש, אנו ממליצים להתחיל עם OpenCode Zen.
+:::
+
+1. הרץ את הפקודה `/connect` ב-TUI, בחר `OpenCode Zen`, ועבור ל-[opencode.ai/auth](https://opencode.ai/auth).
+
+   ```txt
+   /connect
+   ```
+
+2. היכנס, הוסף את פרטי החיוב שלך, והעתק את מפתח ה-API שלך.
+
+3. הדבק את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ `/models` ב-TUI כדי לראות את רשימת המודלים שאנו ממליצים.
+
+   ```txt
+   /models
+   ```
+
+זה עובד כמו כל ספק אחר ב-OpenCode והוא אופציונלי לחלוט לשימוש.
+
+---
+
+## OpenCode Go
+
+OpenCode Go הוא תוכנית מנויית בעלות נמוכה שמספקת גישה אמינה למודלי קידוד פתוח פופולריים שסופקים על ידי צוות OpenCode שנבדקו
+ואומתו שעובדים היטב עם OpenCode.
+
+1. הרץ את הפקודה `/connect` ב-TUI, בחר `OpenCode Go`, ועבור ל-[opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. היכנס, הוסף את פרטי החיוב שלך, והעתק את מפתח ה-API שלך.
+
+3. הדבק את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ `/models` ב-TUI כדי לראות את רשימת המודלים שאנו ממליצים.
+
+   ```txt
+   /models
+   ```
+
+זה עובד כמו כל ספק אחר ב-OpenCode והוא אופציונלי לחלוט לשימוש.
+
+---
+
+## מדריך
+
+בוא נסתכל בכמה מהספקים בפירוט. אם תרצה להוסיף ספק ל
+הרשימה, אל תהסס לפתוח PR.
+
+:::note
+לא רואה ספק כאן? שלח PR.
+:::
+
+---
+
+### 302.AI
+
+1. עבור ל[קונסולת 302.AI](https://302.ai/), צור חשבון, וצור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **302.AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API של 302.AI שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Amazon Bedrock
+
+כדי להשתמש ב-Amazon Bedrock עם OpenCode:
+
+1. עבור ל**קטלוג מודלים** בקונסולת Amazon Bedrock ובקש
+גישה למודלים שאתה רוצה.
+
+   :::tip
+   אתה צריך להיות גישה למודל שאתה רוצה ב-Amazon Bedrock.
+   :::
+
+2. **הגדר אימות** באמצעות אחד מהשיטים הבאים:
+
+   ***
+
+   #### משתני סביבה (התחלה מהירה)
+
+   הגדר אחד ממשתני סביבה אלו בזמן הרצת opencode:
+
+   ```bash
+   # אפשרות 1: שימוש במפתחות AWS
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+
+   # אפשרות 2: שימוש בפרופיל AWS עם שם
+   AWS_PROFILE=my-profile opencode
+
+   # אפשרות 3: שימוש ב-token bearer של Bedrock
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   ```
+
+   או הוסף אותם לפרופיל bash שלך:
+
+   ```bash title="~/.bash_profile"
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
+   ```
+
+   ***
+
+   #### קובץ הגדרה (מומלץ)
+
+   להגדרות ספציפיות לפרויקט או קבועות, השתמש ב-`opencode.json`:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
+
+   **אפשרויות זמינות:**
+   - `region` - אזור AWS (למשל, `us-east-1`, `eu-west-1`)
+   - `profile` - פרופיל AWS עם שם מ-`~/.aws/credentials`
+   - `endpoint` - כתובת נקודה מותאמת אישית עבור נקודות VPC (כינוי לאפשרות `baseURL` הגנרית)
+
+   :::tip
+   אפשרויות קובץ הגדרה קובלות עדיפות על משתני סביבה.
+   :::
+
+   ***
+
+   #### מתקדם: נקודות VPC
+
+   אם אתה משתמש בנקודות VPC עבור Bedrock:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
+
+   :::note
+   האפשרות `endpoint` היא כינוי לאפשרות הגנרית `baseURL`, בשימוש בטרמינולוגיה ספציפית ל-AWS. אם גם `endpoint` ו-`baseURL` מוגדרים, `endpoint` קובל עדיפות.
+   :::
+
+   ***
+
+   #### שיטות אימות
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: צור משתמש IAM וצור מפתחות גישה בקונסולת AWS
+   - **`AWS_PROFILE`**: השתמש בפרופילים עם שם מ-`~/.aws/credentials`. הגדר תחילה עם `aws configure --profile my-profile` או `aws sso login`
+   - **`AWS_BEARER_TOKEN_BEDROCK`**: צור מפתחות API לטווח ארוכות מקונסולת Amazon Bedrock
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: עבור EKS IRSA (תפקידות IAM לחשבונות שירות) או סביבות Kubernetes אחרות עם פדרציית OIDC. משתני סביבה אלו מוזרקים אוטומטית על ידי Kubernetes בעת שימוש בהערותות חשבון שירות.
+
+   ***
+
+   #### עדיפות אימות
+
+   Amazon Bedrock משתמש בעדיפות האימות הבאה:
+   1. **Bearer Token** - משתנה סביבה `AWS_BEARER_TOKEN_BEDROCK` או token מהפקודה `/connect`
+   2. **שרשרת אישור AWS** - פרופיל, מפתחות גישה, אישורים משותפים, תפקידות IAM, Tokens זהות זהות (EKS IRSA), מטא-דאטה של מופעל
+
+   :::note
+   כאשר מוגדר token bearer (דרך `/connect` או `AWS_BEARER_TOKEN_BEDROCK`), הוא קובלת עדיפות על כל שיטות האימות של AWS כולל פרופילים מוגדרים.
+   :::
+
+3. הרץ את הפקודה `/models` כדי לבחור את המודל שאתה רוצה.
+
+   ```txt
+   /models
+   ```
+
+:::note
+עבור פרופילי הסקה מותאמות אישית, השתמש בשם המודל והספק במפתח והגדר את המאפיין `id` ל-arn. זה מבטיח זיכירות נכונה.
+   :::
+
+---
+
+### Anthropic
+
+1. עבור ל[קונסולת Anthropic](https://console.anthropic.com/settings/keys), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Anthropic**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Azure OpenAI
+
+1. עבור ל[Azure OpenAI Studio](https://oai.azure.com/), צור משאב משאב וצור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Azure OpenAI**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את שם המשאב, עבור לחלק מפתחות, והעתק את מפתח ה-API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cohere
+
+1. עבור ל[דף API של Cohere](https://dashboard.cohere.com/api-keys), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Cohere**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Custom
+
+אתה יכול להוסיף ספקים מותאמים אישית באמצעות הגדרת `provider` ב-`opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "my-provider": {
+      "models": {
+        "my-model": {
+          "id": "my-model-id",
+          "name": "My Model"
+        }
+      },
+      "options": {
+        "apiKey": "{env:MY_PROVIDER_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+### DeepSeek
+
+1. עבור ל[קונסולת DeepSeek](https://platform.deepseek.com/api_keys), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **DeepSeek**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Google
+
+1. עבור ל[Vertex AI](https://console.cloud.google.com/vertex-ai), צור פרויקט או תאפשר ל-GCP עם גישה ל-API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Google**.
+
+   ```txt
+   /connect
+   ```
+
+3. בחר את שיטת אימות (Vertex AI, AI Studio, או GCP) ובצע את האימות לפי הצורך.
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Groq
+
+1. עבור ל[קונסולת Groq](https://console.groq.com/keys), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Groq**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מולד.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Meta
+
+1. עבור ל-[קונסולת Meta](https://www.meta.com/llama/meta/), קבל גישה למודלים וצור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Meta**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Mistral
+
+1. עבור ל-[קונסולת Mistral](https://console.mistral.ai/), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Mistral**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenAI
+
+1. עבור ל-[קונסולת OpenAI](https://platform.openai.com/api-keys), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **OpenAI**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### xAI
+
+1. עבור ל-[קונסולת xAI](https://console.x.ai/), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Together AI
+
+1. עבור ל-[קונסולת Together AI](https://api.together.xyz/settings/api-keys), צור מפתח API.
+
+2. הרץ את הפקודה `/connect` וחפש את **Together AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. הכנס את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. הרץ את הפקודה `/models` כדי לבחור מודל.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### ועוד נוספים
+
+ל- OpenCode תומך ב-**75+ ספקי LLM** נוספים.
+- אם אתה רוצה להוסיף ספק לרשימה, [פתח PR](https://github.com/anomalyco/opencode).
+- למידע על הוספת ספק, בקר ב-[AI SDK](https://ai-sdk.dev/).

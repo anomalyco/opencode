@@ -1,0 +1,216 @@
+/* RTL CSS adjustments for Hebrew language support */
+
+[dir="rtl"] {
+  /* Fix button and dialog alignment */
+  [data-component="button"],
+  [data-component="dialog"] button {
+    text-align: right;
+  }
+
+  /* Fix dropdown menu alignment */
+  [data-component="dropdown-menu-content"].desktop-app-menu,
+  [data-component="dropdown-menu-sub-content"].desktop-app-menu {
+    text-align: right;
+  }
+
+  /* Fix tables alignment */
+  table {
+    text-align: right;
+  }
+
+  table th,
+  table td {
+    text-align: right;
+  }
+
+  /* Fix form elements */
+  input,
+  textarea,
+  select {
+    text-align: right;
+  }
+
+  /* Fix margin/padding for RTL */
+  [data-slot="desktop-app-menu-keybind"] {
+    margin-left: 0;
+    margin-right: auto;
+  }
+
+  [data-slot="desktop-app-menu-chevron"] {
+    margin-left: 0;
+    margin-right: auto;
+  }
+
+  /* Fix list items */
+  ul,
+  ol {
+    padding-inline-start: 0;
+    padding-inline-end: 2rem;
+  }
+
+  /* Fix tooltip positioning */
+  [data-component="hover-card"] {
+    text-align: right;
+  }
+
+  /* Fix icon button alignment */
+  [data-component="icon-button"] {
+    text-align: right;
+  }
+
+  /* Fix context menu */
+  [data-component="context-menu"] {
+    text-align: right;
+  }
+
+  /* Fix accordion */
+  [data-component="accordion"] {
+    text-align: right;
+  }
+
+  /* Fix card alignment */
+  [data-component="card"] {
+    text-align: right;
+  }
+
+  /* Fix keybind display */
+  [data-component="keybind"] {
+    text-align: right;
+  }
+
+  /* Fix text fields */
+  [data-component="inline-input"] {
+    text-align: right;
+  }
+
+  /* Fix markdown content */
+  [data-component="markdown"] {
+    text-align: right;
+  }
+
+  /* Fix code blocks to remain LTR */
+  [data-component="markdown-code"],
+  [data-component="markdown-code"] pre,
+  [data-component="markdown-code"] code {
+    direction: ltr !important;
+    text-align: left !important;
+  }
+
+  /* Fix inline code */
+  code,
+  .inline-code {
+    direction: ltr !important;
+    text-align: left !important;
+    display: inline-block;
+  }
+
+  /* Fix file search */
+  [data-component="file-search"] {
+    text-align: right;
+  }
+
+  /* Fix message navigation */
+  [data-component="message-nav"] {
+    text-align: right;
+  }
+
+  /* Fix session review */
+  [data-component="session-review"] {
+    text-align: right;
+  }
+
+  /* Fix tool status */
+  [data-component="tool-status-title"] {
+    text-align: right;
+  }
+
+  /* Fix file media */
+  [data-component="file-media"] {
+    text-align: right;
+  }
+
+  /* Fix line comment */
+  [data-component="line-comment"] {
+    text-align: right;
+  }
+
+  /* Fix list components */
+  [data-component="list"] {
+    text-align: right;
+  }
+
+  /* Fix diff changes */
+  [data-component="diff-changes"] {
+    text-align: right;
+  }
+
+  /* Fix basic tool */
+  [data-component="basic-tool"] {
+    text-align: right;
+  }
+
+  /* Fix tool error card */
+  [data-component="tool-error-card"] {
+    text-align: right;
+  }
+
+  /* Fix image preview */
+  [data-component="image-preview"] {
+    text-align: right;
+  }
+
+  /* Fix scroll view */
+  [data-component="scroll-view"] {
+    text-align: right;
+  }
+
+  /* Fix collapsible */
+  [data-component="collapsible"] {
+    text-align: right;
+  }
+
+  /* Fix dialog select directory */
+  [data-component="dialog-select-directory"] {
+    text-align: right;
+  }
+
+  /* Fix dialog command palette */
+  [data-component="dialog-command-palette"] {
+    text-align: right;
+  }
+
+  /* Fix settings */
+  [data-component="settings"] {
+    text-align: right;
+  }
+
+  /* Fix titlebar */
+  [data-component="titlebar"] {
+    text-align: right;
+  }
+
+  /* Fix titlebar tab nav */
+  [data-component="titlebar-tab-nav"] {
+    text-align: right;
+  }
+
+  /* Fix titlebar tab popover */
+  [data-component="titlebar-tab-popover"] {
+    text-align: right;
+  }
+
+  /* Fix image attachments */
+  [data-component="image-attachments"] {
+    text-align: right;
+  }
+
+  /* Fix prompt input */
+  [data-component="prompt-input"] {
+    text-align: right;
+  }
+
+  /* Fix WSL dialog */
+  [data-component="dialog-add-wsl-server"] {
+    text-align: right;
+  }
+}

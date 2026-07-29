@@ -1,0 +1,219 @@
+---
+title: CLI
+description: אפשרויות ופקודות OpenCode CLI.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode CLI כברירת מחדל מפעיל את [TUI](/docs/tui) כאשר מריצים אותו ללא ארגומנטים.
+
+```bash
+opencode
+```
+
+אבל הוא גם מקבל פקודות כפי שמתועד בדף זה. זה מאפשר לך ליצור אינטראקציה עם OpenCode באופן פרוגרמטי.
+
+```bash
+opencode run "הסבר איך closures עובדים ב-JavaScript"
+```
+
+---
+
+### tui
+
+הפעל את ממשק המשתמש הטרמינלי של OpenCode.
+
+```bash
+opencode [project]
+```
+
+#### דגלים
+
+| דגל                                        | קצר | תיאור                                                             |
+| ------------------------------------------- | ----- | ----------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr>    | `-c`  | המשך את הסשן האחרון                                               |
+| <nobr><code>{"--session"}</code></nobr>     | `-s`  | מזהה סשן להמשך                                                  |
+| <nobr><code>{"--fork"}</code></nobr>        |       | Fork את הסשן בעת המשך (השתמש עם `--continue` או `--session`) |
+| <nobr><code>{"--prompt"}</code></nobr>      |       | פרומפט לשימוש                                                           |
+| <nobr><code>{"--model"}</code></nobr>       | `-m`  | מודל לשימוש בצורת ספק/מודל                              |
+| <nobr><code>{"--agent"}</code></nobr>       |       | סוכן לשימוש                                                            |
+| <nobr><code>{"--auto"}</code></nobr>        |       | אישור אוטומטי של הרשאות שלא נדחו במפורש                 |
+| <nobr><code>{"--port"}</code></nobr>        |       | פורט להאזנה                                                       |
+| <nobr><code>{"--hostname"}</code></nobr>    |       | שם מארח להאזנה                                                   |
+| <nobr><code>{"--mdns"}</code></nobr>        |       | אפשר גילוי mDNS                                                   |
+| <nobr><code>{"--mdns-domain"}</code></nobr> |       | שם דומיין mDNS מותאם אישית                                                 |
+| <nobr><code>{"--cors"}</code></nobr>        |       | מקור(ות) דפדפן נוספ(ות) לאפשר CORS                              |
+
+---
+
+## פקודות
+
+ל-OpenCode CLI יש גם את הפקודות הבאות.
+
+---
+
+### agent
+
+נהל סוכנים עבור OpenCode.
+
+```bash
+opencode agent [command]
+```
+
+---
+
+#### create
+
+צור סוכן חדש עם הגדרה מותאמת אישית.
+
+```bash
+opencode agent create
+```
+
+פקודה זו תדריך אותך ביצירת סוכן חדש עם פרומפט מערכת מותאם אישית והגדרת הרשאות. כל מה שלא מאפשר נדחה ב-frontmatter של הסוכן שנוצר.
+
+#### דגלים
+
+| דגל                                        | קצר | תיאור                                                                                                                                                                                                                |
+| ------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--path"}</code></nobr>        |       | ספרייה לכתיבת קובץ הסוכן אליה (ברירת מחדל לגלובלי או `.opencode/agent` בהתאם לפרומפט)                                                                                                                         |
+| <nobr><code>{"--description"}</code></nobr> |       | מה הסוכן צריך לעשות                                                                                                                                                                                                   |
+| <nobr><code>{"--mode"}</code></nobr>        |       | מצב סוכן: `all`, `primary`, או `subagent`                                                                                                                                                                                |
+| <nobr><code>{"--permissions"}</code></nobr> |       | רשימה מופרדת בפסיקים של הרשאות לאפשר (ברירת מחדל: all). זמינות: `bash`, `read`, `edit`, `glob`, `grep`, `webfetch`, `task`, `todowrite`, `websearch`, `lsp`, `skill`. כל מה שהושמט נדחה. כינוי: `--tools` |
+| <nobr><code>{"--model"}</code></nobr>       | `-m`  | מודל לשימוש, בפורמט `ספק/מודל`                                                                                                                                                                                   |
+
+העברת כל `--path`, `--description`, `--mode`, ו-`--permissions` מריץ את הפקודה באופן לא אינטראקטיבי.
+
+---
+
+#### list
+
+רשום את כל הסוכנים הזמינים.
+
+```bash
+opencode agent list
+```
+
+---
+
+### run
+
+הרץ את OpenCode עם פרומפט והחזר את התוצאה.
+
+```bash
+opencode run "הסבר איך closures עובדים ב-JavaScript"
+```
+
+#### דגלים
+
+| דגל                                        | קצר | תיאור                                                             |
+| ------------------------------------------- | ----- | ----------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr>    | `-c`  | המשך את הסשן האחרון                                               |
+| <nobr><code>{"--session"}</code></nobr>     | `-s`  | מזהה סשן להמשך                                                  |
+| <nobr><code>{"--fork"}</code></nobr>        |       | Fork את הסשן בעת המשך                                          |
+| <nobr><code>{"--prompt"}</code></nobr>      |       | פרומפט לשימוש                                                           |
+| <nobr><code>{"--model"}</code></nobr>       | `-m`  | מודל לשימוש בצורת ספק/מודל                              |
+| <nobr><code>{"--agent"}</code></nobr>       |       | סוכן לשימוש                                                            |
+| <nobr><code>{"--auto"}</code></nobr>        |       | אישור אוטומטי של הרשאות שלא נדחו במפורש                 |
+
+---
+
+### config
+
+נהל את הגדרות OpenCode.
+
+```bash
+opencode config [command]
+```
+
+---
+
+#### get
+
+קבל ערך הגדרה.
+
+```bash
+opencode config get <key>
+```
+
+---
+
+#### set
+
+הגדר ערך הגדרה.
+
+```bash
+opencode config set <key> <value>
+```
+
+---
+
+#### list
+
+רשום את כל הגדרות OpenCode.
+
+```bash
+opencode config list
+```
+
+---
+
+### connect
+
+התחבר לספק AI.
+
+```bash
+opencode connect [provider]
+```
+
+---
+
+### disconnect
+
+התנתק מספק AI.
+
+```bash
+opencode disconnect [provider]
+```
+
+---
+
+### init
+
+אתחל את OpenCode עבור הפרויקט הנוכחי.
+
+```bash
+opencode init
+```
+
+זה ינתח את הפרויקט שלך ויצור קובץ `AGENTS.md` בשורש הפרויקט.
+
+---
+
+### serve
+
+הפעל שרת OpenCode.
+
+```bash
+opencode serve
+```
+
+#### דגלים
+
+| דגל                                        | קצר | תיאור                                                             |
+| ------------------------------------------- | ----- | ----------------------------------------------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>        |       | פורט להאזנה (ברירת מחדל: 4096)                                                       |
+| <nobr><code>{"--hostname"}</code></nobr>    |       | שם מארח להאזנה (ברירת מחדל: localhost)                                                   |
+| <nobr><code>{"--mdns"}</code></nobr>        |       | אפשר גילוי mDNS                                                   |
+| <nobr><code>{"--mdns-domain"}</code></nobr> |       | שם דומיין mDNS מותאם אישית                                                 |
+| <nobr><code>{"--cors"}</code></nobr>        |       | מקור(ות) דפדפן נוספ(ות) לאפשר CORS                              |
+
+---
+
+### version
+
+הצג את גרסת OpenCode.
+
+```bash
+opencode version
+```

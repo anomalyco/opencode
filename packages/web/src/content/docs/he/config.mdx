@@ -1,0 +1,317 @@
+---
+title: הגדרות
+description: שימוש בקובץ הגדרות JSON של OpenCode.
+---
+
+אתה יכול להגדיר את OpenCode באמצעות קובץ הגדרות JSON.
+
+---
+
+## פורמט
+
+OpenCode תומך הן בפורמט **JSON** והן בפורמט **JSONC** (JSON עם הערות).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
+}
+```
+
+---
+
+## מיקומים
+
+אתה יכול למקם את ההגדרות שלך בכמה מיקומים שונים ויש להם
+סדר עדיפות שונה.
+
+:::note
+קבצי הגדרות **ממוזגים יחד**, לא מוחלפים.
+:::
+
+קבצי הגדרות ממוזגים יחד, לא מוחלפים. הגדרות מהמיקומי ההגדרות הבאים משולבות. הגדרות מאוחרות מבטלות הגדרות מוקדמות רק עבור מפתחות מתנגשים. הגדרות לא מתנגשות מכל ההגדרות נשמרות.
+
+לדוגמה, אם ההגדרה הגלובלית שלך מגדירה `autoupdate: true` וההגדרה של הפרויקט שלך מגדירה `model: "anthropic/claude-sonnet-4-5"`, ההגדרה הסופית תכלול את שתי ההגדרות.
+
+---
+
+### סדר עדיפות
+
+מקורות הגדרות נטענים בסדר הזה (מקורות מאוחרים מבטלים מקורות מוקדמים):
+
+1. **הגדרה מרוחקת** (מ-`.well-known/opencode`) - ברירות מחדל ארגוניות
+2. **הגדרה גלובלית** (`~/.config/opencode/opencode.json`) - העדפות משתמש
+3. **הגדרה מותאמת אישית** (משתנה סביבת `OPENCODE_CONFIG`) - עקיפות מותאמות אישית
+4. **הגדרת פרויקט** (`opencode.json` בפרויקט) - הגדרות ספציפיות לפרויקט
+5. **ספריות `.opencode`** - סוכנים, פקודות, תוספים
+6. **הגדרה מוטמעת** (משתנה סביבת `OPENCODE_CONFIG_CONTENT`) - עקיפות זמן ריצה
+7. **קבצי הגדרות מנוהלים** (`/Library/Application Support/opencode/` ב-macOS) - נשלט על ידי מנהל מערכת
+8. **העדפות מנוהלות macOS** (`.mobileconfig` דרך MDM) - עדיפות הגבוהה ביותר, לא ניתנות לעקיפה על ידי משתמש
+
+זה אומר שהגדרות פרויקט יכולות לבטל ברירות מחדל גלובליות, והגדרות גלובליות יכולות לבטל ברירות מחדל ארגוניות מרוחקות. הגדרות מנוהלות מבטלות הכל.
+
+:::note
+הספריות `.opencode` ו-`~/.config/opencode` משתמשות ב**שמות ברבים** לתת-ספריות: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, ו-`themes/`. שמות ביחיד (למשל `agent/`) גם נתמכים לתאימות לאחור.
+:::
+
+---
+
+### מרוחק
+
+ארגונים יכולים לספק הגדרות ברירת מחדל דרך הנקודה `.well-known/opencode`. זה מאוחזר אוטומטית כאשר אתה מאמת עם ספק שתומך בזה.
+
+הגדרה מרוחקת נטענת ראשונה, משמשת כשכבה בסיסית. כל מקורות ההגדרות האחרים (גלובלי, פרויקט) יכולים לבטל את הברירות המחדל הללו.
+
+לדוגמה, אם הארגון שלך מספק שרתי MCP שמושבתים כברירת מחדל:
+
+```json title="הגדרה מרוחקת מ-.well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+אתה יכול לאפשר שרתים ספציפיים בהגדרה המקומית שלך:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### גלובלי
+
+מקם את ההגדרה הגלובלית של OpenCode ב-`~/.config/opencode/opencode.json`. השתמש בהגדרה גלובלית להעדפות שרת/זמן ריצה ברמת משתמש כמו ספקים, מודלים, והרשאות.
+
+להגדרות TUI ספציפיות, השתמש ב-`~/.config/opencode/tui.json`.
+
+הגדרה גלובלית מבטלת ברירות מחדל ארגוניות מרוחקות.
+
+---
+
+### לכל פרויקט
+
+הוסף `opencode.json` בשורש הפרויקט שלך. הגדרת פרויקט יש לה את העדיפות הגבוהה ביותר בין קבצי ההגדרות הסטנדרטיים - היא מבטלת הן הגדרות גלובליות והן הגדרות מרוחקות.
+
+להגדרות TUI ספציפיות לפרויקט, הוסף `tui.json` לצידה.
+
+:::tip
+מקם הגדרות ספציפיות לפרויקט בשורש הפרויקט שלך.
+:::
+
+כאשר OpenCode מתחיל, הוא ראשון מחפש קובץ הגדרות בספרייה הנוכחית, לאחר מכן עולה למעלה לספריית Git הקרובה ביותר.
+
+זה גם בטוח לבדוק ל-Git ומשתמש באותו סכמה כמו הגלובלי.
+
+---
+
+### נתיב מותאם אישית
+
+ציין נתיב קובץ הגדרות מותאם אישית באמצעות משתנה הסביבה `OPENCODE_CONFIG`.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "שלום עולם"
+```
+
+הגדרה מותאמת אישית נטענת בין הגדרה גלובלית והגדרת פרויקט בסדר העדיפות.
+
+---
+
+### ספרייה מותאמת אישית
+
+ציין ספריית הגדרות מותאמת אישית באמצעות משתנה הסביבה
+`OPENCODE_CONFIG_DIR`. ספרייה זו תיחפש עבור סוכנים, פקודות,
+מצבים, ותוספים בדיוק כמו ספריית `.opencode` הסטנדרטית, וצריכה
+לעקוב את אותו מבנה.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "שלום עולם"
+```
+
+הספרייה המותאמת אישית נטענת לאחר ההגדרה הגלובלית וספריות `.opencode`, אז היא **יכולה לבטל** את ההגדרות שלהם.
+
+---
+
+### הגדרות מנוהלות
+
+ארגונים יכולים לאכוף הגדרות שמשתמשים לא יכולים לבטל. הגדרות מנוהלות נטענות ברמת העדיפות הגבוהה ביותר.
+
+#### מבוסס קבצים
+
+הורד `opencode.json` או `opencode.jsonc` לספריית ההגדרות המנוהלות של המערכת:
+
+| פלטפורמה | נתיב                                     |
+| -------- | ---------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/` |
+| Linux    | `/etc/opencode/`                         |
+| Windows  | `%ProgramData%\opencode`                 |
+
+ספריות אלו דורשות גישה של admin/root לכתיבה, אז משתמשים לא יכולים לשנות אותן.
+
+#### העדפות מנוהלות macOS
+
+ב-macOS, OpenCode קורא העדפות מנוהלות מתחום ההעדפות `ai.opencode.managed`. פרוס `.mobileconfig` דרך MDM (Jamf, Kandji, FleetDM) וההגדרות נאכפות אוטומטית.
+
+OpenCode בודק את הנתיבים הללו:
+
+1. `/Library/Managed Preferences/<user>/ai.opencode.managed.plist`
+2. `/Library/Managed Preferences/ai.opencode.managed.plist`
+
+מפתחות ה-plist ממפים ישירות לשדות `opencode.json`. מפתחות מטא-דאטה של MDM (`PayloadUUID`, `PayloadType`, וכו') מוסרים אוטומטית.
+
+**יצירת `.mobileconfig`**
+
+השתמש ב-PayloadType `ai.opencode.managed`. מפתחות ההגדרות של OpenCode הולכים ישירות במילון ה-payload:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>ai.opencode.managed</string>
+      <key>PayloadIdentifier</key>
+      <string>com.example.opencode.config</string>
+      <key>PayloadUUID</key>
+      <string>GENERATE-YOUR-OWN-UUID</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>share</key>
+      <string>disabled</string>
+      <key>server</key>
+      <dict>
+        <key>hostname</key>
+        <string>127.0.0.1</string>
+      </dict>
+      <key>permission</key>
+      <dict>
+        <key>*</key>
+        <string>ask</string>
+        <key>bash</key>
+        <dict>
+          <key>*</key>
+          <string>ask</string>
+          <key>rm -rf *</key>
+          <string>deny</string>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadIdentifier</key>
+  <string>com.example.opencode</string>
+  <key>PayloadUUID</key>
+  <string>GENERATE-YOUR-OWN-UUID</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
+```
+
+צור UUIDs ייחודיים עם `uuidgen`. התאם אישית את ההגדרות להתאים לדרישות הארגון שלך.
+
+**פריסה דרך MDM**
+
+- **Jamf Pro:** Computers > Configuration Profiles > Upload > תחום למכשירי יעד או קבוצות חכמות
+- **FleetDM:** הוסף את ה-`.mobileconfig` ל-repo gitops שלך תחת `mdm.macos_settings.custom_settings` והרץ `fleetctl apply`
+
+**אימות במכשיר**
+
+לחץ פעמיים על ה-`.mobileconfig` להתקנה מקומית לבדיקה (מופיע בהגדרות מערכת > פרטיות ואבטחה > פרופילים), לאחר מכן הרץ:
+
+```bash
+opencode debug config
+```
+
+כל מפתחות העדפות המנוהלות מופיעים בהגדרה המומצקת ולא ניתנים לעקיפה על ידי הגדרת משתמש או פרויקט.
+
+---
+
+## סכמה
+
+סכמת הגדרות השרת/זמן ריצה מוגדרת ב-[**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+
+הגדרות TUI משתמשות ב-[**`opencode.ai/tui.json`**](https://opencode.ai/tui.json).
+
+עורך הקוד שלך יוכול להשתמש בסכמה זו לאימות אוטומטי והשלמה אוטומטית.
+
+---
+
+## משתני סביבה
+
+אתה יכול להשתמש במשתני סביבה בתוך קובץ ההגדרות שלך.
+
+### משתני סביבה
+
+השתמש בתחביר `{env:VAR_NAME}` להחלפת משתנות סביבה:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+אם משתנה הסביבה לא מוגדר, הוא יוחלף במחרוזת ריקה.
+
+---
+
+### קבצים
+
+השתמש ב-`{file:path/to/file}` להחלפת את התוכן של קובץ:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+נתיבי קבצים יכולים להיות:
+
+- יחסי לספריית קובץ ההגדרות
+- או נתיבים מוחלטים שמתחילים ב-`/` או `~`
+
+אלו שימושיים עבור:
+
+- שמירת נתונים רגישים כמו מפתחות API בקבצים נפרדים.
+- כלול קבצי הוראות גדולים מבלי לערבב את ההגדרות שלך.
+- שיתוף קטעי הגדרה נפוצים לכמה קבצי הגדרות.

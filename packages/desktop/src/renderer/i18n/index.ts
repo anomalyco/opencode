@@ -13,6 +13,7 @@ import { dict as desktopPl } from "./pl"
 import { dict as desktopRu } from "./ru"
 import { dict as desktopUk } from "./uk"
 import { dict as desktopAr } from "./ar"
+import { dict as desktopHe } from "./he"
 import { dict as desktopNo } from "./no"
 import { dict as desktopBr } from "./br"
 import { dict as desktopBs } from "./bs"
@@ -30,6 +31,7 @@ import { dict as appPl } from "../../../../app/src/i18n/pl"
 import { dict as appRu } from "../../../../app/src/i18n/ru"
 import { dict as appUk } from "../../../../app/src/i18n/uk"
 import { dict as appAr } from "../../../../app/src/i18n/ar"
+import { dict as appHe } from "../../../../app/src/i18n/he"
 import { dict as appNo } from "../../../../app/src/i18n/no"
 import { dict as appBr } from "../../../../app/src/i18n/br"
 import { dict as appBs } from "../../../../app/src/i18n/bs"
@@ -48,6 +50,7 @@ export type Locale =
   | "ru"
   | "uk"
   | "ar"
+  | "he"
   | "no"
   | "br"
   | "bs"
@@ -70,6 +73,7 @@ const LOCALES: readonly Locale[] = [
   "uk",
   "bs",
   "ar",
+  "he",
   "no",
   "br",
 ]
@@ -95,6 +99,7 @@ function detectLocale(): Locale {
     if (language.toLowerCase().startsWith("ru")) return "ru"
     if (language.toLowerCase().startsWith("uk")) return "uk"
     if (language.toLowerCase().startsWith("ar")) return "ar"
+    if (language.toLowerCase().startsWith("he")) return "he"
     if (
       language.toLowerCase().startsWith("no") ||
       language.toLowerCase().startsWith("nb") ||
@@ -155,6 +160,7 @@ function build(locale: Locale): Dictionary {
   if (locale === "ru") return { ...base, ...i18n.flatten(appRu), ...i18n.flatten(desktopRu) }
   if (locale === "uk") return { ...base, ...i18n.flatten(appUk), ...i18n.flatten(desktopUk) }
   if (locale === "ar") return { ...base, ...i18n.flatten(appAr), ...i18n.flatten(desktopAr) }
+  if (locale === "he") return { ...base, ...i18n.flatten(appHe), ...i18n.flatten(desktopHe) }
   if (locale === "no") return { ...base, ...i18n.flatten(appNo), ...i18n.flatten(desktopNo) }
   if (locale === "br") return { ...base, ...i18n.flatten(appBr), ...i18n.flatten(desktopBr) }
   if (locale === "bs") return { ...base, ...i18n.flatten(appBs), ...i18n.flatten(desktopBs) }
@@ -186,6 +192,11 @@ export function initI18n(): Promise<Locale> {
 
     state.locale = next
     state.dict = build(next)
+    
+    if (typeof document !== "object") return next
+    document.documentElement.lang = next
+    document.documentElement.dir = next === "ar" || next === "he" ? "rtl" : "ltr"
+    
     return next
   })().catch(() => state.locale)
 
