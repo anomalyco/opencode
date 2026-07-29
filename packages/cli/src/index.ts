@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import "@opentui/solid/runtime-plugin-support"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Effect } from "effect"
 import { Commands } from "./commands/commands"
