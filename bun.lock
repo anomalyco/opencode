@@ -143,7 +143,10 @@
         "open": "10.1.2",
         "semver": "catalog:",
         "solid-js": "catalog:",
+        "tree-sitter-bash": "0.25.0",
+        "tree-sitter-powershell": "0.25.10",
         "uqr": "0.1.3",
+        "web-tree-sitter": "0.25.10",
         "ws": "8.21.0",
       },
       "devDependencies": {
