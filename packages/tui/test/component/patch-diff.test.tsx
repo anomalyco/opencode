@@ -41,9 +41,9 @@ test("renders separate diff nodes with a full-width hunk row", async () => {
     ),
     { width: 120, height: 30 },
   )
-  const frame = await app.waitForFrame((value) =>
-    value.includes("@@ -20,3 +20,3 @@"),
-  )
+  await app.waitForFrame((value) => value.includes("@@ -20,3 +20,3 @@"))
+  await app.renderOnce()
+  const frame = app.captureCharFrame()
   const headerRow = frame.split("\n").findIndex((line) => line.includes("@@ -20,3 +20,3 @@"))
   const header = frame.split("\n")[headerRow]
   const background = parseColor("#222222")
@@ -61,7 +61,11 @@ test("renders separate diff nodes with a full-width hunk row", async () => {
           span.bg.a === background.a,
       ),
   ).toBe(true)
-  expect(findDiffs(app.renderer.root)).toHaveLength(2)
+  const diffs = findDiffs(app.renderer.root)
+  const gutters = diffs.flatMap((diff) => diff.getChildren().flatMap((side) => side.getChildren().slice(0, 1)))
+  expect(diffs).toHaveLength(2)
+  expect(gutters[0].width).toBeGreaterThan(0)
+  expect(new Set(gutters.map((gutter) => gutter.width)).size).toBe(1)
 })
 
 function findDiffs(root: Renderable): DiffRenderable[] {
