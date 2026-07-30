@@ -93,10 +93,9 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
-    // Title generation is a side effect of the first step; it must not delay step continuation.
-    // Tracked per process so repeated wakes before the second user message arrives don't
-    // re-fire a redundant LLM call; `SessionTitle` itself is idempotent based on durable history.
-    const titleStarted = new Set<SessionSchema.ID>()
+    // Title generation is a side effect of a successful step; it must not delay continuation.
+    // The in-flight set coalesces overlapping steps while title presence records success durably.
+    const titlesRunning = new Set<SessionSchema.ID>()
     const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
     /**
      * Drains eligible manual compaction and user input until the Session becomes idle.
@@ -125,7 +124,7 @@ const layer = Layer.effect(
       let step = 1
       while (true) {
         const result = yield* runStep(sessionID, promotable, step)
-        yield* startTitleOnce(sessionID)
+        if (step === 1) yield* startTitle(sessionID)
         yield* runPendingCompaction(sessionID)
         if (!result.needsContinuation && !(yield* SessionPending.has(db, sessionID, "steer"))) return
         promotable = "steer"
@@ -481,11 +480,20 @@ const layer = Layer.effect(
       }
     })
 
-    /** Fires title generation once per process after the first step makes a user message visible. */
-    const startTitleOnce = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-      if (titleStarted.has(sessionID)) return
-      titleStarted.add(sessionID)
-      forkTitle(title.generateForFirstPrompt(yield* getSession(sessionID)).pipe(Effect.ignore))
+    /** Starts one title request at a time after a successful step makes user input visible. */
+    const startTitle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      if (titlesRunning.has(sessionID)) return
+      titlesRunning.add(sessionID)
+      forkTitle(
+        title.generateForFirstPrompt(sessionID).pipe(
+          Effect.ignore,
+          Effect.ensuring(
+            Effect.sync(() => {
+              titlesRunning.delete(sessionID)
+            }),
+          ),
+        ),
+      )
     })
 
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
