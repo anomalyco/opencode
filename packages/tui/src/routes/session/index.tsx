@@ -53,6 +53,7 @@ import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { SessionListPanel } from "../../component/session-list-panel"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
@@ -123,6 +124,7 @@ const sessionBindingCommands = [
   "session.undo",
   "session.redo",
   "session.sidebar.toggle",
+  "session_list_panel.toggle",
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
@@ -248,6 +250,8 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [sessionList, setSessionList] = kv.signal<"auto" | "hide">("session_list", "auto")
+  const [sessionListOpen, setSessionListOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
@@ -267,8 +271,14 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
+  const sessionListVisible = createMemo(() => {
+    if (session()?.parentID) return false
+    if (sessionListOpen()) return true
+    if (sessionList() === "auto" && wide()) return true
+    return false
+  })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => dimensions().width - (sessionListVisible() ? 30 : 0) - (sidebarVisible() ? 42 : 0) - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -672,6 +682,19 @@ export function Session() {
           const isVisible = sidebarVisible()
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: sessionListVisible() ? "Hide session list" : "Show session list",
+      value: "session_list_panel.toggle",
+      category: "Session",
+      run: () => {
+        batch(() => {
+          const isVisible = sessionListVisible()
+          setSessionList(() => (isVisible ? "hide" : "auto"))
+          setSessionListOpen(!isVisible)
         })
         dialog.clear()
       },
@@ -1163,6 +1186,26 @@ export function Session() {
         }}
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
+          <Show when={sessionListVisible()}>
+            <Switch>
+              <Match when={wide()}>
+                <SessionListPanel sessionID={route.sessionID} />
+              </Match>
+              <Match when={!wide()}>
+                <box
+                  position="absolute"
+                  top={0}
+                  left={0}
+                  right={0}
+                  bottom={0}
+                  alignItems="flex-start"
+                  backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+                >
+                  <SessionListPanel sessionID={route.sessionID} />
+                </box>
+              </Match>
+            </Switch>
+          </Show>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
               <scrollbox
