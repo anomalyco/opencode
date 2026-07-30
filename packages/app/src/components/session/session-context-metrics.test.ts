@@ -96,4 +96,26 @@ describe("getSessionContext", () => {
 
     expect(ctx).toBeUndefined()
   })
+
+  test("falls back to null usage when the matched model has no limit field", () => {
+    const messages = [assistant("a1", { input: 40, output: 10, reasoning: 0, read: 0, write: 0 }, 0.1)]
+    const providers = [
+      {
+        id: "openai",
+        name: "OpenAI",
+        models: {
+          "gpt-4.1": {
+            name: "GPT-4.1",
+          },
+        },
+      },
+    ]
+
+    const ctx = getSessionContext(messages, providers)
+
+    expect(ctx?.providerLabel).toBe("OpenAI")
+    expect(ctx?.modelLabel).toBe("GPT-4.1")
+    expect(ctx?.limit).toBeUndefined()
+    expect(ctx?.usage).toBeNull()
+  })
 })

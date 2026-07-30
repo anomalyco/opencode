@@ -8,7 +8,7 @@ type Provider = {
 
 type Model = {
   name?: string
-  limit: {
+  limit?: {
     context: number
   }
 }
@@ -44,7 +44,7 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
 
   const provider = providers.find((item) => item.id === message.providerID)
   const model = provider?.models[message.modelID]
-  const limit = model?.limit.context
+  const limit = model?.limit?.context
   const total = tokenTotal(message)
 
   return {
