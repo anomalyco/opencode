@@ -296,12 +296,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         )
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
-      history(direction: 1 | -1) {
-        if (!enabled()) return
-        const next = moveSessionTabHistory(history, state().tabs, current(), direction)
-        history = next.history
-        if (next.sessionID) route.navigate({ type: "session", sessionID: next.sessionID })
-      },
       selectIndex(index: number) {
         if (!enabled()) return
         const tab = state().tabs[index]

@@ -100,8 +100,6 @@ const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as
 const sessionTabBindingCommands = [
   "session.tab.next",
   "session.tab.previous",
-  "session.tab.history.back",
-  "session.tab.history.forward",
   "session.tab.next_unread",
   "session.tab.previous_unread",
   "session.tab.close",
@@ -682,22 +680,6 @@ function App(props: { pair?: DialogPairCredentials }) {
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycle(-1),
-      },
-      {
-        name: "session.tab.history.back",
-        title: "Back in tab history",
-        category: "Session",
-        palette: undefined,
-        enabled: sessionTabs.enabled,
-        run: () => sessionTabs.history(-1),
-      },
-      {
-        name: "session.tab.history.forward",
-        title: "Forward in tab history",
-        category: "Session",
-        palette: undefined,
-        enabled: sessionTabs.enabled,
-        run: () => sessionTabs.history(1),
       },
       {
         name: "session.tab.next_unread",
