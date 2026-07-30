@@ -17,6 +17,7 @@ on:
 
 jobs:
   close:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-latest
     timeout-minutes: 240
     permissions:
