@@ -148,7 +148,14 @@ describe("ACP service sessions", () => {
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
+      get?: (input: { sessionID: string }) => Promise<{ data: { id: string; parentID?: string } }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      sessions?: Array<{
+        id: string
+        directory: string
+        title: string
+        time: { created: number; updated: number }
+      }>
     },
   ) => {
     const updates: SessionNotification[] = []
@@ -159,12 +166,14 @@ describe("ACP service sessions", () => {
     const commands: unknown[] = []
     const summarizes: unknown[] = []
     const usageUpdates: string[] = []
-    const sessions = Array.from({ length: 102 }, (_, index) => ({
-      id: `ses_${index + 1}`,
-      directory: index % 2 === 0 ? "/workspace" : "/other",
-      title: `Session ${index + 1}`,
-      time: { created: index + 1, updated: index + 1 },
-    }))
+    const sessions =
+      options?.sessions ??
+      Array.from({ length: 102 }, (_, index) => ({
+        id: `ses_${index + 1}`,
+        directory: index % 2 === 0 ? "/workspace" : "/other",
+        title: `Session ${index + 1}`,
+        time: { created: index + 1, updated: index + 1 },
+      }))
     const sdk = {
       config: {
         providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
@@ -192,11 +201,15 @@ describe("ACP service sessions", () => {
       },
       session: {
         create: () => Promise.resolve({ data: { id: "ses_new" } }),
-        get: () => Promise.resolve({ data: { id: "ses_loaded" } }),
-        list: (input: { directory?: string }) =>
-          Promise.resolve({
-            data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
-          }),
+        get: options?.get ?? (() => Promise.resolve({ data: { id: "ses_loaded" } })),
+        list: (input: { directory?: string; limit?: number }) => {
+          const filtered = input.directory
+            ? sessions.filter((session) => session.directory === input.directory)
+            : sessions
+          return Promise.resolve({
+            data: filtered.slice(0, input.limit ?? 100),
+          })
+        },
         messages: () => Promise.resolve({ data: messages }),
         children: () => Promise.resolve({ data: [] }),
         status: () =>
@@ -416,16 +429,47 @@ describe("ACP service sessions", () => {
     expect(listed.sessions[0]?.cwd).toBe("/workspace")
   })
 
+  it("does not leak a loaded child into the parent-only session list", async () => {
+    const { service } = makeService([], {
+      get: () => Promise.resolve({ data: { id: "child", parentID: "root" } }),
+    })
+    await Effect.runPromise(service.loadSession({ sessionId: "child", cwd: "/workspace", mcpServers: [] }))
+
+    const listed = await Effect.runPromise(service.listSessions({ cwd: "/workspace" }))
+
+    expect(listed.sessions.some((session) => session.sessionId === "child")).toBe(false)
+  })
+
   it("lists all sessions with next cursor when the first page is full", async () => {
     const { service } = makeService()
     const first = await Effect.runPromise(service.listSessions({}))
     const second = await Effect.runPromise(service.listSessions({ cursor: first.nextCursor }))
+    const legacySecond = await Effect.runPromise(service.listSessions({ cursor: "3" }))
 
     expect(first.sessions).toHaveLength(100)
     expect(first.sessions[0]?.sessionId).toBe("ses_102")
     expect(first.sessions.at(-1)?.sessionId).toBe("ses_3")
-    expect(first.nextCursor).toBe("3")
+    expect(first.nextCursor).toBe("v1:3:ses_3")
     expect(second.sessions.map((session) => session.sessionId)).toEqual(["ses_2", "ses_1"])
+    expect(legacySecond.sessions).toEqual(second.sessions)
+  })
+
+  it("does not drop sessions tied at the 100-item cursor boundary", async () => {
+    const sessions = Array.from({ length: 102 }, (_, index) => ({
+      id: `tied_${String(index + 1).padStart(3, "0")}`,
+      directory: "/workspace",
+      title: `Tied ${index + 1}`,
+      time: { created: index + 1, updated: 1 },
+    }))
+    const { service } = makeService([], { sessions })
+
+    const first = await Effect.runPromise(service.listSessions({}))
+    const second = await Effect.runPromise(service.listSessions({ cursor: first.nextCursor }))
+    const ids = [...first.sessions, ...second.sessions].map((session) => session.sessionId)
+
+    expect(first.sessions).toHaveLength(100)
+    expect(second.sessions).toHaveLength(2)
+    expect(new Set(ids)).toEqual(new Set(sessions.map((session) => session.id)))
   })
 
   it("resumes a session and stores restored state without replaying transcript chunks", async () => {

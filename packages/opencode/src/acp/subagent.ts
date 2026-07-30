@@ -100,6 +100,10 @@ const maxDirectCostAmountLength = 256
 const maxDirectCostSignificantDigits = 38
 const minDirectCostPower = -128
 const maxDirectCostPower = 127
+const initialRetryDelayMs = 25
+const maxRetryDelayMs = 1000
+// The legacy session list endpoint has no cursor and otherwise truncates at 100.
+const completeSessionListLimit = Number.MAX_SAFE_INTEGER
 const directCostAmountPattern = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/
 const decodeListParamsSchema = Schema.decodeUnknownSync(ListParams)
 const decodeSnapshotSchema = Schema.decodeUnknownSync(Snapshot)
@@ -150,6 +154,8 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
   let closed = false
   let removeListener: (() => void) | undefined
   let processing: Promise<void> | undefined
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let retryDelayMs = initialRetryDelayMs
 
   const handle = async (event: Event) => {
     const sessionID = recordEvent({ event, failed, deleted, statuses, sessions })
@@ -157,71 +163,125 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
 
     pending.add(sessionID)
     if (initializing) return
-    await process()
+    void process()
   }
 
   const process = () => {
-    if (processing) return processing
-    processing = reconcile().finally(() => {
-      processing = undefined
-    })
+    if (processing || retryTimer) return processing
+    let failed = false
+    processing = reconcile()
+      .then(() => {
+        retryDelayMs = initialRetryDelayMs
+      })
+      .catch(() => {
+        failed = true
+      })
+      .finally(() => {
+        processing = undefined
+        if (!active || !pending.size) return
+        if (!failed) {
+          void process()
+          return
+        }
+        const delay = retryDelayMs
+        retryDelayMs = Math.min(retryDelayMs * 2, maxRetryDelayMs)
+        retryTimer = setTimeout(() => {
+          retryTimer = undefined
+          void process()
+        }, delay)
+      })
     return processing
   }
 
   const reconcile = async () => {
     while (active && pending.size) {
-      const changed = [...pending]
-      pending.clear()
-      const roots = new Set(
-        changed.flatMap((sessionID) =>
+      const nextSession = pending.values().next()
+      if (nextSession.done) return
+      const sessionID = nextSession.value
+      pending.delete(sessionID)
+
+      let staged: Map<string, Node>
+      let update: Update | undefined
+      const changed = new Set([sessionID])
+      try {
+        const roots = new Set(
           affectedRoots({
             sessionID,
             nodes,
             sessions,
           }),
-        ),
-      )
-      if (params.rootSessionId) {
-        roots.forEach((rootSessionID) => {
-          if (rootSessionID !== params.rootSessionId) roots.delete(rootSessionID)
-        })
-      }
+        )
+        let expanded = true
+        while (expanded) {
+          expanded = false
+          for (const candidate of pending) {
+            const candidateRoots = affectedRoots({
+              sessionID: candidate,
+              nodes,
+              sessions,
+            })
+            if (!candidateRoots.some((rootSessionID) => roots.has(rootSessionID))) continue
+            changed.add(candidate)
+            pending.delete(candidate)
+            for (const rootSessionID of candidateRoots) {
+              if (roots.has(rootSessionID)) continue
+              roots.add(rootSessionID)
+              expanded = true
+            }
+          }
+        }
+        if (params.rootSessionId) {
+          roots.forEach((rootSessionID) => {
+            if (rootSessionID !== params.rootSessionId) roots.delete(rootSessionID)
+          })
+        }
+        const boundary = {
+          failed: new Set(failed),
+          deleted: new Set(deleted),
+          statuses: new Map(statuses),
+          sessions: new Map(sessions),
+        }
 
-      const staged = new Map(nodes)
-      const upsert = new Map<string, Node>()
-      const removed = new Set<string>()
-      for (const rootSessionId of roots) {
-        const next = await snapshot({
-          sdk: input.sdk,
+        staged = new Map(nodes)
+        const upsert = new Map<string, Node>()
+        const removed = new Set<string>()
+        for (const rootSessionId of roots) {
+          const next = await snapshot({
+            sdk: input.sdk,
+            generation,
+            revision,
+            params: { rootSessionId },
+            failed: boundary.failed,
+            deleted: boundary.deleted,
+            statuses: boundary.statuses,
+            sessions: boundary.sessions,
+          })
+          if (!active) return
+
+          const previous = [...staged.values()].filter((node) => node.rootSessionId === rootSessionId)
+          const bySession = new Map(next.nodes.map((node) => [node.sessionId, node]))
+          next.nodes.forEach((node) => {
+            const current = staged.get(node.sessionId)
+            if (!current || !sameNode(current, node)) upsert.set(node.sessionId, node)
+          })
+          previous.filter((node) => !bySession.has(node.sessionId)).forEach((node) => removed.add(node.sessionId))
+          previous.forEach((node) => staged.delete(node.sessionId))
+          next.nodes.forEach((node) => staged.set(node.sessionId, node))
+        }
+        const removedSessionIds = [...removed].filter((id) => !upsert.has(id))
+        if (!upsert.size && !removedSessionIds.length) continue
+
+        update = encodeUpdate({
           generation,
-          revision,
-          params: { rootSessionId },
-          failed,
-          deleted,
-          statuses,
-          sessions,
+          revision: revision + 1,
+          upsert: [...upsert.values()],
+          removedSessionIds,
         })
-        if (!active) return
-
-        const previous = [...staged.values()].filter((node) => node.rootSessionId === rootSessionId)
-        const bySession = new Map(next.nodes.map((node) => [node.sessionId, node]))
-        next.nodes.forEach((node) => {
-          const current = staged.get(node.sessionId)
-          if (!current || !sameNode(current, node)) upsert.set(node.sessionId, node)
-        })
-        previous.filter((node) => !bySession.has(node.sessionId)).forEach((node) => removed.add(node.sessionId))
-        previous.forEach((node) => staged.delete(node.sessionId))
-        next.nodes.forEach((node) => staged.set(node.sessionId, node))
+      } catch (error) {
+        changed.forEach((id) => pending.add(id))
+        throw error
       }
-      const removedSessionIds = [...removed].filter((sessionID) => !upsert.has(sessionID))
-      if (!upsert.size && !removedSessionIds.length) continue
 
-      const update = encodeUpdate({
-        generation,
-        revision: revision + 1,
-        upsert: [...upsert.values()],
-        removedSessionIds,
-      })
       // Reserve the revision before notification I/O so a failed send can never be reused.
       revision = update.revision
       nodes.clear()
@@ -263,7 +323,7 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
         initial.nodes.forEach((node) => nodes.set(node.sessionId, node))
         initializing = false
         queueMicrotask(() => {
-          process().catch(() => {})
+          void process()
         })
         return initial
       } catch (error) {
@@ -284,6 +344,8 @@ export function make(input: { sdk: SDK; events?: EventSource; notify?: Notify })
     close: () => {
       closed = true
       active = false
+      if (retryTimer) clearTimeout(retryTimer)
+      retryTimer = undefined
       removeListener?.()
       removeListener = undefined
       pending.clear()
@@ -320,13 +382,21 @@ async function snapshot(input: {
   const deleted = new Set(input.deleted)
   const sessionOverrides = new Map(input.sessions)
   const statusOverrides = new Map(input.statuses)
-  const [rootsResponse, statusResponse] = await Promise.all([
-    input.sdk.session.list({ roots: true }),
-    input.sdk.session.status(),
+  const [source, statusResponse] = await Promise.all([
+    input.params.rootSessionId
+      ? deleted.has(input.params.rootSessionId)
+        ? []
+        : input.sdk.session
+            .get({ sessionID: input.params.rootSessionId }, { throwOnError: true })
+            .then((response) => (response.data ? [response.data] : []))
+      : input.sdk.session
+          .list({ roots: true, limit: completeSessionListLimit }, { throwOnError: true })
+          .then((response) => response.data ?? []),
+    input.sdk.session.status(undefined, { throwOnError: true }),
   ])
   const statuses = { ...(statusResponse.data ?? {}), ...Object.fromEntries(statusOverrides) }
   const nodes: Node[] = []
-  const roots = mergeSessions(rootsResponse.data ?? [], sessionOverrides, deleted).filter(
+  const roots = mergeSessions(source, sessionOverrides, deleted).filter(
     (session) => !input.params.rootSessionId || session.id === input.params.rootSessionId,
   )
 
@@ -384,6 +454,15 @@ function recordEvent(input: {
       if (!input.event.properties.sessionID) return
       input.failed.add(input.event.properties.sessionID)
       return input.event.properties.sessionID
+    case "message.part.updated":
+      if (input.event.properties.part.type !== "step-finish") return
+      return input.event.properties.sessionID
+    case "message.part.removed":
+    case "message.removed":
+    case "session.next.step.ended":
+    case "session.next.agent.switched":
+    case "session.next.moved":
+      return input.event.properties.sessionID
   }
 }
 
@@ -393,17 +472,15 @@ function mergeSessions(
   deleted: ReadonlySet<string>,
   parentID?: string,
 ) {
-  const merged = new Map<string, Session>()
+  const merged = new Map(overrides)
   source.forEach((session) => {
-    const current = overrides.get(session.id) ?? session
-    if (deleted.has(current.id) || current.parentID !== parentID) return
+    const override = overrides.get(session.id)
+    const current = override && override.time.updated > session.time.updated ? override : session
     merged.set(current.id, current)
   })
-  overrides.forEach((session) => {
-    if (deleted.has(session.id) || session.parentID !== parentID) return
-    merged.set(session.id, session)
-  })
-  return sortSessions([...merged.values()])
+  return sortSessions(
+    [...merged.values()].filter((session) => !deleted.has(session.id) && session.parentID === parentID),
+  )
 }
 
 function affectedRoots(input: {
@@ -479,7 +556,7 @@ async function readSession(input: {
     ...(directCost ? { directCost } : {}),
   })
 
-  const children = await input.sdk.session.children({ sessionID: input.session.id })
+  const children = await input.sdk.session.children({ sessionID: input.session.id }, { throwOnError: true })
   for (const child of mergeSessions(children.data ?? [], input.sessions, input.deleted, input.session.id)) {
     await readSession({
       ...input,
@@ -497,8 +574,7 @@ function sortSessions(sessions: Session[]) {
 function phaseOf(sessionId: string, status: SessionStatus | undefined, failed: ReadonlySet<string>): Phase {
   if (failed.has(sessionId)) return "failed"
   if (status?.type === "busy" || status?.type === "retry") return "running"
-  if (status?.type === "idle") return "completed"
-  return "unknown"
+  return "completed"
 }
 
 function validateSnapshot(input: Schema.Schema.Type<typeof Snapshot>): Snapshot {

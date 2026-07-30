@@ -50,6 +50,9 @@ import type { Command } from "@/command"
 export const AuthMethodID = "opencode-login"
 
 export type Error = ACPError.Error
+// The legacy session list endpoint has no cursor and otherwise truncates at 100.
+const completeSessionListLimit = Number.MAX_SAFE_INTEGER
+const sessionCursorPrefix = "v1:"
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "extNotification" | "requestPermission" | "writeTextFile">>
 
@@ -87,6 +90,7 @@ export function make(input: {
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
+  const optimisticRoots = new Set<string>()
   const connection = input.connection
   const extNotification = connection?.extNotification?.bind(connection)
   const events = connection ? ACPEvent.start({ sdk: input.sdk, connection, session }) : undefined
@@ -105,6 +109,7 @@ export function make(input: {
     closed = true
     subagents?.close()
     events?.close()
+    optimisticRoots.clear()
   }
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
@@ -218,6 +223,7 @@ export function make(input: {
       variant,
       modeId,
     })
+    optimisticRoots.add(state.id)
     sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
@@ -271,7 +277,7 @@ export function make(input: {
   })
 
   const listSessions = Effect.fn("ACP.listSessions")(function* (params: ListSessionsRequest) {
-    const cursor = params.cursor ? Number(params.cursor) : undefined
+    const cursor = parseSessionCursor(params.cursor)
     const limit = 100
     const sessions = yield* request(
       () =>
@@ -279,6 +285,7 @@ export function make(input: {
           {
             ...(params.cwd ? { directory: params.cwd } : {}),
             roots: true,
+            limit: completeSessionListLimit,
           },
           { throwOnError: true },
         ),
@@ -292,8 +299,9 @@ export function make(input: {
         updatedAt: new Date(item.time.updated).toISOString(),
       }),
     )
+    serverEntries.forEach((entry) => optimisticRoots.delete(entry.sessionId))
     const liveEntries = (yield* session.list(params.cwd ?? undefined))
-      .filter((item) => !serverEntries.some((entry) => entry.sessionId === item.id))
+      .filter((item) => optimisticRoots.has(item.id) && !serverEntries.some((entry) => entry.sessionId === item.id))
       .map(
         (item): SessionInfo => ({
           sessionId: item.id,
@@ -302,17 +310,16 @@ export function make(input: {
         }),
       )
     const sorted = [...liveEntries, ...serverEntries].toSorted(
-      (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
+      (a, b) =>
+        sessionUpdatedAt(b) - sessionUpdatedAt(a) ||
+        (a.sessionId === b.sessionId ? 0 : a.sessionId < b.sessionId ? 1 : -1),
     )
-    const filtered =
-      cursor === undefined || !Number.isFinite(cursor)
-        ? sorted
-        : sorted.filter((item) => new Date(item.updatedAt ?? 0).getTime() < cursor)
+    const filtered = cursor ? sorted.filter((item) => isAfterSessionCursor(item, cursor)) : sorted
     const page = filtered.slice(0, limit)
     const last = page.at(-1)
     return {
       sessions: page,
-      ...(filtered.length > limit && last ? { nextCursor: String(new Date(last.updatedAt ?? 0).getTime()) } : {}),
+      ...(filtered.length > limit && last ? { nextCursor: encodeSessionCursor(last) } : {}),
     }
   })
 
@@ -369,6 +376,7 @@ export function make(input: {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
+    optimisticRoots.delete(params.sessionId)
     if (!removed) return {}
 
     yield* abortBackingSession(removed)
@@ -408,6 +416,7 @@ export function make(input: {
       variant: restored.variant ?? selectVariant(snapshot, model),
       modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
     })
+    if (!forked.parentID) optimisticRoots.add(state.id)
     sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
@@ -613,6 +622,35 @@ export function make(input: {
     extension,
     close,
   }
+}
+
+function parseSessionCursor(input: string | null | undefined) {
+  if (!input) return
+  const legacy = Number(input)
+  if (Number.isFinite(legacy)) return { updatedAt: legacy }
+  if (!input.startsWith(sessionCursorPrefix)) return
+
+  const separator = input.indexOf(":", sessionCursorPrefix.length)
+  if (separator < 0) return
+  const updatedAt = Number(input.slice(sessionCursorPrefix.length, separator))
+  const sessionId = input.slice(separator + 1)
+  if (!Number.isFinite(updatedAt) || !sessionId.length) return
+  return { updatedAt, sessionId }
+}
+
+function encodeSessionCursor(session: SessionInfo) {
+  return `${sessionCursorPrefix}${sessionUpdatedAt(session)}:${session.sessionId}`
+}
+
+function isAfterSessionCursor(session: SessionInfo, cursor: { updatedAt: number; sessionId?: string }) {
+  const updatedAt = sessionUpdatedAt(session)
+  if (updatedAt !== cursor.updatedAt) return updatedAt < cursor.updatedAt
+  if (!cursor.sessionId) return false
+  return session.sessionId < cursor.sessionId
+}
+
+function sessionUpdatedAt(session: SessionInfo) {
+  return new Date(session.updatedAt ?? 0).getTime()
 }
 
 function decodeSubagentParams(params: Record<string, unknown>) {

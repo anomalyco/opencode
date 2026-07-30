@@ -76,7 +76,7 @@ describe("ACP agent connection", () => {
     const snapshotStarted = Promise.withResolvers<void>()
     const releaseSnapshot = Promise.withResolvers<void>()
     await using harness = makeHarness({
-      holdFirstList: {
+      holdFirstRootRead: {
         started: snapshotStarted,
         release: releaseSnapshot.promise,
       },
@@ -120,7 +120,7 @@ describe("ACP agent connection", () => {
 })
 
 function makeHarness(options?: {
-  holdFirstList?: {
+  holdFirstRootRead?: {
     started: PromiseWithResolvers<void>
     release: Promise<void>
   }
@@ -131,6 +131,7 @@ function makeHarness(options?: {
   const writer = input.writable.getWriter()
   const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
   let listReads = 0
+  let getReads = 0
   let listFailure = false
   let inputClosed = false
   const sdk = {
@@ -144,11 +145,19 @@ function makeHarness(options?: {
       list: async () => {
         listReads += 1
         if (listFailure) throw new Error("list failed")
-        if (listReads === 1 && options?.holdFirstList) {
-          options.holdFirstList.started.resolve()
-          await options.holdFirstList.release
+        if (listReads === 1 && options?.holdFirstRootRead) {
+          options.holdFirstRootRead.started.resolve()
+          await options.holdFirstRootRead.release
         }
         return { data: [root] }
+      },
+      get: async () => {
+        getReads += 1
+        if (getReads === 1 && options?.holdFirstRootRead) {
+          options.holdFirstRootRead.started.resolve()
+          await options.holdFirstRootRead.release
+        }
+        return { data: root }
       },
       children: () => Promise.resolve({ data: [] }),
       status: () => Promise.resolve({ data: { root: { type: "idle" as const } } }),

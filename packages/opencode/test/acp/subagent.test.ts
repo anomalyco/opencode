@@ -285,6 +285,99 @@ describe("acp subagent snapshots", () => {
     ])
   })
 
+  test("reads roots beyond the SDK default page for filtered and unfiltered snapshots", async () => {
+    const sessions = Array.from({ length: 102 }, (_, index) =>
+      session({
+        id: `root-${index + 1}`,
+        directory: `/workspace/root-${index + 1}`,
+        created: index + 1,
+        updated: index + 1,
+      }),
+    )
+    let listReads = 0
+    let getReads = 0
+    const service = Subagent.make({
+      sdk: sdk({
+        sessions,
+        status: Object.fromEntries(sessions.map((item) => [item.id, { type: "idle" }])),
+        onList: () => listReads++,
+        onGet: () => getReads++,
+      }),
+    })
+
+    const all = await service.list({})
+    const filtered = await service.list({ rootSessionId: "root-102" })
+
+    expect(all.nodes).toHaveLength(102)
+    expect(all.nodes.at(-1)?.sessionId).toBe("root-102")
+    expect(filtered.nodes.map((node) => node.sessionId)).toEqual(["root-102"])
+    expect(listReads).toBe(1)
+    expect(getReads).toBe(1)
+  })
+
+  test("makes every graph read fail fast instead of accepting SDK error envelopes", async () => {
+    const root = session({
+      id: "root",
+      directory: "/workspace/root",
+      created: 1,
+      updated: 1,
+    })
+    const reads: Array<[string, boolean | undefined]> = []
+    const service = Subagent.make({
+      sdk: {
+        session: {
+          list: async (_params: unknown, options?: { throwOnError?: boolean }) => {
+            reads.push(["list", options?.throwOnError])
+            return { data: [root] }
+          },
+          get: async (_params: unknown, options?: { throwOnError?: boolean }) => {
+            reads.push(["get", options?.throwOnError])
+            return { data: root }
+          },
+          children: async (_params: unknown, options?: { throwOnError?: boolean }) => {
+            reads.push(["children", options?.throwOnError])
+            return { data: [] }
+          },
+          status: async (_params: unknown, options?: { throwOnError?: boolean }) => {
+            reads.push(["status", options?.throwOnError])
+            return { data: {} }
+          },
+        },
+      } as unknown as Pick<OpencodeClient, "session">,
+    })
+
+    await service.list({})
+    await service.list({ rootSessionId: "root" })
+
+    expect(reads).toEqual([
+      ["list", true],
+      ["status", true],
+      ["children", true],
+      ["get", true],
+      ["status", true],
+      ["children", true],
+    ])
+  })
+
+  test("treats retained sessions omitted from the active status map as completed", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const child = session({
+      id: "child",
+      parentID: "root",
+      directory: "/workspace/child",
+      created: 2,
+      updated: 2,
+    })
+    const service = Subagent.make({ sdk: sdk({ sessions: [root, child], status: {} }) })
+
+    const snapshot = await service.list({})
+
+    expect(snapshot.nodes.map((node) => [node.sessionId, node.phase])).toEqual([
+      ["root", "completed"],
+      ["child", "completed"],
+    ])
+  })
+
   test("rejects a ninth descendant while reading the SDK graph", async () => {
     const service = Subagent.make({ sdk: chainSDK(9) })
 
@@ -396,7 +489,7 @@ describe("acp subagent subscriptions", () => {
             parentSessionId: "root",
             agent: "build",
             title: "child",
-            phase: "unknown",
+            phase: "completed",
             createdAt: "1970-01-01T00:00:00.002Z",
             updatedAt: "1970-01-01T00:00:00.002Z",
             cwd: "/workspace/child",
@@ -408,6 +501,213 @@ describe("acp subagent subscriptions", () => {
 
     service.close()
     harness.close()
+  })
+
+  test("does not lose an event delivered as the initial reconciliation worker finishes", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const child = session({
+      id: "child",
+      parentID: "root",
+      directory: "/workspace/child",
+      created: 2,
+      updated: 2,
+    })
+    const sessions = [root]
+    const harness = await subscriptionHarness({
+      sessions,
+      status: { root: { type: "idle" } },
+    })
+    const notified = Promise.withResolvers<Subagent.Update>()
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        notified.resolve(update)
+      },
+    })
+
+    const snapshot = await service.subscribe({})
+    sessions.push(child)
+    await service.handle(sessionChanged("session.created", child))
+    const update = await within(notified.promise, "post-subscribe child update was lost")
+
+    expect(update.revision).toBe(snapshot.revision + 1)
+    expect(update.upsert.map((node) => node.sessionId)).toEqual(["child"])
+
+    service.close()
+    harness.close()
+  })
+
+  test("returns from event capture while reconciliation notification is backpressured", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const harness = await subscriptionHarness({
+      sessions: [root],
+      status: { root: { type: "idle" } },
+    })
+    const notifyStarted = Promise.withResolvers<void>()
+    const releaseNotify = Promise.withResolvers<void>()
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async () => {
+        notifyStarted.resolve()
+        await releaseNotify.promise
+      },
+    })
+    await service.subscribe({})
+    await Promise.resolve()
+    await Promise.resolve()
+
+    let captured = false
+    const handling = service.handle(sessionStatus("root", { type: "busy" })).then(() => {
+      captured = true
+    })
+    await notifyStarted.promise
+
+    try {
+      expect(captured).toBe(true)
+    } finally {
+      releaseNotify.resolve()
+      await handling
+      service.close()
+      harness.close()
+    }
+  })
+
+  test("refreshes a live-created child's direct cost from cost mutation events", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const child = session({
+      id: "child",
+      parentID: "root",
+      directory: "/workspace/child",
+      cost: 0,
+      created: 2,
+      updated: 2,
+    })
+    const sessions = [root]
+    const harness = await subscriptionHarness({
+      sessions,
+      status: { root: { type: "idle" } },
+    })
+    const updates: Subagent.Update[] = []
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+      },
+    })
+    await service.subscribe({})
+    await Promise.resolve()
+    await Promise.resolve()
+
+    sessions.push(child)
+    await harness.send(sessionChanged("session.created", child))
+    await eventually(() => updates.length === 1, "live child creation was not projected")
+    sessions[1] = { ...child, cost: 0.35 }
+    await harness.send(sessionStepFinished("child", 0.35))
+    await eventually(() => updates.length === 2, "step cost was not projected")
+
+    expect(updates[1]?.upsert.find((node) => node.sessionId === "child")?.directCost).toEqual({
+      amount: "0.35",
+      currency: "USD",
+    })
+
+    service.close()
+    harness.close()
+  })
+
+  test("removes a direct cost without dropping the live graph and omits a later invalid cost", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const child = session({
+      id: "child",
+      parentID: "root",
+      directory: "/workspace/child",
+      cost: 0.35,
+      created: 2,
+      updated: 2,
+    })
+    const sessions = [root, child]
+    const harness = await subscriptionHarness({
+      sessions,
+      status: { root: { type: "idle" }, child: { type: "idle" } },
+    })
+    const updates: Subagent.Update[] = []
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+      },
+    })
+    await service.subscribe({})
+    await Promise.resolve()
+    await Promise.resolve()
+
+    sessions[1] = { ...child, cost: undefined }
+    await harness.send(sessionPartRemoved("child"))
+    await eventually(() => updates.length === 1, "removed cost was not projected")
+    expect(updates[0]?.upsert.find((node) => node.sessionId === "child")?.directCost).toBeUndefined()
+    expect(updates[0]?.removedSessionIds).toEqual([])
+
+    sessions[1] = { ...child, cost: 0.5 }
+    await harness.send(sessionStepFinished("child", 0.5))
+    await eventually(() => updates.length === 2, "replacement cost was not projected")
+    sessions[1] = { ...child, cost: Number.POSITIVE_INFINITY }
+    await harness.send(sessionMessageRemoved("child"))
+    await eventually(() => updates.length === 3, "invalid replacement cost was not omitted")
+
+    expect(updates[2]?.upsert.find((node) => node.sessionId === "child")?.directCost).toBeUndefined()
+    expect(updates[2]?.removedSessionIds).toEqual([])
+
+    service.close()
+    harness.close()
+  })
+
+  test("removes a filtered root graph without fetching the deleted root", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const child = session({
+      id: "child",
+      parentID: "root",
+      directory: "/workspace/child",
+      created: 2,
+      updated: 2,
+    })
+    let getReads = 0
+    const harness = await subscriptionHarness({
+      sessions: [root, child],
+      status: { root: { type: "idle" }, child: { type: "idle" } },
+      get: async (session) => {
+        getReads += 1
+        if (getReads === 1) return session
+        throw new Error("deleted root is no longer readable")
+      },
+    })
+    const notified = Promise.withResolvers<Subagent.Update>()
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        notified.resolve(update)
+      },
+    })
+    const snapshot = await service.subscribe({ rootSessionId: "root" })
+
+    try {
+      await service.handle(sessionChanged("session.deleted", root))
+      const update = await within(notified.promise, "filtered root deletion was not projected")
+
+      expect(update).toEqual({
+        generation: snapshot.generation,
+        revision: 1,
+        upsert: [],
+        removedSessionIds: ["root", "child"],
+      })
+      expect(getReads).toBe(1)
+    } finally {
+      service.close()
+      harness.close()
+    }
   })
 
   test("projects session changes as bounded successor updates for only the affected root", async () => {
@@ -436,14 +736,19 @@ describe("acp subagent subscriptions", () => {
 
     const updated = { ...child, title: "renamed child", time: { ...child.time, updated: 4 } }
     await harness.send(sessionChanged("session.updated", updated))
+    await eventually(() => updates.length === 1, "session update was not projected")
 
     await harness.send(sessionStatus("child", { type: "busy" }))
+    await eventually(() => updates.length === 2, "busy status was not projected")
 
     await harness.send(sessionIdle("child"))
+    await eventually(() => updates.length === 3, "idle status was not projected")
 
     await harness.send(sessionError("child"))
+    await eventually(() => updates.length === 4, "session error was not projected")
 
     await harness.send(sessionChanged("session.deleted", updated))
+    await eventually(() => updates.length === 5, "session deletion was not projected")
 
     expect(updates.map((update) => update.revision)).toEqual([1, 2, 3, 4, 5])
     expect(updates.every((update) => update.generation === snapshot.generation)).toBe(true)
@@ -503,7 +808,9 @@ describe("acp subagent subscriptions", () => {
     }
 
     await harness.send(sessionChanged("session.updated", moved))
+    await eventually(() => updates.length === 1, "cross-root move was not projected")
     await harness.send(sessionStatus("child", { type: "busy" }))
+    await eventually(() => updates.length === 2, "moved child status was not projected")
 
     expect(updates.map((update) => update.revision)).toEqual([1, 2])
     expect(updates[0]).toEqual({
@@ -538,6 +845,321 @@ describe("acp subagent subscriptions", () => {
     harness.close()
   })
 
+  test("uses one immutable event boundary across every root in a move update", async () => {
+    const rootA = session({ id: "root-a", directory: "/workspace/root-a", created: 1, updated: 1 })
+    const rootB = session({ id: "root-b", directory: "/workspace/root-b", created: 2, updated: 2 })
+    const rootC = session({ id: "root-c", directory: "/workspace/root-c", created: 3, updated: 3 })
+    const child = session({
+      id: "child",
+      parentID: "root-a",
+      directory: "/workspace/child",
+      created: 4,
+      updated: 4,
+    })
+    const firstRootRead = Promise.withResolvers<void>()
+    const releaseFirstRootRead = Promise.withResolvers<void>()
+    let held = false
+    const harness = await subscriptionHarness({
+      sessions: [rootA, rootB, rootC, child],
+      status: {
+        "root-a": { type: "idle" },
+        "root-b": { type: "idle" },
+        "root-c": { type: "idle" },
+        child: { type: "idle" },
+      },
+      get: async (current) => {
+        if (current?.id !== "root-a" || held) return current
+        held = true
+        firstRootRead.resolve()
+        await releaseFirstRootRead.promise
+        return current
+      },
+    })
+    const updates: Subagent.Update[] = []
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+      },
+    })
+    await service.subscribe({})
+    const movedToB = { ...child, parentID: "root-b", time: { ...child.time, updated: 5 } }
+    const movedToC = { ...child, parentID: "root-c", time: { ...child.time, updated: 6 } }
+
+    try {
+      await service.handle(sessionChanged("session.updated", movedToB))
+      await firstRootRead.promise
+      await service.handle(sessionChanged("session.updated", movedToC))
+      releaseFirstRootRead.resolve()
+      await eventually(() => updates.length === 2, "successive cross-root moves were not projected")
+
+      expect(updates[0]?.upsert).toMatchObject([{ sessionId: "child", rootSessionId: "root-b" }])
+      expect(updates[0]?.removedSessionIds).toEqual([])
+      expect(updates[1]?.upsert).toMatchObject([{ sessionId: "child", rootSessionId: "root-c" }])
+      expect(updates[1]?.removedSessionIds).toEqual([])
+    } finally {
+      releaseFirstRootRead.resolve()
+      service.close()
+      harness.close()
+    }
+  })
+
+  test("coalesces a pending root update with a connected cross-root move", async () => {
+    const gate = session({ id: "gate", directory: "/workspace/gate", created: 1, updated: 1 })
+    const rootA = session({ id: "root-a", directory: "/workspace/root-a", created: 2, updated: 2 })
+    const rootB = session({ id: "root-b", directory: "/workspace/root-b", created: 3, updated: 3 })
+    const child = session({
+      id: "child",
+      parentID: "root-a",
+      directory: "/workspace/child",
+      created: 4,
+      updated: 4,
+    })
+    const harness = await subscriptionHarness({
+      sessions: [gate, rootA, rootB, child],
+      status: {
+        gate: { type: "idle" },
+        "root-a": { type: "idle" },
+        "root-b": { type: "idle" },
+        child: { type: "idle" },
+      },
+    })
+    const updates: Subagent.Update[] = []
+    const firstNotify = Promise.withResolvers<void>()
+    const releaseFirstNotify = Promise.withResolvers<void>()
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+        if (updates.length !== 1) return
+        firstNotify.resolve()
+        await releaseFirstNotify.promise
+      },
+    })
+    await service.subscribe({})
+    const moved = { ...child, parentID: "root-b", time: { ...child.time, updated: 5 } }
+
+    try {
+      await service.handle(sessionStatus("gate", { type: "busy" }))
+      await firstNotify.promise
+      await service.handle(sessionStatus("root-a", { type: "busy" }))
+      await service.handle(sessionChanged("session.updated", moved))
+      releaseFirstNotify.resolve()
+      await eventually(
+        () => updates.some((update) => update.upsert.some((node) => node.sessionId === "child")),
+        "connected cross-root move was not projected",
+      )
+
+      expect(updates).toHaveLength(2)
+      expect(updates[1]?.upsert).toContainEqual(
+        expect.objectContaining({
+          sessionId: "root-a",
+          rootSessionId: "root-a",
+          phase: "running",
+        }),
+      )
+      expect(updates[1]?.upsert).toContainEqual(
+        expect.objectContaining({
+          sessionId: "child",
+          rootSessionId: "root-b",
+          parentSessionId: "root-b",
+        }),
+      )
+      expect(updates[1]?.removedSessionIds).toEqual([])
+      expect(updates.some((update) => update.removedSessionIds.includes("child"))).toBe(false)
+    } finally {
+      releaseFirstNotify.resolve()
+      service.close()
+      harness.close()
+    }
+  })
+
+  test("bounds a coalesced backlog to one affected root per successor update", async () => {
+    const roots = ["root-a", "root-b", "root-c"].map((id, index) =>
+      session({
+        id,
+        directory: `/workspace/${id}`,
+        created: index + 1,
+        updated: index + 1,
+      }),
+    )
+    const harness = await subscriptionHarness({
+      sessions: roots,
+      status: Object.fromEntries(roots.map((item) => [item.id, { type: "idle" }])),
+    })
+    const updates: Subagent.Update[] = []
+    const firstNotify = Promise.withResolvers<void>()
+    const releaseFirstNotify = Promise.withResolvers<void>()
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+        if (updates.length !== 1) return
+        firstNotify.resolve()
+        await releaseFirstNotify.promise
+      },
+    })
+    await service.subscribe({})
+
+    await service.handle(sessionStatus("root-a", { type: "busy" }))
+    await firstNotify.promise
+    await service.handle(sessionStatus("root-b", { type: "busy" }))
+    await service.handle(sessionStatus("root-c", { type: "busy" }))
+    releaseFirstNotify.resolve()
+    await eventually(() => updates.length === 3, "coalesced roots were not emitted as bounded successor updates")
+
+    expect(updates.map((update) => update.upsert.map((node) => node.sessionId))).toEqual([
+      ["root-a"],
+      ["root-b"],
+      ["root-c"],
+    ])
+
+    service.close()
+    harness.close()
+  })
+
+  test("coalesces a same-root backlog into one graph read", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const first = session({
+      id: "child-a",
+      parentID: "root",
+      directory: "/workspace/child-a",
+      created: 2,
+      updated: 2,
+    })
+    const second = session({
+      id: "child-b",
+      parentID: "root",
+      directory: "/workspace/child-b",
+      created: 3,
+      updated: 3,
+    })
+    let listReads = 0
+    let getReads = 0
+    const harness = await subscriptionHarness({
+      sessions: [root, first, second],
+      status: { root: { type: "idle" }, "child-a": { type: "idle" }, "child-b": { type: "idle" } },
+      list: async (roots) => {
+        listReads += 1
+        return roots
+      },
+      get: async (session) => {
+        getReads += 1
+        return session
+      },
+    })
+    const updates: Subagent.Update[] = []
+    const firstNotify = Promise.withResolvers<void>()
+    const releaseFirstNotify = Promise.withResolvers<void>()
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+        if (updates.length !== 1) return
+        firstNotify.resolve()
+        await releaseFirstNotify.promise
+      },
+    })
+    await service.subscribe({})
+
+    await service.handle(sessionStatus("root", { type: "busy" }))
+    await firstNotify.promise
+    await service.handle(sessionStatus("child-a", { type: "busy" }))
+    await service.handle(sessionStatus("child-b", { type: "busy" }))
+    releaseFirstNotify.resolve()
+    await eventually(() => updates.length === 2, "same-root backlog was not projected")
+    await Bun.sleep(10)
+
+    expect(updates[1]?.upsert.map((node) => node.sessionId)).toEqual(["child-a", "child-b"])
+    expect(listReads).toBe(1)
+    expect(getReads).toBe(2)
+
+    service.close()
+    harness.close()
+  })
+
+  test("preserves pending changes across a fallible reconciliation read", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const failedRead = Promise.withResolvers<void>()
+    let failNextRead = false
+    const harness = await subscriptionHarness({
+      sessions: [root],
+      status: { root: { type: "idle" } },
+      get: async (session) => {
+        if (!failNextRead) return session
+        failNextRead = false
+        failedRead.resolve()
+        throw new Error("transient list failure")
+      },
+    })
+    const updates: Subagent.Update[] = []
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+      },
+    })
+    await service.subscribe({})
+    failNextRead = true
+
+    await service.handle(sessionStatus("root", { type: "busy" }))
+    await failedRead.promise
+    await eventually(() => updates.length === 1, "pending status was lost after a transient read failure")
+
+    expect(updates[0]?.upsert).toMatchObject([{ sessionId: "root", phase: "running" }])
+
+    service.close()
+    harness.close()
+  })
+
+  test("keeps new events behind an already scheduled reconciliation backoff", async () => {
+    const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
+    const failedRead = Promise.withResolvers<void>()
+    let getReads = 0
+    const harness = await subscriptionHarness({
+      sessions: [root],
+      status: { root: { type: "idle" } },
+      get: async (current) => {
+        getReads += 1
+        if (getReads !== 1) return current
+        failedRead.resolve()
+        throw new Error("transient root read failure")
+      },
+    })
+    const updates: Subagent.Update[] = []
+    const service = Subagent.make({
+      sdk: harness.sdk,
+      events: harness.events,
+      notify: async (update) => {
+        updates.push(update)
+      },
+    })
+    await service.subscribe({})
+
+    try {
+      await service.handle(sessionStatus("root", { type: "busy" }))
+      await failedRead.promise
+      await Bun.sleep(0)
+      expect(getReads).toBe(1)
+
+      const captured = service.handle(sessionStatus("root", { type: "busy" }))
+      expect(getReads).toBe(1)
+      await captured
+      await eventually(() => updates.length === 1, "backed-off reconciliation never retried")
+
+      expect(getReads).toBe(2)
+      expect(updates[0]?.upsert).toMatchObject([{ sessionId: "root", phase: "running" }])
+    } finally {
+      service.close()
+      harness.close()
+    }
+  })
+
   test("does not reuse a revision after notification failure", async () => {
     const root = session({ id: "root", directory: "/workspace/root", created: 1, updated: 1 })
     const harness = await subscriptionHarness({ sessions: [root], status: { root: { type: "idle" } } })
@@ -553,7 +1175,9 @@ describe("acp subagent subscriptions", () => {
     await service.subscribe({})
 
     await harness.send(sessionStatus("root", { type: "busy" }))
+    await eventually(() => revisions.length === 1, "failed notification revision was not reserved")
     await harness.send(sessionIdle("root"))
+    await eventually(() => revisions.length === 2, "successor notification was not attempted")
 
     expect(revisions).toEqual([1, 2])
 
@@ -625,6 +1249,7 @@ describe("acp subagent subscriptions", () => {
     await harness.send(sessionChanged("session.created", detached))
     const snapshot = await service.subscribe({})
     await harness.send(sessionStatus("root", { type: "busy" }))
+    await eventually(() => updates.length === 1, "retry subscription status was not projected")
 
     expect(snapshot.nodes.map((node) => node.sessionId)).toEqual(["root"])
     expect(updates).toEqual([
@@ -728,11 +1353,24 @@ function descendantSDK(count: number) {
   return sdk({ sessions, status: Object.fromEntries(sessions.map((item) => [item.id, { type: "idle" }])) })
 }
 
-function sdk(input: { sessions: Session[]; status: Record<string, SessionStatus>; onStatus?: () => void }) {
+function sdk(input: {
+  sessions: Session[]
+  status: Record<string, SessionStatus>
+  onList?: () => void
+  onGet?: () => void
+  onStatus?: () => void
+}) {
   return {
     session: {
-      list: (params?: { roots?: boolean }) =>
-        Promise.resolve({ data: params?.roots ? input.sessions.filter((item) => !item.parentID) : input.sessions }),
+      list: (params?: { roots?: boolean; limit?: number }) => {
+        input.onList?.()
+        const sessions = params?.roots ? input.sessions.filter((item) => !item.parentID) : input.sessions
+        return Promise.resolve({ data: sessions.slice(0, params?.limit ?? 100) })
+      },
+      get: ({ sessionID }: { sessionID: string }) => {
+        input.onGet?.()
+        return Promise.resolve({ data: input.sessions.find((item) => item.id === sessionID) })
+      },
       children: ({ sessionID }: { sessionID: string }) =>
         Promise.resolve({ data: input.sessions.filter((item) => item.parentID === sessionID) }),
       status: () => {
@@ -780,6 +1418,7 @@ async function subscriptionHarness(input: {
   status: Record<string, SessionStatus>
   blockChildren?: { rootSessionId: string; started: PromiseWithResolvers<void>; release: Promise<void> }
   list?: (roots: Session[]) => Promise<Session[]>
+  get?: (session: Session | undefined) => Promise<Session | undefined>
 }) {
   const queue: EventEnvelope[] = []
   const waiters: Array<(value: EventEnvelope | undefined) => void> = []
@@ -811,6 +1450,10 @@ async function subscriptionHarness(input: {
       list: async (params?: { roots?: boolean }) => {
         const sessions = params?.roots ? input.sessions.filter((item) => !item.parentID) : input.sessions
         return { data: input.list ? await input.list(sessions) : sessions }
+      },
+      get: async ({ sessionID }: { sessionID: string }) => {
+        const session = input.sessions.find((item) => item.id === sessionID)
+        return { data: input.get ? await input.get(session) : session }
       },
       children: async ({ sessionID }: { sessionID: string }) => {
         const data = input.sessions.filter((item) => item.parentID === sessionID)
@@ -892,5 +1535,71 @@ function sessionIdle(sessionID: string): Event {
     id: `event-idle-${sessionID}`,
     type: "session.idle",
     properties: { sessionID },
+  }
+}
+
+function sessionStepFinished(sessionID: string, cost: number): Event {
+  return {
+    id: `event-step-finished-${sessionID}`,
+    type: "message.part.updated",
+    properties: {
+      sessionID,
+      time: Date.now(),
+      part: {
+        id: `part-${sessionID}`,
+        sessionID,
+        messageID: `message-${sessionID}`,
+        type: "step-finish",
+        reason: "stop",
+        cost,
+        tokens: {
+          input: 1,
+          output: 1,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      },
+    },
+  }
+}
+
+function sessionPartRemoved(sessionID: string): Event {
+  return {
+    id: `event-part-removed-${sessionID}`,
+    type: "message.part.removed",
+    properties: {
+      sessionID,
+      messageID: `message-${sessionID}`,
+      partID: `part-${sessionID}`,
+    },
+  }
+}
+
+function sessionMessageRemoved(sessionID: string): Event {
+  return {
+    id: `event-message-removed-${sessionID}`,
+    type: "message.removed",
+    properties: {
+      sessionID,
+      messageID: `message-${sessionID}`,
+    },
+  }
+}
+
+async function within<T>(promise: Promise<T>, message: string) {
+  const timeout = Promise.withResolvers<never>()
+  const timer = setTimeout(() => timeout.reject(new Error(message)), 250)
+  try {
+    return await Promise.race([promise, timeout.promise])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function eventually(check: () => boolean, message: string) {
+  const started = performance.now()
+  while (!check()) {
+    if (performance.now() - started > 250) throw new Error(message)
+    await Bun.sleep(1)
   }
 }
