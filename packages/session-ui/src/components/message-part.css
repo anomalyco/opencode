@@ -891,7 +891,7 @@
       width: 16px;
       height: 2px;
       border-radius: 999px;
-      background-color: var(--icon-weak-base);
+      background-color: var(--v2-icon-icon-muted);
       transition: background-color 0.2s ease;
     }
 

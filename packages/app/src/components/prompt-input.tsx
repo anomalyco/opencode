@@ -591,7 +591,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "resource",
         name: resource.name,
         uri: resource.uri,
-        client: resource.client,
+        client: resource.server,
         display: resource.name,
         description: resource.description,
         mime: resource.mimeType,
@@ -709,7 +709,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       title: cmd.name,
       description: cmd.description,
       type: "custom" as const,
-      source: cmd.source,
+      // source: cmd.source,
     }))
 
     return [...custom, ...builtin]
@@ -1460,10 +1460,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <DockShellForm
+        data-dock-border-underlay="legacy"
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
-          "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1723,29 +1723,31 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         >
                           <ModelSelectorPopover
                             model={props.controls.model.selection}
-                            triggerAs={Button}
-                            triggerProps={{
-                              variant: "ghost",
-                              size: "normal",
-                              style: control(),
-                              class: "min-w-0 max-w-[320px] text-13-regular text-text-base group",
-                              "data-action": "prompt-model",
-                            }}
+                            trigger={(triggerProps) => (
+                              <Button
+                                {...triggerProps}
+                                variant="ghost"
+                                size="normal"
+                                style={control()}
+                                class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
+                                data-action="prompt-model"
+                              >
+                                <Show when={props.controls.model.selection.current()?.provider?.id}>
+                                  <ProviderIcon
+                                    id={props.controls.model.selection.current()?.provider?.id ?? ""}
+                                    class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                                    style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                                  />
+                                </Show>
+                                <span class="truncate">
+                                  {props.controls.model.selection.current()?.name ??
+                                    language.t("dialog.model.select.title")}
+                                </span>
+                                <Icon name="chevron-down" size="small" class="shrink-0" />
+                              </Button>
+                            )}
                             onClose={restoreFocus}
-                          >
-                            <Show when={props.controls.model.selection.current()?.provider?.id}>
-                              <ProviderIcon
-                                id={props.controls.model.selection.current()?.provider?.id ?? ""}
-                                class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                                style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                              />
-                            </Show>
-                            <span class="truncate">
-                              {props.controls.model.selection.current()?.name ??
-                                language.t("dialog.model.select.title")}
-                            </span>
-                            <Icon name="chevron-down" size="small" class="shrink-0" />
-                          </ModelSelectorPopover>
+                          />
                         </TooltipKeybind>
                       </Show>
                     </div>

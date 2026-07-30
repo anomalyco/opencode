@@ -160,21 +160,18 @@ async function fixKnownLockfileIssues() {
   if (stale.length === 0) return []
   if (stale.some((item) => !item.entry.startsWith("opentui-spinner/@opentui/"))) return []
 
-  const lines = txt.split("\n")
-  const spinnerEntry = /^    "(opentui-spinner\/@opentui\/[^"]+)": \[.*\],\r?$/
-  const removed = lines
-    .map((line) => line.match(spinnerEntry)?.[1])
+  const removed = txt
+    .split("\n")
+    .map((line) => line.match(/^    "(opentui-spinner\/@opentui\/[^\"]+)": /)?.[1])
     .filter((item): item is string => item !== undefined)
 
   if (removed.length === 0) return []
 
-  // Bun separates package records with a blank line, so remove each record's separator with it.
   await Bun.write(
     lockfile,
-    lines
-      .filter(
-        (line, index) => !spinnerEntry.test(line) && !(line.trim() === "" && spinnerEntry.test(lines[index - 1] ?? "")),
-      )
+    txt
+      .split("\n")
+      .filter((line) => !line.match(/^    "opentui-spinner\/@opentui\//))
       .join("\n"),
   )
   return removed
