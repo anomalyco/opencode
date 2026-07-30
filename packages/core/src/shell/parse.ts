@@ -272,7 +272,7 @@ function prefix(tokens: string[]) {
 
 function resolve(asset: string) {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
-  if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
+  if (path.isAbsolute(asset)) return asset
   return fileURLToPath(new URL(asset, import.meta.url))
 }
 
