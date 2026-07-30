@@ -18,6 +18,8 @@ export const builtins = [
   SidebarFooter,
   Notifications,
   Plugins,
-  Storybook,
+  // The storybook is a development tool; keep its route and palette commands out of
+  // normal launches and register it only for OPENCODE_STORY runs.
+  ...(process.env.OPENCODE_STORY ? [Storybook] : []),
   DiffViewer,
 ]

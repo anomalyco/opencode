@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { Effect, FileSystem } from "effect"
+import { Effect, FileSystem, Layer } from "effect"
 import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -265,6 +265,33 @@ describe("FSUtil", () => {
         expect(result).toContain(path.join(child, "a.txt"))
         expect(result).toContain(path.join(tmp, "a.txt"))
         expect(result).toContain(path.join(tmp, "b.txt"))
+      }),
+    )
+
+    it(
+      "stops at the first match when requested",
+      Effect.gen(function* () {
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        yield* filesys.writeFileString(path.join(tmp, "marker"), "root")
+        const child = path.join(tmp, "sub")
+        yield* filesys.makeDirectory(child)
+        yield* filesys.writeFileString(path.join(child, "marker"), "child")
+        const checked: string[] = []
+        const instrumented = FileSystem.FileSystem.of({
+          ...filesys,
+          exists: (target) => Effect.sync(() => checked.push(target)).pipe(Effect.andThen(filesys.exists(target))),
+        })
+        const search = yield* FSUtil.Service.pipe(
+          Effect.provide(
+            FSUtil.layer.pipe(Layer.fresh, Layer.provide(Layer.succeed(FileSystem.FileSystem, instrumented))),
+          ),
+        )
+
+        expect(yield* search.up({ targets: ["marker", "other"], start: child, mode: "first" })).toEqual([
+          path.join(child, "marker"),
+        ])
+        expect(checked).toEqual([path.join(child, "marker")])
       }),
     )
   })

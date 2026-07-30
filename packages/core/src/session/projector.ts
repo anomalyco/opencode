@@ -657,6 +657,12 @@ const layer = Layer.effectDiscard(
           input: event.data.input,
           timeCreated: event.created,
         })
+        yield* db
+          .update(SessionTable)
+          .set({ time_updated: DateTime.toEpochMillis(event.created) })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
       }),
     )
     yield* bus.project(SessionEvent.Compaction.Admitted, (event) =>

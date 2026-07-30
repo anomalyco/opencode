@@ -4,6 +4,7 @@ import { extend } from "@opentui/solid"
 type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
   enabled?: boolean
   active?: boolean
+  promptPulse?: number
   complete?: boolean
   glow?: boolean
   breathe?: boolean
@@ -28,6 +29,7 @@ const COMPLETION_OPACITY = 0.18
 const EDGE_FLASH_DURATION = 800
 const EDGE_FLASH_ATTACK = 0.1
 const EDGE_FLASH_OPACITY = 0.1
+const PROMPT_FLASH_SCALE = 2
 const GLOW_IGNITION_DURATION = 600
 const GLOW_IGNITION_PEAK = 1.5
 const GLOW_IGNITION_ATTACK = 0.3
@@ -102,6 +104,11 @@ class Envelope {
     this.scale = scale
   }
 
+  restart(scale = 1) {
+    this.clock = 0
+    this.scale = scale
+  }
+
   stop() {
     this.clock = undefined
   }
@@ -127,6 +134,7 @@ const envelopeActive = (envelope: Envelope) => envelope.active
 class TabPulseRenderable extends Renderable {
   private _enabled: boolean
   private _active: boolean
+  private _promptPulse: number
   private _complete: boolean
   private _glow: boolean
   private _breathe: boolean
@@ -154,6 +162,7 @@ class TabPulseRenderable extends Renderable {
     super(ctx, { ...options, height: 1, live: enabled && active })
     this._enabled = enabled
     this._active = active
+    this._promptPulse = options.promptPulse ?? 0
     this._complete = options.complete ?? false
     this._glow = options.glow ?? false
     this._breathe = options.breathe ?? false
@@ -218,6 +227,15 @@ class TabPulseRenderable extends Renderable {
     }
     // The same neutral edge flash marks both the start and the finish of a run.
     this.edgeFlash.start()
+    this.live = true
+    this.requestRender()
+  }
+
+  set promptPulse(value: number) {
+    if (value === this._promptPulse) return
+    this._promptPulse = value
+    if (!this._enabled) return
+    this.edgeFlash.restart(PROMPT_FLASH_SCALE)
     this.live = true
     this.requestRender()
   }
@@ -368,6 +386,7 @@ extend({ tab_pulse: TabPulseRenderable })
 export function TabPulse(props: {
   enabled?: boolean
   active: boolean
+  promptPulse?: number
   complete?: boolean
   glow?: boolean
   breathe?: boolean
@@ -385,6 +404,7 @@ export function TabPulse(props: {
       width="100%"
       enabled={props.enabled ?? true}
       active={props.active}
+      promptPulse={props.promptPulse ?? 0}
       complete={props.complete ?? false}
       glow={props.glow ?? false}
       breathe={props.breathe ?? false}

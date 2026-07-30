@@ -1089,6 +1089,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         list(location?: LocationRef) {
           return Object.values(store.location[locationKey(location ?? defaultLocation())]?.shell ?? {})
         },
+        listBySession(sessionID: string) {
+          return Object.values(store.location)
+            .flatMap((data) => Object.values(data.shell ?? {}))
+            .filter((shell) => shell.metadata.sessionID === sessionID)
+        },
         get(id: string) {
           return Object.values(store.location)
             .map((data) => data.shell?.[id])

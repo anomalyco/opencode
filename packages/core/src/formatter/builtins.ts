@@ -18,7 +18,6 @@ export function make(input: {
   readonly fs: FSUtil.Interface
   readonly npm: Npm.Interface
   readonly processes: AppProcess.Interface
-  readonly experimentalOxfmt?: boolean
 }) {
   const disabled = false as const
   const findUp = (target: string) => input.fs.findUp(target, input.directory, input.worktree)

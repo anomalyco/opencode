@@ -201,7 +201,7 @@ const layer = Layer.effect(
       locks.withLock(repository.gitDirectory)(effect)
 
     const discover = Effect.fn("Git.repo.discover")(function* (input: AbsolutePath) {
-      const dotgit = yield* fs.up({ targets: [".git"], start: input }).pipe(
+      const dotgit = yield* fs.up({ targets: [".git"], start: input, mode: "first" }).pipe(
         Effect.map((matches) => matches[0]),
         Effect.catch(() => Effect.succeed(undefined)),
       )

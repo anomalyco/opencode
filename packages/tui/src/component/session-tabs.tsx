@@ -6,9 +6,11 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useTheme, useThemes } from "../context/theme"
 import {
   adaptiveSessionTabLayout,
+  NEW_SESSION_TAB_TITLE,
   sessionTabComplete,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
+  type SessionTab,
   type SessionTabUnread,
 } from "../context/session-tabs-model"
 import { createAnimatable, spring, tween } from "../ui/animation"
@@ -24,9 +26,18 @@ type ContextController = ReturnType<typeof useSessionTabs>
 export type SessionTabsStatus = Omit<ReturnType<ContextController["status"]>, "unread"> & {
   unread: SessionTabUnread | undefined
 }
+export const EMPTY_SESSION_TAB_STATUS: SessionTabsStatus = {
+  unread: undefined,
+  promptPulse: 0,
+  attention: false,
+  busy: false,
+}
 export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close" | "move"> & {
+  newTab?: () => boolean
   status(sessionID: string): SessionTabsStatus
 }
+
+const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
 
 export function SessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
   const tabs = props.controller ?? useSessionTabs()
@@ -42,8 +53,9 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
   const accent = () => theme.hue.accent[hueStep()]
   const activeNumber = () => theme.hue.interactive[hueStep()]
   const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
-  const activeID = createMemo(tabs.current)
-  const items = tabs.tabs
+  const newTab = () => tabs.newTab?.() ?? false
+  const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
+  const items = createMemo(() => (newTab() ? [...tabs.tabs(), NEW_SESSION_TAB] : tabs.tabs()))
   const layout = createMemo((previous: ReturnType<typeof adaptiveSessionTabLayout> | undefined) =>
     adaptiveSessionTabLayout(items(), activeID(), dimensions().width, previous?.start),
   )
@@ -51,7 +63,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
     () =>
       new Map(
         layout().tabs.map((tab) => {
-          const status = tabs.status(tab.sessionID)
+          const status = tab === NEW_SESSION_TAB ? EMPTY_SESSION_TAB_STATUS : tabs.status(tab.sessionID)
           return [
             tab.sessionID,
             {
@@ -198,6 +210,11 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
           createEffect((previous: string) => {
             const next = title()
             if (next === previous) return next
+            if (previous === NEW_SESSION_TAB_TITLE) {
+              setOutgoingTitle(undefined)
+              wipe.jump({ front: 1 })
+              return next
+            }
             setOutgoingTitle(previous)
             wipe.jump({ front: 0 })
             wipe.animate({ front: 1 })
@@ -262,6 +279,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
           // keeping sloppy clicks indistinguishable from clean ones.
           const release = () => {
             setDragging(undefined)
+            if (tab === NEW_SESSION_TAB) return
             tabs.select(tab.sessionID)
           }
           return (
@@ -275,6 +293,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
               onMouseDown={() => setDragging(tab.sessionID)}
               onMouseUp={release}
               onMouseDrag={(event) => {
+                if (tab === NEW_SESSION_TAB) return
                 const slot = slotAt(event.x)
                 if (slot !== undefined && slot !== tabNumber() - 1) tabs.move(tab.sessionID, slot)
               }}
@@ -283,6 +302,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
               <TabPulse
                 enabled={animations()}
                 active={status().busy && !status().attention}
+                promptPulse={status().promptPulse}
                 complete={status().complete && !status().attention}
                 glow={glows()}
                 breathe={status().attention}
@@ -322,7 +342,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
                   selectable={false}
                   onMouseUp={(event) => {
                     event.stopPropagation()
-                    tabs.close(tab.sessionID)
+                    tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
                   }}
                 >
                   {hovered() === tab.sessionID ? "×" : ""}

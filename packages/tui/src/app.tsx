@@ -105,6 +105,7 @@ const sessionTabBindingCommands = [
   "session.tab.next_unread",
   "session.tab.previous_unread",
   "session.tab.close",
+  "session.tab.reopen",
   "session.tab.select.1",
   "session.tab.select.2",
   "session.tab.select.3",
@@ -668,7 +669,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       })),
       {
         name: "session.tab.next",
-        title: "Next open session tab",
+        title: "Next tab",
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
@@ -676,7 +677,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.tab.previous",
-        title: "Previous open session tab",
+        title: "Previous tab",
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
@@ -684,7 +685,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.tab.history.back",
-        title: "Back in session tab history",
+        title: "Back in tab history",
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
@@ -692,7 +693,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.tab.history.forward",
-        title: "Forward in session tab history",
+        title: "Forward in tab history",
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
@@ -700,7 +701,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.tab.next_unread",
-        title: "Next unread session tab",
+        title: "Next unread tab",
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
@@ -708,7 +709,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.tab.previous_unread",
-        title: "Previous unread session tab",
+        title: "Previous unread tab",
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
@@ -716,14 +717,21 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.tab.close",
-        title: "Close current session tab",
+        title: "Close tab",
         category: "Session",
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.close(),
       },
+      {
+        name: "session.tab.reopen",
+        title: "Reopen closed tab",
+        category: "Session",
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.reopen(),
+      },
       ...Array.from({ length: 9 }, (_, i) => ({
         name: `session.tab.select.${i + 1}`,
-        title: `Switch to session tab ${i + 1}`,
+        title: `Switch to tab ${i + 1}`,
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
@@ -1219,7 +1227,13 @@ function App(props: { pair?: DialogPairCredentials }) {
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
-              <Show when={sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"}>
+              <Show
+                when={
+                  sessionTabs.enabled() &&
+                  (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) &&
+                  route.data.type !== "plugin"
+                }
+              >
                 <SessionTabs />
               </Show>
               <Switch>

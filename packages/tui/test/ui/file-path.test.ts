@@ -14,6 +14,11 @@ describe("truncateFilePath", () => {
     expect(truncateFilePath(path, 19)).toBe("…/dialog-select.tsx")
   })
 
+  test("uses remaining width for part of a long parent segment", () => {
+    const path = "/private/var/folders/run-17f048ec-dbb2-4b36-860c-98637bb51a8d/files"
+    expect(truncateFilePath(path, 40)).toBe("/…/run-17f048ec-dbb2-4b36-860c-98…/files")
+  })
+
   test("preserves the extension when the basename must shrink", () => {
     expect(truncateFilePath(path, 16)).toBe("…/dialog-se….tsx")
     expect(truncateFilePath("dialog-select.tsx", 12)).toBe("dialog-….tsx")

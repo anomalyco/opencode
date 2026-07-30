@@ -182,7 +182,8 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  if (Provider.isAISDK(resolved.package)) {
+  const native = Provider.isAISDK(resolved.package) ? nativePackage(packageName) : resolved.package
+  if (Provider.isAISDK(resolved.package) && !native) {
     if (!dependencies?.loadAISDK) return Effect.fail(unsupported(resolved))
     const runtime = produce(resolved, (draft) => {
       draft.settings = Provider.mergeOverlay(draft.settings, {
@@ -193,20 +194,22 @@ export const fromCatalogModel = (
     })
     return dependencies.loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
   }
-  if (!resolved.package) return Effect.fail(unsupported(resolved))
+  if (!native) return Effect.fail(unsupported(resolved))
 
-  const specifier = resolved.package
+  const specifier = native
   return Effect.gen(function* () {
     const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
       Effect.mapError(() => unsupported(resolved)),
     )
     const configured = { ...resolved.settings, ...credential?.metadata }
+    const providerOptions = nativeProviderOptions(packageName, configured)
     const settings = {
       ...(credential ? withoutNativeAuthSettings(configured) : configured),
       ...nativeCredentialSettings(specifier, credential),
       headers: resolved.headers,
       body: resolved.body,
       limits: { context: resolved.limit.context, output: resolved.limit.output },
+      ...(providerOptions ? { providerOptions } : {}),
     }
     return yield* Effect.try({
       try: () => {
@@ -221,6 +224,26 @@ export const fromCatalogModel = (
       catch: () => unsupported(resolved),
     })
   })
+}
+
+const nativePackage = (packageName: string | undefined) => {
+  if (packageName === "@ai-sdk/google") return "@opencode-ai/ai/providers/google"
+  if (packageName === "@openrouter/ai-sdk-provider") return "@opencode-ai/ai/providers/openrouter"
+  if (packageName === "@ai-sdk/xai") return "@opencode-ai/ai/providers/xai"
+  return undefined
+}
+
+const nativeProviderOptions = (packageName: string | undefined, settings: Readonly<Record<string, unknown>>) => {
+  const values = Object.fromEntries(
+    Object.entries(settings).filter(
+      ([key]) => !["apiKey", "authToken", "baseURL", "chunkTimeout", "fetch", "timeout"].includes(key),
+    ),
+  )
+  if (Object.keys(values).length === 0) return undefined
+  if (packageName === "@ai-sdk/google") return { gemini: values }
+  if (packageName === "@openrouter/ai-sdk-provider") return { openrouter: values }
+  if (packageName === "@ai-sdk/xai") return { xai: values }
+  return undefined
 }
 
 const isNativeOpenAI = (packageName: string | undefined) =>

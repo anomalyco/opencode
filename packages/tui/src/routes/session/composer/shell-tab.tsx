@@ -16,9 +16,7 @@ export function ShellTab(props: { sessionID: string }) {
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
-  const entries = createMemo(() =>
-    data.shell.list().filter((shell) => shell.metadata.sessionID === props.sessionID && shell.status === "running"),
-  )
+  const entries = createMemo(() => data.shell.listBySession(props.sessionID).filter((shell) => shell.status === "running"))
 
   const [store, setStore] = createStore({ selected: 0 })
   let scroll: ScrollBoxRenderable | undefined

@@ -546,6 +546,76 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("routes supported AISDK catalog packages through native provider packages", () =>
+    Effect.gen(function* () {
+      const native = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai")))
+      const packages = [
+        ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "gemini"],
+        ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "openrouter"],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", "xai"],
+      ] as const
+
+      yield* Effect.forEach(packages, ([catalogPackage, nativePackage, optionKey]) =>
+        ModelResolver.fromCatalogModel(
+          model(Provider.aisdk(catalogPackage), {
+            modelID: "api-model",
+            settings: { baseURL: "https://provider.example/v1", reasoningEffort: "high" },
+            headers: { "x-provider": "header" },
+            body: { custom: true },
+          }),
+          Credential.Key.make({ type: "key", key: "secret" }),
+          {
+            loadPackage: (specifier) => {
+              expect(specifier).toBe(nativePackage)
+              return Effect.succeed({
+                model: (modelID, settings) => {
+                  expect(modelID).toBe("api-model")
+                  expect(settings).toMatchObject({
+                    apiKey: "secret",
+                    baseURL: "https://provider.example/v1",
+                    headers: { "x-provider": "header" },
+                    body: { custom: true },
+                    limits: { context: 100, output: 20 },
+                    providerOptions: { [optionKey]: { reasoningEffort: "high" } },
+                  })
+                  return Model.make({ id: modelID, provider: "native-provider", route: native.route })
+                },
+              })
+            },
+            loadAISDK: () => Effect.die("AI SDK loader should not be called"),
+          },
+        ),
+      )
+    }),
+  )
+
+  it.effect("loads supported AISDK catalog packages as native routes", () =>
+    Effect.gen(function* () {
+      const google = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/google"), { settings: { thinkingConfig: { thinkingBudget: 1_024 } } }),
+      )
+      const openrouter = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@openrouter/ai-sdk-provider"), {
+          settings: { reasoning: { effort: "high" } },
+        }),
+      )
+      const xai = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/xai"), { settings: { reasoningEffort: "high" } }),
+      )
+
+      expect(google.route.id).toBe("gemini")
+      expect(google.route.defaults.providerOptions).toEqual({
+        gemini: { thinkingConfig: { thinkingBudget: 1_024 } },
+      })
+      expect(openrouter.route.id).toBe("openrouter")
+      expect(openrouter.route.defaults.providerOptions).toEqual({ openrouter: { reasoning: { effort: "high" } } })
+      expect(xai.route.id).toBe("openai-responses")
+      expect(xai.route.defaults.providerOptions).toEqual({
+        xai: { reasoningEffort: "high", store: false },
+      })
+    }),
+  )
+
   it.effect("loads arbitrary AISDK packages through the injected AISDK loader", () =>
     Effect.gen(function* () {
       const native = yield* ModelResolver.fromCatalogModel(
@@ -554,8 +624,8 @@ describe("ModelResolver", () => {
         }),
       )
       const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/google"), {
-          modelID: "gemini-api-model",
+        model(Provider.aisdk("@ai-sdk/mistral"), {
+          modelID: "mistral-api-model",
           settings: { project: "test" },
           headers: { "x-aisdk": "header" },
           body: { custom: true },
@@ -566,9 +636,9 @@ describe("ModelResolver", () => {
             Effect.sync(() => {
               expect(runtime).toMatchObject({
                 id: "test-model",
-                modelID: "gemini-api-model",
+                modelID: "mistral-api-model",
                 providerID: "test-provider",
-                package: Provider.aisdk("@ai-sdk/google"),
+                package: Provider.aisdk("@ai-sdk/mistral"),
                 settings: { project: "test", apiKey: "fallback-secret" },
                 headers: { "x-aisdk": "header" },
                 body: { custom: true },
@@ -582,15 +652,15 @@ describe("ModelResolver", () => {
         },
       )
 
-      expect(resolved).toMatchObject({ id: "gemini-api-model", provider: "test-provider" })
+      expect(resolved).toMatchObject({ id: "mistral-api-model", provider: "test-provider" })
     }),
   )
 
   it.effect("rejects AISDK packages without an available loader", () =>
     Effect.gen(function* () {
       const failure = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/google"), {
-          settings: { baseURL: "https://google.example/v1" },
+        model(Provider.aisdk("@ai-sdk/mistral"), {
+          settings: { baseURL: "https://mistral.example/v1" },
         }),
       ).pipe(Effect.flip)
 
@@ -598,9 +668,9 @@ describe("ModelResolver", () => {
         _tag: "SessionRunnerModel.UnsupportedPackageError",
         providerID: "test-provider",
         modelID: "test-model",
-        package: "aisdk:@ai-sdk/google",
+        package: "aisdk:@ai-sdk/mistral",
       })
-      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/google")
+      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/mistral")
     }),
   )
 
@@ -612,8 +682,8 @@ describe("ModelResolver", () => {
         }),
       )
       yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/google"), {
-          settings: { apiKey: "", baseURL: "https://google.example/v1" },
+        model(Provider.aisdk("@ai-sdk/mistral"), {
+          settings: { apiKey: "", baseURL: "https://mistral.example/v1" },
         }),
         undefined,
         {

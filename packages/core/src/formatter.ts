@@ -54,9 +54,6 @@ const layer = Layer.effect(
         })
         formatters = builtIns
         if (configured === true) return
-        if (configured.ruff?.disabled || configured.uv?.disabled) {
-          formatters = formatters.filter((formatter) => formatter.name !== "ruff" && formatter.name !== "uv")
-        }
 
         for (const [name, entry] of Object.entries(configured)) {
           const index = formatters.findIndex((formatter) => formatter.name === name)

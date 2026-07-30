@@ -106,8 +106,10 @@ test("opens the subagent picker with down", () => {
 test("navigates session tabs with leader arrows", () => {
   const config = resolve({}, { terminalSuspend: true })
 
-  expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,<leader>right" }])
-  expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,<leader>left" }])
+  expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,<leader>right,alt+shift+]" }])
+  expect(config.keybinds.get("session.tab.previous")).toMatchObject([
+    { key: "ctrl+shift+tab,<leader>left,alt+shift+[" },
+  ])
   expect(config.keybinds.get("session.tab.history.back")).toMatchObject([{ key: "ctrl+o" }])
   expect(config.keybinds.get("session.tab.history.forward")).toMatchObject([{ key: "ctrl+i" }])
   expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "<leader>down" }])
