@@ -55,7 +55,7 @@ test("resolves host-neutral defaults", () => {
   expect(config.leader_timeout).toBe(LeaderTimeoutDefault)
   expect(config.mouse).toBe(true)
   expect(config.keybinds.has("terminal.suspend")).toBe(true)
-  expect(config.keybinds.has("session.list")).toBe(true)
+  expect(config.keybinds.get("session.list")).toMatchObject([{ key: "ctrl+l,<leader>l" }])
 })
 
 test("resolves overrides without mutating input", () => {
