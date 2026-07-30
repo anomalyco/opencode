@@ -632,6 +632,8 @@ export const dict = {
   "home.sessions.group.today": "Сьогодні",
   "home.sessions.group.yesterday": "Учора",
   "home.sessions.group.older": "Раніше",
+  "home.sessions.noProjectToCreate": "Open a project first",
+  "home.sessions.noProjectToCreate.description": "You need to open a project before creating a new session.",
   "home.providerTip":
     "Підключіться до понад 75 провайдерів, щоб використовувати інші моделі, зокрема Claude, GPT, Gemini та інші",
 

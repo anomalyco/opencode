@@ -1049,6 +1049,8 @@ export const dict = {
   "home.sessions.group.today": "I dag",
   "home.sessions.group.yesterday": "I går",
   "home.sessions.group.older": "Eldre",
+  "home.sessions.noProjectToCreate": "Open a project first",
+  "home.sessions.noProjectToCreate.description": "You need to open a project before creating a new session.",
   "home.providerTip":
     "Koble til over 75 leverandører for å bruke andre modeller, inkludert Claude, GPT, Gemini og flere",
 

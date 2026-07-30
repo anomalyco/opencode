@@ -25,6 +25,14 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     port: 3000,
+    proxy: {
+      "/api": "http://127.0.0.1:4096",
+      "/event": { target: "ws://127.0.0.1:4096", ws: true },
+      "/global/event": { target: "ws://127.0.0.1:4096", ws: true },
+      "/global/health": "http://127.0.0.1:4096",
+      "/path": "http://127.0.0.1:4096",
+      "/session": "http://127.0.0.1:4096",
+    },
   },
   build: {
     target: "esnext",

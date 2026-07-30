@@ -563,6 +563,8 @@ export const dict = {
   "home.sessions.group.today": "Aujourd'hui",
   "home.sessions.group.yesterday": "Hier",
   "home.sessions.group.older": "Plus anciennes",
+  "home.sessions.noProjectToCreate": "Open a project first",
+  "home.sessions.noProjectToCreate.description": "You need to open a project before creating a new session.",
   "home.providerTip":
     "Connectez-vous à plus de 75 fournisseurs pour utiliser d’autres modèles, notamment Claude, GPT, Gemini, etc.",
   "session.tab.session": "Session",

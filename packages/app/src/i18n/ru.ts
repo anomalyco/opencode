@@ -610,6 +610,8 @@ export const dict = {
   "home.sessions.group.today": "Сегодня",
   "home.sessions.group.yesterday": "Вчера",
   "home.sessions.group.older": "Ранее",
+  "home.sessions.noProjectToCreate": "Open a project first",
+  "home.sessions.noProjectToCreate.description": "You need to open a project before creating a new session.",
   "home.providerTip":
     "Подключитесь к более чем 75 провайдерам, чтобы использовать другие модели, включая Claude, GPT, Gemini и другие",
 

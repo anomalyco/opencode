@@ -566,6 +566,8 @@ export const dict = {
   "home.sessions.group.today": "Heute",
   "home.sessions.group.yesterday": "Gestern",
   "home.sessions.group.older": "Älter",
+  "home.sessions.noProjectToCreate": "Open a project first",
+  "home.sessions.noProjectToCreate.description": "You need to open a project before creating a new session.",
   "home.providerTip":
     "Verbinde dich mit über 75 Anbietern, um weitere Modelle wie Claude, GPT, Gemini und andere zu nutzen",
   "session.tab.session": "Sitzung",

@@ -605,6 +605,8 @@ export const dict = {
   "home.sessions.group.today": "วันนี้",
   "home.sessions.group.yesterday": "เมื่อวาน",
   "home.sessions.group.older": "ก่อนหน้านี้",
+  "home.sessions.noProjectToCreate": "Open a project first",
+  "home.sessions.noProjectToCreate.description": "You need to open a project before creating a new session.",
   "home.providerTip": "เชื่อมต่อกับผู้ให้บริการกว่า 75 รายเพื่อใช้โมเดลอื่นๆ รวมถึง Claude, GPT, Gemini และอีกมากมาย",
 
   "session.tab.session": "เซสชัน",

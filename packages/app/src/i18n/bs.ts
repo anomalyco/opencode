@@ -609,6 +609,8 @@ export const dict = {
   "home.sessions.group.today": "Danas",
   "home.sessions.group.yesterday": "Jučer",
   "home.sessions.group.older": "Starije",
+  "home.sessions.noProjectToCreate": "Open a project first",
+  "home.sessions.noProjectToCreate.description": "You need to open a project before creating a new session.",
   "home.providerTip":
     "Povežite se s više od 75 pružalaca usluga kako biste koristili druge modele, uključujući Claude, GPT, Gemini i druge",
 

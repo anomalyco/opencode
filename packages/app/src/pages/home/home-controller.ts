@@ -1,9 +1,11 @@
 import { useGlobal } from "@/context/global"
+import { useLanguage } from "@/context/language"
 import { type HomeProjectSelection, useLayout } from "@/context/layout"
 import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useTabs } from "@/context/tabs"
 import { toggleHomeProjectSelection } from "@/pages/layout/helpers"
+import { showToast } from "@/utils/toast"
 import { createEffect, createMemo } from "solid-js"
 
 export function createHomeController() {
@@ -34,6 +36,8 @@ export function createHomeController() {
       projects().find((project) => project.worktree === focusedServerCtx()?.projects.last()) ??
       projects()[0],
   )
+
+  const language = useLanguage()
 
   createEffect(() => {
     const list = global.servers.list()
@@ -96,9 +100,21 @@ export function createHomeController() {
       },
       openNewSession: () => {
         const conn = focusedServer()
+        if (!conn) return
         const project = newSessionProject()
-        if (!conn || !project) return
-        openProjectNewSession(conn, project.worktree)
+        if (project) {
+          openProjectNewSession(conn, project.worktree)
+          return
+        }
+        const fallbackDir = focusedSync().data.path.directory
+        if (fallbackDir) {
+          openProjectNewSession(conn, fallbackDir)
+          return
+        }
+        showToast({
+          title: language.t("home.sessions.noProjectToCreate"),
+          description: language.t("home.sessions.noProjectToCreate.description"),
+        })
       },
       openProjectNewSession,
     },

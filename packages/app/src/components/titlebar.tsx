@@ -29,6 +29,7 @@ import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 import { normalizeSessionInfo } from "@/utils/session"
+import { showToast } from "@/utils/toast"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -368,7 +369,13 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
-              if (!fallback) return
+              if (!fallback) {
+                showToast({
+                  title: language.t("home.sessions.noProjectToCreate"),
+                  description: language.t("home.sessions.noProjectToCreate.description"),
+                })
+                return
+              }
 
               tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
             }
