@@ -1,6 +1,7 @@
 import type { Model, ProviderOptions } from "./schema"
 
 export interface Settings extends Readonly<Record<string, unknown>> {
+  readonly baseURL?: string
   readonly headers?: Readonly<Record<string, string>>
   readonly body?: Readonly<Record<string, unknown>>
   readonly limits?: {

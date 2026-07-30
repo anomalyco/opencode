@@ -6,13 +6,14 @@ export interface Mapping {
 }
 
 export function map(packageName: string | undefined, settings: Readonly<Record<string, unknown>>): Mapping | undefined {
-  const sharedSettings = mapSharedSettings(settings)
+  const baseSettings = mapBaseSettings(settings)
   switch (packageName) {
     case "@ai-sdk/google":
       return {
         package: "@opencode-ai/ai/providers/google",
         settings: {
-          ...sharedSettings,
+          ...baseSettings,
+          ...mapAPIKey(settings),
           ...mapProviderOptions("gemini", settings),
         },
       }
@@ -20,7 +21,8 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
       return {
         package: "@opencode-ai/ai/providers/openrouter",
         settings: {
-          ...sharedSettings,
+          ...baseSettings,
+          ...mapAPIKey(settings),
           ...mapProviderOptions("openrouter", settings),
         },
       }
@@ -28,18 +30,22 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
       return {
         package: "@opencode-ai/ai/providers/xai",
         settings: {
-          ...sharedSettings,
+          ...baseSettings,
+          ...mapAPIKey(settings),
           ...mapProviderOptions("xai", settings),
         },
       }
   }
 }
 
-function mapSharedSettings(settings: Readonly<Record<string, unknown>>) {
+function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
   return {
-    ...(typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}),
     ...(typeof settings.baseURL === "string" ? { baseURL: settings.baseURL } : {}),
   }
+}
+
+function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
+  return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
 }
 
 function mapProviderOptions(namespace: string, settings: Readonly<Record<string, unknown>>) {
