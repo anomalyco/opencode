@@ -50,6 +50,6 @@ describe("ShellParse", () => {
     const powershell = await Effect.runPromise(
       ShellParse.scan('Set-Location "$PWD/src"; Set-Location $PSHOME', "/usr/local/bin/pwsh", "/workspace"),
     )
-    expect(powershell.directories).toEqual([path.join("/workspace", "src"), "/usr/local/bin"])
+    expect(powershell.directories).toEqual(["/workspace/src", "/usr/local/bin"])
   })
 })

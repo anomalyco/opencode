@@ -223,8 +223,10 @@ describe("ShellTool", () => {
               type: "text",
               text: expect.stringContaining("Command exited with code 0."),
             })
-            expect(assertions).toMatchObject([{ sessionID, action: "shell", resources: [helloCommand] }])
-            expect(assertions[0]?.save).toEqual(["printf *"])
+            expect(assertions).toMatchObject([
+              { sessionID, action: "shell", resources: [isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand] },
+            ])
+            expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
           }),
         )
       },
@@ -536,7 +538,7 @@ describe("ShellTool", () => {
       (tmp) => {
           reset()
           return withSession(tmp.path, (registry) =>
-            executeTool(registry, call({ command: timeoutOutputCommand, timeout: 50 })),
+            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 500 : 50 })),
           ).pipe(
             Effect.andThen((settled) =>
               Effect.sync(() => {
