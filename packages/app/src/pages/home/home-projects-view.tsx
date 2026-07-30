@@ -360,25 +360,26 @@ function HomeProjectSlot(
     index: () => number
   },
 ) {
-  const project = createMemo(() => props.items.find((item) => item.worktree === props.worktree))
+  const initial = props.items.find((item) => item.worktree === props.worktree)
+  if (!initial) return
+  const project = createMemo<LocalProject>(
+    (previous) => props.items.find((item) => item.worktree === props.worktree) ?? previous,
+    initial,
+  )
 
   return (
-    <Show when={project()}>
-      {(item) => (
-        <HomeProjectRow
-          {...props}
-          project={item()}
-          server={props.server}
-          index={props.index}
-          serverSelected={props.selection().server === ServerConnection.key(props.server)}
-          selected={
-            props.selection().server === ServerConnection.key(props.server) &&
-            props.selection().directory === props.worktree
-          }
-          unseen={props.unseenCount(props.server, item())}
-        />
-      )}
-    </Show>
+    <HomeProjectRow
+      {...props}
+      project={project()}
+      server={props.server}
+      index={props.index}
+      serverSelected={props.selection().server === ServerConnection.key(props.server)}
+      selected={
+        props.selection().server === ServerConnection.key(props.server) &&
+        props.selection().directory === props.worktree
+      }
+      unseen={props.unseenCount(props.server, project())}
+    />
   )
 }
 
@@ -481,7 +482,6 @@ function HomeProjectRow(
         class="pr-16 disabled:opacity-60"
         classList={{
           "bg-v2-background-bg-layer-01 text-v2-text-text-base": sortable.isDragSource(),
-          "[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]": sortable.isDragSource(),
         }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
@@ -589,9 +589,9 @@ function HomeProjectNavButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
       class={`
         flex h-7 min-w-0 w-full shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-1.5 text-left
         text-v2-text-text-muted [font-weight:440] transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-        hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base hover:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]
+        hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base
         data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base
-        data-[selected]:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:hover:bg-v2-background-bg-layer-03
+        data-[selected]:hover:bg-v2-background-bg-layer-03
         focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none
         focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]
         ${local.class ?? ""}
