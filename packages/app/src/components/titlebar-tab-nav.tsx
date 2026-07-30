@@ -143,7 +143,7 @@ export function TabNavItem(props: {
     if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
     const session = props.session()
     if (!session) return
-    titleEl.textContent = session.title
+    titleEl.textContent = session.title ?? ""
     setEditing(true)
 
     requestAnimationFrame(() => {

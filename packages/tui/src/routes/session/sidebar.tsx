@@ -3,6 +3,7 @@ import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
 import { PluginSlot } from "../../plugin/context"
+import { sessionTitle } from "../../util/session"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -38,7 +39,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
               <text fg={theme.text.default}>
-                <b>{session()!.title}</b>
+                <b>{sessionTitle(session()!)}</b>
               </text>
               <Show when={session()!.location.workspaceID}>
                 <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>

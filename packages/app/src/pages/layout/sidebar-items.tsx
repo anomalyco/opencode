@@ -104,7 +104,7 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
 }): JSX.Element => {
-  const title = () => sessionTitle(props.session.title)
+  const title = () => sessionTitle(props.session.title, props.session.parentID)
 
   return (
     <A
@@ -229,7 +229,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               fallback={
                 <Tooltip
                   placement={props.mobile ? "bottom" : "right"}
-                  value={sessionTitle(props.session.title)}
+                  value={sessionTitle(props.session.title, props.session.parentID)}
                   gutter={10}
                   class="min-w-0 w-full"
                 >

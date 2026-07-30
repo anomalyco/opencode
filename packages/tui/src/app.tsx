@@ -523,7 +523,7 @@ function App(props: { pair?: DialogPairCredentials }) {
     renderer.useMouse = config.data.mouse
   })
 
-  let active: { id: string; title: string } | undefined
+  let active: { id: string; title?: string } | undefined
   // Update terminal window title based on current route and session
   createEffect(() => {
     const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
@@ -536,13 +536,13 @@ function App(props: { pair?: DialogPairCredentials }) {
     }
 
     if (route.data.type === "session") {
-      if (!session || isDefaultTitle(session.title)) {
+      const title = session?.title
+      if (!title || isDefaultTitle(title)) {
         renderer.setTerminalTitle("OpenCode")
         return
       }
 
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
       return
     }
 

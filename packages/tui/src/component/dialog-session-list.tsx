@@ -18,6 +18,7 @@ import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
+import { sessionTitle } from "../util/session"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -77,7 +78,7 @@ export function DialogSessionList() {
           (session.projectID === current?.project.id && session.location.directory === current.directory),
       )
     if (!query) return sessions
-    return sessions.filter((session) => !session.parentID && session.title.toLowerCase().includes(query))
+    return sessions.filter((session) => !session.parentID && sessionTitle(session).toLowerCase().includes(query))
   })
   const sessions = createMemo(() => {
     const query = filter().trim()
@@ -139,7 +140,7 @@ export function DialogSessionList() {
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {
-        title: deleting ? `Press ${shortcuts.get("session.delete")} again to confirm` : session.title,
+        title: deleting ? `Press ${shortcuts.get("session.delete")} again to confirm` : sessionTitle(session),
         value: session.id,
         category,
         footer,

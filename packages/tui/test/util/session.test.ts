@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client"
-import { isDefaultTitle, lastAssistantWithUsage } from "../../src/util/session"
+import { isDefaultTitle, lastAssistantWithUsage, sessionTitle } from "../../src/util/session"
 
 const assistant = (id: string, input: number): SessionMessageInfo => ({
   id,
@@ -14,9 +14,19 @@ const assistant = (id: string, input: number): SessionMessageInfo => ({
 
 describe("util.session", () => {
   test("recognizes generated parent and child titles", () => {
+    expect(isDefaultTitle(undefined)).toBeTrue()
     expect(isDefaultTitle("New session - 2026-06-06T12:34:56.789Z")).toBeTrue()
     expect(isDefaultTitle("Child session - 2026-06-06T12:34:56.789Z")).toBeTrue()
     expect(isDefaultTitle("New session - custom")).toBeFalse()
+  })
+
+  test("derives display-only titles for untitled sessions", () => {
+    expect(sessionTitle({ title: undefined, time: { created: 0, updated: 0 } })).toBe(
+      "New session - 1970-01-01T00:00:00.000Z",
+    )
+    expect(sessionTitle({ title: undefined, parentID: "ses_parent", time: { created: 0, updated: 0 } })).toBe(
+      "Child session - 1970-01-01T00:00:00.000Z",
+    )
   })
 
   test("tracks usage across undo and redo boundaries", () => {
