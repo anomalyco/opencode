@@ -13,7 +13,6 @@ export function useSessionTabAvatarState(
   const global = useGlobal()
   const notification = useNotification()
   const permission = usePermission()
-  const permissionState = createMemo(() => permission.ensureServerState(server()))
   const connection = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === server()))
   const sync = createMemo(() => {
     const conn = connection()
@@ -22,9 +21,10 @@ export function useSessionTabAvatarState(
   const hasPermissions = createMemo(() => {
     const serverSync = sync()
     if (!serverSync) return false
+    const permissionState = permission.ensureServerState(server())
     const [store] = serverSync.child(directory(), { bootstrap: false })
     return !!sessionPermissionRequest(store.session, serverSync.session.data.permission, sessionId(), (item) => {
-      return !permissionState().autoResponds(item, directory())
+      return !permissionState.autoResponds(item, directory())
     })
   })
   const hasQuestions = createMemo(() => {
@@ -34,9 +34,11 @@ export function useSessionTabAvatarState(
     return !!sessionQuestionRequest(store.session, serverSync.session.data.question, sessionId())
   })
   const needsAttention = createMemo(() => hasPermissions() || hasQuestions())
-  const unread = createMemo(
-    () => needsAttention() || notification.ensureServerState(server()).session.unseenCount(sessionId()) > 0,
-  )
+  const notificationState = createMemo(() => {
+    if (!connection()) return
+    return notification.ensureServerState(server())
+  })
+  const unread = createMemo(() => needsAttention() || (notificationState()?.session.unseenCount(sessionId()) ?? 0) > 0)
   const loading = createMemo(() => {
     const serverSync = sync()
     if (!serverSync) return false
