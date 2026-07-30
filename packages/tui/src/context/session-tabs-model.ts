@@ -5,8 +5,6 @@ export type SessionTab = {
 
 export type SessionTabUnread = "activity" | "error"
 
-export const NEW_SESSION_TAB_ID = "new"
-
 export type SessionTabHistory = {
   entries: readonly string[]
   index: number

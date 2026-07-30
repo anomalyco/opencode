@@ -2,7 +2,11 @@ import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createSignal, For, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { SessionTabs, type SessionTabsController } from "../../../component/session-tabs"
+import {
+  EMPTY_SESSION_TAB_STATUS,
+  SessionTabs,
+  type SessionTabsController,
+} from "../../../component/session-tabs"
 import { moveSessionTab } from "../../../context/session-tabs-model"
 import type { Story } from "./index"
 
@@ -23,7 +27,6 @@ const FIXTURE_TABS = [
   { sessionID: "fixture-12", title: "Prepare review" },
 ]
 
-const EMPTY_STATUS: FixtureStatus = { unread: undefined, promptPulse: 0, attention: false, busy: false }
 const RUN_DURATION = 1_800
 const RESUME_DURATION = 900
 
@@ -66,7 +69,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     if (!resumed && roll < 0.25) {
       setStatuses((current) => ({
         ...current,
-        [sessionID]: { ...(current[sessionID] ?? EMPTY_STATUS), attention: true },
+        [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), attention: true },
       }))
       setLastEvent(`tab ${number(sessionID)} needs input; select it to resolve`)
       return
@@ -77,7 +80,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       setOutcomes((current) => ({ ...current, [sessionID]: failed ? "failed" : "completed" }))
       setStatuses((current) => ({
         ...current,
-        [sessionID]: { ...(current[sessionID] ?? EMPTY_STATUS), busy: false, unread },
+        [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), busy: false, unread },
       }))
       // An untitled session earns its title after its first completed run, like a real summarization.
       const index = number(sessionID) - 1
@@ -110,7 +113,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     tabs,
     current: active,
     status(sessionID) {
-      return statuses()[sessionID] ?? EMPTY_STATUS
+      return statuses()[sessionID] ?? EMPTY_SESSION_TAB_STATUS
     },
     select,
     move(sessionID: string, index: number) {
@@ -150,7 +153,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const startRun = (sessionID: string) => {
     setStatuses((current) => ({
       ...current,
-      [sessionID]: { ...(current[sessionID] ?? EMPTY_STATUS), busy: true, unread: undefined },
+      [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), busy: true, unread: undefined },
     }))
     setOutcomes((current) => {
       const next = { ...current }
@@ -223,7 +226,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
 
   const selectedState = () => {
     const current = active()
-    const status = current ? controller.status(current) : EMPTY_STATUS
+    const status = current ? controller.status(current) : EMPTY_SESSION_TAB_STATUS
     const activity = status.busy
       ? "running"
       : status.unread === "activity"
