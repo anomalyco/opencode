@@ -87,7 +87,7 @@ export const Definitions = {
   session_move: keybind("none", "Move session"),
   session_new: keybind("<leader>n", "Create a new session"),
   session_list: keybind("<leader>l", "List all sessions"),
-  open_menu: keybind("ctrl+o,<leader>o", "Open recent sessions and projects"),
+  open_menu: keybind("ctrl+o", "Open recent sessions and projects"),
   session_tab_next: keybind("ctrl+tab,<leader>right,alt+shift+]", "Switch to next open tab"),
   session_tab_previous: keybind("ctrl+shift+tab,<leader>left,alt+shift+[", "Switch to previous open tab"),
   session_tab_next_unread: keybind("<leader>down", "Switch to next unread tab"),
