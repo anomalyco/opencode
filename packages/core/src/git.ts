@@ -200,11 +200,19 @@ const layer = Layer.effect(
     const locked = <A, E, R>(repository: Repository, effect: Effect.Effect<A, E, R>) =>
       locks.withLock(repository.gitDirectory)(effect)
 
+    const findGitDirectory = Effect.fnUntraced(function* (input: AbsolutePath) {
+      let current: string = input
+      while (true) {
+        const dotgit = path.join(current, ".git")
+        if (yield* fs.exists(dotgit)) return dotgit
+        const parent = path.dirname(current)
+        if (parent === current) return undefined
+        current = parent
+      }
+    })
+
     const discover = Effect.fn("Git.repo.discover")(function* (input: AbsolutePath) {
-      const dotgit = yield* fs.up({ targets: [".git"], start: input }).pipe(
-        Effect.map((matches) => matches[0]),
-        Effect.catch(() => Effect.succeed(undefined)),
-      )
+      const dotgit = yield* findGitDirectory(input).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (!dotgit) return undefined
 
       const cwd = path.dirname(dotgit)
