@@ -45,28 +45,6 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("disables gpt-5-chat-latest during catalog transforms", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => {
-        const item = Provider.Info.make({
-          ...Provider.Info.empty(Provider.ID.openai),
-          package: Provider.aisdk("@ai-sdk/openai"),
-        })
-        catalog.provider.update(item.id, (draft) => {
-          draft.package = item.package
-        })
-        catalog.model.update(item.id, Model.ID.make("gpt-5"), () => {})
-        catalog.model.update(item.id, Model.ID.make("gpt-5-chat-latest"), () => {})
-      })
-      yield* addPlugin()
-      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(true)
-      expect(
-        required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5-chat-latest"))).enabled,
-      ).toBe(false)
-    }),
-  )
-
   it.effect("filters the OpenAI catalog to codex-eligible models under a ChatGPT connection", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -163,24 +141,4 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("does not disable gpt-5-chat-latest for non-OpenAI providers", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => {
-        const item = Provider.Info.make({
-          ...Provider.Info.empty(Provider.ID.make("custom-openai")),
-          package: Provider.aisdk("test-provider"),
-        })
-        catalog.provider.update(item.id, (draft) => {
-          draft.package = item.package
-        })
-        catalog.model.update(item.id, Model.ID.make("gpt-5-chat-latest"), () => {})
-      })
-      yield* addPlugin()
-      expect(
-        required(yield* catalog.model.get(Provider.ID.make("custom-openai"), Model.ID.make("gpt-5-chat-latest")))
-          .enabled,
-      ).toBe(true)
-    }),
-  )
 })

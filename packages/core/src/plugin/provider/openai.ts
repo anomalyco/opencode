@@ -192,12 +192,6 @@ export const OpenAIPlugin = define({
         evt.provider.update(item.provider.id, (provider) => {
           provider.package = "@opencode-ai/ai/providers/openai"
         })
-        if (!item.models.has(Model.ID.make("gpt-5-chat-latest"))) continue
-        evt.model.update(item.provider.id, Model.ID.make("gpt-5-chat-latest"), (model) => {
-          // OpenAIPlugin sends OpenAI models through Responses; this alias is a
-          // chat-completions-only model, so hide it only from OpenAI's catalog.
-          model.enabled = false
-        })
       }
       if (!chatgpt) return
       const item = evt.provider.get(Provider.ID.openai)
