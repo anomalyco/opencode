@@ -46,9 +46,11 @@ function makeSessionService() {
 function createHarness(
   requestPermission: (params: RequestPermissionRequest) => Promise<RequestPermissionResponse> = () =>
     Promise.resolve({ outcome: { outcome: "selected", optionId: "once" } }),
+  backingSessions: Readonly<Record<string, { id: string; parentID?: string; directory: string }>> = {},
 ) {
   const replies: PermissionReplyParams[] = []
   const requests: RequestPermissionRequest[] = []
+  const sessionGets: string[] = []
   const updates: SessionUpdateParams[] = []
   const session = makeSessionService()
   const sdk = {
@@ -59,6 +61,12 @@ function createHarness(
       },
     },
     session: {
+      get: (params: { sessionID: string }) => {
+        sessionGets.push(params.sessionID)
+        const found = backingSessions[params.sessionID]
+        if (!found) return Promise.reject(new Error("session not found"))
+        return Promise.resolve({ data: found })
+      },
       message: () => Promise.resolve({ data: undefined }),
     },
   } as unknown as OpencodeClient
@@ -74,7 +82,7 @@ function createHarness(
   } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate">
   const subscription = new ACPEvent.Subscription({ sdk, connection, session })
 
-  return { connection, replies, requests, sdk, session, subscription, updates }
+  return { connection, replies, requests, sdk, session, sessionGets, subscription, updates }
 }
 
 async function createSession(session: ACPSession.Interface, sessionId: string, cwd = "/workspace") {
@@ -181,6 +189,51 @@ describe("acp permissions", () => {
       ],
     })
     expect(harness.replies).toEqual([{ requestID: "perm_1", reply: "once", directory: "/workspace" }])
+  })
+
+  it("projects an unloaded recursive child permission through its attached root", async () => {
+    const harness = createHarness(undefined, {
+      ses_child: {
+        id: "ses_child",
+        parentID: "ses_parent",
+        directory: "/workspace/child",
+      },
+      ses_parent: {
+        id: "ses_parent",
+        parentID: "ses_root",
+        directory: "/workspace/parent",
+      },
+      ses_root: {
+        id: "ses_root",
+        directory: "/workspace",
+      },
+    })
+    await createSession(harness.session, "ses_root")
+
+    harness.subscription.handle(
+      permissionAsked("ses_child", "perm_child", {
+        tool: { messageID: "msg_child", callID: "call_child" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "child permission was never projected")
+
+    expect(harness.sessionGets).toEqual(["ses_child", "ses_parent", "ses_root"])
+    expect(harness.requests).toHaveLength(1)
+    expect(harness.requests[0]).toMatchObject({
+      sessionId: "ses_child",
+      toolCall: {
+        toolCallId: "call_child",
+        status: "pending",
+      },
+    })
+    expect(harness.replies).toEqual([
+      {
+        requestID: "perm_child",
+        reply: "once",
+        directory: "/workspace/child",
+      },
+    ])
   })
 
   it("uses permission metadata for non-shell titles", async () => {

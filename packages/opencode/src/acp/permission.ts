@@ -16,6 +16,12 @@ import { Effect } from "effect"
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type Reply = "once" | "always" | "reject"
 type Connection = Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+type PermissionSession = {
+  readonly id: string
+  readonly cwd: string
+}
+
+const maximumPermissionAncestryDepth = 256
 
 const permissionOptions: PermissionOption[] = [
   { optionId: "once", kind: "allow_once", name: "Allow once" },
@@ -50,7 +56,7 @@ export class Handler {
 
   private async process(event: PermissionEvent) {
     const permission = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(permission.sessionID))
+    const session = await this.resolvePermissionSession(permission.sessionID)
     if (!session) return
 
     if (!this.input.connection.requestPermission) {
@@ -86,6 +92,42 @@ export class Handler {
     }
 
     await this.reply(permission.id, reply, session.cwd)
+  }
+
+  /**
+   * Resolves the session whose permission is being answered without letting one
+   * ACP connection claim work owned by another root.
+   *
+   * Sessions explicitly new/loaded on this connection retain the ordinary ACP
+   * behavior. OpenCode Task descendants are different: they can ask permission
+   * before the client has loaded their transcript, while their canonical root is
+   * already attached. In that case, walk the persisted OpenCode ancestry and
+   * admit the source only when this ACP session store owns the final root.
+   */
+  private async resolvePermissionSession(sessionID: string): Promise<PermissionSession | undefined> {
+    const attached = await Effect.runPromise(this.input.session.tryGet(sessionID))
+    if (attached) return attached
+
+    const source = (await this.input.sdk.session.get({ sessionID }, { throwOnError: true })).data
+    if (!source.directory.trim()) return
+
+    const visited = new Set<string>()
+    let cursor = source
+    for (let depth = 0; depth < maximumPermissionAncestryDepth; depth++) {
+      if (visited.has(cursor.id)) return
+      visited.add(cursor.id)
+
+      if (!cursor.parentID) {
+        const root = await Effect.runPromise(this.input.session.tryGet(cursor.id))
+        if (!root) return
+        return {
+          id: source.id,
+          cwd: source.directory,
+        }
+      }
+
+      cursor = (await this.input.sdk.session.get({ sessionID: cursor.parentID }, { throwOnError: true })).data
+    }
   }
 
   private async reply(requestID: string, reply: Reply, directory: string) {

@@ -19,6 +19,13 @@ type Notification<T = unknown> = {
   readonly params?: T
 }
 
+type Request<T = unknown> = {
+  readonly jsonrpc: "2.0"
+  readonly id: number | string
+  readonly method: string
+  readonly params?: T
+}
+
 describe("opencode acp subagent extension subprocess", () => {
   cliIt.live(
     "lists, subscribes, updates, and loads a child transcript over ndjson",
@@ -113,7 +120,191 @@ describe("opencode acp subagent extension subprocess", () => {
       }),
     60_000,
   )
+
+  cliIt.live(
+    "loads a running child on its root connection and keeps permissions and transcript live",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const handle = yield* opencode.acp({
+          env: {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              ...verifierConfig(llm.url),
+              permission: {
+                task: "allow",
+                bash: "ask",
+              },
+            }),
+          },
+        })
+        const acp = createAcpClient(handle)
+        yield* initialize(acp)
+        const root = yield* newSession(acp, home)
+
+        yield* llm.tool("task", {
+          description: "inspect live child",
+          prompt: "request both shell permissions, then report",
+          subagent_type: "general",
+        })
+        yield* llm.tool("bash", {
+          command: "printf permission-before-load",
+          description: "First child command",
+        })
+        yield* llm.tool("bash", {
+          command: "printf permission-after-load",
+          description: "Second child command",
+        })
+        yield* llm.text("child live after load")
+        yield* llm.text("parent complete")
+
+        yield* handle.send({
+          jsonrpc: "2.0",
+          id: 200,
+          method: "_opencode/subagents/subscribe",
+          params: { rootSessionId: root.sessionId },
+        })
+        yield* handle.send({
+          jsonrpc: "2.0",
+          id: 201,
+          method: "session/prompt",
+          params: {
+            sessionId: root.sessionId,
+            prompt: [{ type: "text", text: "delegate this live task" }],
+          },
+        })
+
+        const opening = yield* collectRunningChildAndPermission(handle.receive, 200, root.sessionId)
+        expect(opening.subscribe.error).toBeUndefined()
+        expect(opening.child.phase).toBe("running")
+        expect(opening.permission.params?.sessionId).toBe(opening.child.sessionId)
+
+        yield* handle.send({
+          jsonrpc: "2.0",
+          id: 202,
+          method: "session/load",
+          params: {
+            cwd: opening.child.cwd,
+            sessionId: opening.child.sessionId,
+            mcpServers: [],
+          },
+        })
+        const loaded = yield* collectResponse<LoadSessionResponse>(handle.receive, 202)
+        expect(loaded.error).toBeUndefined()
+
+        yield* selectPermission(handle, opening.permission.id)
+        const secondPermission = yield* collectPermission(handle.receive, opening.child.sessionId)
+        expect(secondPermission.id).not.toBe(opening.permission.id)
+        yield* selectPermission(handle, secondPermission.id)
+
+        const completed = yield* collectLiveChildDeltaAndPrompt(
+          handle.receive,
+          201,
+          opening.child.sessionId,
+          "child live after load",
+        )
+        expect(completed.prompt.error).toBeUndefined()
+        expect(completed.prompt.result).toMatchObject({ stopReason: "end_turn" })
+        expect(completed.childText).toBe("child live after load")
+      }),
+    90_000,
+  )
 })
+
+type PermissionRequestParams = {
+  readonly sessionId: string
+}
+
+function collectRunningChildAndPermission(receive: Effect.Effect<unknown>, subscribeId: number, rootSessionId: string) {
+  return Effect.gen(function* () {
+    let subscribe: Response<Subagent.Snapshot> | undefined
+    let child: Subagent.Node | undefined
+    let permission: Request<PermissionRequestParams> | undefined
+    while (!subscribe || !child || !permission) {
+      const message = yield* receive.pipe(Effect.timeout(Duration.seconds(20)))
+      if (isResponse<Subagent.Snapshot>(message) && message.id === subscribeId) {
+        subscribe = message
+      }
+      if (isNotification<Subagent.Update>(message) && message.method === "_opencode/subagents/update") {
+        const update = Subagent.decodeUpdate(message.params)
+        child ??= update.upsert.find(
+          (node) => node.rootSessionId === rootSessionId && node.parentSessionId === rootSessionId,
+        )
+      }
+      if (
+        isRequest<PermissionRequestParams>(message) &&
+        message.method === "session/request_permission" &&
+        message.params?.sessionId !== rootSessionId
+      ) {
+        permission = message
+      }
+    }
+    return { subscribe, child, permission }
+  })
+}
+
+function collectResponse<T>(receive: Effect.Effect<unknown>, id: number) {
+  return Effect.gen(function* () {
+    while (true) {
+      const message = yield* receive.pipe(Effect.timeout(Duration.seconds(20)))
+      if (isResponse<T>(message) && message.id === id) return message
+    }
+  })
+}
+
+function selectPermission(handle: { send: (message: object) => Effect.Effect<void> }, id: number | string) {
+  return handle.send({
+    jsonrpc: "2.0",
+    id,
+    result: {
+      outcome: {
+        outcome: "selected",
+        optionId: "once",
+      },
+    },
+  })
+}
+
+function collectPermission(receive: Effect.Effect<unknown>, sessionId: string) {
+  return Effect.gen(function* () {
+    while (true) {
+      const message = yield* receive.pipe(Effect.timeout(Duration.seconds(20)))
+      if (
+        isRequest<PermissionRequestParams>(message) &&
+        message.method === "session/request_permission" &&
+        message.params?.sessionId === sessionId
+      ) {
+        return message
+      }
+    }
+  })
+}
+
+function collectLiveChildDeltaAndPrompt(
+  receive: Effect.Effect<unknown>,
+  promptId: number,
+  childSessionId: string,
+  expectedText: string,
+) {
+  return Effect.gen(function* () {
+    let prompt: Response<PromptResponse> | undefined
+    let childText: string | undefined
+    while (!prompt || childText !== expectedText) {
+      const message = yield* receive.pipe(Effect.timeout(Duration.seconds(20)))
+      if (isResponse<PromptResponse>(message) && message.id === promptId) prompt = message
+      if (
+        isNotification<{
+          sessionId: string
+          update: { sessionUpdate: string; content?: { type: string; text?: string } }
+        }>(message) &&
+        message.method === "session/update" &&
+        message.params?.sessionId === childSessionId &&
+        message.params.update.sessionUpdate === "agent_message_chunk"
+      ) {
+        childText = `${childText ?? ""}${message.params.update.content?.text ?? ""}`
+      }
+    }
+    return { prompt, childText }
+  })
+}
 
 function subscribeBeforeUpdate(receive: Effect.Effect<unknown>, subscribeId: number, promptId: number) {
   return Effect.gen(function* () {
@@ -184,4 +375,8 @@ function isResponse<T>(input: unknown): input is Response<T> {
 
 function isNotification<T>(input: unknown): input is Notification<T> {
   return !!input && typeof input === "object" && "jsonrpc" in input && "method" in input && !("id" in input)
+}
+
+function isRequest<T>(input: unknown): input is Request<T> {
+  return !!input && typeof input === "object" && "jsonrpc" in input && "method" in input && "id" in input
 }
