@@ -292,6 +292,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         session: {
           width: DEFAULT_SESSION_WIDTH,
+          listOpened: false,
         },
         mobileSidebar: {
           opened: false,
@@ -749,6 +750,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("session", "width", width)
+        },
+        listOpened: createMemo(() => store.session?.listOpened ?? false),
+        openList() {
+          if (!store.session) {
+            setStore("session", { width: DEFAULT_SESSION_WIDTH, listOpened: true })
+            return
+          }
+          setStore("session", "listOpened", true)
+        },
+        closeList() {
+          if (!store.session) {
+            setStore("session", { width: DEFAULT_SESSION_WIDTH, listOpened: false })
+            return
+          }
+          setStore("session", "listOpened", false)
+        },
+        toggleList() {
+          const value = store.session?.listOpened ?? false
+          if (!store.session) {
+            setStore("session", { width: DEFAULT_SESSION_WIDTH, listOpened: !value })
+            return
+          }
+          setStore("session", "listOpened", !value)
         },
       },
       mobileSidebar: {

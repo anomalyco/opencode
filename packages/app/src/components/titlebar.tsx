@@ -307,6 +307,14 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 hidden: true,
                 onSelect: toggleHome,
               },
+              {
+                id: "sessionList.toggle",
+                title: "Toggle Session List",
+                category: language.t("command.category.view"),
+                keybind: "mod+shift+s",
+                hidden: true,
+                onSelect: () => layout.session.toggleList(),
+              },
             ])
 
             command.register("tabs", () => {
@@ -377,6 +385,23 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     onClick={toggleHome}
                     aria-label={language.t("home.title")}
                     aria-pressed={layout.route().type === "home"}
+                  />
+                </TooltipV2>
+                <TooltipV2
+                  placement="bottom"
+                  value="Session List"
+                  class="shrink-0"
+                >
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    size="large"
+                    class="!w-9 shrink-0"
+                    icon={<IconV2 name="menu" />}
+                    state={layout.session.listOpened() ? "pressed" : undefined}
+                    onClick={() => layout.session.toggleList()}
+                    aria-label="Session List"
+                    aria-pressed={layout.session.listOpened()}
                   />
                 </TooltipV2>
 

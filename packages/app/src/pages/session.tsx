@@ -83,6 +83,7 @@ import {
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
+import { SessionListPanel } from "@/components/session-list-panel"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
 import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
@@ -1150,6 +1151,13 @@ export default function Page() {
       title: language.t("command.palette"),
       hidden: true,
       onSelect: () => command.trigger("file.open", "palette"),
+    },
+    {
+      id: "sessionList.toggle",
+      title: "Toggle Session List",
+      category: language.t("command.category.view"),
+      keybind: "mod+shift+s",
+      onSelect: () => layout.session.toggleList(),
     },
   ])
 
@@ -2253,6 +2261,14 @@ export default function Page() {
         }}
       >
         <Show when={!isDesktop() && !!params.id && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>
+
+        <Show when={settings.general.newLayoutDesigns() && layout.session.listOpened()}>
+          <div class="min-w-0 flex" style={{ width: "280px" }}>
+            <Suspense>
+              <SessionListPanel currentSessionID={params.id} />
+            </Suspense>
+          </div>
+        </Show>
 
         <div
           classList={{
