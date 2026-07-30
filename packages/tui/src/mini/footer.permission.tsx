@@ -408,7 +408,6 @@ export function RunPermissionBody(props: {
                   >
                     <PatchDiff
                       diff={info().diff!}
-                      hunkBg={props.block.diffContextBg}
                       hunkFg={props.block.diffLineNumber}
                       view="unified"
                       filetype={ft()}

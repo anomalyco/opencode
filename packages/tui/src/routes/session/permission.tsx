@@ -53,8 +53,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
         >
           <PatchDiff
             diff={diff()}
-            hunkBg={theme.diff.background.context}
-            hunkFg={theme.diff.lineNumber.text}
+            hunkFg={theme.diff.text.hunkHeader}
             view={view()}
             filetype={ft()}
             syntaxStyle={syntax()}

@@ -3030,8 +3030,7 @@ function Edit(props: ToolProps) {
             <box paddingLeft={1}>
               <PatchDiff
                 diff={item().patch}
-                hunkBg={theme.diff.background.context}
-                hunkFg={theme.diff.lineNumber.text}
+                hunkFg={theme.diff.text.hunkHeader}
                 view={view()}
                 filetype={filetype(path())}
                 syntaxStyle={syntax()}
@@ -3121,8 +3120,7 @@ function ApplyPatch(props: ToolProps) {
                   <box paddingLeft={1}>
                     <PatchDiff
                       diff={file.patch}
-                      hunkBg={theme.diff.background.context}
-                      hunkFg={theme.diff.lineNumber.text}
+                      hunkFg={theme.diff.text.hunkHeader}
                       view={view()}
                       filetype={filetype(file.relativePath)}
                       syntaxStyle={syntax()}

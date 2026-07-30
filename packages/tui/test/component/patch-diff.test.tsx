@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { afterEach, expect, test } from "bun:test"
-import { DiffRenderable, type Renderable, SyntaxStyle } from "@opentui/core"
+import { DiffRenderable, parseColor, type Renderable, SyntaxStyle } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { PatchDiff } from "../../src/component/patch-diff"
 
@@ -29,8 +29,8 @@ test("renders separate diff nodes with a full-width hunk row", async () => {
       <box width={120}>
         <PatchDiff
           diff={patch}
-          hunkBg="#222222"
           hunkFg="#888888"
+          lineNumberBg="#222222"
           view="split"
           filetype="typescript"
           syntaxStyle={SyntaxStyle.create()}
@@ -44,12 +44,23 @@ test("renders separate diff nodes with a full-width hunk row", async () => {
   const frame = await app.waitForFrame((value) =>
     value.includes("@@ -20,3 +20,3 @@"),
   )
-  const header = frame
-    .split("\n")
-    .find((line) => line.includes("@@ -20,3 +20,3 @@"))
+  const headerRow = frame.split("\n").findIndex((line) => line.includes("@@ -20,3 +20,3 @@"))
+  const header = frame.split("\n")[headerRow]
+  const background = parseColor("#222222")
 
   expect(header?.startsWith("@@ -20,3 +20,3 @@")).toBe(true)
   expect(header?.trimEnd()).toBe("@@ -20,3 +20,3 @@")
+  expect(
+    app
+      .captureSpans()
+      .lines[headerRow].spans.every(
+        (span) =>
+          span.bg.r === background.r &&
+          span.bg.g === background.g &&
+          span.bg.b === background.b &&
+          span.bg.a === background.a,
+      ),
+  ).toBe(true)
   expect(findDiffs(app.renderer.root)).toHaveLength(2)
 })
 

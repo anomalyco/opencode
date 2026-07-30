@@ -181,7 +181,6 @@ export function RunEntryContent(props: {
                 <box width="100%" paddingLeft={1}>
                   <PatchDiff
                     diff={item.diff}
-                    hunkBg={diffBg(theme().block.diffContextBg)}
                     hunkFg={theme().block.diffLineNumber}
                     view="unified"
                     filetype={toolFiletype(item.file)}
