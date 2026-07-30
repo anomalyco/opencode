@@ -111,15 +111,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const actionFocused = createMemo(() => focusedAction() !== undefined)
   let selection: { value: T; category?: string } | undefined
   let resetSelection = false
-  let pendingVisibility: (() => void) | undefined
+  let pendingScroll: (() => void) | undefined
 
-  function scheduleVisibility(callback: () => void) {
-    if (pendingVisibility) renderer.off(CliRenderEvents.FRAME, pendingVisibility)
-    pendingVisibility = () => {
-      pendingVisibility = undefined
-      callback()
+  function scrollAfterLayout(center: boolean, value: T) {
+    if (pendingScroll) renderer.off(CliRenderEvents.FRAME, pendingScroll)
+    pendingScroll = () => {
+      pendingScroll = undefined
+      if (!isDeepEqual(selected()?.value, value)) return
+      scrollToSelection(center)
     }
-    renderer.once(CliRenderEvents.FRAME, pendingVisibility)
+    renderer.once(CliRenderEvents.FRAME, pendingScroll)
     renderer.requestRender()
   }
 
@@ -275,12 +276,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           setStore("selected", index)
           selection = option
           if (!moved) return
-          const value = option.value
-          scheduleVisibility(() => {
-            if (!props.preserveSelection || store.filter.length > 0) return
-            if (!isDeepEqual(selected()?.value, value)) return
-            scrollToSelection(false)
-          })
+          if (!props.preserveSelection || store.filter.length > 0) return
+          scrollAfterLayout(false, option.value)
           return
         }
         const next = reconcileSelection(store.selected, flat().length)
@@ -291,24 +288,26 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     ),
   )
   onCleanup(() => {
-    if (!pendingVisibility) return
-    renderer.off(CliRenderEvents.FRAME, pendingVisibility)
-    pendingVisibility = undefined
+    if (!pendingScroll) return
+    renderer.off(CliRenderEvents.FRAME, pendingScroll)
+    pendingScroll = undefined
   })
 
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
       if (filter.length > 0) resetSelection = true
-      scheduleVisibility(() => {
-        if (filter.length > 0) {
-          moveTo(0, true, false)
-          return
-        }
-        if (current && props.focusCurrent !== false) {
-          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
-          if (currentIndex >= 0) moveTo(currentIndex, true)
-        }
-      })
+      if (filter.length > 0) {
+        const option = flat()[0]
+        if (!option) return
+        moveTo(0, true, false)
+        scrollAfterLayout(true, option.value)
+        return
+      }
+      if (!current || props.focusCurrent === false) return
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+      if (currentIndex < 0) return
+      moveTo(currentIndex, true)
+      scrollAfterLayout(true, current)
     }),
   )
 

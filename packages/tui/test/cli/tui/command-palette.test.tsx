@@ -73,6 +73,7 @@ test("searches settings globally and opens the matching setting", async () => {
     expect(app.captureCharFrame()).not.toContain("Animations")
     await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
 
+    app.mockInput.pressArrow("down")
     for (const key of "sounds") app.mockInput.pressKey(key)
     app.mockInput.pressEnter()
     await app.waitForFrame((frame) => frame.includes("Settings") && frame.includes("Sounds"))
