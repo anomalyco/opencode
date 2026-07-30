@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, ne, or, type SQL } from "drizzle-orm"
 import { Project } from "./project"
 import { Workspace } from "./workspace"
 import { Model } from "./model"
@@ -325,6 +325,22 @@ const layer = Layer.effect(
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+    const persistProject = (project: Project.Resolved) => {
+      const vcs = project.vcs?.type
+      return db
+        .insert(ProjectTable)
+        .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
+        .onConflictDoUpdate({
+          target: ProjectTable.id,
+          set: { worktree: project.canonical, vcs: vcs ?? null },
+          setWhere: or(
+            ne(ProjectTable.worktree, project.canonical),
+            vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
+          ),
+        })
+        .run()
+        .pipe(Effect.orDie)
+    }
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
         Effect.mapError(
@@ -347,12 +363,7 @@ const layer = Layer.effect(
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
-        yield* db
-          .insert(ProjectTable)
-          .values({ id: project.id, worktree: project.directory, vcs: project.vcs?.type, sandboxes: [] })
-          .onConflictDoNothing()
-          .run()
-          .pipe(Effect.orDie)
+        yield* persistProject(project)
         const now = Date.now()
         const info = SessionV1.SessionInfo.make({
           id: sessionID,
@@ -451,6 +462,7 @@ const layer = Layer.effect(
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
+        if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.parentID !== undefined)
           conditions.push(
@@ -732,12 +744,7 @@ const layer = Layer.effect(
         )
           return
         const project = yield* projects.resolve(directory)
-        yield* db
-          .insert(ProjectTable)
-          .values({ id: project.id, worktree: project.directory, vcs: project.vcs?.type, sandboxes: [] })
-          .onConflictDoNothing()
-          .run()
-          .pipe(Effect.orDie)
+        yield* persistProject(project)
         if ((yield* execution.active).has(input.sessionID)) {
           yield* execution.interrupt(input.sessionID)
           yield* execution.awaitIdle(input.sessionID)

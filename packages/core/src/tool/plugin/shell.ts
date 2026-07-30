@@ -1,5 +1,6 @@
 export * as ShellTool from "./shell"
 
+import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Content } from "@opencode-ai/schema/tool"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
@@ -11,6 +12,7 @@ import { PluginRuntime } from "../../plugin/runtime"
 import { NonNegativeInt } from "../../schema"
 import { SessionSchema } from "../../session/schema"
 import { Shell } from "../../shell"
+import { ShellParse } from "../../shell/parse"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -74,18 +76,6 @@ const modelOutput = (output: Output): string | undefined => {
   if (output.timeout) return "Command timed out before completion."
   return `Command exited with code ${output.exit}.`
 }
-
-/**
- * Minimal core shell boundary. Keep parity debt visible without pulling the
- * legacy shell runtime into core.
- */
-// TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
-// TODO: Port BashArity reusable command-prefix approvals.
-// TODO: Add plugin shell.env environment augmentation once plugin hooks exist.
-// TODO: Persist job status and define restart recovery before exposing remote observation.
-// TODO: Add HTTP job observation only after durable status, restart recovery, and authorization are defined.
-// TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
-// TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
 
 export const Plugin = {
   id: "opencode.tool.shell",
@@ -158,24 +148,34 @@ export const Plugin = {
                   (invocation) =>
                     Effect.gen(function* () {
                       const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.canonical)
+                      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
+                        mutation.resolve({ path: path.resolve(target.canonical, directory), kind: "directory" }),
+                      )
                       invocation.cwd = target.canonical
                       finalTimeout = invocation.timeout
-                      const external = target.externalDirectory
-                      if (external)
+                      const external = [target, ...directories]
+                        .map((item) => item.externalDirectory)
+                        .filter((item) => item !== undefined)
+                        .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
+                      if (external.length > 0)
                         yield* permission.assert({
-                          ...LocationMutation.externalDirectoryPermission(external),
+                          action: "external_directory",
+                          resources: external.map((item) => item.resource),
+                          save: external.map((item) => item.save),
                           sessionID: context.sessionID,
                           agent: context.agent,
                           source,
                         })
-                      yield* permission.assert({
-                        action: name,
-                        resources: [invocation.command],
-                        save: [invocation.command],
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
+                      if (parsed.commands.length > 0)
+                        yield* permission.assert({
+                          action: name,
+                          resources: parsed.commands.map((command) => command.resource),
+                          save: parsed.commands.map((command) => command.save),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
                       if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
                         return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
                     }),

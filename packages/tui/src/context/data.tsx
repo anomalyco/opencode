@@ -15,6 +15,7 @@ import type {
   ModelInfo,
   PermissionSavedInfo,
   PermissionRequest,
+  Project,
   ProviderInfo,
   ReferenceInfo,
   SessionMessageInfo,
@@ -80,6 +81,7 @@ type Store = {
     form: Record<string, FormWithLocation[]>
   }
   project: {
+    info: Record<string, Project>
     permission: Record<string, PermissionSavedInfo[]>
   }
   location: Record<string, LocationData>
@@ -139,6 +141,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         form: {},
       },
       project: {
+        info: {},
         permission: {},
       },
       location: {},
@@ -954,10 +957,26 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             sync.invalidate(`session.pending:${sessionID}`)
           },
         },
-        sync(sessionID: string) {
-          return sync.run(`session:${sessionID}`, async () => {
-            setStore("session", "info", sessionID, await client.api.session.get({ sessionID }))
-            registerSession(sessionID)
+        sync(sessionID: string, options?: { children?: boolean }) {
+          return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
+            const [info, children] = await Promise.all([
+              client.api.session.get({ sessionID }),
+              options?.children
+                ? client.api.session.list({ parentID: sessionID, order: "desc" }).then((response) => response.data)
+                : [],
+            ])
+            const sessions = [info, ...children]
+            setStore(
+              "session",
+              "info",
+              produce((draft) => {
+                for (const session of sessions) draft[session.id] = session
+              }),
+            )
+            for (const session of sessions) {
+              sync.complete(`session:${session.id}`)
+              registerSession(session.id)
+            }
           })
         },
         invalidate(sessionID: string) {
@@ -1037,6 +1056,21 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         },
       },
       project: {
+        list() {
+          return Object.values(store.project.info).toSorted((a, b) => b.time.updated - a.time.updated)
+        },
+        get(projectID: string) {
+          return store.project.info[projectID]
+        },
+        sync() {
+          return sync.run("project", async () => {
+            const projects = await client.api.project.list()
+            setStore("project", "info", reconcile(Object.fromEntries(projects.map((project) => [project.id, project]))))
+          })
+        },
+        invalidate() {
+          sync.invalidate("project")
+        },
         permission: {
           list(projectID: string) {
             return store.project.permission[projectID]
@@ -1318,27 +1352,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             .then((location) => {
               const key = locationKey(location)
               setStore("location", key, { ...store.location[key], info: location })
-              return client.api.session.list({
-                project: location.project.id,
-                limit: 50,
-                order: "desc",
-                parentID: null,
-              })
             })
-            .then((response) => {
-              setStore(
-                "session",
-                "info",
-                produce((draft) => {
-                  for (const session of response.data) draft[session.id] = session
-                }),
-              )
-              for (const session of response.data) {
-                sync.complete(`session:${session.id}`)
-                registerSession(session.id)
-              }
-            })
-            .catch((error) => console.error("Failed to preload sessions", error))
+            .catch((error) => console.error("Failed to preload location", error))
+          void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
           return
         }
         handleEvent(details)

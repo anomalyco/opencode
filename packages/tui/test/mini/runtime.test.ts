@@ -78,7 +78,7 @@ describe("run interactive runtime", () => {
         directory: "/tmp",
         target: async () => ({
           sessionID: "ses_root",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
           agent: "build",
           model: undefined,
           variant: undefined,
@@ -130,7 +130,7 @@ describe("run interactive runtime", () => {
     await refreshCatalog?.()
     expect(defaultModel).toHaveBeenCalledTimes(1)
     selected.resolve({
-      location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+      location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
       data: model,
     })
     while (defaultModel.mock.calls.length < 2) await Bun.sleep(0)
@@ -165,7 +165,7 @@ describe("run interactive runtime", () => {
         directory: "/tmp",
         target: async () => ({
           sessionID: "ses_root",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
           agent: "build",
           model: { providerID: "test", modelID: "model" },
           variant: undefined,
@@ -261,7 +261,7 @@ describe("run interactive runtime", () => {
           return {
             sessionID: "ses-deferred",
             sessionTitle: "Deferred",
-            location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+            location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
             agent: "build",
             model: { providerID: "openai", modelID: "gpt-5" },
             variant: undefined,
@@ -349,7 +349,7 @@ describe("run interactive runtime", () => {
         target: async () => ({
           sessionID: "ses-resume",
           sessionTitle: "Resume",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
           agent: "review",
           model: { providerID: "openai", modelID: "gpt-5" },
           variant: "high",
@@ -432,7 +432,7 @@ describe("run interactive runtime", () => {
         target: async () => ({
           sessionID: "ses-resume-abort",
           sessionTitle: "Cached title",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp" } },
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
           agent: "build",
           model: undefined,
           variant: undefined,
@@ -490,7 +490,7 @@ describe("run interactive runtime", () => {
       location: {
         directory: "/session",
         workspaceID: "work-1",
-        project: { id: "pro-1", directory: "/session" },
+        project: { id: "pro-1", directory: "/session", canonical: "/session" },
       },
       data: [{ path: "src/index.ts", type: "file" }],
     } as never)
@@ -507,7 +507,7 @@ describe("run interactive runtime", () => {
             location: {
               directory: "/session",
               workspaceID: "work-1",
-              project: { id: "location-project", directory: "/session" },
+              project: { id: "location-project", directory: "/session", canonical: "/session" },
             },
             agent: "review",
             model: { providerID: "openai", modelID: "gpt-5" },

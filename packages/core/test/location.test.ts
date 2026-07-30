@@ -18,6 +18,7 @@ const projectLayer = Layer.succeed(
       Effect.succeed({
         id: Project.ID.make("project"),
         directory: AbsolutePath.make("/repo"),
+        canonical: AbsolutePath.make("/main/repo"),
         vcs: { type: "git", store: AbsolutePath.make("/repo/.git") },
       }),
     commit: () => Effect.void,
@@ -34,6 +35,7 @@ describe("Location", () => {
       expect(location.workspaceID).toBe(workspaceID)
       expect(location.project.id).toBe(Project.ID.make("project"))
       expect(location.project.directory).toBe(AbsolutePath.make("/repo"))
+      expect(location.project.canonical).toBe(AbsolutePath.make("/main/repo"))
       expect(location.vcs).toEqual({
         type: "git",
         store: AbsolutePath.make("/repo/.git"),

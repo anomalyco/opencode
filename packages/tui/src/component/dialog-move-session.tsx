@@ -328,7 +328,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         options={options()}
         emptyView={
           showError() ? (
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
                 Could not load project directories
               </text>
@@ -336,17 +336,17 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
               <text fg={theme.text.subdued}>Close and reopen Move session to try again.</text>
             </box>
           ) : directories.loading || loadedProject.loading ? (
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.subdued}>Loading project directories…</text>
             </box>
           ) : (
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.subdued}>No project directories available</text>
             </box>
           )
         }
         noMatchView={
-          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+          <box paddingLeft={4} paddingRight={4}>
             <text fg={theme.text.subdued}>No project directories found</text>
           </box>
         }

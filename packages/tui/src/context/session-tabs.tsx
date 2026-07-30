@@ -1,6 +1,7 @@
-import { createEffect, onCleanup } from "solid-js"
+import { createEffect, createMemo, onCleanup } from "solid-js"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
+import { useClient } from "./client"
 import { useData } from "./data"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
@@ -31,10 +32,14 @@ type PersistedState = {
 
 const empty = (): TabsState => ({ tabs: [], unread: {} })
 
+// Deliberately after connect settles: the visible session's mount syncs win the first slots.
+const TAB_PREFETCH_DELAY = 300
+
 export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimpleContext({
   name: "SessionTabs",
   init: () => {
     const route = useRoute()
+    const client = useClient()
     const data = useData()
     const event = useEvent()
     const config = useConfig().data
@@ -126,6 +131,45 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
           return result
         }, {})
+      })
+    })
+
+    // Warm open tabs' session data so first switches render from cache instead of fetching inside
+    // the switch gesture. Uses only existing sync methods (each dedupes internally), so reruns on
+    // tab-set or connection changes are no-ops for already-warm sessions, and reconnects double as
+    // a cache refresh after an SSE gap. The delay lets the current session's own mount syncs get
+    // the first connection slots. The effect tracks only the id set: reorders, tab switches, and
+    // title updates neither restart the timer nor an in-flight warm pass; the timer callback
+    // itself runs untracked, where the current session is skipped.
+    const openTabSessions = createMemo(() =>
+      state()
+        .tabs.map((tab) => tab.sessionID)
+        .sort()
+        .join("\n"),
+    )
+    createEffect(() => {
+      if (!enabled()) return
+      if (client.connection.status() !== "connected") return
+      if (openTabSessions() === "") return
+      let stale = false
+      const timer = setTimeout(async () => {
+        const sessions = state()
+          .tabs.map((tab) => tab.sessionID)
+          .filter((sessionID) => sessionID !== current())
+        for (const sessionID of sessions) {
+          if (stale) return
+          await Promise.allSettled([
+            data.session.sync(sessionID),
+            data.session.message.sync(sessionID),
+            data.session.pending.sync(sessionID),
+            data.session.permission.sync(sessionID),
+            data.session.form.sync(sessionID),
+          ])
+        }
+      }, TAB_PREFETCH_DELAY)
+      onCleanup(() => {
+        stale = true
+        clearTimeout(timer)
       })
     })
 

@@ -13,15 +13,19 @@ export const name = "subagent"
 
 const NO_TEXT = "Subagent completed without a text response."
 const backgroundStarted = (sessionID: SessionSchema.ID) =>
-  `The subagent is working in the background (id: ${sessionID}). You will be notified automatically when it finishes. DO NOT sleep, poll, or proactively check on its progress.`
+  [
+    `The subagent is working in the background (id: ${sessionID}). You will be notified automatically when it finishes.`,
+    "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
+    "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+  ].join("\n")
 
 export const Input = Schema.Struct({
-  agent: Schema.String.annotate({ description: "The configured agent to run as the subagent" }),
-  description: Schema.String.annotate({ description: "A short description of the subagent's task" }),
+  agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
-      "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
+      "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
   }),
 })
 
@@ -31,7 +35,8 @@ export const Output = Schema.Struct({
   output: Schema.String,
 })
 export const description = [
-  "Spawn a subagent: a child session running a configured agent with fresh context.",
+  "Spawns an agent in a child session to work on the specified task.",
+  "Include all relevant context and instructions in the prompt because the child starts with fresh context.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
   "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
   "Use background only for independent work that can run while you continue elsewhere.",

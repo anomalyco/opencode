@@ -9,7 +9,11 @@ export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handl
     .handle("project.list", () => Project.Service.use((project) => project.list()))
     .handle("project.current", () =>
       Location.Service.use((location) =>
-        Effect.succeed({ id: location.project.id, directory: location.project.directory }),
+        Effect.succeed({
+          id: location.project.id,
+          directory: location.project.directory,
+          canonical: location.project.canonical,
+        }),
       ),
     )
     .handle("project.directories", (ctx) =>

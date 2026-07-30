@@ -2,7 +2,7 @@ export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { asc, desc } from "drizzle-orm"
+import { asc, desc, isNotNull, isNull, ne, or } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema"
 import { Database } from "./database/database"
@@ -40,6 +40,7 @@ export interface Resolved {
   readonly previous?: ID
   readonly id: ID
   readonly directory: AbsolutePath
+  readonly canonical: AbsolutePath
   readonly vcs?: Vcs
 }
 
@@ -83,7 +84,7 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
       : undefined
   return {
     id: row.id,
-    worktree: row.worktree,
+    canonical: row.worktree,
     vcs: row.vcs ?? undefined,
     name: row.name ?? undefined,
     icon,
@@ -105,6 +106,40 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const db = (yield* Database.Service).db
     const projectDirectories = yield* ProjectDirectories.Service
+
+    const persist = Effect.fnUntraced(function* (project: Resolved) {
+      yield* db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            const vcs = project.vcs?.type
+            yield* tx
+              .insert(ProjectTable)
+              .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
+              .onConflictDoUpdate({
+                target: ProjectTable.id,
+                set: { worktree: project.canonical, vcs: vcs ?? null },
+                setWhere: or(
+                  ne(ProjectTable.worktree, project.canonical),
+                  vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
+                ),
+              })
+              .run()
+            if (!project.vcs) return
+            yield* projectDirectories.create({ projectID: project.id, directory: project.canonical }, tx)
+            if (project.directory === project.canonical) return
+            yield* projectDirectories.create(
+              {
+                projectID: project.id,
+                directory: project.directory,
+                strategy: project.vcs.type === "git" ? "git_worktree" : undefined,
+              },
+              tx,
+            )
+          }),
+        )
+        .pipe(Effect.orDie)
+      return project
+    })
 
     const list = Effect.fn("Project.list")(function* () {
       const rows = yield* db
@@ -211,17 +246,25 @@ const layer = Layer.effect(
       if (repo) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
-        return {
+        const canonical = yield* git.worktree
+          .list(repo)
+          .pipe(
+            Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
+            Effect.catch(() => Effect.succeed(repo.worktree)),
+          )
+        return yield* persist({
           previous,
           id: id ?? ID.global,
           directory: repo.worktree,
+          canonical,
           vcs: { type: "git" as const, store: repo.commonDirectory },
-        }
+        })
       }
 
       const hg = yield* hgDiscover(input)
-      if (hg) return hg
-      return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (hg) return yield* persist({ ...hg, canonical: hg.directory })
+      const directory = AbsolutePath.make(path.parse(input).root)
+      return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
     })
 
     const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {

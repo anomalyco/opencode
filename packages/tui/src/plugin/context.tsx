@@ -2,8 +2,10 @@ import { PluginContextProvider, type Plugin } from "@opencode-ai/plugin/tui"
 import {
   batch,
   createContext,
+  createEffect,
   createMemo,
   For,
+  on,
   onCleanup,
   onMount,
   useContext,
@@ -33,6 +35,7 @@ import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
 import { useStorage } from "../context/storage"
+import { useSessionTabs } from "../context/session-tabs"
 import { abbreviateHome } from "../util/path-format"
 import { builtins } from "./builtins"
 import { discoverTuiPlugins } from "./discovery"
@@ -94,6 +97,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const toast = useToast()
   const attention = useAttention()
   const storage = useStorage()
+  const sessionTabs = useSessionTabs()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
@@ -278,6 +282,33 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
             return route.data
           },
         },
+        tabs: {
+          enabled: sessionTabs.enabled,
+          list: () =>
+            sessionTabs.tabs().map((tab) => ({
+              ...tab,
+              active: sessionTabs.current() === tab.sessionID,
+              ...sessionTabs.status(tab.sessionID),
+            })),
+          open(sessionID) {
+            if (!sessionTabs.enabled()) return false
+            sessionTabs.select(sessionID)
+            return true
+          },
+          focus(sessionID) {
+            if (!sessionTabs.enabled()) return false
+            if (!sessionTabs.tabs().some((tab) => tab.sessionID === sessionID)) return false
+            sessionTabs.select(sessionID)
+            return true
+          },
+          close(sessionID) {
+            if (!sessionTabs.enabled()) return false
+            const target = sessionID ?? sessionTabs.current()
+            if (!target || !sessionTabs.tabs().some((tab) => tab.sessionID === target)) return false
+            sessionTabs.close(target)
+            return true
+          },
+        },
         slot(name, render) {
           if (store.registrations[item.plugin.id]?.slots[name]) throw new Error(`Slot already registered: ${name}`)
           setStore("registrations", item.plugin.id, "slots", name, () => (input: SlotMap[typeof name]) => (
@@ -343,13 +374,13 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     return true
   }
 
-  const reconcile = async () => {
+  const reconcile = async (configured = config.data.plugins ?? []) => {
     await Promise.all(
       Object.entries(store.registrations)
         .filter(([, registration]) => registration.active)
         .map(([id]) => deactivate(id)),
     )
-    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...(config.data.plugins ?? [])]
+    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...configured]
     batch(() => {
       setStore("registrations", reconcileStore({}))
       setStore("states", [])
@@ -423,8 +454,21 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       ])
     }
   }
+  let loading = Promise.resolve()
+  createEffect(
+    on(
+      () => JSON.stringify(config.data.plugins ?? []),
+      () => {
+        const configured = config.data.plugins ?? []
+        loading = loading.catch(() => undefined).then(() => reconcile(configured))
+        void loading.then(
+          () => setStore("ready", true),
+          () => setStore("ready", true),
+        )
+      },
+    ),
+  )
   onMount(() => {
-    const loading = reconcile()
     let disposing: Promise<void> | undefined
     const dispose = () => {
       if (disposing) return disposing
@@ -445,7 +489,6 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       unregister()
       void dispose()
     })
-    void loading.finally(() => setStore("ready", true))
   })
 
   return (

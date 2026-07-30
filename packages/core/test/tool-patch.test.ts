@@ -6,6 +6,7 @@ import { systemError } from "effect/PlatformError"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Formatter } from "@opencode-ai/core/formatter"
 import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -21,7 +22,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
-  deps: [Tool.node, FSUtil.node, Location.node, Permission.node],
+  deps: [Tool.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_patch_tool_test")
@@ -33,6 +34,7 @@ let failWriteTarget: string | undefined
 let readsBeforeEditApproval = 0
 let editApproved = false
 let afterEditApproval = (): Effect.Effect<void> => Effect.void
+let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
 const permission = Layer.succeed(
   Permission.Service,
@@ -63,6 +65,10 @@ const permission = Layer.succeed(
   }),
 )
 
+const formatter = Layer.mock(Formatter.Service, {
+  file: (target) => formatFile(target),
+})
+
 const reset = () => {
   assertions.length = 0
   denyAction = undefined
@@ -72,6 +78,7 @@ const reset = () => {
   readsBeforeEditApproval = 0
   editApproved = false
   afterEditApproval = () => Effect.void
+  formatFile = () => Effect.succeed(false)
 }
 
 const filesystem = Layer.effect(
@@ -135,6 +142,7 @@ const withTool = <A, E, R>(
       AppNodeBuilder.build(LayerNode.group([Tool.node, patchToolNode]), [
         [FSUtil.node, filesystem],
         [Location.node, activeLocation],
+        [Formatter.node, formatter],
         [Permission.node, permission],
       ]),
     ),
@@ -252,6 +260,28 @@ describe("PatchTool", () => {
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
+  )
+
+  it.live("returns file diffs for final formatted content", () =>
+    withTempTool((directory, registry) => {
+      const target = path.join(directory, "formatted.txt")
+      formatFile = (file) =>
+        Effect.promise(async () => {
+          await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace("created", "FORMATTED"))
+          return true
+        })
+      return Effect.gen(function* () {
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Add File: formatted.txt\n+created\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        if (settled.status !== "completed") return
+        expect(settled.output.files[0]?.patch).toContain("+FORMATTED")
+        expect(settled.metadata?.files?.[0]?.patch).toContain("+FORMATTED")
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMATTED\n")
+      })
+    }),
   )
 
   it.live("moves and updates a file", () =>
@@ -552,6 +582,11 @@ describe("PatchTool", () => {
         const bom = "\uFEFF"
         const target = path.join(directory, "example.cs")
         yield* Effect.promise(() => fs.writeFile(target, `${bom}using System;\n\nclass Test {}\n`))
+        formatFile = (file) =>
+          Effect.promise(async () => {
+            await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace(/^\uFEFF/, ""))
+            return true
+          })
         const settled = yield* executeTool(
           registry,
           call("*** Begin Patch\n*** Update File: example.cs\n@@\n class Test {}\n+class Next {}\n*** End Patch"),

@@ -3,6 +3,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
+import { Formatter } from "@opencode-ai/core/formatter"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -22,12 +23,13 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [Tool.node, LocationMutation.node, FileMutation.node, Permission.node],
+  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_write_tool_test")
 const assertions: Permission.AssertInput[] = []
 const writes: string[] = []
+let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 let denyAction: string | undefined
 
 const permission = Layer.succeed(
@@ -55,9 +57,14 @@ const permission = Layer.succeed(
   }),
 )
 
+const formatter = Layer.mock(Formatter.Service, {
+  file: (target) => formatFile(target),
+})
+
 const reset = () => {
   assertions.length = 0
   writes.length = 0
+  formatFile = () => Effect.succeed(false)
   denyAction = undefined
 }
 
@@ -93,6 +100,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
         [
           [FSUtil.node, filesystem],
           [Location.node, activeLocation],
+          [Formatter.node, formatter],
           [Permission.node, permission],
         ],
       ),
@@ -132,7 +140,42 @@ describe("WriteTool", () => {
               "created",
             )
             expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["src/new.txt"], save: ["*"] }])
+            expect(assertions[0]?.metadata).toMatchObject({
+              files: [
+                {
+                  file: "src/new.txt",
+                  status: "added",
+                  additions: 1,
+                  deletions: 0,
+                  patch: expect.stringContaining("+created"),
+                },
+              ],
+            })
             expect(writes).toEqual([path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt")])
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("formats the committed file", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "formatted.txt")
+        formatFile = (file) =>
+          Effect.promise(async () => {
+            await fs.writeFile(file, (await fs.readFile(file, "utf8")).toUpperCase())
+            return true
+          })
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            expect(yield* executeTool(registry, call({ path: "formatted.txt", content: "format me" }))).toMatchObject({
+              status: "completed",
+            })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMAT ME")
           }),
         )
       },
@@ -155,6 +198,17 @@ describe("WriteTool", () => {
               if (settled.status !== "completed") return
               expect(settled.content).toEqual([{ type: "text", text: "Wrote file successfully: existing.txt" }])
               expect(settled.output).toMatchObject({ resource: "existing.txt", existed: true })
+              expect(assertions[0]?.metadata).toMatchObject({
+                files: [
+                  {
+                    file: "existing.txt",
+                    status: "modified",
+                    additions: 1,
+                    deletions: 1,
+                    patch: expect.stringMatching(/-before[\s\S]*\+after/),
+                  },
+                ],
+              })
               expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "existing.txt"), "utf8"))).toBe(
                 "after",
               )
@@ -174,6 +228,11 @@ describe("WriteTool", () => {
         reset()
         const preserved = path.join(tmp.path, "preserved.txt")
         const deduplicated = path.join(tmp.path, "deduplicated.txt")
+        formatFile = (target) =>
+          Effect.promise(async () => {
+            await fs.writeFile(target, `\uFEFF\uFEFF\uFEFF${(await fs.readFile(target, "utf8")).replace(/^\uFEFF+/, "")}`)
+            return true
+          })
         return Effect.promise(() =>
           Promise.all([fs.writeFile(preserved, "\uFEFFbefore"), fs.writeFile(deduplicated, "\uFEFFbefore")]),
         ).pipe(

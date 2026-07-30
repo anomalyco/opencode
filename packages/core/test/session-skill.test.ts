@@ -20,7 +20,7 @@ import { testEffect } from "./lib/effect"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const projects = Layer.mock(Project.Service, {
-  resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
+  resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
 })
 const skills = Layer.mock(Skill.Service, {
   list: () =>

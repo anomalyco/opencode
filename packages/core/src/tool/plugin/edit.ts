@@ -9,12 +9,14 @@ export * as EditTool from "./edit"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { createTwoFilesPatch, diffLines } from "diff"
+import { Bom } from "@opencode-ai/util/bom"
 import { Effect, Schema } from "effect"
 import { FileMutation } from "../../file-mutation"
+import { Formatter } from "../../formatter"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
+import { fileDiff } from "./file-diff"
 
 export const name = "edit"
 
@@ -99,7 +101,6 @@ const findLineOccurrences = (content: string, search: string) => {
 }
 
 /** Deferred edit behavior and UX integrations remain visible at the model-facing seam. */
-// TODO: Add formatter integration after formatter runtime exists.
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
 // TODO: Add LSP notification and diagnostics after LSP runtime exists.
@@ -109,6 +110,7 @@ export const Plugin = {
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
+    const formatter = yield* Formatter.Service
     const fs = yield* FSUtil.Service
     const permission = yield* Permission.Service
 
@@ -151,14 +153,6 @@ export const Plugin = {
                     })
                   }
 
-                  yield* permission.assert({
-                    action: "edit",
-                    resources: [target.resource],
-                    save: ["*"],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source: permissionSource,
-                  })
                   const info = yield* fs.stat(target.canonical).pipe(
                     Effect.catchReason("PlatformError", "NotFound", () =>
                       Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
@@ -167,9 +161,8 @@ export const Plugin = {
                   if (info.type === "Directory") {
                     return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
                   }
-                  const bytes = yield* fs.readFile(target.canonical)
-                  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
-                  const source = new TextDecoder().decode(bom ? bytes.slice(3) : bytes)
+                  const original = yield* Bom.readFile(fs, target.canonical)
+                  const source = original.text
                   const ending = source.includes(crlf) ? crlf : "\n"
                   const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
                   const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
@@ -183,6 +176,26 @@ export const Plugin = {
                       : findLineOccurrences(source, oldString)
                   const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
                   const replacements = matches.length
+                  const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
+                    .toReversed()
+                    .reduce(
+                      (content, match) =>
+                        `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
+                      source,
+                    )
+                  const preview =
+                    replacements > 0 && (replacements === 1 || input.replaceAll === true)
+                      ? fileDiff(target.resource, source, replaced)
+                      : undefined
+                  yield* permission.assert({
+                    action: "edit",
+                    resources: [target.resource],
+                    save: ["*"],
+                    metadata: preview ? { files: [preview] } : undefined,
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: permissionSource,
+                  })
                   if (replacements === 0) {
                     return yield* new ToolFailure({
                       message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
@@ -193,35 +206,17 @@ export const Plugin = {
                       message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
                     })
                   }
-
-                  const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
-                    .toReversed()
-                    .reduce(
-                      (content, match) =>
-                        `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
-                      source,
-                    )
-                  const counts = diffLines(source, replaced).reduce(
-                    (result, item) => ({
-                      additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-                      deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
-                    }),
-                    { additions: 0, deletions: 0 },
-                  )
                   const replacementBom = replaced.startsWith("\uFEFF")
                   const result = yield* files.write({
                     target,
-                    content: `${bom || replacementBom ? "\uFEFF" : ""}${replacementBom ? replaced.slice(1) : replaced}`,
+                    content: Bom.join(replaced, original.bom || replacementBom),
                   })
+                  const bom = original.bom || replacementBom
+                  const formatted = (yield* formatter.file(target.canonical))
+                    ? yield* Bom.syncFile(fs, target.canonical, bom)
+                    : (yield* Bom.readFile(fs, target.canonical)).text
                   return {
-                    files: [
-                      {
-                        file: result.resource,
-                        patch: createTwoFilesPatch(result.resource, result.resource, source, replaced),
-                        status: "modified" as const,
-                        ...counts,
-                      },
-                    ],
+                    files: [fileDiff(result.resource, source, formatted)],
                     replacements,
                   } satisfies Output
                 }).pipe(

@@ -1,6 +1,7 @@
-import { createMemo, createResource, createSignal, onMount } from "solid-js"
+import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode-ai/client"
+import { TextAttributes } from "@opentui/core"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
@@ -32,52 +33,69 @@ export function DialogSessionList() {
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
+  const [allProjects, setAllProjects] = createSignal(false)
 
-  const [searchResults] = createResource(search, async (query) => {
-    if (!query) return
-    try {
-      if (!data.location.info()) await data.location.sync()
-      const current = data.location.info()
-      if (!current) throw new Error("Location unavailable")
-      const response = await client.api.session.list({
-        project: current.project.id,
-        search: query,
-        limit: 50,
-        order: "desc",
-        parentID: null,
-      })
-      return { query, sessions: response.data, error: undefined }
-    } catch (error) {
-      // A transient transport failure must degrade search, not crash the TUI
-      // through the root ErrorBoundary when the errored resource is read.
-      return { query, sessions: [] as SessionInfo[], error }
-    }
-  })
+  const [searchResults, { mutate: setSearchResults }] = createResource(
+    () => ({ query: search().trim(), allProjects: allProjects() }),
+    async ({ query, allProjects }) => {
+      try {
+        if (!data.location.info()) await data.location.sync()
+        const current = data.location.info()
+        if (!current) throw new Error("Location unavailable")
+        const response = await client.api.session.list({
+          ...(allProjects
+            ? {}
+            : {
+                project: current.project.id,
+                subpath: path.relative(current.project.directory, current.directory).replaceAll("\\", "/"),
+              }),
+          ...(query ? { search: query } : {}),
+          limit: 50,
+          order: "desc",
+          parentID: null,
+        })
+        return { query, allProjects, sessions: response.data, error: undefined }
+      } catch (error) {
+        // A transient transport failure must degrade search, not crash the TUI
+        // through the root ErrorBoundary when the errored resource is read.
+        return { query, allProjects, sessions: [] as SessionInfo[], error }
+      }
+    },
+  )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const localSessions = createMemo(() => {
     const query = filter().trim().toLowerCase()
-    const sessions = data.session.list()
+    const current = data.location.info()
+    const sessions = data.session
+      .list()
+      .filter(
+        (session) =>
+          allProjects() ||
+          (session.projectID === current?.project.id && session.location.directory === current.directory),
+      )
     if (!query) return sessions
     return sessions.filter((session) => !session.parentID && session.title.toLowerCase().includes(query))
   })
   const sessions = createMemo(() => {
-    const query = filter()
+    const query = filter().trim()
     const local = localSessions()
-    if (!query) return local
-    if (query !== search() || searchResults.loading) return local
+    if (query !== search().trim() || searchResults.loading) return searchResults.latest?.sessions ?? local
     const result = searchResults()
-    if (result?.query !== query || result.error) return local
+    if (result?.query !== query || result.allProjects !== allProjects() || result.error) return local
     return result.sessions
   })
   const searchState = createMemo(() => {
-    const query = filter()
-    if (!query) return { message: "No sessions available", error: false }
-    if (query !== search() || searchResults.loading) return { message: "Searching sessions…", error: false }
+    const query = filter().trim()
+    if (query !== search().trim() || searchResults.loading)
+      return { message: query ? "Searching sessions…" : "Loading sessions…", error: false }
     const result = searchResults()
     if (result?.query === query && result.error)
-      return { message: "Could not search sessions. Change the search to try again.", error: true }
-    return { message: "No sessions found", error: false }
+      return {
+        message: query ? "Could not search sessions. Change the search to try again." : "Could not load sessions.",
+        error: true,
+      }
+    return { message: query ? "No sessions found" : "No sessions available", error: false }
   })
 
   const quickSwitchHint = createMemo(() => {
@@ -90,6 +108,13 @@ export function DialogSessionList() {
   const quickSwitchFooterHints = createMemo(() => {
     const hint = quickSwitchHint()
     return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+  })
+  const currentProjectName = createMemo(() => {
+    const current = data.location.info()
+    if (!current) return ""
+    const project = data.project.get(current.project.id)
+    if (!project) return ""
+    return project.name || path.basename(project.canonical)
   })
 
   const options = createMemo(() => {
@@ -105,8 +130,12 @@ export function DialogSessionList() {
 
     const option = (session: SessionInfo, category: string) => {
       const directory = session.location.directory
-      const footer =
-        directory !== data.location.info()?.project.directory ? Locale.truncate(path.basename(directory), 20) : ""
+      const project = data.project.get(session.projectID)
+      const footer = allProjects()
+        ? Locale.truncate(project?.name || path.basename(project?.canonical ?? directory), 20)
+        : directory !== data.location.info()?.project.directory
+          ? Locale.truncate(path.basename(directory), 20)
+          : ""
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {
@@ -139,6 +168,16 @@ export function DialogSessionList() {
   return (
     <DialogSelect
       title="Sessions"
+      titleView={
+        <box flexDirection="row">
+          <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+            Sessions
+          </text>
+          <Show when={!allProjects() && currentProjectName()}>
+            <text fg={theme.text.subdued}> for {currentProjectName()}</text>
+          </Show>
+        </box>
+      }
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -146,13 +185,25 @@ export function DialogSessionList() {
         setFilter(query)
         setSearch(query)
       }}
+      bindings={[
+        {
+          bind: "ctrl+a",
+          title: allProjects() ? "Show current directory sessions" : "Show all project sessions",
+          group: "Dialog",
+          run: () => {
+            setAllProjects((value) => !value)
+          },
+        },
+      ]}
       emptyView={
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={theme.text.subdued}>No sessions available</text>
+        <box paddingLeft={4} paddingRight={4}>
+          <text fg={searchState().error ? theme.text.feedback.error.default : theme.text.subdued}>
+            {searchState().message}
+          </text>
         </box>
       }
       noMatchView={
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+        <box paddingLeft={4} paddingRight={4}>
           <text fg={searchState().error ? theme.text.feedback.error.default : theme.text.subdued}>
             {searchState().message}
           </text>
@@ -178,24 +229,34 @@ export function DialogSessionList() {
               setToDelete(option.value)
               return
             }
-            void client.api.session.remove({ sessionID: option.value }).catch((error) => {
-              setToDelete(undefined)
-              toast.show({
-                message: `Failed to delete session: ${errorMessage(error)}`,
-                variant: "error",
-                duration: 5000,
+            void client.api.session
+              .remove({ sessionID: option.value })
+              .then(() => {
+                setSearchResults((result) =>
+                  result ? { ...result, sessions: result.sessions.filter((session) => session.id !== option.value) } : result,
+                )
               })
-            })
+              .catch((error) => {
+                setToDelete(undefined)
+                toast.show({
+                  message: `Failed to delete session: ${errorMessage(error)}`,
+                  variant: "error",
+                  duration: 5000,
+                })
+              })
           },
         },
         {
           command: "session.rename",
           title: "rename",
-          onTrigger: (option: { value: string }) =>
-            DialogSessionRename.show(dialog, option.value, data.session.get(option.value)?.title),
+          onTrigger: (option: { value: string; title: string }) =>
+            DialogSessionRename.show(dialog, option.value, option.title),
         },
       ]}
-      footerHints={quickSwitchFooterHints()}
+      footerHints={[
+        ...quickSwitchFooterHints(),
+        { title: allProjects() ? "current directory" : "all projects", label: "ctrl+a", side: "right" },
+      ]}
     />
   )
 }

@@ -102,12 +102,12 @@ export function DialogIntegration(
       title="Connect a service"
       options={options()}
       emptyView={
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+        <box paddingLeft={4} paddingRight={4}>
           <text fg={theme.text.subdued}>No integrations available</text>
         </box>
       }
       noMatchView={
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+        <box paddingLeft={4} paddingRight={4}>
           <text fg={theme.text.subdued}>No integrations found</text>
         </box>
       }

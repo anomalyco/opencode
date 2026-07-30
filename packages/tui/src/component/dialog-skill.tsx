@@ -62,13 +62,13 @@ export function DialogSkill(props: DialogSkillProps) {
       emptyView={
         <Switch
           fallback={
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.subdued}>No skills available</text>
             </box>
           }
         >
           <Match when={showError()}>
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
                 Could not load skills
               </text>
@@ -77,14 +77,14 @@ export function DialogSkill(props: DialogSkillProps) {
             </box>
           </Match>
           <Match when={skills.loading}>
-            <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.subdued}>Loading skills…</text>
             </box>
           </Match>
         </Switch>
       }
       noMatchView={
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+        <box paddingLeft={4} paddingRight={4}>
           <text fg={theme.text.subdued}>No skills found</text>
         </box>
       }

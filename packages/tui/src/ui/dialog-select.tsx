@@ -615,14 +615,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               when={props.renderFilter !== false && store.filter.length > 0}
               fallback={
                 props.emptyView ?? (
-                  <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+                  <box paddingLeft={4} paddingRight={4}>
                     <text fg={theme.text.subdued}>No items available</text>
                   </box>
                 )
               }
             >
               {props.noMatchView ?? (
-                <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+                <box paddingLeft={4} paddingRight={4}>
                   <text fg={theme.text.subdued}>No results found</text>
                 </box>
               )}

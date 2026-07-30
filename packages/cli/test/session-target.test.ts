@@ -3,7 +3,7 @@ import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } fro
 import { resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
 
 function location(directory: string, workspaceID?: string): LocationGetOutput {
-  return { directory, workspaceID, project: { id: "project", directory } }
+  return { directory, workspaceID, project: { id: "project", directory, canonical: directory } }
 }
 
 function session(id: string, directory: string, workspaceID?: string, model?: ModelRef): SessionInfo {

@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import { realpathSync } from "node:fs"
+import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
@@ -222,7 +223,10 @@ describe("ShellTool", () => {
               type: "text",
               text: expect.stringContaining("Command exited with code 0."),
             })
-            expect(assertions).toMatchObject([{ sessionID, action: "shell", resources: [helloCommand] }])
+            expect(assertions).toMatchObject([
+              { sessionID, action: "shell", resources: [isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand] },
+            ])
+            expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
           }),
         )
       },
@@ -246,6 +250,29 @@ describe("ShellTool", () => {
                 text: expect.stringContaining(realpathSync(path.join(tmp.path, "src"))),
               }),
             ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("permissions compound commands separately", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: "printf one && printf two" }, "call-compound")),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions).toHaveLength(1)
+              expect(assertions[0]).toMatchObject({
+                resources: ["printf one", "printf two"],
+                save: ["printf *", "printf *"],
+              })
+            }),
           ),
         )
       },
@@ -322,6 +349,51 @@ describe("ShellTool", () => {
         Effect.promise(() =>
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
         ),
+    ),
+  )
+
+  it.live("approves an external directory used by a directory-change command", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        const command = isWindows
+          ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
+          : `cd '${outside.path}' && pwd`
+        return withSession(active.path, (registry) => executeTool(registry, call({ command }, "call-external-cd"))).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+              expect(assertions[0]).toMatchObject({
+                resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+              })
+            }),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
+  it.live("approves an expanded external home directory", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const command = isWindows ? "Set-Location $HOME; (Get-Location).Path" : "cd ~ && pwd"
+        return withSession(tmp.path, (registry) => executeTool(registry, call({ command }, "call-external-home"))).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+              expect(assertions[0]?.resources[0]).toStartWith(os.homedir().replaceAll("\\", "/"))
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
   )
 
@@ -466,7 +538,7 @@ describe("ShellTool", () => {
       (tmp) => {
           reset()
           return withSession(tmp.path, (registry) =>
-            executeTool(registry, call({ command: timeoutOutputCommand, timeout: 50 })),
+            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 500 : 50 })),
           ).pipe(
             Effect.andThen((settled) =>
               Effect.sync(() => {

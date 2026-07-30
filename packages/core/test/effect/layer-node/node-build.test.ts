@@ -56,7 +56,7 @@ describe("node build", () => {
               Location.Service.of({
                 directory: ref.directory,
                 workspaceID: ref.workspaceID,
-                project: { id: Project.ID.global, directory: service.directory },
+                project: { id: Project.ID.global, directory: service.directory, canonical: service.directory },
               }),
             ),
           { idleTimeToLive: "1 minute" },
@@ -79,7 +79,7 @@ describe("node build", () => {
         return Project.Service.of({
           list: () => Effect.succeed([]),
           directories: () => Effect.succeed([]),
-          resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
+          resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
           commit: () => Effect.void,
         })
       }),

@@ -128,7 +128,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
   const located = <T>(data: T, value?: { directory?: string }) => ({
     location: {
       directory: directory(value) ?? "",
-      project: { id: "", directory: directory(value) ?? "" },
+      project: { id: "", directory: directory(value) ?? "", canonical: directory(value) ?? "" },
     },
     data,
   })
@@ -298,12 +298,19 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     project: {
       ...input.current.project,
       async list() {
-        return ((await legacy().project.list()).data ?? []) as Project[]
+        return ((await legacy().project.list()).data ?? []).map((project) => ({
+          ...project,
+          canonical: project.worktree,
+        }))
       },
       async current(value?: Parameters<ServerApi["project"]["current"]>[0]) {
         const result = await legacy(value?.location).project.current()
         if (!result.data) throw new Error("Project not found")
-        return { id: result.data.id, directory: result.data.worktree } satisfies ProjectCurrent
+        return {
+          id: result.data.id,
+          directory: result.data.worktree,
+          canonical: result.data.worktree,
+        } satisfies ProjectCurrent
       },
       // async update(value: Parameters<ServerApi["project"]["update"]>[0]) {
       //   const project = (await legacy().project.list()).data?.find((item) => item.id === value.projectID)

@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { dirname } from "path"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Bom } from "@opencode-ai/util/bom"
 
 export interface Target {
   readonly canonical: string
@@ -108,13 +109,13 @@ const layer = Layer.effect(
     const writeTextPreservingBom = Effect.fn("FileMutation.writeTextPreservingBom")((input: TextWriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const next = splitBom(input.content)
+          const next = Bom.split(input.content)
           const current = yield* fs
             .readFile(input.target.canonical)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
           yield* fs.writeWithDirs(
             input.target.canonical,
-            joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom),
+            Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom),
           )
           return writeResult(input.target, current !== undefined)
         }),
@@ -171,20 +172,6 @@ const layer = Layer.effect(
     return Service.of({ create, write, writeTextPreservingBom, writeIfUnchanged, remove })
   }),
 )
-
-function splitBom(text: string) {
-  const stripped = text.replace(/^\uFEFF+/, "")
-  return { bom: stripped.length !== text.length, text: stripped }
-}
-
-function joinBom(text: string, bom: boolean) {
-  const stripped = splitBom(text).text
-  return bom ? `\uFEFF${stripped}` : stripped
-}
-
-function hasUtf8Bom(content: Uint8Array) {
-  return content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
-}
 
 function sameBytes(left: Uint8Array, right: Uint8Array) {
   if (left.length !== right.length) return false

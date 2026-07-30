@@ -167,7 +167,11 @@ function sdk(input: {
       location: {
         directory: input.globalLocation?.directory ?? "/tmp",
         workspaceID: input.globalLocation?.workspaceID,
-        project: { id: "proj_1", directory: input.globalLocation?.directory ?? "/tmp" },
+        project: {
+          id: "proj_1",
+          directory: input.globalLocation?.directory ?? "/tmp",
+          canonical: input.globalLocation?.directory ?? "/tmp",
+        },
       },
       data: input.globals ?? [],
     }),

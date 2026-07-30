@@ -66,6 +66,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { DialogProject } from "./component/dialog-project"
 import { SessionTabs } from "./component/session-tabs"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { ThemeProvider, useTheme, useThemes } from "./context/theme"
@@ -646,6 +647,15 @@ function App(props: { pair?: DialogPairCredentials }) {
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "project.switch",
+        title: "Switch project",
+        category: "Session",
+        slash: { name: "projects", aliases: ["project"] },
+        run: () => {
+          dialog.replace(() => <DialogProject />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({

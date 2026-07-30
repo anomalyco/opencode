@@ -168,6 +168,7 @@ export function sanitizeProject(project: Project) {
 export function normalizeProjectInfo(project: Project | CurrentProject): Project {
   return {
     ...project,
+    worktree: "canonical" in project ? project.canonical : project.worktree,
     vcs: project.vcs === "git" ? "git" : undefined,
   }
 }

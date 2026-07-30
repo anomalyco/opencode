@@ -8,6 +8,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Node } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus"
 import { FileMutation } from "./file-mutation"
+import { Formatter } from "./formatter"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
 import { Generate } from "./generate"
@@ -73,6 +74,7 @@ const locationServiceNodes = [
   InstructionDiscovery.node,
   LocationMutation.node,
   FileMutation.node,
+  Formatter.node,
   MCP.node,
   Permission.node,
   Tool.node,

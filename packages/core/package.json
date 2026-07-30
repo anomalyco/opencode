@@ -41,6 +41,11 @@
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
     },
+    "#shell-parser-wasm": {
+      "bun": "./src/shell/parser-wasm.bun.ts",
+      "node": "./src/shell/parser-wasm.node.ts",
+      "default": "./src/shell/parser-wasm.bun.ts"
+    },
     "#process-lock-ffi": {
       "bun": "./src/util/process-lock-ffi.bun.ts",
       "node": "./src/util/process-lock-ffi.node.ts",
@@ -119,7 +124,10 @@
     "jsonc-parser": "3.3.1",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
+    "tree-sitter-bash": "0.25.0",
+    "tree-sitter-powershell": "0.25.10",
     "venice-ai-sdk-provider": "2.1.1",
+    "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "zod": "catalog:"
   },

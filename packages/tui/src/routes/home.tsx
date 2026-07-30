@@ -27,10 +27,11 @@ export function Home() {
   const data = useData()
   const location = useLocation()
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
-  const forms = createMemo(() => data.session.form.list("global", data.location.default()) ?? [])
+  const currentLocation = () => route.location ?? data.location.default()
+  const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
   let sent = false
 
-  createEffect(() => location.set(data.location.default()))
+  createEffect(() => location.set(currentLocation()))
 
   onMount(() => {
     editor.clearSelection()

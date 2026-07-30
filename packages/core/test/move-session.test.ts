@@ -11,7 +11,6 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Job } from "@opencode-ai/core/job"
 import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -89,11 +88,6 @@ describe("MoveSession", () => {
       const sessionID = Session.ID.make("ses_move")
       const { db } = yield* Database.Service
       yield* db
-        .insert(ProjectTable)
-        .values({ id: projectID, worktree: source, sandboxes: [], time_created: 1, time_updated: 1 })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
         .insert(SessionTable)
         .values({
           id: sessionID,
@@ -144,11 +138,6 @@ describe("MoveSession", () => {
       const projectID = (yield* Project.Service.use((service) => service.resolve(source))).id
       const sessionID = Session.ID.make("ses_move_nested")
       const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: projectID, worktree: source, sandboxes: [], time_created: 1, time_updated: 1 })
-        .run()
-        .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
         .values({
@@ -204,11 +193,6 @@ describe("MoveSession", () => {
       const destinationProjectID = (yield* Project.Service.use((service) => service.resolve(destination))).id
       const sessionID = Session.ID.make("ses_move_project")
       const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: projectID, worktree: source, sandboxes: [], time_created: 1, time_updated: 1 })
-        .run()
-        .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
         .values({
@@ -268,11 +252,6 @@ describe("MoveSession", () => {
       const projectID = (yield* Project.Service.use((service) => service.resolve(source))).id
       const sessionID = Session.ID.make("ses_move_nested_checkout")
       const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: projectID, worktree: source, sandboxes: [], time_created: 1, time_updated: 1 })
-        .run()
-        .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
         .values({

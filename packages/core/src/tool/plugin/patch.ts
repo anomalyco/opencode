@@ -7,7 +7,9 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { PlatformError } from "effect/PlatformError"
 import path from "path"
+import { Bom } from "@opencode-ai/util/bom"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Formatter } from "../../formatter"
 import { Location } from "../../location"
 import { Patch } from "@opencode-ai/util/patch"
 import { Permission } from "../../permission"
@@ -68,6 +70,7 @@ export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
     const fs = yield* FSUtil.Service
+    const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
@@ -129,15 +132,16 @@ export const Plugin = {
                           ...hunk,
                           target,
                           before: "",
-                          after: (hunk.contents.endsWith("\n") || hunk.contents === ""
-                            ? hunk.contents
-                            : `${hunk.contents}\n`
-                          ).replace(/^\uFEFF/, ""),
+                          after: Bom.split(
+                            hunk.contents.endsWith("\n") || hunk.contents === ""
+                              ? hunk.contents
+                              : `${hunk.contents}\n`,
+                          ).text,
                         })
                         return
                       }
                       if (hunk.type === "delete") {
-                        const content = yield* fs.readFile(target.canonical).pipe(
+                        const content = yield* Bom.readFile(fs, target.canonical).pipe(
                           Effect.mapError(
                             (error) =>
                               new ToolFailure({
@@ -145,8 +149,7 @@ export const Plugin = {
                               }),
                           ),
                         )
-                        const original = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content)
-                        prepared.push({ ...hunk, target, before: original.replace(/^\uFEFF/, ""), after: "" })
+                        prepared.push({ ...hunk, target, before: content.text, after: "" })
                         return
                       }
                       const previous = updates.get(target.canonical)
@@ -166,18 +169,17 @@ export const Plugin = {
                               message: `patch verification failed: Failed to read file to update ${target.canonical}: path is a directory`,
                             })
                           }
-                          return new TextDecoder("utf-8", { ignoreBOM: true }).decode(
-                            yield* fs.readFile(target.canonical).pipe(
-                              Effect.mapError(
-                                (error) =>
-                                  new ToolFailure({
-                                    message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
-                                  }),
-                              ),
+                          const content = yield* Bom.readFile(fs, target.canonical).pipe(
+                            Effect.mapError(
+                              (error) =>
+                                new ToolFailure({
+                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
+                                }),
                             ),
                           )
+                          return Bom.join(content.text, content.bom)
                         }))
-                      const before = original.replace(/^\uFEFF/, "")
+                      const before = Bom.split(original).text
                       const update = yield* Effect.try({
                         try: () => Patch.derive(hunk.path, hunk.chunks, original),
                         catch: (error) =>
@@ -217,7 +219,7 @@ export const Plugin = {
                     )
                   }
 
-                  const patchFiles = prepared.map(patchFile)
+                  const patchFiles = prepared.map((change) => patchFile(change))
                   yield* permission.assert({
                     action: "edit",
                     resources: [...new Set(targets.map((target) => target.resource))],
@@ -295,7 +297,31 @@ export const Plugin = {
                       }),
                     { discard: true },
                   )
-                  return { applied, files: patchFiles }
+                  const formatted = new Map<string, string>()
+                  yield* Effect.forEach(
+                    [...new Set(applied.filter((item) => item.type !== "delete").map((item) => item.target))],
+                    (target) =>
+                      Effect.gen(function* () {
+                        const current = yield* Bom.readFile(fs, target).pipe(
+                          Effect.mapError((error) => fail(`Failed to read ${target}`, error)),
+                        )
+                        formatted.set(
+                          target,
+                          (yield* formatter.file(target))
+                            ? yield* Bom.syncFile(fs, target, current.bom).pipe(
+                                Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
+                              )
+                            : current.text,
+                        )
+                      }),
+                    { discard: true },
+                  )
+                  const files = yield* Effect.forEach(prepared, (change) => {
+                    if (change.type === "delete") return Effect.succeed(patchFile(change))
+                    const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
+                    return Effect.succeed(patchFile(change, formatted.get(target.canonical)))
+                  })
+                  return { applied, files }
                 }).pipe(
                   Effect.map((output) => ({
                     output,
@@ -337,15 +363,15 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-function patchFile(change: Prepared): typeof FileDiff.Info.Type {
+function patchFile(change: Prepared, after = change.after): typeof FileDiff.Info.Type {
   const target = (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource
   const patch = trimDiff(
-    createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, change.after),
+    createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, after),
   )
   const counts =
     change.type === "delete"
       ? { additions: 0, deletions: change.before.split("\n").length }
-      : diffLines(change.before, change.after).reduce(
+      : diffLines(change.before, after).reduce(
           (result, item) => ({
             additions: result.additions + (item.added ? (item.count ?? 0) : 0),
             deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),

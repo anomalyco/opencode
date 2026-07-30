@@ -17,6 +17,7 @@ export class Info extends Schema.Class<Info>("Location.Info")({
   project: Schema.Struct({
     id: ProjectID,
     directory: AbsolutePath,
+    canonical: AbsolutePath,
   }),
 }) {}
 

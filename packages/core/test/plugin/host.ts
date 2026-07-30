@@ -121,7 +121,11 @@ export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
             ? Effect.succeed({
                 location: new Location.Info({
                   directory: AbsolutePath.make("/"),
-                  project: { id: Project.ID.make("test"), directory: AbsolutePath.make("/") },
+                  project: {
+                    id: Project.ID.make("test"),
+                    directory: AbsolutePath.make("/"),
+                    canonical: AbsolutePath.make("/"),
+                  },
                 }),
                 data: agentInfo(value),
               })
@@ -163,7 +167,11 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
           Effect.map((data) => ({
             location: new Location.Info({
               directory: AbsolutePath.make("/"),
-              project: { id: Project.ID.make("test"), directory: AbsolutePath.make("/") },
+              project: {
+                id: Project.ID.make("test"),
+                directory: AbsolutePath.make("/"),
+                canonical: AbsolutePath.make("/"),
+              },
             }),
             data: data.map(modelInfo),
           })),
@@ -357,7 +365,11 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
 export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["websearch"] {
   const location = Location.Info.make({
     directory: AbsolutePath.make("/tmp/websearch-test"),
-    project: { id: Project.ID.make("websearch-test"), directory: AbsolutePath.make("/tmp/websearch-test") },
+    project: {
+      id: Project.ID.make("websearch-test"),
+      directory: AbsolutePath.make("/tmp/websearch-test"),
+      canonical: AbsolutePath.make("/tmp/websearch-test"),
+    },
   })
   return {
     providers: () => websearch.providers().pipe(Effect.map((data) => ({ location, data }))),

@@ -14,7 +14,7 @@ import { Model } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -32,7 +32,7 @@ const projects = Layer.succeed(
   Project.Service,
   Project.Service.of({
     list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
+    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
     directories: () => Effect.succeed([]),
     commit: () => Effect.void,
   }),
@@ -181,6 +181,26 @@ describe("Session.create", () => {
       const page = yield* session.list({ parentID: parent.id })
 
       expect(page.data.map((item) => item.id)).toEqual([child.id])
+    }),
+  )
+
+  it.effect("filters project sessions by subpath", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      const root = yield* session.create({ location, title: "root" })
+      const nested = yield* session.create({ location, title: "nested" })
+
+      yield* db.update(SessionTable).set({ path: "packages/tui" }).where(eq(SessionTable.id, nested.id)).run()
+
+      const page = yield* session.list({
+        project: Project.ID.global,
+        subpath: RelativePath.make("packages/tui"),
+        parentID: null,
+      })
+
+      expect(page.data.map((item) => item.id)).toEqual([nested.id])
+      expect(page.data.map((item) => item.id)).not.toContain(root.id)
     }),
   )
 

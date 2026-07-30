@@ -1,8 +1,8 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
-import { FilePath } from "../../ui/file-path"
 import { stringWidth } from "../../util/string-width"
+import { FadeFilePath } from "../../ui/fade-file-path"
 
 function Directory(props: { context: Plugin.Context; maxWidth: number }) {
   const directory = createMemo(() =>
@@ -10,9 +10,12 @@ function Directory(props: { context: Plugin.Context; maxWidth: number }) {
   )
 
   return (
-    <Show when={directory()}>
-      {(value) => <FilePath value={value()} maxWidth={props.maxWidth} fg={props.context.theme.text.subdued} />}
-    </Show>
+    <FadeFilePath
+      value={directory()}
+      maxWidth={props.maxWidth}
+      fg={props.context.theme.text.subdued}
+      bg={props.context.theme.background.default}
+    />
   )
 }
 
