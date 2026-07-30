@@ -58,6 +58,7 @@ describe("OpenAIPlugin", () => {
           draft.package = item.package
         })
         catalog.model.update(item.id, Model.ID.make("gpt-5.5"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
           model.cost = [
             {
               input: Money.USDPerMillionTokens.make(1),
@@ -75,7 +76,9 @@ describe("OpenAIPlugin", () => {
           model.body = { reasoning: { mode: "pro" } }
         })
         catalog.model.update(item.id, Model.ID.make("gpt-5.6"), () => {})
-        catalog.model.update(item.id, Model.ID.make("gpt-5.6-sol"), () => {})
+        catalog.model.update(item.id, Model.ID.make("gpt-5.6-sol"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
         catalog.model.update(item.id, Model.ID.make("gpt-4.1"), () => {})
       })
       yield* credentials.create({
@@ -98,6 +101,7 @@ describe("OpenAIPlugin", () => {
       const eligible = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode-ai/ai/providers/openai")
       expect(eligible.cost).toEqual([])
+      expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"))).enabled).toBe(
         false,
@@ -106,9 +110,9 @@ describe("OpenAIPlugin", () => {
         false,
       )
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
-      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"))).enabled).toBe(
-        true,
-      )
+      const gpt56 = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
+      expect(gpt56.enabled).toBe(true)
+      expect(gpt56.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
     }),
   )
@@ -125,7 +129,9 @@ describe("OpenAIPlugin", () => {
         catalog.provider.update(item.id, (draft) => {
           draft.package = item.package
         })
-        catalog.model.update(item.id, Model.ID.make("gpt-5.5"), () => {})
+        catalog.model.update(item.id, Model.ID.make("gpt-5.5"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
         catalog.model.update(item.id, Model.ID.make("gpt-4.1"), () => {})
       })
       yield* credentials.create({
@@ -137,6 +143,7 @@ describe("OpenAIPlugin", () => {
       const model = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(model.package).toBe("@opencode-ai/ai/providers/openai")
       expect(model.enabled).toBe(true)
+      expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(true)
     }),
   )
