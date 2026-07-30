@@ -346,6 +346,25 @@ export interface UI {
     navigate(destination: Destination): void
     current(): Route
   }
+  readonly tabs: {
+    /** Returns whether session tabs are enabled for this TUI. */
+    enabled(): boolean
+    /** Returns the currently open root-session tabs. Reactive when read in a Solid computation. */
+    list(): readonly {
+      readonly sessionID: string
+      readonly title?: string
+      readonly active: boolean
+      readonly busy: boolean
+      readonly attention: boolean
+      readonly unread?: "activity" | "error"
+    }[]
+    /** Opens (or focuses) a tab for a session, adding it when not already open. Returns false when tabs are disabled. */
+    open(sessionID: string): boolean
+    /** Focuses an already-open tab and returns false when it is not open. */
+    focus(sessionID: string): boolean
+    /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
+    close(sessionID?: string): boolean
+  }
   readonly slot: <Name extends SlotName>(name: Name, render: Slot<Name>) => () => void
 }
 

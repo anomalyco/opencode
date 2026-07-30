@@ -33,6 +33,7 @@ import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
 import { useStorage } from "../context/storage"
+import { useSessionTabs } from "../context/session-tabs"
 import { abbreviateHome } from "../util/path-format"
 import { builtins } from "./builtins"
 import { discoverTuiPlugins } from "./discovery"
@@ -94,6 +95,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const toast = useToast()
   const attention = useAttention()
   const storage = useStorage()
+  const sessionTabs = useSessionTabs()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
@@ -276,6 +278,33 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
           },
           current() {
             return route.data
+          },
+        },
+        tabs: {
+          enabled: sessionTabs.enabled,
+          list: () =>
+            sessionTabs.tabs().map((tab) => ({
+              ...tab,
+              active: sessionTabs.current() === tab.sessionID,
+              ...sessionTabs.status(tab.sessionID),
+            })),
+          open(sessionID) {
+            if (!sessionTabs.enabled()) return false
+            sessionTabs.select(sessionID)
+            return true
+          },
+          focus(sessionID) {
+            if (!sessionTabs.enabled()) return false
+            if (!sessionTabs.tabs().some((tab) => tab.sessionID === sessionID)) return false
+            sessionTabs.select(sessionID)
+            return true
+          },
+          close(sessionID) {
+            if (!sessionTabs.enabled()) return false
+            const target = sessionID ?? sessionTabs.current()
+            if (!target || !sessionTabs.tabs().some((tab) => tab.sessionID === target)) return false
+            sessionTabs.close(target)
+            return true
           },
         },
         slot(name, render) {
