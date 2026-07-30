@@ -123,6 +123,37 @@ class Envelope {
 
 // Hoisted so the per-frame liveness check allocates no closure.
 const envelopeActive = (envelope: Envelope) => envelope.active
+const activePulses = new Set<TabPulseRenderable>()
+let pulseTimer: ReturnType<typeof setInterval> | undefined
+let pulseTime = 0
+
+function animatePulse(pulse: TabPulseRenderable, value: boolean) {
+  if (!value) {
+    activePulses.delete(pulse)
+    if (activePulses.size === 0 && pulseTimer) clearInterval(pulseTimer)
+    if (activePulses.size === 0) pulseTimer = undefined
+    return
+  }
+  activePulses.add(pulse)
+  if (pulseTimer) return
+  pulseTime = performance.now()
+  pulseTimer = setInterval(() => {
+    const now = performance.now()
+    const delta = now - pulseTime
+    pulseTime = now
+    for (const active of activePulses) {
+      if (active.isDestroyed) {
+        activePulses.delete(active)
+        continue
+      }
+      active.updateAnimation(delta)
+      active.requestRender()
+    }
+    if (activePulses.size > 0 || !pulseTimer) return
+    clearInterval(pulseTimer)
+    pulseTimer = undefined
+  }, 1000 / 60)
+}
 
 class TabPulseRenderable extends Renderable {
   private _enabled: boolean
@@ -151,7 +182,7 @@ class TabPulseRenderable extends Renderable {
   constructor(ctx: RenderContext, options: TabPulseOptions = {}) {
     const enabled = options.enabled ?? true
     const active = options.active ?? false
-    super(ctx, { ...options, height: 1, live: enabled && active })
+    super(ctx, { ...options, height: 1, live: false })
     this._enabled = enabled
     this._active = active
     this._complete = options.complete ?? false
@@ -163,6 +194,11 @@ class TabPulseRenderable extends Renderable {
     this._completionColor = options.completionColor ?? this._color
     this._backgroundColor = options.backgroundColor ?? RGBA.defaultBackground()
     this._onLevel = options.onLevel
+    this.setAnimating(enabled && (active || this.breathing))
+  }
+
+  private setAnimating(value: boolean) {
+    animatePulse(this, value)
   }
 
   set onLevel(value: ((level: number) => void) | undefined) {
@@ -197,9 +233,9 @@ class TabPulseRenderable extends Renderable {
       for (const envelope of this.envelopes) envelope.stop()
       this.completionPending = false
       this.breatheClock = 0
-      this.live = false
+      this.setAnimating(false)
     } else if (this._active || this.breathing) {
-      this.live = true
+      this.setAnimating(true)
     }
     this.requestRender()
   }
@@ -218,7 +254,7 @@ class TabPulseRenderable extends Renderable {
     }
     // The same neutral edge flash marks both the start and the finish of a run.
     this.edgeFlash.start()
-    this.live = true
+    this.setAnimating(true)
     this.requestRender()
   }
 
@@ -233,7 +269,7 @@ class TabPulseRenderable extends Renderable {
       this.completionPending = false
       if (this._enabled) {
         this.completionPulse.start()
-        this.live = true
+        this.setAnimating(true)
       }
     }
     this.requestRender()
@@ -248,7 +284,7 @@ class TabPulseRenderable extends Renderable {
     if (this._enabled && value) {
       this.glowOff.stop()
       this.ignition.start()
-      this.live = true
+      this.setAnimating(true)
     }
     this.requestRender()
   }
@@ -257,7 +293,7 @@ class TabPulseRenderable extends Renderable {
     if (value === this._breathe) return
     this._breathe = value
     this.breatheClock = 0
-    if (this.breathing) this.live = true
+    if (this.breathing) this.setAnimating(true)
     this.requestRender()
   }
 
@@ -291,7 +327,7 @@ class TabPulseRenderable extends Renderable {
     this.requestRender()
   }
 
-  protected override onUpdate(deltaTime: number): void {
+  updateAnimation(deltaTime: number): void {
     if (!this._enabled) return
     if (this._active || this.runFade.active) this.clock += deltaTime
     if (this.breathing) this.breatheClock += deltaTime
@@ -304,7 +340,11 @@ class TabPulseRenderable extends Renderable {
         this.completionPending = false
       }
     }
-    this.live = this._active || this.breathing || this.envelopes.some(envelopeActive)
+    this.setAnimating(this._active || this.breathing || this.envelopes.some(envelopeActive))
+  }
+
+  protected override destroySelf(): void {
+    this.setAnimating(false)
   }
 
   protected override renderSelf(buffer: OptimizedBuffer): void {
