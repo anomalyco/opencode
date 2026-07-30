@@ -69,20 +69,13 @@ Açmak için **Komut Paleti**'ndeki `agent: new thread` eylemini kullanın.
 
 ### JetBrains IDEs
 
-[documentation](https://www.jetbrains.com/help/ai-assistant/acp.html) uyarınca [JetBrains IDE](https://www.jetbrains.com/) acp.json dosyanıza ekleyin:
+OpenCode, JetBrains IDE'lerinde ACP Registry üzerinden kullanılabilir.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+Kullanmak için JetBrains AI Assistant eklentisini yükleyin veya güncelleyin, AI Chat'i açın ve sohbet modu seçicisinden **Install From ACP Registry** seçeneğini seçin. Ayrıca **Settings | Tools | AI Assistant | Agents** bölümüne gidebilirsiniz. **OpenCode** arayın, yükleyin, ayarları uygulayın ve ardından AI Chat ajan seçicisinden **OpenCode**'u seçin.
 
-Açmak için AI Chat agent seçicisindeki yeni 'OpenCode' ajanını kullanın.
+Kayıt girdisi: `opencode`
+
+Daha fazla ayrıntı için [JetBrains ACP belgelerine](https://www.jetbrains.com/help/ai-assistant/acp.html) ve [ACP Registry belgelerine](https://agentclientprotocol.com/get-started/registry) bakın.
 
 ---
 

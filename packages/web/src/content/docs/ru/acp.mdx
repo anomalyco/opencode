@@ -69,20 +69,13 @@ ACP — это открытый протокол, который стандар�
 
 ### IDE JetBrains
 
-Добавьте в свою [JetBrains IDE](https://www.jetbrains.com/) acp.json в соответствии с [документацией](https://www.jetbrains.com/help/ai-assistant/acp.html):
+OpenCode доступен в JetBrains IDE через ACP Registry.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+Чтобы использовать его, установите или обновите плагин JetBrains AI Assistant, откройте AI Chat и выберите **Install From ACP Registry** в селекторе режима чата. Также можно перейти в **Settings | Tools | AI Assistant | Agents**. Найдите **OpenCode**, установите его, примените настройки, а затем выберите **OpenCode** в селекторе агентов AI Chat.
 
-Чтобы открыть его, используйте новый агент opencode в селекторе агентов AI Chat.
+Запись в реестре: `opencode`
+
+Подробнее см. [документацию JetBrains ACP](https://www.jetbrains.com/help/ai-assistant/acp.html) и [документацию ACP Registry](https://agentclientprotocol.com/get-started/registry).
 
 ---
 

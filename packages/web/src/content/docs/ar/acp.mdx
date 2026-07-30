@@ -6,7 +6,7 @@ description: استخدم OpenCode في أي محرر متوافق مع ACP.
 يدعم OpenCode بروتوكول [Agent Client Protocol](https://agentclientprotocol.com) أو (ACP)، مما يتيح لك استخدامه مباشرة في المحررات وبيئات التطوير المتكاملة (IDEs) المتوافقة.
 
 :::tip
-للاطلاع على قائمة بالمحررات والأدوات التي تدعم ACP، راجع [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
+للاطلاع على قائمة بالمحررات والأدوات التي تدعم ACP، راجع [تقرير تقدّم ACP](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
 ACP بروتوكول مفتوح يوحّد آلية التواصل بين محررات الشيفرة ووكلاء البرمجة بالذكاء الاصطناعي.
@@ -67,22 +67,15 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 
 ---
 
-### JetBrains IDEs
+### بيئات JetBrains
 
-أضف إلى ملف acp.json الخاص بـ [JetBrains IDE](https://www.jetbrains.com/) وفقا لـ [documentation](https://www.jetbrains.com/help/ai-assistant/acp.html):
+OpenCode متاح في بيئات JetBrains المتوافقة مع ACP من خلال ACP Registry.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+لاستخدامه، ثبّت أو حدّث إضافة JetBrains AI Assistant، ثم افتح AI Chat واختر **Install From ACP Registry** من محدد وضع الدردشة. يمكنك أيضا الانتقال إلى **Settings | Tools | AI Assistant | Agents**. ابحث عن **OpenCode**، ثبته، طبّق الإعدادات، ثم اختر **OpenCode** من محدد وكلاء AI Chat.
 
-لفتحه، اختر الوكيل الجديد 'OpenCode' من محدد الوكلاء في AI Chat.
+مدخل السجل: `opencode`
+
+اطّلع على [توثيق JetBrains ACP](https://www.jetbrains.com/help/ai-assistant/acp.html) و[توثيق ACP Registry](https://agentclientprotocol.com/get-started/registry) للمزيد من التفاصيل.
 
 ---
 

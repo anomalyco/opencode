@@ -69,20 +69,13 @@ Vous pouvez également associer un raccourci clavier en modifiant votre `keymap.
 
 ### IDE JetBrains
 
-Ajoutez `acp.json` à votre [IDE JetBrains](https://www.jetbrains.com/) conformément à la [documentation](https://www.jetbrains.com/help/ai-assistant/acp.html) :
+OpenCode est disponible dans les IDE JetBrains via le registre ACP.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+Pour l'utiliser, installez ou mettez à jour le plugin JetBrains AI Assistant, ouvrez AI Chat et sélectionnez **Install From ACP Registry** dans le sélecteur de mode de chat. Vous pouvez aussi aller dans **Settings | Tools | AI Assistant | Agents**. Recherchez **OpenCode**, installez-le, appliquez les paramètres, puis choisissez **OpenCode** dans le sélecteur d'agents d'AI Chat.
 
-Pour l'ouvrir, utilisez le nouvel agent « OpenCode » dans le sélecteur d'agent AI Chat.
+Entrée du registre : `opencode`
+
+Consultez la [documentation JetBrains ACP](https://www.jetbrains.com/help/ai-assistant/acp.html) et la [documentation du registre ACP](https://agentclientprotocol.com/get-started/registry) pour plus de détails.
 
 ---
 

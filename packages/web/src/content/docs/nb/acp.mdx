@@ -69,20 +69,13 @@ Du kan også binde en hurtigtast ved å redigere `keymap.json`:
 
 ### JetBrains IDE-er
 
-Legg til [JetBrains IDE](https://www.jetbrains.com/) acp.json i henhold til [dokumentasjonen](https://www.jetbrains.com/help/ai-assistant/acp.html):
+OpenCode er tilgjengelig i JetBrains IDE-er via ACP Registry.
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+For å bruke det, installer eller oppdater JetBrains AI Assistant-pluginen, åpne AI Chat og velg **Install From ACP Registry** fra velgeren for chatmodus. Du kan også gå til **Settings | Tools | AI Assistant | Agents**. Søk etter **OpenCode**, installer det, bruk innstillingene, og velg deretter **OpenCode** fra agentvelgeren i AI Chat.
 
-For å åpne den, bruk den nye 'OpenCode'-agenten i AI Chat-agentvelgeren.
+Registeroppføring: `opencode`
+
+Se [JetBrains ACP-dokumentasjonen](https://www.jetbrains.com/help/ai-assistant/acp.html) og [ACP Registry-dokumentasjonen](https://agentclientprotocol.com/get-started/registry) for flere detaljer.
 
 ---
 

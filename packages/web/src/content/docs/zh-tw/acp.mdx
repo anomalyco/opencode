@@ -69,20 +69,13 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
 
 ### JetBrains IDEs
 
-根據[文件](https://www.jetbrains.com/help/ai-assistant/acp.html)，將以下內容新增到你的 [JetBrains IDE](https://www.jetbrains.com/) 的 acp.json 中：
+OpenCode 可透過 ACP Registry 在 JetBrains IDE 中使用。
 
-```json title="acp.json"
-{
-  "agent_servers": {
-    "OpenCode": {
-      "command": "/absolute/path/bin/opencode",
-      "args": ["acp"]
-    }
-  }
-}
-```
+要使用它，請安裝或更新 JetBrains AI Assistant 外掛程式，開啟 AI Chat，並在聊天模式選擇器中選取 **Install From ACP Registry**。你也可以前往 **Settings | Tools | AI Assistant | Agents**。搜尋 **OpenCode**，安裝它，套用設定，然後在 AI Chat 的代理程式選擇器中選取 **OpenCode**。
 
-開啟方式：在 AI Chat 代理選擇器中選擇新的 'OpenCode' 代理。
+登錄項目：`opencode`
+
+更多詳細資訊請參閱 [JetBrains ACP 文件](https://www.jetbrains.com/help/ai-assistant/acp.html) 與 [ACP Registry 文件](https://agentclientprotocol.com/get-started/registry)。
 
 ---
 
