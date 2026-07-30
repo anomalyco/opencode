@@ -66,7 +66,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogProject } from "./component/dialog-project"
+import { DialogOpen } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { ThemeProvider, useTheme, useThemes } from "./context/theme"
@@ -95,7 +95,7 @@ import { StorageProvider } from "./context/storage"
 
 registerOpencodeSpinner()
 
-const appGlobalBindingCommands = ["session.list", "session.new"] as const
+const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as const
 
 const sessionTabBindingCommands = [
   "session.tab.next",
@@ -651,12 +651,12 @@ function App(props: { pair?: DialogPairCredentials }) {
         },
       },
       {
-        name: "project.switch",
-        title: "Switch project",
+        name: "open.menu",
+        title: "Open session or project",
         category: "Session",
-        slash: { name: "projects", aliases: ["project"] },
+        slash: { name: "open", aliases: ["projects", "project"] },
         run: () => {
-          dialog.replace(() => <DialogProject />)
+          dialog.replace(() => <DialogOpen />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
