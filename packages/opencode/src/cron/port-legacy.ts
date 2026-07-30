@@ -1,15 +1,10 @@
 import { Effect, Layer } from "effect"
 import { CronDeliveryPort, CronDeliveryError } from "@opencode-ai/core/cron/port"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionRunState } from "@/session/run-state"
 import { SessionPrompt } from "@/session/prompt"
 import { Session } from "@/session/session"
-
-const parseModel = (raw?: string) => {
-  if (!raw) return undefined
-  const [providerID, modelID] = raw.split("/")
-  if (!providerID || !modelID) return undefined
-  return { providerID, modelID }
-}
+import { SessionID } from "@/session/schema"
 
 export const CronDeliveryPortLive = Layer.effect(
   CronDeliveryPort,
@@ -20,24 +15,24 @@ export const CronDeliveryPortLive = Layer.effect(
 
     return CronDeliveryPort.of({
       isBusy: (sessionID) =>
-        runState.assertNotBusy(sessionID as any).pipe(
+        runState.assertNotBusy(SessionID.make(sessionID)).pipe(
           Effect.as(false),
           Effect.catchTag("SessionBusyError", () => Effect.succeed(true)),
         ),
       deliver: (sessionID, prompt, opts) =>
         promptSvc
           .prompt({
-            sessionID: sessionID as any,
+            sessionID: SessionID.make(sessionID),
             parts: [{ type: "text", text: prompt }],
             agent: opts?.agent,
-            model: parseModel(opts?.model) as any,
+            model: opts?.model ? ModelV2.parse(opts.model) : undefined,
           })
           .pipe(
             Effect.asVoid,
             Effect.mapError((e) => new CronDeliveryError({ message: String(e) })),
           ),
       exists: (sessionID) =>
-        sessionSvc.get(sessionID as any).pipe(
+        sessionSvc.get(SessionID.make(sessionID)).pipe(
           Effect.as(true),
           Effect.orElseSucceed(() => false),
         ),

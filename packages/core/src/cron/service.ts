@@ -39,9 +39,6 @@ const make = Effect.gen(function* () {
       return [jobs.length - kept.length, sortByNextRun(kept)] as const
     })
 
-  const sessionCount = (sessionID: string) =>
-    Ref.get(heap).pipe(Effect.map((jobs) => jobs.filter((j) => j.sessionID === sessionID).length))
-
   const loop = Effect.gen(function* () {
     while (true) {
       const empty = yield* heapIsEmpty()
@@ -75,7 +72,12 @@ const make = Effect.gen(function* () {
 
       yield* port
         .deliver(job.sessionID, job.prompt, { agent: job.agent, model: job.model })
-        .pipe(Effect.forkScoped)
+        .pipe(
+          Effect.catch((e) =>
+            Effect.logError("cron delivery failed", { sessionID: job.sessionID, error: String(e) }),
+          ),
+          Effect.forkScoped,
+        )
 
       const updated: CronJob = {
         ...job,
@@ -98,15 +100,11 @@ const make = Effect.gen(function* () {
   }) =>
     Effect.gen(function* () {
       if (input.intervalMs < 60_000) {
-        return yield* new CronError({ message: "Interval must be at least 1 minute (60_000 ms)" })
+        return yield* new CronError({ message: "Interval must be at least 1 minute (60s)" })
       }
       const exists = yield* port.exists(input.sessionID)
       if (!exists) {
         return yield* new CronError({ message: `Session ${input.sessionID} not found` })
-      }
-      const count = yield* sessionCount(input.sessionID)
-      if (count >= 50) {
-        return yield* new CronError({ message: "Maximum 50 cron jobs per session" })
       }
       const now = yield* Clock.currentTimeMillis
       const job: CronJob = {
@@ -121,7 +119,14 @@ const make = Effect.gen(function* () {
         nextRunAt: now + input.intervalMs,
         runCount: 0,
       }
-      yield* insertJob(job)
+      const inserted = yield* Ref.modify(heap, (jobs) => {
+        const count = jobs.filter((j) => j.sessionID === input.sessionID).length
+        if (count >= 50) return [false, jobs] as const
+        return [true, sortByNextRun([...jobs, job])] as const
+      })
+      if (!inserted) {
+        return yield* new CronError({ message: "Maximum 50 cron jobs per session" })
+      }
       yield* Queue.offer(wakeQueue, undefined)
       return job
     })
