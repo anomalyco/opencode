@@ -3,6 +3,7 @@ import { DiffRenderable, LineNumberRenderable, type ColorInput } from "@opentui/
 import type { JSX } from "@opentui/solid"
 import { createMemo, For, Show, splitProps } from "solid-js"
 import { splitPatchHunks } from "../util/diff"
+import { stringWidth } from "../util/string-width"
 
 type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg"> & {
   diff: string
@@ -19,12 +20,26 @@ export function PatchDiff(props: Props) {
       const sides = [...nodes]
         .filter((item) => !item.isDestroyed)
         .flatMap((item) => item.getChildren().filter((side) => side instanceof LineNumberRenderable))
-      const max = Math.max(...sides.flatMap((side) => [...side.getLineNumbers().values()]))
-      if (!max && attempt < 2) return syncGutters(attempt + 1)
-      if (!max) return
+      const lineNumbers = sides.map((side) => new Map([...side.getLineNumbers()].filter(([line]) => line >= 0)))
+      const digits = lineNumbers.map((numbers) => Math.max(0, ...numbers.values()).toString().length)
+      const after = sides.map((side) =>
+        Math.max(
+          0,
+          ...[...side.getLineSigns()]
+            .filter(([line]) => line >= 0)
+            .map(([, sign]) => stringWidth(sign.after ?? "")),
+        ),
+      )
+      const maxDigits = Math.max(...digits)
+      const maxAfter = Math.max(...after)
+      if (!maxDigits && attempt < 2) return syncGutters(attempt + 1)
+      if (!maxDigits) return
       sides.forEach((side) => {
-        side.setLineNumbers(new Map([...side.getLineNumbers(), [-1, max]]))
-        side.setLineSigns(new Map([...side.getLineSigns(), [-1, { after: "  " }]]))
+        const index = sides.indexOf(side)
+        const signs = new Map([...side.getLineSigns()].filter(([line]) => line >= 0))
+        signs.set(-1, { after: " ".repeat(maxAfter + maxDigits - digits[index]) })
+        side.setLineNumbers(lineNumbers[index])
+        side.setLineSigns(signs)
       })
     })
   }
