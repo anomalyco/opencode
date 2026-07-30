@@ -34,8 +34,8 @@ describe("ACP agent connection", () => {
     await harness.close()
     await harness.connection.closed
 
-    expect(harness.events.signal()?.aborted).toBe(true)
     await harness.events.released.promise
+    expect(harness.events.subscribers()).toBe(0)
     await harness.events.emit(sessionStatus("root", { type: "busy" }))
 
     expect(harness.listReads()).toBe(reads)
@@ -135,12 +135,6 @@ function makeHarness(options?: {
   let listFailure = false
   let inputClosed = false
   const sdk = {
-    global: {
-      event: (request?: { signal?: AbortSignal }) => {
-        events.capture(request?.signal)
-        return Promise.resolve({ stream: events.stream(request?.signal) })
-      },
-    },
     session: {
       list: async () => {
         listReads += 1
@@ -163,7 +157,10 @@ function makeHarness(options?: {
       status: () => Promise.resolve({ data: { root: { type: "idle" as const } } }),
     },
   } as unknown as OpencodeClient
-  const connection = new AgentSideConnection(ACP.init({ sdk }).create, ndJsonStream(output.writable, input.readable))
+  const connection = new AgentSideConnection(
+    ACP.init({ sdk, eventSubscriber: events.subscribe }).create,
+    ndJsonStream(output.writable, input.readable),
+  )
   const close = async () => {
     if (inputClosed) return
     inputClosed = true
@@ -226,53 +223,25 @@ function outputCollector() {
 }
 
 function eventSource() {
-  type Envelope = {
-    readonly payload: Event
-    readonly delivered: PromiseWithResolvers<void>
-  }
-  const queued: Envelope[] = []
-  const waiters: Array<(envelope: Envelope | undefined) => void> = []
+  const listeners = new Set<(event: Event) => void>()
   const started = Promise.withResolvers<void>()
   const released = Promise.withResolvers<void>()
-  let signal: AbortSignal | undefined
-  let done = false
-
-  const stream = async function* (abort?: AbortSignal) {
-    started.resolve()
-    try {
-      while (!abort?.aborted) {
-        const queuedEvent = queued.shift()
-        const next =
-          queuedEvent ??
-          (await new Promise<Envelope | undefined>((resolve) => {
-            waiters.push(resolve)
-            abort?.addEventListener("abort", () => resolve(undefined), { once: true })
-          }))
-        if (!next) return
-        yield { payload: next.payload }
-        next.delivered.resolve()
-      }
-    } finally {
-      done = true
-      released.resolve()
-    }
-  }
 
   return {
     started,
     released,
-    stream,
-    capture: (value?: AbortSignal) => {
-      signal = value
+    subscribe: (listener: (event: Event) => void) => {
+      listeners.add(listener)
+      started.resolve()
+      return () => {
+        listeners.delete(listener)
+        if (!listeners.size) released.resolve()
+      }
     },
-    signal: () => signal,
+    subscribers: () => listeners.size,
     emit: (event: Event) => {
-      if (done) return Promise.resolve()
-      const envelope = { payload: event, delivered: Promise.withResolvers<void>() }
-      const waiter = waiters.shift()
-      if (waiter) waiter(envelope)
-      else queued.push(envelope)
-      return envelope.delivered.promise
+      for (const listener of listeners) listener(event)
+      return Promise.resolve()
     },
   }
 }

@@ -1411,8 +1411,6 @@ function sessionError(sessionID: string): Event {
   }
 }
 
-type EventEnvelope = { payload?: Event }
-
 async function subscriptionHarness(input: {
   sessions: Session[]
   status: Record<string, SessionStatus>
@@ -1420,32 +1418,9 @@ async function subscriptionHarness(input: {
   list?: (roots: Session[]) => Promise<Session[]>
   get?: (session: Session | undefined) => Promise<Session | undefined>
 }) {
-  const queue: EventEnvelope[] = []
-  const waiters: Array<(value: EventEnvelope | undefined) => void> = []
-  const streamReady = Promise.withResolvers<void>()
-  let closed = false
+  let listener: ((event: Event) => void) | undefined
   let childrenBlocked = false
-
-  const stream = async function* (signal?: AbortSignal) {
-    streamReady.resolve()
-    while (!closed && !signal?.aborted) {
-      const queued = queue.shift()
-      if (queued) {
-        yield queued
-        continue
-      }
-      const next = await new Promise<EventEnvelope | undefined>((resolve) => {
-        waiters.push(resolve)
-        signal?.addEventListener("abort", () => resolve(undefined), { once: true })
-      })
-      if (!next) return
-      yield next
-    }
-  }
   const sdk = {
-    global: {
-      event: (options?: { signal?: AbortSignal }) => Promise.resolve({ stream: stream(options?.signal) }),
-    },
     session: {
       list: async (params?: { roots?: boolean }) => {
         const sessions = params?.roots ? input.sessions.filter((item) => !item.parentID) : input.sessions
@@ -1473,18 +1448,17 @@ async function subscriptionHarness(input: {
     session: {
       tryGet: () => Effect.succeed(undefined),
     } as unknown as ACPSession.Interface,
+    subscribeEvents: (receive) => {
+      listener = receive
+      return () => {
+        if (listener === receive) listener = undefined
+      }
+    },
   })
   events.start()
-  await streamReady.promise
 
   const push = (event: Event) => {
-    const envelope = { payload: event }
-    const waiter = waiters.shift()
-    if (waiter) {
-      waiter(envelope)
-      return
-    }
-    queue.push(envelope)
+    listener?.(event)
   }
   const afterNextEvent = (after?: () => void) => {
     const delivered = Promise.withResolvers<void>()
@@ -1507,9 +1481,7 @@ async function subscriptionHarness(input: {
       return delivered
     },
     close: () => {
-      closed = true
       events.stop()
-      waiters.splice(0).forEach((resolve) => resolve(undefined))
     },
   }
 }

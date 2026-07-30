@@ -17,14 +17,20 @@ import {
   type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import * as ACPError from "./error"
 import * as ACPService from "./service"
 
-export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
+export function init({
+  sdk: _sdk,
+  eventSubscriber,
+}: {
+  sdk: OpencodeClient
+  eventSubscriber?: (listener: (event: Event) => void) => () => void
+}) {
   return {
     create: (connection: AgentSideConnection) => {
-      const service = ACPService.make({ sdk: _sdk, connection })
+      const service = ACPService.make({ sdk: _sdk, connection, eventSubscriber })
       // The SDK invokes this factory before AgentSideConnection finishes assigning
       // its internal connection, so its lifecycle signal is readable next turn.
       queueMicrotask(() => {

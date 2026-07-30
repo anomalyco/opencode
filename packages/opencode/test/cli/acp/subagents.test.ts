@@ -218,16 +218,20 @@ function collectRunningChildAndPermission(receive: Effect.Effect<unknown>, subsc
     let subscribe: Response<Subagent.Snapshot> | undefined
     let child: Subagent.Node | undefined
     let permission: Request<PermissionRequestParams> | undefined
-    while (!subscribe || !child || !permission) {
+    while (!subscribe || child?.phase !== "running" || !permission) {
       const message = yield* receive.pipe(Effect.timeout(Duration.seconds(20)))
       if (isResponse<Subagent.Snapshot>(message) && message.id === subscribeId) {
         subscribe = message
       }
       if (isNotification<Subagent.Update>(message) && message.method === "_opencode/subagents/update") {
         const update = Subagent.decodeUpdate(message.params)
-        child ??= update.upsert.find(
-          (node) => node.rootSessionId === rootSessionId && node.parentSessionId === rootSessionId,
-        )
+        child =
+          update.upsert.find(
+            (node) =>
+              node.rootSessionId === rootSessionId &&
+              node.parentSessionId === rootSessionId &&
+              node.phase === "running",
+          ) ?? child
       }
       if (
         isRequest<PermissionRequestParams>(message) &&
