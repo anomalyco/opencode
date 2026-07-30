@@ -39,18 +39,26 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus["type"],
     inlineComments: boolean,
+    projectedUserMessages: UserMessage[],
   ) {
-    const turns = messages.flatMap<{ user: UserMessage; assistants: AssistantMessage[] }>((message) => {
+    const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
+    const turnByUserID = new Map<string, (typeof turns)[number]>()
+    messages.forEach((message) => {
       const projected = getMessage(message.id)
       if (message.type === "shell" && projected?.role === "user") {
         const assistant = getMessage(`${message.id}:assistant`)
-        return [{ user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }]
+        const turn = { user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        return
       }
-      return projected?.role === "user" ? [{ user: projected, assistants: [] }] : []
-    })
-    const turnByUserID = new Map(turns.map((turn) => [turn.user.id, turn]))
-    messages.forEach((message) => {
-      const projected = getMessage(message.id)
+      if (projected?.role === "user") {
+        if (turnByUserID.has(projected.id)) return
+        const turn = { user: projected, assistants: [] }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        return
+      }
       if (projected?.role !== "assistant") return
       const existing = turnByUserID.get(projected.parentID)
       if (existing) {
@@ -60,6 +68,14 @@ export namespace Timeline {
       const user = getMessage(projected.parentID)
       if (user?.role !== "user") return
       const turn = { user, assistants: [projected] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+    })
+    const latestUserMessageID = turns.at(-1)?.user.id
+    projectedUserMessages.forEach((user) => {
+      if (turnByUserID.has(user.id)) return
+      if (latestUserMessageID && user.id < latestUserMessageID) return
+      const turn = { user, assistants: [] }
       turns.push(turn)
       turnByUserID.set(user.id, turn)
     })

@@ -8,6 +8,7 @@ export { reuseTimelineRows } from "./row-reconciliation"
 
 export function createTimelineProjection(input: {
   messages: Accessor<Message[]>
+  userMessages: Accessor<UserMessage[]>
   sessionMessages: Accessor<SessionMessageInfo[]>
   parts: (messageID: string) => Part[]
   status: Accessor<SessionStatus>
@@ -36,6 +37,7 @@ export function createTimelineProjection(input: {
       input.showReasoningSummaries(),
       input.status().type,
       input.inlineComments(),
+      input.userMessages(),
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)

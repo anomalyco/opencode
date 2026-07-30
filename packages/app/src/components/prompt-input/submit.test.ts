@@ -489,6 +489,9 @@ describe("prompt submit worktree selection", () => {
       agents: [],
     })
     expect((promptInputs[0] as { id?: string }).id).toStartWith("msg_")
+    expect((promptInputs[0] as { legacyParts?: { id: string; type: string; text?: string }[] }).legacyParts).toEqual([
+      { id: expect.stringMatching(/^prt_/), type: "text", text: "ls" },
+    ])
   })
 
   test("submits slash commands through the current session API", async () => {
