@@ -431,6 +431,21 @@ export namespace Compaction {
   export type Ended = typeof Ended.Type
 }
 
+export namespace ReasoningCycle {
+  export const Fired = Event.define({
+    type: "session.next.reasoning.cycle.fired",
+    ...options,
+    schema: {
+      ...Base,
+      loop: Schema.Literals(["why", "then"]),
+      gated: Schema.Boolean,
+      steered: Schema.Boolean,
+      messageID: SessionMessage.ID.pipe(optional),
+    },
+  })
+  export type Fired = typeof Fired.Type
+}
+
 export namespace RevertEvent {
   export const Staged = Event.define({
     type: "session.next.revert.staged",
@@ -471,6 +486,7 @@ export const DurableDefinitions = Event.inventory(
   Retried,
   Compaction.Started,
   Compaction.Ended,
+  ReasoningCycle.Fired,
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
@@ -506,6 +522,7 @@ export const Definitions = Event.inventory(
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,
+  ReasoningCycle.Fired,
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,

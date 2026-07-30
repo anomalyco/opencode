@@ -39,6 +39,19 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   default_agent: Schema.String.pipe(Schema.optional).annotate({
     description: "Default primary agent to use when no session agent is selected",
   }),
+  reflective_reasoning: Schema.Struct({
+    hedgeThreshold: Schema.Number.pipe(Schema.optional).annotate({
+      description: "Threshold for hedge density before entering fallback mode",
+    }),
+    maxReflectionBudget: Schema.Number.pipe(Schema.optional).annotate({
+      description: "Maximum reflection budget per turn",
+    }),
+    approxTcaTolerance: Schema.Number.pipe(Schema.optional).annotate({
+      description: "TCA approximation tolerance for bounded reflection",
+    }),
+  }).pipe(Schema.optional).annotate({
+    description: "Reflective reasoning and stabilization configuration",
+  }),
   autoupdate: Schema.Union([Schema.Boolean, Schema.Literal("notify")])
     .pipe(Schema.optional)
     .annotate({

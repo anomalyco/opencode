@@ -15,6 +15,11 @@ export interface Interface {
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Fire Why/Then reflective loops against the session's last assistant message. No provider turn is run. */
+  readonly reflect: (
+    sessionID: SessionSchema.ID,
+    input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
+  ) => Effect.Effect<void, SessionRunner.RunError>
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
@@ -30,5 +35,6 @@ export const noopLayer = Layer.succeed(
     resume: () => Effect.void,
     wake: () => Effect.void,
     interrupt: () => Effect.void,
+    reflect: () => Effect.void,
   }),
 )

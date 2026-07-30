@@ -65,7 +65,8 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -240,6 +241,8 @@ const app = LayerNode.group([
   EventV2Bridge.node,
   SessionRunState.node,
   SessionProcessor.node,
+  SessionStore.node,
+  SessionExecutionLocal.node,
   SessionCompaction.node,
   SessionRevert.node,
   SessionSummary.node,

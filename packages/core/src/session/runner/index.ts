@@ -16,6 +16,10 @@ export type RunError =
   | SystemContext.InitializationBlocked
   | ToolOutputStore.Error
 
+export interface ReflectionResult {
+  readonly steered: boolean
+}
+
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {
   /** Drains eligible durable work. Explicit runs perform one provider attempt even when no work is eligible. */
@@ -23,6 +27,16 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
   }) => Effect.Effect<void, RunError>
+  /** Why Loop: post-tool-settlement reflection on whether new information changed the goal. */
+  readonly whyLoop: (
+    sessionID: SessionSchema.ID,
+    modelOverride?: { readonly providerID: string; readonly modelID: string },
+  ) => Effect.Effect<ReflectionResult, RunError>
+  /** Then Loop: forward projection from the most recent assistant message. */
+  readonly thenLoop: (
+    sessionID: SessionSchema.ID,
+    modelOverride?: { readonly providerID: string; readonly modelID: string },
+  ) => Effect.Effect<ReflectionResult, RunError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunner") {}

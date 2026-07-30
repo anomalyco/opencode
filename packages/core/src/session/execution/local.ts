@@ -33,6 +33,26 @@ const layer = Layer.effect(
       interrupt: coordinator.interrupt,
       resume: coordinator.run,
       wake: coordinator.wake,
+      reflect: Effect.fnUntraced(function* (
+        sessionID: SessionSchema.ID,
+        input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
+      ) {
+        const session = yield* store.get(sessionID)
+        if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
+        yield* SessionRunner.Service.use((runner) =>
+          Effect.gen(function* () {
+            yield* runner.whyLoop(sessionID, input?.model)
+            yield* runner.thenLoop(sessionID, input?.model)
+          }),
+        ).pipe(
+          Effect.provide(locations.get(session.location)),
+          Effect.tapCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : Effect.logError("Failed to reflect on Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+          ),
+        )
+      }),
     })
   }),
 )

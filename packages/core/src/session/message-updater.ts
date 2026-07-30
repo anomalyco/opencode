@@ -390,6 +390,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.revert.staged": () => Effect.void,
       "session.next.revert.cleared": () => Effect.void,
       "session.next.revert.committed": () => Effect.void,
+      "session.next.reasoning.cycle.fired": () => Effect.void,
     })
   })
 }

@@ -29,6 +29,8 @@ import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
+import { Prompt } from "../prompt"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
@@ -36,6 +38,7 @@ import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
+import { containsHedge } from "./hedge"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -165,6 +168,38 @@ const layer = Layer.effect(
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
+    const lastAssistantText = (entries: ReadonlyArray<{ message: SessionMessage.Message }>): string => {
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const message = entries[i].message
+        if (message.type !== "assistant") continue
+        const text = message.content
+          .filter((part): part is SessionMessage.AssistantText => part.type === "text")
+          .map((part) => part.text)
+          .join(" ")
+        return text
+      }
+      return ""
+    }
+
+    const publishCycle = Effect.fn("SessionRunner.publishCycle")(function* (
+      loop: "why" | "then",
+      sessionID: SessionSchema.ID,
+      gated: boolean,
+      steered: boolean,
+      messageID?: SessionMessage.ID,
+    ) {
+      yield* events
+        .publish(SessionEvent.ReasoningCycle.Fired, {
+          loop,
+          gated,
+          steered,
+          ...(messageID === undefined ? {} : { messageID }),
+          timestamp: yield* DateTime.now,
+          sessionID,
+        })
+        .pipe(Effect.ignore, Effect.asVoid)
+    })
+
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
         concurrency: "unbounded",
@@ -183,6 +218,7 @@ const layer = Layer.effect(
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
+      let whyLoopBudget = 1
       let currentStep = step
       if (promotion) {
         const cutoff = yield* EventV2.latestSequence(db, session.id)
@@ -264,15 +300,30 @@ const layer = Layer.effect(
                 }),
               ).pipe(
                 Effect.flatMap((settlement) =>
-                  publish(
-                    LLMEvent.toolResult({
-                      id: event.id,
-                      name: event.name,
-                      result: settlement.result,
-                      output: settlement.output,
-                    }),
-                    settlement.outputPaths ?? [],
-                  ),
+                  Effect.gen(function* () {
+                    yield* publish(
+                      LLMEvent.toolResult({
+                        id: event.id,
+                        name: event.name,
+                        result: settlement.result,
+                        output: settlement.output,
+                      }),
+                      settlement.outputPaths ?? [],
+                    )
+                    if (whyLoopBudget <= 0) return
+                    const refreshed = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq).pipe(
+                      Effect.option,
+                    )
+                    if (Option.isNone(refreshed)) return
+                    if (!containsHedge(lastAssistantText(refreshed.value))) {
+                      yield* publishCycle("why", session.id, true, false)
+                      return
+                    }
+                    whyLoopBudget--
+                    const whyResult = yield* whyLoop(session.id).pipe(Effect.option)
+                    if (Option.isNone(whyResult)) return
+                    if (whyResult.value.steered) needsContinuation = true
+                  }),
                 ),
               ),
             ).pipe(FiberSet.run(toolFibers))
@@ -387,6 +438,124 @@ const layer = Layer.effect(
       )
     })
 
+    const thenLoop = Effect.fn("SessionRunner.thenLoop")(function* (
+      sessionID: SessionSchema.ID,
+      modelOverride?: { providerID: string; modelID: string },
+    ) {
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return { steered: false }
+      const agent = yield* agents.select(session.value.agent)
+      const model = yield* models.resolveReflection(session.value, modelOverride).pipe(Effect.option)
+      if (Option.isNone(model)) return { steered: false }
+      const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(system)) return { steered: false }
+      const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(entries)) return { steered: false }
+      if (!containsHedge(lastAssistantText(entries.value))) {
+        yield* publishCycle("then", sessionID, true, false)
+        return { steered: false }
+      }
+      const recent = entries.value.slice(-6)
+      const lastMsgs = recent.map((e) => e.message)
+      const hasDecision = lastMsgs.some(
+        (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
+      )
+      if (!hasDecision || entries.value.length < 2) return { steered: false }
+      const projectionMsgs = [
+        ...toLLMMessages(lastMsgs, model.value),
+        Message.user(
+          `Forward-project 3-5 steps from the reasoning above. Identify negative consequences, contradictions, or risks. If none, output exactly "No issues projected."`,
+        ),
+      ]
+      const req = LLM.request({ model: model.value, messages: projectionMsgs, tools: [], generation: { maxTokens: 1024 } })
+      const chunks: string[] = []
+      let failed = false
+      yield* llm.stream(req).pipe(
+        Stream.runForEach((event) => {
+          if (LLMEvent.is.providerError(event)) failed = true
+          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          return Effect.void
+        }),
+        Effect.option,
+      )
+      if (failed || chunks.length === 0) return { steered: false }
+      const projection = chunks.join("").trim()
+      if (/no issues?|no negative/i.test(projection) || projection.length < 40) {
+        yield* publishCycle("then", sessionID, false, false)
+        return { steered: false }
+      }
+      const messageID = SessionMessage.ID.create()
+      yield* SessionInput.admit(db, events, {
+        id: messageID,
+        sessionID,
+        prompt: Prompt.fromUserMessage({ text: `[Then Loop forward check]\n${projection}` }),
+        delivery: "steer",
+      }).pipe(Effect.option)
+      yield* publishCycle("then", sessionID, false, true, messageID)
+      return { steered: true }
+    })
+
+    const whyLoop = Effect.fn("SessionRunner.whyLoop")(function* (
+      sessionID: SessionSchema.ID,
+      modelOverride?: { providerID: string; modelID: string },
+    ) {
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return { steered: false }
+      const agent = yield* agents.select(session.value.agent)
+      const model = yield* models.resolveReflection(session.value, modelOverride).pipe(Effect.option)
+      if (Option.isNone(model)) return { steered: false }
+      const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(system)) return { steered: false }
+      const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(entries)) return { steered: false }
+      const recent = entries.value.slice(-6)
+      const lastMsgs = recent.map((e) => e.message)
+      const hasDecision = lastMsgs.some(
+        (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
+      )
+      if (!hasDecision || entries.value.length < 2) return { steered: false }
+      const reflectionMsgs = [
+        ...toLLMMessages(lastMsgs, model.value),
+        Message.user(
+          `Reflect on whether the most recent tool result changes your goal. If so, state the new goal in one sentence. Otherwise output exactly "Goal unchanged."`,
+        ),
+      ]
+      const req = LLM.request({ model: model.value, messages: reflectionMsgs, tools: [], generation: { maxTokens: 1024 } })
+      const chunks: string[] = []
+      let failed = false
+      yield* llm.stream(req).pipe(
+        Stream.runForEach((event) => {
+          if (LLMEvent.is.providerError(event)) failed = true
+          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          return Effect.void
+        }),
+        Effect.option,
+      )
+      if (failed || chunks.length === 0) return { steered: false }
+      const reflection = chunks.join("").trim()
+      if (/goal unchanged|goal is unchanged/i.test(reflection) || reflection.length < 20) {
+        yield* publishCycle("why", sessionID, false, false)
+        return { steered: false }
+      }
+      const messageID = SessionMessage.ID.create()
+      yield* SessionInput.admit(db, events, {
+        id: messageID,
+        sessionID,
+        prompt: Prompt.fromUserMessage({ text: `[Why Loop reflection]\n${reflection}` }),
+        delivery: "steer",
+      }).pipe(Effect.option)
+      yield* publishCycle("why", sessionID, false, true, messageID)
+      return { steered: true }
+    })
+
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
@@ -397,6 +566,7 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      let thenLoopBudget = 1
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -405,7 +575,17 @@ const layer = Layer.effect(
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          if (!needsContinuation) {
+            if (thenLoopBudget > 0) {
+              const thenResult = yield* thenLoop(input.sessionID)
+              if (thenResult.steered) {
+                thenLoopBudget--
+                needsContinuation = true
+                step = 1
+              }
+            }
+            if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          }
         }
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined
@@ -414,6 +594,8 @@ const layer = Layer.effect(
 
     return Service.of({
       run,
+      whyLoop,
+      thenLoop,
     })
   }),
 )
