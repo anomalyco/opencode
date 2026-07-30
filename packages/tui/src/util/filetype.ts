@@ -122,9 +122,22 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".typc": "typst",
 }
 
+function lookup(input: string) {
+  const name = path.basename(input).toLowerCase()
+  // Keys like ".html.erb" and bare "makefile" never equal path.extname(), so match
+  // the longest suffix first and fall back to the whole name for extensionless files.
+  let dot = name.indexOf(".")
+  while (dot !== -1) {
+    const found = LANGUAGE_EXTENSIONS[name.slice(dot)]
+    if (found) return found
+    dot = name.indexOf(".", dot + 1)
+  }
+  return LANGUAGE_EXTENSIONS[name]
+}
+
 export function filetype(input?: string) {
   if (!input) return "none"
-  const language = LANGUAGE_EXTENSIONS[path.extname(input)]
+  const language = lookup(input)
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
 }
