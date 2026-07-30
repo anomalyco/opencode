@@ -8,6 +8,9 @@ import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { useLocation } from "../context/location"
 import { useToast } from "../ui/toast"
+import { useTerminalDimensions } from "@opentui/solid"
+import { truncateFilePath } from "../ui/file-path"
+import { stringWidth } from "../util/string-width"
 
 export function DialogProject() {
   const dialog = useDialog()
@@ -16,6 +19,7 @@ export function DialogProject() {
   const paths = useTuiPaths()
   const location = useLocation()
   const toast = useToast()
+  const dimensions = useTerminalDimensions()
 
   data.project.invalidate()
   void data.project.sync().catch(toast.error)
@@ -36,12 +40,19 @@ export function DialogProject() {
         if (b.id === current()?.id) return 1
         return 0
       })
-      .map((project) => ({
-        title: project.name ?? path.basename(project.canonical),
-        description: abbreviateHome(project.canonical, paths.home),
-        value: project.canonical,
-        category: project.id === current()?.id ? "Current" : "Projects",
-      }))
+      .map((project) => {
+        const title = project.name ?? path.basename(project.canonical)
+        const description = abbreviateHome(project.canonical, paths.home)
+        // Dialog padding, the current marker, title padding, and the separating space use nine columns.
+        const width = Math.min(60, dimensions().width - 2) - 9 - stringWidth(title)
+        return {
+          title,
+          description: truncateFilePath(description, width),
+          searchText: description,
+          value: project.canonical,
+          category: project.id === current()?.id ? "Current" : "Projects",
+        }
+      })
   })
 
   return (
