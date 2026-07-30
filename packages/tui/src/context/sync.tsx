@@ -445,11 +445,13 @@ export const {
     const BOOTSTRAP_TIMEOUT = 8_000
 
     async function timed<T>(promise: Promise<T>, label: string): Promise<T> {
-      const timeoutId = setTimeout(() => {}, BOOTSTRAP_TIMEOUT)
+      let timeoutId: ReturnType<typeof setTimeout>
       try {
         return await Promise.race([
           promise,
-          new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${BOOTSTRAP_TIMEOUT}ms`)), BOOTSTRAP_TIMEOUT)),
+          new Promise<T>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${BOOTSTRAP_TIMEOUT}ms`)), BOOTSTRAP_TIMEOUT)
+          }),
         ])
       } finally {
         clearTimeout(timeoutId)
@@ -458,13 +460,15 @@ export const {
 
     function withTimeoutFallback<T>(promise: Promise<T>, label: string, fallback: () => T): Promise<T | ReturnType<typeof fallback>> {
       return timed(promise, label).catch((e) => {
+        if (!e.message.includes("timed out")) {
+          throw e
+        }
         console.warn(`Bootstrap ${label} timed out, using fallback`, e.message)
         return fallback()
       })
     }
 
-    async function bootstrap(input: { fatal?: boolean } = {}) {
-      const fatal = input.fatal ?? true
+    async function bootstrap() {
       const workspace = project.workspace.current()
       const projectPromise = project.sync()
       const sessionListPromise = projectPromise.then(() => listSessions())
@@ -491,7 +495,7 @@ export const {
       ])
 
       if (args.continue) {
-        await withTimeoutFallback(sessionListPromise, "session-list").catch(() => null)
+        await withTimeoutFallback(sessionListPromise, "session-list", () => null).catch(() => null)
       }
       await projectPromise
 
@@ -521,7 +525,7 @@ export const {
         }).catch(() => {}),
         sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))).catch(() => {}),
         sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))).catch(() => {}),
-        project.workspace.sync(),
+        project.workspace.sync().catch(() => {}),
       ]).then(() => {
         setStore("status", "complete")
       }).catch(() => {

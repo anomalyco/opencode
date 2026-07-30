@@ -299,7 +299,7 @@ export function Session() {
         // fatal. If it doesn't we still want to show the session
         // (which will be non-interactive)
         try {
-          await sync.bootstrap({ fatal: false })
+          await sync.bootstrap()
         } catch {}
       }
       editor.reconnect(result.data.directory)
