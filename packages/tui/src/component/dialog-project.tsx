@@ -1,8 +1,7 @@
 import path from "path"
-import { createMemo, createResource } from "solid-js"
+import { createMemo } from "solid-js"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
-import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"
@@ -12,47 +11,48 @@ import { errorMessage } from "../util/error"
 
 export function DialogProject() {
   const dialog = useDialog()
-  const client = useClient()
   const data = useData()
   const route = useRoute()
   const toast = useToast()
   const paths = useTuiPaths()
 
-  const [projects] = createResource(() => client.api.project.list())
-  const current = createMemo(() => data.location.info()?.project.directory ?? data.location.default().directory)
+  data.project.invalidate()
+  void data.project.sync()
+  const current = createMemo(() => data.location.info()?.project.id)
+  const currentDirectory = createMemo(() => data.project.get(current() ?? "")?.canonical)
 
-  const options = createMemo(() => {
-    const list = [...(projects() ?? [])]
-    list.sort((a, b) => {
-      if (a.worktree === current()) return -1
-      if (b.worktree === current()) return 1
-      return (b.time.initialized ?? 0) - (a.time.initialized ?? 0)
-    })
-    return list
-      .filter((project) => project.worktree !== "/")
-      .filter((project, index, all) => all.findIndex((other) => other.worktree === project.worktree) === index)
+  const options = createMemo(() =>
+    data.project
+      .list()
+      .filter((project) => project.canonical !== "/")
+      .toSorted((a, b) => {
+        if (a.id === current()) return -1
+        if (b.id === current()) return 1
+        return b.time.updated - a.time.updated
+      })
+      .filter((project, index, all) => all.findIndex((other) => other.canonical === project.canonical) === index)
       .map((project) => ({
-        title: project.name ?? path.basename(project.worktree),
-        description: abbreviateHome(project.worktree, paths.home),
-        value: project.worktree,
-        category: project.worktree === current() ? "Current" : "Projects",
-      }))
-  })
+        title: project.name ?? path.basename(project.canonical),
+        description: abbreviateHome(project.canonical, paths.home),
+        value: project.canonical,
+        category: project.id === current() ? "Current" : "Projects",
+      })),
+  )
 
   return (
     <DialogSelect
       title="Switch project"
       placeholder="Search projects…"
       options={options()}
-      current={current()}
+      current={currentDirectory()}
       emptyView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text>{projects.loading ? "Loading projects…" : "No projects found"}</text>
+          <text>No projects found</text>
         </box>
       }
       onSelect={(option) => {
         dialog.clear()
-        if (option.value === current()) return
+        if (option.value === currentDirectory()) return
         // Navigating while already home would remount the footer mid-animation.
         if (route.data.type !== "home") route.navigate({ type: "home" })
         void data.location
