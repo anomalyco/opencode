@@ -9,13 +9,18 @@ export function getDirectory(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[/\\]+$/, "")
   const parts = trimmed.split(/[/\\]/)
+  // A path with no separator has no parent directory, so there is nothing to show.
+  if (parts.length <= 1) return ""
   return parts.slice(0, parts.length - 1).join("/") + "/"
 }
 
 export function getFileExtension(path: string | undefined) {
   if (!path) return ""
-  const parts = path.split(".")
-  return parts[parts.length - 1]
+  const filename = getFilename(path)
+  // A leading dot marks a hidden file, not an extension.
+  const lastDot = filename.lastIndexOf(".")
+  if (lastDot <= 0) return ""
+  return filename.slice(lastDot + 1)
 }
 
 export function getFilenameTruncated(path: string | undefined, maxLength: number = 20) {
@@ -30,8 +35,11 @@ export function getFilenameTruncated(path: string | undefined, maxLength: number
 
 export function truncateMiddle(text: string, maxLength: number = 20) {
   if (text.length <= maxLength) return text
+  if (maxLength <= 1) return "…"
   const available = maxLength - 1 // -1 for ellipsis
   const start = Math.ceil(available / 2)
   const end = Math.floor(available / 2)
+  // slice(-0) returns the whole string, so an empty tail has to be handled explicitly.
+  if (end === 0) return text.slice(0, start) + "…"
   return text.slice(0, start) + "…" + text.slice(-end)
 }
