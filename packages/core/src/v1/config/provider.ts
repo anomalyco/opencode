@@ -72,6 +72,7 @@ export const Model = Schema.Struct({
     ).annotate({ description: "Variant-specific configuration" }),
   ),
 })
+export type Model = Schema.Schema.Type<typeof Model>
 
 export const Info = Schema.Struct({
   api: Schema.optional(Schema.String),
@@ -81,6 +82,13 @@ export const Info = Schema.Struct({
   npm: Schema.optional(Schema.String),
   whitelist: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   blacklist: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  disable_model_discovery: Schema.optional(Schema.Boolean).annotate({
+    description: "Disable a provider's built-in automatic model discovery (for example, GitLab Duo)",
+  }),
+  enable_model_discovery: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Opt this provider into fetching its model list from `{options.baseURL}/models`. Only applies to providers not already known to OpenCode (custom openai-compatible providers).",
+  }),
   options: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({
