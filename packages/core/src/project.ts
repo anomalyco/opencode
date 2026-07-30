@@ -1,6 +1,6 @@
 export * as Project from "./project"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Cache, Context, Duration, Effect, Exit, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { asc, desc, isNotNull, isNull, ne, or } from "drizzle-orm"
 import path from "path"
@@ -106,6 +106,14 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const db = (yield* Database.Service).db
     const projectDirectories = yield* ProjectDirectories.Service
+    const findCanonicalWorktree = (repo: Git.Repository) =>
+      git.worktree
+        .list(repo)
+        .pipe(Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree))
+    const canonicalWorktrees = yield* Cache.makeWith(findCanonicalWorktree, {
+      capacity: 128,
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? "60 minutes" : Duration.zero),
+    })
 
     const persist = Effect.fnUntraced(function* (project: Resolved) {
       yield* db
@@ -249,10 +257,7 @@ const layer = Layer.effect(
         const canonical =
           repo.gitDirectory === repo.commonDirectory
             ? repo.worktree
-            : yield* git.worktree.list(repo).pipe(
-                Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
-                Effect.catch(() => Effect.succeed(repo.worktree)),
-              )
+            : yield* Cache.get(canonicalWorktrees, repo).pipe(Effect.catch(() => Effect.succeed(repo.worktree)))
         return yield* persist({
           previous,
           id: id ?? ID.global,

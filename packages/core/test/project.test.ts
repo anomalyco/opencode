@@ -5,6 +5,7 @@ import path from "path"
 import { Effect, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Database } from "@opencode-ai/core/database/database"
+import { Git } from "@opencode-ai/core/git"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -371,5 +372,38 @@ describe("Project.resolve", () => {
         { directory: yield* real(worktree), strategy: "git_worktree" },
       ])
     }),
+  )
+
+  testEffect(Layer.empty).live("reuses the canonical worktree lookup", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const worktree = `${tmp.path}-worktree`
+          yield* Effect.addFinalizer(() =>
+            Effect.promise(() => fs.rm(worktree, { recursive: true, force: true })).pipe(Effect.ignore),
+          )
+          yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+          yield* Effect.promise(() => $`git worktree add ${worktree} -b cache-${Date.now()}`.cwd(tmp.path).quiet())
+          const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+          let lists = 0
+          const instrumented = Git.Service.of({
+            ...git,
+            worktree: {
+              ...git.worktree,
+              list: (repo) => Effect.sync(() => lists++).pipe(Effect.andThen(git.worktree.list(repo))),
+            },
+          })
+          const layer = AppNodeBuilder.build(Project.node, [[Git.node, Layer.succeed(Git.Service, instrumented)]])
+
+          yield* Effect.gen(function* () {
+            const project = yield* Project.Service
+            expect((yield* project.resolve(abs(worktree))).canonical).toBe(yield* real(tmp.path))
+            expect((yield* project.resolve(abs(worktree))).canonical).toBe(yield* real(tmp.path))
+            expect(lists).toBe(1)
+          }).pipe(Effect.provide(layer))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
   )
 })
