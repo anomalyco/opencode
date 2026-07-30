@@ -108,6 +108,49 @@ describe("bestModel context-adequacy filter", () => {
   })
 })
 
+describe("bestModel resident-model tier (skein rule: loaded > preferred > any)", () => {
+  const requiredCtx = 9_000
+
+  test("an eligible resident model beats swapping to the parent's own model", () => {
+    const p = probe(
+      [
+        fitModel("resident", { fit_level: "good", max_safe_ctx: 32_768, est_tokens_per_sec: 40 }),
+        fitModel("parentm", { fit_level: "perfect", max_safe_ctx: 32_768, est_tokens_per_sec: 400 }),
+      ],
+      "resident",
+    )
+    const result = bestModel({ probe: p, info: info("resident", "parentm"), parentModelID: "parentm", requiredCtx })
+    expect(result?.modelID as string | undefined).toBe("resident")
+  })
+
+  test("with nothing resident, the parent's model is preferred over a better fit", () => {
+    const p = probe([
+      fitModel("parentm", { fit_level: "good", max_safe_ctx: 32_768 }),
+      fitModel("other", { fit_level: "perfect", max_safe_ctx: 32_768 }),
+    ])
+    const result = bestModel({ probe: p, info: info("parentm", "other"), parentModelID: "parentm", requiredCtx })
+    expect(result?.modelID as string | undefined).toBe("parentm")
+  })
+
+  test("residency never overrides vetting — an unlisted resident model loses to an allowed cold one", () => {
+    const p = probe(
+      [
+        fitModel("resident", { fit_level: "perfect", max_safe_ctx: 32_768 }),
+        fitModel("vetted", { fit_level: "good", max_safe_ctx: 32_768 }),
+      ],
+      "resident",
+    )
+    const result = bestModel({
+      probe: p,
+      info: info("resident", "vetted"),
+      parentModelID: "cloud",
+      requiredCtx,
+      allowedModels: ["vetted"],
+    })
+    expect(result?.modelID as string | undefined).toBe("vetted")
+  })
+})
+
 // Regression guard for the reported session hang: a subagent was dispatched to
 // the parent's own single-slot provider whenever placement found no idle peer,
 // where it queued behind its parent and never returned.

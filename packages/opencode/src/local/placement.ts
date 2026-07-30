@@ -168,11 +168,17 @@ export function bestModel(input: {
     if (rank === 0) continue
     const score =
       rank * 1_000 +
-      // Same model as the parent: proven behavior beats avoiding a swap — a
-      // 30s model load costs less than a subagent that derails on tool calls.
+      // Already resident: an absolute tier, not a bonus — same rule as skein.
+      // Swapping models on a host mid-session evicts what the user (or skein)
+      // deliberately keeps loaded and costs a multi-second reload both ways.
+      // An eligible resident model always beats anything that needs a load;
+      // eligibility (allowlist, ctx, fit) is still enforced by the filters
+      // above, so an unvetted or too-small resident model never wins by
+      // residency alone.
+      (fit.model === loadedID ? 100_000 : 0) +
+      // Among models that would need a load, prefer the parent's own model:
+      // proven behavior beats an arbitrary pick.
       (fit.model === input.parentModelID ? 5_000 : 0) +
-      // Already resident: skips the multi-second llama-swap load.
-      (fit.model === loadedID ? 2_000 : 0) +
       Math.min(fit.est_tokens_per_sec ?? 0, 500)
     if (!best || score > best.score) best = { modelID: model.id, score }
   }
