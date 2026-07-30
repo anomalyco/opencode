@@ -460,15 +460,16 @@ export const {
 
     function withTimeoutFallback<T>(promise: Promise<T>, label: string, fallback: () => T): Promise<T | ReturnType<typeof fallback>> {
       return timed(promise, label).catch((e) => {
-        if (!e.message.includes("timed out")) {
+        const errMsg = e instanceof Error ? e.message : String(e ?? "")
+        if (!errMsg.includes("timed out")) {
           throw e
         }
-        console.warn(`Bootstrap ${label} timed out, using fallback`, e.message)
+        console.warn(`Bootstrap ${label} timed out, using fallback`, errMsg)
         return fallback()
       })
     }
 
-    async function bootstrap() {
+    async function bootstrap(input: { fatal?: boolean } = {}) {
       const workspace = project.workspace.current()
       const projectPromise = project.sync()
       const sessionListPromise = projectPromise.then(() => listSessions())
@@ -491,7 +492,7 @@ export const {
         withTimeoutFallback(providerListPromise, "provider-list", () => null),
         withTimeoutFallback(capabilitiesPromise.catch(() => undefined), "capabilities", () => undefined),
         withTimeoutFallback(agentsPromise, "agents", () => ({ data: [] })),
-        withTimeoutFallback(configPromise, "config", () => null),
+        withTimeoutFallback(configPromise, "config", () => ({ data: {} })),
       ])
 
       if (args.continue) {
