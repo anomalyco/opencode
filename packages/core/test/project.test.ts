@@ -143,6 +143,7 @@ describe("Project.resolve", () => {
 
       expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
       expect(result.directory).toBe(yield* real(tmp.path))
+      expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs?.type).toBe("git")
     }),

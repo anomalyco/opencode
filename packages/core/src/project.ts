@@ -246,12 +246,13 @@ const layer = Layer.effect(
       if (repo) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
-        const canonical = yield* git.worktree
-          .list(repo)
-          .pipe(
-            Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
-            Effect.catch(() => Effect.succeed(repo.worktree)),
-          )
+        const canonical =
+          repo.gitDirectory === repo.commonDirectory
+            ? repo.worktree
+            : yield* git.worktree.list(repo).pipe(
+                Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
+                Effect.catch(() => Effect.succeed(repo.worktree)),
+              )
         return yield* persist({
           previous,
           id: id ?? ID.global,
