@@ -21,6 +21,11 @@ describe("provider error classification", () => {
   test("does not classify rate limits as context overflow", () => {
     const messages = [
       "Throttling error: Too many tokens, please wait before trying again.",
+      // Bedrock ThrottlingException via @ai-sdk/amazon-bedrock (no prefix)
+      "Too many tokens, please wait before trying again.",
+      "ThrottlingException: Too many tokens, please wait before trying again.",
+      "undefined: Too many tokens, please wait before trying again.",
+      "Too many tokens, please try again later.",
       "Rate limit exceeded, please retry after 30 seconds.",
       "Too many requests. Please slow down.",
     ]
