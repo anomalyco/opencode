@@ -400,6 +400,85 @@ test("loads older session messages through a private cursor", async () => {
   }
 })
 
+test("extends message pages until they start at a turn root", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_turn_root"
+  const requests: URL[] = []
+  const id = (value: number) => `msg_${value.toString().padStart(3, "0")}`
+  const item = (value: number) => ({
+    id: id(value),
+    type: "user" as const,
+    text: `Message ${value}`,
+    time: { created: value },
+  })
+  const assistant = (value: number) => ({
+    id: id(value),
+    type: "assistant" as const,
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content: [],
+    time: { created: value },
+  })
+  const range = (newest: number, oldest: number) =>
+    Array.from({ length: newest - oldest + 1 }, (_, index) => item(newest - index))
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/pending`) return json({ data: [] })
+    if (url.pathname !== `/api/session/${sessionID}/message`) return undefined
+    requests.push(url)
+    const cursor = url.searchParams.get("cursor")
+    // Initial window ends on an assistant reply whose prompt is on the next page.
+    if (cursor === null) return json({ data: [...range(60, 42), assistant(41)], cursor: { next: "c1" } })
+    if (cursor === "c1") return json({ data: range(40, 21), cursor: { next: "c2" } })
+    // Older page also ends on an assistant reply.
+    if (cursor === "c2") return json({ data: [...range(20, 12), assistant(11)], cursor: { next: "c3" } })
+    if (cursor === "c3") return json({ data: [item(10)], cursor: { next: "c4" } })
+    throw new Error(`unexpected cursor: ${cursor}`)
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.sync(sessionID)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 40 }, (_, index) => id(index + 21)),
+    )
+    expect(requests).toHaveLength(2)
+    expect(requests[1]?.searchParams.get("cursor")).toBe("c1")
+    expect(requests[1]?.searchParams.get("limit")).toBe("20")
+
+    expect(await data.session.message.older(sessionID, 10)).toBe(11)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 51 }, (_, index) => id(index + 10)),
+    )
+    expect(requests).toHaveLength(4)
+    expect(requests[2]?.searchParams.get("cursor")).toBe("c2")
+    expect(requests[3]?.searchParams.get("cursor")).toBe("c3")
+    expect(requests[3]?.searchParams.get("limit")).toBe("10")
+
+    // The short extension page exhausted history despite the returned cursor.
+    expect(await data.session.message.older(sessionID, 10)).toBe(0)
+    expect(requests).toHaveLength(4)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("applies absolute usage events to session info", async () => {
   const events = createEventStream()
   const sessionID = "ses_usage_refresh"

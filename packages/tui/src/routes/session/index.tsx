@@ -104,7 +104,8 @@ const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 const TRANSCRIPT_BACKFILL_DELAY = 120
-const HISTORY_PAGE_SIZE = 20
+// Cold-open stays small for latency; once the user asks for history, page like desktop.
+const HISTORY_PAGE_SIZE = 200
 
 const context = createContext<{
   width: number
@@ -346,7 +347,7 @@ export function Session() {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
     })
   // Keep each fetch locked through layout so the next page cannot overlap anchor restoration.
-  const loadOlder = (count = HISTORY_PAGE_SIZE) => {
+  const loadOlder = () => {
     const sessionID = route.sessionID
     if (!scroll || scroll.isDestroyed || hidden() !== 0) return Promise.resolve(0)
     const active = historyRequests.get(sessionID)
@@ -357,7 +358,7 @@ export function Session() {
     const anchor = first ? viewport.getRenderable(first) : undefined
     const anchorTop = anchor ? anchor.y - viewport.viewport.y : undefined
     const request = data.session.message
-      .older(sessionID, count)
+      .older(sessionID, HISTORY_PAGE_SIZE)
       .then(
         async (added) => {
           if (added === 0 || route.sessionID !== sessionID || messages()[0]?.id === first) return added
@@ -385,7 +386,7 @@ export function Session() {
       setHiddenRows(0)
       await settleLayout()
     }
-    while ((await loadOlder(200)) > 0) {}
+    while ((await loadOlder()) > 0) {}
   }
   const loadOlderAtTop = () => {
     if (!scroll || scroll.isDestroyed || scroll.scrollTop > 0) return

@@ -41,6 +41,19 @@ export type DataSessionStatus = "idle" | "running"
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 
+// A window whose oldest turn-significant message is an assistant reply starts mid-turn:
+// its user or shell prompt sits on an older page. Matches the desktop client's invariant.
+function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
+  const boundary = source.find(
+    (message) =>
+      message.type === "user" ||
+      message.type === "shell" ||
+      message.type === "assistant" ||
+      (message.type === "synthetic" && message.description?.trim()),
+  )
+  return boundary?.type === "assistant"
+}
+
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
 // until MCP elicitations carry session ownership.
@@ -154,6 +167,23 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     const messageIndex = new Map<string, Map<string, number>>()
     const messageCursor = new Map<string, string | undefined>()
     const messagePaging = new Map<string, Promise<number>>()
+    // Fetch one descending page, following the cursor while the window would open on a
+    // dangling assistant reply, so the oldest loaded message always starts its turn.
+    const fetchMessagePage = async (sessionID: string, limit: number, cursor?: string) => {
+      const request = (cursor?: string) =>
+        client.api.message.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
+      const pages = [await request(cursor)]
+      while (pages.at(-1)!.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
+        const response = await request(pages.at(-1)!.cursor.next ?? undefined)
+        pages.push(response)
+        if (!response.data.length) break
+      }
+      const last = pages.at(-1)!
+      return {
+        messages: pages.flatMap((page) => page.data).toReversed(),
+        cursor: last.data.length < limit ? undefined : (last.cursor.next ?? undefined),
+      }
+    }
     const sync = createSync()
 
     function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -1002,11 +1032,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           sync(sessionID: string) {
             return sync.run(`session.message:${sessionID}`, async () => {
-              const page = await client.api.message.list({ sessionID, limit: 20, order: "desc" })
-              const messages = page.data.toReversed()
-              messageCursor.set(sessionID, page.data.length < 20 ? undefined : (page.cursor.next ?? undefined))
-              messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
-              setStore("session", "message", sessionID, reconcile(messages))
+              const page = await fetchMessagePage(sessionID, 20)
+              messageCursor.set(sessionID, page.cursor)
+              messageIndex.set(sessionID, new Map(page.messages.map((message, index) => [message.id, index])))
+              setStore("session", "message", sessionID, reconcile(page.messages))
             })
           },
           older(sessionID: string, count: number) {
@@ -1015,10 +1044,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const active = messagePaging.get(sessionID)
             if (active) return active
             const pending = (async () => {
-              const page = await client.api.message.list({ sessionID, limit: count, cursor })
-              messageCursor.set(sessionID, page.data.length < count ? undefined : (page.cursor.next ?? undefined))
+              const page = await fetchMessagePage(sessionID, count, cursor)
+              messageCursor.set(sessionID, page.cursor)
               const loaded = index(sessionID)
-              const older = page.data.toReversed().filter((item) => !loaded.has(item.id))
+              const older = page.messages.filter((item) => !loaded.has(item.id))
               if (older.length === 0) return 0
               message.update(sessionID, (draft, index) => {
                 draft.unshift(...older)
