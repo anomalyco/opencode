@@ -62,9 +62,14 @@ export function truncateFilePath(value: string, maxWidth: number) {
   const separatorWidth = stringWidth(separator)
   let width = stringWidth(prefix + basename)
   for (let index = segments.length - 2; index >= 0; index--) {
-    const next = stringWidth(segments[index]!) + separatorWidth
-    if (width + next > maxWidth) break
-    selected.unshift(segments[index]!)
+    const segment = segments[index]!
+    const next = stringWidth(segment) + separatorWidth
+    if (width + next > maxWidth) {
+      const available = maxWidth - width - separatorWidth
+      if (available > 1) selected.unshift(takeStart(segment, available - 1) + "…")
+      break
+    }
+    selected.unshift(segment)
     width += next
   }
   return prefix + selected.join(separator)
