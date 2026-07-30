@@ -17,6 +17,7 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
+import { useStorage } from "../context/storage"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -33,7 +34,8 @@ export function DialogSessionList() {
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
-  const [allProjects, setAllProjects] = createSignal(false)
+  const [prefs, updatePrefs] = useStorage().store("session-list", { initial: { allProjects: false } })
+  const allProjects = () => prefs.allProjects
 
   const [searchResults, { mutate: setSearchResults }] = createResource(
     () => ({ query: search().trim(), allProjects: allProjects() }),
@@ -189,7 +191,9 @@ export function DialogSessionList() {
           title: allProjects() ? "Show current directory sessions" : "Show all project sessions",
           group: "Dialog",
           run: () => {
-            setAllProjects((value) => !value)
+            void updatePrefs((draft) => {
+              draft.allProjects = !draft.allProjects
+            }).catch(() => {})
           },
         },
       ]}
