@@ -31,8 +31,8 @@ import {
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
-import { Context, Effect, Layer, ManagedRuntime } from "effect"
+import type { AssistantMessage, Event, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { Context, Effect, Exit, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
 import { promptContentToParts } from "./content"
@@ -85,6 +85,8 @@ export function make(input: {
   session?: ACPSession.Interface
   usage?: UsageService.Interface
   eventSubscription?: (subscription: ACPEvent.Subscription) => void
+  eventBarrierPublisher?: (event: Event) => void
+  eventSubscriber?: (listener: (event: Event) => void) => () => void
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
@@ -93,7 +95,15 @@ export function make(input: {
   const optimisticRoots = new Set<string>()
   const connection = input.connection
   const extNotification = connection?.extNotification?.bind(connection)
-  const events = connection ? ACPEvent.start({ sdk: input.sdk, connection, session }) : undefined
+  const events = connection
+    ? ACPEvent.start({
+        sdk: input.sdk,
+        connection,
+        session,
+        publishBarrier: input.eventBarrierPublisher,
+        subscribeEvents: input.eventSubscriber,
+      })
+    : undefined
   if (events) input.eventSubscription?.(events)
   const subagents =
     extNotification && events
@@ -242,38 +252,138 @@ export function make(input: {
   })
 
   const loadSession = Effect.fn("ACP.loadSession")(function* (params: LoadSessionRequest) {
-    const snapshot = yield* directorySnapshot(params.cwd)
-    yield* request(
-      () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
-      "session",
-    )
-    const messages = yield* request(
-      () => input.sdk.session.messages({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
-      "session",
-    )
-    const restored = restoreFromMessages(messages.map((item) => item.info))
-    const model = restored.model ?? selectDefaultModel(snapshot)
-    const state = yield* session.load({
-      id: params.sessionId,
-      cwd: params.cwd,
-      mcpServers: params.mcpServers,
-      model,
-      variant: restored.variant ?? selectVariant(snapshot, model),
-      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
-    })
-    sessionSnapshots.set(state.id, snapshot)
-
-    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
-    yield* sendAvailableCommands(input.connection, state.id, snapshot)
-    yield* replayMessages(events, messages)
-
-    return {
-      configOptions: configOptions(snapshot, {
-        model: state.model ?? model,
-        variant: state.variant,
-        modeId: state.modeId,
+    let rollback:
+      | {
+          readonly previous: ACPSession.Info | undefined
+          readonly previousSnapshot: Directory.Snapshot | undefined
+          readonly hadPreviousSnapshot: boolean
+          registered: boolean
+        }
+      | undefined
+    return yield* Effect.acquireUseRelease(
+      Effect.try({
+        try: () => events?.beginReplay(params.sessionId),
+        catch: () =>
+          new ACPError.ServiceFailureError({
+            safeMessage: "Session is already being loaded",
+            service: "session",
+          }),
       }),
-    }
+      (replay) =>
+        Effect.gen(function* () {
+          rollback = {
+            previous: yield* session.tryGet(params.sessionId),
+            previousSnapshot: sessionSnapshots.get(params.sessionId),
+            hadPreviousSnapshot: sessionSnapshots.has(params.sessionId),
+            registered: false,
+          }
+          const snapshot = yield* directorySnapshot(params.cwd)
+          yield* request(
+            () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
+            "session",
+          )
+
+          const messages = yield* request(
+            () =>
+              input.sdk.session.messages(
+                { directory: params.cwd, sessionID: params.sessionId },
+                { throwOnError: true },
+              ),
+            "session",
+          )
+          const boundaryRevision =
+            replay && events
+              ? yield* Effect.tryPromise({
+                  try: () => events.replayBoundary(replay),
+                  catch: () =>
+                    new ACPError.ServiceFailureError({
+                      safeMessage: "Unable to synchronize session replay",
+                      service: "session",
+                    }),
+                })
+              : 0
+
+          const restored = restoreFromMessages(messages.map((item) => item.info))
+          const model = restored.model ?? selectDefaultModel(snapshot)
+          const state = yield* session.load({
+            id: params.sessionId,
+            cwd: params.cwd,
+            mcpServers: params.mcpServers,
+            model,
+            variant: restored.variant ?? selectVariant(snapshot, model),
+            modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+          })
+          rollback.registered = true
+          sessionSnapshots.set(state.id, snapshot)
+
+          yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
+          yield* sendAvailableCommands(input.connection, state.id, snapshot)
+          yield* replayMessages(events, messages)
+          if (replay && events) {
+            yield* Effect.tryPromise({
+              try: () => events.finishReplay(replay, boundaryRevision, messages),
+              catch: () =>
+                new ACPError.ServiceFailureError({
+                  safeMessage: "Unable to finish session replay",
+                  service: "session",
+                }),
+            })
+          }
+
+          return {
+            configOptions: configOptions(snapshot, {
+              model: state.model ?? model,
+              variant: state.variant,
+              modeId: state.modeId,
+            }),
+          }
+        }),
+      (replay, exit) => {
+        const restore = Effect.gen(function* () {
+          if (!Exit.isFailure(exit) || !rollback?.registered) return
+          if (rollback.previous) {
+            const previous = rollback.previous
+            yield* session.load({
+              id: previous.id,
+              cwd: previous.cwd,
+              mcpServers: previous.mcpServers,
+              createdAt: previous.createdAt,
+              model: previous.model,
+              variant: previous.variant,
+              modeId: previous.modeId,
+            })
+            for (const part of previous.knownParts.values()) {
+              yield* session.recordPartMetadata({
+                sessionId: previous.id,
+                messageId: part.messageId,
+                partId: part.partId,
+                partType: part.partType,
+                role: part.role,
+                ignored: part.ignored,
+                toolCallId: part.toolCallId,
+                metadata: part.metadata,
+              })
+            }
+          } else {
+            yield* session.remove(params.sessionId)
+          }
+          if (rollback.hadPreviousSnapshot && rollback.previousSnapshot) {
+            sessionSnapshots.set(params.sessionId, rollback.previousSnapshot)
+          } else {
+            sessionSnapshots.delete(params.sessionId)
+          }
+        })
+        const abort =
+          replay && events
+            ? Effect.promise(() =>
+                events.abortReplay(replay, {
+                  reapplyDeliveredToolState: rollback?.previous !== undefined,
+                }),
+              )
+            : Effect.void
+        return restore.pipe(Effect.ensuring(abort))
+      },
+    )
   })
 
   const listSessions = Effect.fn("ACP.listSessions")(function* (params: ListSessionsRequest) {

@@ -52,7 +52,11 @@ function createHarness(
   const requests: RequestPermissionRequest[] = []
   const sessionGets: string[] = []
   const updates: SessionUpdateParams[] = []
+  const listeners = new Set<(event: Event) => void>()
   const session = makeSessionService()
+  const emit = (event: Event) => {
+    for (const listener of listeners) listener(event)
+  }
   const sdk = {
     permission: {
       reply: (params: PermissionReplyParams) => {
@@ -80,9 +84,18 @@ function createHarness(
       return Promise.resolve()
     },
   } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate">
-  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
+  const subscription = new ACPEvent.Subscription({
+    sdk,
+    connection,
+    session,
+    publishBarrier: emit,
+    subscribeEvents: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+  })
 
-  return { connection, replies, requests, sdk, session, sessionGets, subscription, updates }
+  return { connection, emit, replies, requests, sdk, session, sessionGets, subscription, updates }
 }
 
 async function createSession(session: ACPSession.Interface, sessionId: string, cwd = "/workspace") {
@@ -189,6 +202,44 @@ describe("acp permissions", () => {
       ],
     })
     expect(harness.replies).toEqual([{ requestID: "perm_1", reply: "once", directory: "/workspace" }])
+  })
+
+  it("preserves permissions observed before a transcript replay boundary", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_replay")
+
+    const replay = harness.subscription.beginReplay("ses_replay")
+    await harness.subscription.handle(permissionAsked("ses_replay", "perm_replay"))
+    const boundary = harness.subscription.replayRevision(replay)
+
+    await harness.subscription.finishReplay(replay, boundary)
+    await pollUntil(() => harness.replies.length === 1, "buffered permission was never projected")
+
+    expect(harness.requests[0]?.sessionId).toBe("ses_replay")
+    expect(harness.replies).toEqual([{ requestID: "perm_replay", reply: "once", directory: "/workspace" }])
+  })
+
+  it("does not let a post-boundary transcript event delay a later permission", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_replay")
+    await createKnownTextPart(harness.session, "ses_replay", "msg_replay", "part_replay")
+    harness.subscription.start()
+    const replay = harness.subscription.beginReplay("ses_replay")
+
+    try {
+      const boundary = await harness.subscription.replayBoundary(replay)
+      harness.emit(textDelta("ses_replay", "msg_replay", "part_replay", "live"))
+      harness.emit(permissionAsked("ses_replay", "perm_after_boundary"))
+
+      await pollUntil(() => harness.replies.length === 1, "permission was blocked behind transcript replay", {
+        timeoutMs: 100,
+      })
+      expect(harness.requests[0]?.sessionId).toBe("ses_replay")
+      await harness.subscription.finishReplay(replay, boundary)
+    } finally {
+      await harness.subscription.abortReplay(replay)
+      harness.subscription.stop()
+    }
   })
 
   it("projects an unloaded recursive child permission through its attached root", async () => {

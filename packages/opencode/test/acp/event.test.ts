@@ -39,11 +39,15 @@ function makeSessionService() {
 function createEventStream() {
   const queue: GlobalEventEnvelope[] = []
   const waiters: Array<(value: GlobalEventEnvelope | undefined) => void> = []
+  const listeners = new Set<(event: Event) => void>()
   const state = { closed: false }
   const ready = Promise.withResolvers<void>()
   let opened = false
 
   const push = (event: GlobalEventEnvelope) => {
+    if (event.payload) {
+      for (const listener of listeners) listener(event.payload)
+    }
     const waiter = waiters.shift()
     if (waiter) {
       waiter(event)
@@ -81,10 +85,21 @@ function createEventStream() {
     }
   }
 
-  return { push, close, ready: ready.promise, stream }
+  const subscribe = (listener: (event: Event) => void) => {
+    listeners.add(listener)
+    ready.resolve()
+    return () => listeners.delete(listener)
+  }
+
+  return { push, close, ready: ready.promise, stream, subscribe }
 }
 
-function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
+function createHarness(
+  messages: Record<string, SessionMessageResponse> = {},
+  onSessionUpdate?: (params: SessionUpdateParams) => void | Promise<void>,
+  beforeReplayBarrier?: () => void,
+  afterReplayBarrier?: () => void,
+) {
   const updates: SessionUpdateParams[] = []
   const calls = {
     eventSubscribe: 0,
@@ -110,11 +125,24 @@ function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
   const connection = {
     sessionUpdate: (params: SessionUpdateParams) => {
       updates.push(params)
-      return Promise.resolve()
+      return Promise.resolve(onSessionUpdate?.(params)).then(() => undefined)
     },
   } satisfies Pick<AgentSideConnection, "sessionUpdate">
   const session = makeSessionService()
-  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
+  const subscription = new ACPEvent.Subscription({
+    sdk,
+    connection,
+    session,
+    publishBarrier: (event) => {
+      beforeReplayBarrier?.()
+      events.push({ payload: event })
+      afterReplayBarrier?.()
+    },
+    subscribeEvents: (listener) => {
+      calls.eventSubscribe++
+      return events.subscribe(listener)
+    },
+  })
 
   return { calls, connection, events, sdk, session, subscription, updates }
 }
@@ -307,6 +335,17 @@ function toolUpdates(updates: SessionUpdateParams[]) {
   })
 }
 
+function textFromUpdates(updates: SessionUpdateParams[], sessionID: string) {
+  return updates
+    .filter((item) => item.sessionId === sessionID && item.update.sessionUpdate === "agent_message_chunk")
+    .map((item) =>
+      item.update.sessionUpdate === "agent_message_chunk" && item.update.content.type === "text"
+        ? item.update.content.text
+        : "",
+    )
+    .join("")
+}
+
 async function createKnownSession(
   session: ACPSession.Interface,
   sessionId: string,
@@ -426,6 +465,11 @@ describe("acp event routing", () => {
         variants: Directory.variants,
       },
       session: harness.session,
+      eventBarrierPublisher: (event) => harness.events.push({ payload: event }),
+      eventSubscriber: (listener) => {
+        harness.calls.eventSubscribe++
+        return harness.events.subscribe(listener)
+      },
       eventSubscription: (started) => {
         subscription = started
       },
@@ -530,6 +574,8 @@ describe("acp event routing", () => {
           ),
         variants: Directory.variants,
       },
+      eventBarrierPublisher: (event) => events.push({ payload: event }),
+      eventSubscriber: events.subscribe,
       eventSubscription: (started) => {
         subscription = started
       },
@@ -544,6 +590,384 @@ describe("acp event routing", () => {
     ])
     subscription?.stop()
     events.close()
+  })
+
+  it("opens a lossless replay boundary before draining later live transcript events", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_boundary", cwd: "/workspace" }))
+
+    const replay = harness.subscription.beginReplay("ses_boundary")
+    await harness.subscription.handle(partUpdated("ses_boundary", "msg_boundary", "part_boundary", "text"))
+    await harness.subscription.handle(textDelta("ses_boundary", "msg_boundary", "part_boundary", "covered"))
+    const boundary = harness.subscription.replayRevision(replay)
+
+    const baseline = assistantMessage("ses_boundary", "msg_boundary", "part_boundary", "text")
+    const baselinePart = baseline.parts[0]
+    if (baselinePart?.type === "text") baselinePart.text = "covered"
+    await harness.subscription.replayMessage(baseline)
+
+    await harness.subscription.handle(textDelta("ses_boundary", "msg_boundary", "part_boundary", " live"))
+    await harness.subscription.finishReplay(replay, boundary, [baseline])
+
+    expect(textFromUpdates(harness.updates, "ses_boundary")).toBe("covered live")
+  })
+
+  it("does not suppress a repeated text delta committed after the replay boundary", async () => {
+    const harness = createHarness()
+    await createKnownSession(harness.session, "ses_repeated", {
+      messageId: "msg_repeated",
+      partId: "part_repeated",
+      partType: "text",
+    })
+    const baseline = assistantMessage("ses_repeated", "msg_repeated", "part_repeated", "text")
+    const part = baseline.parts[0]
+    if (part?.type === "text") part.text = "x"
+
+    const replay = harness.subscription.beginReplay("ses_repeated")
+    const boundary = harness.subscription.replayRevision(replay)
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.handle(textDelta("ses_repeated", "msg_repeated", "part_repeated", "x"))
+    await harness.subscription.finishReplay(replay, boundary, [baseline])
+
+    expect(textFromUpdates(harness.updates, "ses_repeated")).toBe("xx")
+  })
+
+  it("accounts for a second post-boundary event while the first awaits replay", async () => {
+    const harness = createHarness()
+    await createKnownSession(harness.session, "ses_bounded", {
+      messageId: "msg_bounded",
+      partId: "part_bounded",
+      partType: "text",
+    })
+    harness.subscription.start()
+    await harness.events.ready
+    const replay = harness.subscription.beginReplay("ses_bounded")
+
+    try {
+      const boundary = await harness.subscription.replayBoundary(replay)
+      harness.events.push({ payload: textDelta("ses_bounded", "msg_bounded", "part_bounded", "first") })
+      await pollUntil(
+        () => harness.subscription.replayRevision(replay) === 1,
+        "first post-boundary event was not admitted",
+      )
+      harness.events.push({
+        payload: textDelta("ses_bounded", "msg_bounded", "part_bounded", "x".repeat(2 * 1024 * 1024)),
+      })
+
+      await expect(harness.subscription.finishReplay(replay, boundary)).rejects.toBeInstanceOf(
+        ACPEvent.ReplayBoundaryError,
+      )
+    } finally {
+      await harness.subscription.abortReplay(replay)
+      harness.subscription.stop()
+      harness.events.close()
+    }
+  })
+
+  it("enforces the event-count cap across batches admitted while replay drains", async () => {
+    let harness: ReturnType<typeof createHarness>
+    let injected = false
+    const delta = textDelta("s", "m", "p", "x")
+    harness = createHarness({}, (update) => {
+      if (injected || update.update.sessionUpdate !== "agent_message_chunk") return
+      injected = true
+      for (let index = 0; index < 5_001; index++) {
+        void harness.subscription.handle(delta)
+      }
+    })
+    await createKnownSession(harness.session, "s", {
+      messageId: "m",
+      partId: "p",
+      partType: "text",
+    })
+    const replay = harness.subscription.beginReplay("s")
+    for (let index = 0; index < 5_000; index++) {
+      await harness.subscription.handle(delta)
+    }
+
+    try {
+      await expect(harness.subscription.finishReplay(replay, 0)).rejects.toBeInstanceOf(ACPEvent.ReplayBoundaryError)
+    } finally {
+      harness.subscription.stop()
+    }
+  })
+
+  it("retains a transient delta that is absent from the replay snapshot", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_transient", cwd: "/workspace" }))
+
+    const replay = harness.subscription.beginReplay("ses_transient")
+    await harness.subscription.handle(partUpdated("ses_transient", "msg_transient", "part_transient", "text"))
+    await harness.subscription.handle(textDelta("ses_transient", "msg_transient", "part_transient", "transient"))
+    const boundary = harness.subscription.replayRevision(replay)
+    const baseline = assistantMessage("ses_transient", "msg_transient", "part_transient", "text")
+
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.finishReplay(replay, boundary, [baseline])
+
+    expect(textFromUpdates(harness.updates, "ses_transient")).toBe("transient")
+  })
+
+  it("projects a tool completion committed after the snapshot and before its boundary", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_tool_race", cwd: "/workspace" }))
+    const completed = completedTool("ses_tool_race", "call_after_snapshot")
+
+    const replay = harness.subscription.beginReplay("ses_tool_race")
+    await harness.subscription.handle(toolUpdated(completed))
+    const boundary = harness.subscription.replayRevision(replay)
+    await harness.subscription.finishReplay(replay, boundary, [])
+
+    expect(toolUpdates(harness.updates).map((item) => item.update.toolCallId)).toEqual([
+      "call_after_snapshot",
+      "call_after_snapshot",
+    ])
+  })
+
+  it("does not duplicate a snapshot-covered tool completion delivered after its boundary", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_tool_delayed", cwd: "/workspace" }))
+    const completed = completedTool("ses_tool_delayed", "call_delayed")
+    const baseline = assistantToolMessage(completed)
+
+    const replay = harness.subscription.beginReplay("ses_tool_delayed")
+    const boundary = harness.subscription.replayRevision(replay)
+    await harness.subscription.handle(toolUpdated(completed))
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.finishReplay(replay, boundary, [baseline])
+
+    expect(toolUpdates(harness.updates).map((item) => item.update.toolCallId)).toEqual(["call_delayed", "call_delayed"])
+  })
+
+  it("does not regress snapshot running-tool progress to an earlier buffered update", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_tool_progress", cwd: "/workspace" }))
+    const earlier = runningTool("ses_tool_progress", "call_progress", "earlier")
+    const latest = runningTool("ses_tool_progress", "call_progress", "latest")
+    const baseline = assistantToolMessage(latest)
+
+    const replay = harness.subscription.beginReplay("ses_tool_progress")
+    await harness.subscription.handle(toolUpdated(earlier))
+    await harness.subscription.handle(toolUpdated(latest))
+    const boundary = harness.subscription.replayRevision(replay)
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.finishReplay(replay, boundary, [baseline])
+
+    const outputs = toolUpdates(harness.updates).flatMap((item) => {
+      if (item.update.sessionUpdate !== "tool_call_update") return []
+      return (item.update.content ?? []).flatMap((content) =>
+        content.type === "content" && content.content.type === "text" ? [content.content.text] : [],
+      )
+    })
+    expect(outputs).toEqual(["latest"])
+  })
+
+  it("fences matching running-tool progress before projecting an earlier update", async () => {
+    const earlier = runningTool("ses_tool_drain", "call_drain", "earlier")
+    const latest = runningTool("ses_tool_drain", "call_drain", "latest")
+    const baseline = assistantToolMessage(latest)
+    let harness: ReturnType<typeof createHarness>
+    let injected = false
+    harness = createHarness({}, undefined, () => {
+      if (injected) return
+      injected = true
+      harness.events.push({ payload: toolUpdated(latest) })
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_tool_drain", cwd: "/workspace" }))
+    harness.subscription.start()
+
+    const replay = harness.subscription.beginReplay("ses_tool_drain")
+    await harness.subscription.handle(toolUpdated(earlier))
+    const boundary = harness.subscription.replayRevision(replay)
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.finishReplay(replay, boundary, [baseline])
+
+    const outputs = toolUpdates(harness.updates).flatMap((item) => {
+      if (item.update.sessionUpdate !== "tool_call_update") return []
+      return (item.update.content ?? []).flatMap((content) =>
+        content.type === "content" && content.content.type === "text" ? [content.content.text] : [],
+      )
+    })
+    expect(outputs).toEqual(["latest"])
+    harness.subscription.stop()
+  })
+
+  it("keeps a replay locked while post-fence live events are backpressured", async () => {
+    const liveStarted = Promise.withResolvers<void>()
+    const releaseLive = Promise.withResolvers<void>()
+    let harness: ReturnType<typeof createHarness>
+    let injected = false
+    harness = createHarness(
+      {},
+      (update) => {
+        if (
+          update.update.sessionUpdate !== "agent_message_chunk" ||
+          update.update.content.type !== "text" ||
+          update.update.content.text !== "live"
+        ) {
+          return
+        }
+        liveStarted.resolve()
+        return releaseLive.promise
+      },
+      undefined,
+      () => {
+        if (injected) return
+        injected = true
+        harness.events.push({ payload: textDelta("ses_drain_lock", "msg_drain_lock", "part_drain_lock", "live") })
+      },
+    )
+    await createKnownSession(harness.session, "ses_drain_lock", {
+      messageId: "msg_drain_lock",
+      partId: "part_drain_lock",
+      partType: "text",
+    })
+    harness.subscription.start()
+    const replay = harness.subscription.beginReplay("ses_drain_lock")
+    const finishing = harness.subscription.finishReplay(replay, 0)
+    await liveStarted.promise
+
+    let concurrent: ACPEvent.ReplayWindow | undefined
+    let concurrentError: unknown
+    try {
+      concurrent = harness.subscription.beginReplay("ses_drain_lock")
+    } catch (error) {
+      concurrentError = error
+    }
+    harness.events.push({ payload: textDelta("ses_drain_lock", "msg_drain_lock", "part_drain_lock", "later") })
+    releaseLive.resolve()
+    await finishing
+    if (concurrent) await harness.subscription.abortReplay(concurrent)
+
+    expect(concurrentError).toBeInstanceOf(Error)
+    expect(textFromUpdates(harness.updates, "ses_drain_lock")).toBe("livelater")
+    const retry = harness.subscription.beginReplay("ses_drain_lock")
+    await harness.subscription.abortReplay(retry)
+    harness.subscription.stop()
+  })
+
+  it("reconciles a pre-replay queued event before newer post-fence events", async () => {
+    const blockerStarted = Promise.withResolvers<void>()
+    const releaseBlocker = Promise.withResolvers<void>()
+    let harness: ReturnType<typeof createHarness>
+    let injected = false
+    harness = createHarness(
+      {},
+      (update) => {
+        if (
+          update.sessionId !== "ses_blocker" ||
+          update.update.sessionUpdate !== "agent_message_chunk" ||
+          update.update.content.type !== "text"
+        ) {
+          return
+        }
+        blockerStarted.resolve()
+        return releaseBlocker.promise
+      },
+      undefined,
+      () => {
+        if (injected) return
+        injected = true
+        harness.events.push({ payload: textDelta("ses_ordered", "msg_ordered", "part_ordered", "new") })
+      },
+    )
+    await createKnownSession(harness.session, "ses_blocker", {
+      messageId: "msg_blocker",
+      partId: "part_blocker",
+      partType: "text",
+    })
+    await createKnownSession(harness.session, "ses_ordered", {
+      messageId: "msg_ordered",
+      partId: "part_ordered",
+      partType: "text",
+    })
+    harness.subscription.start()
+    harness.events.push({ payload: textDelta("ses_blocker", "msg_blocker", "part_blocker", "block") })
+    await blockerStarted.promise
+    harness.events.push({ payload: textDelta("ses_ordered", "msg_ordered", "part_ordered", "old") })
+
+    const replay = harness.subscription.beginReplay("ses_ordered")
+    const boundary = harness.subscription.replayRevision(replay)
+    const baseline = assistantMessage("ses_ordered", "msg_ordered", "part_ordered", "text")
+    const baselinePart = baseline.parts[0]
+    if (baselinePart?.type === "text") baselinePart.text = "old"
+    await harness.subscription.replayMessage(baseline)
+    const finishing = harness.subscription.finishReplay(replay, boundary, [baseline])
+    releaseBlocker.resolve()
+    await finishing
+
+    expect(textFromUpdates(harness.updates, "ses_ordered")).toBe("oldnew")
+    harness.subscription.stop()
+  })
+
+  it("restores tool replay caches when a failed replay is aborted", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_tool_abort", cwd: "/workspace" }))
+    const baseline = assistantToolMessage(runningTool("ses_tool_abort", "call_abort", "latest"))
+    const first = harness.subscription.beginReplay("ses_tool_abort")
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.handle(
+      textDelta("ses_tool_abort", "msg_overflow", "part_overflow", "x".repeat(2 * 1024 * 1024)),
+    )
+    await expect(harness.subscription.finishReplay(first, 0, [baseline])).rejects.toBeInstanceOf(
+      ACPEvent.ReplayBoundaryError,
+    )
+    await harness.subscription.abortReplay(first)
+
+    const beforeRetry = harness.updates.length
+    const retry = harness.subscription.beginReplay("ses_tool_abort")
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.finishReplay(retry, 0, [baseline])
+
+    const retried = toolUpdates(harness.updates.slice(beforeRetry))
+    expect(retried.map((item) => item.update.sessionUpdate)).toEqual(["tool_call", "tool_call_update"])
+    expect(retried[1]?.update).toMatchObject({
+      content: [{ type: "content", content: { type: "text", text: "latest" } }],
+    })
+  })
+
+  it("isolates running-tool caches for reused call IDs in different sessions", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_tool_first", cwd: "/workspace" }))
+    await Effect.runPromise(harness.session.create({ id: "ses_tool_second", cwd: "/workspace" }))
+
+    await harness.subscription.replayMessage(
+      assistantToolMessage(runningTool("ses_tool_first", "call_shared", "first")),
+    )
+    await harness.subscription.replayMessage(
+      assistantToolMessage(runningTool("ses_tool_second", "call_shared", "second")),
+    )
+
+    expect(toolUpdates(harness.updates).map((item) => [item.sessionId, item.update.sessionUpdate])).toEqual([
+      ["ses_tool_first", "tool_call"],
+      ["ses_tool_first", "tool_call_update"],
+      ["ses_tool_second", "tool_call"],
+      ["ses_tool_second", "tool_call_update"],
+    ])
+  })
+
+  it("treats finalized transformed text as covering its original streamed deltas", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_transformed", cwd: "/workspace" }))
+    const replay = harness.subscription.beginReplay("ses_transformed")
+    await harness.subscription.handle(partUpdated("ses_transformed", "msg_transformed", "part_transformed", "text"))
+    await harness.subscription.handle(textDelta("ses_transformed", "msg_transformed", "part_transformed", "hello"))
+    const boundary = harness.subscription.replayRevision(replay)
+    const baseline = assistantMessage("ses_transformed", "msg_transformed", "part_transformed", "text")
+    const part = baseline.parts[0]
+    if (part?.type === "text") {
+      const finalized = part as unknown as {
+        text: string
+        time: { start: number; end: number }
+      }
+      finalized.text = "HELLO"
+      finalized.time = { start: Date.now() - 1, end: Date.now() }
+    }
+
+    await harness.subscription.replayMessage(baseline)
+    await harness.subscription.finishReplay(replay, boundary, [baseline])
+
+    expect(textFromUpdates(harness.updates, "ses_transformed")).toBe("HELLO")
   })
 
   it("ignores unknown sessions and live user parts without user_message_chunk duplication", async () => {

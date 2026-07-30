@@ -10,13 +10,15 @@ import type {
   SessionConfigSelectOption,
   SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
-import type { AssistantMessage, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { Effect } from "effect"
+import { Effect, ManagedRuntime } from "effect"
 import { Agent } from "@/acp/agent"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
+import { ACPSession } from "@/acp/session"
 import { Subagent } from "@/acp/subagent"
 import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
@@ -25,6 +27,12 @@ const providerID = ProviderV2.ID.make("test")
 const modelID = ModelV2.ID.make("test-model")
 const configuredModelID = ModelV2.ID.make("configured-model")
 const secondModelID = ModelV2.ID.make("second-model")
+
+function makeSessionService() {
+  return ManagedRuntime.make(LayerNode.compile(ACPSession.node)).runSync(
+    ACPSession.Service.use((service) => Effect.succeed(service)),
+  )
+}
 
 const provider: Provider.Info = {
   id: providerID,
@@ -143,13 +151,197 @@ const provider: Provider.Info = {
   },
 }
 
+function createEventStream() {
+  const queue: Array<{ payload?: Event }> = []
+  const waiters: Array<(value: { payload?: Event } | undefined) => void> = []
+  const listeners = new Set<(event: Event) => void>()
+  const ready = Promise.withResolvers<void>()
+  let opened = false
+
+  const push = (event: Event) => {
+    for (const listener of listeners) listener(event)
+    const envelope = { payload: event }
+    const waiter = waiters.shift()
+    if (waiter) {
+      waiter(envelope)
+      return
+    }
+    queue.push(envelope)
+  }
+
+  const stream = async function* (signal?: AbortSignal) {
+    if (!opened) {
+      opened = true
+      ready.resolve()
+    }
+    while (!signal?.aborted) {
+      const queued = queue.shift()
+      if (queued) {
+        yield queued
+        continue
+      }
+      const next = await new Promise<{ payload?: Event } | undefined>((resolve) => {
+        waiters.push(resolve)
+        signal?.addEventListener("abort", () => resolve(undefined), { once: true })
+      })
+      if (!next) return
+      yield next
+    }
+  }
+
+  return {
+    push,
+    ready: ready.promise,
+    subscribe: (listener: (event: Event) => void) => {
+      listeners.add(listener)
+      ready.resolve()
+      return () => listeners.delete(listener)
+    },
+    globalEvent: (options?: { signal?: AbortSignal }) => Promise.resolve({ stream: stream(options?.signal) }),
+  }
+}
+
+function textPartUpdated(sessionID: string, messageID: string, partID: string, text: string): Event {
+  return {
+    id: `updated_${text}`,
+    type: "message.part.updated",
+    properties: {
+      sessionID,
+      time: Date.now(),
+      part: {
+        id: partID,
+        sessionID,
+        messageID,
+        type: "text",
+        text,
+      },
+    },
+  }
+}
+
+function textPartDelta(sessionID: string, messageID: string, partID: string, delta: string): Event {
+  return {
+    id: `delta_${delta}`,
+    type: "message.part.delta",
+    properties: {
+      sessionID,
+      messageID,
+      partID,
+      field: "text",
+      delta,
+    },
+  }
+}
+
+function assistantTextMessage(
+  sessionID: string,
+  messageID: string,
+  partID: string,
+  text: string,
+): SessionMessageResponse {
+  return {
+    info: {
+      id: messageID,
+      sessionID,
+      role: "assistant",
+      time: { created: Date.now() },
+      parentID: "parent",
+      modelID,
+      providerID,
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/workspace", root: "/workspace" },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    },
+    parts: [
+      {
+        id: partID,
+        sessionID,
+        messageID,
+        type: "text",
+        text,
+      },
+    ],
+  }
+}
+
+function runningTool(sessionID: string, callID: string, output: string) {
+  return {
+    id: `part_${callID}`,
+    sessionID,
+    messageID: `msg_${callID}`,
+    type: "tool",
+    callID,
+    tool: "bash",
+    state: {
+      status: "running",
+      input: { cmd: "printf latest" },
+      title: "bash",
+      metadata: { output },
+      time: { start: Date.now() },
+    },
+  } satisfies ToolPart
+}
+
+function toolPartUpdated(part: ToolPart): Event {
+  return {
+    id: `updated_${part.callID}_${part.state.status}`,
+    type: "message.part.updated",
+    properties: {
+      sessionID: part.sessionID,
+      time: Date.now(),
+      part,
+    },
+  }
+}
+
+function assistantToolMessage(part: ToolPart): SessionMessageResponse {
+  return {
+    info: {
+      id: part.messageID,
+      sessionID: part.sessionID,
+      role: "assistant",
+      time: { created: Date.now() },
+      parentID: "parent",
+      modelID,
+      providerID,
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/workspace", root: "/workspace" },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    },
+    parts: [part],
+  }
+}
+
 describe("ACP service sessions", () => {
   const makeService = (
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
       get?: (input: { sessionID: string }) => Promise<{ data: { id: string; parentID?: string } }>
+      globalEvent?: (options?: { signal?: AbortSignal }) => Promise<{
+        stream: AsyncIterable<{ payload?: Event }>
+      }>
+      eventBarrierPublisher?: (event: Event) => void
+      eventSubscriber?: (listener: (event: Event) => void) => () => void
+      messages?: () => Promise<{ data: readonly { info: unknown; parts: readonly unknown[] }[] }>
+      observeEvent?: (event: Event) => void | Promise<void>
+      onSessionUpdate?: (update: SessionNotification) => void | Promise<void>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      session?: ACPSession.Interface
       sessions?: Array<{
         id: string
         directory: string
@@ -158,6 +350,7 @@ describe("ACP service sessions", () => {
       }>
     },
   ) => {
+    const defaultEvents = createEventStream()
     const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
     const aborts: string[] = []
@@ -210,7 +403,7 @@ describe("ACP service sessions", () => {
             data: filtered.slice(0, input.limit ?? 100),
           })
         },
-        messages: () => Promise.resolve({ data: messages }),
+        messages: options?.messages ?? (() => Promise.resolve({ data: messages })),
         children: () => Promise.resolve({ data: [] }),
         status: () =>
           Promise.resolve({
@@ -266,13 +459,13 @@ describe("ACP service sessions", () => {
         },
       },
       global: {
-        event: () => new Promise(() => {}),
+        event: options?.globalEvent ?? defaultEvents.globalEvent,
       },
     } as unknown as OpencodeClient
     const connection = {
       sessionUpdate: (update: SessionNotification) => {
         updates.push(update)
-        return Promise.resolve()
+        return Promise.resolve(options?.onSessionUpdate?.(update)).then(() => undefined)
       },
       extNotification: () => Promise.resolve(),
     } as Pick<AgentSideConnection, "sessionUpdate" | "extNotification">
@@ -288,7 +481,23 @@ describe("ACP service sessions", () => {
     })
 
     return {
-      service: ACPService.make({ sdk, connection, usage }),
+      service: ACPService.make({
+        sdk,
+        connection,
+        usage,
+        eventBarrierPublisher: options?.eventBarrierPublisher ?? defaultEvents.push,
+        eventSubscriber: options?.eventSubscriber ?? defaultEvents.subscribe,
+        session: options?.session,
+        ...(options?.observeEvent
+          ? {
+              eventSubscription: (subscription) => {
+                subscription.addListener(async (event) => {
+                  await options.observeEvent?.(event)
+                })
+              },
+            }
+          : {}),
+      }),
       updates,
       mcpAdds,
       aborts,
@@ -406,6 +615,289 @@ describe("ACP service sessions", () => {
         content: { type: "text", text: "hi there" },
       },
     ])
+  })
+
+  it("reconciles a fenced load snapshot with transient and later child deltas exactly once", async () => {
+    const events = createEventStream()
+    const coveredObserved = Promise.withResolvers<void>()
+    const baseline = assistantTextMessage("ses_loaded", "msg_live", "part_live", "")
+    let messageReads = 0
+    let liveDeltaSent = false
+    const { service, updates } = makeService([], {
+      globalEvent: events.globalEvent,
+      eventBarrierPublisher: events.push,
+      eventSubscriber: events.subscribe,
+      messages: async () => {
+        messageReads++
+        if (messageReads === 1) {
+          events.push(textPartUpdated("ses_loaded", "msg_live", "part_live", "covered"))
+          events.push(textPartDelta("ses_loaded", "msg_live", "part_live", "covered"))
+          await coveredObserved.promise
+        }
+        return { data: [baseline] }
+      },
+      observeEvent: (event) => {
+        if (event.id === "delta_covered") coveredObserved.resolve()
+      },
+      onSessionUpdate: (notification) => {
+        if (
+          !liveDeltaSent &&
+          notification.sessionId === "ses_loaded" &&
+          notification.update.sessionUpdate === "agent_message_chunk" &&
+          notification.update.content.type === "text" &&
+          notification.update.content.text === "covered"
+        ) {
+          liveDeltaSent = true
+          events.push(textPartDelta("ses_loaded", "msg_live", "part_live", " live"))
+        }
+      },
+    })
+    await events.ready
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    const text = updates
+      .filter(
+        (notification) =>
+          notification.sessionId === "ses_loaded" &&
+          notification.update.sessionUpdate === "agent_message_chunk" &&
+          notification.update.content.type === "text",
+      )
+      .map((notification) =>
+        notification.update.sessionUpdate === "agent_message_chunk" && notification.update.content.type === "text"
+          ? notification.update.content.text
+          : "",
+      )
+      .join("")
+    expect(messageReads).toBe(1)
+    expect(text).toBe("covered live")
+    service.close()
+  })
+
+  it("opens a continuously streaming session from one causally fenced snapshot", async () => {
+    const events = createEventStream()
+    let messageReads = 0
+    let observedEvents = 0
+    const baseline = assistantTextMessage("ses_loaded", "msg_churn", "part_churn", "")
+    const deltas = Array.from({ length: 8 }, (_, index) => `delta_${index + 1}`)
+    const { service, updates } = makeService([], {
+      globalEvent: events.globalEvent,
+      eventBarrierPublisher: events.push,
+      eventSubscriber: events.subscribe,
+      messages: async () => {
+        messageReads++
+        for (const delta of deltas) {
+          events.push(textPartDelta("ses_loaded", "msg_churn", "part_churn", delta))
+        }
+        while (observedEvents < deltas.length) {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+        }
+        return { data: [baseline] }
+      },
+      observeEvent: () => {
+        observedEvents++
+      },
+    })
+    await events.ready
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    const text = updates
+      .filter(
+        (notification) =>
+          notification.sessionId === "ses_loaded" &&
+          notification.update.sessionUpdate === "agent_message_chunk" &&
+          notification.update.content.type === "text",
+      )
+      .map((notification) =>
+        notification.update.sessionUpdate === "agent_message_chunk" && notification.update.content.type === "text"
+          ? notification.update.content.text
+          : "",
+      )
+      .join("")
+    expect(messageReads).toBe(1)
+    expect(text).toBe(deltas.join(""))
+    service.close()
+  })
+
+  it("rejects a concurrent load until post-fence live events finish draining", async () => {
+    const events = createEventStream()
+    const liveStarted = Promise.withResolvers<void>()
+    const releaseLive = Promise.withResolvers<void>()
+    const baseline = assistantTextMessage("ses_loaded", "msg_drain_lock", "part_drain_lock", "")
+    let barriers = 0
+    const { service } = makeService([baseline], {
+      eventSubscriber: events.subscribe,
+      eventBarrierPublisher: (event) => {
+        events.push(event)
+        barriers++
+        if (barriers === 2) {
+          events.push(textPartDelta("ses_loaded", "msg_drain_lock", "part_drain_lock", "live"))
+        }
+      },
+      onSessionUpdate: (notification) => {
+        if (
+          notification.update.sessionUpdate !== "agent_message_chunk" ||
+          notification.update.content.type !== "text" ||
+          notification.update.content.text !== "live"
+        ) {
+          return
+        }
+        liveStarted.resolve()
+        return releaseLive.promise
+      },
+    })
+
+    const first = Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+    await liveStarted.promise
+    const concurrent = Effect.runPromise(
+      service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+    const concurrentRejected = expect(concurrent).rejects.toMatchObject({
+      _tag: "ACPServiceFailureError",
+      safeMessage: "Session is already being loaded",
+    })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    releaseLive.resolve()
+
+    await first
+    await concurrentRejected
+    service.close()
+  })
+
+  it("removes a newly registered ACP session when replay finish fails", async () => {
+    const events = createEventStream()
+    const session = makeSessionService()
+    const baseline = assistantTextMessage("ses_loaded", "msg_overflow", "part_overflow", "baseline")
+    let liveSent = false
+    let overflowSent = false
+    const { service } = makeService([baseline], {
+      eventBarrierPublisher: events.push,
+      eventSubscriber: events.subscribe,
+      session,
+      onSessionUpdate: (notification) => {
+        if (notification.update.sessionUpdate !== "agent_message_chunk" || notification.update.content.type !== "text")
+          return
+        if (!liveSent && notification.update.content.text === "baseline") {
+          liveSent = true
+          events.push(textPartDelta("ses_loaded", "msg_overflow", "part_overflow", " live"))
+          return
+        }
+        if (!overflowSent && notification.update.content.text === " live") {
+          overflowSent = true
+          events.push(textPartDelta("ses_loaded", "msg_overflow", "part_overflow", "x".repeat(2 * 1024 * 1024)))
+        }
+      },
+    })
+
+    await expect(
+      Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).rejects.toMatchObject({ _tag: "ACPServiceFailureError" })
+
+    expect(await Effect.runPromise(session.tryGet("ses_loaded"))).toBeUndefined()
+    service.close()
+  })
+
+  it("does not retain delivered tool caches after a failed first load", async () => {
+    const events = createEventStream()
+    const baseline = assistantTextMessage("ses_loaded", "msg_baseline", "part_baseline", "baseline")
+    const tool = runningTool("ses_loaded", "call_retry", "latest")
+    const replayedTool = assistantToolMessage(tool)
+    let messageReads = 0
+    let toolSent = false
+    let overflowSent = false
+    const { service, updates } = makeService([], {
+      eventBarrierPublisher: events.push,
+      eventSubscriber: events.subscribe,
+      messages: () => Promise.resolve({ data: messageReads++ === 0 ? [baseline] : [replayedTool] }),
+      onSessionUpdate: (notification) => {
+        if (
+          !toolSent &&
+          notification.update.sessionUpdate === "agent_message_chunk" &&
+          notification.update.content.type === "text" &&
+          notification.update.content.text === "baseline"
+        ) {
+          toolSent = true
+          events.push(toolPartUpdated(tool))
+          return
+        }
+        if (
+          !overflowSent &&
+          notification.update.sessionUpdate === "tool_call_update" &&
+          notification.update.toolCallId === "call_retry"
+        ) {
+          overflowSent = true
+          events.push(textPartDelta("ses_loaded", "msg_overflow", "part_overflow", "x".repeat(2 * 1024 * 1024)))
+        }
+      },
+    })
+
+    await expect(
+      Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).rejects.toMatchObject({ _tag: "ACPServiceFailureError" })
+
+    const beforeRetry = updates.length
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    const retryTools = updates.slice(beforeRetry).filter((notification) => {
+      return (
+        notification.update.sessionUpdate === "tool_call" || notification.update.sessionUpdate === "tool_call_update"
+      )
+    })
+    expect(retryTools.map((notification) => notification.update.sessionUpdate)).toEqual([
+      "tool_call",
+      "tool_call_update",
+    ])
+    expect(retryTools[1]?.update).toMatchObject({
+      content: [{ type: "content", content: { type: "text", text: "latest" } }],
+    })
+    service.close()
+  })
+
+  it("restores exact pre-load ACP session state when replay finish fails", async () => {
+    const events = createEventStream()
+    const session = makeSessionService()
+    await Effect.runPromise(
+      session.create({
+        id: "ses_loaded",
+        cwd: "/prior",
+        mcpServers: [{ name: "prior", command: "prior-server", args: [], env: [] }],
+        createdAt: new Date(1234),
+        model: { providerID, modelID: secondModelID },
+        variant: "medium",
+        modeId: "plan",
+      }),
+    )
+    await Effect.runPromise(
+      session.recordPartMetadata({
+        sessionId: "ses_loaded",
+        messageId: "msg_prior",
+        partId: "part_prior",
+        partType: "text",
+        role: "assistant",
+        metadata: { retained: true },
+      }),
+    )
+    const before = await Effect.runPromise(session.get("ses_loaded"))
+    const baseline = assistantTextMessage("ses_loaded", "msg_overflow", "part_overflow", "baseline")
+    let emitted = false
+    const { service } = makeService([baseline], {
+      eventBarrierPublisher: events.push,
+      eventSubscriber: events.subscribe,
+      session,
+      onSessionUpdate: (notification) => {
+        if (emitted || notification.update.sessionUpdate !== "agent_message_chunk") return
+        emitted = true
+        events.push(textPartDelta("ses_loaded", "msg_overflow", "part_overflow", "x".repeat(2 * 1024 * 1024)))
+      },
+    })
+
+    await expect(
+      Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).rejects.toMatchObject({ _tag: "ACPServiceFailureError" })
+
+    expect(await Effect.runPromise(session.get("ses_loaded"))).toEqual(before)
+    service.close()
   })
 
   it("lists sessions sorted by updated time with cursor support", async () => {
