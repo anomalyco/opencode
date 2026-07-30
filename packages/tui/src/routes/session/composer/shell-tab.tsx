@@ -17,7 +17,9 @@ export function ShellTab(props: { sessionID: string }) {
   const shortcuts = Keymap.useShortcuts()
 
   const entries = createMemo(() =>
-    data.shell.list().filter((shell) => shell.metadata.sessionID === props.sessionID && shell.status === "running"),
+    data.shell
+      .list(location.current)
+      .filter((shell) => shell.metadata.sessionID === props.sessionID && shell.status === "running"),
   )
 
   const [store, setStore] = createStore({ selected: 0 })
