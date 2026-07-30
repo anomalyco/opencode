@@ -50,7 +50,6 @@ export function DialogProject() {
           description: truncateFilePath(description, width),
           searchText: description,
           value: project.canonical,
-          category: project.id === current()?.id ? "Current" : "Projects",
         }
       })
   })
