@@ -159,6 +159,14 @@ describe("ConfigMarkdown: frontmatter parsing", async () => {
     expect(parsed.data.dollar).toBe("Use $' and $& for special patterns")
   })
 
+  test("should extract hyphenated keys with colons in the value", () => {
+    expect(parsed.data["allowed-tools"]).toBe("Read: every file")
+  })
+
+  test("should extract dotted keys with colons in the value", () => {
+    expect(parsed.data["dotted.key"]).toBe("Has a colon: here")
+  })
+
   test("should not parse fake yaml from content", () => {
     expect(parsed.data.fake_field).toBeUndefined()
     expect(parsed.data.another).toBeUndefined()

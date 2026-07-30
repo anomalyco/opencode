@@ -25,7 +25,9 @@ export function sanitize(content: string) {
   const frontmatter = match[1]
   const result = frontmatter.split(/\r?\n/).flatMap((line) => {
     if (line.trim().startsWith("#") || line.trim() === "" || /^\s+/.test(line)) return [line]
-    const entry = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
+    // Keys may contain hyphens and dots — `allowed-tools` is the common case in
+    // other agents' command files, and it is exactly what needs sanitizing.
+    const entry = line.match(/^([a-zA-Z_][a-zA-Z0-9_.-]*)\s*:\s*(.*)$/)
     if (!entry) return [line]
     const value = entry[2].trim()
     if (value === "" || value === ">" || value === "|" || value.startsWith('"') || value.startsWith("'")) return [line]

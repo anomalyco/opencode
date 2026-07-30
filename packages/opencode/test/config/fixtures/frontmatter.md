@@ -16,6 +16,8 @@ single_quoted_colon: 'Single quoted: also fine'
 mixed: He said "hello: world" and then left
 empty:
 dollar: Use $' and $& for special patterns
+allowed-tools: Read: every file
+dotted.key: Has a colon: here
 ---
 
 Content that should not be parsed:
