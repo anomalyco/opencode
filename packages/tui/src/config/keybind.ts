@@ -148,7 +148,7 @@ export const Definitions = {
   messages_redo: keybind("<leader>r", "Redo message"),
   messages_toggle_conceal: keybind("<leader>h", "Toggle code block concealment in messages"),
   tool_details: keybind("none", "Toggle tool details visibility"),
-  display_thinking: keybind("none", "Toggle thinking blocks visibility"),
+  display_thinking: keybind("<leader>t", "Toggle thinking blocks visibility"),
 
   prompt_submit: keybind("none", "Submit prompt"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
