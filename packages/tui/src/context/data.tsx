@@ -152,6 +152,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: process.cwd(),
     })
     const messageIndex = new Map<string, Map<string, number>>()
+    const messageCursor = new Map<string, string | undefined>()
+    const messagePaging = new Map<string, Promise<number>>()
     const sync = createSync()
 
     function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -275,6 +277,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removeSession(sessionID: string) {
       messageIndex.delete(sessionID)
+      messageCursor.delete(sessionID)
+      messagePaging.delete(sessionID)
       sync.invalidate(`session:${sessionID}`)
       sync.invalidate(`session.pending:${sessionID}`)
       sync.invalidate(`session.message:${sessionID}`)
@@ -310,6 +314,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           // hydration can load pending and projected messages atomically.
           sync.complete(`session.pending:${event.data.sessionID}`)
           sync.complete(`session.message:${event.data.sessionID}`)
+          messageCursor.set(event.data.sessionID, undefined)
           break
         case "session.deleted":
           removeSession(event.data.sessionID)
@@ -754,6 +759,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             if (position === -1) return
             for (const item of draft.splice(position)) index.delete(item.id)
           })
+          if (store.session.message[event.data.sessionID]?.length === 0) {
+            result.session.message.invalidate(event.data.sessionID)
+            void result.session.message.sync(event.data.sessionID)
+          }
           break
         case "session.compaction.delta":
           message.update(event.data.sessionID, (draft) => {
@@ -993,14 +1002,39 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           sync(sessionID: string) {
             return sync.run(`session.message:${sessionID}`, async () => {
-              const messages = (
-                await client.api.message.list({ sessionID, limit: 200, order: "desc" })
-              ).data.toReversed()
+              const page = await client.api.message.list({ sessionID, limit: 20, order: "desc" })
+              const messages = page.data.toReversed()
+              messageCursor.set(sessionID, page.data.length < 20 ? undefined : (page.cursor.next ?? undefined))
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
             })
           },
+          older(sessionID: string, count: number) {
+            const cursor = messageCursor.get(sessionID)
+            if (!cursor) return Promise.resolve(0)
+            const active = messagePaging.get(sessionID)
+            if (active) return active
+            const pending = (async () => {
+              const page = await client.api.message.list({ sessionID, limit: count, cursor })
+              messageCursor.set(sessionID, page.data.length < count ? undefined : (page.cursor.next ?? undefined))
+              const loaded = index(sessionID)
+              const older = page.data.toReversed().filter((item) => !loaded.has(item.id))
+              if (older.length === 0) return 0
+              message.update(sessionID, (draft, index) => {
+                draft.unshift(...older)
+                index.clear()
+                draft.forEach((item, position) => index.set(item.id, position))
+              })
+              return older.length
+            })().finally(() => {
+              if (messagePaging.get(sessionID) === pending) messagePaging.delete(sessionID)
+            })
+            messagePaging.set(sessionID, pending)
+            return pending
+          },
           invalidate(sessionID: string) {
+            messageCursor.delete(sessionID)
+            messagePaging.delete(sessionID)
             sync.invalidate(`session.message:${sessionID}`)
           },
         },

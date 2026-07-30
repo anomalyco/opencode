@@ -104,6 +104,7 @@ const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 const TRANSCRIPT_BACKFILL_DELAY = 120
+const HISTORY_PAGE_SIZE = 20
 
 const context = createContext<{
   width: number
@@ -339,6 +340,71 @@ export function Session() {
     }, TRANSCRIPT_BACKFILL_DELAY)
     onCleanup(() => clearTimeout(timer))
   })
+  const historyRequests = new Map<string, Promise<number>>()
+  const settleLayout = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+  // Keep each fetch locked through layout so the next page cannot overlap anchor restoration.
+  const loadOlder = (count = HISTORY_PAGE_SIZE) => {
+    const sessionID = route.sessionID
+    if (!scroll || scroll.isDestroyed || hidden() !== 0) return Promise.resolve(0)
+    const active = historyRequests.get(sessionID)
+    if (active) return active
+    const viewport = scroll
+    const before = viewport.scrollHeight
+    const first = messages()[0]?.id
+    const anchor = first ? viewport.getRenderable(first) : undefined
+    const anchorTop = anchor ? anchor.y - viewport.viewport.y : undefined
+    const request = data.session.message
+      .older(sessionID, count)
+      .then(
+        async (added) => {
+          if (added === 0 || route.sessionID !== sessionID || messages()[0]?.id === first) return added
+          await settleLayout()
+          if (route.sessionID !== sessionID || scroll !== viewport || viewport.isDestroyed) return added
+          const nextAnchor = first ? viewport.getRenderable(first) : undefined
+          // Message boundaries exclude bottom appends from the compensation; height is a fallback for notice rows.
+          viewport.scrollBy(
+            anchorTop !== undefined && nextAnchor
+              ? nextAnchor.y - viewport.viewport.y - anchorTop
+              : viewport.scrollHeight - before,
+          )
+          return added
+        },
+        () => 0,
+      )
+      .finally(() => {
+        if (historyRequests.get(sessionID) === request) historyRequests.delete(sessionID)
+      })
+    historyRequests.set(sessionID, request)
+    return request
+  }
+  const loadAllOlder = async () => {
+    if (hidden() !== 0) {
+      setHiddenRows(0)
+      await settleLayout()
+    }
+    while ((await loadOlder(200)) > 0) {}
+  }
+  const loadOlderAtTop = () => {
+    if (!scroll || scroll.isDestroyed || scroll.scrollTop > 0) return
+    void loadOlder()
+  }
+  createEffect(
+    on(
+      () => [synced(), hidden(), rows.length] as const,
+      ([ready, hidden]) => {
+        if (!ready || hidden !== 0) return
+        const sessionID = route.sessionID
+        afterLayout(() => {
+          if (route.sessionID !== sessionID) return
+          if (scroll.scrollHeight > scroll.viewport.height && scroll.scrollTop > 0) return
+          void loadOlder()
+        })
+      },
+    ),
+  )
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
     if (hidden() === 0) return continuation()
@@ -390,7 +456,18 @@ export function Session() {
         userOnly,
       })
 
-      if (target) alignMessage(target.id, target.top)
+      if (target) {
+        alignMessage(target.id, target.top)
+        dialog.clear()
+        return
+      }
+      if (direction === "prev") {
+        void loadOlder().then((added) => {
+          if (added > 0) return scrollToMessage(direction, dialog, userOnly)
+          dialog.clear()
+        })
+        return
+      }
       dialog.clear()
     })
 
@@ -420,6 +497,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(-scroll.height / 2)
+        loadOlderAtTop()
         dialog.clear()
       },
     },
@@ -442,6 +520,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(-1)
+        loadOlderAtTop()
         dialog.clear()
       },
     },
@@ -464,6 +543,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(-scroll.height / 4)
+        loadOlderAtTop()
         dialog.clear()
       },
     },
@@ -486,10 +566,15 @@ export function Session() {
       title: "First message",
       group: "Session",
       palette: undefined,
-      run: () => {
+      run: async () => {
+        const sessionID = route.sessionID
         clearMessageNavigation()
-        scroll.scrollTo(0)
-        dialog.clear()
+        await loadAllOlder()
+        if (route.sessionID !== sessionID) return
+        ensureAllRows(() => {
+          scroll.scrollTo(0)
+          dialog.clear()
+        })
       },
     },
     {
@@ -526,7 +611,10 @@ export function Session() {
       id: "session.timeline",
       group: "Session",
       slash: { name: "timeline" },
-      run: () => {
+      run: async () => {
+        const sessionID = route.sessionID
+        await loadAllOlder()
+        if (route.sessionID !== sessionID) return
         dialog.replace(() => (
           <DialogTimeline
             sessionID={route.sessionID}
@@ -541,7 +629,10 @@ export function Session() {
       id: "session.fork",
       group: "Session",
       slash: { name: "fork" },
-      run: () => {
+      run: async () => {
+        const sessionID = route.sessionID
+        await loadAllOlder()
+        if (route.sessionID !== sessionID) return
         dialog.replace(() => (
           <DialogFork
             sessionID={route.sessionID}
@@ -785,6 +876,8 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
+          await loadAllOlder()
+          if (route.sessionID !== sessionData.id) return
           const transcript = formatSessionTranscript(sessionData, messages(), showThinking())
           await clipboard.write?.(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
@@ -809,6 +902,10 @@ export function Session() {
           const options = await DialogExportOptions.show(dialog, showThinking())
 
           if (options === null) return
+          if (options.format === "markdown") {
+            await loadAllOlder()
+            if (route.sessionID !== sessionData.id) return
+          }
 
           const content =
             options.format === "markdown"
@@ -961,6 +1058,10 @@ export function Session() {
           <Show when={session()}>
             <scrollbox
               ref={(r) => (scroll = r)}
+              onMouseScroll={(event) => {
+                if (event.modifiers.shift || event.scroll?.direction !== "up") return
+                queueMicrotask(loadOlderAtTop)
+              }}
               viewportOptions={{
                 paddingRight: showScrollbar() ? 1 : 0,
               }}

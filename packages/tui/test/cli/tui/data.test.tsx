@@ -316,6 +316,90 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("loads older session messages through a private cursor", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_paged"
+  const requests: URL[] = []
+  const item = (value: number) => ({
+    id: `msg_${value.toString().padStart(3, "0")}`,
+    type: "user" as const,
+    text: `Message ${value}`,
+    time: { created: value },
+  })
+  const switched = (value: number) => ({
+    id: `msg_${value.toString().padStart(3, "0")}`,
+    type: "model-switched" as const,
+    model: { id: "model", providerID: "provider" },
+    time: { created: value },
+  })
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/pending`) return json({ data: [] })
+    if (url.pathname !== `/api/session/${sessionID}/message`) return undefined
+    requests.push(url)
+    if (url.searchParams.get("cursor") === "older-page") {
+      return json({
+        data: [item(21), item(20), item(19), item(18), switched(17)],
+        cursor: { next: "unused" },
+      })
+    }
+    return json({
+      data: Array.from({ length: 20 }, (_, index) => item(40 - index)),
+      cursor: { next: "older-page" },
+    })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let rows!: ReturnType<typeof createSessionRows>
+
+  function Probe() {
+    data = useData()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.sync(sessionID)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 20 }, (_, index) => item(index + 21).id),
+    )
+    await wait(() => rows.length === 20)
+
+    const loaded = await Promise.all([
+      data.session.message.older(sessionID, 10),
+      data.session.message.older(sessionID, 10),
+    ])
+    expect(loaded).toEqual([4, 4])
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 24 }, (_, index) => item(index + 17).id),
+    )
+    expect(data.session.message.get(sessionID, "msg_017")?.id).toBe("msg_017")
+    expect(data.session.message.get(sessionID, "msg_040")?.id).toBe("msg_040")
+    await wait(() => rows.length === 24)
+    expect(rows[0]).toEqual({ type: "message", messageID: "msg_017" })
+
+    expect(await data.session.message.older(sessionID, 10)).toBe(0)
+    expect(requests).toHaveLength(2)
+    expect(requests[0]?.searchParams.get("limit")).toBe("20")
+    expect(requests[0]?.searchParams.get("order")).toBe("desc")
+    expect(requests[1]?.searchParams.get("limit")).toBe("10")
+    expect(requests[1]?.searchParams.get("cursor")).toBe("older-page")
+    expect(requests[1]?.searchParams.has("order")).toBeFalse()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("applies absolute usage events to session info", async () => {
   const events = createEventStream()
   const sessionID = "ses_usage_refresh"
