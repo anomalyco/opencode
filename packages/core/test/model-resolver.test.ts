@@ -611,7 +611,6 @@ describe("ModelResolver", () => {
       expect(openrouter.route.defaults.providerOptions).toEqual({ openrouter: { reasoning: { effort: "high" } } })
       expect(xai.route.id).toBe("openai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
-        openai: { store: false },
         xai: { reasoningEffort: "high", store: false },
       })
     }),
