@@ -11,8 +11,6 @@ import { Permission } from "../permission"
 // Combined output files written by the Shell service, e.g. `<data>/shell/<projectID>/<shellID>.out`.
 // Whitelisted so agents can read a command's full captured output without an external-directory prompt.
 const SHELL_OUTPUT_GLOB = path.join(Global.Path.data, "shell", "*", "*")
-const BUILD_SYSTEM =
-  "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
