@@ -1,10 +1,10 @@
-import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { Keymap, type KeymapCommand } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
@@ -100,6 +100,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const mode = themes.mode
   const config = useConfig().data
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
+  const renderer = useRenderer()
 
   const [store, setStore] = createStore({
     selected: 0,
@@ -110,7 +111,17 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const actionFocused = createMemo(() => focusedAction() !== undefined)
   let selection: { value: T; category?: string } | undefined
   let resetSelection = false
-  let visibilityGeneration = 0
+  let pendingVisibility: (() => void) | undefined
+
+  function scheduleVisibility(callback: () => void) {
+    if (pendingVisibility) renderer.off(CliRenderEvents.FRAME, pendingVisibility)
+    pendingVisibility = () => {
+      pendingVisibility = undefined
+      callback()
+    }
+    renderer.once(CliRenderEvents.FRAME, pendingVisibility)
+    renderer.requestRender()
+  }
 
   createEffect(
     on(
@@ -265,14 +276,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           selection = option
           if (!moved) return
           const value = option.value
-          const generation = ++visibilityGeneration
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (generation !== visibilityGeneration) return
-              if (!props.preserveSelection || store.filter.length > 0) return
-              if (!isDeepEqual(selected()?.value, value)) return
-              scrollToSelection(false)
-            })
+          scheduleVisibility(() => {
+            if (!props.preserveSelection || store.filter.length > 0) return
+            if (!isDeepEqual(selected()?.value, value)) return
+            scrollToSelection(false)
           })
           return
         }
@@ -284,23 +291,23 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     ),
   )
   onCleanup(() => {
-    visibilityGeneration++
+    if (!pendingVisibility) return
+    renderer.off(CliRenderEvents.FRAME, pendingVisibility)
+    pendingVisibility = undefined
   })
 
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
       if (filter.length > 0) resetSelection = true
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (filter.length > 0) {
-            moveTo(0, true, false)
-            return
-          }
-          if (current && props.focusCurrent !== false) {
-            const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
-            if (currentIndex >= 0) moveTo(currentIndex, true)
-          }
-        })
+      scheduleVisibility(() => {
+        if (filter.length > 0) {
+          moveTo(0, true, false)
+          return
+        }
+        if (current && props.focusCurrent !== false) {
+          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+          if (currentIndex >= 0) moveTo(currentIndex, true)
+        }
       })
     }),
   )
