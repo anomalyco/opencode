@@ -354,7 +354,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         paddingRight={1}
         flexDirection="row"
       >
-        <text fg={elevatedTheme.text.subdued}>storybook / session tabs</text>
+        <text fg={elevatedTheme.text.subdued}>storybook / tabs</text>
         <box flexGrow={1} />
         <text fg={elevatedTheme.text.subdued}>
           space/s run | t add | d close | r reset | ←/→ 1-0 move | drag reorders | esc back
@@ -366,6 +366,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
 
 export const sessionTabsStory: Story = {
   id: "session-tabs",
-  title: "Session tabs",
+  title: "Tabs",
   render: (context) => <SessionTabsStory context={context} />,
 }
