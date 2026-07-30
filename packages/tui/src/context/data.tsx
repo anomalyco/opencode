@@ -1116,12 +1116,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         default() {
           return defaultLocation()
         },
-        // Repoints the whole TUI at another project directory, like a shell `cd`.
-        // The follow-up default sync lets the server canonicalize the directory.
-        async setDefault(directory: string) {
-          setDefaultLocation({ directory })
-          await result.location.sync()
-        },
         async sync(ref?: LocationRef) {
           const current = ref ?? defaultLocation()
           await sync.run(`location:${locationKey(current)}`, async () => {
