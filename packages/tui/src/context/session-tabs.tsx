@@ -14,7 +14,10 @@ import {
   moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
+  recordClosedSessionTab,
   recordSessionTabHistory,
+  reopenSessionTab,
+  type ClosedSessionTab,
   type SessionTab,
   type SessionTabHistory,
   type SessionTabUnread,
@@ -57,6 +60,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
+    // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
+    let closedTabs: ClosedSessionTab[] = []
 
     function state() {
       if (config.tabs?.scope === "global") return store.global
@@ -193,6 +198,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     )
     onCleanup(
       event.on("session.deleted", (evt) => {
+        const target = root(evt.data.sessionID)
+        closedTabs = closedTabs.filter((entry) => entry.tab.sessionID !== target)
         remove(evt.data.sessionID, enabled())
       }),
     )
@@ -244,7 +251,21 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           if (route.data.type === "home" && session) route.navigate({ type: "session", sessionID: session })
           return
         }
+        const index = state().tabs.findIndex((tab) => tab.sessionID === target)
+        const tab = state().tabs[index]
+        if (tab) closedTabs = recordClosedSessionTab(closedTabs, tab, index)
         remove(target, true)
+      },
+      reopen() {
+        if (!enabled()) return
+        const result = reopenSessionTab(closedTabs, state().tabs)
+        closedTabs = result.stack
+        const tabs = result.tabs
+        if (!tabs || !result.sessionID) return
+        update((draft) => {
+          draft.tabs = tabs
+        })
+        route.navigate({ type: "session", sessionID: result.sessionID })
       },
       move(sessionID: string, index: number) {
         if (!enabled()) return

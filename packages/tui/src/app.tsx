@@ -105,6 +105,7 @@ const sessionTabBindingCommands = [
   "session.tab.next_unread",
   "session.tab.previous_unread",
   "session.tab.close",
+  "session.tab.reopen",
   "session.tab.select.1",
   "session.tab.select.2",
   "session.tab.select.3",
@@ -720,6 +721,13 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.close(),
+      },
+      {
+        name: "session.tab.reopen",
+        title: "Reopen closed tab",
+        category: "Session",
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.reopen(),
       },
       ...Array.from({ length: 9 }, (_, i) => ({
         name: `session.tab.select.${i + 1}`,

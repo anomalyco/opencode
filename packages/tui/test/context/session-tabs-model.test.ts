@@ -6,7 +6,9 @@ import {
   moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
+  recordClosedSessionTab,
   recordSessionTabHistory,
+  reopenSessionTab,
   seedSessionTabMotion,
   sessionTabComplete,
   sessionTabOverflowWidth,
@@ -134,6 +136,45 @@ describe("session tabs", () => {
     const current = recordSessionTabHistory(history, "b")
 
     expect(moveSessionTabHistory(current, closed.tabs, "b", -1).sessionID).toBe("c")
+  })
+
+  test("reopens the most recently closed tab at its original position", () => {
+    const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
+    const stack = recordClosedSessionTab([], { sessionID: "b", title: "Middle" }, 1)
+    const reopened = reopenSessionTab(stack, [{ sessionID: "a" }, { sessionID: "c" }])
+
+    expect(reopened.sessionID).toBe("b")
+    expect(reopened.tabs).toEqual([{ sessionID: "a" }, { sessionID: "b", title: "Middle" }, { sessionID: "c" }])
+    expect(reopened.stack).toEqual([])
+    expect(reopenSessionTab([], tabs)).toEqual({ stack: [], tabs: undefined, sessionID: undefined })
+  })
+
+  test("skips and consumes closed entries that are already open", () => {
+    const stack = [
+      { tab: { sessionID: "a" }, index: 0 },
+      { tab: { sessionID: "b" }, index: 1 },
+    ]
+    const reopened = reopenSessionTab(stack, [{ sessionID: "b" }])
+
+    expect(reopened.sessionID).toBe("a")
+    expect(reopened.tabs).toEqual([{ sessionID: "a" }, { sessionID: "b" }])
+    expect(reopened.stack).toEqual([])
+  })
+
+  test("clamps restored positions and keeps one entry per session", () => {
+    const twice = recordClosedSessionTab(recordClosedSessionTab([], { sessionID: "a" }, 5), { sessionID: "a" }, 2)
+    expect(twice).toEqual([{ tab: { sessionID: "a" }, index: 2 }])
+
+    const reopened = reopenSessionTab(twice, [{ sessionID: "b" }])
+    expect(reopened.tabs).toEqual([{ sessionID: "b" }, { sessionID: "a" }])
+
+    const overflow = Array.from({ length: 12 }, (_, index) => ({ sessionID: String(index) })).reduce(
+      (stack, tab, index) => recordClosedSessionTab(stack, tab, index),
+      twice,
+    )
+    expect(overflow).toHaveLength(10)
+    expect(overflow.at(-1)?.tab.sessionID).toBe("11")
+    expect(overflow[0]?.tab.sessionID).toBe("2")
   })
 
   test("reveals completion activity only after session work becomes idle", () => {
