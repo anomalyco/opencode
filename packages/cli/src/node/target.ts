@@ -29,6 +29,11 @@ export function nodeTarget(platform: string, arch: string) {
 }
 
 export const photonWasmAsset = "@silvia-odwyer/photon-node/photon_rs_bg.wasm"
+export const shellParserWasmAssets = {
+  runtime: "web-tree-sitter/tree-sitter.wasm",
+  bash: "tree-sitter-bash/tree-sitter-bash.wasm",
+  powershell: "tree-sitter-powershell/tree-sitter-powershell.wasm",
+} as const
 export const nodeExecArgv = ["--experimental-ffi", "--use-system-ca", "--disable-warning=ExperimentalWarning"] as const
 
 export const attentionSoundAssets = [
