@@ -247,17 +247,20 @@ export async function pick(input: {
   promptText?: string
   requiredCtx?: number
   timeoutMs?: number
+  /** Explicitly requested provider id — restrict placement to this host only. */
+  target?: string
 }): Promise<{ placement: Placement; release: () => void } | null> {
   try {
     const requiredCtx = input.requiredCtx ?? estimateRequiredCtx(input.promptText)
     const parentInfo = input.providers[input.parent.providerID]
     // Only reroute when the parent itself runs locally: a cloud parent has no
     // queue problem, and silently downgrading it to a local model would be a
-    // quality surprise.
-    if (!parentInfo || !baseURLOf(parentInfo)) return null
+    // quality surprise. An explicit target is exempt — the user asked for a
+    // specific host, so honor it regardless of where the parent runs.
+    if (!input.target && (!parentInfo || !baseURLOf(parentInfo))) return null
 
     const candidates = Object.values(input.providers)
-      .filter((info) => info.id !== input.parent.providerID)
+      .filter((info) => (input.target ? info.id === input.target : info.id !== input.parent.providerID))
       .flatMap((info) => {
         const baseURL = baseURLOf(info)
         return baseURL ? [{ info, baseURL }] : []
@@ -289,8 +292,7 @@ export async function pick(input: {
       const freeMb = result.fit.vram_free_mb ?? result.hardware.vram?.free_mb ?? 0
       const placedAt = recentPlacements.get(result.providerID)
       const recent = placedAt !== undefined && Date.now() - placedAt < RECENT_PLACEMENT_WINDOW_MS
-      const score =
-        model.score + Math.min(freeMb, 65_536) / 1_000 - (recent ? RECENT_PLACEMENT_PENALTY : 0)
+      const score = model.score + Math.min(freeMb, 65_536) / 1_000 - (recent ? RECENT_PLACEMENT_PENALTY : 0)
       if (!best || score > best.score) {
         best = { placement: { providerID: result.providerID, modelID: model.modelID }, score }
       }

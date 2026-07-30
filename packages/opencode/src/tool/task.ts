@@ -61,6 +61,10 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  provider: Schema.optional(Schema.String).annotate({
+    description:
+      'Local provider (host) to run this subagent on, e.g. "rocky" or "m3". Use when the user names a host; copy the name exactly. Omit to auto-place on an idle host.',
+  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -188,22 +192,39 @@ export const TaskTool = Tool.define(
       // Hop to an idle local peer instead. Resumed sessions keep the old
       // behavior so a running task isn't re-placed away from its warm cache.
       const placed =
-        !provider || next.model || session || cfg.experimental?.local_subagent_placement === false
+        !provider || next.model || session || (cfg.experimental?.local_subagent_placement === false && !params.provider)
           ? null
-          : yield* provider
-              .list()
-              .pipe(
-                Effect.flatMap((providers) =>
-                  Effect.promise(() =>
-                    LocalPlacement.pick({
-                      parent: inherited,
-                      providers,
-                      allowedModels: cfg.experimental?.local_subagent_placement_models,
-                      promptText: params.prompt,
-                    }),
-                  ),
+          : yield* provider.list().pipe(
+              Effect.flatMap((providers) =>
+                Effect.promise(() =>
+                  LocalPlacement.pick({
+                    parent: inherited,
+                    providers,
+                    allowedModels: cfg.experimental?.local_subagent_placement_models,
+                    promptText: params.prompt,
+                    target: params.provider,
+                  }),
                 ),
-              )
+              ),
+            )
+      // An explicitly requested host must be honored or refused loudly —
+      // silently placing elsewhere (or inheriting) would do the opposite of
+      // what the user asked for.
+      if (params.provider && !placed && !next.model && !session) {
+        const known = provider
+          ? Object.values(yield* provider.list())
+              .filter((info) => LocalPlacement.baseURLOf(info))
+              .map((info) => info.id)
+          : []
+        return yield* Effect.fail(
+          new Error(
+            `Requested provider "${params.provider}" is not available for a subagent right now ` +
+              `(unknown name, no free slot, or no eligible model). ` +
+              (known.length ? `Known local providers: ${known.join(", ")}. ` : "") +
+              `Retry later, pick another provider, or omit provider to auto-place.`,
+          ),
+        )
+      }
       // Placement found no idle peer, so we are about to fall back to the
       // parent's own provider. On a single-slot llama.cpp server that queues
       // the subagent behind its parent, which never returns — the session
@@ -213,8 +234,7 @@ export const TaskTool = Tool.define(
       // explicit model or a resumed session is a deliberate choice, not a
       // fallback.
       const willInherit = !next.model && !placed
-      const placementRan =
-        !!provider && !next.model && !session && cfg.experimental?.local_subagent_placement !== false
+      const placementRan = !!provider && !next.model && !session && cfg.experimental?.local_subagent_placement !== false
       if (willInherit && placementRan) {
         const capacity = yield* provider
           .list()
@@ -398,7 +418,9 @@ export const TaskTool = Tool.define(
             // slot indefinitely.
             const waited = yield* Effect.raceFirst(
               background.wait({ id: nextSession.id, timeout: SUBAGENT_TASK_TIMEOUT_MS }),
-              background.waitForPromotion(nextSession.id).pipe(Effect.map((info) => ({ info, timedOut: false as const }))),
+              background
+                .waitForPromotion(nextSession.id)
+                .pipe(Effect.map((info) => ({ info, timedOut: false as const }))),
             )
             if (waited.timedOut) {
               yield* background.cancel(nextSession.id)
@@ -432,10 +454,24 @@ export const TaskTool = Tool.define(
       )
     })
 
+    // Best-effort fleet visibility: list local providers by name so the model
+    // can honor "run this on rocky". Discovery is async, so hosts appearing
+    // later are still reachable via the provider parameter by name.
+    const localProviders = provider
+      ? Object.values(yield* provider.list().pipe(Effect.orElseSucceed(() => ({}))))
+          .filter((info) => LocalPlacement.baseURLOf(info))
+          .map((info) => info.id)
+      : []
+    const FLEET_DESCRIPTION = localProviders.length
+      ? `Local providers available for the provider parameter: ${localProviders.join(", ")}.`
+      : undefined
+
     return {
-      description: flags.experimentalBackgroundSubagents
-        ? [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n")
-        : DESCRIPTION,
+      description: [
+        DESCRIPTION,
+        ...(flags.experimentalBackgroundSubagents ? [BACKGROUND_DESCRIPTION] : []),
+        ...(FLEET_DESCRIPTION ? [FLEET_DESCRIPTION] : []),
+      ].join("\n\n"),
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
