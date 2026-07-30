@@ -41,6 +41,7 @@ test("a prompt pulse restarts the neutral edge flash while the tab remains busy"
     await Bun.sleep(80)
     await app.renderOnce()
     expect(firstBackground()?.equals(background)).toBeFalse()
+    expect(firstBackground()?.r ?? 0).toBeGreaterThan(0.17)
 
     await Bun.sleep(800)
     await app.renderOnce()

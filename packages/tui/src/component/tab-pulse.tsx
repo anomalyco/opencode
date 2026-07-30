@@ -29,6 +29,7 @@ const COMPLETION_OPACITY = 0.18
 const EDGE_FLASH_DURATION = 800
 const EDGE_FLASH_ATTACK = 0.1
 const EDGE_FLASH_OPACITY = 0.1
+const PROMPT_FLASH_SCALE = 2
 const GLOW_IGNITION_DURATION = 600
 const GLOW_IGNITION_PEAK = 1.5
 const GLOW_IGNITION_ATTACK = 0.3
@@ -234,7 +235,7 @@ class TabPulseRenderable extends Renderable {
     if (value === this._promptPulse) return
     this._promptPulse = value
     if (!this._enabled) return
-    this.edgeFlash.restart()
+    this.edgeFlash.restart(PROMPT_FLASH_SCALE)
     this.live = true
     this.requestRender()
   }
