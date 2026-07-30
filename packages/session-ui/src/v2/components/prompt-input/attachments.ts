@@ -74,6 +74,7 @@ export type PromptInputV2AttachmentConfig = {
   directory: () => string
   isDialogActive: () => boolean
   warn: () => void
+  duplicate: () => void
   onError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
@@ -94,7 +95,7 @@ export function createPromptInputV2Attachments(
     if (!editor) return
     return { prompt, cursor: prompt.cursor() ?? cursorPosition(editor) }
   }
-  const add = async (file: File, toast = true, target = capture()) => {
+  const add = async (file: File, toast = true, target = capture(), clipboard = false) => {
     if (!target) return false
     const mime = await attachmentMime(file)
     if (!mime) {
@@ -103,11 +104,28 @@ export function createPromptInputV2Attachments(
     }
     const url = await dataUrl(file, mime)
     if (!url) return false
+    const sourcePath = input.getPathForFile?.(file) || undefined
+    // Native clipboard images arrive with a fresh timestamped filename on every paste, so identical
+    // clipboard content is matched on bytes alone.
+    const duplicate = target.prompt
+      .current()
+      .some(
+        (part) =>
+          part.type === "image" &&
+          part.dataUrl === url &&
+          (sourcePath
+            ? part.sourcePath === sourcePath
+            : !part.sourcePath && (clipboard || part.filename === file.name)),
+      )
+    if (duplicate) {
+      input.duplicate()
+      return true
+    }
     const attachment: PromptInputV2Attachment = {
       type: "image",
       id: globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2),
       filename: file.name,
-      sourcePath: input.getPathForFile?.(file) || undefined,
+      sourcePath,
       mime,
       dataUrl: url,
     }
@@ -141,7 +159,7 @@ export function createPromptInputV2Attachments(
     const plainText = clipboardData.getData("text/plain") ?? ""
     if (input.readClipboardImage && !plainText) {
       const file = await input.readClipboardImage()
-      if (file && (await add(file, true, target))) return
+      if (file && (await add(file, true, target, true))) return
     }
     if (!plainText) return
     const text = plainText.includes("\r") ? plainText.replace(/\r\n?/g, "\n") : plainText
