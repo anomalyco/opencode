@@ -3,9 +3,9 @@ import type { DatabaseMigration } from "../migration"
 
 export default {
   id: "20260730195856_optional_session_title",
+  disableForeignKeys: true,
   up(tx) {
     return Effect.gen(function* () {
-      yield* tx.run(`PRAGMA foreign_keys=OFF;`)
       yield* tx.run(`
         CREATE TABLE \`__new_session\` (
           \`id\` text PRIMARY KEY,
@@ -48,7 +48,6 @@ export default {
       )
       yield* tx.run(`DROP TABLE \`session\`;`)
       yield* tx.run(`ALTER TABLE \`__new_session\` RENAME TO \`session\`;`)
-      yield* tx.run(`PRAGMA foreign_keys=ON;`)
       yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)

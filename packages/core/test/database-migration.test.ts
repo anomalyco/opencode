@@ -26,6 +26,7 @@ import timeSuspendedMigration from "@opencode-ai/core/database/migration/2026070
 import instructionSyncMigration from "@opencode-ai/core/database/migration/20260710025429_instruction_sync"
 import deleteToolProgressEventsMigration from "@opencode-ai/core/database/migration/20260722011141_delete_tool_progress_events"
 import canonicalToolResultsMigration from "@opencode-ai/core/database/migration/20260722170000_canonical_tool_results"
+import optionalSessionTitleMigration from "@opencode-ai/core/database/migration/20260730195856_optional_session_title"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -397,6 +398,75 @@ describe("DatabaseMigration", () => {
         }),
       ),
     ).rejects.toThrow("Database is not empty and has no session table")
+  })
+
+  test("makes session titles nullable without deleting dependent rows", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+        yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY)`)
+        yield* db.run(sql`
+          CREATE TABLE session (
+            id text PRIMARY KEY,
+            project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+            workspace_id text,
+            parent_id text,
+            fork_session_id text,
+            fork_boundary text,
+            slug text NOT NULL,
+            directory text NOT NULL,
+            path text,
+            title text NOT NULL,
+            version text NOT NULL,
+            share_url text,
+            summary_additions integer,
+            summary_deletions integer,
+            summary_files integer,
+            summary_diffs text,
+            metadata text,
+            cost real DEFAULT 0 NOT NULL,
+            tokens_input integer DEFAULT 0 NOT NULL,
+            tokens_output integer DEFAULT 0 NOT NULL,
+            tokens_reasoning integer DEFAULT 0 NOT NULL,
+            tokens_cache_read integer DEFAULT 0 NOT NULL,
+            tokens_cache_write integer DEFAULT 0 NOT NULL,
+            revert text,
+            permission text,
+            agent text,
+            model text,
+            time_created integer NOT NULL,
+            time_updated integer NOT NULL,
+            time_compacting integer,
+            time_archived integer,
+            time_suspended integer
+          )
+        `)
+        yield* db.run(sql`
+          CREATE TABLE message (
+            id text PRIMARY KEY,
+            session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE
+          )
+        `)
+        yield* db.run(sql`INSERT INTO project VALUES ('global')`)
+        yield* db.run(sql`
+          INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_existing', 'global', 'existing', '/project', 'Existing title', 'test', 1, 1)
+        `)
+        yield* db.run(sql`INSERT INTO message VALUES ('msg_existing', 'ses_existing')`)
+
+        yield* DatabaseMigration.applyOnly(db, [optionalSessionTitleMigration])
+
+        expect(yield* db.get(sql`SELECT title FROM session WHERE id = 'ses_existing'`)).toEqual({
+          title: "Existing title",
+        })
+        expect(yield* db.get(sql`SELECT id FROM message WHERE id = 'msg_existing'`)).toEqual({ id: "msg_existing" })
+        expect(
+          yield* db.get<{ notnull: number }>(sql`SELECT "notnull" FROM pragma_table_info('session') WHERE name = 'title'`),
+        ).toEqual({ notnull: 0 })
+        expect(yield* db.get<{ foreign_keys: number }>(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 })
+      }),
+    )
   })
 
   test("backfills existing Context Epoch rows to the build agent", async () => {

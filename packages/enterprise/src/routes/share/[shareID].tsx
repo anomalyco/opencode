@@ -167,7 +167,8 @@ export default function () {
               }
             }
             const modelIDs = Array.from(models)
-            const encodedTitle = encodeURIComponent(Base64.encode(encodeURIComponent(info().title.substring(0, 700))))
+            const title = info().title ?? `New session - ${new Date(info().time.created).toISOString()}`
+            const encodedTitle = encodeURIComponent(Base64.encode(encodeURIComponent(title.substring(0, 700))))
             let modelParam: string
             if (modelIDs.length === 1) {
               modelParam = modelIDs[0]
