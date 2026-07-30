@@ -175,6 +175,54 @@ test("searches from an absolute root without a default base", async () => {
   expect(directories).toEqual(["/"])
 })
 
+test("browses directories instead of fuzzy finding when the filter is empty", async () => {
+  const calls = { list: [] as unknown[], find: [] as unknown[] }
+  const sdk = {
+    api: {
+      file: {
+        list: (input: { location?: { directory?: string }; path?: string }) => {
+          calls.list.push(input)
+          return Promise.resolve({
+            data: [
+              { path: "projects/", type: "directory" },
+              { path: "notes.txt", type: "file" },
+            ],
+          })
+        },
+        find: (input: unknown) => {
+          calls.find.push(input)
+          return Promise.resolve({ data: [] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/repo" })
+
+  expect(await search("")).toEqual(["/repo/projects"])
+  expect(calls.find).toEqual([])
+  expect(calls.list).toEqual([{ location: { directory: "/repo" }, path: "" }])
+})
+
+test("uses fuzzy find for non-empty picker filters", async () => {
+  const calls = { list: [] as unknown[], find: [] as unknown[] }
+  const sdk = {
+    api: {
+      file: {
+        list: () => Promise.resolve({ data: [] }),
+        find: (input: { location?: { directory?: string }; query?: string }) => {
+          calls.find.push(input)
+          return Promise.resolve({ data: [{ path: "opencode" }] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/repo" })
+
+  expect(await search("opencode")).toEqual(["/repo/opencode"])
+  expect(calls.find).toEqual([{ location: { directory: "/repo" }, query: "opencode", type: "directory", limit: 50 }])
+  expect(calls.list).toEqual([])
+})
+
 test("identifies the next directory level to preload", () => {
   expect(
     preloadTreeDirectories("src/", [
