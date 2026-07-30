@@ -405,41 +405,10 @@ describe("DatabaseMigration", () => {
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* db.run(sql`PRAGMA foreign_keys = ON`)
-        yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY)`)
         yield* db.run(sql`
           CREATE TABLE session (
             id text PRIMARY KEY,
-            project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE,
-            workspace_id text,
-            parent_id text,
-            fork_session_id text,
-            fork_boundary text,
-            slug text NOT NULL,
-            directory text NOT NULL,
-            path text,
-            title text NOT NULL,
-            version text NOT NULL,
-            share_url text,
-            summary_additions integer,
-            summary_deletions integer,
-            summary_files integer,
-            summary_diffs text,
-            metadata text,
-            cost real DEFAULT 0 NOT NULL,
-            tokens_input integer DEFAULT 0 NOT NULL,
-            tokens_output integer DEFAULT 0 NOT NULL,
-            tokens_reasoning integer DEFAULT 0 NOT NULL,
-            tokens_cache_read integer DEFAULT 0 NOT NULL,
-            tokens_cache_write integer DEFAULT 0 NOT NULL,
-            revert text,
-            permission text,
-            agent text,
-            model text,
-            time_created integer NOT NULL,
-            time_updated integer NOT NULL,
-            time_compacting integer,
-            time_archived integer,
-            time_suspended integer
+            title text NOT NULL
           )
         `)
         yield* db.run(sql`
@@ -448,11 +417,7 @@ describe("DatabaseMigration", () => {
             session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE
           )
         `)
-        yield* db.run(sql`INSERT INTO project VALUES ('global')`)
-        yield* db.run(sql`
-          INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
-          VALUES ('ses_existing', 'global', 'existing', '/project', 'Existing title', 'test', 1, 1)
-        `)
+        yield* db.run(sql`INSERT INTO session VALUES ('ses_existing', 'Existing title')`)
         yield* db.run(sql`INSERT INTO message VALUES ('msg_existing', 'ses_existing')`)
 
         yield* DatabaseMigration.applyOnly(db, [optionalSessionTitleMigration])
