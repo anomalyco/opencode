@@ -47,7 +47,7 @@ describe("provider package entrypoints", () => {
     })
     const xai = XAI.model("grok-4", {
       ...settings,
-      providerOptions: { openai: { reasoningEffort: "high" } },
+      providerOptions: { xai: { reasoningEffort: "high" } },
     })
 
     for (const selected of [openrouter, xai]) {
@@ -57,7 +57,7 @@ describe("provider package entrypoints", () => {
       expect(selected.route.defaults.limits).toEqual(settings.limits)
     }
     expect(openrouter.route.defaults.providerOptions).toEqual({ openrouter: { usage: true } })
-    expect(xai.route.defaults.providerOptions).toEqual({ openai: { reasoningEffort: "high", store: false } })
+    expect(xai.route.defaults.providerOptions).toMatchObject({ xai: { reasoningEffort: "high", store: false } })
   })
 
   test("maps package settings onto the executable model", () => {

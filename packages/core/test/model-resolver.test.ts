@@ -552,7 +552,7 @@ describe("ModelResolver", () => {
       const packages = [
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "gemini"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "openrouter"],
-        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", "openai"],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", "xai"],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, optionKey]) =>
@@ -611,7 +611,8 @@ describe("ModelResolver", () => {
       expect(openrouter.route.defaults.providerOptions).toEqual({ openrouter: { reasoning: { effort: "high" } } })
       expect(xai.route.id).toBe("openai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
-        openai: { reasoningEffort: "high", store: false },
+        openai: { store: false },
+        xai: { reasoningEffort: "high", store: false },
       })
     }),
   )

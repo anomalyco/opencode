@@ -242,7 +242,7 @@ const nativeProviderOptions = (packageName: string | undefined, settings: Readon
   if (Object.keys(values).length === 0) return undefined
   if (packageName === "@ai-sdk/google") return { gemini: values }
   if (packageName === "@openrouter/ai-sdk-provider") return { openrouter: values }
-  if (packageName === "@ai-sdk/xai") return { openai: values }
+  if (packageName === "@ai-sdk/xai") return { xai: values }
   return undefined
 }
 
