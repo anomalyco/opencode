@@ -40,7 +40,12 @@ export namespace FSUtil {
     readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
     readonly resolve: (path: string) => Effect.Effect<string>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
-    readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
+    readonly up: (options: {
+      targets: string[]
+      start: string
+      stop?: string
+      mode?: "all" | "first"
+    }) => Effect.Effect<string[], Error>
     readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly scan: (pattern: string, options?: Glob.Options) => Effect.Effect<string[], Error>
     readonly globMatch: (pattern: string, filepath: string) => boolean
@@ -167,13 +172,21 @@ export namespace FSUtil {
         return result
       })
 
-      const up = Effect.fn("FileSystem.up")(function* (options: { targets: string[]; start: string; stop?: string }) {
+      const up = Effect.fn("FileSystem.up")(function* (options: {
+        targets: string[]
+        start: string
+        stop?: string
+        mode?: "all" | "first"
+      }) {
         const result: string[] = []
         let current = options.start
         while (true) {
           for (const target of options.targets) {
             const search = join(current, target)
-            if (yield* fs.exists(search)) result.push(search)
+            if (yield* fs.exists(search)) {
+              result.push(search)
+              if (options.mode === "first") return result
+            }
           }
           if (options.stop === current) break
           const parent = dirname(current)

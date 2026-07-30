@@ -267,6 +267,21 @@ describe("FSUtil", () => {
         expect(result).toContain(path.join(tmp, "b.txt"))
       }),
     )
+
+    it(
+      "stops at the first match when requested",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        yield* filesys.writeFileString(path.join(tmp, "marker"), "root")
+        const child = path.join(tmp, "sub")
+        yield* filesys.makeDirectory(child)
+        yield* filesys.writeFileString(path.join(child, "marker"), "child")
+
+        expect(yield* fs.up({ targets: ["marker"], start: child, mode: "first" })).toEqual([path.join(child, "marker")])
+      }),
+    )
   })
 
   describe("glob", () => {

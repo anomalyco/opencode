@@ -2,10 +2,8 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { branch, commit, gitRemote } from "./fixture/git"
@@ -15,36 +13,6 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(LayerNode.compile(Git.node))
 
 describe("Git", () => {
-  testEffect(Layer.empty).live("stops discovery at the nearest Git directory", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (root) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() => initRepo(root.path))
-          const nested = path.join(root.path, "a", "b")
-          yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
-          const filesystem = yield* FSUtil.Service.pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node)))
-          const parentDotGit = path.join(path.dirname(root.path), ".git")
-          let checkedParent = false
-          const instrumented = FSUtil.Service.of({
-            ...filesystem,
-            exists: (target) => {
-              if (target === parentDotGit) checkedParent = true
-              return filesystem.exists(target)
-            },
-          })
-          const layer = AppNodeBuilder.build(Git.node, [[FSUtil.node, Layer.succeed(FSUtil.Service, instrumented)]])
-          const git = yield* Git.Service.pipe(Effect.provide(layer))
-
-          expect((yield* git.repo.discover(AbsolutePath.make(nested)))?.worktree).toBe(
-            AbsolutePath.make(yield* Effect.promise(() => fs.realpath(root.path))),
-          )
-          expect(checkedParent).toBe(false)
-        }),
-      (root) => Effect.promise(() => root[Symbol.asyncDispose]()),
-    ),
-  )
-
   it.live("discovers repository metadata without a work tree", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(

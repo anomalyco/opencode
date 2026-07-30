@@ -49,7 +49,7 @@ export const root = Effect.fn("Project.root")(function* (
   fs: FSUtil.Interface,
   input: AbsolutePath,
 ) {
-  return yield* fs.up({ targets: [".git", ".hg"], start: input }).pipe(
+  return yield* fs.up({ targets: [".git", ".hg"], start: input, mode: "first" }).pipe(
     Effect.map((matches) => matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined),
     Effect.catch(() => Effect.succeed(undefined)),
   )
@@ -224,7 +224,7 @@ const layer = Layer.effect(
     })
 
     const hgDiscover = Effect.fnUntraced(function* (input: AbsolutePath) {
-      const dotHg = yield* fs.up({ targets: [".hg"], start: input }).pipe(
+      const dotHg = yield* fs.up({ targets: [".hg"], start: input, mode: "first" }).pipe(
         Effect.map((matches) => matches[0]),
         Effect.catch(() => Effect.succeed(undefined)),
       )
