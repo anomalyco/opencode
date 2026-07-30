@@ -2,6 +2,9 @@
 // Prefer straightforward projection. Do not add generation counters, stale-response
 // merges, live/history overlays, or other race machinery here—last write wins.
 // Reconnect invalidates cached reads; active UI owners decide what to sync again.
+// One sanctioned exception: message.older drops a continuation whose cursor no longer
+// matches the current window edge, because applying it would poison the cursor and
+// leave a permanent unfetchable gap rather than a recoverable stale view.
 
 import type {
   AgentInfo,
@@ -788,14 +791,21 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             event.data.sessionID,
             (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
           )
-          message.update(event.data.sessionID, (draft, index) => {
-            const position = draft.findIndex((item) => item.id >= event.data.to)
-            if (position === -1) return
-            for (const item of draft.splice(position)) index.delete(item.id)
-          })
-          if (store.session.message[event.data.sessionID]?.length === 0) {
-            result.session.message.invalidate(event.data.sessionID)
-            void result.session.message.sync(event.data.sessionID)
+          {
+            let emptied = false
+            message.update(event.data.sessionID, (draft, index) => {
+              const position = draft.findIndex((item) => item.id >= event.data.to)
+              if (position === -1) return
+              emptied = position === 0
+              for (const item of draft.splice(position)) index.delete(item.id)
+            })
+            // A fully reverted window keeps no anchor for older paging, so refetch to make
+            // history below the revert point the new tail. Only a window that actually held
+            // messages needs this; never-loaded sessions must not start speculative fetches.
+            if (emptied) {
+              result.session.message.invalidate(event.data.sessionID)
+              void result.session.message.sync(event.data.sessionID).catch(() => {})
+            }
           }
           break
         case "session.compaction.delta":
@@ -1046,13 +1056,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           hasOlder(sessionID: string) {
             return messageCursor.has(sessionID)
           },
-          older(sessionID: string, count: number) {
+          paging(sessionID: string) {
+            return messagePaging.has(sessionID)
+          },
+          /** Resolves with the number of messages prepended, which can exceed the limit (turn-root extension) or undershoot it (dedupe). */
+          older(sessionID: string, limit: number) {
             const cursor = messageCursor.get(sessionID)
             if (!cursor) return Promise.resolve(0)
             const active = messagePaging.get(sessionID)
             if (active) return active
             const pending = (async () => {
-              const page = await fetchMessagePage(sessionID, count, cursor)
+              const page = await fetchMessagePage(sessionID, limit, cursor)
               // Invalidate or a fresh sync may have replaced the window mid-flight. Apply the
               // continuation only while it still extends the current window edge; prepending it
               // onto a replaced window would leave a permanent unfetchable gap in the transcript.

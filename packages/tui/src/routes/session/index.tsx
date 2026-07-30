@@ -358,35 +358,42 @@ export function Session() {
     if (!data.session.message.hasOlder(sessionID)) return Promise.resolve(0)
     const viewport = scroll
     const before = viewport.scrollHeight
-    const first = messages()[0]?.id
+    // Anchor on the oldest message that actually rendered: the window can open on rows the
+    // reducer skips (e.g. description-less synthetics), and the height fallback would fold
+    // concurrent bottom appends into the compensation.
+    const first = messages().find((message) => viewport.getRenderable(message.id))?.id
     const anchor = first ? viewport.getRenderable(first) : undefined
     const anchorTop = anchor ? anchor.y - viewport.viewport.y : undefined
     const request = data.session.message
       .older(sessionID, HISTORY_PAGE_SIZE)
-      .then(
-        async (added) => {
-          if (added === 0 || route.sessionID !== sessionID || messages()[0]?.id === first) return added
-          await settleLayout()
-          if (route.sessionID !== sessionID || scroll !== viewport || viewport.isDestroyed) return added
-          const nextAnchor = first ? viewport.getRenderable(first) : undefined
-          // Message boundaries exclude bottom appends from the compensation; height is a fallback for notice rows.
-          viewport.scrollBy(
-            anchorTop !== undefined && nextAnchor
-              ? nextAnchor.y - viewport.viewport.y - anchorTop
-              : viewport.scrollHeight - before,
-          )
-          return added
-        },
-        () => 0,
-      )
+      .then(async (added) => {
+        // An unchanged first id after a positive count means the window was replaced
+        // mid-microtask (reconnect resync) and the prepend was discarded; skip compensation.
+        if (added === 0 || route.sessionID !== sessionID || messages()[0]?.id === first) return added
+        await settleLayout()
+        if (route.sessionID !== sessionID || scroll !== viewport || viewport.isDestroyed) return added
+        const nextAnchor = first ? viewport.getRenderable(first) : undefined
+        // Message boundaries exclude bottom appends from the compensation; height is a fallback for notice rows.
+        viewport.scrollBy(
+          anchorTop !== undefined && nextAnchor
+            ? nextAnchor.y - viewport.viewport.y - anchorTop
+            : viewport.scrollHeight - before,
+        )
+        return added
+      })
       .finally(() => {
         if (historyRequests.get(sessionID) === request) historyRequests.delete(sessionID)
       })
     historyRequests.set(sessionID, request)
     return request
   }
+  /** Rejects when a page fetch fails, so full-history consumers can report truncation instead of proceeding silently. */
   const loadAllOlder = async () => {
     const sessionID = route.sessionID
+    // The cursor only exists after the initial sync; await it (deduped) so an early
+    // call cannot mistake "not loaded yet" for "no older history".
+    await data.session.message.sync(sessionID)
+    if (route.sessionID !== sessionID) return
     if (hidden() !== 0) {
       setHiddenRows(0)
       await settleLayout()
@@ -397,7 +404,8 @@ export function Session() {
   }
   const loadOlderAtTop = () => {
     if (!scroll || scroll.isDestroyed || scroll.scrollTop > 0) return
-    void loadOlder()
+    // Scroll-driven paging swallows failures; the cursor survives, so the next tick retries.
+    void loadOlder().catch(() => {})
   }
   createEffect(
     on(
@@ -407,8 +415,11 @@ export function Session() {
         const sessionID = route.sessionID
         afterLayout(() => {
           if (route.sessionID !== sessionID) return
+          // Adopt a page left in flight by a previous mount of this session so its prepend
+          // lands with anchor compensation instead of shifting the restored viewport.
+          if (data.session.message.paging(sessionID)) return void loadOlder().catch(() => {})
           if (scroll.scrollHeight > scroll.viewport.height && scroll.scrollTop > 0) return
-          void loadOlder()
+          void loadOlder().catch(() => {})
         })
       },
     ),
@@ -471,11 +482,13 @@ export function Session() {
       }
       if (direction === "prev") {
         const sessionID = route.sessionID
-        void loadOlder().then((added) => {
-          if (route.sessionID !== sessionID) return
-          if (added > 0) return scrollToMessage(direction, dialog, userOnly)
-          dialog.clear()
-        })
+        void loadOlder()
+          .catch(() => 0)
+          .then((added) => {
+            if (route.sessionID !== sessionID) return
+            if (added > 0) return scrollToMessage(direction, dialog, userOnly)
+            dialog.clear()
+          })
         return
       }
       dialog.clear()
@@ -581,8 +594,15 @@ export function Session() {
         clearMessageNavigation()
         // loadAllOlder pins hidden rows to zero before paging, so the transcript is fully
         // mounted here and no ensureAllRows wrapper is needed.
-        await loadAllOlder()
+        const complete = await loadAllOlder().then(
+          () => true,
+          () => false,
+        )
         if (route.sessionID !== sessionID || !scroll || scroll.isDestroyed) return
+        if (!complete) {
+          toast.show({ message: "Failed to load full session history", variant: "error", duration: 3000 })
+          return
+        }
         scroll.scrollTo(0)
         dialog.clear()
       },
@@ -623,8 +643,18 @@ export function Session() {
       slash: { name: "timeline" },
       run: async () => {
         const sessionID = route.sessionID
-        await loadAllOlder()
-        if (route.sessionID !== sessionID) return
+        const complete = await loadAllOlder().then(
+          () => true,
+          () => false,
+        )
+        // The Session component remounts per session; a stale instance must not open
+        // dialogs whose callbacks close over its destroyed scroll renderable.
+        if (route.sessionID !== sessionID || !scroll || scroll.isDestroyed) return
+        if (!complete) {
+          toast.show({ message: "Failed to load full session history", variant: "error", duration: 3000 })
+          dialog.clear()
+          return
+        }
         dialog.replace(() => (
           <DialogTimeline
             sessionID={route.sessionID}
@@ -641,8 +671,16 @@ export function Session() {
       slash: { name: "fork" },
       run: async () => {
         const sessionID = route.sessionID
-        await loadAllOlder()
-        if (route.sessionID !== sessionID) return
+        const complete = await loadAllOlder().then(
+          () => true,
+          () => false,
+        )
+        if (route.sessionID !== sessionID || !scroll || scroll.isDestroyed) return
+        if (!complete) {
+          toast.show({ message: "Failed to load full session history", variant: "error", duration: 3000 })
+          dialog.clear()
+          return
+        }
         dialog.replace(() => (
           <DialogFork
             sessionID={route.sessionID}
@@ -680,12 +718,17 @@ export function Session() {
       id: "session.undo",
       group: "Session",
       slash: { name: "undo" },
-      run: () => {
+      run: async () => {
         const boundary = session()?.revert?.messageID
-        const message = messages().findLast(
-          (message): message is SessionMessageUser =>
-            message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
-        )
+        const candidate = () =>
+          messages().findLast(
+            (message): message is SessionMessageUser =>
+              message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
+          )
+        // Repeated undo can walk past the loaded window; page older history until a
+        // candidate appears or history is exhausted.
+        let message = candidate()
+        while (!message && (await loadOlder().catch(() => 0)) > 0) message = candidate()
         if (!message) {
           toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
           dialog.clear()
@@ -1070,6 +1113,8 @@ export function Session() {
               ref={(r) => (scroll = r)}
               onMouseScroll={(event) => {
                 if (event.modifiers.shift || event.scroll?.direction !== "up") return
+                // The scrollbox applies the wheel delta after this handler returns; defer one
+                // microtask so loadOlderAtTop reads the post-scroll scrollTop.
                 queueMicrotask(loadOlderAtTop)
               }}
               viewportOptions={{

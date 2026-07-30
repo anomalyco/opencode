@@ -433,6 +433,7 @@ test("extends message pages until they start at a turn root", async () => {
     text: "note",
     time: { created: value },
   })
+  const described = (value: number) => ({ ...synthetic(value), description: "Reverted" })
   const range = (newest: number, oldest: number) =>
     Array.from({ length: newest - oldest + 1 }, (_, index) => item(newest - index))
   const calls = createFetch((url) => {
@@ -443,7 +444,8 @@ test("extends message pages until they start at a turn root", async () => {
     // Initial window ends on a description-less synthetic (not turn-significant) below an
     // assistant reply whose prompt is on the next page.
     if (cursor === null) return json({ data: [...range(60, 43), assistant(42), synthetic(41)], cursor: { next: "c1" } })
-    if (cursor === "c1") return json({ data: range(40, 21), cursor: { next: "c2" } })
+    // A described synthetic is a valid turn root, so this extension stops here.
+    if (cursor === "c1") return json({ data: [...range(40, 22), described(21)], cursor: { next: "c2" } })
     // Older page also ends on an assistant reply.
     if (cursor === "c2") return json({ data: [...range(20, 13), shell(12), assistant(11)], cursor: { next: "c3" } })
     // A shell message is a valid turn root, so the extension stops here.
@@ -516,6 +518,8 @@ test("drops a stale older page when the window is replaced mid-flight", async ()
     if (cursor === "stale") return new Promise<Response>((resolve) => (release = resolve))
     if (cursor === "fresh")
       return json({ data: Array.from({ length: 10 }, (_, index) => item(20 - index)), cursor: { next: "unused" } })
+    // A request with the poisoned (or any unexpected) cursor must fail loudly.
+    if (cursor !== null) throw new Error(`unexpected cursor: ${cursor}`)
     initialLoads += 1
     return json({ data: window, cursor: { next: initialLoads === 1 ? "stale" : "fresh" } })
   }, events)
@@ -546,16 +550,15 @@ test("drops a stale older page when the window is replaced mid-flight", async ()
     // The window is replaced while the older page is still in flight.
     data.session.message.invalidate(sessionID)
     await data.session.message.sync(sessionID)
+
+    // Invalidate cleared the paging slot, so a fresh page can start before the stale one lands.
+    const fresh = data.session.message.older(sessionID, 10)
     release!(json({ data: Array.from({ length: 10 }, (_, index) => item(20 - index)), cursor: { next: "poison" } }))
 
-    // The stale continuation no longer extends the current window edge and must be dropped.
+    // The stale continuation no longer extends the current window edge and must be dropped;
+    // the fresh page applies from the fresh cursor, not the poisoned one.
+    expect(await fresh).toBe(10)
     expect(await stale).toBe(0)
-    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
-      Array.from({ length: 20 }, (_, index) => id(index + 21)),
-    )
-
-    // Paging resumes from the fresh cursor, not the poisoned one.
-    expect(await data.session.message.older(sessionID, 10)).toBe(10)
     expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
       Array.from({ length: 30 }, (_, index) => id(index + 11)),
     )
