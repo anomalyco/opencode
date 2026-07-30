@@ -50,8 +50,8 @@ test("renders separate diff nodes with a full-width hunk row", async () => {
   const secondLine = frame.split("\n").find((line) => line.includes("const second")) ?? ""
   const background = parseColor("#222222")
 
-  expect(header?.startsWith("@@ -20,3 +20,3 @@")).toBe(true)
-  expect(header?.trimEnd()).toBe("@@ -20,3 +20,3 @@")
+  expect(header?.startsWith(" @@ -20,3 +20,3 @@")).toBe(true)
+  expect(header?.trimEnd()).toBe(" @@ -20,3 +20,3 @@")
   expect(
     app
       .captureSpans()

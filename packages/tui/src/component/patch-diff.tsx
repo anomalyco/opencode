@@ -55,7 +55,7 @@ export function PatchDiff(props: Props) {
           <Show when={index() > 0}>
             <box width="100%" height={1} backgroundColor={local.lineNumberBg}>
               <text fg={local.hunkFg} bg={local.lineNumberBg}>
-                {hunk.header ?? ""}
+                {` ${hunk.header ?? ""}`}
               </text>
             </box>
           </Show>
