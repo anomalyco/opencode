@@ -41,6 +41,7 @@ export const create = Effect.fn("SimulationRenderer.create")(function* (
         ...options,
         width: cols,
         height: rows,
+        kittyKeyboard: Boolean(options.useKittyKeyboard),
         ...(recording
           ? {
               stdout: recording as unknown as NodeJS.WriteStream,
