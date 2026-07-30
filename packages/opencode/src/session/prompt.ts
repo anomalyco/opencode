@@ -1157,6 +1157,10 @@ export const layer = Layer.effect(
         // fork: loop detection state — track near-identical output across turns
         let lastOutputText: string | undefined
         let loopStreak = 0
+        // fork: single forced-tool-choice retry state — see the empty-turn check
+        // at the loop exit below
+        let requiredRetryFor: string | undefined
+        let forceRequiredStep = false
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1188,26 +1192,51 @@ export const layer = Layer.effect(
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
-            const orphan = lastAssistantMsg?.parts.find(
-              (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
-            )
-            if (orphan) {
-              yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+            // fork: an "empty" turn — the model finished without emitting any
+            // tool call or text (small local reasoning models sometimes stop
+            // after thinking without acting, or get length-cut mid-think).
+            // Instead of going idle silently, retry once per user turn with
+            // tool_choice forced to "required".
+            const emptyTurn =
+              ["stop", "length"].includes(lastAssistant.finish) &&
+              !lastAssistant.error &&
+              requiredRetryFor !== lastUser.id &&
+              !(lastAssistantMsg?.parts.some((part) => part.type === "text" && part.text.trim().length > 0) ?? false)
+            if (emptyTurn) {
+              requiredRetryFor = lastUser.id
+              forceRequiredStep = true
+              yield* Effect.logWarning("empty turn with no tool calls or text — retrying with tool_choice required", {
                 "session.id": sessionID,
                 messageID: lastAssistant.id,
-                tool: orphan.tool,
-                callID: orphan.callID,
+                finish: lastAssistant.finish,
               })
             }
-            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
-            // force: true bypasses summary.ts's per-session throttle so the turn's
-            // final diff is always persisted accurately, even if the last few
-            // steps' calls were skipped for landing inside the throttle window.
-            yield* summary
-              .summarize({ sessionID, messageID: lastUser.id, force: true })
-              .pipe(Effect.ignore, Effect.forkIn(scope))
-            break
+            if (!emptyTurn) {
+              const orphan = lastAssistantMsg?.parts.find(
+                (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
+              )
+              if (orphan) {
+                yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+                  "session.id": sessionID,
+                  messageID: lastAssistant.id,
+                  tool: orphan.tool,
+                  callID: orphan.callID,
+                })
+              }
+              yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+              // force: true bypasses summary.ts's per-session throttle so the turn's
+              // final diff is always persisted accurately, even if the last few
+              // steps' calls were skipped for landing inside the throttle window.
+              yield* summary
+                .summarize({ sessionID, messageID: lastUser.id, force: true })
+                .pipe(Effect.ignore, Effect.forkIn(scope))
+              break
+            }
           }
+
+          // fork: consume the forced-tool-choice flag for exactly one step
+          const forceRequired = forceRequiredStep
+          forceRequiredStep = false
 
           step++
           if (step === 1)
@@ -1372,7 +1401,7 @@ export const layer = Layer.effect(
               messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              toolChoice: format.type === "json_schema" || forceRequired ? ("required" as const) : undefined,
             })
 
             if (structured !== undefined) {
@@ -1433,9 +1462,7 @@ export const layer = Layer.effect(
               .filter((p): p is Extract<SessionV1.Part, { type: "text" }> => p.type === "text")
               .map((p) => p.text)
               .join(" ")
-            const currentHasToolCalls = currentParts.some(
-              (p) => p.type === "tool" && !isOrphanedInterruptedTool(p),
-            )
+            const currentHasToolCalls = currentParts.some((p) => p.type === "tool" && !isOrphanedInterruptedTool(p))
             if (lastOutputText !== undefined && !currentHasToolCalls) {
               const sim = outputSimilarity(currentText, lastOutputText)
               if (sim >= LoopSimilarityThreshold) {
