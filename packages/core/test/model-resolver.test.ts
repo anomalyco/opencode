@@ -307,12 +307,12 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("routes ChatGPT OAuth credentials to the codex backend", () =>
+  it.effect("applies plugin-projected OpenAI endpoint and headers", () =>
     Effect.gen(function* () {
       const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: { baseURL: "https://openai.example/v1" },
-          headers: {},
+        model("@opencode-ai/ai/providers/openai", {
+          settings: { baseURL: "https://chatgpt.com/backend-api/codex" },
+          headers: { "chatgpt-account-id": "acct_123" },
           body: {},
         }),
         Credential.OAuth.make({
@@ -337,37 +337,8 @@ describe("ModelResolver", () => {
         id: "openai-responses",
         endpoint: { baseURL: "https://chatgpt.com/backend-api/codex" },
       })
+      expect(resolved.route.defaults.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
-      expect(headers["chatgpt-account-id"]).toBe("acct_123")
-    }),
-  )
-
-  it.effect("routes native OpenAI provider packages with ChatGPT credentials to the codex backend", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model("@opencode-ai/ai/providers/openai", {
-          settings: { baseURL: "https://openai.example/v1" },
-        }),
-        Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("chatgpt-browser"),
-          access: "chatgpt-token",
-          refresh: "refresh",
-          expires: Date.now() + 60_000,
-          metadata: { accountID: "acct_123" },
-        }),
-      )
-      const headers = yield* resolved.route.auth.apply({
-        request: LLM.request({ model: resolved, prompt: "Hello" }),
-        method: "POST",
-        url: "https://chatgpt.com/backend-api/codex/responses",
-        body: "{}",
-        headers: Headers.empty,
-      })
-
-      expect(resolved.route.endpoint.baseURL).toBe("https://chatgpt.com/backend-api/codex")
-      expect(headers.authorization).toBe("Bearer chatgpt-token")
-      expect(headers["chatgpt-account-id"]).toBe("acct_123")
     }),
   )
 
@@ -404,37 +375,6 @@ describe("ModelResolver", () => {
         "OpenAI-Organization": "org_123",
         "OpenAI-Project": "proj_123",
       })
-    }),
-  )
-
-  it.effect("routes ChatGPT OAuth credentials without an account id to the codex backend", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: { baseURL: "https://openai.example/v1" },
-          headers: {},
-          body: {},
-        }),
-        Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("chatgpt-headless"),
-          access: "chatgpt-token",
-          refresh: "refresh",
-          expires: Date.now() + 60_000,
-        }),
-      )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
-      const headers = yield* resolved.route.auth.apply({
-        request,
-        method: "POST",
-        url: "https://chatgpt.com/backend-api/codex/responses",
-        body: "{}",
-        headers: Headers.empty,
-      })
-
-      expect(resolved.route.endpoint.baseURL).toBe("https://chatgpt.com/backend-api/codex")
-      expect(headers.authorization).toBe("Bearer chatgpt-token")
-      expect(headers["chatgpt-account-id"]).toBeUndefined()
     }),
   )
 

@@ -18,7 +18,6 @@ import { Credential } from "./credential"
 import { Integration } from "./integration"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model"
 import { Npm } from "@opencode-ai/util/npm"
-import { OpenAICodex } from "./plugin/provider/openai-codex"
 import { Provider } from "./provider"
 
 export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
@@ -153,12 +152,7 @@ export const fromCatalogModel = (
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
 
-  if (OpenAICodex.isChatGPT(credential) && !Provider.isAISDK(resolved.package) && isNativeOpenAI(resolved.package)) {
-    return Effect.succeed(codexModel(resolved, credential, key))
-  }
-
   if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
-    if (OpenAICodex.isChatGPT(credential)) return Effect.succeed(codexModel(resolved, credential, key))
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
@@ -227,10 +221,6 @@ export const fromCatalogModel = (
   })
 }
 
-const isNativeOpenAI = (packageName: string | undefined) =>
-  packageName === "@opencode-ai/ai/providers/openai" ||
-  packageName?.startsWith("@opencode-ai/ai/providers/openai/") === true
-
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
   if (!credential) return {}
   if (credential.type === "key") return { apiKey: credential.key }
@@ -250,22 +240,6 @@ const nativeCredentialSettings = (specifier: string, credential: Credential.Valu
 const withoutNativeAuthSettings = (settings: Record<string, unknown>) => {
   const { accessToken: _accessToken, apiKey: _apiKey, authToken: _authToken, ...rest } = settings
   return rest
-}
-
-const codexModel = (
-  model: Info,
-  credential: Credential.Value | undefined,
-  key: ReturnType<typeof Auth.value> | undefined,
-) => {
-  const account = OpenAICodex.accountID(credential)
-  return withDefaults(model, OpenAIResponses.route)
-    .with({
-      endpoint: { baseURL: OpenAICodex.baseURL },
-      auth: (key === undefined ? Auth.none : Auth.bearer(key)).andThen(
-        account === undefined ? Auth.none : Auth.headers({ "chatgpt-account-id": account }),
-      ),
-    })
-    .model({ id: model.modelID ?? model.id, compatibility: model.compatibility })
 }
 
 const unsupported = (model: Info) =>
