@@ -8,6 +8,7 @@ export const popularProviders = [
   "openai",
   "google",
   "openrouter",
+  "prism-router",
   "vercel",
 ]
 
@@ -36,6 +37,7 @@ const popular = [
 const catalog = [
   ...popular,
   { id: "openrouter", name: "OpenRouter", models: {} },
+  { id: "prism-router", name: "Prism Router", models: {} },
   { id: "vercel", name: "Vercel AI Gateway", models: {} },
   { id: "302ai", name: "302.AI", models: {} },
   { id: "abacus", name: "Abacus", models: {} },

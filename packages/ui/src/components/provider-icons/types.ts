@@ -29,6 +29,7 @@ export const iconNames = [
   "qihang-ai",
   "privatemode-ai",
   "poe",
+  "prism-router",
   "perplexity",
   "ovhcloud",
   "openrouter",

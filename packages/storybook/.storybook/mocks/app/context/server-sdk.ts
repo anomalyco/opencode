@@ -5,6 +5,7 @@ const providers = [
   "openai",
   "google",
   "openrouter",
+  "prism-router",
   "vercel",
   "github-copilot",
   "302ai",
