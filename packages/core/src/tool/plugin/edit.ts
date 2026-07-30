@@ -10,13 +10,13 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
-import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { FileMutation } from "../../file-mutation"
 import { Formatter } from "../../formatter"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
+import { fileDiff } from "./file-diff"
 
 export const name = "edit"
 
@@ -237,20 +237,4 @@ export const Plugin = {
       )
       .pipe(Effect.orDie)
   }),
-}
-
-function fileDiff(file: string, before: string, after: string): typeof FileDiff.Info.Type {
-  const counts = diffLines(before, after).reduce(
-    (result, item) => ({
-      additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-      deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
-    }),
-    { additions: 0, deletions: 0 },
-  )
-  return {
-    file,
-    patch: createTwoFilesPatch(file, file, before, after),
-    status: "modified",
-    ...counts,
-  }
 }
