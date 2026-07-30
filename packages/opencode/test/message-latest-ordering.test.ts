@@ -75,4 +75,28 @@ describe("MessageV2.latest ordering", () => {
 
     expect(MessageV2.latest(msgs).assistant?.id).toBe("msg_bbb")
   })
+
+  test("survives compaction: array is reordered and messages are rewritten with new ids", () => {
+    // filterCompacted emits [compaction-user, summary, ...retained tail..., continue-user],
+    // so array position is NOT chronological, and compaction mints fresh ids for the
+    // rewritten messages. latest() must therefore resolve by time (id as tiebreaker only),
+    // never by array position: the OLD retained-tail assistant appears LATER in the array
+    // than the newer summary, and must not be mistaken for the most recent turn.
+    const msgs = [
+      msg("msg_rewrite_compactionuser", "user", 9_000), // compaction user, placed FIRST
+      msg("msg_rewrite_summary", "assistant", 9_001, "stop"), // summary (newest finished assistant)
+      msg("msg_retained_user", "user", 1_000), // retained tail, OLD, appears mid-array
+      msg("msg_retained_assistant", "assistant", 1_001, "stop"), // retained tail assistant, OLD
+      msg("msg_rewrite_continueuser", "user", 9_002), // continue user, newest overall
+    ]
+
+    const { user, assistant, finished } = MessageV2.latest(msgs)
+
+    // newest user is the continue-user, not the mid-array retained-tail user
+    expect(user?.id).toBe("msg_rewrite_continueuser")
+    // newest assistant is the summary, despite the older retained assistant sorting later
+    // in the array (position) — selection is by time, not index
+    expect(assistant?.id).toBe("msg_rewrite_summary")
+    expect(finished?.id).toBe("msg_rewrite_summary")
+  })
 })
