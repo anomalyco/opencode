@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -55,6 +55,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       key: "sessionID",
     })
     const fallback = empty()
+    const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
 
     function state() {
@@ -77,6 +78,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const family = members.length > 0 ? members : [session]
       return {
         unread: state().unread[session],
+        promptPulse: promptPulses()[session] ?? 0,
         attention: family.some(
           (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
         ),
@@ -177,6 +179,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     onCleanup(event.on("session.execution.interrupted", (evt) => markUnread(evt.data.sessionID, "activity")))
     onCleanup(event.on("session.execution.failed", (evt) => markUnread(evt.data.sessionID, "error")))
     onCleanup(
+      event.on("session.input.admitted", (evt) => {
+        if (!enabled() || evt.data.input.type !== "user") return
+        const sessionID = root(evt.data.sessionID)
+        if (current() === sessionID || !state().tabs.some((tab) => tab.sessionID === sessionID)) return
+        setPromptPulses((pulses) => ({ ...pulses, [sessionID]: (pulses[sessionID] ?? 0) + 1 }))
+      }),
+    )
+    onCleanup(
       event.on("session.error", (evt) => {
         if (evt.data.sessionID) markUnread(evt.data.sessionID, "error")
       }),
@@ -200,6 +210,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       update((draft) => {
         draft.tabs = closeSessionTab(draft.tabs, target).tabs
         delete draft.unread[target]
+      })
+      setPromptPulses((pulses) => {
+        if (pulses[target] === undefined) return pulses
+        const next = { ...pulses }
+        delete next[target]
+        return next
       })
       if (selected) route.navigate(next ? { type: "session", sessionID: next } : { type: "home" })
     }

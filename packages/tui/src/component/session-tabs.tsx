@@ -283,6 +283,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
               <TabPulse
                 enabled={animations()}
                 active={status().busy && !status().attention}
+                promptPulse={status().promptPulse}
                 complete={status().complete && !status().attention}
                 glow={glows()}
                 breathe={status().attention}

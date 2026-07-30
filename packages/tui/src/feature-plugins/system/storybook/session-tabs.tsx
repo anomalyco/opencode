@@ -23,7 +23,7 @@ const FIXTURE_TABS = [
   { sessionID: "fixture-12", title: "Prepare review" },
 ]
 
-const EMPTY_STATUS: FixtureStatus = { unread: undefined, attention: false, busy: false }
+const EMPTY_STATUS: FixtureStatus = { unread: undefined, promptPulse: 0, attention: false, busy: false }
 const RUN_DURATION = 1_800
 const RESUME_DURATION = 900
 
