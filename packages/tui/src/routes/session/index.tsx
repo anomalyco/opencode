@@ -105,6 +105,8 @@ const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 const TRANSCRIPT_BACKFILL_DELAY = 120
 // Cold-open stays small for latency; once the user asks for history, page like desktop.
+// 200 is also the server's maximum message page size (protocol session.messages limit);
+// raising it past the cap would make requests fail validation.
 const HISTORY_PAGE_SIZE = 200
 
 const context = createContext<{
@@ -305,13 +307,16 @@ export function Session() {
     r.set(route.prompt)
   }
 
-  /** Runs after layout has settled (two frames), unless the transcript was torn down. */
+  /** Resolves after layout has settled (two frames). */
+  const settleLayout = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+  /** Runs after layout has settled, unless the transcript was torn down. */
   const afterLayout = (continuation: () => void) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!scroll || scroll.isDestroyed) return
-        continuation()
-      })
+    void settleLayout().then(() => {
+      if (!scroll || scroll.isDestroyed) return
+      continuation()
     })
   }
 
@@ -342,16 +347,15 @@ export function Session() {
     onCleanup(() => clearTimeout(timer))
   })
   const historyRequests = new Map<string, Promise<number>>()
-  const settleLayout = () =>
-    new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    })
   // Keep each fetch locked through layout so the next page cannot overlap anchor restoration.
   const loadOlder = () => {
     const sessionID = route.sessionID
     if (!scroll || scroll.isDestroyed || hidden() !== 0) return Promise.resolve(0)
     const active = historyRequests.get(sessionID)
     if (active) return active
+    // Exhausted history: skip the anchor snapshot and promise plumbing entirely, so
+    // fully-loaded sessions pay one map lookup per scroll or row change.
+    if (!data.session.message.hasOlder(sessionID)) return Promise.resolve(0)
     const viewport = scroll
     const before = viewport.scrollHeight
     const first = messages()[0]?.id
@@ -382,11 +386,14 @@ export function Session() {
     return request
   }
   const loadAllOlder = async () => {
+    const sessionID = route.sessionID
     if (hidden() !== 0) {
       setHiddenRows(0)
       await settleLayout()
     }
-    while ((await loadOlder()) > 0) {}
+    // Stop on session switch: loadOlder re-reads the route, so continuing would
+    // exhaustively page the newly opened session instead.
+    while (route.sessionID === sessionID && (await loadOlder()) > 0) {}
   }
   const loadOlderAtTop = () => {
     if (!scroll || scroll.isDestroyed || scroll.scrollTop > 0) return
@@ -463,7 +470,9 @@ export function Session() {
         return
       }
       if (direction === "prev") {
+        const sessionID = route.sessionID
         void loadOlder().then((added) => {
+          if (route.sessionID !== sessionID) return
           if (added > 0) return scrollToMessage(direction, dialog, userOnly)
           dialog.clear()
         })
@@ -570,12 +579,12 @@ export function Session() {
       run: async () => {
         const sessionID = route.sessionID
         clearMessageNavigation()
+        // loadAllOlder pins hidden rows to zero before paging, so the transcript is fully
+        // mounted here and no ensureAllRows wrapper is needed.
         await loadAllOlder()
-        if (route.sessionID !== sessionID) return
-        ensureAllRows(() => {
-          scroll.scrollTo(0)
-          dialog.clear()
-        })
+        if (route.sessionID !== sessionID || !scroll || scroll.isDestroyed) return
+        scroll.scrollTo(0)
+        dialog.clear()
       },
     },
     {

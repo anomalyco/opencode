@@ -419,6 +419,20 @@ test("extends message pages until they start at a turn root", async () => {
     content: [],
     time: { created: value },
   })
+  const shell = (value: number) => ({
+    id: id(value),
+    type: "shell" as const,
+    shellID: "sh_test",
+    command: "ls",
+    status: "exited" as const,
+    time: { created: value },
+  })
+  const synthetic = (value: number) => ({
+    id: id(value),
+    type: "synthetic" as const,
+    text: "note",
+    time: { created: value },
+  })
   const range = (newest: number, oldest: number) =>
     Array.from({ length: newest - oldest + 1 }, (_, index) => item(newest - index))
   const calls = createFetch((url) => {
@@ -426,12 +440,14 @@ test("extends message pages until they start at a turn root", async () => {
     if (url.pathname !== `/api/session/${sessionID}/message`) return undefined
     requests.push(url)
     const cursor = url.searchParams.get("cursor")
-    // Initial window ends on an assistant reply whose prompt is on the next page.
-    if (cursor === null) return json({ data: [...range(60, 42), assistant(41)], cursor: { next: "c1" } })
+    // Initial window ends on a description-less synthetic (not turn-significant) below an
+    // assistant reply whose prompt is on the next page.
+    if (cursor === null) return json({ data: [...range(60, 43), assistant(42), synthetic(41)], cursor: { next: "c1" } })
     if (cursor === "c1") return json({ data: range(40, 21), cursor: { next: "c2" } })
     // Older page also ends on an assistant reply.
-    if (cursor === "c2") return json({ data: [...range(20, 12), assistant(11)], cursor: { next: "c3" } })
-    if (cursor === "c3") return json({ data: [item(10)], cursor: { next: "c4" } })
+    if (cursor === "c2") return json({ data: [...range(20, 13), shell(12), assistant(11)], cursor: { next: "c3" } })
+    // A shell message is a valid turn root, so the extension stops here.
+    if (cursor === "c3") return json({ data: [shell(10)], cursor: { next: "c4" } })
     throw new Error(`unexpected cursor: ${cursor}`)
   }, events)
   let data!: ReturnType<typeof useData>
@@ -474,6 +490,75 @@ test("extends message pages until they start at a turn root", async () => {
     // The short extension page exhausted history despite the returned cursor.
     expect(await data.session.message.older(sessionID, 10)).toBe(0)
     expect(requests).toHaveLength(4)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("drops a stale older page when the window is replaced mid-flight", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_stale_page"
+  const id = (value: number) => `msg_${value.toString().padStart(3, "0")}`
+  const item = (value: number) => ({
+    id: id(value),
+    type: "user" as const,
+    text: `Message ${value}`,
+    time: { created: value },
+  })
+  const window = Array.from({ length: 20 }, (_, index) => item(40 - index))
+  let release: ((response: Response) => void) | undefined
+  let initialLoads = 0
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/pending`) return json({ data: [] })
+    if (url.pathname !== `/api/session/${sessionID}/message`) return undefined
+    const cursor = url.searchParams.get("cursor")
+    // The stale continuation stays in flight until the test releases it.
+    if (cursor === "stale") return new Promise<Response>((resolve) => (release = resolve))
+    if (cursor === "fresh")
+      return json({ data: Array.from({ length: 10 }, (_, index) => item(20 - index)), cursor: { next: "unused" } })
+    initialLoads += 1
+    return json({ data: window, cursor: { next: initialLoads === 1 ? "stale" : "fresh" } })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.sync(sessionID)
+    const stale = data.session.message.older(sessionID, 10)
+    await wait(() => release !== undefined)
+
+    // The window is replaced while the older page is still in flight.
+    data.session.message.invalidate(sessionID)
+    await data.session.message.sync(sessionID)
+    release!(json({ data: Array.from({ length: 10 }, (_, index) => item(20 - index)), cursor: { next: "poison" } }))
+
+    // The stale continuation no longer extends the current window edge and must be dropped.
+    expect(await stale).toBe(0)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 20 }, (_, index) => id(index + 21)),
+    )
+
+    // Paging resumes from the fresh cursor, not the poisoned one.
+    expect(await data.session.message.older(sessionID, 10)).toBe(10)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 30 }, (_, index) => id(index + 11)),
+    )
   } finally {
     app.renderer.destroy()
   }

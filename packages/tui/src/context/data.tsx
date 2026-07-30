@@ -41,10 +41,14 @@ export type DataSessionStatus = "idle" | "running"
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 
+const initialMessagePageSize = 20
+
 // A window whose oldest turn-significant message is an assistant reply starts mid-turn:
-// its user or shell prompt sits on an older page. Matches the desktop client's invariant.
-function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
-  const boundary = source.find(
+// its user or shell prompt sits on an older page. Input is descending (newest first) as
+// served, so the oldest boundary is found from the end. Matches the desktop client's
+// invariant in packages/app/src/context/server-session.ts.
+function needsOlderTurnRoot(descending: readonly SessionMessageInfo[]) {
+  const boundary = descending.findLast(
     (message) =>
       message.type === "user" ||
       message.type === "shell" ||
@@ -165,23 +169,24 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: process.cwd(),
     })
     const messageIndex = new Map<string, Map<string, number>>()
-    const messageCursor = new Map<string, string | undefined>()
+    // Continuation cursor per session; absence means no older history is known to remain.
+    const messageCursor = new Map<string, string>()
     const messagePaging = new Map<string, Promise<number>>()
     // Fetch one descending page, following the cursor while the window would open on a
     // dangling assistant reply, so the oldest loaded message always starts its turn.
     const fetchMessagePage = async (sessionID: string, limit: number, cursor?: string) => {
       const request = (cursor?: string) =>
         client.api.message.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
-      const pages = [await request(cursor)]
-      while (pages.at(-1)!.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
-        const response = await request(pages.at(-1)!.cursor.next ?? undefined)
-        pages.push(response)
-        if (!response.data.length) break
+      let response = await request(cursor)
+      const descending = [...response.data]
+      while (response.data.length > 0 && response.cursor.next && needsOlderTurnRoot(descending)) {
+        response = await request(response.cursor.next)
+        descending.push(...response.data)
       }
-      const last = pages.at(-1)!
       return {
-        messages: pages.flatMap((page) => page.data).toReversed(),
-        cursor: last.data.length < limit ? undefined : (last.cursor.next ?? undefined),
+        messages: descending.toReversed(),
+        // The server returns a cursor even on the final page; a short page is the exhaustion signal.
+        cursor: response.data.length < limit ? undefined : (response.cursor.next ?? undefined),
       }
     }
     const sync = createSync()
@@ -344,7 +349,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           // hydration can load pending and projected messages atomically.
           sync.complete(`session.pending:${event.data.sessionID}`)
           sync.complete(`session.message:${event.data.sessionID}`)
-          messageCursor.set(event.data.sessionID, undefined)
           break
         case "session.deleted":
           removeSession(event.data.sessionID)
@@ -1032,11 +1036,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           sync(sessionID: string) {
             return sync.run(`session.message:${sessionID}`, async () => {
-              const page = await fetchMessagePage(sessionID, 20)
-              messageCursor.set(sessionID, page.cursor)
+              const page = await fetchMessagePage(sessionID, initialMessagePageSize)
+              if (page.cursor) messageCursor.set(sessionID, page.cursor)
+              else messageCursor.delete(sessionID)
               messageIndex.set(sessionID, new Map(page.messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(page.messages))
             })
+          },
+          hasOlder(sessionID: string) {
+            return messageCursor.has(sessionID)
           },
           older(sessionID: string, count: number) {
             const cursor = messageCursor.get(sessionID)
@@ -1045,7 +1053,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             if (active) return active
             const pending = (async () => {
               const page = await fetchMessagePage(sessionID, count, cursor)
-              messageCursor.set(sessionID, page.cursor)
+              // Invalidate or a fresh sync may have replaced the window mid-flight. Apply the
+              // continuation only while it still extends the current window edge; prepending it
+              // onto a replaced window would leave a permanent unfetchable gap in the transcript.
+              if (messageCursor.get(sessionID) !== cursor) return 0
+              if (page.cursor) messageCursor.set(sessionID, page.cursor)
+              else messageCursor.delete(sessionID)
               const loaded = index(sessionID)
               const older = page.messages.filter((item) => !loaded.has(item.id))
               if (older.length === 0) return 0
