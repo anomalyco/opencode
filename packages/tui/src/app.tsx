@@ -525,8 +525,11 @@ function App(props: { pair?: DialogPairCredentials }) {
     renderer.useMouse = config.data.mouse
   })
 
+  let active: { id: string; title: string } | undefined
   // Update terminal window title based on current route and session
   createEffect(() => {
+    const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
+    if (session) active = { id: session.id, title: session.title }
     if (!terminalTitleEnabled()) return
 
     if (route.data.type === "home") {
@@ -535,7 +538,6 @@ function App(props: { pair?: DialogPairCredentials }) {
     }
 
     if (route.data.type === "session") {
-      const session = data.session.get(route.data.sessionID)
       if (!session || isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
         return
@@ -1160,10 +1162,11 @@ function App(props: { pair?: DialogPairCredentials }) {
 
   event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.data.sessionID) {
+      const title = active?.id === evt.data.sessionID ? active.title : undefined
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: title ? `Session "${title}" was deleted` : "The current session was deleted",
       })
     }
   })
