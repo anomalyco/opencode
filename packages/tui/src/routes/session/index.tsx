@@ -51,6 +51,7 @@ import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
+import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
@@ -520,6 +521,32 @@ export function Session() {
       group: "Session",
       slash: { name: "rename" },
       run: () => DialogSessionRename.show(dialog, route.sessionID, session()?.title),
+    },
+    {
+      title: "Delete session",
+      id: "session.delete",
+      group: "Session",
+      slash: { name: "delete" },
+      run: async () => {
+        const current = session()
+        if (!current) return
+        const confirmed = await DialogConfirm.show(
+          dialog,
+          "Delete Session",
+          `Delete "${current.title}"? This action cannot be undone.`,
+        )
+        if (confirmed !== true) return
+        const error = await client.api.session.remove({ sessionID: route.sessionID }).then(
+          () => undefined,
+          (error) => error,
+        )
+        if (!error) return
+        toast.show({
+          message: `Failed to delete session: ${errorMessage(error)}`,
+          variant: "error",
+          duration: 5000,
+        })
+      },
     },
     {
       title: "Jump to message",
