@@ -133,9 +133,7 @@ export function DialogSessionList() {
       const project = data.project.get(session.projectID)
       const footer = allProjects()
         ? Locale.truncate(project?.name || path.basename(project?.canonical ?? directory), 20)
-        : directory !== data.location.info()?.project.directory
-          ? Locale.truncate(path.basename(directory), 20)
-          : ""
+        : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {
