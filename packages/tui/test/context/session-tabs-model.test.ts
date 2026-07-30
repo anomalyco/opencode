@@ -151,12 +151,12 @@ describe("session tabs", () => {
     expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(76)
   })
 
-  test("does not reserve an active tab slot on the new session page", () => {
-    const tabs = ["a", "b", "c", "d", "e"].map((sessionID) => ({ sessionID }))
-    const layout = adaptiveSessionTabLayout(tabs, "dummy", 40)
+  test("reserves an active tab slot for the new session page", () => {
+    const tabs = ["a", "b", "c", "d", "new"].map((sessionID) => ({ sessionID }))
+    const layout = adaptiveSessionTabLayout(tabs, "new", 54)
 
     expect(layout.tabs).toEqual(tabs)
-    expect(layout.widths).toEqual([8, 8, 8, 8, 8])
+    expect(layout.widths).toEqual([8, 8, 8, 8, 22])
     expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(layout.total)
   })
 

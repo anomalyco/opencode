@@ -225,6 +225,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       tabs() {
         return state().tabs
       },
+      newTab() {
+        return route.data.type === "home"
+      },
       current,
       status,
       select(sessionID: string) {
@@ -235,8 +238,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (!enabled()) return
         const target = sessionID ? root(sessionID) : current()
         if (!target) {
-          const previous = state().tabs.at(-1)
-          if (route.data.type === "home" && previous) route.navigate({ type: "session", sessionID: previous.sessionID })
+          const previous = moveSessionTabHistory(history, state().tabs, undefined, -1)
+          history = previous.history
+          const session = previous.sessionID ?? state().tabs.at(-1)?.sessionID
+          if (route.data.type === "home" && session) route.navigate({ type: "session", sessionID: session })
           return
         }
         remove(target, true)

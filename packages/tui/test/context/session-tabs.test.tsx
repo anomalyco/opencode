@@ -108,3 +108,65 @@ test("user prompt admissions pulse an already-busy background tab", async () => 
     rmSync(state, { recursive: true, force: true })
   }
 })
+
+test("tracks a temporary new session tab across close and creation", async () => {
+  const state = mkdtempSync(path.join(tmpdir(), "opencode-session-tabs-"))
+  const events = createEventStream()
+  const calls = createFetch(undefined, events)
+  let tabs!: ReturnType<typeof useSessionTabs>
+  let route!: ReturnType<typeof useRoute>
+  let client!: ReturnType<typeof useClient>
+
+  function Probe() {
+    tabs = useSessionTabs()
+    route = useRoute()
+    client = useClient()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts paths={{ state }}>
+      <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+        <StorageProvider>
+          <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+            <RouteProvider initialRoute={{ type: "session", sessionID: "first" }}>
+              <ClientProvider api={createApi(calls.fetch)}>
+                <DataProvider>
+                  <SessionTabsProvider>
+                    <Probe />
+                  </SessionTabsProvider>
+                </DataProvider>
+              </ClientProvider>
+            </RouteProvider>
+          </ConfigProvider>
+        </StorageProvider>
+      </TuiAppProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected" && tabs.current() === "first")
+    route.navigate({ type: "session", sessionID: "second" })
+    await wait(() => tabs.current() === "second" && tabs.tabs().length === 2)
+    route.navigate({ type: "session", sessionID: "first" })
+    await wait(() => tabs.current() === "first")
+
+    route.navigate({ type: "home" })
+    await wait(() => tabs.newTab() && tabs.current() === undefined)
+    expect(tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "second"])
+    tabs.close()
+    await wait(() => route.data.type === "session")
+
+    expect(route.data).toEqual({ type: "session", sessionID: "first" })
+
+    route.navigate({ type: "home" })
+    await wait(() => tabs.newTab())
+    route.navigate({ type: "session", sessionID: "third" })
+    await wait(() => tabs.current() === "third" && tabs.tabs().some((tab) => tab.sessionID === "third"))
+
+    expect(tabs.newTab()).toBe(false)
+  } finally {
+    app.renderer.destroy()
+    rmSync(state, { recursive: true, force: true })
+  }
+})

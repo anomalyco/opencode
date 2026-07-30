@@ -6,6 +6,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useTheme, useThemes } from "../context/theme"
 import {
   adaptiveSessionTabLayout,
+  NEW_SESSION_TAB_ID,
   sessionTabComplete,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
@@ -25,6 +26,7 @@ export type SessionTabsStatus = Omit<ReturnType<ContextController["status"]>, "u
   unread: SessionTabUnread | undefined
 }
 export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close" | "move"> & {
+  newTab?: () => boolean
   status(sessionID: string): SessionTabsStatus
 }
 
@@ -42,8 +44,11 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
   const accent = () => theme.hue.accent[hueStep()]
   const activeNumber = () => theme.hue.interactive[hueStep()]
   const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
-  const activeID = createMemo(tabs.current)
-  const items = tabs.tabs
+  const newTab = () => tabs.newTab?.() ?? false
+  const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB_ID : tabs.current()))
+  const items = createMemo(() =>
+    newTab() ? [...tabs.tabs(), { sessionID: NEW_SESSION_TAB_ID, title: "New session" }] : tabs.tabs(),
+  )
   const layout = createMemo((previous: ReturnType<typeof adaptiveSessionTabLayout> | undefined) =>
     adaptiveSessionTabLayout(items(), activeID(), dimensions().width, previous?.start),
   )
@@ -51,7 +56,10 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
     () =>
       new Map(
         layout().tabs.map((tab) => {
-          const status = tabs.status(tab.sessionID)
+          const status =
+            tab.sessionID === NEW_SESSION_TAB_ID
+              ? { unread: undefined, promptPulse: 0, attention: false, busy: false }
+              : tabs.status(tab.sessionID)
           return [
             tab.sessionID,
             {
@@ -262,6 +270,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
           // keeping sloppy clicks indistinguishable from clean ones.
           const release = () => {
             setDragging(undefined)
+            if (tab.sessionID === NEW_SESSION_TAB_ID) return
             tabs.select(tab.sessionID)
           }
           return (
@@ -275,6 +284,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
               onMouseDown={() => setDragging(tab.sessionID)}
               onMouseUp={release}
               onMouseDrag={(event) => {
+                if (tab.sessionID === NEW_SESSION_TAB_ID) return
                 const slot = slotAt(event.x)
                 if (slot !== undefined && slot !== tabNumber() - 1) tabs.move(tab.sessionID, slot)
               }}
@@ -323,7 +333,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
                   selectable={false}
                   onMouseUp={(event) => {
                     event.stopPropagation()
-                    tabs.close(tab.sessionID)
+                    tabs.close(tab.sessionID === NEW_SESSION_TAB_ID ? undefined : tab.sessionID)
                   }}
                 >
                   {hovered() === tab.sessionID ? "×" : ""}
