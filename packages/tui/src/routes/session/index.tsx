@@ -22,6 +22,7 @@ import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
+import { PatchDiff } from "../../component/patch-diff"
 import { ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -3027,8 +3028,10 @@ function Edit(props: ToolProps) {
         {(item) => (
           <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
             <box paddingLeft={1}>
-              <diff
+              <PatchDiff
                 diff={item().patch}
+                hunkBg={theme.diff.background.context}
+                hunkFg={theme.diff.lineNumber.text}
                 view={view()}
                 filetype={filetype(path())}
                 syntaxStyle={syntax()}
@@ -3116,8 +3119,10 @@ function ApplyPatch(props: ToolProps) {
                   }
                 >
                   <box paddingLeft={1}>
-                    <diff
+                    <PatchDiff
                       diff={file.patch}
+                      hunkBg={theme.diff.background.context}
+                      hunkFg={theme.diff.lineNumber.text}
                       view={view()}
                       filetype={filetype(file.relativePath)}
                       syntaxStyle={syntax()}
