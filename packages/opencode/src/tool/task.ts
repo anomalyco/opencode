@@ -457,11 +457,17 @@ export const TaskTool = Tool.define(
     // Best-effort fleet visibility: list local providers by name so the model
     // can honor "run this on rocky". Discovery is async, so hosts appearing
     // later are still reachable via the provider parameter by name.
-    const localProviders = provider
-      ? Object.values(yield* provider.list().pipe(Effect.orElseSucceed(() => ({}))))
-          .filter((info) => LocalPlacement.baseURLOf(info))
-          .map((info) => info.id)
-      : []
+    // Must survive init contexts with no project instance loaded —
+    // provider.list() can die there (defect, not typed failure), and a
+    // defect at tool-init kills the whole server worker at startup.
+    // Effect.exit captures failures and defects alike.
+    const listExit = provider ? yield* provider.list().pipe(Effect.exit) : undefined
+    const localProviders =
+      listExit !== undefined && Exit.isSuccess(listExit)
+        ? Object.values(listExit.value)
+            .filter((info) => LocalPlacement.baseURLOf(info))
+            .map((info) => info.id)
+        : []
     const FLEET_DESCRIPTION = localProviders.length
       ? `Local providers available for the provider parameter: ${localProviders.join(", ")}.`
       : undefined
