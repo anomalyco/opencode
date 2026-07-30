@@ -6,6 +6,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useTheme, useThemes } from "../context/theme"
 import {
   adaptiveSessionTabLayout,
+  NEW_SESSION_TAB_TITLE,
   sessionTabComplete,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
@@ -36,7 +37,7 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
   status(sessionID: string): SessionTabsStatus
 }
 
-const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: "New session" }
+const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
 
 export function SessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
   const tabs = props.controller ?? useSessionTabs()
@@ -209,6 +210,11 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
           createEffect((previous: string) => {
             const next = title()
             if (next === previous) return next
+            if (previous === NEW_SESSION_TAB_TITLE) {
+              setOutgoingTitle(undefined)
+              wipe.jump({ front: 1 })
+              return next
+            }
             setOutgoingTitle(previous)
             wipe.jump({ front: 0 })
             wipe.animate({ front: 1 })

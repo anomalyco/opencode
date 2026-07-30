@@ -13,6 +13,7 @@ import {
   cycleSessionTab,
   moveSessionTab,
   moveSessionTabHistory,
+  NEW_SESSION_TAB_TITLE,
   openSessionTab,
   recordClosedSessionTab,
   recordSessionTabHistory,
@@ -77,6 +78,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     const root = (sessionID: string) => data.session.root(sessionID)
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
+    const newTab = createMemo((open = false) => {
+      if (route.data.type === "home") return true
+      if (!open) return false
+      const sessionID = current()
+      return sessionID !== undefined && !state().tabs.some((tab) => tab.sessionID === sessionID)
+    }, false)
     const status = (sessionID: string) => {
       const session = root(sessionID)
       const members = data.session.family(session)
@@ -107,7 +114,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
       history = recordSessionTabHistory(history, sessionID)
-      const title = data.session.get(sessionID)?.title
+      const title = data.session.get(sessionID)?.title ?? (newTab() ? NEW_SESSION_TAB_TITLE : undefined)
       const tabs = openSessionTab(state().tabs, { sessionID, title })
       if (tabs === state().tabs && !state().unread[sessionID]) return
       update((draft) => {
@@ -233,7 +240,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return state().tabs
       },
       newTab() {
-        return route.data.type === "home"
+        return newTab()
       },
       current,
       status,

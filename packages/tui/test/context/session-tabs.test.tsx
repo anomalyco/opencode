@@ -11,6 +11,7 @@ import { DataProvider } from "../../src/context/data"
 import { RouteProvider, useRoute } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider, useSessionTabs } from "../../src/context/session-tabs"
+import { NEW_SESSION_TAB_TITLE } from "../../src/context/session-tabs-model"
 import { StorageProvider } from "../../src/context/storage"
 import { createApi, createEventStream, createFetch, directory } from "../fixture/tui-client"
 import { TestTuiContexts } from "../fixture/tui-environment"
@@ -142,11 +143,13 @@ test("tracks a temporary new session tab across close and creation", async () =>
     setup.route.navigate({ type: "home" })
     await wait(() => setup.tabs.newTab())
     setup.route.navigate({ type: "session", sessionID: "third" })
+    expect(setup.tabs.newTab()).toBe(true)
     await wait(
       () => setup.tabs.current() === "third" && setup.tabs.tabs().some((tab) => tab.sessionID === "third"),
     )
 
     expect(setup.tabs.newTab()).toBe(false)
+    expect(setup.tabs.tabs().find((tab) => tab.sessionID === "third")?.title).toBe(NEW_SESSION_TAB_TITLE)
   } finally {
     setup.destroy()
   }
