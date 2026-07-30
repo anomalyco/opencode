@@ -15,7 +15,7 @@ import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
-  package: Provider.aisdk("@ai-sdk/google"),
+  package: Provider.aisdk("@ai-sdk/mistral"),
 })
 const runtime = Model.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
