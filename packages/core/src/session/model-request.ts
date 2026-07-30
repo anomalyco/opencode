@@ -155,6 +155,23 @@ export const layer = Layer.effect(
         model,
         http: {
           headers: SessionModelHeaders.make(session, app),
+          transform: (request) =>
+            hooks
+              .trigger("session", "request", {
+                sessionID: session.id,
+                agent: agent.id,
+                model: resolved.ref,
+                ...request,
+              })
+              .pipe(
+                Effect.tap((event) =>
+                  Effect.sync(() => {
+                    request.headers = event.headers
+                    request.body = event.body
+                  }),
+                ),
+                Effect.asVoid,
+              ),
         },
         providerOptions: { openai: { promptCacheKey } },
         system: contextEvent.system,

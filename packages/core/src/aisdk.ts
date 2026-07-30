@@ -1,5 +1,6 @@
 export * as AISDK from "./aisdk"
 
+import { AsyncLocalStorage } from "node:async_hooks"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import type {
   JSONSchema7,
@@ -25,6 +26,7 @@ import {
   ToolResultValue,
   UnknownProviderReason,
   type ContentPart,
+  type HttpRequestTransform,
   type LLMRequest,
   type ToolDefinition,
   type UsageInput,
@@ -40,6 +42,7 @@ type SDK = any
 type UserContent = Extract<LanguageModelV3Message, { role: "user" }>["content"]
 type AssistantContent = Extract<LanguageModelV3Message, { role: "assistant" }>["content"]
 type ToolResultContent = Extract<AssistantContent[number], { type: "tool-result" }>
+const requestTransform = new AsyncLocalStorage<HttpRequestTransform>()
 
 export interface SDKEvent {
   readonly model: Info
@@ -148,6 +151,20 @@ function prepareOptions(model: Info, pkg: string) {
       if (Schema.is(Schema.Record(Schema.String, Schema.Json))(decoded)) {
         opts.body = JSON.stringify(Provider.mergeOverlay(decoded, model.body))
       }
+    }
+
+    const transform = requestTransform.getStore()
+    if (transform) {
+      const source = input instanceof Request ? new Request(input, opts) : new Request(input.toString(), opts)
+      const request = {
+        url: source.url,
+        method: source.method,
+        headers: Object.fromEntries(source.headers.entries()),
+        body: source.body ? await source.clone().text() : undefined,
+      }
+      await Effect.runPromise(transform(request))
+      opts.headers = request.headers
+      opts.body = request.body
     }
 
     const res = await (typeof customFetch === "function" ? customFetch : fetch)(input, {
@@ -342,7 +359,8 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     with: () => route,
     model: (input) => Model.make({ ...input, provider: "provider" in input ? input.provider : info.providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
-    streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
+    streamPrepared: (prepared, request) =>
+      streamLanguage(language, prepared as LanguageModelV3CallOptions, request.http?.transform),
   }
   return Model.make({
     id: info.modelID ?? info.id,
@@ -531,13 +549,18 @@ function providerOptions(input: LLMRequest["providerOptions"]): SharedV3Provider
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
-function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions) {
+function streamLanguage(
+  language: LanguageModelV3,
+  options: LanguageModelV3CallOptions,
+  transform: HttpRequestTransform | undefined,
+) {
   const state = { step: 0, toolNames: {} as Record<string, string> }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
       Effect.tryPromise({
-        try: () => language.doStream(options),
+        try: () =>
+          transform ? requestTransform.run(transform, () => language.doStream(options)) : language.doStream(options),
         catch: (error) => llmError("doStream", error),
       }).pipe(
         Effect.map((result) =>

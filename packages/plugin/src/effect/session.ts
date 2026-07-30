@@ -15,8 +15,19 @@ export interface SessionContext {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
+export interface SessionRequest {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly url: string
+  readonly method: string
+  headers: Record<string, string>
+  body: string | undefined
+}
+
 export interface SessionHooks {
   readonly context: SessionContext
+  readonly request: SessionRequest
 }
 
 export type SessionDomain = Pick<

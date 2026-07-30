@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { JsonSchema, ModelID, ProviderID } from "./ids"
 import type { AnyRoute } from "../route/client"
 import { isRecord } from "../utils/record"
@@ -50,10 +50,25 @@ export const mergeProviderOptions = (
   return Object.keys(result).length === 0 ? undefined : result
 }
 
+export interface HttpRequest {
+  readonly url: string
+  readonly method: string
+  headers: Record<string, string>
+  body: string | undefined
+}
+
+export type HttpRequestTransform = (request: HttpRequest) => Effect.Effect<void>
+
+const HttpRequestTransform = Schema.declare(
+  (value): value is HttpRequestTransform => typeof value === "function",
+  { expected: "LLM.HttpRequestTransform" },
+)
+
 export class HttpOptions extends Schema.Class<HttpOptions>("LLM.HttpOptions")({
   body: Schema.optional(JsonSchema),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  transform: Schema.optional(HttpRequestTransform),
 }) {}
 
 export namespace HttpOptions {
@@ -67,8 +82,9 @@ export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined
   const body = mergeJsonRecords(...items.map((item) => item?.body))
   const headers = mergeStringRecords(...items.map((item) => item?.headers))
   const query = mergeStringRecords(...items.map((item) => item?.query))
-  if (!body && !headers && !query) return undefined
-  return new HttpOptions({ body, headers, query })
+  const transform = items.findLast((item) => item?.transform !== undefined)?.transform
+  if (!body && !headers && !query && !transform) return undefined
+  return new HttpOptions({ body, headers, query, transform })
 }
 
 export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
