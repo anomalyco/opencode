@@ -374,6 +374,16 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
+      // An empty filter has nothing to fuzzy-match on, and `file.find` is backed by an
+      // index that declines to run in the home directory or the filesystem root - which
+      // are exactly the directories the picker opens on by default. That returns an empty
+      // list and the dialog reads "No folders found" until something is typed. List the
+      // directory instead so the first open shows its folders.
+      if (!query) {
+        const listed = await match(input.directory, "", 50)
+        if (!active()) return []
+        return listed.slice(0, 50)
+      }
       const results = await args.sdk.api.file
         .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
         .then((result) => result.data.map((entry) => entry.path))
