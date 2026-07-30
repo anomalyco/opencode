@@ -11,7 +11,7 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
       return {
         package: "@opencode-ai/ai/providers/google",
         settings: {
-          ...settings,
+          ...mapProviderSettings(settings),
           ...mapProviderOptions("gemini", settings),
         },
       }
@@ -19,7 +19,7 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
       return {
         package: "@opencode-ai/ai/providers/openrouter",
         settings: {
-          ...settings,
+          ...mapProviderSettings(settings),
           ...mapProviderOptions("openrouter", settings),
         },
       }
@@ -27,10 +27,17 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
       return {
         package: "@opencode-ai/ai/providers/xai",
         settings: {
-          ...settings,
+          ...mapProviderSettings(settings),
           ...mapProviderOptions("xai", settings),
         },
       }
+  }
+}
+
+function mapProviderSettings(settings: Readonly<Record<string, unknown>>) {
+  return {
+    ...(typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}),
+    ...(typeof settings.baseURL === "string" ? { baseURL: settings.baseURL } : {}),
   }
 }
 
