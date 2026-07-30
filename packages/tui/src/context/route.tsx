@@ -7,6 +7,7 @@ import { useTuiStartup } from "./runtime"
 export type HomeRoute = {
   type: "home"
   prompt?: PromptInfo
+  // Location carried over from the previous session or project picker so a new session lands there.
   location?: LocationRef
 }
 

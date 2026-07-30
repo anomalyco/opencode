@@ -240,7 +240,6 @@ export function Prompt(props: PromptProps) {
               return undefined
             })
             if (!location) return
-            move.setDirectory(location.directory, location.directory !== location.project.directory)
             currentLocation.set(location)
             return
           }
@@ -963,7 +962,10 @@ export function Prompt(props: PromptProps) {
       const directory = await move.getDirectory()
       if (move.pending() && !directory) return false
       finishMoveProgress = Boolean(move.progress())
-      const location = data.location.default()
+      // The location context is where the next session is created: seeded by the home
+      // route (launch cwd, inherited session location, or picked project) and updated
+      // by /cd before a session exists.
+      const location = currentLocation.ref ?? data.location.default()
 
       const created = await client.api.session
         .create({
@@ -1299,7 +1301,12 @@ export function Prompt(props: PromptProps) {
     return `Ask anything... "${list()[store.placeholder % list().length]}"`
   })
   const locationLabel = createMemo(() => {
-    if (!props.sessionID || status() !== "idle") return
+    if (!props.sessionID) {
+      // No session yet: show where the next session will be created.
+      const directory = currentLocation.ref?.directory ?? data.location.default().directory
+      return abbreviateHome(directory, paths.home)
+    }
+    if (status() !== "idle") return
     const directory = data.session.get(props.sessionID)?.location.directory
     return directory ? abbreviateHome(directory, paths.home) : undefined
   })
