@@ -139,16 +139,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }, {})
       if (isDeepEqual(next, state().tabs) && isDeepEqual(unread, state().unread)) return
       update((draft) => {
-        draft.tabs = draft.tabs.reduce<SessionTab[]>((tabs, tab) => {
-          const sessionID = root(tab.sessionID)
-          const session = data.session.get(sessionID)
-          return openSessionTab(tabs, { sessionID, title: session ? sessionTitle(session) : tab.title })
-        }, [])
-        draft.unread = Object.entries(draft.unread).reduce<Record<string, SessionTabUnread>>((result, entry) => {
-          const sessionID = root(entry[0])
-          result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
-          return result
-        }, {})
+        draft.tabs = next
+        draft.unread = unread
       })
     })
 
