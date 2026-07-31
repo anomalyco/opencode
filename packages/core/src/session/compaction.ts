@@ -351,10 +351,11 @@ const make = (dependencies: Dependencies) => {
     )
     if (!last) return false
     const output = Math.min(input.model.route.defaults.limits?.output ?? 0, OUTPUT_TOKEN_MAX)
-    const limit = Math.min(
+    const promptCeiling = Math.min(
       input.model.route.defaults.limits?.input ?? Number.POSITIVE_INFINITY,
-      context - (output || config.buffer),
+      context - output,
     )
+    const limit = promptCeiling - config.buffer
     const used =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (used <= 0) return false

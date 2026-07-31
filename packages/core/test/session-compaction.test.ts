@@ -132,7 +132,7 @@ test("compaction prompt requires the checkpoint headings in order", () => {
   expect(prompt).toContain("Keep every section, even when empty.")
 })
 
-it.effect("auto compaction respects explicit model input limits", () =>
+it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service
     const session = Session.Info.make({
@@ -143,12 +143,12 @@ it.effect("auto compaction respects explicit model input limits", () =>
       time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
     })
-    const input = (tokens: number) => ({
+    const input = (tokens: number, limits: { context: number; input?: number; output: number }) => ({
       session,
       model: Model.make({
         id: "test-model",
         provider: "test-provider",
-        route: OpenAIChat.route.with({ limits: { context: 1_000, input: 100, output: 100 } }),
+        route: OpenAIChat.route.with({ limits }),
       }),
       cost: [],
       messages: [
@@ -164,8 +164,13 @@ it.effect("auto compaction respects explicit model input limits", () =>
       ],
     })
 
-    expect(compaction.required(input(99))).toBe(false)
-    expect(compaction.required(input(100))).toBe(true)
+    const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
+    expect(compaction.required(input(251_999, inputLimited))).toBe(false)
+    expect(compaction.required(input(252_000, inputLimited))).toBe(true)
+
+    const contextLimited = { context: 100_000, output: 10_000 }
+    expect(compaction.required(input(69_999, contextLimited))).toBe(false)
+    expect(compaction.required(input(70_000, contextLimited))).toBe(true)
   }),
 )
 
