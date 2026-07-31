@@ -16,6 +16,7 @@ import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { truncateFilePath } from "../ui/file-path"
 import { stringWidth } from "../util/string-width"
+import { sessionTitle } from "../util/session"
 import { Spinner } from "./spinner"
 
 const RECENT_LIMIT = 8
@@ -79,7 +80,7 @@ export function DialogOpen() {
       const name = project?.name || path.basename(project?.canonical ?? session.location.directory)
       const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
-        title: session.title,
+        title: sessionTitle(session),
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
         footer: `${Locale.truncate(name, 20)} · ${timeAgo(session.time.updated)}`,
