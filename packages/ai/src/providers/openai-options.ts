@@ -17,7 +17,6 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
   const openai = Object.fromEntries(
     definedEntries({
       store: options?.store,
-      promptCacheKey: options?.promptCacheKey,
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,

@@ -682,9 +682,9 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
+          promptCacheKey: "session_123",
           providerOptions: {
             openai: {
-              promptCacheKey: "session_123",
               reasoningEffort: "high",
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
@@ -803,17 +803,16 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("request OpenAI provider options override route defaults", () =>
+  it.effect("maps the request prompt cache key", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model: OpenAI.configure({
             baseURL: "https://api.openai.test/v1/",
             apiKey: "test",
-            providerOptions: { openai: { promptCacheKey: "model_cache" } },
           }).model("gpt-4.1-mini"),
           prompt: "no cache",
-          providerOptions: { openai: { promptCacheKey: "request_cache" } },
+          promptCacheKey: "request_cache",
         }),
       )
 

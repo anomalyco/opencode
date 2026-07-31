@@ -272,6 +272,8 @@ export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
   cache: Schema.optional(CachePolicy),
+  // Stable cache affinity for protocols that support provider-managed prompt caching.
+  promptCacheKey: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
@@ -289,6 +291,7 @@ export namespace LLMRequest {
     providerOptions: request.providerOptions,
     http: request.http,
     cache: request.cache,
+    promptCacheKey: request.promptCacheKey,
     metadata: request.metadata,
   })
 

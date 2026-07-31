@@ -179,7 +179,6 @@ describe("AISDKNative", () => {
         models: ["anthropic/claude-sonnet-4.6"],
         provider: { only: ["anthropic"], require_parameters: true },
         reasoning: { effort: "high" },
-        promptCacheKey: "session_123",
         future_option: { enabled: true },
       }),
     ).toEqual({
@@ -190,7 +189,6 @@ describe("AISDKNative", () => {
             models: ["anthropic/claude-sonnet-4.6"],
             provider: { only: ["anthropic"], require_parameters: true },
             reasoning: { effort: "high" },
-            promptCacheKey: "session_123",
             future_option: { enabled: true },
           },
         },
@@ -271,7 +269,6 @@ describe("AISDKNative", () => {
         baseURL: "https://xai.example/v1",
         reasoningEffort: "custom",
         store: true,
-        promptCacheKey: "cache-key",
       }),
     ).toEqual({
       package: "@opencode-ai/ai/providers/xai",
@@ -282,7 +279,6 @@ describe("AISDKNative", () => {
           xai: {
             reasoningEffort: "custom",
             store: true,
-            promptCacheKey: "cache-key",
           },
         },
       },

@@ -11,6 +11,7 @@ import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
 import type { SessionMessage } from "./message"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionPromptCacheKey } from "./prompt-cache-key"
 import { App } from "../app"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
@@ -258,6 +259,7 @@ const make = (dependencies: Dependencies) => {
       .stream(
         LLM.request({
           model: plan.model,
+          promptCacheKey: SessionPromptCacheKey.make(plan.session.id),
           http: { headers: SessionModelHeaders.make(plan.session, dependencies.app) },
           messages: [Message.user(plan.prompt)],
           tools: [],

@@ -15,6 +15,7 @@ import { QuestionTool } from "../tool/plugin/question"
 import { Tool } from "../tool"
 import { SessionContext } from "./context"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionPromptCacheKey } from "./prompt-cache-key"
 import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
@@ -181,7 +182,6 @@ export const layer = Layer.effect(
       // The final Step keeps definitions available to protocols with native "none",
       // preserving their prompt cache prefix. Calls are still rejected at execution.
       const tools = input.context.tools
-      const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
@@ -220,7 +220,7 @@ export const layer = Layer.effect(
         http: {
           headers: SessionModelHeaders.make(session, app),
         },
-        providerOptions: { [providerMetadataKey]: { promptCacheKey } },
+        promptCacheKey: SessionPromptCacheKey.make(session.id),
         system: context.system,
         messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
         tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
