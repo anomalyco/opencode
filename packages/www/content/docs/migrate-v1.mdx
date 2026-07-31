@@ -175,16 +175,16 @@ Rename the singular `snapshot` field to `snapshots`. Its boolean value does not 
 { "snapshots": false }
 ```
 
-### Attachments
+### Media
 
-Rename the singular `attachment` object to `attachments`. Nested image settings keep the same names:
+Rename the singular `attachment` object to `media`. Nested image settings keep the same names:
 
 ```jsonc
 // V1
 { "attachment": { "image": { "auto_resize": true } } }
 
 // V2
-{ "attachments": { "image": { "auto_resize": true } } }
+{ "media": { "image": { "auto_resize": true } } }
 ```
 
 ### MCP servers

@@ -143,23 +143,24 @@ const cacheControl = () => {
 
 const bodyOptions = (input: unknown) => {
   const openrouter = isRecord(input) ? input : {}
-  const { promptCacheKey, ...options } = openrouter
+  const { usage, models, provider, plugins, web_search_options, debug, user, reasoning, promptCacheKey, ...options } =
+    openrouter
   return {
     ...options,
-    ...(openrouter.usage === undefined || openrouter.usage === true
+    ...(usage === undefined || usage === true
       ? { usage: { include: true } }
-      : openrouter.usage === false
+      : usage === false
         ? { usage: { include: false } }
-        : isRecord(openrouter.usage)
-          ? { usage: openrouter.usage }
+        : isRecord(usage)
+          ? { usage }
           : {}),
-    ...(Array.isArray(openrouter.models) ? { models: openrouter.models } : {}),
-    ...(isRecord(openrouter.provider) ? { provider: openrouter.provider } : {}),
-    ...(Array.isArray(openrouter.plugins) ? { plugins: openrouter.plugins } : {}),
-    ...(isRecord(openrouter.web_search_options) ? { web_search_options: openrouter.web_search_options } : {}),
-    ...(isRecord(openrouter.debug) ? { debug: openrouter.debug } : {}),
-    ...(typeof openrouter.user === "string" ? { user: openrouter.user } : {}),
-    ...(isRecord(openrouter.reasoning) ? { reasoning: openrouter.reasoning } : {}),
+    ...(Array.isArray(models) ? { models } : {}),
+    ...(isRecord(provider) ? { provider } : {}),
+    ...(Array.isArray(plugins) ? { plugins } : {}),
+    ...(isRecord(web_search_options) ? { web_search_options } : {}),
+    ...(isRecord(debug) ? { debug } : {}),
+    ...(typeof user === "string" ? { user } : {}),
+    ...(isRecord(reasoning) ? { reasoning } : {}),
     ...(typeof promptCacheKey === "string" ? { prompt_cache_key: promptCacheKey } : {}),
   }
 }
