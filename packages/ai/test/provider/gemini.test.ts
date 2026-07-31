@@ -51,6 +51,11 @@ describe("Gemini route", () => {
           providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } } },
         }),
       )
+      const defaulted = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+        }),
+      )
 
       expect(prepared.body.generationConfig?.thinkingConfig).toEqual({
         thinkingBudget: 0,
@@ -58,6 +63,10 @@ describe("Gemini route", () => {
         thinkingLevel: "high",
       })
       expect(filtered.body.generationConfig?.thinkingConfig).toEqual({ includeThoughts: false })
+      expect(defaulted.body.generationConfig?.thinkingConfig).toEqual({
+        includeThoughts: true,
+        thinkingLevel: "high",
+      })
     }),
   )
 

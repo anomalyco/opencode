@@ -322,7 +322,7 @@ const resolveOptions = (request: LLMRequest) => {
   if (!ProviderShared.isRecord(value)) return {}
   const thinkingConfig = {
     thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
-    includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
+    includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : true,
     thinkingLevel: typeof value.thinkingLevel === "string" ? value.thinkingLevel : undefined,
   }
   return {
