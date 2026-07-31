@@ -389,19 +389,8 @@ export default function LegacyLayout(props: ParentProps) {
       }
 
       const unsub = serverSDK().event.listen((e) => {
-        if (e.details?.type === "worktree.ready") {
+        if (e.details?.type === "worktree.ready" || e.details?.type === "worktree.failed") {
           setBusy(e.name, false)
-          WorktreeState.ready(serverSDK().scope, e.name)
-          return
-        }
-
-        if (e.details?.type === "worktree.failed") {
-          setBusy(e.name, false)
-          WorktreeState.failed(
-            serverSDK().scope,
-            e.name,
-            e.details.properties?.message ?? language.t("common.requestFailed"),
-          )
           return
         }
 

@@ -42,7 +42,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
 import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
@@ -57,6 +57,7 @@ import { ServerConnection, ServerProvider, serverName, useServer } from "@/conte
 import { SettingsProvider, useSettings } from "@/context/settings"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { SDKProvider, useSDK } from "@/context/sdk"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 import { WslServersProvider } from "@/wsl/context"
 import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout"
 import LegacyLayout from "@/pages/layout"
@@ -346,9 +347,31 @@ type ServerScopedShellProps = ParentProps<{
   serverScoped?: JSX.Element
 }>
 
+// Workspace creation blocks the first prompt on these events, so they must be recorded in every layout.
+function WorktreeEvents() {
+  const serverSDK = useServerSDK()
+  const language = useLanguage()
+  const unsub = serverSDK().event.listen((e) => {
+    if (e.details?.type === "worktree.ready") {
+      WorktreeState.ready(serverSDK().scope, e.name)
+      return
+    }
+    if (e.details?.type === "worktree.failed") {
+      WorktreeState.failed(
+        serverSDK().scope,
+        e.name,
+        e.details.properties?.message ?? language.t("common.requestFailed"),
+      )
+    }
+  })
+  onCleanup(unsub)
+  return null
+}
+
 function ServerScopedProviders(props: ServerScopedShellProps) {
   return (
     <LayoutProvider>
+      <WorktreeEvents />
       {props.serverScoped}
       <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
     </LayoutProvider>
