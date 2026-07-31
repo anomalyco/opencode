@@ -6,12 +6,16 @@ import { freshSpecifier, localSource } from "../src/plugin/discovery"
 import { tmpdir } from "./fixture/fixture"
 
 test("localSource resolves file URLs and local paths but not package specs", () => {
-  expect(localSource("file:///tmp/plugin.ts", "/base")?.href).toBe("file:///tmp/plugin.ts")
-  expect(localSource("./plugin.ts", "/base")?.pathname).toBe("/base/plugin.ts")
-  expect(localSource("../plugin.ts", "/base/nested")?.pathname).toBe("/base/plugin.ts")
-  expect(localSource(path.join(path.sep, "abs", "plugin.ts"), "/base")?.pathname).toBe("/abs/plugin.ts")
-  expect(localSource("some-package", "/base")).toBeUndefined()
-  expect(localSource("@scope/some-package", "/base")).toBeUndefined()
+  const base = process.cwd()
+  const absolute = path.resolve(base, "abs", "plugin.ts")
+  expect(localSource("file:///tmp/plugin.ts", base)?.href).toBe("file:///tmp/plugin.ts")
+  expect(localSource("./plugin.ts", base)?.href).toBe(pathToFileURL(path.join(base, "plugin.ts")).href)
+  expect(localSource("../plugin.ts", path.join(base, "nested"))?.href).toBe(
+    pathToFileURL(path.join(base, "plugin.ts")).href,
+  )
+  expect(localSource(absolute, base)?.href).toBe(pathToFileURL(absolute).href)
+  expect(localSource("some-package", base)).toBeUndefined()
+  expect(localSource("@scope/some-package", base)).toBeUndefined()
 })
 
 test("freshSpecifier re-imports a plugin source after it changes", async () => {
