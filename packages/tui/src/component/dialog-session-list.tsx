@@ -49,6 +49,10 @@ export function DialogSessionList() {
         if (!data.location.info()) await data.location.sync()
         const current = data.location.info()
         if (!current) throw new Error("Location unavailable")
+        if (allProjects && !query) {
+          await data.session.recent.sync()
+          return { query, allProjects, sessions: data.session.recent.list(), error: undefined }
+        }
         const response = await client.api.session.list({
           ...(allProjects
             ? {}

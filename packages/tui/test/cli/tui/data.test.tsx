@@ -106,11 +106,18 @@ test("does not preload session summaries into the data context", async () => {
   }
 })
 
-test("proactively syncs project metadata", async () => {
+test("proactively syncs project metadata newest first", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/project") return
     return json([
+      {
+        id: "proj_old",
+        canonical: "/old/project",
+        name: "Old project",
+        time: { created: 1, updated: 1 },
+        sandboxes: [],
+      },
       {
         id: "proj_test",
         canonical: worktree,
@@ -149,7 +156,55 @@ test("proactively syncs project metadata", async () => {
         time: { created: 1, updated: 2 },
         sandboxes: [],
       },
+      {
+        id: "proj_old",
+        canonical: "/old/project",
+        name: "Old project",
+        time: { created: 1, updated: 1 },
+        sandboxes: [],
+      },
     ])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("caches recent sessions until invalidated", async () => {
+  const events = createEventStream()
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/session" || url.searchParams.get("parentID") !== "null") return
+    requests++
+    return json({ data: [sessionInfo("ses_recent", undefined)], cursor: {} })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.recent.sync()
+    await data.session.recent.sync()
+    expect(requests).toBe(1)
+    expect(data.session.recent.list().map((session) => session.id)).toEqual(["ses_recent"])
+
+    data.session.recent.invalidate()
+    await data.session.recent.sync()
+    expect(requests).toBe(2)
   } finally {
     app.renderer.destroy()
   }

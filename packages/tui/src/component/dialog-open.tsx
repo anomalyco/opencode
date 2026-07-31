@@ -1,12 +1,10 @@
 import path from "path"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
-import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
-import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
 import { useTheme, useThemes } from "../context/theme"
@@ -27,7 +25,6 @@ export function DialogOpen() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
-  const client = useClient()
   const location = useLocation()
   const sessionTabs = useSessionTabs()
   const themes = useThemes()
@@ -38,22 +35,25 @@ export function DialogOpen() {
   const shortcuts = Keymap.useShortcuts()
   const [filter, setFilter] = createSignal("")
 
-  data.project.invalidate()
   void data.project.sync().catch(() => {})
 
   // One background fetch fills in recent sessions from other projects; the menu renders
   // immediately from the local store and never blocks on the network.
   const [fetched] = createResource(
     () =>
-      client.api.session
-        .list({ limit: 50, order: "desc", parentID: null })
-        .then((response) => response.data)
-        .catch(() => [] as SessionInfo[]),
+      data.session.recent
+        .sync()
+        .then(() => data.session.recent.list())
+        .catch(() => []),
     { initialValue: [] },
   )
 
-  const openTabs = createMemo(() => new Set(sessionTabs.tabs().map((tab) => tab.sessionID)))
-  const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
+  const openTabs = createMemo(
+    () => new Set(sessionTabs.enabled() ? sessionTabs.tabs().map((tab) => tab.sessionID) : []),
+  )
+  const currentSessionID = createMemo(() =>
+    route.data.type === "session" ? data.session.root(route.data.sessionID) : undefined,
+  )
   const sessions = createMemo(() => {
     const seen = new Set<string>()
     return [...data.session.list(), ...fetched()]
@@ -69,7 +69,7 @@ export function DialogOpen() {
     const tabs = openTabs()
     // With an empty query the menu shows what is not already one keystroke away: open tabs are
     // visible in the strip, so recents exclude them. Typing widens the pool to every session so
-    // matching a tab by name still switches to it.
+    // matching a loaded tab by name still switches to it.
     const recent = filter().trim()
       ? sessions()
       : sessions()
@@ -98,7 +98,7 @@ export function DialogOpen() {
     const projectOptions = data.project
       .list()
       .filter((project) => {
-        if (project.canonical === "/" || project.id === current?.id || seen.has(project.canonical)) return false
+        if (project.canonical === "/" || seen.has(project.canonical)) return false
         seen.add(project.canonical)
         return true
       })
@@ -113,6 +113,10 @@ export function DialogOpen() {
           searchText: footer,
           value: { type: "project", directory: project.canonical } as OpenTarget,
           category: "Projects",
+          gutter:
+            project.canonical === current?.canonical
+              ? () => <text fg={theme.text.formfield.selected}>●</text>
+              : undefined,
         }
       })
 

@@ -115,8 +115,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const [focusedAction, setFocusedAction] = createSignal<number>()
   const actionFocused = createMemo(() => focusedAction() !== undefined)
   let selection: { value: T; category?: string } | undefined
+  let selectionExplicit = false
   let resetSelection = false
   let pendingScroll: (() => void) | undefined
+
+  const preserveSelection = () =>
+    props.preserveSelection || selectionExplicit || (props.current !== undefined && props.focusCurrent !== false)
 
   function scrollAfterLayout(center: boolean, value: T) {
     if (pendingScroll) renderer.off(CliRenderEvents.FRAME, pendingScroll)
@@ -134,7 +138,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       () => props.current,
       (current) => {
         if (props.focusCurrent === false) return
-        if (current) {
+        if (current !== undefined) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
@@ -245,7 +249,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.options,
       () => {
-        if (!props.preserveSelection && props.current === undefined) {
+        if (!preserveSelection()) {
           const count = flat().length
           if (count === 0) return
           const next = reconcileSelection(store.selected, count)
@@ -281,7 +285,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           setStore("selected", index)
           selection = option
           if (!moved) return
-          if ((!props.preserveSelection && props.current === undefined) || store.filter.length > 0) return
+          if (!preserveSelection() || store.filter.length > 0) return
           scrollAfterLayout(false, option.value)
           return
         }
@@ -308,7 +312,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         scrollAfterLayout(true, option.value)
         return
       }
-      if (!current || props.focusCurrent === false) return
+      if (current === undefined || props.focusCurrent === false) return
       const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
       if (currentIndex < 0) return
       moveTo(currentIndex, true)
@@ -319,6 +323,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   function move(direction: number) {
     if (props.locked) return
     if (flat().length === 0) return
+    selectionExplicit = true
     moveTo(moveSelection(store.selected, { count: flat().length, delta: direction, policy: "wrap" }), true)
   }
 
@@ -441,6 +446,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           run() {
             if (props.locked) return
             setStore("input", "keyboard")
+            selectionExplicit = true
             moveTo(0)
           },
         },
@@ -451,6 +457,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           run() {
             if (props.locked) return
             setStore("input", "keyboard")
+            selectionExplicit = true
             moveTo(flat().length - 1)
           },
         },
@@ -497,7 +504,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     },
     moveTo(value) {
       const index = flat().findIndex((option) => isDeepEqual(option.value, value))
-      if (index >= 0) moveTo(index, true)
+      if (index >= 0) {
+        selectionExplicit = true
+        moveTo(index, true)
+      }
     },
   }
   props.ref?.(ref)
@@ -597,6 +607,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             <input
               onInput={(e) => {
                 if (props.locked) return
+                selectionExplicit = false
                 batch(() => {
                   setStore("filter", e)
                   props.onFilter?.(e)
@@ -690,12 +701,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             if (store.input !== "mouse") return
                             const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                             if (index === -1) return
+                            selectionExplicit = true
                             moveTo(index)
                           }}
                           onMouseDown={() => {
                             if (props.locked) return
                             const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                             if (index === -1) return
+                            selectionExplicit = true
                             moveTo(index)
                           }}
                         >
