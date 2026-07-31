@@ -18,16 +18,14 @@ import { StorageProvider } from "../../../src/context/storage"
 import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
-import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
+import { createApi, createEventStream, createFetch, json, type FetchHandler } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 test("selecting an unhydrated session preserves its location", async () => {
-  const state = mkdtempSync(path.join(tmpdir(), "opencode-dialog-open-"))
-  const events = createEventStream()
   const remote = { directory: "/tmp/opencode/remote", workspaceID: "ws_remote" }
-  const calls = createFetch((url) => {
-    if (url.pathname !== "/api/session") return
+  const fixture = await renderOpen((url) => {
+    if (url.pathname !== "/api/session") return undefined
     return json({
       data: [
         {
@@ -42,7 +40,129 @@ test("selecting an unhydrated session preserves its location", async () => {
       ],
       cursor: {},
     })
-  }, events)
+  })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Remote session"))
+    expect(fixture.data.session.get("ses_remote")).toBeUndefined()
+
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_remote" })
+    expect(fixture.location.ref).toEqual(remote)
+  } finally {
+    fixture.dispose()
+  }
+})
+
+test("shows the current project and opens its root", async () => {
+  const root = "/tmp/opencode/project"
+  const subfolder = `${root}/packages/tui`
+  const fixture = await renderOpen(
+    (url) => {
+      if (url.pathname === "/api/project")
+        return json([
+          {
+            id: "proj_current",
+            canonical: root,
+            name: "OpenCode",
+            time: { created: 1, updated: 2 },
+            sandboxes: [],
+          },
+        ])
+      if (url.pathname === "/api/location")
+        return json({
+          directory: subfolder,
+          project: { id: "proj_current", directory: root, canonical: root },
+        })
+      return undefined
+    },
+    async ({ data, location }) => {
+      await data.location.sync({ directory: subfolder })
+      location.set({ directory: subfolder })
+    },
+  )
+
+  try {
+    const frame = await fixture.app.waitForFrame((value) => value.includes("OpenCode") && value.includes("●"))
+    expect(frame).toContain(root)
+
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "home")
+
+    expect(fixture.route.data).toEqual({ type: "home", location: { directory: root } })
+    expect(fixture.location.ref).toEqual({ directory: root })
+  } finally {
+    fixture.dispose()
+  }
+})
+
+test("preserves a moved project when sessions arrive", async () => {
+  let resolveSessions!: (response: Response) => void
+  const sessions = new Promise<Response>((resolve) => (resolveSessions = resolve))
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return sessions
+    if (url.pathname === "/api/project")
+      return json([
+        {
+          id: "proj_first",
+          canonical: "/tmp/opencode/first",
+          name: "First project",
+          time: { created: 1, updated: 2 },
+          sandboxes: [],
+        },
+        {
+          id: "proj_second",
+          canonical: "/tmp/opencode/second",
+          name: "Second project",
+          time: { created: 1, updated: 1 },
+          sandboxes: [],
+        },
+      ])
+    return undefined
+  })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Second project"))
+    fixture.app.mockInput.pressArrow("down")
+
+    resolveSessions(
+      json({
+        data: [
+          {
+            id: "ses_recent",
+            projectID: "proj_first",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 2, updated: 3 },
+            title: "Recent session",
+            location: { directory: "/tmp/opencode/first" },
+          },
+        ],
+        cursor: {},
+      }),
+    )
+    await fixture.app.waitForFrame((frame) => frame.includes("Recent session"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "home")
+
+    expect(fixture.route.data).toEqual({ type: "home", location: { directory: "/tmp/opencode/second" } })
+  } finally {
+    fixture.dispose()
+  }
+})
+
+async function renderOpen(
+  handler: FetchHandler,
+  beforeOpen?: (contexts: {
+    data: ReturnType<typeof useData>
+    location: ReturnType<typeof useLocation>
+  }) => void | Promise<void>,
+) {
+  const state = mkdtempSync(path.join(tmpdir(), "opencode-dialog-open-"))
+  const events = createEventStream()
+  const calls = createFetch(handler, events)
   let route!: ReturnType<typeof useRoute>
   let location!: ReturnType<typeof useLocation>
   let data!: ReturnType<typeof useData>
@@ -52,7 +172,9 @@ test("selecting an unhydrated session preserves its location", async () => {
     route = useRoute()
     location = useLocation()
     data = useData()
-    onMount(() => dialog.replace(() => <DialogOpen />))
+    onMount(
+      () => void Promise.resolve(beforeOpen?.({ data, location })).then(() => dialog.replace(() => <DialogOpen />)),
+    )
     return null
   }
 
@@ -90,17 +212,20 @@ test("selecting an unhydrated session preserves its location", async () => {
   )
   app.renderer.start()
 
-  try {
-    await app.waitForFrame((frame) => frame.includes("Remote session"))
-    expect(data.session.get("ses_remote")).toBeUndefined()
-
-    app.mockInput.pressEnter()
-    await app.waitFor(() => route.data.type === "session")
-
-    expect(route.data).toEqual({ type: "session", sessionID: "ses_remote" })
-    expect(location.ref).toEqual(remote)
-  } finally {
-    app.renderer.destroy()
-    rmSync(state, { recursive: true, force: true })
+  return {
+    app,
+    get route() {
+      return route
+    },
+    get location() {
+      return location
+    },
+    get data() {
+      return data
+    },
+    dispose() {
+      app.renderer.destroy()
+      rmSync(state, { recursive: true, force: true })
+    },
   }
-})
+}

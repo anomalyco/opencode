@@ -82,7 +82,12 @@ async function renderSelect(
   return app
 }
 
-async function mountSelect(root: string, initial: DialogSelectOption<string>[], current?: string) {
+async function mountSelect(
+  root: string,
+  initial: DialogSelectOption<string>[],
+  current?: string,
+  focusCurrent?: boolean,
+) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
   const config = createTuiResolvedConfig()
@@ -118,6 +123,7 @@ async function mountSelect(root: string, initial: DialogSelectOption<string>[], 
             title="Mutable options"
             options={options()}
             current={current}
+            focusCurrent={focusCurrent}
             onMove={(option) => moved.push(option.value)}
             onSelect={(option) => selected.push(option.value)}
           />
@@ -348,6 +354,27 @@ test("keeps the current option selected when options reorder", async () => {
     await select.app.waitFor(() => select.selected.length === 1)
 
     expect(select.selected).toEqual(["current"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("keeps the first row selected when current is only a marker", async () => {
+  await using tmp = await tmpdir()
+  const project = { title: "project", value: "project" }
+  const select = await mountSelect(tmp.path, [project], "current", false)
+
+  try {
+    select.replaceOptions([
+      { title: "recent session", value: "recent" },
+      project,
+      { title: "current session", value: "current" },
+    ])
+    await select.app.waitForFrame((frame) => frame.includes("recent session"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["recent"])
   } finally {
     select.app.renderer.destroy()
   }

@@ -106,11 +106,18 @@ test("does not preload session summaries into the data context", async () => {
   }
 })
 
-test("proactively syncs project metadata", async () => {
+test("proactively syncs project metadata newest first", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/project") return
     return json([
+      {
+        id: "proj_old",
+        canonical: "/old/project",
+        name: "Old project",
+        time: { created: 1, updated: 1 },
+        sandboxes: [],
+      },
       {
         id: "proj_test",
         canonical: worktree,
@@ -147,6 +154,13 @@ test("proactively syncs project metadata", async () => {
         canonical: worktree,
         name: "OpenCode",
         time: { created: 1, updated: 2 },
+        sandboxes: [],
+      },
+      {
+        id: "proj_old",
+        canonical: "/old/project",
+        name: "Old project",
+        time: { created: 1, updated: 1 },
         sandboxes: [],
       },
     ])

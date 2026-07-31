@@ -37,8 +37,8 @@ export function DialogOpen() {
   const dimensions = useTerminalDimensions()
   const shortcuts = Keymap.useShortcuts()
   const [filter, setFilter] = createSignal("")
+  const [selectionMoved, setSelectionMoved] = createSignal(false)
 
-  data.project.invalidate()
   void data.project.sync().catch(() => {})
 
   // One background fetch fills in recent sessions from other projects; the menu renders
@@ -52,8 +52,12 @@ export function DialogOpen() {
     { initialValue: [] },
   )
 
-  const openTabs = createMemo(() => new Set(sessionTabs.tabs().map((tab) => tab.sessionID)))
-  const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
+  const openTabs = createMemo(
+    () => new Set(sessionTabs.enabled() ? sessionTabs.tabs().map((tab) => tab.sessionID) : []),
+  )
+  const currentSessionID = createMemo(() =>
+    route.data.type === "session" ? data.session.root(route.data.sessionID) : undefined,
+  )
   const sessions = createMemo(() => {
     const seen = new Set<string>()
     return [...data.session.list(), ...fetched()]
@@ -69,7 +73,7 @@ export function DialogOpen() {
     const tabs = openTabs()
     // With an empty query the menu shows what is not already one keystroke away: open tabs are
     // visible in the strip, so recents exclude them. Typing widens the pool to every session so
-    // matching a tab by name still switches to it.
+    // matching a loaded tab by name still switches to it.
     const recent = filter().trim()
       ? sessions()
       : sessions()
@@ -78,7 +82,9 @@ export function DialogOpen() {
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
       const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
-      const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
+      const running =
+        data.session.status(session.id) === "running" ||
+        data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: withTimestampedFallback(session),
         value: { type: "session", sessionID: session.id } as OpenTarget,
@@ -98,7 +104,7 @@ export function DialogOpen() {
     const projectOptions = data.project
       .list()
       .filter((project) => {
-        if (project.canonical === "/" || project.id === current?.id || seen.has(project.canonical)) return false
+        if (project.canonical === "/" || seen.has(project.canonical)) return false
         seen.add(project.canonical)
         return true
       })
@@ -113,6 +119,10 @@ export function DialogOpen() {
           searchText: footer,
           value: { type: "project", directory: project.canonical } as OpenTarget,
           category: "Projects",
+          gutter:
+            project.canonical === current?.canonical
+              ? () => <text fg={theme.text.formfield.selected}>●</text>
+              : undefined,
         }
       })
 
@@ -128,6 +138,8 @@ export function DialogOpen() {
       options={options()}
       current={currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined}
       focusCurrent={false}
+      preserveSelection={selectionMoved()}
+      onMove={() => setSelectionMoved(true)}
       onFilter={setFilter}
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>
