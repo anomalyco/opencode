@@ -114,9 +114,18 @@ export type CommandRegistration = {
   options: Accessor<CommandOption[]>
 }
 
-export function upsertCommandRegistration(registrations: CommandRegistration[], entry: CommandRegistration) {
-  if (entry.key === undefined) return [entry, ...registrations]
-  return [entry, ...registrations.filter((x) => x.key !== entry.key)]
+export function addCommandRegistration(registrations: CommandRegistration[], entry: CommandRegistration) {
+  return [entry, ...registrations]
+}
+
+export function activeCommandRegistrations(registrations: CommandRegistration[]) {
+  const keys = new Set<string>()
+  return registrations.filter((entry) => {
+    if (entry.key === undefined) return true
+    if (keys.has(entry.key)) return false
+    keys.add(entry.key)
+    return true
+  })
 }
 
 export function parseKeybind(config: string): Keybind[] {
@@ -281,7 +290,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const seen = new Set<string>()
       const all: CommandOption[] = []
 
-      for (const reg of store.registrations) {
+      for (const reg of activeCommandRegistrations(store.registrations)) {
         for (const opt of reg.options()) {
           if (seen.has(opt.id)) {
             if (import.meta.env.DEV && !warnedDuplicates.has(opt.id)) {
@@ -425,7 +434,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         key: id,
         options,
       }
-      setStore("registrations", (arr) => upsertCommandRegistration(arr, entry))
+      setStore("registrations", (arr) => addCommandRegistration(arr, entry))
       onCleanup(() => {
         setStore("registrations", (arr) => arr.filter((x) => x !== entry))
       })
