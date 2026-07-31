@@ -490,6 +490,19 @@
         "vite": "catalog:",
       },
     },
+    "packages/feishu": {
+      "name": "@opencode-ai/feishu",
+      "version": "1.18.4",
+      "dependencies": {
+        "mysql2": "3.14.4",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/function": {
       "name": "@opencode-ai/function",
       "version": "1.18.4",
@@ -1970,6 +1983,8 @@
     "@opencode-ai/effect-sqlite-node": ["@opencode-ai/effect-sqlite-node@workspace:packages/effect-sqlite-node"],
 
     "@opencode-ai/enterprise": ["@opencode-ai/enterprise@workspace:packages/enterprise"],
+
+    "@opencode-ai/feishu": ["@opencode-ai/feishu@workspace:packages/feishu"],
 
     "@opencode-ai/function": ["@opencode-ai/function@workspace:packages/function"],
 

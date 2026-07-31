@@ -1,0 +1,21 @@
+{
+  "name": "@opencode-ai/feishu",
+  "version": "1.18.4",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "bun test",
+    "test:mysql-contract": "bun test test/mysql-inventory.contract.test.ts",
+    "typecheck": "tsgo --noEmit",
+    "lint": "oxlint src test"
+  },
+  "dependencies": {
+    "mysql2": "3.14.4"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}
