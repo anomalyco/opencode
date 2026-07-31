@@ -19,6 +19,14 @@ describe("inventory intent", () => {
     expect(parseInventoryIntent(text)).toEqual({ kind: "lookup", productTerm })
   })
 
+  test.each([
+    ["6001ZZ", "6001ZZ"],
+    ["6201", "6201"],
+    ["SP0000005943", "SP0000005943"],
+  ])("routes one standalone product token without requiring a query keyword: %s", (text, productTerm) => {
+    expect(parseInventoryIntent(text)).toEqual({ kind: "lookup", productTerm })
+  })
+
   test.each(["查一下库存", "库存多少", "货架在哪里", "商品位置"])("clarifies a clear query with no term: %s", (text) => {
     expect(parseInventoryIntent(text)).toEqual({ kind: "clarify" })
   })
@@ -26,7 +34,6 @@ describe("inventory intent", () => {
   test.each([
     "我们聊聊库存管理理念",
     "库存管理有什么原则",
-    "SP0000005943",
     "6001ZZ和6201ZZ库存多少",
   ])("leaves ambiguous or non-query text to restricted chat: %s", (text) => {
     expect(parseInventoryIntent(text)).toEqual({ kind: "chat" })

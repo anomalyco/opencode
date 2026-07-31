@@ -11,8 +11,12 @@ export type InventoryIntent =
 
 export function parseInventoryIntent(text: string): InventoryIntent {
   const normalized = text.trim()
-  if (!hasInventoryKeyword(normalized)) return { kind: "chat" }
   const compact = compactTerms(normalized)
+  if (!hasInventoryKeyword(normalized)) {
+    return compact.length === 1 && compact[0] === normalized
+      ? { kind: "lookup", productTerm: compact[0] }
+      : { kind: "chat" }
+  }
   if (isUnsafe(normalized)) {
     return compact.length === 1 ? { kind: "blocked", productTerm: compact[0] } : { kind: "blocked" }
   }
