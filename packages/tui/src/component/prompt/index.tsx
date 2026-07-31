@@ -1292,13 +1292,20 @@ export function Prompt(props: PromptProps) {
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
-    if (store.mode === "shell") {
-      if (!shell().length) return undefined
-      const example = shell()[store.placeholder % shell().length]
-      return `Run a command... "${example}"`
-    }
-    if (!list().length) return undefined
-    return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    const value = (() => {
+      if (store.mode === "shell") {
+        if (!shell().length) return undefined
+        return `Run a command... "${shell()[store.placeholder % shell().length]}"`
+      }
+      if (!list().length) return undefined
+      return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    })()
+    if (!value) return undefined
+    const width =
+      dimensions().width < 44
+        ? dimensions().width - 5
+        : Math.min(75, dimensions().width - 4) - 5
+    return Locale.truncateWidth(value, Math.max(1, width))
   })
   const locationLabel = createMemo(() => {
     if (!props.sessionID) {
