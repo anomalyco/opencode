@@ -2,8 +2,8 @@ import path from "path"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
-import { useDialog } from "../ui/dialog"
-import { DialogSelect } from "../ui/dialog-select"
+import { dialogWidth, useDialog } from "../ui/dialog"
+import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -105,8 +105,8 @@ export function DialogOpen() {
       .map((project) => {
         const title = project.name ?? path.basename(project.canonical)
         const footer = abbreviateHome(project.canonical, paths.home)
-        // Dialog padding, the gutter column, title padding, and the separating space use nine columns.
-        const width = Math.min(60, dimensions().width - 2) - 9 - stringWidth(title)
+        const width =
+          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title)
         return {
           title,
           footer: truncateFilePath(footer, width),
