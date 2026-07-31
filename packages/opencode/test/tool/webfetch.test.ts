@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, beforeAll, describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Effect, Layer } from "effect"
@@ -41,6 +41,30 @@ const exec = Effect.fn("WebFetchToolTest.exec")(function* (args: Tool.InferParam
   const info = yield* WebFetchTool
   const tool = yield* info.init()
   return yield* tool.execute(args, ctx)
+})
+
+const withoutAllowPrivate = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      delete process.env.AIXPLAIN_CODE_WEBFETCH_ALLOW_PRIVATE
+    }),
+    () => self,
+    () =>
+      Effect.sync(() => {
+        process.env.AIXPLAIN_CODE_WEBFETCH_ALLOW_PRIVATE = "1"
+      }),
+  )
+
+const ORIGINAL_ALLOW_PRIVATE = process.env.AIXPLAIN_CODE_WEBFETCH_ALLOW_PRIVATE
+
+beforeAll(() => {
+  // The localhost fixtures below spin up real servers; the SSRF guard would block them by default
+  process.env.AIXPLAIN_CODE_WEBFETCH_ALLOW_PRIVATE = "1"
+})
+
+afterAll(() => {
+  if (ORIGINAL_ALLOW_PRIVATE === undefined) delete process.env.AIXPLAIN_CODE_WEBFETCH_ALLOW_PRIVATE
+  else process.env.AIXPLAIN_CODE_WEBFETCH_ALLOW_PRIVATE = ORIGINAL_ALLOW_PRIVATE
 })
 
 describe("tool.webfetch", () => {
@@ -94,6 +118,38 @@ describe("tool.webfetch", () => {
           const result = yield* exec({ url: new URL("/file.txt", url).toString(), format: "text" })
           expect(result.output).toBe("hello from webfetch")
           expect(result.attachments).toBeUndefined()
+        }),
+    ),
+  )
+
+  it.instance("blocks loopback targets even when a server is listening", () =>
+    withoutAllowPrivate(
+      withFetch(
+        () => new Response("secret", { status: 200, headers: { "content-type": "text/plain" } }),
+        (url) =>
+          Effect.gen(function* () {
+            // url is http://localhost:<port>/ of a LIVE server — the guard must fire before any connection
+            const exit = yield* exec({ url: new URL("/file.txt", url).toString(), format: "text" }).pipe(Effect.exit)
+            expect(exit._tag).toBe("Failure")
+            if (exit._tag === "Failure") {
+              expect(String(exit.cause)).toContain("private/internal")
+            }
+          }),
+      ),
+    ),
+  )
+
+  it.instance("follows redirects across allowed servers", () =>
+    withFetch(
+      (req) => {
+        const url = new URL(req.url)
+        if (url.pathname === "/start") return Response.redirect(new URL("/final", url).toString(), 302)
+        return new Response("reached final", { status: 200, headers: { "content-type": "text/plain" } })
+      },
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/start", url).toString(), format: "text" })
+          expect(result.output).toBe("reached final")
         }),
     ),
   )

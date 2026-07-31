@@ -1,14 +1,17 @@
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import * as Tool from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
+import { assertPublicUrl } from "@/util/url-safety"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
+const MAX_REDIRECTS = 5
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
 export const Parameters = Schema.Struct({
   url: Schema.String.annotate({ description: "The URL to fetch content from" }),
@@ -25,7 +28,6 @@ export const WebFetchTool = Tool.define(
   "webfetch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const httpOk = HttpClient.filterStatusOk(http)
 
     return {
       description: DESCRIPTION,
@@ -35,6 +37,9 @@ export const WebFetchTool = Tool.define(
           if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
             throw new Error("URL must start with http:// or https://")
           }
+
+          // SSRF guard: reject loopback/private/internal targets before asking or connecting
+          yield* Effect.promise(() => assertPublicUrl(params.url))
 
           yield* ctx.ask({
             permission: "webfetch",
@@ -73,24 +78,38 @@ export const WebFetchTool = Tool.define(
             "Accept-Language": "en-US,en;q=0.9",
           }
 
-          const request = HttpClientRequest.get(params.url).pipe(HttpClientRequest.setHeaders(headers))
+          const request = (url: string, honestUa = false) =>
+            HttpClientRequest.get(url).pipe(
+              HttpClientRequest.setHeaders(honestUa ? { ...headers, "User-Agent": "aixplain-code" } : headers),
+            )
 
-          // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
-          const response = yield* httpOk.execute(request).pipe(
-            Effect.catchIf(
-              (err) =>
-                err.reason._tag === "StatusCodeError" &&
-                err.reason.response.status === 403 &&
-                err.reason.response.headers["cf-mitigated"] === "challenge",
-              () =>
-                httpOk.execute(
-                  HttpClientRequest.get(params.url).pipe(
-                    HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" }),
-                  ),
-                ),
-            ),
-            Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error("Request timed out")) }),
-          )
+// Follow redirects manually so every hop is re-validated against the SSRF guard;
+          // fetch's implicit redirect following would bypass the URL check entirely.
+          const send = (url: string, honestUa = false) =>
+            http.execute(request(url, honestUa)).pipe(
+              Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+            )
+
+          const response = yield* Effect.gen(function* () {
+            let current = params.url
+            let res = yield* send(current)
+            for (let hops = 0; REDIRECT_STATUSES.has(res.status); hops++) {
+              const location = res.headers["location"]
+              if (!location) break
+              if (hops >= MAX_REDIRECTS) throw new Error(`Too many redirects (max ${MAX_REDIRECTS})`)
+              current = new URL(location, current).toString()
+              yield* Effect.promise(() => assertPublicUrl(current))
+              res = yield* send(current)
+            }
+            // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
+            if (res.status === 403 && res.headers["cf-mitigated"] === "challenge") {
+              res = yield* send(current, true)
+            }
+            if (res.status < 200 || res.status >= 300) {
+              throw new Error(`Request failed with status code ${res.status}`)
+            }
+            return res
+          }).pipe(Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error("Request timed out")) }))
 
           // Check content length
           const contentLength = response.headers["content-length"]

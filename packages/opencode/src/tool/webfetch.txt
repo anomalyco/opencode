@@ -8,6 +8,7 @@ Usage notes:
   - IMPORTANT: if another tool is present that offers better web fetching capabilities, is more targeted to the task, or has fewer restrictions, prefer using that tool instead of this one.
   - The URL must be a fully-formed valid URL
   - HTTP URLs will be automatically upgraded to HTTPS
+  - URLs targeting localhost, loopback, private, or link-internal addresses (including cloud metadata endpoints) are blocked for security; do not attempt to use this tool to reach internal services
   - Format options: "markdown" (default), "text", or "html"
   - This tool is read-only and does not modify any files
   - Results may be summarized if the content is very large
