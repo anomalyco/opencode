@@ -803,7 +803,7 @@ describe("Config", () => {
                   custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
                 },
                 lsp: { typescript: { disabled: true }, custom: { command: ["custom-lsp"], extensions: [".foo"] } },
-                attachments: {
+                media: {
                   image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
                 },
                 tool_output: { max_lines: 1000, max_bytes: 32768 },
@@ -890,7 +890,7 @@ describe("Config", () => {
               typescript: { disabled: true },
               custom: { command: ["custom-lsp"], extensions: [".foo"] },
             })
-            expect(documents[0]?.info.attachments).toEqual({
+            expect(documents[0]?.info.media).toEqual({
               image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
             })
             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
@@ -1097,7 +1097,7 @@ describe("Config", () => {
             expect(documents[0]?.info.references).toEqual({
               docs: { path: "../docs", description: "Use for product documentation", hidden: true },
             })
-            expect(documents[0]?.info.attachments).toEqual({ image: { auto_resize: false, max_width: 1200 } })
+            expect(documents[0]?.info.media).toEqual({ image: { auto_resize: false, max_width: 1200 } })
             expect(documents[0]?.info.providers?.custom).toMatchObject({
               settings: { apiKey: "secret" },
               models: {

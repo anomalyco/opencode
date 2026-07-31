@@ -192,6 +192,43 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("filters invalid known OpenRouter options while preserving extensions", () =>
+    Effect.gen(function* () {
+      const invalid: Record<string, unknown> = {
+        usage: "yes",
+        models: "anthropic/claude-sonnet-4.6",
+        provider: [],
+        plugins: {},
+        web_search_options: [],
+        debug: [],
+        user: 123,
+        reasoning: [],
+        promptCacheKey: 123,
+        future_option: { enabled: true },
+      }
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({
+            apiKey: "test-key",
+            providerOptions: { openrouter: invalid },
+          }).model("openai/gpt-4o-mini"),
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({ future_option: { enabled: true } })
+      expect(prepared.body).not.toHaveProperty("usage")
+      expect(prepared.body).not.toHaveProperty("models")
+      expect(prepared.body).not.toHaveProperty("provider")
+      expect(prepared.body).not.toHaveProperty("plugins")
+      expect(prepared.body).not.toHaveProperty("web_search_options")
+      expect(prepared.body).not.toHaveProperty("debug")
+      expect(prepared.body).not.toHaveProperty("user")
+      expect(prepared.body).not.toHaveProperty("reasoning")
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
+    }),
+  )
+
   it.effect("preserves the upstream provider finish reason", () =>
     Effect.gen(function* () {
       const model = OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6")

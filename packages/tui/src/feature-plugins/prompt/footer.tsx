@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { contextUsage, formatContextUsage } from "../../util/session"
+import { useTerminalDimensions } from "@opentui/solid"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -8,6 +9,7 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 export function PromptFooter(props: { context: Plugin.Context; sessionID?: string; mode: "normal" | "shell" }) {
+  const dimensions = useTerminalDimensions()
   const activeSubagents = createMemo(() => {
     if (!props.sessionID) return 0
     return props.context.data.session
@@ -60,19 +62,24 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
               <Show when={status().length > 0}>{status().join(" · ")}</Show>
             </text>
           </Match>
-          <Match when={true}>
+          <Match when={dimensions().width >= 44}>
             <text fg={props.context.theme.text.default} flexShrink={0}>
               {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.subdued }}>agents</span>
             </text>
           </Match>
         </Switch>
-        <text fg={props.context.theme.text.default} flexShrink={0}>
-          {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
-        </text>
+        <Show when={dimensions().width >= 44}>
+          <text fg={props.context.theme.text.default} flexShrink={0}>
+            {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
+          </text>
+        </Show>
       </Match>
       <Match when={props.mode === "shell"}>
         <text fg={props.context.theme.text.default} flexShrink={0}>
-          esc <span style={{ fg: props.context.theme.text.subdued }}>exit shell mode</span>
+          esc{" "}
+          <span style={{ fg: props.context.theme.text.subdued }}>
+            {dimensions().width < 44 ? "shell" : "exit shell mode"}
+          </span>
         </text>
       </Match>
     </Switch>

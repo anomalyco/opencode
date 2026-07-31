@@ -2,7 +2,7 @@ import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Exit, Layer, PlatformError, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
+import { ConfigMedia } from "@opencode-ai/core/config/media"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -432,8 +432,8 @@ describe("ReadTool", () => {
         new Config.Document({
           type: "document",
           info: new Config.Info({
-            attachments: new ConfigAttachments.Info({
-              image: new ConfigAttachments.Image({ auto_resize: false, max_width: 4 }),
+            media: new ConfigMedia.Info({
+              image: new ConfigMedia.Image({ auto_resize: false, max_width: 4 }),
             }),
           }),
         }),
@@ -475,7 +475,7 @@ describe("ReadTool", () => {
         new Config.Document({
           type: "document",
           info: new Config.Info({
-            attachments: new ConfigAttachments.Info({ image: new ConfigAttachments.Image({ max_width: 4 }) }),
+            media: new ConfigMedia.Info({ image: new ConfigMedia.Image({ max_width: 4 }) }),
           }),
         }),
       ])
@@ -514,8 +514,8 @@ describe("ReadTool", () => {
         new Config.Document({
           type: "document",
           info: new Config.Info({
-            attachments: new ConfigAttachments.Info({
-              image: new ConfigAttachments.Image({ max_base64_bytes: 1 }),
+            media: new ConfigMedia.Info({
+              image: new ConfigMedia.Image({ max_base64_bytes: 1 }),
             }),
           }),
         }),

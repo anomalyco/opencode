@@ -16,7 +16,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Location } from "./location"
 import { AbsolutePath } from "./schema"
 import { ConfigAgent } from "./config/agent"
-import { ConfigAttachments } from "./config/attachments"
+import { ConfigMedia } from "./config/media"
 import { ConfigCompaction } from "./config/compaction"
 import { ConfigCommand } from "./config/command"
 import { ConfigExperimental } from "./config/experimental"
@@ -85,8 +85,8 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   lsp: ConfigLSP.Info.pipe(Schema.optional).annotate({
     description: "Enable built-in language servers or configure server overrides",
   }),
-  attachments: ConfigAttachments.Info.pipe(Schema.optional).annotate({
-    description: "Attachment processing configuration",
+  media: ConfigMedia.Info.pipe(Schema.optional).annotate({
+    description: "Media processing configuration",
   }),
   tool_output: ConfigToolOutput.Info.pipe(Schema.optional).annotate({
     description: "Tool output truncation thresholds",
