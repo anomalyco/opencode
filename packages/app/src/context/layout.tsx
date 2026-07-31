@@ -29,6 +29,8 @@ const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 const DEFAULT_REVIEW_PANEL_OPENED = false
+const DEFAULT_BROWSER_PREVIEW_WIDTH = 480
+const DEFAULT_BROWSER_PREVIEW_URL = "http://localhost:3000"
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -291,6 +293,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         session: {
           width: DEFAULT_SESSION_WIDTH,
+        },
+        browserPreview: {
+          opened: false,
+          width: DEFAULT_BROWSER_PREVIEW_WIDTH,
+          url: DEFAULT_BROWSER_PREVIEW_URL,
         },
         mobileSidebar: {
           opened: false,
@@ -722,6 +729,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("session", "width", width)
+        },
+      },
+      browserPreview: {
+        opened: createMemo(() => store.browserPreview?.opened ?? false),
+        width: createMemo(() => store.browserPreview?.width ?? DEFAULT_BROWSER_PREVIEW_WIDTH),
+        url: createMemo(() => store.browserPreview?.url ?? DEFAULT_BROWSER_PREVIEW_URL),
+        open() {
+          setStore("browserPreview", "opened", true)
+        },
+        close() {
+          setStore("browserPreview", "opened", false)
+          void platform.browserPreview?.hide()
+        },
+        toggle() {
+          if (store.browserPreview?.opened) {
+            setStore("browserPreview", "opened", false)
+            void platform.browserPreview?.hide()
+            return
+          }
+          setStore("browserPreview", "opened", true)
+        },
+        resize(width: number) {
+          setStore("browserPreview", "width", width)
+        },
+        setUrl(url: string) {
+          setStore("browserPreview", "url", url)
         },
       },
       mobileSidebar: {

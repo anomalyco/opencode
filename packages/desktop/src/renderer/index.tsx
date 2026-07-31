@@ -306,6 +306,14 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
         type: "image/png",
       })
     },
+
+    browserPreview: {
+      show: (url) => window.api.browserPreview.show(url),
+      hide: () => window.api.browserPreview.hide(),
+      setBounds: (bounds) => window.api.browserPreview.setBounds(bounds),
+      command: (command) => window.api.browserPreview.command(command),
+      subscribe: (callback) => window.api.browserPreview.onState(callback),
+    },
   }
 }
 

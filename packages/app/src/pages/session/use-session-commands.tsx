@@ -19,6 +19,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { useTabs } from "@/context/tabs"
+import { usePlatform } from "@/context/platform"
 import { requireServerKey } from "@/utils/session-route"
 import { createSessionOwnership } from "./session-ownership"
 
@@ -51,6 +52,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sessionTabs = useTabs()
   const layout = useLayout()
   const navigate = useNavigate()
+  const platform = usePlatform()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
@@ -486,6 +488,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   ]
 
   const viewCmds = () => [
+    ...(platform.browserPreview
+      ? [
+          viewCommand({
+            id: "browserPreview.toggle",
+            title: language.t("command.browserPreview.toggle"),
+            keybind: "mod+shift+b",
+            onSelect: () => layout.browserPreview.toggle(),
+          }),
+        ]
+      : []),
     viewCommand({
       id: "terminal.toggle",
       title: language.t("command.terminal.toggle"),

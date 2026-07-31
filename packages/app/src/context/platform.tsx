@@ -5,6 +5,7 @@ import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
+import type { BrowserPreviewPlatform } from "../browser-preview"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -114,6 +115,9 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Isolated localhost browser preview (Electron desktop only) */
+  browserPreview?: BrowserPreviewPlatform
 }
 
 export type Platform = PlatformBase &

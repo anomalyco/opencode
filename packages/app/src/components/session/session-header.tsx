@@ -465,6 +465,31 @@ export function SessionHeader() {
                     </TooltipKeybind>
 
                     <div class="hidden md:flex items-center gap-1 shrink-0">
+                      <Show when={platform.browserPreview}>
+                        <TooltipKeybind
+                          title={language.t("command.browserPreview.toggle")}
+                          keybind={command.keybind("browserPreview.toggle")}
+                        >
+                          <Button
+                            variant="ghost"
+                            class="titlebar-icon w-8 h-6 p-0 box-border"
+                            onClick={() => layout.browserPreview.toggle()}
+                            aria-label={language.t("command.browserPreview.toggle")}
+                            aria-expanded={layout.browserPreview.opened()}
+                            aria-controls="browser-preview-panel"
+                          >
+                            <Icon
+                              size="small"
+                              name={layout.browserPreview.opened() ? "layout-right-full" : "layout-right"}
+                              classList={{
+                                "text-icon-strong": layout.browserPreview.opened(),
+                                "text-icon-weak": !layout.browserPreview.opened(),
+                              }}
+                            />
+                          </Button>
+                        </TooltipKeybind>
+                      </Show>
+
                       <TooltipKeybind
                         title={language.t("command.review.toggle")}
                         keybind={command.keybind("review.toggle")}

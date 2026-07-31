@@ -117,6 +117,17 @@ const api: ElectronAPI = {
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
+  browserPreview: {
+    show: (url) => ipcRenderer.invoke("browser-preview-show", url),
+    hide: () => ipcRenderer.invoke("browser-preview-hide"),
+    setBounds: (bounds) => ipcRenderer.invoke("browser-preview-set-bounds", bounds),
+    command: (command) => ipcRenderer.invoke("browser-preview-command", command),
+    onState: (cb) => {
+      const handler = (_: unknown, state: Parameters<typeof cb>[0]) => cb(state)
+      ipcRenderer.on("browser-preview-state", handler)
+      return () => ipcRenderer.removeListener("browser-preview-state", handler)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld("api", api)

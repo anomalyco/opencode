@@ -1,6 +1,12 @@
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
+import type {
+  BrowserPreviewBounds,
+  BrowserPreviewCommand,
+  BrowserPreviewResult,
+  BrowserPreviewState,
+} from "@opencode-ai/app"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
@@ -100,4 +106,11 @@ export type ElectronAPI = {
   setBackgroundColor: (color: string) => Promise<void>
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
+  browserPreview: {
+    show: (url?: string) => Promise<BrowserPreviewState>
+    hide: () => Promise<void>
+    setBounds: (bounds: BrowserPreviewBounds) => Promise<void>
+    command: (command: BrowserPreviewCommand) => Promise<BrowserPreviewResult>
+    onState: (cb: (state: BrowserPreviewState) => void) => () => void
+  }
 }

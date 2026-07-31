@@ -12,6 +12,7 @@ import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore } from "./store"
 import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
+import { destroyBrowserPreview } from "./browser-preview"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -219,10 +220,16 @@ function registerWindow(win: BrowserWindow, id: string) {
   win.on("focus", () => {
     lastFocusedWindowID = id
   })
+  win.once("close", () => {
+    void destroyBrowserPreview(win)
+  })
   win.on("closed", () => {
     windowsByID.delete(id)
     if (lastFocusedWindowID === id) lastFocusedWindowID = windowsByID.keys().next().value
     if (!appQuitting) removeWindowID(id)
+  })
+  win.webContents.on("did-start-navigation", (_event, _url, inPlace, isMainFrame) => {
+    if (isMainFrame && !inPlace) void destroyBrowserPreview(win)
   })
 }
 
@@ -440,7 +447,7 @@ function allowRendererPermissions(win: BrowserWindow) {
   })
 }
 
-function isTrustedRendererUrl(value?: string) {
+export function isTrustedRendererUrl(value?: string) {
   return isRendererUrl(value)
 }
 

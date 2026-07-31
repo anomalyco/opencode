@@ -76,6 +76,7 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { BrowserPreviewPanel } from "@/pages/session/browser-preview-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -435,10 +436,20 @@ export default function Page() {
       }),
   )
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const desktopBrowserPreviewOpen = createMemo(
+    () => isDesktop() && !!platform.browserPreview && layout.browserPreview.opened(),
+  )
   const sessionPanelWidth = createMemo(() => {
-    if (!desktopSidePanelOpen()) return "100%"
-    if (desktopReviewOpen()) return `${layout.session.width()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
+    const previewWidth = desktopBrowserPreviewOpen() ? layout.browserPreview.width() : 0
+    const previewGaps = previewWidth && settings.general.newLayoutDesigns() ? (params.id ? 16 : 8) : 0
+    if (!desktopSidePanelOpen()) {
+      return previewWidth ? `calc(100% - ${previewWidth + previewGaps}px)` : "100%"
+    }
+    if (desktopReviewOpen()) {
+      if (!previewWidth) return `${layout.session.width()}px`
+      return `min(${layout.session.width()}px, max(0px, calc(100% - ${previewWidth + previewGaps}px)))`
+    }
+    return `calc(100% - ${layout.fileTree.width() + previewWidth + previewGaps}px)`
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
@@ -2054,6 +2065,9 @@ export default function Page() {
           reviewSnap={ui.reviewSnap}
           size={size}
         />
+        <Show when={isDesktop() && platform.browserPreview}>
+          <BrowserPreviewPanel />
+        </Show>
       </div>
 
       <TerminalPanel />

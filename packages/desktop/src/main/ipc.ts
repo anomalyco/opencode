@@ -4,12 +4,21 @@ import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { BrowserPreviewBounds, BrowserPreviewCommand } from "@opencode-ai/app"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
-import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import {
+  getPinchZoomEnabled,
+  getWindowID,
+  isTrustedRendererUrl,
+  setPinchZoomEnabled,
+  setTitlebar,
+  updateTitlebar,
+} from "./windows"
+import { destroyBrowserPreview, getBrowserPreview } from "./browser-preview"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 
@@ -19,6 +28,71 @@ const pickerFilters = (ext?: string[]) => {
 }
 
 const pickedFiles = createPickedFileAuthorizations()
+
+function trustedWindow(event: IpcMainInvokeEvent) {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const frame = event.senderFrame
+  if (!win || !frame || frame !== event.sender.mainFrame || !isTrustedRendererUrl(frame.url)) {
+    throw new Error("Browser Preview request rejected")
+  }
+  return win
+}
+
+function previewBounds(value: BrowserPreviewBounds) {
+  if (!value || typeof value !== "object") throw new Error("Invalid Browser Preview bounds")
+  const values = [value.x, value.y, value.width, value.height, value.revision]
+  if (values.some((item) => typeof item !== "number" || !Number.isFinite(item))) {
+    throw new Error("Invalid Browser Preview bounds")
+  }
+  const hidden = value.width === 0 && value.height === 0
+  if ((!hidden && (value.width <= 0 || value.height <= 0)) || value.revision < 1) {
+    throw new Error("Invalid Browser Preview bounds")
+  }
+  return value
+}
+
+const previewCommandTypes = new Set([
+  "new-tab",
+  "close-tab",
+  "activate-tab",
+  "navigate",
+  "back",
+  "forward",
+  "reload",
+  "hard-reload",
+  "set-auto-refresh",
+  "open-external",
+  "open-devtools",
+  "set-device-emulation",
+  "set-zoom",
+  "clear-cache",
+  "start-console-capture",
+  "get-console-logs",
+  "read-dom",
+  "capture-screenshot",
+])
+
+function previewCommand(value: BrowserPreviewCommand) {
+  if (!value || typeof value !== "object" || !previewCommandTypes.has(value.type)) {
+    throw new Error("Invalid Browser Preview command")
+  }
+  if ((value.type === "navigate" || value.type === "new-tab") && "url" in value && value.url !== undefined) {
+    if (typeof value.url !== "string" || value.url.length > 2048) throw new Error("Invalid Browser Preview URL")
+  }
+  if ((value.type === "close-tab" || value.type === "activate-tab") && typeof value.tabId !== "string") {
+    throw new Error("Invalid Browser Preview tab")
+  }
+  if (value.type === "set-zoom" && (typeof value.zoom !== "number" || !Number.isFinite(value.zoom))) {
+    throw new Error("Invalid Browser Preview zoom")
+  }
+  if (
+    (value.type === "set-auto-refresh" || value.type === "set-device-emulation") &&
+    typeof value.enabled !== "boolean"
+  ) {
+    throw new Error("Invalid Browser Preview setting")
+  }
+  return value
+}
 
 type Deps = {
   killSidecar: () => Promise<void> | void
@@ -240,6 +314,19 @@ export function registerIpcHandlers(deps: Deps) {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
     })
+  })
+  ipcMain.handle("browser-preview-show", (event: IpcMainInvokeEvent, url?: string) => {
+    if (url !== undefined && (typeof url !== "string" || url.length > 2048)) throw new Error("Invalid Browser Preview URL")
+    return getBrowserPreview(trustedWindow(event)).show(url)
+  })
+  ipcMain.handle("browser-preview-hide", async (event: IpcMainInvokeEvent) => {
+    await destroyBrowserPreview(trustedWindow(event))
+  })
+  ipcMain.handle("browser-preview-set-bounds", (event: IpcMainInvokeEvent, bounds: BrowserPreviewBounds) => {
+    getBrowserPreview(trustedWindow(event)).setBounds(previewBounds(bounds))
+  })
+  ipcMain.handle("browser-preview-command", (event: IpcMainInvokeEvent, command: BrowserPreviewCommand) => {
+    return getBrowserPreview(trustedWindow(event)).command(previewCommand(command))
   })
 }
 

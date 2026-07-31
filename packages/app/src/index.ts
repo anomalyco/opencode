@@ -21,3 +21,12 @@ export {
 } from "./wsl/types"
 export { ServerConnection } from "./context/server"
 export { handleNotificationClick } from "./utils/notification-click"
+export type {
+  BrowserPreviewBounds,
+  BrowserPreviewCommand,
+  BrowserPreviewError,
+  BrowserPreviewPlatform,
+  BrowserPreviewResult,
+  BrowserPreviewState,
+  BrowserPreviewTab,
+} from "./browser-preview"
