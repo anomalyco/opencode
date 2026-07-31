@@ -334,7 +334,7 @@ Final request call site stays boring:
 ```ts
 const response =
   yield *
-  LLM.generate(
+  LLM.generateTurn(
     LLM.request({
       model: DeepSeek.model("deepseek-chat"),
       prompt: "Hello.",

@@ -47,7 +47,7 @@ describe("Cloudflare", () => {
 
   it.effect("posts to the derived gateway endpoint with bearer auth", () =>
     Effect.gen(function* () {
-      const response = yield* LLM.generate(
+      const response = yield* LLM.generateTurn(
         LLM.request({
           model: CloudflareAIGateway.configure({
             accountId: "test-account",
@@ -104,7 +104,7 @@ describe("Cloudflare", () => {
           index: 0,
         },
       ]
-      const response = yield* LLM.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+      const response = yield* LLM.generateTurn(LLM.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.succeed(
@@ -150,7 +150,7 @@ describe("Cloudflare", () => {
 
   it.effect("supports authenticated AI Gateway plus upstream provider auth", () =>
     Effect.gen(function* () {
-      yield* LLM.generate(
+      yield* LLM.generateTurn(
         LLM.request({
           model: CloudflareAIGateway.configure({
             accountId: "test-account",
@@ -221,7 +221,7 @@ describe("Cloudflare", () => {
 
   it.effect("posts direct Workers AI requests to the account endpoint with bearer auth", () =>
     Effect.gen(function* () {
-      const response = yield* LLM.generate(
+      const response = yield* LLM.generateTurn(
         LLM.request({
           model: CloudflareWorkersAI.configure({
             accountId: "test-account",
@@ -256,7 +256,7 @@ describe("Cloudflare", () => {
 
   it.effect("supports direct Workers AI token aliases through auth config", () =>
     Effect.gen(function* () {
-      yield* LLM.generate(
+      yield* LLM.generateTurn(
         LLM.request({
           model: CloudflareWorkersAI.configure({
             accountId: "test-account",

@@ -24,6 +24,10 @@ import { TestLLM } from "@opencode-ai/ai/testing"
 describe("public exports", () => {
   test("root exposes app-facing runtime APIs", () => {
     expect(LLM.request).toBeFunction()
+    expect(LLM.generateTurn).toBeFunction()
+    expect(LLM.streamTurn).toBeFunction()
+    expect(LLM).not.toHaveProperty("generate")
+    expect(LLM).not.toHaveProperty("stream")
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
     expect(ImageInput.bytes).toBeFunction()

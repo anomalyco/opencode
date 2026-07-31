@@ -176,7 +176,7 @@ Conversational image generation remains part of the LLM interaction. OpenAI Resp
 
 ```ts
 const program = Effect.gen(function* () {
-  const response = yield* LLM.generate(
+  const response = yield* LLM.generateTurn(
     LLM.request({
       model: OpenAI.configure({ apiKey }).responses("gpt-5"),
       prompt: "Design a solarpunk rooftop garden, then show me.",
@@ -193,7 +193,7 @@ The hosted result is represented as a provider-executed tool call and tool resul
 ## Public API
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
-- **`LLM.generate` / `LLM.stream`** — re-exported from `LLMClient` for one-import use.
+- **`LLM.generateTurn` / `LLM.streamTurn`** — execute exactly one provider turn, re-exported from `LLMClient` for one-import use.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`Model.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.

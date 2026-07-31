@@ -32,9 +32,9 @@ Tool.make({
   ],
 })
 
-LLM.stream(request)
-LLM.generate(LLMRequest.update(request, { tools: toDefinitions({ schemaOnly }) }))
+LLM.streamTurn(request)
+LLM.generateTurn(LLMRequest.update(request, { tools: toDefinitions({ schemaOnly }) }))
 ToolRuntime.dispatch({ executable }, { type: "tool-call", id: "call_1", name: "executable", input: { city: "Paris" } })
 
 // @ts-expect-error High-level tool orchestration overloads are intentionally not supported.
-LLM.stream({ request, tools: { schemaOnly } })
+LLM.streamTurn({ request, tools: { schemaOnly } })

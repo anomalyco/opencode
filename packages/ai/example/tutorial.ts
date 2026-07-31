@@ -53,7 +53,7 @@ const request = LLM.request({
 // 3. `generate` sends the request and collects the event stream into one
 // response object. `response.text` is the collected text output.
 const generateOnce = Effect.gen(function* () {
-  const response = yield* LLM.generate(request)
+  const response = yield* LLM.generateTurn(request)
 
   console.log("\n== generate ==")
   console.log("generated text:", response.text)
@@ -62,7 +62,7 @@ const generateOnce = Effect.gen(function* () {
 
 // 4. `stream` exposes provider output as common `LLMEvent`s for UIs that want
 // incremental text, reasoning, tool input, usage, or finish events.
-const streamText = LLM.stream(request).pipe(
+const streamText = LLM.streamTurn(request).pipe(
   Stream.tap((event) =>
     Effect.sync(() => {
       if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
@@ -94,7 +94,7 @@ const streamWithTools = Effect.gen(function* () {
     generation: { maxTokens: 80, temperature: 0 },
     tools: Tool.toDefinitions(tools),
   })
-  const events = Array.from(yield* LLM.stream(request).pipe(Stream.runCollect))
+  const events = Array.from(yield* LLM.streamTurn(request).pipe(Stream.runCollect))
   for (const event of events) {
     if (event.type === "tool-call") console.log("tool call", event.name, event.input)
     if (event.type === "text-delta") process.stdout.write(event.text)

@@ -10,7 +10,7 @@
 
 ## Conventions
 
-Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `Model.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.updateRequest`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
+Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `Model.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generateTurn`, `LLM.streamTurn`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
 
 ## Tests
 
@@ -223,7 +223,7 @@ Routes lower these into provider-native assistant tool-call messages and tool-re
 
 ### Tool dispatch
 
-`LLM.stream(request)` and `LLM.generate(request)` each run exactly one provider turn. Add tool schemas to `request.tools` with `Tool.toDefinitions(tools)`. When a caller wants the package's typed one-call execution behavior, pass each canonical local `tool-call` event to `ToolRuntime.dispatch(tools, call)`.
+`LLM.streamTurn(request)` and `LLM.generateTurn(request)` each run exactly one provider turn. Add tool schemas to `request.tools` with `Tool.toDefinitions(tools)`. When a caller wants the package's typed one-call execution behavior, pass each canonical local `tool-call` event to `ToolRuntime.dispatch(tools, call)`.
 
 ```ts
 const get_weather = tool({
@@ -240,7 +240,7 @@ const get_weather = tool({
 })
 
 const tools = { get_weather, get_time, ... }
-const events = yield* LLM.stream(
+const events = yield* LLM.streamTurn(
   LLMRequest.update(request, { tools: Tool.toDefinitions(tools) }),
 ).pipe(Stream.runCollect)
 

@@ -175,8 +175,8 @@ const request = LLM.request({
   prompt: "Say hello.",
 })
 
-// Current API: this performs one provider turn, despite the broad name.
-const response = yield * LLM.generate(request)
+// Current API: this performs one provider turn.
+const response = yield * LLM.generateTurn(request)
 
 // Current API: execution also needs LLMClient.layer and RequestExecutor services.
 ```
@@ -432,7 +432,7 @@ const request = LLM.request({
   tools: Tool.toDefinitions(tools),
 })
 
-const events = yield * LLM.stream(request).pipe(Stream.runCollect)
+const events = yield * LLM.streamTurn(request).pipe(Stream.runCollect)
 const call = Array.from(events).find(LLMEvent.is.toolCall)
 
 if (call && !call.providerExecuted) {
@@ -1076,7 +1076,7 @@ The redesign intentionally removes or changes these current concepts:
 | Current                                 | Proposed                                                    |
 | --------------------------------------- | ----------------------------------------------------------- |
 | Mandatory `LLM.request({ model, ... })` | Inline calls or model-free portable requests                |
-| `LLM.generate` means one turn           | `LLM.generate` means complete run                           |
+| No complete-run API                     | Add `LLM.generate` / `LLM.stream`                           |
 | `LLMClient.generate/stream`             | `LLM.generateTurn/streamTurn` for one turn                  |
 | `LLMClient.layer` requirement           | Standard Effect requirements exposed directly               |
 | Public `Route` mental model             | Hidden behind executable `Model`                            |

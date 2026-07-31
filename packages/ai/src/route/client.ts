@@ -398,7 +398,7 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
   )
 
 const generateWith = (stream: Interface["stream"]) =>
-  Effect.fn("LLM.generate")(function* (request: LLMRequest) {
+  Effect.fn("LLM.generateTurn")(function* (request: LLMRequest) {
     const state = yield* stream(request).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
     const response = LLMResponse.complete(state)
     if (response) return response
