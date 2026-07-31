@@ -33,6 +33,12 @@ export function createAdmission(input: {
         originalText: message.originalText,
         replyTarget: message.replyTarget,
         ...(message.replyRootID ? { replyRootID: message.replyRootID } : {}),
+        ...(message.chatType === "group"
+          ? {
+              replyMentionID: message.senderID,
+              ...(message.senderName ? { replyMentionName: message.senderName } : {}),
+            }
+          : {}),
         state: "received",
       }
       const admit = async () =>

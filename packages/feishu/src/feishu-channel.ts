@@ -5,6 +5,7 @@ export type NormalizedFeishuMessage = {
   chatType: "direct" | "group"
   chatID: string
   senderID: string
+  senderName?: string
   messageID: string
   threadID?: string
   rootID?: string
@@ -58,6 +59,7 @@ export function normalizeChannelMessage(message: NormalizedMessage): NormalizeRe
   const routing = {
     chatID: message.chatId,
     senderID: message.senderId,
+    ...(message.senderName ? { senderName: message.senderName } : {}),
     messageID: message.messageId,
     originalText: readOriginalText(message),
     promptText: message.content,

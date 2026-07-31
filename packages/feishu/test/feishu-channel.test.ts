@@ -36,8 +36,9 @@ describe("Feishu Channel adapter", () => {
       normalizeChannelMessage(
         message({
           chatType: "group",
-          content: "查库存",
           mentionedBot: true,
+          senderName: "姹傜簿杞存壙",
+          content: "查库存",
           rootId: "om_root_1",
           threadId: "omt_thread_1",
           raw: rawText("@_user_2 查库存"),
@@ -49,6 +50,7 @@ describe("Feishu Channel adapter", () => {
         chatType: "group",
         chatID: "oc_chat_1",
         senderID: "ou_user_1",
+        senderName: "姹傜簿杞存壙",
         messageID: "om_message_1",
         threadID: "omt_thread_1",
         rootID: "om_root_1",
@@ -62,6 +64,17 @@ describe("Feishu Channel adapter", () => {
     expect(normalizeChannelMessage(message({ chatType: "group", mentionedBot: false }))).toEqual({
       kind: "ignored",
       reason: "unmentioned_group",
+    })
+  })
+
+  test("normalizes a direct sender name only when the SDK provides a non-empty value", () => {
+    expect(normalizeChannelMessage(message({ senderName: "姹傜簿杞存壙" }))).toEqual({
+      kind: "accepted",
+      message: expect.objectContaining({ senderName: "姹傜簿杞存壙" }),
+    })
+    expect(normalizeChannelMessage(message({ senderName: "" }))).toEqual({
+      kind: "accepted",
+      message: expect.not.objectContaining({ senderName: expect.anything() }),
     })
   })
 

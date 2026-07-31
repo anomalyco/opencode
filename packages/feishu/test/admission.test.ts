@@ -58,6 +58,54 @@ describe("durable Feishu admission", () => {
     store.close()
   })
 
+  test("persists the named group requester for a native reply mention", async () => {
+    const { admission, store, queued } = await fixture()
+
+    expect(
+      await admission.receive(
+        message({
+          chatType: "group",
+          senderName: "姹傜簿杞存壙",
+          threadID: "omt_thread_1",
+          replyRootID: "om_root_1",
+        }),
+      ),
+    ).toBe("created")
+    expect(store.getTask(queued[0])).toEqual(
+      expect.objectContaining({
+        replyMentionID: "ou_user_1",
+        replyMentionName: "姹傜簿杞存壙",
+      }),
+    )
+    store.close()
+  })
+
+  test("persists an unnamed group requester without inferring a display name", async () => {
+    const { admission, store, queued } = await fixture()
+
+    expect(
+      await admission.receive(message({ chatType: "group", threadID: "omt_thread_1", replyRootID: "om_root_1" })),
+    ).toBe("created")
+    expect(store.getTask(queued[0])).toEqual(expect.objectContaining({ replyMentionID: "ou_user_1" }))
+    expect(store.getTask(queued[0])).not.toEqual(expect.objectContaining({ replyMentionName: expect.anything() }))
+    store.close()
+  })
+
+  test("excludes direct-chat reply mentions while retaining its established routing identity", async () => {
+    const { admission, store, queued } = await fixture()
+
+    expect(await admission.receive(message({ senderName: "姹傜簿杞存壙" }))).toBe("created")
+    expect(store.getTask(queued[0])).toEqual(
+      expect.objectContaining({
+        conversationID: "conv_a7f2801fcfced3a0d7535b6dc3fd50581308f3120add15de",
+        sessionID: "ses_feishu_82d301ca9e76289c6d97d3d48e9a7a29a108cce05ab54d40",
+      }),
+    )
+    expect(store.getTask(queued[0])).not.toEqual(expect.objectContaining({ replyMentionID: expect.anything() }))
+    expect(store.getTask(queued[0])).not.toEqual(expect.objectContaining({ replyMentionName: expect.anything() }))
+    store.close()
+  })
+
   test("writes a sanitized fallback and schedules nothing when persistence fails", async () => {
     const { store, log, fallbackPath } = await base(["secret-canary"])
     const queued: string[] = []
