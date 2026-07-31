@@ -341,6 +341,9 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
                   fg={closeColor()}
                   selectable={false}
                   onMouseUp={(event) => {
+                    // The close mark only renders while hovered; without motion events a click can
+                    // land here first, and must select the tab instead of closing it invisibly.
+                    if (hovered() !== tab.sessionID) return
                     event.stopPropagation()
                     tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
                   }}
