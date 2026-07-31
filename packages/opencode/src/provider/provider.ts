@@ -18,7 +18,7 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Effect, Layer, Context, Option, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -42,6 +42,14 @@ function timeoutController(ms: number) {
     signal: ctl.signal,
     clear: () => clearTimeout(id),
   }
+}
+
+const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+function streamsResponse(body: BodyInit | null | undefined) {
+  if (typeof body !== "string") return false
+  const value = Option.getOrUndefined(decodeJson(body))
+  return isRecord(value) && value.stream === true
 }
 
 function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {
@@ -1731,6 +1739,7 @@ const layer = Layer.effect(
             bucket: `${model.providerID}:${model.api.npm}`,
             controller: streamAbortController,
             timeout: fixedChunkTimeout,
+            stream: streamsResponse(opts.body),
           })
         }
 
