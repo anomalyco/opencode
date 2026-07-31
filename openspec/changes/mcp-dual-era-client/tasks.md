@@ -2,9 +2,10 @@
 
 ## Phase A: Client package migration (3 tasks)
 
-- [ ] Add `@modelcontextprotocol/client@2.0.0` alongside the existing `@modelcontextprotocol/sdk@1.29.0`; do not remove v1 yet. #deps #A1 #s
+- [x] Add `@modelcontextprotocol/client@2.0.0` alongside the existing `@modelcontextprotocol/sdk@1.29.0`; do not remove v1 yet. #deps #A1 #s
   - File: `packages/opencode/package.json`
   - Validation: `bun install && bun run typecheck` in `packages/opencode`
+  - Note: `bun install` resolved cleanly (`@modelcontextprotocol+client@2.0.0` + its `@modelcontextprotocol+core@2.0.0` dep in `node_modules/.bun`). Verified the package's `.d.mts` actually exports `versionNegotiation`, `PriorDiscovery`, and `ConnectOptions.prior` as described in the release notes this proposal cites — not assumed. `bun run typecheck` still fails, but only on the pre-existing `src/session/prompt.ts:1152` error that predates this task and is caused by uncommitted WIP elsewhere in the working tree (bisected separately, see `mcp-dual-era-client` push history) — nothing this task touched regressed.
 
 - [ ] Port `createClient`/`connectRemote`/`connectLocal` in `packages/opencode/src/mcp/index.ts` to the v2 `Client`, preserving StreamableHTTP → SSE → stdio fallback order and existing OAuth flow. #client #A2 #l
   - File: `packages/opencode/src/mcp/index.ts`
