@@ -9,7 +9,7 @@ import { Skill } from "@/skill"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ApiVcsApplyError } from "../groups/instance"
+import { ApiVcsApplyError, ApiVcsSwitchError } from "../groups/instance"
 import { markInstanceForDisposal } from "../lifecycle"
 
 export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance", (handlers) =>
@@ -38,10 +38,24 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     })
 
     const getVcs = Effect.fn("InstanceHttpApi.vcs")(function* () {
-      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
+      const [branch, base] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
         concurrency: "unbounded",
       })
-      return { branch, default_branch }
+      return { branch, default_branch: base?.name, default_ref: base?.ref }
+    })
+
+    const getVcsBranch = Effect.fn("InstanceHttpApi.vcsBranch")(function* () {
+      return yield* vcs.branches()
+    })
+
+    const switchVcs = Effect.fn("InstanceHttpApi.vcsSwitch")(function* (ctx: { payload: Vcs.SwitchInput }) {
+      return yield* vcs
+        .switchBranch(ctx.payload)
+        .pipe(
+          Effect.mapError(
+            (error) => new ApiVcsSwitchError({ name: "VcsSwitchError", data: { message: error.message } }),
+          ),
+        )
     })
 
     const getVcsStatus = Effect.fn("InstanceHttpApi.vcsStatus")(function* () {
@@ -97,6 +111,8 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       .handle("dispose", dispose)
       .handle("path", getPath)
       .handle("vcs", getVcs)
+      .handle("vcsBranch", getVcsBranch)
+      .handle("vcsSwitch", switchVcs)
       .handle("vcsStatus", getVcsStatus)
       .handle("vcsDiff", getVcsDiff)
       .handle("vcsDiffRaw", getVcsDiffRaw)
