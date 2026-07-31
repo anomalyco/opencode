@@ -938,7 +938,7 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
       : resolved.bytes
   const normalized = yield* normalizeImageAttachment(
     input,
-    Base64.make(Buffer.from(content).toString("base64")),
+    Buffer.from(content).toString("base64"),
     mime,
     image,
   )
@@ -954,11 +954,11 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
 
 const normalizeImageAttachment = Effect.fn("Session.normalizeImageAttachment")(function* (
   input: PromptInput.FileAttachment,
-  data: Base64,
+  data: string,
   mime: string,
   image: Effect.Effect<Image.Interface>,
 ) {
-  if (!mime.startsWith("image/")) return { data, mime }
+  if (!mime.startsWith("image/")) return { data: Base64.make(data), mime }
   const service = yield* image
   const label = input.name ?? (input.uri.startsWith("data:") ? "inline attachment" : input.uri)
   const content = { uri: label, content: data, encoding: "base64" as const, mime }

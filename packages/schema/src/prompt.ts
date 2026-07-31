@@ -17,27 +17,10 @@ export const FileSource = Schema.Union([
   .annotate({ identifier: "Prompt.FileSource" })
 export type FileSource = typeof FileSource.Type
 
-const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
-
 export const Base64 = Schema.String.check(
-  Schema.makeFilter((value) => (isBase64(value) ? undefined : "a base64 encoded string"), {
-    expected: "a base64 encoded string",
-    meta: { _tag: "isBase64", regExp: base64Pattern },
-    arbitrary: { constraint: { patterns: [base64Pattern.source] } },
-  }),
+  Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
 ).annotate({ identifier: "Prompt.Base64" })
 export type Base64 = typeof Base64.Type
-
-function isBase64(value: string) {
-  if (value.length % 4 !== 0) return false
-  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0
-  for (let index = 0; index < value.length - padding; index++) {
-    const code = value.charCodeAt(index)
-    if ((code < 48 || code > 57) && (code < 65 || code > 90) && (code < 97 || code > 122) && code !== 43 && code !== 47)
-      return false
-  }
-  return true
-}
 
 export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment> {}
 export const FileAttachment = Schema.Struct({

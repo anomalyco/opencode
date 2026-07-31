@@ -26,8 +26,8 @@ import { SessionPendingTable, SessionMessageTable, SessionTable } from "@opencod
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
+import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -58,7 +58,10 @@ const locations = Layer.effect(
     () =>
       // Attachment admission only needs the location-scoped Image service.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      imagePassthrough as unknown as Layer.Layer<LocationServices>,
+      Layer.mock(Image.Service, {
+        normalize: (_resource, content) =>
+          Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+      }) as unknown as Layer.Layer<LocationServices>,
   ),
 )
 const it = testEffect(
@@ -383,6 +386,35 @@ describe("Session.prompt", () => {
       ])
       const stored = yield* admitted(message.id)
       expect(stored?.type === "user" ? stored.data.files : undefined).toEqual(message.data.files)
+    }),
+  )
+
+  it.effect("normalizes large image content before validating persisted Base64", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const pixel = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      )
+      const bytes = Buffer.concat([pixel, Buffer.alloc(4_323_030 - pixel.length)])
+      const data = bytes.toString("base64")
+      expect(data).toHaveLength(5_764_040)
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Inspect this image",
+        files: [{ uri: `data:image/png;base64,${data}` }],
+        resume: false,
+      })
+
+      expect(message.data.files).toEqual([
+        {
+          data: "AA==",
+          mime: "image/png",
+          source: { type: "inline" },
+        },
+      ])
     }),
   )
 
