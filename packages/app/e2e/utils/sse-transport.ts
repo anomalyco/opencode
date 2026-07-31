@@ -197,6 +197,14 @@ export async function installSseTransport<T>(
               controller.enqueue(
                 encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
               )
+            if (url.pathname === "/global/event")
+              controller.enqueue(
+                encoder.encode(
+                  frame({
+                    payload: { id: `evt_mock_connected_${id}`, type: "server.connected", properties: {} },
+                  }),
+                ),
+              )
             request.signal.addEventListener(
               "abort",
               () => {
