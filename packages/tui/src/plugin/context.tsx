@@ -240,6 +240,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       },
       storage: {
         store: (key, options) => storage.store(`plugin.${item.plugin.id}.${key}`, options),
+        memory: (key, options) => storage.memory(`plugin.${item.plugin.id}.${key}`, options),
       },
       ui: {
         dialog: dialogApi,
