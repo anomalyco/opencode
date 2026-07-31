@@ -27,7 +27,7 @@ function segment(text: string) {
   let current = ""
 
   for (let index = 0; index < text.length; index++) {
-    const character = text[index]!
+    const character = text[index]
     current += character
 
     if (character === "\r" && text[index + 1] === "\n") {
