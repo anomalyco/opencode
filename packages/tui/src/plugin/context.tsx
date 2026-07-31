@@ -17,7 +17,6 @@ import {
   type ParentProps,
 } from "solid-js"
 import path from "path"
-import { watch } from "fs"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { Page, Slot, SlotMap, SlotName } from "@opencode-ai/plugin/tui/context"
@@ -31,6 +30,7 @@ import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose } from "./api"
+import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectory } from "./discovery"
 
 export interface PackageResolver {
@@ -159,20 +159,10 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   }
 
   // Hot-reload local plugin sources: watch the discovery directory and any
-  // local entrypoints, then rebuild the plugin generation when one changes.
-  // Files are watched through their parent directory (editors that save by
-  // rename replace the inode, which silently kills a direct file watch) and
-  // filtered by basename so bursts in busy directories stay quiet. Directory
-  // plugins are watched at their root only: edits to nested helper files do
-  // not change the entrypoint mtime and are not detected. Watches are never
-  // torn down individually (a stale watch costs one fs handle and a no-op
-  // reconcile); all die with this provider. Failed watches are forgotten so
-  // a later reconcile can re-arm once the path exists.
-  const watchers = new Set<ReturnType<typeof watch>>()
-  const watched = new Map<string, Set<string> | null>()
-  let disposed = false
+  // local entrypoints (see watch.ts for the mechanics), debounced into a
+  // serialized reconcile so bursts of events rebuild the generation once.
   let pending: ReturnType<typeof setTimeout> | undefined
-  const scheduleReconcile = () => {
+  const watcher = createSourceWatcher(() => {
     clearTimeout(pending)
     pending = setTimeout(() => {
       loading = loading.catch(() => undefined).then(() => reconcile())
@@ -180,43 +170,10 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       // otherwise surface as an unhandled rejection until the next trigger.
       void loading.catch(() => undefined)
     }, 100)
-  }
-  const watchSource = (target: string) => {
-    stat(target)
-      .then((info) => {
-        if (disposed) return
-        const dir = info.isDirectory() ? target : path.dirname(target)
-        // Directories accept every filename (null); files accept their basename.
-        const name = info.isDirectory() ? null : path.basename(target)
-        const existing = watched.get(dir)
-        if (existing !== undefined) {
-          if (name === null) watched.set(dir, null)
-          else existing?.add(name)
-          return
-        }
-        watched.set(dir, name === null ? null : new Set([name]))
-        const watcher = watch(dir, (_event, filename) => {
-          // A null filename (platform-dependent) always schedules.
-          const accept = watched.get(dir)
-          if (filename && accept && !accept.has(filename.toString())) return
-          scheduleReconcile()
-        })
-        // A watched directory can disappear out from under us; without a
-        // listener the error event would crash the process. Forget the path
-        // so a later reconcile can re-arm once it exists again.
-        watcher.on("error", () => {
-          watcher.close()
-          watchers.delete(watcher)
-          watched.delete(dir)
-        })
-        watchers.add(watcher)
-      })
-      .catch(() => undefined)
-  }
+  })
   onCleanup(() => {
-    disposed = true
     clearTimeout(pending)
-    for (const watcher of watchers) watcher.close()
+    watcher.dispose()
   })
 
   // Rebuild the plugin generation as resolve → compare → swap, mirroring the
@@ -230,7 +187,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
     const entries = [...(await discoverTuiPlugins(host.paths.cwd)), ...(config.data.plugins ?? [])]
-    watchSource(tuiPluginDirectory(host.paths.cwd))
+    watcher.add(tuiPluginDirectory(host.paths.cwd))
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -253,7 +210,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       const options = typeof entry === "string" ? undefined : entry.options
       // Watch even when the resolve below fails so fixing a broken plugin reloads it.
       const local = localSource(target, directory)
-      if (local) watchSource(fileURLToPath(local))
+      if (local) watcher.add(fileURLToPath(local))
       const previous = Object.values(store.registrations).find((registration) => registration.target === target)
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo
