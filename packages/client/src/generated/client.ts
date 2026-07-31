@@ -6,6 +6,7 @@ import type {
   AgentsListOutput,
   SessionsListInput,
   SessionsListOutput,
+  SessionsCostOutput,
   SessionsCreateInput,
   SessionsCreateOutput,
   SessionsActiveOutput,
@@ -304,6 +305,11 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      cost: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsCostOutput }>(
+          { method: "GET", path: `/api/session/cost`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ).then((value) => value.data),
       create: (input?: SessionsCreateInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionsCreateOutput }>(
           {

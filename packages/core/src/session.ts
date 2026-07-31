@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -101,6 +101,10 @@ export class OperationUnavailableError extends Schema.TaggedErrorClass<Operation
 
 export { ContextSnapshotDecodeError, MessageDecodeError } from "./session/error"
 
+export function sumSessionCosts(sessions: readonly { readonly cost?: number }[]) {
+  return sessions.reduce((total, session) => total + (session.cost ?? 0), 0)
+}
+
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
@@ -112,6 +116,7 @@ export type Error = NotFoundError | MessageDecodeError | OperationUnavailableErr
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
+  readonly todayCost: Effect.Effect<number>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
@@ -205,6 +210,17 @@ const layer = Layer.effect(
       )
 
     const result = Service.of({
+      todayCost: Effect.gen(function* () {
+        const start = new Date()
+        start.setHours(0, 0, 0, 0)
+        const rows = yield* db
+          .select({ cost: SessionTable.cost })
+          .from(SessionTable)
+          .where(gte(SessionTable.time_updated, start.getTime()))
+          .all()
+          .pipe(Effect.orDie)
+        return sumSessionCosts(rows)
+      }),
       create: Effect.fn("V2Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
