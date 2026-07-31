@@ -235,10 +235,6 @@ async function renderToolError(part: SessionMessageAssistantTool, directory: str
   UI.println(UI.Style.TEXT_NORMAL + "✗", UI.Style.TEXT_NORMAL + `${info.title} failed`)
 }
 
-function warning(message: string) {
-  UI.println(UI.Style.TEXT_WARNING_BOLD + "!", UI.Style.TEXT_NORMAL, message)
-}
-
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message
   if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string")
