@@ -5,7 +5,6 @@ import type {
   TuiAttentionNotifyResult,
   TuiAttentionNotifySkipReason,
   TuiAttentionWhen,
-  TuiKV,
   TuiAttentionSoundName,
   TuiAttentionSoundPack,
   TuiAttentionSoundPackInfo,
@@ -115,8 +114,6 @@ export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<Config.Resolved, "attention">
   update?: Config.Interface["update"]
-  /** @deprecated Ignored. Sound-pack persistence uses CLI config. */
-  kv?: TuiKV
   audio?: Pick<typeof TuiAudio, "loadSoundFile" | "play">
 }): TuiAttentionHost {
   let focus: FocusState = "unknown"
