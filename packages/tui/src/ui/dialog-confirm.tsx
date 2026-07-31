@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { useDialog, type DialogContext } from "./dialog"
+import { useDialog } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { Locale } from "../util/locale"
@@ -16,8 +16,6 @@ export type DialogConfirmProps = {
     cancel?: string
   }
 }
-
-export type DialogConfirmResult = boolean | undefined
 
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
@@ -92,21 +90,4 @@ export function DialogConfirm(props: DialogConfirmProps) {
       </box>
     </box>
   )
-}
-
-DialogConfirm.show = (dialog: DialogContext, title: string, message: string, label?: DialogConfirmProps["label"]) => {
-  return new Promise<DialogConfirmResult>((resolve) => {
-    dialog.replace(
-      () => (
-        <DialogConfirm
-          title={title}
-          message={message}
-          onConfirm={() => resolve(true)}
-          onCancel={() => resolve(false)}
-          label={label}
-        />
-      ),
-      () => resolve(undefined),
-    )
-  })
 }
