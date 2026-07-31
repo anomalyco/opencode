@@ -1175,16 +1175,6 @@ export function Prompt(props: PromptProps) {
     const part = store.prompt.pasted[ref.index]
     if (!part) return false
 
-    setStore(
-      produce((draft) => {
-        draft.prompt.pasted.splice(ref.index, 1)
-        draft.extmarkToPart.delete(extmarkId)
-        draft.extmarkToPart.forEach((value, id) => {
-          if (value.type !== "pasted" || value.index < ref.index) return
-          draft.extmarkToPart.set(id, { type: "pasted", index: value.index - 1 })
-        })
-      }),
-    )
     input.extmarks.delete(extmarkId)
     input.setSelection(extmark.start, extmark.end)
     input.insertText(part.text)
@@ -1214,9 +1204,15 @@ export function Prompt(props: PromptProps) {
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
-      const match = store.prompt.pasted.findIndex((part) => part.text === pastedContent)
-      const extmark = Array.from(store.extmarkToPart).find(([, ref]) => ref.type === "pasted" && ref.index === match)
-      if (extmark && expandPastedText(extmark[0])) return
+      const extmark = input.extmarks.getAllForTypeId(promptPartTypeId).find((extmark) => {
+        const ref = store.extmarkToPart.get(extmark.id)
+        return (
+          (extmark.end === input.cursorOffset || extmark.end + 1 === input.cursorOffset) &&
+          ref?.type === "pasted" &&
+          store.prompt.pasted[ref.index]?.text === pastedContent
+        )
+      })
+      if (extmark && expandPastedText(extmark.id)) return
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
     }
@@ -1451,7 +1447,7 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => {
-                if (props.disabled) return
+                if (props.disabled || r.button !== 0) return
                 r.target?.focus()
                 const extmark = input.extmarks
                   .getAtOffset(input.cursorOffset)
