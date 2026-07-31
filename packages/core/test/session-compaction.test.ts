@@ -19,9 +19,11 @@ import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
+import { Agent } from "@opencode-ai/core/agent"
+import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
-import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -129,6 +131,43 @@ test("compaction prompt requires the checkpoint headings in order", () => {
   expect(prompt).toContain("next action if known")
   expect(prompt).toContain("Keep every section, even when empty.")
 })
+
+it.effect("auto compaction respects explicit model input limits", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const session = Session.Info.make({
+      id: Session.ID.make("ses_input_limit"),
+      projectID: Project.ID.global,
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+      location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
+    })
+    const input = (tokens: number) => ({
+      session,
+      model: Model.make({
+        id: "test-model",
+        provider: "test-provider",
+        route: OpenAIChat.route.with({ limits: { context: 1_000, input: 100, output: 100 } }),
+      }),
+      cost: [],
+      messages: [
+        Schema.decodeUnknownSync(SessionMessage.Assistant)({
+          id: SessionMessage.ID.make("msg_assistant"),
+          type: "assistant",
+          agent: Agent.defaultID,
+          model: { id: "test-model", providerID: "test-provider" },
+          content: [],
+          tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, completed: 0 },
+        }),
+      ],
+    })
+
+    expect(compaction.required(input(99))).toBe(false)
+    expect(compaction.required(input(100))).toBe(true)
+  }),
+)
 
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {

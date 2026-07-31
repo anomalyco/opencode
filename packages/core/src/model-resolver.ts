@@ -81,7 +81,7 @@ const withDefaults = (model: Info, route: AnyRoute) =>
     headers: providerHeaders(model),
     providerOptions: providerOptions(model),
     http: model.body === undefined ? undefined : { body: model.body },
-    limits: { context: model.limit.context, output: model.limit.output },
+    limits: { context: model.limit.context, input: model.limit.input, output: model.limit.output },
   })
 
 const providerHeaders = (model: Info) => {
@@ -204,7 +204,7 @@ export const fromCatalogModel = (
       ...nativeCredentialSettings(specifier, credential),
       headers: resolved.headers,
       body: resolved.body,
-      limits: { context: resolved.limit.context, output: resolved.limit.output },
+      limits: { context: resolved.limit.context, input: resolved.limit.input, output: resolved.limit.output },
     }
     return yield* Effect.try({
       try: () => {

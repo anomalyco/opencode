@@ -74,6 +74,9 @@ describe("OpenAIPlugin", () => {
           ]
         })
         catalog.model.update(item.id, Model.ID.make("gpt-5.5-pro"), () => {})
+        catalog.model.update(item.id, Model.ID.make("gpt-5.4"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 64_000 }
+        })
         catalog.model.update(item.id, Model.ID.make("gpt-5.4-pro"), (model) => {
           model.modelID = Model.ID.make("gpt-5.4")
           model.body = { reasoning: { mode: "pro" } }
@@ -137,7 +140,7 @@ describe("OpenAIPlugin", () => {
       const eligible = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode-ai/ai/providers/openai")
       expect(eligible.cost).toEqual([])
-      expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+      expect(eligible.limit).toEqual({ context: 272_000, input: 272_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"))).enabled).toBe(
         false,
@@ -145,10 +148,15 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.4-pro"))).enabled).toBe(
         false,
       )
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.4"))).limit).toEqual({
+        context: 272_000,
+        input: 272_000,
+        output: 64_000,
+      })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
       const gpt56 = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
       expect(gpt56.enabled).toBe(true)
-      expect(gpt56.limit).toEqual({ context: 500_000, input: 372_000, output: 128_000 })
+      expect(gpt56.limit).toEqual({ context: 272_000, input: 272_000, output: 128_000 })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
     }),
   )
