@@ -37,6 +37,7 @@ const PROTOCOL_BODY_OVERLAY_DENYLIST = new Set([
   "generationConfig",
   "inferenceConfig",
   "input",
+  "max_completion_tokens",
   "maxTokens",
   "max_tokens",
   "messages",

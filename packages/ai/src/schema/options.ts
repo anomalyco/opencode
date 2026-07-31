@@ -167,9 +167,13 @@ export namespace ModelDefaults {
 export const ModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
 export type ModelToolSchemaCompatibility = Schema.Schema.Type<typeof ModelToolSchemaCompatibility>
 
+export const ModelMaxTokensFieldCompatibility = Schema.Literals(["max_completion_tokens", "max_tokens"])
+export type ModelMaxTokensFieldCompatibility = Schema.Schema.Type<typeof ModelMaxTokensFieldCompatibility>
+
 export class ModelCompatibility extends Schema.Class<ModelCompatibility>("LLM.ModelCompatibility")({
   toolSchema: Schema.optional(ModelToolSchemaCompatibility),
   reasoningField: Schema.optional(Schema.String),
+  maxTokensField: Schema.optional(ModelMaxTokensFieldCompatibility),
 }) {}
 
 export namespace ModelCompatibility {
