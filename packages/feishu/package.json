@@ -17,6 +17,7 @@
     "mysql2": "3.14.4"
   },
   "devDependencies": {
+    "@opencode-ai/core": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
