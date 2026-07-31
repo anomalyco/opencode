@@ -3,18 +3,18 @@ import { pathToFileURL } from "node:url"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
-  Client,
-  type ClientOptions,
-  StreamableHTTPClientTransport,
-  SSEClientTransport,
-  UnauthorizedError,
-  RegistrationRejectedError,
-  SdkHttpError,
+  ListRootsRequestSchema,
   type LoggingMessageNotification,
+  LoggingMessageNotificationSchema,
   type Tool as MCPToolDef,
-} from "@modelcontextprotocol/client"
-import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
+  ToolListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "@/config/config"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -36,7 +36,7 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
-export const CLIENT_OPTIONS = {
+const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
     // sampling: {},
@@ -47,8 +47,6 @@ export const CLIENT_OPTIONS = {
     // https://github.com/anomalyco/opencode/issues/28567
     // tasks: {},
   },
-  versionNegotiation: { mode: "auto" },
-  listMaxPages: 1_000,
 } satisfies ClientOptions
 
 export const Resource = Schema.Struct({
@@ -72,19 +70,13 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
   name: Schema.String,
 }) {}
 
-type MCPClient = Client & { onToolsChanged?: (error: Error | null) => void }
+type MCPClient = Client
 
 function createClient(directory: string) {
-  const client: MCPClient = new Client(
-    { name: "opencode", version: InstallationVersion },
-    {
-      ...CLIENT_OPTIONS,
-      listChanged: {
-        tools: { autoRefresh: false, onChanged: (error) => client.onToolsChanged?.(error) },
-      },
-    },
+  const client = new Client({ name: "opencode", version: InstallationVersion }, CLIENT_OPTIONS)
+  client.setRequestHandler(ListRootsRequestSchema, () =>
+    Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )
-  client.setRequestHandler("roots/list", async () => ({ roots: [{ uri: pathToFileURL(directory).href }] }))
   return client
 }
 
@@ -162,7 +154,12 @@ export interface ServerInstructions {
 }
 
 /** An MCP tool in its native shape; consumers adapt it to their own tool format. */
-export type McpTool = McpCatalog.McpTool
+export interface McpTool {
+  /** Shared cached definition; consumers must copy rather than mutate it. */
+  readonly def: MCPToolDef
+  readonly client: MCPClient
+  readonly timeout?: number
+}
 
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
@@ -193,11 +190,7 @@ export interface Interface {
     mcpName: string,
     onAuthorization?: (authorizationUrl: string) => void,
   ) => Effect.Effect<Status, NotFoundError>
-  readonly finishAuth: (
-    mcpName: string,
-    authorizationCode: string,
-    iss?: string,
-  ) => Effect.Effect<Status, NotFoundError>
+  readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status, NotFoundError>
   readonly removeAuth: (mcpName: string) => Effect.Effect<void>
   readonly supportsOAuth: (mcpName: string) => Effect.Effect<boolean, NotFoundError>
   readonly hasStoredTokens: (mcpName: string) => Effect.Effect<boolean>
@@ -298,18 +291,11 @@ const layer = Layer.effect(
           Effect.map((client) => ({ client, transportName: name })),
           Effect.catch((error) => {
             const lastError = error instanceof Error ? error : new Error(String(error))
-            const registrationRejected =
-              error instanceof RegistrationRejectedError ||
-              lastError.message.includes("registration") ||
-              lastError.message.includes("client_id")
             const isAuthError =
-              error instanceof UnauthorizedError ||
-              registrationRejected ||
-              (authProvider && error instanceof SdkHttpError && error.status === 401) ||
-              (authProvider && lastError.message.includes("OAuth"))
+              error instanceof UnauthorizedError || (authProvider && lastError.message.includes("OAuth"))
 
             if (isAuthError) {
-              if (registrationRejected) {
+              if (lastError.message.includes("registration") || lastError.message.includes("client_id")) {
                 lastStatus = {
                   status: "needs_client_registration" as const,
                   error: "Server does not support dynamic client registration. Please provide clientId in config.",
@@ -468,16 +454,12 @@ const layer = Layer.effect(
         )
       }
 
-      client.setNotificationHandler("notifications/message", (notification) =>
+      client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) =>
         bridge.promise(serverLog(name, notification.params)),
       )
 
       if (!client.getServerCapabilities()?.tools) return
-      client.onToolsChanged = async (error) => {
-        if (error) {
-          await bridge.promise(Effect.logWarning("failed to refresh MCP tools", { server: name, error: error.message }))
-          return
-        }
+      client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         const listed = await bridge.promise(McpCatalog.defs(client, timeout))
@@ -486,7 +468,7 @@ const layer = Layer.effect(
 
         s.defs[name] = listed
         await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
-      }
+      })
     }
 
     function serverLog(name: string, params: LoggingMessageNotification["params"]) {
@@ -922,7 +904,7 @@ const layer = Layer.effect(
         }),
       )
 
-      const callback = yield* Effect.promise(() => callbackPromise)
+      const code = yield* Effect.promise(() => callbackPromise)
 
       const storedState = yield* auth.getOAuthState(mcpName)
       if (storedState !== result.oauthState) {
@@ -930,20 +912,16 @@ const layer = Layer.effect(
         throw new Error("OAuth state mismatch - potential CSRF attack")
       }
       yield* auth.clearOAuthState(mcpName)
-      return yield* finishAuth(mcpName, callback.code, callback.iss)
+      return yield* finishAuth(mcpName, code)
     })
 
-    const finishAuth = Effect.fn("MCP.finishAuth")(function* (
-      mcpName: string,
-      authorizationCode: string,
-      iss?: string,
-    ) {
+    const finishAuth = Effect.fn("MCP.finishAuth")(function* (mcpName: string, authorizationCode: string) {
       yield* requireMcpConfig(mcpName)
       const pending = pendingOAuthTransports.get(mcpName)
       if (!pending) throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
 
       const error = yield* Effect.tryPromise({
-        try: () => pending.transport.finishAuth(authorizationCode, iss),
+        try: () => pending.transport.finishAuth(authorizationCode),
         catch: (error) => error,
       }).pipe(
         Effect.match({

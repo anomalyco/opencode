@@ -8,14 +8,15 @@ import { Session } from "@/session/session"
 import { Tool } from "@/tool/tool"
 import * as Truncate from "@/tool/truncate"
 import { MessageID, SessionID } from "@/session/schema"
-import { Server } from "@modelcontextprotocol/server"
+import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import {
-  InMemoryTransport,
+  CallToolRequestSchema,
   LATEST_PROTOCOL_VERSION,
-  type CallToolResult,
-  type Client,
+  ListToolsRequestSchema,
   type Tool as MCPToolDef,
-} from "@modelcontextprotocol/client"
+} from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Layer } from "effect"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -99,7 +100,7 @@ const TOOL_DEFS: MCPToolDef[] = [
   },
 ] as MCPToolDef[]
 
-function handleCall(name: string, args: Record<string, unknown>): CallToolResult {
+function handleCall(name: string, args: Record<string, unknown>) {
   switch (name) {
     case "get_text":
       return { content: [{ type: "text", text: `hello ${args.name}` }] }
@@ -121,8 +122,8 @@ let description: string
 
 async function buildTool() {
   const server = new Server({ name: SERVER, version: "1.0.0" }, { capabilities: { tools: {} } })
-  server.setRequestHandler("tools/list", async () => ({ tools: TOOL_DEFS }))
-  server.setRequestHandler("tools/call", async (req) =>
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }))
+  server.setRequestHandler(CallToolRequestSchema, async (req) =>
     handleCall(req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>),
   )
 

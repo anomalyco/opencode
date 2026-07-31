@@ -90,6 +90,7 @@
       "@sentry/solid": "10.36.0",
       "@sentry/vite-plugin": "4.6.0",
       "solid-js": "1.9.10",
+      "solid-sonner": "0.3.1",
       "vite-plugin-solid": "2.11.10",
       "@lydell/node-pty": "1.2.0-beta.12"
     }
@@ -143,6 +144,7 @@
     "@types/node": "catalog:"
   },
   "patchedDependencies": {
+    "@dnd-kit/dom@0.5.0": "patches/@dnd-kit%2Fdom@0.5.0.patch",
     "@ff-labs/fff-bun@0.9.3": "patches/@ff-labs%2Ffff-bun@0.9.3.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",
     "@silvia-odwyer/photon-node@0.3.4": "patches/@silvia-odwyer%2Fphoton-node@0.3.4.patch",
@@ -154,8 +156,8 @@
     "pacote@21.5.0": "patches/pacote@21.5.0.patch",
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
+    "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch",
-    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
-    "@modelcontextprotocol/client@2.0.0-beta.5": "patches/@modelcontextprotocol%2Fclient@2.0.0-beta.5.patch"
+    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch"
   }
 }
