@@ -246,6 +246,20 @@ describe("session.retry.retryable", () => {
     })
   })
 
+  test("retries response stream inactivity timeouts", () => {
+    const request = MessageV2.fromError(new ProviderError.ResponseStreamTimeoutError(900_000), { providerID })
+    expect(SessionV1.APIError.isInstance(request)).toBe(true)
+    if (!SessionV1.APIError.isInstance(request)) throw new Error("expected APIError")
+    expect(request.data.metadata).toEqual({
+      code: "ProviderResponseStreamTimeoutError",
+      timeoutMs: "900000",
+    })
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({
+      message:
+        "Provider response stream timed out after 900000ms of inactivity. Check provider connectivity or increase provider.options.chunkTimeout before retrying.",
+    })
+  })
+
   test("retries websocket stream transport errors", () => {
     const request = MessageV2.fromError(
       new ProviderError.ResponseStreamError("WebSocket closed before response.completed (code 1006: Connection ended)"),

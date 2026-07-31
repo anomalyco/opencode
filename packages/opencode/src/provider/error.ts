@@ -13,10 +13,20 @@ export class HeaderTimeoutError extends Error {
 }
 
 export class ResponseStreamError extends Error {
-  public override readonly name = "ProviderResponseStreamError"
+  public override readonly name: string = "ProviderResponseStreamError"
 
   constructor(message: string, options?: ErrorOptions) {
     super(message, options)
+  }
+}
+
+export class ResponseStreamTimeoutError extends ResponseStreamError {
+  public override readonly name = "ProviderResponseStreamTimeoutError"
+
+  constructor(public readonly ms: number) {
+    super(
+      `Provider response stream timed out after ${ms}ms of inactivity. Check provider connectivity or increase provider.options.chunkTimeout before retrying.`,
+    )
   }
 }
 

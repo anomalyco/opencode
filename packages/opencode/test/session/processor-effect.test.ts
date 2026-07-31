@@ -70,7 +70,7 @@ const cfg = {
   },
 }
 
-function providerCfg(url: string) {
+function providerCfg(url: string, options: Record<string, unknown> = {}) {
   return {
     ...cfg,
     provider: {
@@ -80,6 +80,7 @@ function providerCfg(url: string) {
         options: {
           ...cfg.provider.test.options,
           baseURL: url,
+          ...options,
         },
       },
     },
@@ -648,6 +649,64 @@ it.live("session.processor effect tests retry OpenAI-compatible midstream server
         expect(handle.message.error).toBeUndefined()
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests retry response stream inactivity timeouts", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+
+        yield* llm.hang
+        yield* llm.text("after timeout")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry stalled stream")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const states: number[] = []
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+          const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+          if (data.sessionID === chat.id && data.status.type === "retry") states.push(data.status.attempt)
+          return Effect.void
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry stalled stream" }],
+          tools: {},
+        })
+
+        yield* off
+
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(states).toStrictEqual([1])
+        expect(parts.some((part) => part.type === "text" && part.text === "after timeout")).toBe(true)
+        expect(handle.message.error).toBeUndefined()
+      }),
+    { config: (url) => providerCfg(url, { chunkTimeout: 50 }) },
   ),
 )
 
