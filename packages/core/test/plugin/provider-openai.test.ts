@@ -101,7 +101,7 @@ describe("OpenAIPlugin", () => {
         sessionID: Session.ID.make("ses_test"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.openai, id: Model.ID.make("gpt-5.5") }),
-        url: "https://chatgpt.com/backend-api/codex/responses",
+        url: "https://api.openai.com/v1/responses",
         method: "POST",
         headers: {},
         body: "{}",
@@ -115,13 +115,25 @@ describe("OpenAIPlugin", () => {
         headers: {},
         body: "{}",
       })
+      const proxy = yield* (yield* PluginHooks.Service).trigger("session", "request", {
+        sessionID: Session.ID.make("ses_test"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.openai, id: Model.ID.make("gpt-5.5") }),
+        url: "https://proxy.example/v1/responses?region=us",
+        method: "POST",
+        headers: {},
+        body: "{}",
+      })
 
       const provider = required(yield* catalog.provider.get(Provider.ID.openai))
       expect(provider.package).toBe("@opencode-ai/ai/providers/openai")
       expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
       expect(provider.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
+      expect(request.url).toBe("https://chatgpt.com/backend-api/codex/responses")
       expect(request.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
       expect(custom.headers).toEqual({})
+      expect(proxy.url).toBe("https://proxy.example/v1/responses?region=us")
+      expect(proxy.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
       const eligible = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode-ai/ai/providers/openai")
       expect(eligible.cost).toEqual([])
