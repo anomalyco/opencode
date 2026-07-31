@@ -7,6 +7,7 @@ import { createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "./home-controller"
 import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./home-sessions-controller"
+import { sessionTitle } from "@/utils/session-title"
 
 type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 
@@ -23,7 +24,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     if (!value) return []
     return sessions.data
       .searchRecords()
-      .filter((record) => `${record.session.title} ${record.projectName}`.toLowerCase().includes(value))
+      .filter((record) => `${sessionTitle(record.session.title)} ${record.projectName}`.toLowerCase().includes(value))
   })
   const active = createMemo(() => {
     const records = results()

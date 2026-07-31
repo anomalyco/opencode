@@ -1,6 +1,7 @@
 export * as SessionModelRequest from "./model-request"
 
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Cause, Config, Context, Effect, Layer, Result } from "effect"
@@ -37,6 +38,7 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
 
 interface Prepared {
   readonly request: LLMRequest
+  readonly options: StreamOptions
   /**
    * One request-scoped execution operation. Unknown, hook-removed, and
    * step-limit-violating calls fail individually through the same seam.
@@ -162,6 +164,26 @@ export const layer = Layer.effect(
         tools: hookedTools,
         toolChoice: stepLimitReached ? "none" : undefined,
       })
+      const options: StreamOptions = {
+        transform: (request) =>
+          hooks
+            .trigger("session", "request", {
+              sessionID: session.id,
+              agent: agent.id,
+              model: resolved.ref,
+              ...request,
+            })
+            .pipe(
+              Effect.tap((event) =>
+                Effect.sync(() => {
+                  request.url = event.url
+                  request.headers = event.headers
+                  request.body = event.body
+                }),
+              ),
+              Effect.asVoid,
+            ),
+      }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)
         const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(session.id), current)
@@ -190,6 +212,7 @@ export const layer = Layer.effect(
       }
       return {
         request,
+        options,
         executeTool,
         stepLimitReached,
       }

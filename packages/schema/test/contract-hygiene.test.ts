@@ -17,7 +17,7 @@ import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
 import { PersistedRevert } from "../src/session-revert.js"
-import { optional } from "../src/schema.js"
+import { AbsolutePath, optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
   test("restricts agent colors to six-digit hex values", () => {
@@ -52,6 +52,18 @@ describe("contract hygiene", () => {
         metadata: undefined,
       }),
     ).toEqual({ text: "completed" })
+
+    expect(
+      Schema.encodeSync(Session.Info)({
+        id: Session.ID.make("ses_untitled"),
+        projectID: Project.ID.make("global"),
+        cost: Money.USD.zero,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        title: undefined,
+        location: { directory: AbsolutePath.make("/project") },
+      }),
+    ).not.toHaveProperty("title")
   })
 
   test("pending session items omit the internal admission sequence", () => {

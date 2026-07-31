@@ -5,7 +5,7 @@ import { Endpoint, type EndpointPatch } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import { Framing } from "./framing"
 import { HttpTransport } from "./transport"
-import type { Transport, TransportRuntime } from "./transport"
+import type { HttpRequestTransform, Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
@@ -46,7 +46,11 @@ export interface Route<Body, Prepared = unknown> {
   readonly body: RouteBody<Body>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
   readonly model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedModelInput) => Model<Options>
-  readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
+  readonly prepareTransport: (
+    body: Body,
+    request: LLMRequest,
+    options?: StreamOptions,
+  ) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
     request: LLMRequest,
@@ -145,12 +149,16 @@ export interface Interface {
   readonly generate: GenerateMethod
 }
 
+export interface StreamOptions {
+  readonly transform?: HttpRequestTransform
+}
+
 export interface StreamMethod {
-  (request: LLMRequest): Stream.Stream<LLMEvent, LLMError>
+  (request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, LLMError>
 }
 
 export interface GenerateMethod {
-  (request: LLMRequest): Effect.Effect<LLMResponse, LLMError>
+  (request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, LLMError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
@@ -286,7 +294,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       },
       model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedModelInput) =>
         makeRouteModel<Options>(route, input),
-      prepareTransport: (body, request) =>
+      prepareTransport: (body, request, options) =>
         routeInput.transport.prepare({
           body,
           request,
@@ -294,6 +302,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           auth: routeInput.auth ?? Auth.none,
           encodeBody,
           headers: routeInput.headers,
+          transform: options?.transform,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route.id}`
@@ -359,14 +368,14 @@ export function make<Body, Prepared, Frame, Event, State>(
   })
 }
 
-const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
+const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
   const resolved = applyCachePolicy(resolveRequestOptions(request))
   const route = resolved.model.route
 
   const body = yield* route.body
     .from(resolved)
     .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))))
-  const prepared = yield* route.prepareTransport(body, resolved)
+  const prepared = yield* route.prepareTransport(body, resolved, options)
 
   return {
     request: resolved,
@@ -389,17 +398,17 @@ export const compileRequest = Effect.fn("LLM.compileRequest")(function* (request
   }
 })
 
-const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =>
+const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, options?: StreamOptions) =>
   Stream.unwrap(
     Effect.gen(function* () {
-      const compiled = yield* compile(request)
+      const compiled = yield* compile(request, options)
       return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
     }),
   )
 
 const generateWith = (stream: Interface["stream"]) =>
-  Effect.fn("LLM.generate")(function* (request: LLMRequest) {
-    const state = yield* stream(request).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
+  Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
+    const state = yield* stream(request, options).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
     const response = LLMResponse.complete(state)
     if (response) return response
     return yield* ProviderShared.eventError(
@@ -408,24 +417,24 @@ const generateWith = (stream: Interface["stream"]) =>
     )
   })
 
-export function stream(request: LLMRequest): Stream.Stream<LLMEvent, LLMError> {
+export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, LLMError> {
   return Stream.unwrap(
     Effect.gen(function* () {
-      return (yield* Service).stream(request)
+      return (yield* Service).stream(request, options)
     }),
   ) as Stream.Stream<LLMEvent, LLMError>
 }
 
-export function generate(request: LLMRequest): Effect.Effect<LLMResponse, LLMError> {
+export function generate(request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, LLMError> {
   return Effect.gen(function* () {
-    return yield* (yield* Service).generate(request)
+    return yield* (yield* Service).generate(request, options)
   }) as Effect.Effect<LLMResponse, LLMError>
 }
 
-export const streamRequest = (request: LLMRequest) =>
+export const streamRequest = (request: LLMRequest, options?: StreamOptions) =>
   Stream.unwrap(
     Effect.gen(function* () {
-      return (yield* Service).stream(request)
+      return (yield* Service).stream(request, options)
     }),
   )
 

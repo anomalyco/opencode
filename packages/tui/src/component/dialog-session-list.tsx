@@ -17,6 +17,8 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
+import { useStorage } from "../context/storage"
+import { sessionTitle } from "../util/session"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -33,7 +35,8 @@ export function DialogSessionList() {
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
-  const [allProjects, setAllProjects] = createSignal(false)
+  const [prefs, updatePrefs] = useStorage().store("session-list", { initial: { allProjects: false } })
+  const allProjects = () => prefs.allProjects
 
   const [searchResults, { mutate: setSearchResults }] = createResource(
     () => ({ query: search().trim(), allProjects: allProjects() }),
@@ -75,7 +78,7 @@ export function DialogSessionList() {
           (session.projectID === current?.project.id && session.location.directory === current.directory),
       )
     if (!query) return sessions
-    return sessions.filter((session) => !session.parentID && session.title.toLowerCase().includes(query))
+    return sessions.filter((session) => !session.parentID && sessionTitle(session).toLowerCase().includes(query))
   })
   const sessions = createMemo(() => {
     const query = filter().trim()
@@ -137,7 +140,7 @@ export function DialogSessionList() {
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {
-        title: deleting ? `Press ${shortcuts.get("session.delete")} again to confirm` : session.title,
+        title: deleting ? `Press ${shortcuts.get("session.delete")} again to confirm` : sessionTitle(session),
         value: session.id,
         category,
         footer,
@@ -189,7 +192,9 @@ export function DialogSessionList() {
           title: allProjects() ? "Show current directory sessions" : "Show all project sessions",
           group: "Dialog",
           run: () => {
-            setAllProjects((value) => !value)
+            void updatePrefs((draft) => {
+              draft.allProjects = !draft.allProjects
+            }).catch(() => {})
           },
         },
       ]}

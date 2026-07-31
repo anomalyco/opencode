@@ -93,6 +93,7 @@ import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
+import { sessionTitle } from "../../util/session"
 
 addDefaultParsers(parsers.parsers)
 
@@ -3334,7 +3335,7 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
     })
     return [`## Assistant\n\n${content.join("\n\n")}`]
   })
-  return `# ${session.title}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
+  return `# ${sessionTitle(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
 }
 
 export function parseApplyPatchFiles(value: unknown) {

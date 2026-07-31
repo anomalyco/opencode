@@ -374,7 +374,7 @@ const layer = Layer.effect(
           directory: location.directory,
           path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
           workspaceID: location.workspaceID ? Workspace.ID.make(location.workspaceID) : undefined,
-          title: input.title ?? `New session - ${new Date(now).toISOString()}`,
+          title: input.title,
           agent: input.agent,
           model: input.model
             ? {

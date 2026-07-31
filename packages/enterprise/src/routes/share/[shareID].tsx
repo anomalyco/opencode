@@ -158,6 +158,11 @@ export default function () {
           const match = createMemo(() => Binary.search(data().session, data().sessionID, (s) => s.id))
           if (!match().found) throw new Error(`Session ${data().sessionID} not found`)
           const info = createMemo(() => data().session[match().index])
+          const title = createMemo(
+            () =>
+              info().title ??
+              `${info().parentID ? "Child" : "New"} session - ${new Date(info().time.created).toISOString()}`,
+          )
           const ogImage = createMemo(() => {
             const models = new Set<string>()
             const messages = data().message[data().sessionID] ?? []
@@ -167,7 +172,7 @@ export default function () {
               }
             }
             const modelIDs = Array.from(models)
-            const encodedTitle = encodeURIComponent(Base64.encode(encodeURIComponent(info().title.substring(0, 700))))
+            const encodedTitle = encodeURIComponent(Base64.encode(encodeURIComponent(title().substring(0, 700))))
             let modelParam: string
             if (modelIDs.length === 1) {
               modelParam = modelIDs[0]
@@ -184,9 +189,7 @@ export default function () {
 
           return (
             <>
-              <Show when={info().title}>
-                <Title>{info().title} | OpenCode</Title>
-              </Show>
+              <Title>{title()} | OpenCode</Title>
               <Meta name="description" content="opencode - The AI coding agent built for the terminal." />
               <Meta property="og:image" content={ogImage()} />
               <Meta name="twitter:image" content={ogImage()} />
@@ -240,7 +243,7 @@ export default function () {
                               </div>
                             </div>
                           </div>
-                          <div class="text-left text-16-medium text-text-strong">{info().title}</div>
+                          <div class="text-left text-16-medium text-text-strong">{title()}</div>
                         </div>
                       )
 

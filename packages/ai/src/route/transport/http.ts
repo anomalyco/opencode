@@ -120,14 +120,19 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
   id: "http-json",
   with: (patch) => httpJson({ ...input, ...patch }),
   prepare: (prepareInput) =>
-    jsonRequestParts({
-      ...prepareInput,
-    }).pipe(
-      Effect.map((parts) => ({
-        request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
+    Effect.gen(function* () {
+      const parts = yield* jsonRequestParts({ ...prepareInput })
+      const request = { url: parts.url, method: "POST", headers: { ...parts.headers }, body: parts.bodyText }
+      yield* (prepareInput.transform?.(request) ?? Effect.void)
+      return {
+        request: ProviderShared.jsonPost({
+          url: request.url,
+          body: request.body ?? "",
+          headers: Headers.fromInput(request.headers),
+        }),
         framing: input.framing,
-      })),
-    ),
+      }
+    }),
   frames: (prepared, request, runtime) =>
     Stream.unwrap(
       runtime.http

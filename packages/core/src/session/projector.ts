@@ -43,7 +43,8 @@ type Usage = {
 
 const ForkBatchSize = 500
 
-const forkTitle = (value: string) => {
+const forkTitle = (value?: string) => {
+  if (value === undefined) return
   const match = value.match(/^(.+) \(fork #(\d+)\)$/)
   if (match) return `${match[1]} (fork #${Number.parseInt(match[2], 10) + 1})`
   return `${value} (fork #1)`
@@ -216,7 +217,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       slug: Slug.create(),
       directory: parent.directory,
       path: parent.path,
-      title: forkTitle(parent.title),
+      title: forkTitle(parent.title ?? undefined),
       agent: parent.agent,
       model: parent.model,
       version: parent.version,

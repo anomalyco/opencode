@@ -66,7 +66,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogProject } from "./component/dialog-project"
+import { DialogOpen } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { ThemeProvider, useTheme, useThemes } from "./context/theme"
@@ -95,13 +95,11 @@ import { StorageProvider } from "./context/storage"
 
 registerOpencodeSpinner()
 
-const appGlobalBindingCommands = ["session.list", "session.new"] as const
+const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as const
 
 const sessionTabBindingCommands = [
   "session.tab.next",
   "session.tab.previous",
-  "session.tab.history.back",
-  "session.tab.history.forward",
   "session.tab.next_unread",
   "session.tab.previous_unread",
   "session.tab.close",
@@ -525,8 +523,11 @@ function App(props: { pair?: DialogPairCredentials }) {
     renderer.useMouse = config.data.mouse
   })
 
+  let active: { id: string; title?: string } | undefined
   // Update terminal window title based on current route and session
   createEffect(() => {
+    const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
+    if (session) active = { id: session.id, title: session.title }
     if (!terminalTitleEnabled()) return
 
     if (route.data.type === "home") {
@@ -535,14 +536,13 @@ function App(props: { pair?: DialogPairCredentials }) {
     }
 
     if (route.data.type === "session") {
-      const session = data.session.get(route.data.sessionID)
-      if (!session || isDefaultTitle(session.title)) {
+      const title = session?.title
+      if (!title || isDefaultTitle(title)) {
         renderer.setTerminalTitle("OpenCode")
         return
       }
 
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
       return
     }
 
@@ -646,17 +646,18 @@ function App(props: { pair?: DialogPairCredentials }) {
         run: () => {
           route.navigate({
             type: "home",
+            location: route.data.type === "session" ? data.session.get(route.data.sessionID)?.location : undefined,
           })
           dialog.clear()
         },
       },
       {
-        name: "project.switch",
-        title: "Switch project",
+        name: "open.menu",
+        title: "Open session or project",
         category: "Session",
-        slash: { name: "projects", aliases: ["project"] },
+        slash: { name: "open", aliases: ["projects", "project"] },
         run: () => {
-          dialog.replace(() => <DialogProject />)
+          dialog.replace(() => <DialogOpen />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -682,22 +683,6 @@ function App(props: { pair?: DialogPairCredentials }) {
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycle(-1),
-      },
-      {
-        name: "session.tab.history.back",
-        title: "Back in tab history",
-        category: "Session",
-        palette: undefined,
-        enabled: sessionTabs.enabled,
-        run: () => sessionTabs.history(-1),
-      },
-      {
-        name: "session.tab.history.forward",
-        title: "Forward in tab history",
-        category: "Session",
-        palette: undefined,
-        enabled: sessionTabs.enabled,
-        run: () => sessionTabs.history(1),
       },
       {
         name: "session.tab.next_unread",
@@ -1160,10 +1145,11 @@ function App(props: { pair?: DialogPairCredentials }) {
 
   event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.data.sessionID) {
+      const title = active?.id === evt.data.sessionID ? active.title : undefined
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: title ? `Session "${title}" was deleted` : "The current session was deleted",
       })
     }
   })

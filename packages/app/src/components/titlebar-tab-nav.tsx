@@ -11,6 +11,7 @@ import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import type { Session } from "@opencode-ai/sdk/v2"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import { TabPreviewPopover } from "./titlebar-tab-popover"
+import { sessionTitle } from "@/utils/session-title"
 import "./titlebar-tab-nav.css"
 
 // MouseEvent.button uses 1 for the middle/wheel button.
@@ -54,7 +55,10 @@ export function TabNavItem(props: {
     if (!session) return
     return projectForSession(session, serverCtx()?.projects.list() ?? [])
   })
-  const title = createMemo(() => props.session()?.title ?? props.fallbackTitle)
+  const title = createMemo(() => {
+    const session = props.session()
+    return session ? sessionTitle(session.title, session.parentID) : props.fallbackTitle
+  })
 
   const projectName = createMemo(() => {
     const session = props.session()
@@ -143,7 +147,7 @@ export function TabNavItem(props: {
     if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
     const session = props.session()
     if (!session) return
-    titleEl.textContent = session.title
+    titleEl.textContent = session.title ?? ""
     setEditing(true)
 
     requestAnimationFrame(() => {
@@ -302,7 +306,7 @@ export function TabNavItem(props: {
       }}
       data={{
         projectName: projectName(),
-        title: props.session()?.title,
+        title: title(),
         path: previewPath(),
         serverName: serverLabel(),
       }}

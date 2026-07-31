@@ -297,7 +297,11 @@ export function MessageTimeline(props: {
     return sync().session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
-  const titleLabel = createMemo(() => sessionTitle(titleValue()))
+  const titleLabel = createMemo(() => {
+    const session = info()
+    if (!session) return
+    return sessionTitle(titleValue(), session.parentID)
+  })
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
@@ -311,7 +315,10 @@ export function MessageTimeline(props: {
     if (!id) return emptyMessages
     return sync().data.message[id] ?? emptyMessages
   })
-  const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
+  const parentTitle = createMemo(() => {
+    const session = parent()
+    return session ? sessionTitle(session.title, session.parentID) : language.t("command.session.new")
+  })
   const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
   const childTaskDescription = createMemo(() => {
@@ -329,7 +336,7 @@ export function MessageTimeline(props: {
     if (value) return value
     return language.t("command.session.new")
   })
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const showHeader = createMemo(() => !!(titleLabel() || parentID()))
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
@@ -912,9 +919,10 @@ export function MessageTimeline(props: {
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
-    const name = createMemo(
-      () => sessionTitle(sync().session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
-    )
+    const name = createMemo(() => {
+      const session = sync().session.get(props.sessionID)
+      return session ? sessionTitle(session.title, session.parentID) : language.t("command.session.new")
+    })
     const handleDelete = async () => {
       await deleteSession(props.sessionID)
       dialog.close()

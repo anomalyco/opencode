@@ -137,6 +137,40 @@ describe("request option precedence", () => {
     ),
   )
 
+  it.effect("transforms the final HTTP request after serialization and authentication", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAIChat.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("fresh-key") })
+          .model({ id: "gpt-4o-mini" }),
+        prompt: "Say hello.",
+      }),
+      {
+        transform: (request) =>
+          Effect.sync(() => {
+            expect(request.headers.authorization).toBe("Bearer fresh-key")
+            request.url = "https://proxy.test/v1/chat/completions"
+            request.headers["x-plugin"] = "transformed"
+            request.body = JSON.stringify({ transformed: true })
+          }),
+      },
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.url).toBe("https://proxy.test/v1/chat/completions")
+            expect(web.headers.get("x-plugin")).toBe("transformed")
+            expect(decodeJson(input.text)).toEqual({ transformed: true })
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
+  )
+
   it.effect("rejects raw body overlays for protocol-owned roots", () =>
     Effect.gen(function* () {
       const model = OpenAIChat.route

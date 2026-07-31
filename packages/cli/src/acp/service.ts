@@ -213,7 +213,9 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         sessions: page.data.map((session) => ({
           sessionId: session.id,
           cwd: session.location.directory,
-          title: session.title,
+          title:
+            session.title ??
+            `${session.parentID ? "Child" : "New"} session - ${new Date(session.time.created).toISOString()}`,
           updatedAt: new Date(session.time.updated).toISOString(),
         })),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),

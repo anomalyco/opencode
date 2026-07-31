@@ -13,7 +13,7 @@ export function normalizeSessionInfo(input: SessionInfo | Session): Session {
     parentID: input.parentID,
     cost: input.cost,
     tokens: input.tokens,
-    title: input.title,
+    title: input.title ?? `${input.parentID ? "Child" : "New"} session - ${new Date(input.time.created).toISOString()}`,
     agent: input.agent,
     model: input.model,
     version: "",

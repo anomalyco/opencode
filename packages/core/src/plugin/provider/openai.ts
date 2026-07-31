@@ -10,14 +10,16 @@ import { Model } from "../../model"
 import { OauthCallbackPage } from "../../oauth/page"
 import { Provider } from "../../provider"
 import type { PluginInternal } from "../internal"
-import { OpenAICodex } from "./openai-codex"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
 const callbackPort = 1455
 const pollingSafetyMargin = 3000
+const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
+const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
+const codexDisallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
 
 type Pkce = {
   verifier: string
@@ -164,14 +166,18 @@ export const OpenAIPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const bus = yield* Bus.Service
     const loading = Semaphore.makeUnsafe(1)
-    let chatgpt = false
+    let chatgpt: Credential.OAuth | undefined
 
     const load = Effect.fn("OpenAIPlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("openai")
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
         : undefined
-      chatgpt = OpenAICodex.isChatGPT(credential)
+      chatgpt =
+        credential?.type === "oauth" &&
+        (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
+          ? credential
+          : undefined
     })
 
     yield* ctx.integration.transform((draft) => {
@@ -183,16 +189,19 @@ export const OpenAIPlugin = define({
       for (const item of evt.provider.list()) {
         if (!Provider.isAISDK(item.provider.package)) continue
         if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai") continue
-        if (!item.models.has(Model.ID.make("gpt-5-chat-latest"))) continue
-        evt.model.update(item.provider.id, Model.ID.make("gpt-5-chat-latest"), (model) => {
-          // OpenAIPlugin sends OpenAI models through Responses; this alias is a
-          // chat-completions-only model, so hide it only from OpenAI's catalog.
-          model.enabled = false
+        evt.provider.update(item.provider.id, (provider) => {
+          provider.package = "@opencode-ai/ai/providers/openai"
         })
       }
       if (!chatgpt) return
       const item = evt.provider.get(Provider.ID.openai)
       if (!item) return
+      item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
+      const account = chatgpt.metadata?.accountID
+      item.provider.headers = Provider.mergeHeaders(
+        item.provider.headers,
+        typeof account === "string" ? { "chatgpt-account-id": account } : undefined,
+      )
       for (const model of item.models.values()) {
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
@@ -201,35 +210,42 @@ export const OpenAIPlugin = define({
             draft.enabled = false
             return
           }
-          if (!OpenAICodex.eligible(draft.modelID ?? draft.id)) {
+          const apiID = draft.modelID ?? draft.id
+          const match = apiID.match(/^gpt-(\d+\.\d+)/)
+          if (
+            !codexAllowed.has(apiID) &&
+            (codexDisallowed.has(apiID) || !match || Number.parseFloat(match[1]) <= 5.4)
+          ) {
             draft.enabled = false
             return
           }
           draft.cost = []
+          if (draft.id.includes("gpt-5.5")) {
+            draft.limit = { context: 400_000, input: 272_000, output: 128_000 }
+          }
+          if (draft.id.includes("gpt-5.6")) {
+            draft.limit = { context: 500_000, input: 372_000, output: 128_000 }
+          }
         })
       }
     })
+    yield* ctx.session.hook("request", (evt) =>
+      Effect.sync(() => {
+        if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return
+        const url = new URL(evt.url)
+        if (url.origin === "https://api.openai.com") {
+          evt.url = `${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`
+        }
+        evt.headers.originator = "opencode"
+        evt.headers["session-id"] = evt.sessionID
+      }),
+    )
 
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/openai") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/openai"))
-        evt.sdk = mod.createOpenAI(evt.options)
-      }),
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.openai) return
-        evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)
-      }),
     )
   }),
 } satisfies PluginInternal.InternalPlugin)

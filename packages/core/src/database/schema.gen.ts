@@ -217,7 +217,7 @@ export default {
           \`slug\` text NOT NULL,
           \`directory\` text NOT NULL,
           \`path\` text,
-          \`title\` text NOT NULL,
+          \`title\` text,
           \`version\` text NOT NULL,
           \`share_url\` text,
           \`summary_additions\` integer,

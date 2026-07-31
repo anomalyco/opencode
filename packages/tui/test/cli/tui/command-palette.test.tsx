@@ -73,16 +73,12 @@ test("searches settings globally and opens the matching setting", async () => {
     expect(app.captureCharFrame()).not.toContain("Animations")
     await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
 
-    for (const key of "side") app.mockInput.pressKey(key)
-    await app.waitForFrame((frame) => frame.includes("Sidebar"))
-    expect(app.captureCharFrame()).not.toContain("New session")
-    expect(app.captureCharFrame()).not.toContain("Switch model")
-    expect(app.captureCharFrame()).not.toContain("Markdown")
-
+    app.mockInput.pressArrow("down")
+    for (const key of "sounds") app.mockInput.pressKey(key)
     app.mockInput.pressEnter()
-    await app.waitForFrame((frame) => frame.includes("Settings") && frame.includes("Color mode"))
+    await app.waitForFrame((frame) => frame.includes("Settings") && frame.includes("Sounds"))
     app.mockInput.pressEnter()
-    await app.waitFor(() => current.session?.sidebar === "hide")
+    await app.waitFor(() => current.attention?.sound === false)
   } finally {
     app.renderer.destroy()
   }
