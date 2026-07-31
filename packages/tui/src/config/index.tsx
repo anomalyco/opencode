@@ -267,7 +267,3 @@ export function useConfig() {
   if (!value) throw new Error("ConfigProvider is missing")
   return value
 }
-
-export function useConfigOptional() {
-  return useContext(ConfigContext)
-}
