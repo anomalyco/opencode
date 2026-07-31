@@ -12,12 +12,14 @@ import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
-import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
+import { ConfigMCP, ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
-import { modify, applyEdits } from "jsonc-parser"
+import { modify, applyEdits, parse } from "jsonc-parser"
+import type { ParseError } from "jsonc-parser"
+
 import { Filesystem } from "@/util/filesystem"
 import { Effect } from "effect"
 
@@ -98,12 +100,13 @@ export const McpCommand = cmd({
   builder: (yargs) =>
     yargs
       .command(McpAddCommand)
+      .command(McpRemoveCommand)
       .command(McpListCommand)
       .command(McpAuthCommand)
       .command(McpLogoutCommand)
       .command(McpDebugCommand)
       .demandCommand(),
-  async handler() {},
+  async handler() { },
 })
 
 export const McpListCommand = effectCmd({
@@ -161,9 +164,9 @@ export const McpListCommand = effectCmd({
 
       const typeHint = !isMcpConfigured(serverConfig)
         ? // No `type`, so there is no command or url to show. Either it is the
-          // legacy disable shorthand, or it is broken and the diagnostic is the
-          // most useful thing this line can carry.
-          (ConfigMCP.entryIssues(serverConfig)[0] ?? "disabled in config")
+        // legacy disable shorthand, or it is broken and the diagnostic is the
+        // most useful thing this line can carry.
+        (ConfigMCP.entryIssues(serverConfig)[0] ?? "disabled in config")
         : serverConfig.type === "remote"
           ? serverConfig.url
           : serverConfig.command.join(" ")
@@ -418,6 +421,54 @@ async function resolveConfigPath(baseDir: string, global = false) {
   return candidates[0]
 }
 
+function mcpConfigCandidates(baseDir: string, global = false) {
+  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
+  if (!global) {
+    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
+  }
+  return candidates
+}
+
+function parseConfigMcp(text: string) {
+  const errors: ParseError[] = []
+  // Match the config loader's tolerance so files with trailing comments/commas are recognized
+  const parsed = parse(text, errors, { allowTrailingComma: true, allowEmptyContent: true }) as
+    | { mcp?: Record<string, unknown> }
+    | undefined
+  if (errors.length > 0 || typeof parsed !== "object" || parsed === null) return undefined
+  return parsed
+}
+
+// Returns the config files (existing only) that define the given MCP server
+export async function findMcpConfigFiles(name: string, candidates: string[]) {
+  const found: string[] = []
+  for (const candidate of candidates) {
+    if (!(await Filesystem.exists(candidate))) continue
+    const parsed = parseConfigMcp(await Filesystem.readText(candidate))
+    if (parsed?.mcp?.[name] !== undefined) found.push(candidate)
+  }
+  return found
+}
+
+// Removes the MCP server entry from a config file, preserving comments.
+// "invalid" means the edit would produce a syntactically invalid file (e.g. a trailing comma
+// left dangling after removing the last entry) — the file is left untouched in that case.
+export async function removeMcpFromConfig(name: string, configPath: string): Promise<"removed" | "not_found" | "invalid"> {
+  if (!(await Filesystem.exists(configPath))) return "not_found"
+  const text = await Filesystem.readText(configPath)
+  const parsed = parseConfigMcp(text)
+  if (parsed?.mcp?.[name] === undefined) return "not_found"
+
+  const edits = modify(text, ["mcp", name], undefined, {
+    formattingOptions: { tabSize: 2, insertSpaces: true },
+  })
+  const result = applyEdits(text, edits)
+  if (!parseConfigMcp(result)) return "invalid"
+
+  await Filesystem.write(configPath, result)
+  return "removed"
+}
+
 async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
   let text = "{}"
   if (await Filesystem.exists(configPath)) {
@@ -434,6 +485,117 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configP
 
   return configPath
 }
+
+export const McpRemoveCommand = effectCmd({
+  command: "remove [name]",
+  aliases: ["rm", "delete"],
+  describe: "remove an MCP server from the config",
+  builder: (yargs) =>
+    yargs.positional("name", {
+      describe: "name of the MCP server",
+      type: "string",
+    }),
+  handler: Effect.fn("Cli.mcp.remove")(function* (args) {
+    UI.empty()
+    prompts.intro("Remove MCP server")
+
+    const maybeCtx = yield* InstanceRef
+    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    const ctx = maybeCtx
+    const config = yield* Config.Service.use((cfg) => cfg.get())
+    const servers = configuredServers(config)
+
+    if (servers.length === 0) {
+      prompts.log.warn("No MCP servers configured")
+      prompts.outro("Done")
+      return
+    }
+
+    const serverConfig = args.name ? config.mcp?.[args.name] : undefined
+    if (args.name && !serverConfig) {
+      prompts.log.error(`MCP server not found: ${args.name}`)
+      prompts.outro("Done")
+      return
+    }
+
+    let serverName = args.name
+    if (!serverName) {
+      const selected = yield* Effect.promise(() =>
+        prompts.select({
+          message: "Select MCP server to remove",
+          options: servers.map(([name, cfg]) => ({
+            label: name,
+            value: name,
+            hint: cfg.type === "remote" ? cfg.url : cfg.command.join(" "),
+          })),
+        }),
+      )
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      serverName = selected
+    }
+    const name = serverName
+
+    // Find the local config files that define this server (project and global scopes)
+    const candidates = [...mcpConfigCandidates(ctx.worktree), ...mcpConfigCandidates(Global.Path.config, true)]
+    const found = yield* Effect.promise(() => findMcpConfigFiles(name, candidates))
+
+    if (found.length === 0) {
+      prompts.log.warn(
+        `${name} is not defined in a local config file. It is likely provided by your organization's remote config and cannot be removed locally.`,
+      )
+      prompts.outro("Done")
+      return
+    }
+
+    let targets = found
+    if (found.length > 1) {
+      const ALL = "*all*"
+      const selected = yield* Effect.promise(() =>
+        prompts.select({
+          message: `"${name}" is defined in multiple config files. Remove from where?`,
+          options: [...found.map((file) => ({ label: file, value: file })), { label: "All of the above", value: ALL }],
+        }),
+      )
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      targets = selected === ALL ? found : [selected]
+    }
+
+    const confirmed = yield* Effect.promise(() =>
+      prompts.confirm({ message: `Remove "${name}" from ${targets.join(", ")}?` }),
+    )
+    if (prompts.isCancel(confirmed) || !confirmed) {
+      prompts.outro("Cancelled")
+      return
+    }
+
+    const results = yield* Effect.promise(() =>
+      Promise.all(targets.map(async (target) => ({ target, result: await removeMcpFromConfig(name, target) }))),
+    )
+    for (const { target, result } of results) {
+      if (result === "removed") {
+        prompts.log.success(`Removed "${name}" from ${target}`)
+      } else if (result === "invalid") {
+        prompts.log.error(
+          `Could not safely edit ${target} (the file has a syntax quirk such as a trailing comma). Remove the "${name}" entry manually.`,
+        )
+      }
+    }
+
+    const remaining = yield* Effect.promise(() => findMcpConfigFiles(name, candidates))
+    if (remaining.length > 0) {
+      prompts.log.warn(`"${name}" is still defined in ${remaining.join(", ")} and will remain active.`)
+    } else {
+      // Best-effort cleanup of stored OAuth credentials once the server is fully removed
+      const entry = yield* McpAuth.Service.use((auth) => auth.get(name))
+      if (entry) {
+        yield* MCP.Service.use((mcp) => mcp.removeAuth(name))
+        prompts.log.info("Removed stored OAuth credentials")
+      }
+    }
+
+    prompts.outro("Restart aiXplain Code to apply the change")
+  }),
+})
 
 export const McpAddCommand = effectCmd({
   command: "add [name]",
@@ -493,15 +655,15 @@ export const McpAddCommand = effectCmd({
         const headers = entries(args.header ?? [], "HTTP header")
         const mcpConfig: ConfigMCPV1.Info = args.url
           ? {
-              type: "remote",
-              url: args.url,
-              ...(Object.keys(headers).length ? { headers } : {}),
-            }
+            type: "remote",
+            url: args.url,
+            ...(Object.keys(headers).length ? { headers } : {}),
+          }
           : {
-              type: "local",
-              command,
-              ...(Object.keys(environment).length ? { environment } : {}),
-            }
+            type: "local",
+            command,
+            ...(Object.keys(environment).length ? { environment } : {}),
+          }
 
         const configPath = await resolveConfigPath(Global.Path.config, true)
         await addMcpToConfig(args.name, mcpConfig, configPath)
@@ -682,9 +844,9 @@ export const McpDebugCommand = effectCmd({
     const authInfo =
       serverConfig && isMcpRemote(serverConfig) && serverConfig.oauth !== false
         ? yield* Effect.all({
-            authStatus: mcp.getAuthStatus(args.name),
-            entry: auth.get(args.name),
-          })
+          authStatus: mcp.getAuthStatus(args.name),
+          entry: auth.get(args.name),
+        })
         : undefined
     yield* Effect.promise(async () => {
       UI.empty()
@@ -784,7 +946,7 @@ export const McpDebugCommand = effectCmd({
               redirectUri: oauthConfig?.redirectUri,
             },
             {
-              onRedirect: async () => {},
+              onRedirect: async () => { },
             },
             auth,
           )
