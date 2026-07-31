@@ -4,6 +4,7 @@ import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
@@ -158,11 +159,7 @@ export default function () {
           const match = createMemo(() => Binary.search(data().session, data().sessionID, (s) => s.id))
           if (!match().found) throw new Error(`Session ${data().sessionID} not found`)
           const info = createMemo(() => data().session[match().index])
-          const title = createMemo(
-            () =>
-              info().title ??
-              `${info().parentID ? "Child" : "New"} session - ${new Date(info().time.created).toISOString()}`,
-          )
+          const title = createMemo(() => withTimestampedFallback(info()))
           const ogImage = createMemo(() => {
             const models = new Set<string>()
             const messages = data().message[data().sessionID] ?? []

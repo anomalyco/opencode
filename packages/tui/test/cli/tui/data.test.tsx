@@ -9,7 +9,11 @@ import { createEffect, onMount, type ParentProps } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
 import { DataProvider as DataProviderBase, useData } from "../../../src/context/data"
+import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
+import { RouteProvider } from "../../../src/context/route"
+import { ThemeProvider } from "../../../src/context/theme"
+import { Composer } from "../../../src/routes/session/composer"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -1782,12 +1786,19 @@ test("refreshes references after updates", async () => {
 test("keeps shell state scoped to location", async () => {
   const events = createEventStream()
   const other = "/tmp/opencode/other"
-  const calls = createFetch((url) => {
+  const workspace = "ws_other"
+  let removed: URL | undefined
+  const calls = createFetch((url, request) => {
+    if (url.pathname === "/api/shell/sh_other" && request.method === "DELETE") {
+      removed = url
+      return new Response(null, { status: 204 })
+    }
     if (url.pathname !== "/api/shell") return
     const requestDirectory = url.searchParams.get("location[directory]")
     return json({
       location: {
         directory: requestDirectory ?? directory,
+        workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
         project: { id: "proj_test", directory: requestDirectory ?? directory },
       },
       data: [
@@ -1798,7 +1809,7 @@ test("keeps shell state scoped to location", async () => {
           cwd: requestDirectory ?? directory,
           shell: "/bin/sh",
           file: "/tmp/opencode-shell",
-          metadata: { sessionID: requestDirectory === other ? "ses_other" : "ses_default" },
+          metadata: { sessionID: "ses_shared" },
           time: { started: 1 },
         },
       ],
@@ -1808,7 +1819,15 @@ test("keeps shell state scoped to location", async () => {
 
   function Probe() {
     data = useData()
-    return <box />
+    return (
+      <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
+        <Keymap.Provider>
+          <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+            <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+          </ThemeProvider>
+        </Keymap.Provider>
+      </RouteProvider>
+    )
   }
 
   const app = await testRender(() => (
@@ -1822,19 +1841,31 @@ test("keeps shell state scoped to location", async () => {
       </ClientProvider>
     </TestTuiContexts>
   ))
+  app.renderer.start()
 
   try {
     await wait(() => data.shell.list().some((shell) => shell.id === "sh_default"))
-    await data.shell.sync({ directory: other })
+    await data.shell.sync({ directory: other, workspaceID: workspace })
 
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
-    expect(data.shell.list({ directory: other }).map((shell) => shell.id)).toEqual(["sh_other"])
+    expect(data.shell.list({ directory: other, workspaceID: workspace }).map((shell) => shell.id)).toEqual(["sh_other"])
+    expect(data.shell.listBySession("ses_shared").map((shell) => [shell.id, shell.location.directory])).toEqual([
+      ["sh_default", directory],
+      ["sh_other", other],
+    ])
+
+    await app.waitForFrame((frame) => frame.includes("pnpm dev"))
+    app.mockInput.pressArrow("down")
+    app.mockInput.pressKey("d", { ctrl: true })
+    await wait(() => removed !== undefined)
+    expect(removed?.searchParams.get("location[directory]")).toBe(other)
+    expect(removed?.searchParams.get("location[workspace]")).toBe(workspace)
 
     events.emit({
       id: "evt_shell_created",
       created: 0,
       type: "shell.created",
-      location: { directory: other },
+      location: { directory: other, workspaceID: workspace },
       data: {
         info: {
           id: "sh_live_other",
@@ -1843,13 +1874,18 @@ test("keeps shell state scoped to location", async () => {
           cwd: other,
           shell: "/bin/sh",
           file: "/tmp/opencode-shell-live",
-          metadata: { sessionID: "ses_other" },
+          metadata: { sessionID: "ses_shared" },
           time: { started: 2 },
         },
       },
     })
-    await wait(() => data.shell.list({ directory: other }).some((shell) => shell.id === "sh_live_other"))
+    await wait(() =>
+      data.shell.list({ directory: other, workspaceID: workspace }).some((shell) => shell.id === "sh_live_other"),
+    )
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
+    expect(data.shell.listBySession("ses_shared").find((shell) => shell.id === "sh_live_other")?.location.directory).toBe(
+      other,
+    )
   } finally {
     app.renderer.destroy()
   }

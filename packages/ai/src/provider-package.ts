@@ -6,6 +6,7 @@ export interface Settings extends Readonly<Record<string, unknown>> {
   readonly body?: Readonly<Record<string, unknown>>
   readonly limits?: {
     readonly context: number
+    readonly input?: number
     readonly output: number
   }
 }

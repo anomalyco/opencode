@@ -2,8 +2,8 @@ import path from "path"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
-import { useDialog } from "../ui/dialog"
-import { DialogSelect } from "../ui/dialog-select"
+import { dialogWidth, useDialog } from "../ui/dialog"
+import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -16,7 +16,7 @@ import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { truncateFilePath } from "../ui/file-path"
 import { stringWidth } from "../util/string-width"
-import { sessionTitle } from "../util/session"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { Spinner } from "./spinner"
 
 const RECENT_LIMIT = 8
@@ -80,10 +80,11 @@ export function DialogOpen() {
       const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
       const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
-        title: sessionTitle(session),
+        title: withTimestampedFallback(session),
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
         footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,
+        onSelect: () => location.set(session.location),
         gutter: running
           ? () => <Spinner />
           : tabs.has(session.id)
@@ -104,8 +105,8 @@ export function DialogOpen() {
       .map((project) => {
         const title = project.name ?? path.basename(project.canonical)
         const footer = abbreviateHome(project.canonical, paths.home)
-        // Dialog padding, the gutter column, title padding, and the separating space use nine columns.
-        const width = Math.min(60, dimensions().width - 2) - 9 - stringWidth(title)
+        const width =
+          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title)
         return {
           title,
           footer: truncateFilePath(footer, width),

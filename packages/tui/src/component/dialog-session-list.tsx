@@ -18,7 +18,8 @@ import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
-import { sessionTitle } from "../util/session"
+import { useConfig } from "../config"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -30,12 +31,15 @@ export function DialogSessionList() {
   const client = useClient()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
+  const config = useConfig().data
   const toast = useToast()
   const [filter, setFilter] = createSignal("")
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
-  const [prefs, updatePrefs] = useStorage().store("session-list", { initial: { allProjects: false } })
+  const [prefs, updatePrefs] = useStorage().store("session-list", {
+    initial: { allProjects: config.tabs?.scope !== "cwd" },
+  })
   const allProjects = () => prefs.allProjects
 
   const [searchResults, { mutate: setSearchResults }] = createResource(
@@ -78,7 +82,9 @@ export function DialogSessionList() {
           (session.projectID === current?.project.id && session.location.directory === current.directory),
       )
     if (!query) return sessions
-    return sessions.filter((session) => !session.parentID && sessionTitle(session).toLowerCase().includes(query))
+    return sessions.filter(
+      (session) => !session.parentID && withTimestampedFallback(session).toLowerCase().includes(query),
+    )
   })
   const sessions = createMemo(() => {
     const query = filter().trim()
@@ -140,7 +146,9 @@ export function DialogSessionList() {
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {
-        title: deleting ? `Press ${shortcuts.get("session.delete")} again to confirm` : sessionTitle(session),
+        title: deleting
+          ? `Press ${shortcuts.get("session.delete")} again to confirm`
+          : withTimestampedFallback(session),
         value: session.id,
         category,
         footer,
@@ -236,7 +244,9 @@ export function DialogSessionList() {
               .remove({ sessionID: option.value })
               .then(() => {
                 setSearchResults((result) =>
-                  result ? { ...result, sessions: result.sessions.filter((session) => session.id !== option.value) } : result,
+                  result
+                    ? { ...result, sessions: result.sessions.filter((session) => session.id !== option.value) }
+                    : result,
                 )
               })
               .catch((error) => {

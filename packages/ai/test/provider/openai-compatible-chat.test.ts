@@ -144,6 +144,20 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("configures the max tokens request field", () =>
+    Effect.gen(function* () {
+      const compatible = OpenAICompatibleChat.route
+        .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+        .model({ id: "custom-model", compatibility: { maxTokensField: "max_completion_tokens" } })
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, prompt: "Say hello.", generation: { maxTokens: 20 } }),
+      )
+
+      expect(prepared.body).toMatchObject({ max_completion_tokens: 20 })
+      expect(prepared.body).not.toHaveProperty("max_tokens")
+    }),
+  )
+
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

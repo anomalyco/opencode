@@ -2,8 +2,8 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import path from "path"
-import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
-import { useDialog } from "../ui/dialog"
+import { DialogSelect, dialogSelectContentWidth, type DialogSelectOption } from "../ui/dialog-select"
+import { dialogWidth, useDialog } from "../ui/dialog"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
@@ -159,7 +159,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       if (b.location === b.root.directory) return 1
       return a.location.localeCompare(b.location)
     })
-    const titleWidth = Math.max(1, Math.min(116, dimensions().width - 2) - 12)
+    const titleWidth = Math.max(
+      1,
+      dialogSelectContentWidth(Math.min(dialogWidth("xlarge"), dimensions().width - 2)),
+    )
 
     return list.map((item) => {
       const title = abbreviateHome(item.location, paths.home)

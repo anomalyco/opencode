@@ -5,6 +5,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
@@ -14,7 +15,6 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
-import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, getProjectAvatarSource, hasProjectPermissions } from "./helpers"
 
@@ -104,7 +104,7 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
 }): JSX.Element => {
-  const title = () => sessionTitle(props.session.title, props.session.parentID)
+  const title = () => displayLabel(props.session)
 
   return (
     <A
@@ -229,7 +229,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               fallback={
                 <Tooltip
                   placement={props.mobile ? "bottom" : "right"}
-                  value={sessionTitle(props.session.title, props.session.parentID)}
+                  value={displayLabel(props.session)}
                   gutter={10}
                   class="min-w-0 w-full"
                 >

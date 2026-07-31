@@ -6,6 +6,7 @@ import { Agent } from "../agent"
 import { Database } from "../database/database"
 import { Bus } from "../bus"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
 import { App } from "../app"
 import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
@@ -39,7 +40,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
 const isUntitled = (session: SessionSchema.Info) =>
-  session.title === undefined || session.title === `New session - ${DateTime.formatIso(session.time.created)}`
+  isExactRootFallback({
+    title: session.title,
+    time: { created: DateTime.toEpochMillis(session.time.created) },
+  })
 
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (

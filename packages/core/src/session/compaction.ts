@@ -152,14 +152,11 @@ const settings = (documents: readonly Config.Entry[]) => {
   const configured = documents
     .filter((entry): entry is Config.Document => entry.type === "document")
     .flatMap((entry) => (entry.info.compaction ? [entry.info.compaction] : []))
-  return configured.reduce<Settings>(
-    (result, current) => ({
-      auto: current.auto ?? result.auto,
-      buffer: current.buffer ?? result.buffer,
-      tokens: current.keep?.tokens ?? result.tokens,
-    }),
-    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
-  )
+  return {
+    auto: configured.findLast((value) => value.auto !== undefined)?.auto ?? true,
+    buffer: configured.findLast((value) => value.buffer !== undefined)?.buffer ?? DEFAULT_BUFFER,
+    tokens: configured.findLast((value) => value.keep?.tokens !== undefined)?.keep?.tokens ?? DEFAULT_KEEP_TOKENS,
+  }
 }
 
 const select = (
@@ -350,11 +347,16 @@ const make = (dependencies: Dependencies) => {
         message.type === "assistant" && message.tokens !== undefined,
     )
     if (!last) return false
-    const output = Math.min(input.model.route.defaults.limits?.output ?? 0, OUTPUT_TOKEN_MAX)
+    const limits = input.model.route.defaults.limits
+    const output = Math.min(limits?.output ?? 0, OUTPUT_TOKEN_MAX)
+    const promptCeiling = Math.min(
+      limits?.input === undefined ? Number.POSITIVE_INFINITY : limits.input - config.buffer,
+      context - Math.max(output, config.buffer),
+    )
     const used =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (used <= 0) return false
-    return used >= context - (output || config.buffer)
+    return used >= promptCeiling
   }
   const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
     const content = planContent(input.messages, config.tokens)

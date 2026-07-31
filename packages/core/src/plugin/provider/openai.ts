@@ -220,12 +220,8 @@ export const OpenAIPlugin = define({
             return
           }
           draft.cost = []
-          if (draft.id.includes("gpt-5.5")) {
-            draft.limit = { context: 400_000, input: 272_000, output: 128_000 }
-          }
-          if (draft.id.includes("gpt-5.6")) {
-            draft.limit = { context: 500_000, input: 372_000, output: 128_000 }
-          }
+          // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
+          draft.limit = { ...draft.limit, context: 272_000, input: 272_000 }
         })
       }
     })

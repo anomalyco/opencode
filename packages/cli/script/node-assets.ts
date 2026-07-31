@@ -58,8 +58,9 @@ export async function collectNodeAssets(target: NodeTarget) {
         source: path.join(ptyRoot, relative),
       })),
   ]
-  await Promise.all(assets.map((asset) => stat(asset.source)))
-  return assets
+  const unique = [...new Map(assets.map((asset) => [asset.key, asset])).values()]
+  await Promise.all(unique.map((asset) => stat(asset.source)))
+  return unique
 }
 
 export async function hashNodeAssets(assets: readonly NodeAsset[]) {
