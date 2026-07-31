@@ -375,8 +375,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             .catch((error) => console.error("Failed to load projected model switch message", error))
           break
         case "session.renamed":
-          if (store.session.info[event.data.sessionID])
-            setStore("session", "info", event.data.sessionID, "title", event.data.title)
+          // Preserve the live title when it races the session's initial read.
+          void result.session.sync(event.data.sessionID).then(() => {
+            if (store.session.info[event.data.sessionID])
+              setStore("session", "info", event.data.sessionID, "title", event.data.title)
+          })
           break
         case "session.moved":
           if (store.session.info[event.data.sessionID]) {
