@@ -958,7 +958,14 @@ export function Session() {
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
-        <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+        <box
+          flexGrow={1}
+          minHeight={0}
+          paddingBottom={1}
+          paddingLeft={dimensions().width < 44 ? 1 : 2}
+          paddingRight={dimensions().width < 44 ? 1 : 2}
+          gap={1}
+        >
           <Show when={session()}>
             <scrollbox
               ref={(r) => (scroll = r)}

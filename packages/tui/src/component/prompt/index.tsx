@@ -1348,8 +1348,8 @@ export function Prompt(props: PromptProps) {
           }}
         >
           <box
-            paddingLeft={2}
-            paddingRight={2}
+            paddingLeft={dimensions().width < 44 ? 1 : 2}
+            paddingRight={dimensions().width < 44 ? 1 : 2}
             paddingTop={1}
             flexShrink={0}
             backgroundColor={promptBg()}
@@ -1433,25 +1433,34 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-              <box flexDirection="row" gap={1}>
+              <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
                 <Show when={agentLabel()} fallback={<box height={1} />}>
                   {(label) => (
                     <>
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>{label()}</text>
-                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
+                      <Show
+                        when={store.mode === "normal" && local.permission.mode === "auto" && dimensions().width >= 44}
+                      >
                         <text fg={fadeColor(theme.text.subdued, agentMetaAlpha())}>auto</text>
                       </Show>
                       <Show when={store.mode === "normal"}>
-                        <box flexDirection="row" gap={1}>
+                        <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
                           <text fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>·</text>
                           <text
-                            flexShrink={0}
+                            flexShrink={1}
+                            minWidth={0}
+                            wrapMode="none"
+                            truncate
                             fg={fadeColor(leader() ? theme.text.subdued : theme.text.default, modelMetaAlpha())}
                           >
                             {local.model.parsed().model}
                           </text>
-                          <text fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                          <Show when={showVariant()}>
+                          <Show when={dimensions().width >= 50}>
+                            <text flexShrink={0} fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>
+                              {currentProviderLabel()}
+                            </text>
+                          </Show>
+                          <Show when={showVariant() && dimensions().width >= 70}>
                             <text fg={fadeColor(theme.text.subdued, variantMetaAlpha())}>·</text>
                             <text>
                               <span
