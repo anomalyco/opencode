@@ -1,4 +1,6 @@
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
+import { graphql } from "@octokit/graphql"
+import { Octokit } from "@octokit/rest"
 
 export { parseGitHubRemote } from "@/util/repository"
 
@@ -27,4 +29,19 @@ export function formatPromptTooLargeError(files: { filename: string; content: st
       ? `\n\nFiles in prompt:\n${files.map((f) => `  - ${f.filename} (${((f.content.length * 0.75) / 1024).toFixed(0)} KB)`).join("\n")}`
       : ""
   return `PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.${fileDetails}`
+}
+
+export function createGithubClients(auth: string) {
+  const restBaseUrl = (process.env["GITHUB_API_URL"] ?? "https://api.github.com").replace(/\/+$/, "")
+  const graphqlBaseUrl = (process.env["GITHUB_GRAPHQL_URL"] ?? "https://api.github.com")
+    .replace(/\/+$/, "")
+    .replace(/\/graphql$/, "")
+
+  return {
+    rest: new Octokit({ auth, baseUrl: restBaseUrl }),
+    graph: graphql.defaults({
+      baseUrl: graphqlBaseUrl,
+      headers: { authorization: `token ${auth}` },
+    }),
+  }
 }
