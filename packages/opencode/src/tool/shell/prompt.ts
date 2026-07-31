@@ -7,6 +7,14 @@ import { ShellID } from "./id"
 const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
 
+export type SummaryMode = "head" | "tail" | "error"
+
+const SUMMARY_MODE_NOTE =
+  "  - Use `summary_mode` to control how large output is summarized: `\"head\"` (first lines), `\"tail\"` (last lines, good for build/test failures), `\"error\"` (only lines matching error/fail/warning patterns). Defaults to `\"tail\"`."
+
+const BACKGROUND_NOTE =
+  "  - For long-running commands (builds, tests, CI polling, watchers), set `background: true` to run the command in the background and keep the conversation responsive. The result will be delivered automatically when it finishes. DO NOT sleep, poll, or check on a background command. Background commands use the full default timeout unless you pass an explicit `timeout`."
+
 export type Limits = {
   maxLines: number
   maxBytes: number
@@ -18,6 +26,16 @@ export function parameterSchema() {
     timeout: Schema.optional(PositiveInt).annotate({ description: "Optional timeout in milliseconds" }),
     workdir: Schema.optional(Schema.String).annotate({
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
+    }),
+    summary_mode: Schema.optional(
+      Schema.Literals(["head", "tail", "error"]).annotate({
+        description:
+          "How to summarize the command output when it is large. 'head' keeps the first lines, 'tail' keeps the last lines (useful for test/build failures), 'error' keeps only lines containing error/fail/warning patterns. Defaults to 'tail'. The full output is always written to a file when truncated.",
+      }),
+    ),
+    background: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "Run the command in the background and return immediately. The result will be delivered as a follow-up message when it completes. Use this for long-running commands (builds, tests, CI polling) that would otherwise block the conversation. DO NOT sleep, poll, or check on background commands.",
     }),
   })
 }
@@ -94,7 +112,9 @@ function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: num
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms (network operations get a shorter default timeout, build/test operations a longer one).
+${SUMMARY_MODE_NOTE}
+${BACKGROUND_NOTE}
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
   - Avoid using Bash with the \`find\`, \`grep\`, \`cat\`, \`head\`, \`tail\`, \`sed\`, \`awk\`, or \`echo\` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
@@ -145,7 +165,9 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms (network operations get a shorter default timeout, build/test operations a longer one).
+${SUMMARY_MODE_NOTE}
+${BACKGROUND_NOTE}
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`Select-Object -First\`, \`Select-Object -Last\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
   - Avoid using Shell with PowerShell file/content cmdlets unless explicitly instructed or when these cmdlets are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
@@ -194,7 +216,9 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms (network operations get a shorter default timeout, build/test operations a longer one).
+${SUMMARY_MODE_NOTE}
+${BACKGROUND_NOTE}
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`more\` or other pagination commands to limit output; the full output will already be captured to a file for more precise searching.
 
   - Avoid using Shell with cmd.exe file/content commands unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
