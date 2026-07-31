@@ -44,15 +44,6 @@ export const settings: Setting[] = [
     keywords: ["motion", "effects"],
   },
   {
-    title: "Onboarding",
-    category: "Appearance",
-    path: ["hints", "onboarding"],
-    default: true,
-    values: [false, true],
-    labels: ["off", "on"],
-    keywords: ["hints", "getting started", "guidance"],
-  },
-  {
     title: "Sidebar",
     category: "Session",
     path: ["session", "sidebar"],
