@@ -1563,13 +1563,14 @@ describe("session.message-v2.latest", () => {
   const NEW_COMPACTION_USER = MessageID.make("msg_006")
 
   const tailUser: SessionV1.WithParts = {
-    info: userInfo(TAIL_USER),
+    info: { ...userInfo(TAIL_USER), time: { created: 1_000 } },
     parts: [{ ...basePart(TAIL_USER, "p1"), type: "text", text: "original prompt" }] as SessionV1.Part[],
   }
 
   const overflowAssistant: SessionV1.WithParts = {
     info: {
       ...assistantInfo(OVERFLOW_ASSISTANT, TAIL_USER),
+      time: { created: 2_000 },
       finish: "tool-calls",
       tokens: { input: 280_000, output: 200, reasoning: 0, cache: { read: 0, write: 0 }, total: 280_200 },
     } as SessionV1.Assistant,
@@ -1577,7 +1578,7 @@ describe("session.message-v2.latest", () => {
   }
 
   const compactionUser: SessionV1.WithParts = {
-    info: userInfo(COMPACTION_USER),
+    info: { ...userInfo(COMPACTION_USER), time: { created: 3_000 } },
     parts: [
       {
         ...basePart(COMPACTION_USER, "p1"),
@@ -1591,6 +1592,7 @@ describe("session.message-v2.latest", () => {
   const summaryAssistant: SessionV1.WithParts = {
     info: {
       ...assistantInfo(SUMMARY_ASSISTANT, COMPACTION_USER),
+      time: { created: 4_000 },
       summary: true,
       finish: "stop",
       tokens: { input: 150_000, output: 1_500, reasoning: 0, cache: { read: 0, write: 0 }, total: 151_500 },
@@ -1599,7 +1601,7 @@ describe("session.message-v2.latest", () => {
   }
 
   const continueUser: SessionV1.WithParts = {
-    info: userInfo(CONTINUE_USER),
+    info: { ...userInfo(CONTINUE_USER), time: { created: 5_000 } },
     parts: [
       {
         ...basePart(CONTINUE_USER, "p1"),
@@ -1635,7 +1637,7 @@ describe("session.message-v2.latest", () => {
 
   test("a fresh compaction-user newer than the latest summary surfaces in tasks", () => {
     const newCompactionUser: SessionV1.WithParts = {
-      info: userInfo(NEW_COMPACTION_USER),
+      info: { ...userInfo(NEW_COMPACTION_USER), time: { created: 6_000 } },
       parts: [
         {
           ...basePart(NEW_COMPACTION_USER, "p1"),
@@ -1656,6 +1658,39 @@ describe("session.message-v2.latest", () => {
 
     expect(state.finished?.id).toBe(SUMMARY_ASSISTANT)
     expect(state.user?.id).toBe(NEW_COMPACTION_USER)
+    expect(state.tasks).toHaveLength(1)
+    expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
+  })
+
+  test("message IDs do not control latest ordering across client or format changes", () => {
+    const oldUser = MessageID.make("msg_fcfbda4a-03c9-4e6b-82cf-2febde1b46a6")
+    const oldAssistant = MessageID.make("msg_fffffffff001AAAAAAAAAAAAAA")
+    const newUser = MessageID.make("msg_001a000000000001AAAAAAAAAAAA")
+
+    const state = MessageV2.latest([
+      {
+        info: { ...userInfo(oldUser), time: { created: 1_000 } },
+        parts: [],
+      },
+      {
+        info: { ...assistantInfo(oldAssistant, oldUser), finish: "stop", time: { created: 2_000 } },
+        parts: [],
+      },
+      {
+        info: { ...userInfo(newUser), time: { created: 3_000 } },
+        parts: [
+          {
+            ...basePart(newUser, "new-task"),
+            type: "compaction",
+            auto: true,
+          },
+        ] as SessionV1.Part[],
+      },
+    ])
+
+    expect(state.user?.id).toBe(newUser)
+    expect(state.assistant?.id).toBe(oldAssistant)
+    expect(state.finished?.id).toBe(oldAssistant)
     expect(state.tasks).toHaveLength(1)
     expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
   })

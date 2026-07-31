@@ -39,9 +39,12 @@ export function create(prefix: string, direction: "descending" | "ascending", ti
 /** Extract timestamp from an ascending ID. Does not work with descending IDs. */
 export function timestamp(id: string): number {
   const prefix = id.split("_")[0]
-  const hex = id.slice(prefix.length + 1, prefix.length + 13)
+  const suffixLength = id.length - prefix.length - 1
+  const hexLength = suffixLength > 26 ? 16 : 12
+  const hex = id.slice(prefix.length + 1, prefix.length + 1 + hexLength)
+  if (!/^[0-9a-f]+$/i.test(hex)) throw new Error(`ID ${id} does not contain an encoded timestamp`)
   const encoded = BigInt("0x" + hex)
-  return Number(encoded / BigInt(0x1000))
+  return Number(encoded >> 12n)
 }
 
 export * as Identifier from "./id"
