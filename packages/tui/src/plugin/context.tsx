@@ -388,6 +388,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     clearTimeout(pending)
     pending = setTimeout(() => {
       loading = loading.catch(() => undefined).then(() => reconcile())
+      // Observe failures immediately: a plugin cleanup that throws would
+      // otherwise surface as an unhandled rejection until the next trigger.
+      void loading.catch(() => undefined)
     }, 100)
   }
   const watchSource = (target: string) => {
@@ -400,7 +403,16 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         const dir = info.isDirectory() ? target : path.dirname(target)
         if (dir !== target && watched.has(dir)) return
         watched.add(dir)
-        watchers.push(watch(dir, changed))
+        const watcher = watch(dir, changed)
+        // A watched directory can disappear out from under us; without a
+        // listener the error event would crash the process. Forget the paths
+        // so a later reconcile can re-arm once they exist again.
+        watcher.on("error", () => {
+          watcher.close()
+          watched.delete(dir)
+          watched.delete(target)
+        })
+        watchers.push(watcher)
       })
       .catch(() => watched.delete(target))
   }
