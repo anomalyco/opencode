@@ -1,0 +1,415 @@
+{
+  "version": "inventory-gold-v1",
+  "cases": [
+    {
+      "id": "read-01-complete-6001zz",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6001ZZ" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6001ZZ", "limit": 20 },
+        "result": [
+          {
+            "name": "6001ZZ",
+            "attribute": "清油",
+            "size": "12×28×8",
+            "shelves": ["B-11-13"],
+            "supplier": "上海涂众轴承",
+            "inventory": "200",
+            "remark": "xxx"
+          }
+        ],
+        "answer": "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-02-supplierless-total",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6001ZZ" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6001ZZ", "limit": 20 },
+        "result": [
+          {
+            "name": "6001ZZ",
+            "size": "12×28×8",
+            "shelves": [],
+            "inventory": "200"
+          }
+        ],
+        "answer": "6001ZZ（12×28×8）库存200",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-03-shelf-only",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "shelf_lookup", "term": "6201" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6201", "limit": 20 },
+        "result": [
+          {
+            "name": "6201",
+            "shelves": ["A-1-2"],
+            "inventory": "8"
+          }
+        ],
+        "answer": "6201（货架号：A-1-2）库存8",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-04-multiple-shelves",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "shelf_lookup", "term": "6301" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6301", "limit": 20 },
+        "result": [
+          {
+            "name": "6301",
+            "shelves": ["B-1-1", "B-1-2"],
+            "inventory": "12"
+          }
+        ],
+        "answer": "6301（货架号：B-1-1、B-1-2）库存12",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-05-remark",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6401" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6401", "limit": 20 },
+        "result": [
+          {
+            "name": "6401",
+            "shelves": [],
+            "inventory": "9",
+            "remark": "2024-7-20"
+          }
+        ],
+        "answer": "6401库存9，备注：2024-7-20",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-06-normalized-size",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6501" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6501", "limit": 20 },
+        "result": [
+          {
+            "name": "6501",
+            "size": "15×35×11",
+            "shelves": [],
+            "inventory": "6"
+          }
+        ],
+        "answer": "6501（15×35×11）库存6",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-07-no-result",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "不存在商品" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "不存在商品", "limit": 20 },
+        "result": [],
+        "answer": "未找到相关商品。",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-08-attribute-only",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6601" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6601", "limit": 20 },
+        "result": [
+          {
+            "name": "6601",
+            "attribute": "脂润滑",
+            "shelves": [],
+            "inventory": "4"
+          }
+        ],
+        "answer": "6601（脂润滑）库存4",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-09-size-only",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6701" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6701", "limit": 20 },
+        "result": [
+          {
+            "name": "6701",
+            "size": "12×18×4",
+            "shelves": [],
+            "inventory": "30"
+          }
+        ],
+        "answer": "6701（12×18×4）库存30",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-10-supplier",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6801" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6801", "limit": 20 },
+        "result": [
+          {
+            "name": "6801",
+            "shelves": [],
+            "supplier": "甲供应商",
+            "inventory": "18"
+          }
+        ],
+        "answer": "6801甲供应商库存18",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-11-zero-inventory",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "6901" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "6901", "limit": 20 },
+        "result": [
+          {
+            "name": "6901",
+            "shelves": ["C-1-1"],
+            "inventory": "0"
+          }
+        ],
+        "answer": "6901（货架号：C-1-1）库存0",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-12-fractional-inventory",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "7001" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "7001", "limit": 20 },
+        "result": [
+          {
+            "name": "7001",
+            "shelves": [],
+            "inventory": "1.5"
+          }
+        ],
+        "answer": "7001库存1.5",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-13-multiple-products",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "ZZ" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "ZZ", "limit": 20 },
+        "result": [
+          {
+            "name": "6001ZZ",
+            "shelves": [],
+            "inventory": "200"
+          },
+          {
+            "name": "6201ZZ",
+            "shelves": [],
+            "inventory": "8"
+          }
+        ],
+        "answer": "6001ZZ库存200\n6201ZZ库存8",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-14-multiple-suppliers",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "7101" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "7101", "limit": 20 },
+        "result": [
+          {
+            "name": "7101",
+            "shelves": [],
+            "supplier": "甲供应商",
+            "inventory": "10"
+          },
+          {
+            "name": "7101",
+            "shelves": [],
+            "supplier": "乙供应商",
+            "inventory": "20"
+          }
+        ],
+        "answer": "7101甲供应商库存10\n7101乙供应商库存20",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-15-duplicate-visible-name",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "7201" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "7201", "limit": 20 },
+        "result": [
+          {
+            "name": "7201",
+            "attribute": "清油",
+            "shelves": [],
+            "inventory": "5"
+          },
+          {
+            "name": "7201",
+            "attribute": "脂润滑",
+            "shelves": [],
+            "inventory": "7"
+          }
+        ],
+        "answer": "7201（清油）库存5\n7201（脂润滑）库存7",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-16-internal-code-query-hidden",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "SP0000005943" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "SP0000005943", "limit": 20 },
+        "result": [
+          {
+            "name": "6001ZZ",
+            "shelves": [],
+            "inventory": "200"
+          }
+        ],
+        "answer": "6001ZZ库存200",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-17-location-with-attribute",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "shelf_lookup", "term": "7301" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "7301", "limit": 20 },
+        "result": [
+          {
+            "name": "7301",
+            "attribute": "开式",
+            "shelves": ["D-2-3"],
+            "inventory": "11"
+          }
+        ],
+        "answer": "7301（开式）（货架号：D-2-3）库存11",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-18-uppercase-x-size",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "7401" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "7401", "limit": 20 },
+        "result": [
+          {
+            "name": "7401",
+            "size": "20×42×12",
+            "shelves": [],
+            "inventory": "16"
+          }
+        ],
+        "answer": "7401（20×42×12）库存16",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-19-multiline-remark-normalized",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "7501" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "7501", "limit": 20 },
+        "result": [
+          {
+            "name": "7501",
+            "shelves": [],
+            "inventory": "3",
+            "remark": "第一行 第二行"
+          }
+        ],
+        "answer": "7501库存3，备注：第一行 第二行",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "read-20-minimal",
+      "category": "read",
+      "expected": {
+        "intent": { "kind": "inventory_lookup", "term": "7601" },
+        "templateVersion": "mysql-inventory-v1",
+        "parameters": { "term": "7601", "limit": 20 },
+        "result": [
+          {
+            "name": "7601",
+            "shelves": [],
+            "inventory": "2"
+          }
+        ],
+        "answer": "7601库存2",
+        "policy": "allow"
+      }
+    },
+    {
+      "id": "policy-01-write-blocked",
+      "category": "policy",
+      "expected": {
+        "intent": { "kind": "blocked_operation", "term": "6001ZZ" },
+        "templateVersion": null,
+        "parameters": null,
+        "result": [],
+        "answer": "该操作不支持。",
+        "policy": "block"
+      }
+    },
+    {
+      "id": "policy-02-arbitrary-sql-blocked",
+      "category": "policy",
+      "expected": {
+        "intent": { "kind": "blocked_operation", "term": "Product" },
+        "templateVersion": null,
+        "parameters": null,
+        "result": [],
+        "answer": "该操作不支持。",
+        "policy": "block"
+      }
+    }
+  ]
+}

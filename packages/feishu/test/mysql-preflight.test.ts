@@ -127,11 +127,17 @@ describe("runMysqlPreflight", () => {
 
   test("removes credential-bearing driver errors", async () => {
     const input = executor({ error: new Error("password=secret-value") })
-    const error = await runMysqlPreflight(input.query, "t1_full_20260717_133707").catch((value) => value)
+    const error = errorValue(
+      await runMysqlPreflight(input.query, "t1_full_20260717_133707").catch((value: unknown) => value),
+    )
 
-    expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toBe("MySQL preflight failed")
-    expect((error as Error).message).not.toContain("secret-value")
-    expect((error as Error).cause).toBeUndefined()
+    expect(error.message).toBe("MySQL preflight failed")
+    expect(error.message).not.toContain("secret-value")
+    expect(error.cause).toBeUndefined()
   })
 })
+
+function errorValue(value: unknown) {
+  if (!(value instanceof Error)) throw new Error("expected an Error")
+  return value
+}

@@ -127,7 +127,7 @@ export async function createMysqlInventory(
   })
   const query: QueryExecutor = async (sql, values = []) => {
     const [rows] = await pool.execute<RowDataPacket[]>({ sql, timeout: config.queryTimeoutMs }, [...values])
-    return rows as readonly Record<string, unknown>[]
+    return rows
   }
   const preflight = await runMysqlPreflight(query, config.database).catch(async (error) => {
     await pool.end().catch(() => undefined)
@@ -198,7 +198,7 @@ function createInventoryReader(input: {
           throw new Error("库存查询失败，请稍后再试。")
         })
     },
-    close: input.close,
+    close: () => input.close(),
   }
 }
 

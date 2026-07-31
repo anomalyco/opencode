@@ -7,7 +7,7 @@
     "test": "bun test",
     "test:mysql-contract": "bun test test/mysql-inventory.contract.test.ts",
     "typecheck": "tsgo --noEmit",
-    "lint": "oxlint src test"
+    "lint": "oxlint -c ../../.oxlintrc.json src test"
   },
   "dependencies": {
     "mysql2": "3.14.4"

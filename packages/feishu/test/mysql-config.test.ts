@@ -67,18 +67,25 @@ describe("MySQL inventory configuration", () => {
     const passwordFile = path.join(directory, "private-password")
     await Bun.write(passwordFile, "\r\n")
 
-    const error = await loadMysqlPassword({ ...parseMysqlConfig(valid), passwordFile }).catch((value) => value)
-    expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toBe("FEISHU_MYSQL_PASSWORD_FILE is empty")
-    expect((error as Error).message).not.toContain(passwordFile)
+    const error = errorValue(
+      await loadMysqlPassword({ ...parseMysqlConfig(valid), passwordFile }).catch((value: unknown) => value),
+    )
+    expect(error.message).toBe("FEISHU_MYSQL_PASSWORD_FILE is empty")
+    expect(error.message).not.toContain(passwordFile)
   })
 
   test("does not expose a missing password file path", async () => {
     const passwordFile = path.join(tmpdir(), "missing-feishu-mysql-password")
-    const error = await loadMysqlPassword({ ...parseMysqlConfig(valid), passwordFile }).catch((value) => value)
+    const error = errorValue(
+      await loadMysqlPassword({ ...parseMysqlConfig(valid), passwordFile }).catch((value: unknown) => value),
+    )
 
-    expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toBe("FEISHU_MYSQL_PASSWORD_FILE cannot be read")
-    expect((error as Error).message).not.toContain(passwordFile)
+    expect(error.message).toBe("FEISHU_MYSQL_PASSWORD_FILE cannot be read")
+    expect(error.message).not.toContain(passwordFile)
   })
 })
+
+function errorValue(value: unknown) {
+  if (!(value instanceof Error)) throw new Error("expected an Error")
+  return value
+}

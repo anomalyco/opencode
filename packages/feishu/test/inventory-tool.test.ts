@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   createInventoryTool,
-  type TrustedFeishuContext,
 } from "../src/inventory-tool"
 import type { InventoryAnswerItem } from "../src/inventory-answer"
 
@@ -75,10 +74,9 @@ describe("inventory tool", () => {
       verifyContext: (value) => value.integrity === "gateway-issued",
       now: () => 2_000,
     })
-    const missing = undefined as unknown as TrustedFeishuContext
     const forged = { ...context, integrity: "forged", expiresAt: 2_001 }
 
-    expect(await tool.query({ context: missing, term: "6001ZZ" })).toEqual({
+    expect(await tool.query({ term: "6001ZZ" })).toEqual({
       status: "error",
       text: "库存查询失败，请稍后再试。",
     })
@@ -150,11 +148,12 @@ describe("inventory tool", () => {
       now: () => 1_500,
     })
 
-    if (false) {
+    const compileOnly = () => {
       // @ts-expect-error inventory tool input has no SQL field
       void tool.query({ context, term: "6001ZZ", sql: "UPDATE Product SET u_Name = 'x'" })
     }
 
+    expect(compileOnly).toBeFunction()
     expect(Object.keys(tool)).toEqual(["query"])
   })
 })
