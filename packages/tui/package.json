@@ -93,7 +93,6 @@
     "@opentui/solid": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
     "clipboardy": "4.0.0",
-    "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "get-east-asian-width": "catalog:",
