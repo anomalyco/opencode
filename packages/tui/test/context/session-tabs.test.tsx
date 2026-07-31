@@ -64,6 +64,7 @@ async function renderSessionTabs(initialSessionID: string) {
   return {
     tabs,
     route,
+    state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
     destroy() {
       app.renderer.destroy()
@@ -71,6 +72,21 @@ async function renderSessionTabs(initialSessionID: string) {
     },
   }
 }
+
+test("stores session tabs globally by default", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    const file = path.join(setup.state, "test", "tui", "tabs.json")
+    await wait(() => Bun.file(file).size > 0)
+    expect(await Bun.file(file).json()).toEqual({
+      global: { tabs: [{ sessionID: "first" }], unread: {} },
+      cwd: {},
+    })
+  } finally {
+    setup.destroy()
+  }
+})
 
 test("user prompt admissions pulse an already-busy background tab", async () => {
   const setup = await renderSessionTabs("background")
@@ -106,9 +122,7 @@ test("user prompt admissions pulse an already-busy background tab", async () => 
     expect(setup.tabs.status("background").promptPulse).toBe(0)
 
     setup.emit(admitted("background", "msg_1"))
-    await wait(
-      () => setup.tabs.status("background").promptPulse === 1 && setup.tabs.status("background").busy,
-    )
+    await wait(() => setup.tabs.status("background").promptPulse === 1 && setup.tabs.status("background").busy)
 
     setup.emit(admitted("background", "msg_2"))
     await wait(() => setup.tabs.status("background").promptPulse === 2)
@@ -144,9 +158,7 @@ test("tracks a temporary new session tab across close and creation", async () =>
     await wait(() => setup.tabs.newTab())
     setup.route.navigate({ type: "session", sessionID: "third" })
     expect(setup.tabs.newTab()).toBe(true)
-    await wait(
-      () => setup.tabs.current() === "third" && setup.tabs.tabs().some((tab) => tab.sessionID === "third"),
-    )
+    await wait(() => setup.tabs.current() === "third" && setup.tabs.tabs().some((tab) => tab.sessionID === "third"))
 
     expect(setup.tabs.newTab()).toBe(false)
     expect(setup.tabs.tabs().find((tab) => tab.sessionID === "third")?.title).toBe(NEW_SESSION_TAB_TITLE)

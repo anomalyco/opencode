@@ -66,12 +66,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     let closedTabs: ClosedSessionTab[] = []
 
     function state() {
-      if (config.tabs?.scope === "global") return store.global
-      return store.cwd[paths.cwd] ?? fallback
+      if (config.tabs?.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
+      return store.global
     }
 
     function update(mutation: (draft: TabsState) => void) {
-      const scope = config.tabs?.scope ?? "cwd"
+      const scope = config.tabs?.scope ?? "global"
       void updateStore((draft) => mutation(scope === "cwd" ? (draft.cwd[paths.cwd] ??= empty()) : draft.global)).catch(
         () => {},
       )
