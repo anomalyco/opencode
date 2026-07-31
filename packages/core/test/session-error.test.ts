@@ -14,6 +14,9 @@ import {
   TransportReason,
   UnknownProviderReason,
   ToolFailure,
+  HttpContext,
+  HttpRequestDetails,
+  HttpResponseDetails,
 } from "@opencode-ai/ai"
 import { Permission } from "@opencode-ai/core/permission"
 import { Tool } from "@opencode-ai/schema/tool"
@@ -68,6 +71,23 @@ describe("toSessionError", () => {
     expect(toSessionError(new Tool.Error({ message: "failed" }))).toEqual({
       type: "tool.execution",
       message: "failed",
+    })
+  })
+
+  test("preserves provider HTTP status", () => {
+    const http = new HttpContext({
+      request: new HttpRequestDetails({ method: "POST", url: "https://example.com", headers: {} }),
+      response: new HttpResponseDetails({ status: 413, headers: {} }),
+    })
+    expect(toSessionError(llm(new InvalidRequestReason({ message: "too large", http })))).toEqual({
+      type: "provider.invalid-request",
+      message: "too large",
+      status: 413,
+    })
+    expect(toSessionError(llm(new ProviderInternalReason({ message: "bad gateway", status: 502 })))).toEqual({
+      type: "provider.internal",
+      message: "bad gateway",
+      status: 502,
     })
   })
 
