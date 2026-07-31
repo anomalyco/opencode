@@ -382,7 +382,11 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    platform.openLink(text)
+    if (URL.canParse(text) && new URL(text).protocol === "file:" && platform.openLocalFile) {
+      platform.openLocalFile(text)
+      return
+    }
+    platform.openExternal(text)
   }
 
   onMount(() => {

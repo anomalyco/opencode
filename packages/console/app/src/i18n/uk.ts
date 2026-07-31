@@ -255,9 +255,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "такими винятками",
 
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
-  "go.banner.text": "Kimi K3 отримує 2x ліміти використання протягом обмеженого часу",
+  "go.banner.text": "GPT 5.6 Luna отримує 2x ліміти використання протягом обмеженого часу",
   "go.meta.description":
-    "Go починається від $5 за перший місяць, потім $10/місяць, зі щедрими 5-годинними лімітами запитів для Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3.",
+    "Go починається від $5 за перший місяць, потім $10/місяць, зі щедрими 5-годинними лімітами запитів для Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
   "go.hero.body":
     "Go надає агентне програмування програмістам у всьому світі, пропонуючи щедрі ліміти та надійний доступ до найкращих моделей з відкритим кодом.",
@@ -305,7 +305,7 @@ export const dict = {
   "go.problem.item2": "Щедрі ліміти та надійний доступ",
   "go.problem.item3": "Створено для якомога більшої кількості програмістів",
   "go.problem.item4":
-    "Включає Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3",
+    "Включає Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3",
   "go.how.title": "Як працює Go",
   "go.how.body":
     "Go починається від $5 за перший місяць, потім $10/місяць. Використовуйте з OpenCode або будь-яким агентом.",
@@ -331,7 +331,7 @@ export const dict = {
   "go.faq.a2": "Go включає моделі, перелічені нижче, із щедрими лімітами та надійним доступом.",
   "go.faq.q3": "Чи Go те саме, що Zen?",
   "go.faq.a3":
-    "Ні. Zen — це плата за використання, тоді як Go починається від $5 за перший місяць, потім $10/місяць, із щедрими лімітами та надійним доступом до моделей з відкритим кодом Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3.",
+    "Ні. Zen — це плата за використання, тоді як Go починається від $5 за перший місяць, потім $10/місяць, із щедрими лімітами та надійним доступом до моделей з відкритим кодом Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3.",
   "go.faq.q4": "Скільки коштує Go?",
   "go.faq.a4.p1.beforePricing": "Go коштує",
   "go.faq.a4.p1.pricingLink": "$5 за перший місяць",
@@ -341,7 +341,7 @@ export const dict = {
   "go.faq.a4.p3": "Скасуйте в будь-який час.",
   "go.faq.q5": "А як щодо даних та конфіденційності?",
   "go.faq.a5.body":
-    "План розроблений переважно для міжнародних користувачів, з моделями в США, ЄС та Сінгапурі. Провайдери дотримуються політики нульового зберігання.",
+    "План розроблено передусім для міжнародних користувачів і він забезпечує стабільний глобальний доступ. Ваші дані не використовуватимуться для навчання моделей.",
   "go.faq.a5.beforeExceptions":
     "Моделі Go розміщені в США. Провайдери дотримуються політики нульового зберігання та не використовують ваші дані для навчання моделей, за",
   "go.faq.a5.exceptionsLink": "такими винятками",
@@ -354,7 +354,7 @@ export const dict = {
 
   "go.faq.q9": "Яка різниця між безкоштовними моделями та Go?",
   "go.faq.a9":
-    "Безкоштовні моделі включають Big Pickle та акційні моделі з лімітом 200 запитів/день. Go включає Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3 із вищими лімітами.",
+    "Безкоштовні моделі включають Big Pickle та акційні моделі з лімітом 200 запитів/день. Go включає Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3 із вищими лімітами.",
 
   "zen.api.error.rateLimitExceeded": "Перевищено ліміт запитів. Спробуйте пізніше.",
   "zen.api.error.modelNotSupported": "Модель {{model}} не підтримується",
@@ -379,7 +379,7 @@ export const dict = {
     "Ви досягли місячного ліміту витрат ${{amount}}. Керуйте лімітами: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Модель вимкнено",
   "zen.api.error.regionNotAllowed":
-    "Ця модель розміщена в Китаї. Якщо ви хочете використовувати цю модель, увімкніть її в налаштуваннях: {{consoleGoUrl}}",
+    "Остання версія цієї моделі доступна лише на серверах у Китаї, і для її використання потрібно надати явну згоду: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Безкоштовна акція для {{model}} закінчилася. Ви можете продовжити використання, підписавшись на OpenCode Go — {{link}}",
 
@@ -667,7 +667,8 @@ export const dict = {
   "workspace.lite.promo.description": "OpenCode Go починається від {{price}}, потім $10/місяць, із щедрими лімітами.",
   "workspace.lite.promo.price": "$5 за перший місяць",
   "workspace.lite.promo.modelsTitle": "Що включено",
-  "workspace.lite.promo.footer": "План призначений для міжнародних користувачів. Ціни можуть змінюватися.",
+  "workspace.lite.promo.footer":
+    "План призначений насамперед для міжнародних користувачів і забезпечує стабільний глобальний доступ. Ціни та ліміти використання можуть змінюватися з урахуванням перших даних про використання та відгуків.",
   "workspace.lite.promo.subscribe": "Підписатися на Go",
   "workspace.lite.promo.subscribing": "Перенаправлення...",
   "workspace.lite.promo.otherMethods": "Інші способи оплати",

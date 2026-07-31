@@ -165,11 +165,13 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   }
 
   const prev = () => {
-    return props.files[fileIndex() - 1]
+    if (!canCycle()) return
+    return props.files[(fileIndex() - 1 + props.files.length) % props.files.length]
   }
 
   const next = () => {
-    return props.files[fileIndex() + 1]
+    if (!canCycle()) return
+    return props.files[(fileIndex() + 1) % props.files.length]
   }
 
   const canCycle = () => props.files.length > 0
@@ -183,15 +185,15 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
     props.onSelectFile(file)
   }
 
-  // The prev/next tooltips advertise < and >; keep the keys working while the
+  // Keep the advertised arrow keys working while the
   // pane is mounted, but never while typing in an input or comment editor.
   makeEventListener(document, "keydown", (event) => {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
-    if (event.key !== "<" && event.key !== ">") return
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
     const target = event.target
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return
     if (!props.hasDiffs || !canCycle()) return
-    const file = event.key === "<" ? prev() : next()
+    const file = event.key === "ArrowLeft" ? prev() : next()
     if (!file) return
     event.preventDefault()
     cycle(file)
@@ -219,7 +221,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           value={
             <>
               {i18n.t("ui.sessionReviewV2.previousFile")}
-              <KeybindV2 keys={["<"]} variant="neutral" />
+              <KeybindV2 keys={["←"]} variant="neutral" />
             </>
           }
         >
@@ -239,7 +241,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           value={
             <>
               {i18n.t("ui.sessionReviewV2.nextFile")}
-              <KeybindV2 keys={[">"]} variant="neutral" />
+              <KeybindV2 keys={["→"]} variant="neutral" />
             </>
           }
         >
@@ -331,6 +333,7 @@ export function SessionReviewV2SidebarToggle(props: { opened: boolean; disabled?
         class="session-review-v2-sidebar-toggle"
         aria-label={i18n.t("ui.sessionReviewV2.toggleSidebar")}
         aria-expanded={props.opened}
+        data-expanded={props.opened ? "" : undefined}
         disabled={props.disabled}
         onClick={props.onToggle}
         icon={<Icon name="filetree" />}
