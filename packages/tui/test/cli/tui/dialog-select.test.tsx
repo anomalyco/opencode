@@ -79,7 +79,7 @@ async function renderSelect(
   return app
 }
 
-async function mountSelect(root: string, initial: DialogSelectOption<string>[]) {
+async function mountSelect(root: string, initial: DialogSelectOption<string>[], current?: string) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
   const config = createTuiResolvedConfig()
@@ -114,6 +114,7 @@ async function mountSelect(root: string, initial: DialogSelectOption<string>[]) 
           <DialogSelect
             title="Mutable options"
             options={options()}
+            current={current}
             onMove={(option) => moved.push(option.value)}
             onSelect={(option) => selected.push(option.value)}
           />
@@ -305,6 +306,23 @@ test("keeps the cursor index while options are temporarily empty", async () => {
     await select.app.waitFor(() => select.selected.length === 1)
 
     expect(select.selected).toEqual(["third"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("keeps the current option selected when options reorder", async () => {
+  await using tmp = await tmpdir()
+  const options = ["first", "current", "third"].map((value) => ({ title: value, value }))
+  const select = await mountSelect(tmp.path, options, "current")
+
+  try {
+    select.replaceOptions([options[1], options[2], options[0]])
+    await select.app.waitForFrame((frame) => frame.indexOf("current") < frame.indexOf("third"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["current"])
   } finally {
     select.app.renderer.destroy()
   }

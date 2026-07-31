@@ -240,7 +240,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.options,
       () => {
-        if (!props.preserveSelection) {
+        if (!props.preserveSelection && props.current === undefined) {
           const count = flat().length
           if (count === 0) return
           const next = reconcileSelection(store.selected, count)
@@ -276,7 +276,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           setStore("selected", index)
           selection = option
           if (!moved) return
-          if (!props.preserveSelection || store.filter.length > 0) return
+          if ((!props.preserveSelection && props.current === undefined) || store.filter.length > 0) return
           scrollAfterLayout(false, option.value)
           return
         }
