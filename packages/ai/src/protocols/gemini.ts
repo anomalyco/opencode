@@ -31,7 +31,7 @@ export interface OptionsInput {
   readonly [key: string]: unknown
   readonly cachedContent?: string
   readonly safetySettings?: ReadonlyArray<{
-    readonly category?:
+    readonly category:
       | "HARM_CATEGORY_UNSPECIFIED"
       | "HARM_CATEGORY_HATE_SPEECH"
       | "HARM_CATEGORY_DANGEROUS_CONTENT"
@@ -39,7 +39,7 @@ export interface OptionsInput {
       | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
       | "HARM_CATEGORY_CIVIC_INTEGRITY"
       | (string & {})
-    readonly threshold?:
+    readonly threshold:
       | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
       | "BLOCK_LOW_AND_ABOVE"
       | "BLOCK_MEDIUM_AND_ABOVE"
@@ -375,7 +375,7 @@ function mapSafetySettings(value: unknown) {
       ? [{ category: item.category, threshold: item.threshold }]
       : [],
   )
-  return settings.length > 0 ? settings : undefined
+  return settings
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {

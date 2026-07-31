@@ -61,6 +61,11 @@ describe("Gemini route", () => {
           providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
         }),
       )
+      const emptySafetySettings = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: { gemini: { safetySettings: [] } },
+        }),
+      )
 
       expect(prepared.body.generationConfig?.thinkingConfig).toEqual({
         thinkingBudget: 0,
@@ -77,6 +82,7 @@ describe("Gemini route", () => {
         includeThoughts: true,
         thinkingLevel: "high",
       })
+      expect(emptySafetySettings.body.safetySettings).toEqual([])
     }),
   )
 
