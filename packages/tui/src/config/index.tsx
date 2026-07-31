@@ -73,7 +73,7 @@ export const Info = Schema.Struct({
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
   show_today_cost: Schema.optional(Schema.Boolean).annotate({
-    description: "Show today's session cost in the footer (default: false)",
+    description: "Show today's session cost in the sidebar Context section (default: false)",
   }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
