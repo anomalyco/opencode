@@ -41,7 +41,14 @@ describe("Gemini route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } } },
+          providerOptions: {
+            gemini: {
+              cachedContent: "cachedContents/example",
+              safetySettings: [{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" }],
+              serviceTier: "priority",
+              thinkingConfig: { thinkingBudget: 0, includeThoughts: false, thinkingLevel: "high" },
+            },
+          },
         }),
       )
       const filtered = yield* compileRequest(
@@ -49,12 +56,33 @@ describe("Gemini route", () => {
           providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "invalid", includeThoughts: false } } },
         }),
       )
+      const defaulted = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+        }),
+      )
+      const emptySafetySettings = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: { gemini: { safetySettings: [] } },
+        }),
+      )
 
       expect(prepared.body.generationConfig?.thinkingConfig).toEqual({
         thinkingBudget: 0,
         includeThoughts: false,
+        thinkingLevel: "high",
       })
+      expect(prepared.body.cachedContent).toBe("cachedContents/example")
+      expect(prepared.body.safetySettings).toEqual([
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+      ])
+      expect(prepared.body.serviceTier).toBe("priority")
       expect(filtered.body.generationConfig?.thinkingConfig).toEqual({ includeThoughts: false })
+      expect(defaulted.body.generationConfig?.thinkingConfig).toEqual({
+        includeThoughts: true,
+        thinkingLevel: "high",
+      })
+      expect(emptySafetySettings.body.safetySettings).toEqual([])
     }),
   )
 

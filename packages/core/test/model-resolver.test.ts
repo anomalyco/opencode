@@ -490,16 +490,31 @@ describe("ModelResolver", () => {
     Effect.gen(function* () {
       const native = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai")))
       const packages = [
-        ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "gemini"],
-        ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "openrouter"],
-        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", "xai"],
+        [
+          "@ai-sdk/google",
+          "@opencode-ai/ai/providers/google",
+          { thinkingConfig: { thinkingLevel: "high" } },
+          { gemini: { thinkingConfig: { thinkingLevel: "high" } } },
+        ],
+        [
+          "@openrouter/ai-sdk-provider",
+          "@opencode-ai/ai/providers/openrouter",
+          { reasoning: { effort: "high" } },
+          { openrouter: { reasoning: { effort: "high" } } },
+        ],
+        [
+          "@ai-sdk/xai",
+          "@opencode-ai/ai/providers/xai",
+          { reasoningEffort: "high" },
+          { xai: { reasoningEffort: "high" } },
+        ],
       ] as const
 
-      yield* Effect.forEach(packages, ([catalogPackage, nativePackage, optionKey]) =>
+      yield* Effect.forEach(packages, ([catalogPackage, nativePackage, sourceOptions, providerOptions]) =>
         ModelResolver.fromCatalogModel(
           model(Provider.aisdk(catalogPackage), {
             modelID: "api-model",
-            settings: { baseURL: "https://provider.example/v1", reasoningEffort: "high" },
+            settings: { baseURL: "https://provider.example/v1", ...sourceOptions },
             headers: { "x-provider": "header" },
             body: { custom: true },
           }),
@@ -516,7 +531,7 @@ describe("ModelResolver", () => {
                     headers: { "x-provider": "header" },
                     body: { custom: true },
                     limits: { context: 100, output: 20 },
-                    providerOptions: { [optionKey]: { reasoningEffort: "high" } },
+                    providerOptions,
                   })
                   return Model.make({ id: modelID, provider: "native-provider", route: native.route })
                 },

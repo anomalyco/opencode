@@ -29,9 +29,30 @@ export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1bet
 
 export interface OptionsInput {
   readonly [key: string]: unknown
+  readonly cachedContent?: string
+  readonly safetySettings?: ReadonlyArray<{
+    readonly category:
+      | "HARM_CATEGORY_UNSPECIFIED"
+      | "HARM_CATEGORY_HATE_SPEECH"
+      | "HARM_CATEGORY_DANGEROUS_CONTENT"
+      | "HARM_CATEGORY_HARASSMENT"
+      | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+      | "HARM_CATEGORY_CIVIC_INTEGRITY"
+      | (string & {})
+    readonly threshold:
+      | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
+      | "BLOCK_LOW_AND_ABOVE"
+      | "BLOCK_MEDIUM_AND_ABOVE"
+      | "BLOCK_ONLY_HIGH"
+      | "BLOCK_NONE"
+      | "OFF"
+      | (string & {})
+  }>
+  readonly serviceTier?: "standard" | "flex" | "priority" | (string & {})
   readonly thinkingConfig?: {
     readonly thinkingBudget?: number
     readonly includeThoughts?: boolean
+    readonly thinkingLevel?: "minimal" | "low" | "medium" | "high" | (string & {})
   }
 }
 
@@ -111,6 +132,12 @@ const GeminiToolConfig = Schema.Struct({
 const GeminiThinkingConfig = Schema.Struct({
   thinkingBudget: Schema.optional(Schema.Number),
   includeThoughts: Schema.optional(Schema.Boolean),
+  thinkingLevel: Schema.optional(Schema.String),
+})
+
+const GeminiSafetySetting = Schema.Struct({
+  category: Schema.String,
+  threshold: Schema.String,
 })
 
 const GeminiGenerationConfig = Schema.Struct({
@@ -123,7 +150,10 @@ const GeminiGenerationConfig = Schema.Struct({
 })
 
 const GeminiBodyFields = {
+  cachedContent: Schema.optional(Schema.String),
   contents: Schema.Array(GeminiContent),
+  safetySettings: optionalArray(GeminiSafetySetting),
+  serviceTier: Schema.optional(Schema.String),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
   toolConfig: Schema.optional(GeminiToolConfig),
@@ -316,15 +346,36 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 })
 
 const resolveOptions = (request: LLMRequest) => {
-  const value = request.providerOptions?.gemini?.thinkingConfig
-  if (!ProviderShared.isRecord(value)) return {}
+  const input = request.providerOptions?.gemini
+  const value = input?.thinkingConfig
   const thinkingConfig = {
-    thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
-    includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
+    thinkingBudget:
+      ProviderShared.isRecord(value) && typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
+    includeThoughts:
+      ProviderShared.isRecord(value) && typeof value.includeThoughts === "boolean"
+        ? value.includeThoughts
+        : ProviderShared.isRecord(value)
+          ? true
+          : undefined,
+    thinkingLevel:
+      ProviderShared.isRecord(value) && typeof value.thinkingLevel === "string" ? value.thinkingLevel : undefined,
   }
   return {
+    cachedContent: typeof input?.cachedContent === "string" ? input.cachedContent : undefined,
+    safetySettings: mapSafetySettings(input?.safetySettings),
+    serviceTier: typeof input?.serviceTier === "string" ? input.serviceTier : undefined,
     thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,
   }
+}
+
+function mapSafetySettings(value: unknown) {
+  if (!Array.isArray(value)) return undefined
+  const settings = value.flatMap((item) =>
+    ProviderShared.isRecord(item) && typeof item.category === "string" && typeof item.threshold === "string"
+      ? [{ category: item.category, threshold: item.threshold }]
+      : [],
+  )
+  return settings
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
@@ -342,7 +393,10 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
   }
 
   return {
+    cachedContent: options.cachedContent,
     contents: yield* lowerMessages(request),
+    safetySettings: options.safetySettings,
+    serviceTier: options.serviceTier,
     systemInstruction:
       request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
     tools: hasTools

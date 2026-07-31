@@ -1,5 +1,7 @@
 export * as AISDKNative from "./aisdk-native"
 
+import { isRecord } from "@opencode-ai/ai/utils/record"
+
 export interface Mapping {
   readonly package: string
   readonly settings: Readonly<Record<string, unknown>>
@@ -14,7 +16,7 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
         settings: {
           ...baseSettings,
           ...mapAPIKey(settings),
-          ...mapProviderOptions("gemini", settings),
+          ...mapGoogleOptions(settings),
         },
       }
     case "@openrouter/ai-sdk-provider":
@@ -46,6 +48,25 @@ function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
 
 function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
   return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
+}
+
+function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
+  const input = settings.thinkingConfig
+  const thinkingConfig = {
+    ...(isRecord(input) && typeof input.thinkingBudget === "number" ? { thinkingBudget: input.thinkingBudget } : {}),
+    ...(isRecord(input) && typeof input.includeThoughts === "boolean"
+      ? { includeThoughts: input.includeThoughts }
+      : {}),
+    ...(isRecord(input) && typeof input.thinkingLevel === "string" ? { thinkingLevel: input.thinkingLevel } : {}),
+  }
+  const options = {
+    ...(typeof settings.cachedContent === "string" ? { cachedContent: settings.cachedContent } : {}),
+    ...(Array.isArray(settings.safetySettings) ? { safetySettings: settings.safetySettings } : {}),
+    ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
+    ...(Object.keys(thinkingConfig).length > 0 ? { thinkingConfig } : {}),
+  }
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: { gemini: options } }
 }
 
 function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {
