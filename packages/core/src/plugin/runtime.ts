@@ -120,7 +120,6 @@ export const providerLayerWithCell = (cell: Cell) =>
   )
 
 export const layer = layerWithCell(defaultCell)
-export const providerLayer = providerLayerWithCell(defaultCell)
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
 
