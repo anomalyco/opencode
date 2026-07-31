@@ -24,8 +24,12 @@ export interface EntryPoint {
   readonly entrypoint?: string
 }
 
+export interface AddOptions {
+  readonly refresh?: boolean
+}
+
 export interface Interface {
-  readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly add: (pkg: string, options?: AddOptions) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly install: (
     dir: string,
     input?: {
@@ -69,6 +73,24 @@ interface ArboristTree {
   edgesOut: Map<string, { to?: ArboristNode }>
 }
 
+export function normalizeRegistrySpec(spec: string) {
+  try {
+    const hit = npa(spec)
+    if (hit.name && hit.raw === hit.name) return `${hit.name}@latest`
+  } catch {}
+  return spec
+}
+
+export function isMutableRegistrySpec(spec: string) {
+  try {
+    const hit = npa(spec)
+    const target = hit.type === "alias" ? (hit as npa.AliasResult).subSpec : hit
+    return !!target.registry && target.type !== "version"
+  } catch {
+    return false
+  }
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -90,6 +112,7 @@ const layer = Layer.effect(
           progress: false,
           savePrefix: "",
           ignoreScripts: true,
+          audit: false,
         })
         return yield* Effect.tryPromise({
           try: () =>
@@ -112,7 +135,31 @@ const layer = Layer.effect(
         }),
       )
 
-    const add = Effect.fn("Npm.add")(function* (pkg: string) {
+    const fetchLatestVersion = (dir: string, name: string) =>
+      Effect.gen(function* () {
+        const registryUrl = yield* NpmConfig.registry(dir)
+        const response = yield* Effect.tryPromise({
+          try: () =>
+            fetch(`${registryUrl}/-/package/${encodeURIComponent(name)}/dist-tags`, {
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(5000),
+            }),
+          catch: () => null as Response | null,
+        })
+        if (!response || !response.ok) return undefined
+        return yield* Effect.tryPromise({
+          try: () => response.json() as Promise<{ latest?: string }>,
+          catch: () => undefined,
+        }).pipe(Effect.map((tags) => tags?.latest))
+      }).pipe(Effect.orElseSucceed(() => undefined))
+
+    const readInstalledVersion = (dir: string, name: string) =>
+      afs.readJson(path.join(dir, "node_modules", name, "package.json")).pipe(
+        Effect.map((pkg) => (pkg as { version?: string })?.version),
+        Effect.orElseSucceed(() => undefined),
+      )
+
+    const add = Effect.fn("Npm.add")(function* (pkg: string, options?: AddOptions) {
       const dir = directory(pkg)
       const name = (() => {
         try {
@@ -121,15 +168,28 @@ const layer = Layer.effect(
           return pkg
         }
       })()
+      const modulePath = path.join(dir, "node_modules", name)
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      if (yield* afs.existsSafe(modulePath)) {
+        if (!options?.refresh && !isMutableRegistrySpec(pkg)) return resolveEntryPoint(name, modulePath)
+        if (!options?.refresh) {
+          const installed = yield* readInstalledVersion(dir, name)
+          const latest = yield* fetchLatestVersion(dir, name)
+          if (!latest || (installed && installed === latest)) return resolveEntryPoint(name, modulePath)
+        }
+        return yield* reify({ dir, add: [pkg] }).pipe(
+          Effect.map((tree) => {
+            const first = tree.edgesOut.values().next().value?.to
+            return first ? resolveEntryPoint(first.name, first.path) : resolveEntryPoint(name, modulePath)
+          }),
+          Effect.catch(() => Effect.succeed(resolveEntryPoint(name, modulePath))),
+        )
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const result = resolveEntryPoint(name, modulePath)
         if (result.entrypoint) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
