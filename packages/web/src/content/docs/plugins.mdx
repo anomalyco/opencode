@@ -22,7 +22,10 @@ Place JavaScript or TypeScript files in the plugin directory.
 - `.opencode/plugins/` - Project-level plugins
 - `~/.config/opencode/plugins/` - Global plugins
 
-Files in these directories are automatically loaded at startup.
+Files in these directories are automatically loaded at startup. Only `*.ts`
+and `*.js` files are loaded — other extensions such as `.mjs` are ignored.
+
+> Note: The `--pure` CLI flag disables all external plugins.
 
 ---
 
@@ -68,6 +71,15 @@ Duplicate npm packages with the same name and version are loaded once. However, 
 
 A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
 functions. Each function receives a context object and returns a hooks object.
+
+There are two export formats:
+
+- **Named export** (legacy): `export const MyPlugin = async (ctx) => { ... }` —
+  shown in the examples below.
+- **Default export** (V1, recommended): `export default { id, server }` — see
+  [Export formats](#export-formats). File-based plugins MUST use this format
+  and export an `id`, otherwise loading fails with
+  `Path plugin <spec> must export id`.
 
 ---
 
@@ -120,6 +132,46 @@ The plugin function receives:
 - `worktree`: The git worktree path.
 - `client`: An opencode SDK client for interacting with the AI.
 - `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) for executing commands.
+
+---
+
+### Export formats
+
+Plugins can be written in either of two formats:
+
+#### Default export (V1) — recommended
+
+```js title=".opencode/plugins/example.js"
+export default {
+  id: "my-plugin",          // Required for file-based plugins
+  server: async (ctx) => {  // Required — called once at startup
+    return {
+      "tool.execute.before": async (input, output) => { ... },
+    }
+  },
+}
+```
+
+The `id` must be a non-empty string. File-based plugins MUST export an `id`;
+npm packages may omit it (the package name is used instead).
+
+This is also the format to use when publishing a plugin to npm with a
+dedicated server entrypoint: expose it via the package's `exports` map, e.g.
+`"./server": "./dist/index.js"`, so the loader resolves the server build.
+
+#### Named export (legacy)
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async (ctx) => {
+  return { ... }
+}
+```
+
+Still supported for backwards compatibility. Multiple named exports in one
+module are loaded as separate plugins.
+
+If a module exports both a V1 default (`{ id, server }`) and named function
+exports, the V1 default takes precedence and the named exports are ignored.
 
 ---
 
