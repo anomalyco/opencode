@@ -57,9 +57,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
 
-  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
+  const missingHome = createMemo(() => !sync.data.path.home)
   const [fallbackPath] = createResource(
-    () => (missingBase() ? true : undefined),
+    () => (missingHome() ? true : undefined),
     async (): Promise<Path | undefined> => {
       if ((await sdk.protocol) !== "v1") return
       return sdk.client.path
