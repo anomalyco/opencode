@@ -17,7 +17,7 @@ export function DialogUsageExceeded(props: DialogGoUpsellProps) {
   const platform = usePlatform()
 
   const runAction = () => {
-    if (props.link) platform.openLink(props.link)
+    if (props.link) platform.openExternal(props.link)
     props.onClose?.()
     dialog.close()
   }
