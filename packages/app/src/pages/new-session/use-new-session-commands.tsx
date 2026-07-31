@@ -9,6 +9,10 @@ export function useNewSessionCommands(input: {
     empty: () => boolean
     open: () => void
   }
+  workspace: {
+    enabled: () => boolean
+    create: () => void
+  }
 }) {
   const command = useCommand()
   const dialog = useDialog()
@@ -39,6 +43,17 @@ export function useNewSessionCommands(input: {
       keybind: "mod+shift+o",
       disabled: input.project.empty(),
       onSelect: input.project.open,
+    },
+    {
+      id: "workspace.new",
+      title: language.t("workspace.new"),
+      category: language.t("command.category.workspace"),
+      keybind: "mod+shift+w",
+      disabled: !input.workspace.enabled(),
+      onSelect: () => {
+        input.workspace.create()
+        input.restoreFocus()
+      },
     },
   ])
 }

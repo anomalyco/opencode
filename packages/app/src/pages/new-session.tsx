@@ -26,6 +26,10 @@ export default function NewSessionPage() {
       empty: project.empty,
       open: () => project.setOpen(true),
     },
+    workspace: {
+      enabled: workspace.bar.visible,
+      create: () => workspace.selection.set("create"),
+    },
   })
   createEffect(() => {
     if (!draft.prompt.ready()) return
