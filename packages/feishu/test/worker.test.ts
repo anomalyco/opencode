@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { FeishuPort, FeishuReplyResult, NormalizedFeishuMessage } from "../src/feishu-channel"
+import { createInventoryRoute } from "../src/inventory-route"
 import type { ChatCompletion, ChatFailure, ChatPort } from "../src/opencode"
 import {
   openGatewayStore,
@@ -120,23 +121,41 @@ describe("gateway worker", () => {
 
   test("uses a handled pre-model route byte-for-byte without calling chat", async () => {
     const store = await createStore()
-    admit(store, task("inventory", "session_inventory"))
+    const inventoryTask = task("inventory", "session_inventory")
+    inventoryTask.promptText = "6001ZZ库存和位置"
+    inventoryTask.originalText = inventoryTask.promptText
+    admit(store, inventoryTask)
     const chat = fakeChat(async (current) => completed(current.id))
     const feishu = fakeFeishu()
-    const route: PreModelRoute = {
-      handle: async () => ({
-        handled: true,
-        text: "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
-        route: "inventory",
-        status: "ok",
+    const inventoryCalls: string[] = []
+    const route = createInventoryRoute({
+      inventory: {
+        async query(request) {
+          inventoryCalls.push(request.term)
+          return {
+            status: "ok",
+            text: "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
+          }
+        },
+      },
+      createContext: (current) => ({
+        source: "feishu",
+        conversationID: current.conversationID,
+        messageID: current.promptMessageID,
+        traceID: current.traceID,
+        admittedAt: 1_000,
+        expiresAt: 2_000,
+        integrity: "trusted",
       }),
-    }
+      record: async () => {},
+    })
     const worker = createWorker(store, chat, feishu, { route })
 
     worker.enqueue("inventory")
     await worker.idle()
 
     expect(chat.calls).toEqual([])
+    expect(inventoryCalls).toEqual(["6001ZZ"])
     expect(feishu.calls[0]?.text).toBe(
       "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
     )
