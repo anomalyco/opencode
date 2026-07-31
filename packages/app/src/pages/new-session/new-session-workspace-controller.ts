@@ -24,11 +24,20 @@ export function normalizeNewSessionWorktree(value: string, directory: string, pr
 
 export function resolveNewSessionBranch(input: {
   worktree: string
+  base?: string
   local?: string
+  fallback?: string
   worktreeBranch: (worktree: string) => string | undefined
 }) {
-  if (input.worktree === "main" || input.worktree === "create") return input.local
+  if (input.worktree === "create") return input.base ?? input.fallback ?? input.local
+  if (input.worktree === "main") return input.local
   return input.worktreeBranch(input.worktree) ?? input.local
+}
+
+export function resolveNewSessionBranchTarget(input: { worktree: string; projectRoot: string }) {
+  if (input.worktree === "create") return undefined
+  if (input.worktree === "main") return input.projectRoot
+  return input.worktree
 }
 
 export function createNewSessionWorkspaceController() {
@@ -36,6 +45,7 @@ export function createNewSessionWorkspaceController() {
   const sync = useSync()
   const serverSync = useServerSync()
   const [worktree, setWorktree] = createSignal<string>()
+  const [base, setBase] = createSignal<string>()
   const visible = createMemo(() => workspaceBarEnabled && sync().project?.vcs === "git")
   const value = createMemo(() =>
     resolveNewSessionWorktree({
@@ -47,10 +57,16 @@ export function createNewSessionWorkspaceController() {
   )
   const projectRoot = createMemo(() => sync().project?.worktree ?? sdk().directory)
   const localBranch = createMemo(() => serverSync().child(projectRoot())[0].vcs?.branch)
+  const defaultRef = createMemo(() => {
+    const vcs = serverSync().child(projectRoot())[0].vcs
+    return vcs?.default_ref ?? vcs?.default_branch
+  })
   const branch = createMemo(() =>
     resolveNewSessionBranch({
       worktree: value(),
+      base: base(),
       local: localBranch(),
+      fallback: defaultRef(),
       worktreeBranch: (worktree) => serverSync().child(worktree)[0].vcs?.branch,
     }),
   )
@@ -58,9 +74,15 @@ export function createNewSessionWorkspaceController() {
   return {
     selection: {
       value,
-      reset: () => setWorktree(),
-      set: (worktree: string) =>
-        setWorktree(normalizeNewSessionWorktree(worktree, sdk().directory, sync().project?.worktree)),
+      reset: () => {
+        setWorktree()
+        setBase()
+      },
+      set: (worktree: string) => {
+        const next = normalizeNewSessionWorktree(worktree, sdk().directory, sync().project?.worktree)
+        if (next !== value()) setBase()
+        setWorktree(next)
+      },
     },
     project: {
       root: projectRoot,
@@ -70,6 +92,9 @@ export function createNewSessionWorkspaceController() {
     bar: {
       visible,
       branch,
+      base,
+      setBase,
+      target: () => resolveNewSessionBranchTarget({ worktree: value(), projectRoot: projectRoot() }),
     },
   }
 }

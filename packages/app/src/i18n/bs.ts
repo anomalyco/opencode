@@ -676,6 +676,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokalno",
   "session.new.workspace.local": "Lokalni repozitorij",
   "session.new.workspace.existing": "Radni prostor…",
+  "session.new.branch.search": "Pretraži grane",
+  "session.new.branch.checkout": "Prebaci na",
+  "session.new.branch.base": "Grana od",
+  "session.new.branch.local": "Lokalno",
+  "session.new.branch.empty": "Nema grana",
+  "session.new.branch.switchFailed": "Neuspješna promjena grane",
   "session.new.git.none": "Nema Gita",
   "session.new.lastModified": "Posljednja izmjena",
 

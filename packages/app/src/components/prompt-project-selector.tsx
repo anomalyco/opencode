@@ -481,14 +481,15 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
       }}
     >
       <Show
+        keyed
         when={project()}
         fallback={<Icon name="folder-add-left" size="small" class="shrink-0 text-v2-icon-icon-muted" />}
       >
         {(item) => (
           <ProjectAvatar
-            fallback={displayName(item())}
-            src={getProjectAvatarSource(item().id, item().icon)}
-            variant={getProjectAvatarVariant(item().icon?.color)}
+            fallback={displayName(item)}
+            src={getProjectAvatarSource(item.id, item.icon)}
+            variant={getProjectAvatarVariant(item.icon?.color)}
           />
         )}
       </Show>

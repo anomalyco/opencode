@@ -2386,6 +2386,135 @@
         ]
       }
     },
+    "/vcs/branch": {
+      "get": {
+        "tags": ["instance"],
+        "operationId": "vcs.branches",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VCS branches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VcsBranch"
+                  },
+                  "description": "VCS branches"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List local and remote-tracking git branches, most recently committed first.",
+        "summary": "List branches",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.branches({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/vcs/switch": {
+      "post": {
+        "tags": ["instance"],
+        "operationId": "vcs.switch",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Branch switched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Branch switched"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VcsSwitchError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/VcsSwitchError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Check out a local branch, creating and tracking it from a remote ref when it does not exist.",
+        "summary": "Switch branch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VcsSwitchInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.switch({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/vcs/status": {
       "get": {
         "tags": ["instance"],
@@ -21960,6 +22089,10 @@
           "name": {
             "type": "string"
           },
+          "base": {
+            "type": "string",
+            "description": "Git ref the new worktree branches from; defaults to the project's default branch"
+          },
           "startCommand": {
             "type": "string",
             "description": "Additional startup script to run after the project's start command"
@@ -22400,8 +22533,61 @@
           },
           "default_branch": {
             "type": "string"
+          },
+          "default_ref": {
+            "type": "string"
           }
         },
+        "additionalProperties": false
+      },
+      "VcsBranch": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "remote": {
+            "type": "string"
+          }
+        },
+        "required": ["ref", "name"],
+        "additionalProperties": false
+      },
+      "VcsSwitchInput": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["ref", "name"],
+        "additionalProperties": false
+      },
+      "VcsSwitchError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["VcsSwitchError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "VcsFileStatus": {

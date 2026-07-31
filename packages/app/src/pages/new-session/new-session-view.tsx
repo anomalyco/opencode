@@ -8,7 +8,8 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
 import { PromptInputV2Composer } from "@/components/prompt-input-v2"
-import { PromptGitStatus, PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
+import { PromptBranchSelector } from "@/components/prompt-branch-selector"
+import { PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 import {
   PromptProjectAddButton,
   PromptProjectSelector,
@@ -48,21 +49,16 @@ export function NewSessionView(props: {
               <Show when={props.project.selected()}>
                 <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
                   <PromptProjectSelector controller={props.project} placement="bottom" />
-                  <Show
-                    when={props.workspace.bar.visible()}
-                    fallback={
-                      <PromptGitStatus branch={props.workspace.bar.branch()} noGit={!props.workspace.project.git()} />
-                    }
-                  >
+                  <Show when={props.workspace.bar.visible()}>
                     <PromptWorkspaceSelector
                       value={props.workspace.selection.value()}
                       projectRoot={props.workspace.project.root()}
                       workspaces={props.workspace.project.workspaces()}
-                      branch={props.workspace.bar.branch()}
                       onChange={props.workspace.selection.set}
                       onDone={props.input.restoreFocus}
                     />
                   </Show>
+                  <PromptBranchSelector controller={props.workspace} onDone={props.input.restoreFocus} />
                 </div>
               </Show>
             </div>
@@ -78,9 +74,9 @@ export function NewSessionStatus(props: { mount: Accessor<HTMLElement | null>; v
   const language = useLanguage()
 
   return (
-    <Show when={props.mount()}>
+    <Show keyed when={props.mount()}>
       {(mount) => (
-        <Portal mount={mount()}>
+        <Portal mount={mount}>
           <Show when={props.visible()}>
             <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
               <StatusPopoverV2 />

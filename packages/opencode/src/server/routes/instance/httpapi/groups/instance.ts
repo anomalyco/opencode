@@ -40,10 +40,20 @@ export class ApiVcsApplyError extends Schema.ErrorClass<ApiVcsApplyError>("VcsAp
   { httpApiStatus: 400 },
 ) {}
 
+export class ApiVcsSwitchError extends Schema.ErrorClass<ApiVcsSwitchError>("VcsSwitchError")(
+  {
+    name: Schema.Literal("VcsSwitchError"),
+    data: Schema.Struct({ message: Schema.String }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 export const InstancePaths = {
   dispose: "/instance/dispose",
   path: "/path",
   vcs: "/vcs",
+  vcsBranch: "/vcs/branch",
+  vcsSwitch: "/vcs/switch",
   vcsStatus: "/vcs/status",
   vcsDiff: "/vcs/diff",
   vcsDiffRaw: "/vcs/diff/raw",
@@ -89,6 +99,28 @@ export const InstanceApi = HttpApi.make("instance")
             summary: "Get VCS info",
             description:
               "Retrieve version control system (VCS) information for the current project, such as git branch.",
+          }),
+        ),
+        HttpApiEndpoint.get("vcsBranch", InstancePaths.vcsBranch, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(Vcs.Branch), "VCS branches"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.branches",
+            summary: "List branches",
+            description: "List local and remote-tracking git branches, most recently committed first.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsSwitch", InstancePaths.vcsSwitch, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.SwitchInput,
+          success: described(Schema.Boolean, "Branch switched"),
+          error: ApiVcsSwitchError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.switch",
+            summary: "Switch branch",
+            description: "Check out a local branch, creating and tracking it from a remote ref when it does not exist.",
           }),
         ),
         HttpApiEndpoint.get("vcsStatus", InstancePaths.vcsStatus, {

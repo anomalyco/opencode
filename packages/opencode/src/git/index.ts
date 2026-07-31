@@ -72,9 +72,16 @@ export interface Options {
   readonly stdin?: ChildProcess.CommandInput
 }
 
+export type Branch = {
+  readonly ref: string
+  readonly name: string
+  readonly remote?: string
+}
+
 export interface Interface {
   readonly run: (args: string[], opts: Options) => Effect.Effect<Result>
   readonly branch: (cwd: string) => Effect.Effect<string | undefined>
+  readonly branches: (cwd: string) => Effect.Effect<Branch[]>
   readonly prefix: (cwd: string) => Effect.Effect<string>
   readonly defaultBranch: (cwd: string) => Effect.Effect<Base | undefined>
   readonly hasHead: (cwd: string) => Effect.Effect<boolean>
@@ -166,6 +173,24 @@ const layer = Layer.effect(
       if (result.exitCode !== 0) return
       const text = out(result)
       return text || undefined
+    })
+
+    const branches = Effect.fn("Git.branches")(function* (cwd: string) {
+      const [heads, remotes] = yield* Effect.all(
+        [
+          lines(["for-each-ref", "--format=%(refname:lstrip=2)", "--sort=-committerdate", "refs/heads"], { cwd }),
+          lines(["for-each-ref", "--format=%(refname:lstrip=2)", "--sort=-committerdate", "refs/remotes"], { cwd }),
+        ],
+        { concurrency: 2 },
+      )
+      return [
+        ...heads.map((ref) => ({ ref, name: ref }) satisfies Branch),
+        ...remotes.flatMap((ref) => {
+          const sep = ref.indexOf("/")
+          if (sep <= 0 || ref.endsWith("/HEAD")) return []
+          return [{ ref, name: ref.slice(sep + 1), remote: ref.slice(0, sep) } satisfies Branch]
+        }),
+      ]
     })
 
     const prefix = Effect.fn("Git.prefix")(function* (cwd: string) {
@@ -326,6 +351,7 @@ const layer = Layer.effect(
     return Service.of({
       run,
       branch,
+      branches,
       prefix,
       defaultBranch,
       hasHead,

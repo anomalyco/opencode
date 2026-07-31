@@ -701,6 +701,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existing": "Workspace…",
+  "session.new.branch.search": "Search branches",
+  "session.new.branch.checkout": "Check out",
+  "session.new.branch.base": "Branch from",
+  "session.new.branch.local": "Local",
+  "session.new.branch.empty": "No branches",
+  "session.new.branch.switchFailed": "Failed to switch branch",
   "session.new.git.none": "No Git",
   "session.new.lastModified": "Last modified",
 

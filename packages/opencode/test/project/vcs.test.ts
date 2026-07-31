@@ -155,6 +155,126 @@ describe("Vcs", () => {
   )
 })
 
+describe("Vcs branches", () => {
+  afterEach(async () => {
+    await disposeAllInstances()
+  })
+
+  it.instance("branches() returns an empty list for non-git directories", () =>
+    Effect.gen(function* () {
+      const vcs = yield* init()
+      expect(yield* vcs.branches()).toEqual([])
+    }),
+  )
+
+  it.instance(
+    "branches() enumerates local and remote refs and excludes remote HEAD",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const remote = yield* tmpdirScoped({ git: true })
+        yield* git(remote, ["branch", "-M", "main"])
+        yield* git(test.directory, ["branch", "-M", "main"])
+        yield* git(test.directory, ["branch", "feature/nested"])
+        yield* git(test.directory, ["remote", "add", "origin", remote])
+        yield* git(test.directory, ["fetch", "--quiet", "origin"])
+        yield* git(test.directory, ["remote", "set-head", "origin", "main"])
+
+        const list = yield* (yield* init()).branches()
+
+        expect(list.filter((item) => !item.remote)).toEqual(
+          expect.arrayContaining([
+            { ref: "main", name: "main" },
+            { ref: "feature/nested", name: "feature/nested" },
+          ]),
+        )
+        expect(list.filter((item) => item.remote)).toEqual([{ ref: "origin/main", name: "main", remote: "origin" }])
+        expect(list.some((item) => item.ref.endsWith("/HEAD"))).toBe(false)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "switchBranch() checks out an existing local branch",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* git(test.directory, ["branch", "-M", "main"])
+        yield* git(test.directory, ["branch", "feature"])
+
+        const vcs = yield* init()
+        expect(yield* vcs.switchBranch({ ref: "feature", name: "feature" })).toBe(true)
+        expect(yield* vcs.branch()).toBe("feature")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "switchBranch() creates a tracking branch for a remote-only ref",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const remote = yield* tmpdirScoped({ git: true })
+        yield* git(remote, ["branch", "-M", "main"])
+        yield* git(remote, ["checkout", "--quiet", "-b", "release"])
+        yield* git(test.directory, ["branch", "-M", "main"])
+        yield* git(test.directory, ["remote", "add", "origin", remote])
+        yield* git(test.directory, ["fetch", "--quiet", "origin"])
+
+        const vcs = yield* init()
+        expect(yield* vcs.switchBranch({ ref: "origin/release", name: "release" })).toBe(true)
+        expect(yield* vcs.branch()).toBe("release")
+
+        const upstream = yield* Git.Service.use((git) =>
+          git.run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd: test.directory }),
+        )
+        expect(upstream.text().trim()).toBe("origin/release")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "switchBranch() rejects a mismatched ref and name pair",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* git(test.directory, ["branch", "-M", "main"])
+        yield* git(test.directory, ["branch", "feature"])
+
+        const vcs = yield* init()
+        const failure = yield* vcs.switchBranch({ ref: "feature", name: "--force" }).pipe(Effect.flip)
+
+        expect(failure.message).toContain("Unknown branch")
+        expect(yield* vcs.branch()).toBe("main")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "switchBranch() surfaces git's refusal when the tree would lose changes",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* git(test.directory, ["branch", "-M", "main"])
+        yield* write(path.join(test.directory, "conflict.txt"), "committed\n")
+        yield* git(test.directory, ["add", "conflict.txt"])
+        yield* git(test.directory, ["commit", "--quiet", "-m", "add conflict"])
+        yield* git(test.directory, ["checkout", "--quiet", "-b", "feature"])
+        yield* write(path.join(test.directory, "conflict.txt"), "feature\n")
+        yield* git(test.directory, ["commit", "--quiet", "-am", "feature change"])
+        yield* git(test.directory, ["checkout", "--quiet", "main"])
+        yield* write(path.join(test.directory, "conflict.txt"), "dirty\n")
+
+        const vcs = yield* init()
+        const failure = yield* vcs.switchBranch({ ref: "feature", name: "feature" }).pipe(Effect.flip)
+
+        expect(failure.message).toContain("would be overwritten")
+        expect(yield* vcs.branch()).toBe("main")
+      }),
+    { git: true },
+  )
+})
+
 describe("Vcs diff", () => {
   afterEach(async () => {
     await disposeAllInstances()
@@ -168,9 +288,9 @@ describe("Vcs diff", () => {
         yield* git(test.directory, ["branch", "-M", "main"])
 
         const vcs = yield* init()
-        const branch = yield* vcs.defaultBranch()
+        const base = yield* vcs.defaultBranch()
 
-        expect(branch).toBe("main")
+        expect(base?.name).toBe("main")
       }),
     { git: true },
   )
@@ -184,9 +304,9 @@ describe("Vcs diff", () => {
         yield* git(test.directory, ["config", "init.defaultBranch", "trunk"])
 
         const vcs = yield* init()
-        const branch = yield* vcs.defaultBranch()
+        const base = yield* vcs.defaultBranch()
 
-        expect(branch).toBe("trunk")
+        expect(base?.name).toBe("trunk")
       }),
     { git: true },
   )
@@ -206,7 +326,7 @@ describe("Vcs diff", () => {
 
       expect(branch).toBeDefined()
       expect(branch).toBe("feature/test")
-      expect(base).toBe("main")
+      expect(base?.name).toBe("main")
     }),
   )
 

@@ -2167,6 +2167,10 @@ export type WorktreeError = {
 export type WorktreeCreateInput = {
   name?: string
   /**
+   * Git ref the new worktree branches from; defaults to the project's default branch
+   */
+  base?: string
+  /**
    * Additional startup script to run after the project's start command
    */
   startCommand?: string
@@ -2311,6 +2315,25 @@ export type Path = {
 export type VcsInfo = {
   branch?: string
   default_branch?: string
+  default_ref?: string
+}
+
+export type VcsBranch = {
+  ref: string
+  name: string
+  remote?: string
+}
+
+export type VcsSwitchInput = {
+  ref: string
+  name: string
+}
+
+export type VcsSwitchError = {
+  name: "VcsSwitchError"
+  data: {
+    message: string
+  }
 }
 
 export type VcsFileStatus = {
@@ -8164,6 +8187,62 @@ export type VcsGetResponses = {
 }
 
 export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
+
+export type VcsBranchesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/branch"
+}
+
+export type VcsBranchesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsBranchesError = VcsBranchesErrors[keyof VcsBranchesErrors]
+
+export type VcsBranchesResponses = {
+  /**
+   * VCS branches
+   */
+  200: Array<VcsBranch>
+}
+
+export type VcsBranchesResponse = VcsBranchesResponses[keyof VcsBranchesResponses]
+
+export type VcsSwitchData = {
+  body?: VcsSwitchInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/switch"
+}
+
+export type VcsSwitchErrors = {
+  /**
+   * VcsSwitchError | InvalidRequestError
+   */
+  400: VcsSwitchError | InvalidRequestError
+}
+
+export type VcsSwitchError2 = VcsSwitchErrors[keyof VcsSwitchErrors]
+
+export type VcsSwitchResponses = {
+  /**
+   * Branch switched
+   */
+  200: boolean
+}
+
+export type VcsSwitchResponse = VcsSwitchResponses[keyof VcsSwitchResponses]
 
 export type VcsStatusData = {
   body?: never

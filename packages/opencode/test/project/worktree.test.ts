@@ -177,6 +177,67 @@ describe("Worktree", () => {
     )
   })
 
+  describe("create base ref", () => {
+    it.instance(
+      "branches from an explicit base instead of the current HEAD",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* git(test.directory, ["branch", "-M", "main"])
+          const base = (yield* git(test.directory, ["rev-parse", "HEAD"])).trim()
+          yield* git(test.directory, ["checkout", "--quiet", "-b", "feature"])
+          yield* Effect.promise(() => Bun.write(path.join(test.directory, "drift.txt"), "drift\n"))
+          yield* git(test.directory, ["add", "drift.txt"])
+          yield* git(test.directory, ["commit", "--quiet", "-m", "drift"])
+          const head = (yield* git(test.directory, ["rev-parse", "HEAD"])).trim()
+          expect(head).not.toBe(base)
+
+          yield* withCreatedWorktree({ base: "main" }, ({ info }) =>
+            Effect.gen(function* () {
+              expect((yield* git(info.directory, ["rev-parse", "HEAD"])).trim()).toBe(base)
+              expect((yield* git(info.directory, ["branch", "--show-current"])).trim()).toBe(info.branch ?? "")
+            }),
+          )
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "defaults to the project default branch rather than the current HEAD",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* git(test.directory, ["branch", "-M", "main"])
+          const base = (yield* git(test.directory, ["rev-parse", "HEAD"])).trim()
+          yield* git(test.directory, ["checkout", "--quiet", "-b", "feature"])
+          yield* Effect.promise(() => Bun.write(path.join(test.directory, "drift.txt"), "drift\n"))
+          yield* git(test.directory, ["add", "drift.txt"])
+          yield* git(test.directory, ["commit", "--quiet", "-m", "drift"])
+
+          yield* withCreatedWorktree(undefined, ({ info }) =>
+            Effect.gen(function* () {
+              expect((yield* git(info.directory, ["rev-parse", "HEAD"])).trim()).toBe(base)
+            }),
+          )
+        }),
+      { git: true },
+    )
+
+    it.instance(
+      "rejects an unknown base without creating a worktree",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const failure = yield* svc.create({ base: "no-such-ref" }).pipe(Effect.flip)
+
+          expect(failure._tag).toBe("WorktreeCreateFailedError")
+          expect(failure.message).toContain("Unknown base ref")
+          expect(yield* svc.list()).toEqual([])
+        }),
+      { git: true },
+    )
+  })
+
   describe("create + remove lifecycle", () => {
     it.instance(
       "create returns worktree info and remove cleans up",

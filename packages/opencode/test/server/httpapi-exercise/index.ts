@@ -121,6 +121,12 @@ const scenarios: Scenario[] = [
     check(body.worktree === ctx.directory, "worktree should resolve from x-opencode-directory")
   }),
   http.protected.get("/vcs", "vcs.get").json(),
+  http.protected.get("/vcs/branch", "vcs.branches").json(200, array),
+  http.protected
+    .post("/vcs/switch", "vcs.switch")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/switch", headers: ctx.headers(), body: { ref: "main", name: "main" } }))
+    .status(400, undefined, "status"),
   http.protected.get("/vcs/status", "vcs.status").json(200, array),
   http.protected
     .get("/vcs/diff", "vcs.diff")

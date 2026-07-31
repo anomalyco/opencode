@@ -1,6 +1,5 @@
 import { For, Show } from "solid-js"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -10,7 +9,6 @@ export function PromptWorkspaceSelector(props: {
   value: string
   projectRoot: string
   workspaces: string[]
-  branch?: string
   onChange: (value: string) => void
   onDone: () => void
 }) {
@@ -93,36 +91,6 @@ export function PromptWorkspaceSelector(props: {
           </MenuV2.Content>
         </MenuV2.Portal>
       </MenuV2>
-      <PromptGitStatus branch={props.branch} />
     </>
-  )
-}
-
-export function PromptGitStatus(props: { branch?: string; noGit?: boolean }) {
-  const language = useLanguage()
-  const label = () => {
-    if (props.noGit) return language.t("session.new.git.none")
-    return props.branch
-  }
-
-  return (
-    <Show when={label()}>
-      {(value) => (
-        <>
-          <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
-          <TooltipV2
-            placement="top"
-            value={value()}
-            class="min-w-0 max-w-[220px]"
-            contentClass="max-w-[calc(100vw-32px)] break-all"
-          >
-            <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px]">
-              <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-              <span class="min-w-0 truncate">{value()}</span>
-            </div>
-          </TooltipV2>
-        </>
-      )}
-    </Show>
   )
 }

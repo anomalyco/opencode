@@ -680,6 +680,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Yerel",
   "session.new.workspace.local": "Yerel depo",
   "session.new.workspace.existing": "Çalışma alanı…",
+  "session.new.branch.search": "Dal ara",
+  "session.new.branch.checkout": "Şuna geç",
+  "session.new.branch.base": "Şundan dallan",
+  "session.new.branch.local": "Yerel",
+  "session.new.branch.empty": "Dal yok",
+  "session.new.branch.switchFailed": "Dal değiştirilemedi",
   "session.new.git.none": "Git yok",
   "session.new.lastModified": "Son değişiklik",
 

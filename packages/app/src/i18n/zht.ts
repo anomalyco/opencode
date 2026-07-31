@@ -664,6 +664,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "本機",
   "session.new.workspace.local": "本機儲存庫",
   "session.new.workspace.existing": "工作區…",
+  "session.new.branch.search": "搜尋分支",
+  "session.new.branch.checkout": "切換到",
+  "session.new.branch.base": "基於分支",
+  "session.new.branch.local": "本機",
+  "session.new.branch.empty": "沒有分支",
+  "session.new.branch.switchFailed": "切換分支失敗",
   "session.new.git.none": "無 Git",
   "session.new.lastModified": "最後修改",
 

@@ -704,6 +704,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальний репозиторій",
   "session.new.workspace.existing": "Робоча область…",
+  "session.new.branch.search": "Пошук гілок",
+  "session.new.branch.checkout": "Переключитися на",
+  "session.new.branch.base": "Відгалузити від",
+  "session.new.branch.local": "Локально",
+  "session.new.branch.empty": "Гілок немає",
+  "session.new.branch.switchFailed": "Не вдалося переключити гілку",
   "session.new.git.none": "Немає Git",
   "session.new.lastModified": "Востаннє змінено",
 
