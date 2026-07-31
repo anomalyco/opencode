@@ -7,7 +7,7 @@ describe("AISDKNative", () => {
       AISDKNative.map("@ai-sdk/xai", {
         apiKey: "secret",
         baseURL: "https://xai.example/v1",
-        reasoningEffort: "high",
+        reasoningEffort: "custom",
         store: true,
         promptCacheKey: "cache-key",
       }),
@@ -18,7 +18,7 @@ describe("AISDKNative", () => {
         baseURL: "https://xai.example/v1",
         providerOptions: {
           xai: {
-            reasoningEffort: "high",
+            reasoningEffort: "custom",
             store: true,
             promptCacheKey: "cache-key",
           },
@@ -30,7 +30,7 @@ describe("AISDKNative", () => {
   test("omits invalid and unsupported xAI settings", () => {
     expect(
       AISDKNative.map("@ai-sdk/xai", {
-        reasoningEffort: "maximum",
+        reasoningEffort: 10,
         store: "yes",
         include: ["unknown"],
         logprobs: true,

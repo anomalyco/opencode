@@ -1,7 +1,5 @@
 export * as AISDKNative from "./aisdk-native"
 
-import { Option, Schema } from "effect"
-
 export interface Mapping {
   readonly package: string
   readonly settings: Readonly<Record<string, unknown>>
@@ -50,15 +48,12 @@ function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
   return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
 }
 
-const XAIOptions = Schema.Struct({
-  reasoningEffort: Schema.Literals(["none", "low", "medium", "high"]).pipe(Schema.optional),
-  store: Schema.Boolean.pipe(Schema.optional),
-  promptCacheKey: Schema.String.pipe(Schema.optional),
-})
-
 function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {
-  const options = Option.getOrUndefined(Schema.decodeUnknownOption(XAIOptions)(settings))
-  if (!options) return {}
+  const options = {
+    ...(typeof settings.reasoningEffort === "string" ? { reasoningEffort: settings.reasoningEffort } : {}),
+    ...(typeof settings.store === "boolean" ? { store: settings.store } : {}),
+    ...(typeof settings.promptCacheKey === "string" ? { promptCacheKey: settings.promptCacheKey } : {}),
+  }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: { xai: options } }
 }
