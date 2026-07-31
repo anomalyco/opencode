@@ -143,7 +143,7 @@ export function Session() {
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
-  const location = createMemo(() => session()?.location)
+  const location = createMemo(() => session()?.location ?? route.location)
   const currentLocation = useLocation()
 
   createEffect(() => currentLocation.set(location()))

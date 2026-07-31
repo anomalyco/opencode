@@ -1,6 +1,6 @@
 import path from "path"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
-import type { SessionInfo } from "@opencode-ai/client"
+import type { LocationRef, SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
@@ -21,7 +21,7 @@ import { Spinner } from "./spinner"
 
 const RECENT_LIMIT = 8
 
-type OpenTarget = { type: "session"; sessionID: string } | { type: "project"; directory: string }
+type OpenTarget = { type: "session"; sessionID: string; location?: LocationRef } | { type: "project"; directory: string }
 
 export function DialogOpen() {
   const dialog = useDialog()
@@ -81,7 +81,7 @@ export function DialogOpen() {
       const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: sessionTitle(session),
-        value: { type: "session", sessionID: session.id } as OpenTarget,
+        value: { type: "session", sessionID: session.id, location: session.location } as OpenTarget,
         category: "Sessions",
         footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,
         gutter: running
@@ -140,7 +140,7 @@ export function DialogOpen() {
       onSelect={(option) => {
         dialog.clear()
         if (option.value.type === "session") {
-          route.navigate({ type: "session", sessionID: option.value.sessionID })
+          route.navigate({ type: "session", sessionID: option.value.sessionID, location: option.value.location })
           return
         }
         const target = { directory: option.value.directory }

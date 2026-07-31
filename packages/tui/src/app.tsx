@@ -17,7 +17,7 @@ import {
   type CliRendererConfig,
   type ThemeMode,
 } from "@opentui/core"
-import { RouteProvider, useRoute } from "./context/route"
+import { newSessionRoute, RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
   Match,
@@ -644,10 +644,12 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
-          route.navigate({
-            type: "home",
-            location: route.data.type === "session" ? data.session.get(route.data.sessionID)?.location : undefined,
-          })
+          route.navigate(
+            newSessionRoute(
+              route.data,
+              route.data.type === "session" ? data.session.get(route.data.sessionID)?.location : undefined,
+            ),
+          )
           dialog.clear()
         },
       },

@@ -14,6 +14,8 @@ export type HomeRoute = {
 export type SessionRoute = {
   type: "session"
   sessionID: string
+  // Available immediately when navigation starts before SessionInfo hydrates.
+  location?: LocationRef
   prompt?: PromptInfo
 }
 
@@ -68,6 +70,13 @@ function initialRoute(value: unknown): Route | undefined {
 }
 
 export type RouteContext = ReturnType<typeof useRoute>
+
+export function newSessionRoute(route: Route, location?: LocationRef): HomeRoute {
+  return {
+    type: "home",
+    location: route.type === "session" ? (location ?? route.location) : undefined,
+  }
+}
 
 export function useRouteData<T extends Route["type"]>(type: T) {
   const route = useRoute()
