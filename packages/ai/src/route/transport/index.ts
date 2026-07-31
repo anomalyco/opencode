@@ -36,7 +36,7 @@ export interface TransportPrepareInput<Body> {
   readonly auth: Auth.Definition
   readonly encodeBody: (body: Body) => string
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-  readonly transformRequest?: HttpRequestTransform
+  readonly transform?: HttpRequestTransform
 }
 
 export * as HttpTransport from "./http"

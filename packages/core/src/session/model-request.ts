@@ -165,7 +165,7 @@ export const layer = Layer.effect(
         toolChoice: stepLimitReached ? "none" : undefined,
       })
       const options: StreamOptions = {
-        transformRequest: (request) =>
+        transform: (request) =>
           hooks
             .trigger("session", "request", {
               sessionID: session.id,

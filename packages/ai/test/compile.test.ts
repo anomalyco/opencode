@@ -146,7 +146,7 @@ describe("request option precedence", () => {
         prompt: "Say hello.",
       }),
       {
-        transformRequest: (request) =>
+        transform: (request) =>
           Effect.sync(() => {
             expect(request.headers.authorization).toBe("Bearer fresh-key")
             request.url = "https://proxy.test/v1/chat/completions"

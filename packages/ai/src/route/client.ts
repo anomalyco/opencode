@@ -150,7 +150,7 @@ export interface Interface {
 }
 
 export interface StreamOptions {
-  readonly transformRequest?: HttpRequestTransform
+  readonly transform?: HttpRequestTransform
 }
 
 export interface StreamMethod {
@@ -302,7 +302,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           auth: routeInput.auth ?? Auth.none,
           encodeBody,
           headers: routeInput.headers,
-          transformRequest: options?.transformRequest,
+          transform: options?.transform,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route.id}`
