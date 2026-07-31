@@ -10,7 +10,6 @@ describe("AISDKNative", () => {
         reasoningEffort: "high",
         store: true,
         promptCacheKey: "cache-key",
-        include: ["file_search_call.results"],
       }),
     ).toEqual({
       package: "@opencode-ai/ai/providers/xai",
@@ -22,7 +21,6 @@ describe("AISDKNative", () => {
             reasoningEffort: "high",
             store: true,
             promptCacheKey: "cache-key",
-            include: ["file_search_call.results"],
           },
         },
       },

@@ -54,17 +54,11 @@ const XAIOptions = Schema.Struct({
   reasoningEffort: Schema.Literals(["none", "low", "medium", "high"]).pipe(Schema.optional),
   store: Schema.Boolean.pipe(Schema.optional),
   promptCacheKey: Schema.String.pipe(Schema.optional),
-  include: Schema.NullOr(Schema.Array(Schema.Literal("file_search_call.results"))).pipe(Schema.optional),
 })
 
 function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {
-  const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(XAIOptions)(settings))
-  if (!decoded) return {}
-  const { include, ...rest } = decoded
-  const options = {
-    ...rest,
-    ...(include && include.length > 0 ? { include } : {}),
-  }
+  const options = Option.getOrUndefined(Schema.decodeUnknownOption(XAIOptions)(settings))
+  if (!options) return {}
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: { xai: options } }
 }
