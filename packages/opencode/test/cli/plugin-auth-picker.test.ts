@@ -1,5 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import { resolvePluginProviders } from "../../src/cli/cmd/providers"
+import { CommandCodeAuthPlugin } from "../../src/plugin/commandcode"
 import type { Hooks } from "@opencode-ai/plugin"
 
 function hookWithAuth(provider: string): Hooks {
@@ -116,5 +117,18 @@ describe("resolvePluginProviders", () => {
       providerNames: {},
     })
     expect(result).toEqual([])
+  })
+
+  test("commandcode plugin appears with an api key method", async () => {
+    const hooks = await CommandCodeAuthPlugin({} as never)
+    expect(hooks.auth?.provider).toBe("commandcode")
+    expect(hooks.auth?.methods).toEqual([{ type: "api", label: "API key" }])
+    const result = resolvePluginProviders({
+      hooks: [hooks],
+      existingProviders: {},
+      disabled: new Set(),
+      providerNames: {},
+    })
+    expect(result).toEqual([{ id: "commandcode", name: "commandcode" }])
   })
 })

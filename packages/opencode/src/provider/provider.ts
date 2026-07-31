@@ -485,6 +485,43 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    commandcode: Effect.fnUntraced(function* (input: Info) {
+      const auth = yield* dep.auth(input.id)
+      const envs = yield* dep.env()
+      const key = auth?.type === "api" ? auth.key : input.env.map((item) => envs[item]).find(Boolean)
+      return {
+        autoload: true,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+            "x-cmd-zdr": "1",
+          },
+        },
+        async discoverModels() {
+          if (!key) return {}
+          try {
+            const res = await fetch("https://api.commandcode.ai/provider/v1/models", {
+              headers: { Authorization: `Bearer ${key}` },
+            })
+            if (!res.ok) return {}
+            const data: unknown = await res.json()
+            const items = (Array.isArray(data) ? data : (data as { data?: unknown }).data)
+            if (!Array.isArray(items)) return {}
+            return Object.fromEntries(
+              items.flatMap((item) => {
+                if (!item || typeof item !== "object") return []
+                const id = (item as { id?: unknown }).id
+                if (typeof id !== "string" || id.length === 0) return []
+                return [[id, commandCodeModel(input.id, id)] as const]
+              }),
+            )
+          } catch {
+            return {}
+          }
+        },
+      }
+    }),
     vercel: () =>
       Effect.succeed({
         autoload: false,
@@ -1262,6 +1299,39 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
   }
 }
 
+// Command Code serves Anthropic models on its Anthropic endpoint and everything
+// else on its OpenAI-compatible endpoint, so route discovered models by family.
+function commandCodeModel(providerID: ProviderV2.ID, id: string): Model {
+  const anthropic = id.toLowerCase().includes("claude")
+  return {
+    id: ModelV2.ID.make(id),
+    providerID,
+    api: {
+      id,
+      npm: anthropic ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible",
+      url: anthropic ? "https://api.commandcode.ai/provider" : "https://api.commandcode.ai/provider/v1",
+    },
+    name: id,
+    family: "",
+    capabilities: {
+      temperature: false,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 200000, output: 65536 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "",
+    variants: {},
+  }
+}
+
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   const models: Record<string, Model> = {}
   for (const [key, model] of Object.entries(provider.models)) {
@@ -1347,6 +1417,25 @@ const layer = Layer.effect(
         const modelsDev = yield* modelsDevSvc.get()
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
         const database = mapValues(catalog, toPublicInfo)
+
+        // Seed Command Code until models.dev carries it so the provider shows
+        // in the /connect picker. The live catalog refreshes the model list
+        // via discoverModels once an API key is configured.
+        const commandCodeID = ProviderV2.ID.make("commandcode")
+        if (!database[commandCodeID]) {
+          database[commandCodeID] = {
+            id: commandCodeID,
+            name: "Command Code",
+            env: ["COMMANDCODE_API_KEY"],
+            options: {},
+            source: "custom",
+            models: Object.fromEntries(
+              ["deepseek/deepseek-v4-pro", "deepseek/deepseek-v4-flash", "claude-sonnet-4-6", "claude-opus-4-6"].map(
+                (id) => [id, commandCodeModel(commandCodeID, id)],
+              ),
+            ),
+          }
+        }
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()
@@ -1594,17 +1683,18 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [providerID, discover] of Object.entries(discoveryLoaders)) {
+          const id = ProviderV2.ID.make(providerID)
+          if (!providers[id] || !isProviderAllowed(id)) continue
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
+              const discovered = await discover()
               for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+                if (!providers[id].models[modelID]) {
+                  providers[id].models[modelID] = model
                 }
               }
-            } catch (e) {}
+            } catch {}
           })
         }
 

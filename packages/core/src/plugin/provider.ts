@@ -4,6 +4,7 @@ import { AnthropicPlugin } from "./provider/anthropic"
 import { AzureCognitiveServicesPlugin, AzurePlugin } from "./provider/azure"
 import { CerebrasPlugin } from "./provider/cerebras"
 import { CloudflareAIGatewayPlugin } from "./provider/cloudflare-ai-gateway"
+import { CommandCodePlugin } from "./provider/commandcode"
 import { CloudflareWorkersAIPlugin } from "./provider/cloudflare-workers-ai"
 import { CoherePlugin } from "./provider/cohere"
 import { DeepInfraPlugin } from "./provider/deepinfra"
@@ -41,6 +42,7 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   AzurePlugin,
   CerebrasPlugin,
   CloudflareAIGatewayPlugin,
+  CommandCodePlugin,
   CloudflareWorkersAIPlugin,
   CoherePlugin,
   DeepInfraPlugin,
