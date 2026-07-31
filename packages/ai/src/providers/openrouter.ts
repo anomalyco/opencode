@@ -8,7 +8,7 @@ import { ProviderID, type CacheHint, type ModelID, type ProviderOptions } from "
 import type { ProviderPackage } from "../provider-package"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
-import { ttlBucket } from "../protocols/utils/cache"
+import { newBreakpoints, ttlBucket } from "../protocols/utils/cache"
 import { isRecord } from "../protocols/shared"
 
 export const profile = OpenAICompatibleProfiles.profiles.openrouter
@@ -98,7 +98,7 @@ export const protocol = Protocol.make({
   body: {
     schema: OpenRouterBody,
     from: (request) =>
-      OpenAIChat.fromRequest(request, { cacheControl }).pipe(
+      OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }).pipe(
         Effect.map((body) => {
           const sourceAssistants = request.messages.filter((message) => message.role === "assistant")
           let assistantIndex = 0
@@ -129,13 +129,17 @@ export const protocol = Protocol.make({
   stream: OpenAIChat.protocol.stream,
 })
 
-const cacheControl = (cache: CacheHint | undefined) =>
-  cache === undefined
-    ? undefined
-    : {
-        type: "ephemeral" as const,
-        ...(ttlBucket(cache.ttlSeconds) === "1h" ? { ttl: "1h" } : {}),
-      }
+const cacheControl = () => {
+  const breakpoints = newBreakpoints(4)
+  return (cache: CacheHint | undefined) => {
+    if (cache === undefined || breakpoints.remaining === 0) return undefined
+    breakpoints.remaining -= 1
+    return {
+      type: "ephemeral" as const,
+      ...(ttlBucket(cache.ttlSeconds) === "1h" ? { ttl: "1h" } : {}),
+    }
+  }
+}
 
 const bodyOptions = (input: unknown) => {
   const openrouter = isRecord(input) ? input : {}

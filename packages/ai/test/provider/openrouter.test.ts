@@ -96,6 +96,28 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("caps manual cache controls at four breakpoints", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: "none",
+          system: [1, 2, 3, 4, 5].map((index) => ({ type: "text" as const, text: `System ${index}`, cache })),
+          prompt: "Hello",
+        }),
+      )
+
+      const system = prepared.body.messages[0]
+      expect(system?.role).toBe("system")
+      expect(
+        system && Array.isArray(system.content)
+          ? system.content.filter((part) => "cache_control" in part && part.cache_control !== undefined)
+          : [],
+      ).toHaveLength(4)
+    }),
+  )
+
   it.effect("preserves cache policy hints on reasoning-only assistant messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

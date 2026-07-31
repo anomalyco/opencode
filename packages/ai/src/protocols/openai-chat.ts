@@ -412,7 +412,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   const system: OpenAIChatMessage[] =
     request.system.length === 0
       ? []
-      : request.system.some((part) => options.cacheControl?.(part.cache) !== undefined)
+      : request.system.some((part) => part.cache !== undefined) && options.cacheControl !== undefined
         ? [
             {
               role: "system",
