@@ -5,19 +5,31 @@ import { createMemo, For, Show, splitProps } from "solid-js"
 import { splitPatchHunks } from "../util/diff"
 import { stringWidth } from "../util/string-width"
 
-type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg"> & {
+export interface PatchDiffRef {
+  readonly hunks: () => readonly DiffRenderable[]
+}
+
+type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"> & {
   diff: string
   hunkFg: ColorInput
   lineNumberBg: ColorInput
+  ref?: (value: PatchDiffRef) => void
 }
 
 export function PatchDiff(props: Props) {
-  const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg"])
+  const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref"])
   const hunks = createMemo(() => splitPatchHunks(local.diff))
-  const nodes = new Set<DiffRenderable>()
+  const nodes = new Map<number, DiffRenderable>()
+  local.ref?.({
+    hunks: () =>
+      [...nodes.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([, node]) => node)
+        .filter((node) => !node.isDestroyed),
+  })
   const syncGutters = (attempt = 0) => {
     requestAnimationFrame(() => {
-      const sides = [...nodes]
+      const sides = [...nodes.values()]
         .filter((item) => !item.isDestroyed)
         .flatMap((item) => item.getChildren().filter((side) => side instanceof LineNumberRenderable))
       const lineNumbers = sides.map((side) => new Map([...side.getLineNumbers()].filter(([line]) => line >= 0)))
@@ -25,9 +37,7 @@ export function PatchDiff(props: Props) {
       const after = sides.map((side) =>
         Math.max(
           0,
-          ...[...side.getLineSigns()]
-            .filter(([line]) => line >= 0)
-            .map(([, sign]) => stringWidth(sign.after ?? "")),
+          ...[...side.getLineSigns()].filter(([line]) => line >= 0).map(([, sign]) => stringWidth(sign.after ?? "")),
         ),
       )
       const maxDigits = Math.max(...digits)
@@ -43,8 +53,8 @@ export function PatchDiff(props: Props) {
       })
     })
   }
-  const register = (node: DiffRenderable) => {
-    nodes.add(node)
+  const register = (index: number, node: DiffRenderable) => {
+    nodes.set(index, node)
     syncGutters()
   }
 
@@ -61,7 +71,7 @@ export function PatchDiff(props: Props) {
           </Show>
           <diff
             {...diffProps}
-            ref={register}
+            ref={(node: DiffRenderable) => register(index(), node)}
             diff={hunk.patch}
             minHeight={hunk.rows}
             lineNumberBg={local.lineNumberBg}
