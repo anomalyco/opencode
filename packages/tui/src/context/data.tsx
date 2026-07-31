@@ -967,6 +967,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         status(sessionID: string) {
           return store.session.active[sessionID] ?? "idle"
         },
+        running(sessionID: string) {
+          const root = resolveRoot(sessionID)
+          const family = store.session.family[root]
+          return (family?.length ? family : [root]).some((id) => store.session.active[id] === "running")
+        },
         input: {
           list(sessionID: string) {
             return store.session.input[sessionID] ?? []

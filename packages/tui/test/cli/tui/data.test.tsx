@@ -169,10 +169,12 @@ test("proactively syncs project metadata newest first", async () => {
   }
 })
 
-test("caches recent sessions until invalidated", async () => {
+test("caches recent sessions and reports unhydrated running sessions", async () => {
   const events = createEventStream()
   let requests = 0
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/active")
+      return json({ data: { ses_recent: { type: "running" } } })
     if (url.pathname !== "/api/session" || url.searchParams.get("parentID") !== "null") return
     requests++
     return json({ data: [sessionInfo("ses_recent", undefined)], cursor: {} })
@@ -201,6 +203,8 @@ test("caches recent sessions until invalidated", async () => {
     await data.session.recent.sync()
     expect(requests).toBe(1)
     expect(data.session.recent.list().map((session) => session.id)).toEqual(["ses_recent"])
+
+    await wait(() => data.session.running("ses_recent"))
 
     data.session.recent.invalidate()
     await data.session.recent.sync()

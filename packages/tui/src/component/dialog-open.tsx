@@ -78,7 +78,7 @@ export function DialogOpen() {
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
       const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
-      const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
+      const running = data.session.running(session.id)
       return {
         title: withTimestampedFallback(session),
         value: { type: "session", sessionID: session.id } as OpenTarget,

@@ -93,7 +93,8 @@ export function DialogSessionList() {
   const sessions = createMemo(() => {
     const query = filter().trim()
     const local = localSessions()
-    if (query !== search().trim() || searchResults.loading) return searchResults.latest?.sessions ?? local
+    if (query !== search().trim()) return searchResults.latest?.sessions ?? local
+    if (searchResults.loading) return searchResults.latest?.sessions ?? []
     const result = searchResults()
     if (result?.query !== query || result.allProjects !== allProjects() || result.error) return local
     return result.sessions
@@ -158,7 +159,7 @@ export function DialogSessionList() {
         footer,
         bg: deleting ? theme.background.action.destructive.focused : undefined,
         fg: deleting ? theme.text.action.destructive.focused : undefined,
-        gutter: data.session.family(session.id).some((id) => data.session.status(id) === "running")
+        gutter: data.session.running(session.id)
           ? () => <Spinner />
           : slot === undefined
             ? undefined
