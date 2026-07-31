@@ -4,6 +4,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  ErrorBoundary,
   For,
   on,
   onCleanup,
@@ -62,7 +63,7 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly slot: <Name extends SlotName>(name: Name) => ReadonlyArray<Slot<Name>>
+  readonly slot: <Name extends SlotName>(name: Name) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -620,8 +621,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
           Object.entries(store.registrations).map(([id, plugin]) => ({ id, source: plugin.source, active: plugin.active })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slot: (name) =>
-          Object.values(store.registrations).flatMap((registration) =>
-            registration.active && registration.slots[name] ? [registration.slots[name]] : [],
+          Object.entries(store.registrations).flatMap(([id, registration]) =>
+            registration.active && registration.slots[name] ? [{ id, render: registration.slots[name] }] : [],
           ),
         activate,
         deactivate,
@@ -725,16 +726,43 @@ export function usePlugin() {
   return value
 }
 
+// Contain render-time plugin crashes: a throwing slot or route must not take
+// down the app or the other plugins. The crash surfaces as one error toast.
+function PluginBoundary(props: ParentProps<{ id: string; where: string }>) {
+  const toast = useToast()
+  return (
+    <ErrorBoundary
+      fallback={(error) => {
+        createEffect(() =>
+          toast.show({
+            variant: "error",
+            title: "Plugin",
+            message: `${props.id} crashed in ${props.where}: ${error instanceof Error ? error.message : String(error)}`,
+          }),
+        )
+        return null
+      }}
+    >
+      {props.children}
+    </ErrorBoundary>
+  )
+}
+
 export function PluginRoute(props: { readonly fallback: (id: string, name: string) => JSX.Element }) {
   const plugins = usePlugin()
   const route = useRoute()
+  const id = createMemo(() => (route.data.type === "plugin" ? route.data.id : ""))
   const content = createMemo(() => {
     if (route.data.type !== "plugin") return
     const render = plugins.route(route.data.id, route.data.name)
     if (!render) return props.fallback(route.data.id, route.data.name)
     return render({ data: route.data.data })
   })
-  return <>{content()}</>
+  return (
+    <PluginBoundary id={id()} where="route">
+      {content()}
+    </PluginBoundary>
+  )
 }
 
 export function PluginSlot<Name extends SlotName>(props: {
@@ -748,5 +776,13 @@ export function PluginSlot<Name extends SlotName>(props: {
     if (props.mode === "replace") return items.slice(-1)
     return items
   })
-  return <For each={renderers()}>{(render) => render(props.input)}</For>
+  return (
+    <For each={renderers()}>
+      {(item) => (
+        <PluginBoundary id={item.id} where={`slot ${props.name}`}>
+          {item.render(props.input)}
+        </PluginBoundary>
+      )}
+    </For>
+  )
 }

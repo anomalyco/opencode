@@ -81,6 +81,43 @@ test("editing a discovered TUI plugin hot-reloads its fresh module", async () =>
   await app.task
 })
 
+test("a plugin whose slot render throws does not take down the TUI", async () => {
+  await using tmp = await tmpdir()
+  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
+  await mkdir(directory, { recursive: true })
+  const markerA = path.join(tmp.path, "a.txt")
+  const markerCrash = path.join(tmp.path, "crash.txt")
+  const sourceA = path.join(directory, "a.ts")
+  await writeFile(sourceA, lifecycleSource(markerA, "test.a", "a1"))
+  await writeFile(
+    path.join(directory, "crash.ts"),
+    `
+import { appendFile } from "node:fs/promises"
+export default {
+  id: "test.crash",
+  setup: async (context: any) => {
+    context.ui.slot("home.footer", () => {
+      throw new Error("boom")
+    })
+    await appendFile(${JSON.stringify(markerCrash)}, "setup\\n")
+  },
+}
+`,
+  )
+
+  await using app = await bootApp(tmp.path)
+  const readA = () => readFile(markerA, "utf8")
+  await until(readA, (value) => value === "a1:setup\n")
+  await until(() => readFile(markerCrash, "utf8"), (value) => value === "setup\n")
+
+  // The app survives the crashing slot: hot reload still works for others.
+  await writeFile(sourceA, lifecycleSource(markerA, "test.a", "a2"))
+  expect(await until(readA, (value) => value?.includes("a2:setup") ?? false)).toBe("a1:setup\na1:cleanup\na2:setup\n")
+
+  process.emit("SIGHUP")
+  await app.task
+})
+
 test("editing one plugin leaves others untouched and a broken save keeps the last good version", async () => {
   await using tmp = await tmpdir()
   const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
