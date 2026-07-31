@@ -265,6 +265,8 @@ Here's what the output looks like:
 And below is the final result.`,
 }
 
+const MEDIA_FIXTURE = new URL("../../../ui/src/assets/images/social-share.png", import.meta.url).href
+
 const REASONING_SAMPLES = [
   `**Analyzing the request**
 
@@ -293,6 +295,29 @@ This should be straightforward given the existing component architecture.`,
 ]
 
 const TOOL_SAMPLES = {
+  "read image": {
+    tool: "read",
+    input: { filePath: "packages/ui/src/assets/images/social-share.png" },
+    output: "Image Size: 1200x630.",
+    title: "Read packages/ui/src/assets/images/social-share.png",
+    metadata: {},
+    attachments: [
+      {
+        id: "ordered-media-fixture",
+        type: "file",
+        mime: "image/png",
+        filename: "social-share.png",
+        url: MEDIA_FIXTURE,
+      } as FilePart,
+      {
+        id: "ordered-media-unsupported",
+        type: "file",
+        mime: "application/pdf",
+        filename: "unsupported.pdf",
+        url: "data:application/pdf;base64,",
+      } as FilePart,
+    ],
+  },
   read: {
     tool: "read",
     input: { filePath: "src/components/session-turn.tsx", offset: 1, limit: 50 },
@@ -561,6 +586,7 @@ function toolPart(sample: (typeof TOOL_SAMPLES)[keyof typeof TOOL_SAMPLES], stat
         title: sample.title,
         metadata: sample.metadata ?? {},
         time: { start: Date.now(), end: Date.now() + 1000 },
+        attachments: "attachments" in sample ? sample.attachments : undefined,
       },
     } as ToolPart
   }
