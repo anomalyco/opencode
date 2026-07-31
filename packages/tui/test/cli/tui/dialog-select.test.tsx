@@ -5,7 +5,7 @@ import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { createSignal, onCleanup, onMount } from "solid-js"
-import type { DialogSelectOption } from "../../../src/ui/dialog-select"
+import { dialogSelectFooterWidth, type DialogSelectOption } from "../../../src/ui/dialog-select"
 import { tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -146,6 +146,10 @@ async function mountSelect(root: string, initial: DialogSelectOption<string>[], 
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
   return { app, moved, replaceOptions, selected }
 }
+
+test("budgets footer width for all option row chrome", () => {
+  expect(dialogSelectFooterWidth(60, 7)).toBe(41)
+})
 
 test("renders actions with a current selection", async () => {
   await using tmp = await tmpdir()
