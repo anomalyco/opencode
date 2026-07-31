@@ -24,6 +24,8 @@ export type GatewayTask = {
   originalText: string
   replyTarget: string
   replyRootID?: string
+  replyMentionID?: string
+  replyMentionName?: string
   state: TaskState
   answer?: string
   receiveSequence: number
@@ -95,6 +97,8 @@ type TaskRow = {
   original_text: string
   reply_target: string
   reply_root_id: string | null
+  reply_mention_id: string | null
+  reply_mention_name: string | null
   state: TaskState
   answer: string | null
   receive_sequence: number
@@ -168,9 +172,9 @@ export function openGatewayStore(path: string, secrets: readonly string[] = []):
         database.run(
           `INSERT INTO gateway_task (
             id, external_message_hash, conversation_id, session_id, prompt_message_id, turn_id, trace_id,
-            prompt_text, original_text, reply_target, reply_root_id, state, answer, receive_sequence,
-            send_attempts, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            prompt_text, original_text, reply_target, reply_root_id, reply_mention_id, reply_mention_name, state, answer,
+            receive_sequence, send_attempts, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             task.id,
             task.externalMessageHash,
@@ -183,6 +187,8 @@ export function openGatewayStore(path: string, secrets: readonly string[] = []):
             task.originalText,
             task.replyTarget,
             task.replyRootID ?? null,
+            task.replyMentionID ?? null,
+            task.replyMentionName ?? null,
             task.state,
             task.answer ?? null,
             receiveSequence,
@@ -279,7 +285,9 @@ function isExactDuplicate(existing: GatewayTask, task: NewGatewayTask) {
     existing.promptText === task.promptText &&
     existing.originalText === task.originalText &&
     existing.replyTarget === task.replyTarget &&
-    existing.replyRootID === task.replyRootID
+    existing.replyRootID === task.replyRootID &&
+    existing.replyMentionID === task.replyMentionID &&
+    existing.replyMentionName === task.replyMentionName
   )
 }
 
@@ -296,6 +304,8 @@ function mapTask(row: TaskRow): GatewayTask {
     originalText: row.original_text,
     replyTarget: row.reply_target,
     ...(row.reply_root_id ? { replyRootID: row.reply_root_id } : {}),
+    ...(row.reply_mention_id ? { replyMentionID: row.reply_mention_id } : {}),
+    ...(row.reply_mention_name ? { replyMentionName: row.reply_mention_name } : {}),
     state: row.state,
     ...(row.answer === null ? {} : { answer: row.answer }),
     receiveSequence: row.receive_sequence,

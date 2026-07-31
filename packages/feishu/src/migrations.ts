@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite"
 
-const currentVersion = 1
+const currentVersion = 2
 
 export function migrateGatewayStore(database: Database) {
   database.exec("PRAGMA journal_mode = WAL")
@@ -30,6 +30,8 @@ export function migrateGatewayStore(database: Database) {
         original_text TEXT NOT NULL,
         reply_target TEXT NOT NULL,
         reply_root_id TEXT,
+        reply_mention_id TEXT,
+        reply_mention_name TEXT,
         state TEXT NOT NULL CHECK (
           state IN ('received', 'admitted', 'running', 'answered', 'sending', 'delivered', 'failed', 'uncertain_delivery')
         ),
@@ -82,6 +84,12 @@ export function migrateGatewayStore(database: Database) {
         SELECT RAISE(ABORT, 'gateway_event is append-only');
       END;
     `)
+    if (applied?.version === 1) {
+      database.exec(`
+        ALTER TABLE gateway_task ADD COLUMN reply_mention_id TEXT;
+        ALTER TABLE gateway_task ADD COLUMN reply_mention_name TEXT;
+      `)
+    }
     database.run(
       "INSERT INTO gateway_schema_version (singleton, version) VALUES (1, ?) ON CONFLICT(singleton) DO UPDATE SET version = excluded.version",
       [currentVersion],

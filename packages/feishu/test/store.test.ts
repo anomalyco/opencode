@@ -24,7 +24,7 @@ describe("gateway store", () => {
 
     const database = new Database(path)
     expect(database.query<{ version: number }, []>("SELECT version FROM gateway_schema_version").get()).toEqual({
-      version: 1,
+      version: 2,
     })
     expect(database.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()?.journal_mode).toBe("wal")
     expect(
@@ -36,6 +36,61 @@ describe("gateway store", () => {
         .map((row) => row.name),
     ).toEqual(["gateway_event_no_delete", "gateway_event_no_update"])
     database.close()
+  })
+
+  test("upgrades version 1 tasks without losing their data", async () => {
+    const path = await databasePath()
+    const database = new Database(path)
+    database.exec(`
+      CREATE TABLE gateway_schema_version (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        version INTEGER NOT NULL
+      );
+      INSERT INTO gateway_schema_version (singleton, version) VALUES (1, 1);
+      CREATE TABLE gateway_task (
+        id TEXT PRIMARY KEY,
+        external_message_hash TEXT NOT NULL UNIQUE,
+        conversation_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        prompt_message_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        trace_id TEXT NOT NULL,
+        prompt_text TEXT NOT NULL,
+        original_text TEXT NOT NULL,
+        reply_target TEXT NOT NULL,
+        reply_root_id TEXT,
+        state TEXT NOT NULL,
+        answer TEXT,
+        receive_sequence INTEGER NOT NULL UNIQUE,
+        send_attempts INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO gateway_task (
+        id, external_message_hash, conversation_id, session_id, prompt_message_id, turn_id, trace_id,
+        prompt_text, original_text, reply_target, state, receive_sequence, send_attempts, created_at, updated_at
+      ) VALUES (
+        'task_legacy', 'hash_legacy', 'conv_legacy', 'ses_feishu_legacy', 'msg_feishu_legacy', 'turn_legacy', 'trace_legacy',
+        'legacy prompt', 'legacy original', 'oc_chat_legacy', 'received', 1, 0, 1700000000000, 1700000000000
+      );
+    `)
+    database.close()
+
+    const store = openGatewayStore(path)
+    expect(store.getTask("task_legacy")).toEqual(
+      expect.objectContaining({ id: "task_legacy", promptText: "legacy prompt", replyTarget: "oc_chat_legacy" }),
+    )
+    store.close()
+
+    const upgraded = new Database(path)
+    expect(upgraded.query<{ version: number }, []>("SELECT version FROM gateway_schema_version").get()).toEqual({ version: 2 })
+    expect(
+      upgraded
+        .query<{ name: string }, []>("SELECT name FROM pragma_table_info('gateway_task') WHERE name LIKE 'reply_mention_%'")
+        .all()
+        .map((column) => column.name),
+    ).toEqual(["reply_mention_id", "reply_mention_name"])
+    upgraded.close()
   })
 
   test("enforces event relationships through the store connection", async () => {
@@ -85,6 +140,41 @@ describe("gateway store", () => {
     expect(() =>
       store.admit(task({ sessionID: "ses_feishu_changed" }), [event("evt_conflict_2", "message_received")]),
     ).toThrow(GatewayConflictError)
+    expect(() =>
+      store.admit(task({ replyMentionID: "ou_user_1" }), [event("evt_conflict_3", "message_received")]),
+    ).toThrow(GatewayConflictError)
+    expect(() =>
+      store.admit(task({ replyMentionName: "姹傜簿杞存壙" }), [event("evt_conflict_4", "message_received")]),
+    ).toThrow(GatewayConflictError)
+    store.close()
+  })
+
+  test("persists group reply mentions through recovery after reopening", async () => {
+    const path = await databasePath()
+    const store = openGatewayStore(path)
+    const admitted = store.admit(
+      task({ replyMentionID: "ou_user_1", replyMentionName: "姹傜簿杞存壙" }),
+      [event("evt_received", "message_received")],
+    )
+
+    expect(admitted.task).toEqual(
+      expect.objectContaining({ replyMentionID: "ou_user_1", replyMentionName: "姹傜簿杞存壙" }),
+    )
+    store.close()
+
+    const reopened = openGatewayStore(path)
+    expect(reopened.recoverableTasks()).toEqual([
+      expect.objectContaining({ replyMentionID: "ou_user_1", replyMentionName: "姹傜簿杞存壙" }),
+    ])
+    reopened.close()
+  })
+
+  test("keeps direct tasks valid without reply mentions", async () => {
+    const store = openGatewayStore(await databasePath())
+    const admitted = store.admit(task(), [event("evt_received", "message_received")])
+
+    expect(admitted.task).not.toHaveProperty("replyMentionID")
+    expect(admitted.task).not.toHaveProperty("replyMentionName")
     store.close()
   })
 
