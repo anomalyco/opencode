@@ -80,6 +80,7 @@ import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
+import { PluginSlot } from "../../plugin/context"
 import {
   cacheReuseDrop,
   createSessionRows,
@@ -1029,6 +1030,7 @@ export function Session() {
               </Show>
             </scrollbox>
             <box flexShrink={0}>
+              <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} mode="all" />
               <Composer
                 sessionID={route.sessionID}
                 open={composer.open || (!!session()?.parentID && forms().length === 0)}

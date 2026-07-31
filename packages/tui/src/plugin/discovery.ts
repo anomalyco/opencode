@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises"
+import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
@@ -27,8 +27,7 @@ export function localSource(spec: string, directory: string) {
 // of hitting the ESM cache. Bun ignores query params when caching file:// URL
 // imports, so bust with a plain path there; Node keys its cache on the full
 // URL. Mirrors the core plugin supervisor's loader.
-export async function freshSpecifier(entrypoint: string) {
-  const mtime = (await stat(new URL(entrypoint))).mtimeMs
+export function freshSpecifier(entrypoint: string, mtime: number) {
   if (typeof Bun !== "undefined") return `${fileURLToPath(entrypoint).replaceAll("\\", "/")}?mtime=${mtime}`
   return `${entrypoint}?mtime=${mtime}`
 }

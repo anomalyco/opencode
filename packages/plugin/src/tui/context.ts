@@ -136,6 +136,9 @@ export interface SlotMap {
     readonly sessionID?: string
     readonly mode: "normal" | "shell"
   }
+  readonly "session.composer.top": {
+    readonly sessionID: string
+  }
   readonly "sidebar.content": {
     readonly sessionID: string
   }

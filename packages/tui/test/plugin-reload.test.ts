@@ -22,11 +22,9 @@ test("freshSpecifier re-imports a plugin source after it changes", async () => {
   await using tmp = await tmpdir()
   const file = path.join(tmp.path, "plugin.ts")
   await writeFile(file, "export default 1")
-  const first: { readonly default?: unknown } = await import(await freshSpecifier(pathToFileURL(file).href))
+  const first: { readonly default?: unknown } = await import(freshSpecifier(pathToFileURL(file).href, 1))
   await writeFile(file, "export default 2")
-  // Force a distinct mtime in case the filesystem clock is coarse.
-  await utimes(file, new Date(), new Date(Date.now() + 5000))
-  const second: { readonly default?: unknown } = await import(await freshSpecifier(pathToFileURL(file).href))
+  const second: { readonly default?: unknown } = await import(freshSpecifier(pathToFileURL(file).href, 2))
   expect(first.default).toBe(1)
   expect(second.default).toBe(2)
 })
