@@ -42,6 +42,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { RadioGroup } from "@opencode-ai/ui/radio-group"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
@@ -1656,20 +1657,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       title={language.t("command.agent.cycle")}
                       keybind={command.keybind("agent.cycle")}
                     >
-                      <Select
-                        size="normal"
-                        options={props.controls.agents.options}
-                        current={props.controls.agents.current}
-                        onSelect={(value) => {
-                          props.controls.agents.select(value)
-                          restoreFocus()
-                        }}
-                        class="capitalize max-w-[160px] text-text-base"
-                        valueClass="truncate text-13-regular text-text-base"
-                        triggerStyle={control()}
-                        triggerProps={{ "data-action": "prompt-agent" }}
-                        variant="ghost"
-                      />
+                      <Show
+                        when={props.controls.agents.options.length === 2}
+                        fallback={
+                          <Select
+                            size="normal"
+                            options={props.controls.agents.options}
+                            current={props.controls.agents.current}
+                            onSelect={(value) => {
+                              props.controls.agents.select(value)
+                              restoreFocus()
+                            }}
+                            class="capitalize max-w-[160px] text-text-base"
+                            valueClass="truncate text-13-regular text-text-base"
+                            triggerStyle={control()}
+                            triggerProps={{ "data-action": "prompt-agent" }}
+                            variant="ghost"
+                          />
+                        }
+                      >
+                        <RadioGroup
+                          size="small"
+                          options={props.controls.agents.options}
+                          current={props.controls.agents.current}
+                          onSelect={(value) => {
+                            if (!value) return
+                            props.controls.agents.select(value)
+                            restoreFocus()
+                          }}
+                          class="capitalize"
+                          data-action="prompt-agent"
+                        />
+                      </Show>
                     </TooltipKeybind>
                   </div>
                 </Show>
