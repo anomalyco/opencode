@@ -80,6 +80,13 @@ const layer = Layer.effect(
             `  Platform: ${process.platform}`,
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
+            ``,
+            `<reflect_tool>`,
+            `  When you face a high-stakes decision (irreversible file changes, destructive operations, ambiguous intent) or your confidence is low, prefer the reflect tool over continuing.`,
+            `  - loop=why: ground your goal in the latest state. Use after a tool result that materially changes context, or when you hedge ("maybe", "I think", "not sure").`,
+            `  - loop=then: project forward 3-5 consequences before acting. Use before destructive actions, refactors with broad blast radius, or when the user asks you to evaluate risks.`,
+            `  Calling reflect is cheap; calling it when uncertain is the default. The runner may also auto-invoke reflect on dense hedge phrases — you do not need to wait for that.`,
+            `</reflect_tool>`,
           ].join("\n"),
           references.length === 0
             ? undefined
@@ -109,7 +116,8 @@ const layer = Layer.effect(
 
         return [
           "Skills provide specialized instructions and workflows for specific tasks.",
-          "Use the skill tool to load a skill when a task matches its description.",
+          "Each skill body opens with a 'USE WHEN' clause; treat that clause as a hard trigger.",
+          "When the user's request or current task matches any 'USE WHEN' clause above, call the skill tool with that name to load the full body before proceeding. Do not paraphrase the skill's content — load it.",
           // the agents seem to ingest the information about skills a bit better if we present a more verbose
           // version of them here and a less verbose version in tool description, rather than vice versa.
           Skill.fmt(list, { verbose: true }),

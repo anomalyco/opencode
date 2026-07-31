@@ -19,7 +19,7 @@ export interface Interface {
   readonly reflect: (
     sessionID: SessionSchema.ID,
     input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
-  ) => Effect.Effect<void, SessionRunner.RunError>
+  ) => Effect.Effect<SessionRunner.ReflectionOutcome, SessionRunner.RunError>
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
@@ -35,6 +35,6 @@ export const noopLayer = Layer.succeed(
     resume: () => Effect.void,
     wake: () => Effect.void,
     interrupt: () => Effect.void,
-    reflect: () => Effect.void,
+    reflect: () => Effect.die("Reflection not available in noop layer"),
   }),
 )

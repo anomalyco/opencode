@@ -441,6 +441,10 @@ export namespace ReasoningCycle {
       gated: Schema.Boolean,
       steered: Schema.Boolean,
       messageID: SessionMessage.ID.pipe(optional),
+      reason: Schema.String.pipe(optional),
+      iterates: Schema.Number.pipe(optional),
+      epsilon: Schema.Number.pipe(optional),
+      approximationGap: Schema.Number.pipe(optional),
     },
   })
   export type Fired = typeof Fired.Type

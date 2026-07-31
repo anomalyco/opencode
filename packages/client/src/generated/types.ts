@@ -486,6 +486,51 @@ export type SessionsCompactInput = { readonly sessionID: { readonly sessionID: s
 
 export type SessionsCompactOutput = void
 
+export type SessionsReflectInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly model?: {
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+  }["model"]
+}
+
+export type SessionsReflectOutput = {
+  readonly data: {
+    readonly why: {
+      readonly steered: boolean
+      readonly iterates: number
+      readonly converged: boolean
+      readonly epsilon: number
+      readonly approximationGap?: number | undefined
+      readonly text: string
+      readonly extensionsDetected: number
+    }
+    readonly then: {
+      readonly steered: boolean
+      readonly iterates: number
+      readonly converged: boolean
+      readonly epsilon: number
+      readonly approximationGap?: number | undefined
+      readonly text: string
+      readonly extensionsDetected: number
+    }
+    readonly diagnostic: {
+      readonly muR: string
+      readonly tauR: string
+      readonly state: string
+      readonly initialPrompt: string
+      readonly rhoMuR: number
+      readonly rhoTauR: number
+      readonly rhoState: number
+      readonly forwardMisalignment: number
+      readonly backwardMisalignment: number
+      readonly totalMisalignment: number
+      readonly objectiveGap: number
+      readonly cofinality: "omega" | "transfinite"
+      readonly extensionsDetected: number
+    }
+  }
+}["data"]
+
 export type SessionsWaitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionsWaitOutput = void
@@ -1095,6 +1140,25 @@ export type SessionsHistoryOutput = {
     | {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.reasoning.cycle.fired"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: {
+          readonly timestamp: number
+          readonly sessionID: string
+          readonly loop: "why" | "then"
+          readonly gated: boolean
+          readonly steered: boolean
+          readonly messageID?: string
+          readonly reason?: string
+          readonly iterates?: number | "Infinity" | "-Infinity" | "NaN"
+          readonly epsilon?: number | "Infinity" | "-Infinity" | "NaN"
+          readonly approximationGap?: number | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.revert.staged"
         readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -1548,6 +1612,25 @@ export type SessionsEventsOutput =
         readonly reason: "auto" | "manual"
         readonly text: string
         readonly recent: string
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.reasoning.cycle.fired"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly loop: "why" | "then"
+        readonly gated: boolean
+        readonly steered: boolean
+        readonly messageID?: string
+        readonly reason?: string
+        readonly iterates?: number
+        readonly epsilon?: number
+        readonly approximationGap?: number
       }
     }
   | {

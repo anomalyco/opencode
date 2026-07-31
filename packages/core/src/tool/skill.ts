@@ -27,6 +27,8 @@ export const Output = Schema.Struct({
 export const description = [
   "Load a specialized skill when the task at hand matches one of the available skills in the system context.",
   "",
+  "Each skill's description includes a 'USE WHEN' clause — if the current user request or task matches it, call this tool with that skill's name BEFORE attempting the task on your own.",
+  "",
   "Use this tool to inject the skill's instructions and resources into the current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc. in the same directory as the skill.",
   "",
   "The skill name must match one of the available skills in the system context.",

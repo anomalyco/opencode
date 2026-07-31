@@ -19,6 +19,8 @@ import type {
   SessionsPromptOutput,
   SessionsCompactInput,
   SessionsCompactOutput,
+  SessionsReflectInput,
+  SessionsReflectOutput,
   SessionsWaitInput,
   SessionsWaitOutput,
   SessionsStageInput,
@@ -390,6 +392,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      reflect: (input: SessionsReflectInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsReflectOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/reflect`,
+            body: { model: input["model"] },
+            successStatus: 200,
+            declaredStatuses: [404, 503, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       wait: (input: SessionsWaitInput, requestOptions?: RequestOptions) =>
         request<SessionsWaitOutput>(
           {

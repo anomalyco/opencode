@@ -33,7 +33,7 @@ import { SessionMessage } from "../message"
 import { Prompt } from "../prompt"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
-import { type RunError, Service } from "./index"
+import { type ReflectionResult, type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
@@ -109,7 +109,11 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const configEntries = yield* config.entries()
+    const compaction = SessionCompaction.make({ events, llm, config: configEntries })
+    const reflectiveReasoning = Config.latest(configEntries, "reflective_reasoning")
+    const maxReflectionBudget = Math.max(0, reflectiveReasoning?.maxReflectionBudget ?? 1)
+    const approxTcaTolerance = Math.max(0, reflectiveReasoning?.approxTcaTolerance ?? 0)
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -181,12 +185,28 @@ const layer = Layer.effect(
       return ""
     }
 
+    const readLastAssistantText = Effect.fn("SessionRunner.readLastAssistantText")(function* (sessionID: SessionSchema.ID) {
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return ""
+      const agent = yield* agents.select(session.value.agent)
+      const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(system)) return ""
+      const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(entries)) return ""
+      return lastAssistantText(entries.value)
+    })
+
     const publishCycle = Effect.fn("SessionRunner.publishCycle")(function* (
       loop: "why" | "then",
       sessionID: SessionSchema.ID,
       gated: boolean,
       steered: boolean,
       messageID?: SessionMessage.ID,
+      diagnostics?: { readonly iterates: number; readonly epsilon: number; readonly approximationGap?: number },
     ) {
       yield* events
         .publish(SessionEvent.ReasoningCycle.Fired, {
@@ -194,6 +214,7 @@ const layer = Layer.effect(
           gated,
           steered,
           ...(messageID === undefined ? {} : { messageID }),
+          ...(diagnostics === undefined ? {} : diagnostics),
           timestamp: yield* DateTime.now,
           sessionID,
         })
@@ -218,7 +239,7 @@ const layer = Layer.effect(
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
-      let whyLoopBudget = 1
+      let whyLoopBudget = maxReflectionBudget
       let currentStep = step
       if (promotion) {
         const cutoff = yield* EventV2.latestSequence(db, session.id)
@@ -442,118 +463,237 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       modelOverride?: { providerID: string; modelID: string },
     ) {
+      const converge = (
+        steered: boolean,
+        iterates: number,
+        text: string,
+        extensionsDetected: number,
+        approximationGap?: number,
+      ): ReflectionResult => ({
+        steered,
+        iterates,
+        converged: !steered,
+        certificate: approximationGap === undefined
+          ? { epsilon: approxTcaTolerance }
+          : { epsilon: approxTcaTolerance, approximationGap },
+        text,
+        extensionsDetected,
+      })
       const session = yield* getSession(sessionID).pipe(Effect.option)
-      if (Option.isNone(session)) return { steered: false }
+      if (Option.isNone(session)) return converge(false, 0, "", 0)
       const agent = yield* agents.select(session.value.agent)
       const model = yield* models.resolveReflection(session.value, modelOverride).pipe(Effect.option)
-      if (Option.isNone(model)) return { steered: false }
+      if (Option.isNone(model)) return converge(false, 0, "", 0)
       const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
         Effect.option,
       )
-      if (Option.isNone(system)) return { steered: false }
+      if (Option.isNone(system)) return converge(false, 0, "", 0)
+      const startBaselineSeq = system.value.baselineSeq
       const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
         Effect.option,
       )
-      if (Option.isNone(entries)) return { steered: false }
+      if (Option.isNone(entries)) return converge(false, 0, "", 0)
       if (!containsHedge(lastAssistantText(entries.value))) {
         yield* publishCycle("then", sessionID, true, false)
-        return { steered: false }
+        return converge(false, 0, "", 0)
       }
-      const recent = entries.value.slice(-6)
-      const lastMsgs = recent.map((e) => e.message)
-      const hasDecision = lastMsgs.some(
-        (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
-      )
-      if (!hasDecision || entries.value.length < 2) return { steered: false }
-      const projectionMsgs = [
-        ...toLLMMessages(lastMsgs, model.value),
-        Message.user(
-          `Forward-project 3-5 steps from the reasoning above. Identify negative consequences, contradictions, or risks. If none, output exactly "No issues projected."`,
-        ),
-      ]
-      const req = LLM.request({ model: model.value, messages: projectionMsgs, tools: [], generation: { maxTokens: 1024 } })
-      const chunks: string[] = []
-      let failed = false
-      yield* llm.stream(req).pipe(
-        Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
-          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
-          return Effect.void
-        }),
-        Effect.option,
-      )
-      if (failed || chunks.length === 0) return { steered: false }
-      const projection = chunks.join("").trim()
-      if (/no issues?|no negative/i.test(projection) || projection.length < 40) {
-        yield* publishCycle("then", sessionID, false, false)
-        return { steered: false }
+      let iterates = 0
+      let steered = false
+      let projection = ""
+      let lastMessageID: SessionMessage.ID | undefined
+      let extensionsDetected = 0
+      let currentBaselineSeq = startBaselineSeq
+      while (iterates < maxReflectionBudget) {
+        iterates++
+        const nextSystem = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+          Effect.option,
+        )
+        if (Option.isNone(nextSystem)) break
+        if (nextSystem.value.baselineSeq !== currentBaselineSeq) {
+          extensionsDetected++
+          currentBaselineSeq = nextSystem.value.baselineSeq
+        }
+        const currentEntries = yield* SessionHistory.entriesForRunner(db, session.value.id, nextSystem.value.baselineSeq).pipe(
+          Effect.option,
+        )
+        if (Option.isNone(currentEntries)) break
+        const lastMsgs = currentEntries.value.slice(-6).map((e) => e.message)
+        const hasDecision = lastMsgs.some(
+          (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
+        )
+        if (!hasDecision || currentEntries.value.length < 2) break
+        const projectionMsgs = [
+          ...toLLMMessages(lastMsgs, model.value),
+          Message.user(
+            `Forward-project 3-5 steps from the reasoning above. Identify negative consequences, contradictions, or risks. If none, output exactly "No issues projected."`,
+          ),
+        ]
+        const req = LLM.request({
+          model: model.value,
+          messages: projectionMsgs,
+          tools: [],
+          generation: { maxTokens: 1024 },
+        })
+        const chunks: string[] = []
+        let failed = false
+        yield* llm.stream(req).pipe(
+          Stream.runForEach((event) => {
+            if (LLMEvent.is.providerError(event)) failed = true
+            if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+            return Effect.void
+          }),
+          Effect.option,
+        )
+        if (failed || chunks.length === 0) break
+        projection = chunks.join("").trim()
+        const converged = /no issues?|no negative/i.test(projection) || projection.length < 40
+        if (converged) {
+          yield* publishCycle(
+            "then",
+            sessionID,
+            false,
+            false,
+            undefined,
+            approxTcaTolerance > 0 ? { iterates, epsilon: approxTcaTolerance, approximationGap: 0 } : undefined,
+          )
+          return converge(false, iterates, projection, extensionsDetected, approxTcaTolerance > 0 ? 0 : undefined)
+        }
+        const messageID = SessionMessage.ID.create()
+        yield* SessionInput.admit(db, events, {
+          id: messageID,
+          sessionID,
+          prompt: Prompt.fromUserMessage({ text: `[Then Loop forward check]\n${projection}` }),
+          delivery: "steer",
+        }).pipe(Effect.option)
+        lastMessageID = messageID
+        steered = true
       }
-      const messageID = SessionMessage.ID.create()
-      yield* SessionInput.admit(db, events, {
-        id: messageID,
+      yield* publishCycle(
+        "then",
         sessionID,
-        prompt: Prompt.fromUserMessage({ text: `[Then Loop forward check]\n${projection}` }),
-        delivery: "steer",
-      }).pipe(Effect.option)
-      yield* publishCycle("then", sessionID, false, true, messageID)
-      return { steered: true }
+        false,
+        true,
+        lastMessageID,
+        { iterates, epsilon: approxTcaTolerance },
+      )
+      return converge(steered, iterates, projection, extensionsDetected)
     })
 
     const whyLoop = Effect.fn("SessionRunner.whyLoop")(function* (
       sessionID: SessionSchema.ID,
       modelOverride?: { providerID: string; modelID: string },
     ) {
+      const converge = (
+        steered: boolean,
+        iterates: number,
+        text: string,
+        extensionsDetected: number,
+        approximationGap?: number,
+      ): ReflectionResult => ({
+        steered,
+        iterates,
+        converged: !steered,
+        certificate: approximationGap === undefined
+          ? { epsilon: approxTcaTolerance }
+          : { epsilon: approxTcaTolerance, approximationGap },
+        text,
+        extensionsDetected,
+      })
       const session = yield* getSession(sessionID).pipe(Effect.option)
-      if (Option.isNone(session)) return { steered: false }
+      if (Option.isNone(session)) return converge(false, 0, "", 0)
       const agent = yield* agents.select(session.value.agent)
       const model = yield* models.resolveReflection(session.value, modelOverride).pipe(Effect.option)
-      if (Option.isNone(model)) return { steered: false }
+      if (Option.isNone(model)) return converge(false, 0, "", 0)
       const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
         Effect.option,
       )
-      if (Option.isNone(system)) return { steered: false }
+      if (Option.isNone(system)) return converge(false, 0, "", 0)
+      const startBaselineSeq = system.value.baselineSeq
       const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
         Effect.option,
       )
-      if (Option.isNone(entries)) return { steered: false }
-      const recent = entries.value.slice(-6)
-      const lastMsgs = recent.map((e) => e.message)
-      const hasDecision = lastMsgs.some(
-        (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
+      if (Option.isNone(entries)) return converge(false, 0, "", 0)
+      const initialHasDecision = entries.value.slice(-6).some((e) =>
+        e.message.type === "assistant" &&
+        e.message.content.some((p) => p.type === "text"),
       )
-      if (!hasDecision || entries.value.length < 2) return { steered: false }
-      const reflectionMsgs = [
-        ...toLLMMessages(lastMsgs, model.value),
-        Message.user(
-          `Reflect on whether the most recent tool result changes your goal. If so, state the new goal in one sentence. Otherwise output exactly "Goal unchanged."`,
-        ),
-      ]
-      const req = LLM.request({ model: model.value, messages: reflectionMsgs, tools: [], generation: { maxTokens: 1024 } })
-      const chunks: string[] = []
-      let failed = false
-      yield* llm.stream(req).pipe(
-        Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
-          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
-          return Effect.void
-        }),
-        Effect.option,
-      )
-      if (failed || chunks.length === 0) return { steered: false }
-      const reflection = chunks.join("").trim()
-      if (/goal unchanged|goal is unchanged/i.test(reflection) || reflection.length < 20) {
-        yield* publishCycle("why", sessionID, false, false)
-        return { steered: false }
+      if (!initialHasDecision || entries.value.length < 2) return converge(false, 0, "", 0)
+      let iterates = 0
+      let steered = false
+      let reflection = ""
+      let lastMessageID: SessionMessage.ID | undefined
+      let extensionsDetected = 0
+      let currentBaselineSeq = startBaselineSeq
+      while (iterates < maxReflectionBudget) {
+        iterates++
+        const nextSystem = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+          Effect.option,
+        )
+        if (Option.isNone(nextSystem)) break
+        if (nextSystem.value.baselineSeq !== currentBaselineSeq) {
+          extensionsDetected++
+          currentBaselineSeq = nextSystem.value.baselineSeq
+        }
+        const currentEntries = yield* SessionHistory.entriesForRunner(db, session.value.id, nextSystem.value.baselineSeq).pipe(
+          Effect.option,
+        )
+        if (Option.isNone(currentEntries)) break
+        const lastMsgs = currentEntries.value.slice(-6).map((e) => e.message)
+        const reflectionMsgs = [
+          ...toLLMMessages(lastMsgs, model.value),
+          Message.user(
+            `Reflect on whether the most recent tool result changes your goal. If so, state the new goal in one sentence. Otherwise output exactly "Goal unchanged."`,
+          ),
+        ]
+        const req = LLM.request({
+          model: model.value,
+          messages: reflectionMsgs,
+          tools: [],
+          generation: { maxTokens: 1024 },
+        })
+        const chunks: string[] = []
+        let failed = false
+        yield* llm.stream(req).pipe(
+          Stream.runForEach((event) => {
+            if (LLMEvent.is.providerError(event)) failed = true
+            if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+            return Effect.void
+          }),
+          Effect.option,
+        )
+        if (failed || chunks.length === 0) break
+        reflection = chunks.join("").trim()
+        const converged = /goal unchanged|goal is unchanged/i.test(reflection) || reflection.length < 20
+        if (converged) {
+          yield* publishCycle(
+            "why",
+            sessionID,
+            false,
+            false,
+            undefined,
+            approxTcaTolerance > 0 ? { iterates, epsilon: approxTcaTolerance, approximationGap: 0 } : undefined,
+          )
+          return converge(false, iterates, reflection, extensionsDetected, approxTcaTolerance > 0 ? 0 : undefined)
+        }
+        const messageID = SessionMessage.ID.create()
+        yield* SessionInput.admit(db, events, {
+          id: messageID,
+          sessionID,
+          prompt: Prompt.fromUserMessage({ text: `[Why Loop reflection]\n${reflection}` }),
+          delivery: "steer",
+        }).pipe(Effect.option)
+        lastMessageID = messageID
+        steered = true
       }
-      const messageID = SessionMessage.ID.create()
-      yield* SessionInput.admit(db, events, {
-        id: messageID,
+      yield* publishCycle(
+        "why",
         sessionID,
-        prompt: Prompt.fromUserMessage({ text: `[Why Loop reflection]\n${reflection}` }),
-        delivery: "steer",
-      }).pipe(Effect.option)
-      yield* publishCycle("why", sessionID, false, true, messageID)
-      return { steered: true }
+        false,
+        true,
+        lastMessageID,
+        { iterates, epsilon: approxTcaTolerance },
+      )
+      return converge(steered, iterates, reflection, extensionsDetected)
     })
 
     const run = Effect.fn("SessionRunner.run")(function* (input: {
@@ -566,7 +706,7 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
-      let thenLoopBudget = 1
+      let thenLoopBudget = maxReflectionBudget
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -582,6 +722,13 @@ const layer = Layer.effect(
                 thenLoopBudget--
                 needsContinuation = true
                 step = 1
+                if (thenResult.extensionsDetected > 0) {
+                  const extendedWhy = yield* whyLoop(input.sessionID)
+                  if (extendedWhy.steered) {
+                    needsContinuation = true
+                    step = 1
+                  }
+                }
               }
             }
             if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
@@ -596,6 +743,7 @@ const layer = Layer.effect(
       run,
       whyLoop,
       thenLoop,
+      lastAssistantText: readLastAssistantText,
     })
   }),
 )
