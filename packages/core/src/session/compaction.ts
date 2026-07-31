@@ -351,10 +351,12 @@ const make = (dependencies: Dependencies) => {
     )
     if (!last) return false
     const output = Math.min(input.model.route.defaults.limits?.output ?? 0, OUTPUT_TOKEN_MAX)
+    const inputLimit = input.model.route.defaults.limits?.input
+    const limit = inputLimit === undefined ? context - (output || config.buffer) : Math.max(0, inputLimit - config.buffer)
     const used =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (used <= 0) return false
-    return used >= context - (output || config.buffer)
+    return used >= limit
   }
   const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
     const content = planContent(input.messages, config.tokens)
