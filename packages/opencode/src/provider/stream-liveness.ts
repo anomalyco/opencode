@@ -40,12 +40,13 @@ export function create(policy: Policy = defaultPolicy, now = () => performance.n
     bucket: string
     controller: AbortController
     timeout?: number | false
+    stream?: boolean
   }) {
     const fixed =
       typeof input.timeout === "number" && Number.isFinite(input.timeout) ? input.timeout : undefined
     if (input.timeout === false || (fixed !== undefined && fixed <= 0)) return input.response
     if (!input.response.body) return input.response
-    if (!input.response.headers.get("content-type")?.includes("text/event-stream")) return input.response
+    if (!input.stream && !input.response.headers.get("content-type")?.includes("text/event-stream")) return input.response
 
     const ms = fixed ?? deadline(input.bucket)
     const reader = input.response.body.getReader()

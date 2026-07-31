@@ -51,6 +51,26 @@ describe("stream liveness response body", () => {
     await expect(response.text()).rejects.toHaveProperty("name", "ProviderResponseStreamTimeoutError")
   })
 
+  test("uses request stream intent when the response omits its content type", async () => {
+    const detector = StreamLiveness.create({ ...policy, initial: 10 })
+    const response = detector.wrap({
+      bucket: "test:transport",
+      controller: new AbortController(),
+      response: new Response(
+        new ReadableStream({
+          async pull(controller) {
+            await Bun.sleep(30)
+            controller.enqueue(new TextEncoder().encode("late"))
+            controller.close()
+          },
+        }),
+      ),
+      stream: true,
+    })
+
+    await expect(response.text()).rejects.toHaveProperty("name", "ProviderResponseStreamTimeoutError")
+  })
+
   test("raw heartbeat bytes reset the pending-read deadline", async () => {
     const detector = StreamLiveness.create({ ...policy, initial: 30 })
     const response = detector.wrap({

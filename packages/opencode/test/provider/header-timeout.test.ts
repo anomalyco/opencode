@@ -83,6 +83,42 @@ it.live("chunkTimeout raises a typed timeout when SSE body never yields or close
   }),
 )
 
+it.live("chunkTimeout uses request stream intent when the response omits its content type", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => hangingBodyServer(false)),
+      (server) => Effect.sync(() => server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const result = streamText({
+            model: yield* provider.getLanguage(model),
+            abortSignal: AbortSignal.timeout(200),
+            onError() {},
+            messages: [{ role: "user", content: "hello" }],
+          })
+
+          const error = yield* Effect.promise(async () => {
+            try {
+              for await (const part of result.fullStream) {
+                if (part.type === "error") return part.error
+              }
+            } catch (error) {
+              return error
+            }
+            return undefined
+          })
+          expect(error).toBeInstanceOf(ProviderError.ResponseStreamTimeoutError)
+        }),
+      { config: providerConfig(server.url, { chunkTimeout: 50 }) },
+    )
+  }),
+)
+
 for (const chunkTimeout of [false, 0] as const) {
   it.live(`chunkTimeout ${chunkTimeout} disables the SSE body watchdog`, () =>
     Effect.gen(function* () {
@@ -241,12 +277,12 @@ async function delayedBodyServer(delay: number): Promise<{ server: Server; url: 
   return { server, url: `http://127.0.0.1:${address.port}` }
 }
 
-async function hangingBodyServer(): Promise<{ close(): void; url: string }> {
+async function hangingBodyServer(contentType = true): Promise<{ close(): void; url: string }> {
   const responses = new Set<ServerResponse>()
   const server = createServer((_, res) => {
     responses.add(res)
     res.on("close", () => responses.delete(res))
-    res.writeHead(200, { "content-type": "text/event-stream" })
+    res.writeHead(200, contentType ? { "content-type": "text/event-stream" } : {})
     res.flushHeaders()
   })
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
