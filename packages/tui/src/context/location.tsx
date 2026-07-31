@@ -4,6 +4,7 @@ import { useClient } from "./client"
 import { useData } from "./data"
 
 const context = createContext<{
+  readonly ref: LocationRef | undefined
   readonly current: LocationGetOutput | undefined
   // The target location as set, available before the server-synced info in `current` arrives.
   readonly ref: LocationRef | undefined
@@ -36,6 +37,9 @@ export function LocationProvider(props: ParentProps) {
   return (
     <context.Provider
       value={{
+        get ref() {
+          return ref()
+        },
         get current() {
           return current()
         },

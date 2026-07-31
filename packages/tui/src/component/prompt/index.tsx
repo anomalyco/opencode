@@ -321,7 +321,8 @@ export function Prompt(props: PromptProps) {
     ),
   )
 
-  // Initialize agent/model/variant from the durable V2 Session state.
+  // Initialize the agent from the durable V2 Session state. Model hydration is
+  // reactive in LocalProvider so it can wait for the location catalog.
   let syncedSessionID: string | undefined
   createEffect(() => {
     const sessionID = props.sessionID
@@ -330,10 +331,6 @@ export function Prompt(props: PromptProps) {
     if (!session) return
     const agent = session.agent && local.agent.list().find((agent) => agent.id === session.agent)
     if (agent && !args.agent) local.agent.set(agent.id)
-    if (session.model) {
-      local.model.set({ providerID: session.model.providerID, modelID: session.model.id })
-      local.model.variant.set(session.model.variant)
-    }
     syncedSessionID = sessionID
   })
 

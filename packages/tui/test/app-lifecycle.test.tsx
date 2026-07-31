@@ -138,46 +138,87 @@ test("session lifecycle updates the terminal title and prints the epilogue after
   }
 })
 
-test("session startup prompt is submitted exactly once", async () => {
+test("session startup waits for catalogs and follows durable model changes", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventStream()
   const cwd = process.cwd()
-  const location = { directory: cwd, project: { id: "project", directory: cwd } }
+  const sessionDirectory = `${cwd}/session`
+  const location = (directory: string) => ({ directory, project: { id: "project", directory } })
   const session = {
     id: "dummy",
     title: "Demo session",
     projectID: "project",
-    location: { directory: cwd },
+    location: { directory: sessionDirectory },
     agent: "build",
-    model: { providerID: "provider", id: "model" },
+    model: { providerID: "provider", id: "model", variant: "high" },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
   }
   const bodies: unknown[] = []
+  const modelSwitches: unknown[] = []
+  const locationRequested = Promise.withResolvers<void>()
+  const targetLocation = Promise.withResolvers<void>()
+  const catalogRequested = Promise.withResolvers<void>()
+  const catalog = Promise.withResolvers<void>()
   const promptSubmitted = Promise.withResolvers<void>()
+  const secondPromptSubmitted = Promise.withResolvers<void>()
   const calls = createFetch(async (url, request) => {
-    if (url.pathname === "/api/location") return json(location)
+    const directory = url.searchParams.get("location[directory]") ?? cwd
+    if (url.pathname === "/api/location") {
+      if (directory === sessionDirectory) {
+        locationRequested.resolve()
+        await targetLocation.promise
+      }
+      return json(location(directory))
+    }
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
     if (url.pathname === "/api/session/dummy") return json({ data: session })
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/dummy/message/msg_model_gamma")
+      return json({
+        data: {
+          id: "msg_model_gamma",
+          type: "model-switched",
+          previous: session.model,
+          model: { providerID: "provider", id: "gamma", variant: "medium" },
+          time: { created: 1 },
+        },
+      })
     if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
     if (url.pathname === "/api/agent")
       return json({
-        location,
+        location: location(directory),
         data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
       })
-    if (url.pathname === "/api/model")
+    if (url.pathname === "/api/model") {
+      if (directory !== sessionDirectory)
+        return json({
+          location: location(directory),
+          data: [{ id: "fallback", providerID: "provider", name: "Fallback", variants: [] }],
+        })
+      catalogRequested.resolve()
+      await catalog.promise
       return json({
-        location,
-        data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }],
+        location: location(directory),
+        data: [
+          { id: "model", providerID: "provider", name: "Model", variants: [{ id: "high" }] },
+          { id: "fallback", providerID: "provider", name: "Fallback", variants: [] },
+          { id: "gamma", providerID: "provider", name: "Gamma", variants: [{ id: "medium" }] },
+        ],
       })
+    }
+    if (url.pathname === "/api/session/dummy/model") {
+      modelSwitches.push(await request.json())
+      return new Response(null, { status: 204 })
+    }
     if (url.pathname === "/api/session/dummy/prompt") {
       bodies.push(await request.json())
       promptSubmitted.resolve()
+      if (bodies.length === 2) secondPromptSubmitted.resolve()
       return json({ data: {} })
     }
   }, events)
@@ -196,6 +237,22 @@ test("session startup prompt is submitted exactly once", async () => {
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
     )
 
+    await locationRequested.promise
+    await Promise.race([
+      promptSubmitted.promise.then(() => {
+        throw new Error("startup prompt was submitted before its location loaded")
+      }),
+      Bun.sleep(100),
+    ])
+    targetLocation.resolve()
+    await catalogRequested.promise
+    await Promise.race([
+      promptSubmitted.promise.then(() => {
+        throw new Error("startup prompt was submitted before its model catalog loaded")
+      }),
+      Bun.sleep(100),
+    ])
+    catalog.resolve()
     await Promise.race([
       promptSubmitted.promise,
       Bun.sleep(2000).then(() => {
@@ -203,12 +260,38 @@ test("session startup prompt is submitted exactly once", async () => {
       }),
     ])
     await Bun.sleep(20)
-    setup.renderer.destroy()
-    await task
 
     expect(bodies).toHaveLength(1)
     expect(bodies[0]).toMatchObject({ text: "RESUME_READY" })
+    expect(modelSwitches).toEqual([])
+
+    events.emit({
+      id: "evt_model_gamma",
+      created: 1,
+      type: "session.model.selected",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      location: session.location,
+      data: {
+        sessionID: session.id,
+        model: { providerID: "provider", id: "gamma", variant: "medium" },
+      },
+    })
+    await Bun.sleep(20)
+    await setup.mockInput.typeText("SECOND")
+    setup.mockInput.pressEnter()
+    await Promise.race([
+      secondPromptSubmitted.promise,
+      Bun.sleep(2000).then(() => {
+        throw new Error("second prompt was not submitted")
+      }),
+    ])
+    expect(modelSwitches).toEqual([])
+    await Bun.sleep(20)
+    setup.renderer.destroy()
+    await task
   } finally {
+    targetLocation.resolve()
+    catalog.resolve()
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
     mock.restore()

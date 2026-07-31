@@ -7,16 +7,20 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useData } from "../context/data"
+import { useLocation } from "../context/location"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const data = useData()
+  const location = useLocation()
   const dialog = useDialog()
   const [query, setQuery] = createSignal("")
 
   const connected = useConnected()
-  const providers = createMemo(() => new Map((data.location.provider.list() ?? []).map((item) => [item.id, item])))
-  const models = createMemo(() => data.location.model.list() ?? [])
+  const providers = createMemo(
+    () => new Map((data.location.provider.list(location.ref) ?? []).map((item) => [item.id, item])),
+  )
+  const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 

@@ -22,6 +22,7 @@ import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { useData } from "./data"
 import { usePermission } from "./permission"
+import { useLocation } from "./location"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -57,11 +58,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const args = useArgs()
     const event = useEvent()
     const permission = usePermission()
+    const location = useLocation()
+
+    const models = () => data.location.model.list(location.ref)
 
     function isModelValid(model: ModelPreferenceModel) {
-      return !!data.location.model
-        .list()
-        ?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
+      return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
     }
 
     function getFirstValidModel(...modelFns: (() => ModelPreferenceModel | undefined)[]) {
@@ -74,9 +76,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     function createAgent() {
       const agents = createMemo(() =>
-        (data.location.agent.list() ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
       )
-      const visibleAgents = createMemo(() => (data.location.agent.list() ?? []).filter((agent) => !agent.hidden))
+      const visibleAgents = createMemo(() =>
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => !agent.hidden),
+      )
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
       })
@@ -191,7 +195,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const model = data.location.model.list()?.[0]
+        const model = models()?.[0]
         if (!model) return undefined
         return {
           providerID: model.providerID,
@@ -208,6 +212,33 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             fallbackModel,
           ) ?? undefined
         )
+      })
+
+      let syncedSessionModel: string | undefined
+      createEffect(() => {
+        if (route.data.type !== "session") {
+          syncedSessionModel = undefined
+          return
+        }
+        const session = data.session.get(route.data.sessionID)
+        const selected = session?.model
+        const a = agent.current()
+        if (!selected || !a) return
+        if (args.model) {
+          const requested = parseModel(args.model)
+          if (isModelValid(requested)) return
+        }
+        const model = { providerID: selected.providerID, modelID: selected.id }
+        if (!isModelValid(model)) return
+        const fingerprint = [session.id, a.id, selected.providerID, selected.id, selected.variant ?? "default"].join(
+          ":",
+        )
+        if (fingerprint === syncedSessionModel) return
+        syncedSessionModel = fingerprint
+        batch(() => {
+          setModelStore("model", a.id, model)
+          setModelStore("variant", modelPreferenceKey(model), normalizeModelVariant(selected.variant))
+        })
       })
 
       return {
@@ -230,10 +261,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               reasoning: false,
             }
           }
-          const provider = data.location.provider.list()?.find((item) => item.id === value.providerID)
-          const info = data.location.model
-            .list()
-            ?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
+          const provider = data.location.provider.list(location.ref)?.find((item) => item.id === value.providerID)
+          const info = models()?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
           return {
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
@@ -327,9 +356,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           list() {
             const m = currentModel()
             if (!m) return []
-            const info = data.location.model
-              .list()
-              ?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
+            const info = models()?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
             return info?.variants?.map((variant) => variant.id) ?? []
           },
           set(value: string | undefined) {
