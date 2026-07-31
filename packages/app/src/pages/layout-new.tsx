@@ -12,6 +12,8 @@ import { useLanguage } from "@/context/language"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
 import { ProjectExplorerSidebar } from "@/pages/layout/explorer-sidebar"
+import { CodePanel } from "@/pages/layout/code-panel"
+import { CodeProvider } from "@/context/code"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
@@ -48,7 +50,9 @@ export default function NewLayout(props: ParentProps) {
         }
       />
       <ExplorerProvider>
-        <ProjectExplorerShell>{props.children}</ProjectExplorerShell>
+        <CodeProvider>
+          <ProjectExplorerShell>{props.children}</ProjectExplorerShell>
+        </CodeProvider>
       </ExplorerProvider>
       {import.meta.env.DEV && state.debugTools && <DebugBar inline />}
       <TabsInfoPopup />
@@ -79,6 +83,7 @@ function ProjectExplorerShell(props: ParentProps) {
       <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
         <Suspense>{props.children}</Suspense>
       </main>
+      <CodePanel />
     </div>
   )
 }

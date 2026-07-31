@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -17,9 +17,9 @@ import { useLayout } from "@/context/layout"
 import { useExplorer } from "@/context/explorer"
 import { usePlatform } from "@/context/platform"
 import { useServerSDK } from "@/context/server-sdk"
+import { useCode } from "@/context/code"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
-import { setSessionHandoff } from "@/pages/session/handoff"
 import { displayName } from "./helpers"
 import FileTreeV2 from "@/components/file-tree-v2"
 import { encodeFilePath } from "@/context/file/path"
@@ -46,11 +46,11 @@ export function ProjectExplorerSidebar(props: { mobile?: boolean }) {
   const language = useLanguage()
   const layout = useLayout()
   const explorer = useExplorer()
-  const navigate = useNavigate()
   const params = useParams()
   const serverSDK = useServerSDK()
   const platform = usePlatform()
   const dialog = useDialog()
+  const code = useCode()
 
   const [filter, setFilter] = createSignal("")
   const [explicitHighlight, setExplicitHighlight] = createSignal<string>()
@@ -123,6 +123,8 @@ export function ProjectExplorerSidebar(props: { mobile?: boolean }) {
   const openFile = (path: string) => {
     const directory = explorer.directory()
     if (!directory) return
+    code.open(path)
+    layout.codePanel.open()
     const sessionKey = currentSessionKey()
     if (sessionKey) {
       const value = `file://${encodeFilePath(path)}`
@@ -132,10 +134,6 @@ export function ProjectExplorerSidebar(props: { mobile?: boolean }) {
       layout.view(sessionKey).reviewPanel.open()
       return
     }
-    const slug = base64Encode(directory)
-    const workspaceKey = SessionStateKey.from(serverSDK().scope, SessionRouteKey.fromRoute(slug))
-    setSessionHandoff(workspaceKey, { files: { [path]: null } })
-    navigate(`/${slug}/session`)
   }
 
   const refresh = (path?: string) => {
