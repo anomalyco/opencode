@@ -76,7 +76,7 @@ export function DialogOpen() {
           .slice(0, RECENT_LIMIT)
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
-      const name = project?.name || path.basename(project?.canonical ?? "") || path.basename(session.location.directory)
+      const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
       const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: session.title,
@@ -101,17 +101,14 @@ export function DialogOpen() {
         return true
       })
       .map((project) => {
-        const title = abbreviateHome(project.canonical, paths.home)
-        const footer =
-          project.name && project.name !== path.basename(project.canonical)
-            ? Locale.truncate(project.name, 20)
-            : undefined
-        // Dialog padding, the gutter column, title padding, the gap, and the footer use this space.
-        const width = Math.min(60, dimensions().width - 2) - 9 - (footer ? stringWidth(footer) + 1 : 0)
+        const title = project.name ?? path.basename(project.canonical)
+        const footer = abbreviateHome(project.canonical, paths.home)
+        // Dialog padding, the gutter column, title padding, and the separating space use nine columns.
+        const width = Math.min(60, dimensions().width - 2) - 9 - stringWidth(title)
         return {
-          title: truncateFilePath(title, width),
-          footer,
-          searchText: [title, project.name].filter(Boolean).join(" "),
+          title,
+          footer: truncateFilePath(footer, width),
+          searchText: footer,
           value: { type: "project", directory: project.canonical } as OpenTarget,
           category: "Projects",
         }
