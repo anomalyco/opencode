@@ -120,7 +120,7 @@ export const { use: useCode, provider: CodeProvider } = createSimpleContext({
     return {
       ready,
       directory,
-      tabs: saved.tabs,
+      tabs: () => saved.tabs,
       active: () => saved.active,
       content: (path: string) => content[path],
       open,
