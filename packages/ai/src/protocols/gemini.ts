@@ -32,7 +32,7 @@ export interface OptionsInput {
   readonly thinkingConfig?: {
     readonly thinkingBudget?: number
     readonly includeThoughts?: boolean
-    readonly thinkingLevel?: "minimal" | "low" | "medium" | "high"
+    readonly thinkingLevel?: "minimal" | "low" | "medium" | "high" | (string & {})
   }
 }
 

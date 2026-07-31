@@ -25,6 +25,5 @@ LLM.request({
 LLM.request({
   model,
   prompt: "Hello",
-  // @ts-expect-error Gemini thinking levels use Google's supported effort values.
   providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "maximum" } } },
 })
