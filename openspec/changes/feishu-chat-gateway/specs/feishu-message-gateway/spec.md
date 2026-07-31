@@ -58,15 +58,19 @@ The system SHALL send exactly one complete final text response to the originatin
 
 #### Scenario: Group reply mentions the requester
 - **WHEN** an accepted group-chat task produces a final answer
-- **THEN** the gateway uses a native Feishu mention for the original requester before the answer in the originating thread or root-message context
+- **THEN** the gateway uses the official Feishu Channel client's `mentions` send option for a native Feishu mention of the original requester before the answer in the originating thread or root-message context
 
 #### Scenario: Direct reply has no requester mention
 - **WHEN** an accepted direct-chat task produces a final answer
 - **THEN** the gateway sends the answer without requester mention metadata
 
+#### Scenario: Requester mention metadata is captured only for group tasks
+- **WHEN** the gateway accepts a group-chat task or a direct-chat task
+- **THEN** it captures and persists requester mention metadata only for the accepted group-chat task, and the direct-chat task and its reply contain no requester mention metadata
+
 #### Scenario: Mention presentation does not change the answer body
 - **WHEN** a group reply is sent, retried, or recovered after restart
-- **THEN** the persisted final answer remains the exact body-only text and the requester mention is applied only by the Feishu delivery adapter
+- **THEN** the persisted final answer remains the exact body-only text and the Feishu delivery adapter applies the requester mention only through the official Channel client's `mentions` send option
 
 #### Scenario: Model emits intermediate output
 - **WHEN** OpenCode emits text deltas, reasoning events, or other intermediate progress

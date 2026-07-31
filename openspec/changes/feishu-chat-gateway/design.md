@@ -84,7 +84,7 @@ received -> admitted -> running -> answered -> sending -> delivered
                                                \--> uncertain_delivery
 ```
 
-`gateway_task` 保存用于恢复的当前状态、确定性标识、回复目标和尝试计数；`reply_mention_id` 和 `reply_mention_name` 是可空的任务投递元数据。状态可以推进，但每次推进必须同时向不可变的 `gateway_event` 追加对应事件。历史事件不更新、不覆盖。
+`gateway_task` 保存用于恢复的当前状态、确定性标识、回复目标和尝试计数；`reply_mention_id` 和 `reply_mention_name` 是可空的任务投递元数据：前者是原始请求者的飞书 `open_id`，后者是可选的已观察显示名称。仅已接纳的群聊任务捕获和持久化这两个字段；单聊任务及其发送均不带这两个字段。状态可以推进，但每次推进必须同时向不可变的 `gateway_event` 追加对应事件。历史事件不更新、不覆盖。
 
 进程启动时扫描非终态任务：
 
@@ -112,11 +112,11 @@ worker 在提交 prompt 前订阅 `sessions.events({ sessionID, after })`，并�
 
 ### 6. 使用独立 SQLite 任务库和追加式事件表
 
-网关使用 Bun 内置 SQLite，数据库位于 OpenCode 本机数据目录下的飞书子目录，不进入 Git。启用 WAL、外键和显式 schema 版本迁移；schema version 2 对 version 1 进行加法升级，新增可空的 `reply_mention_id` 和 `reply_mention_name`，不改写已有任务或回答正文。
+网关使用 Bun 内置 SQLite，数据库位于 OpenCode 本机数据目录下的飞书子目录，不进入 Git。启用 WAL、外键和显式 schema 版本迁移；schema version 2 对 version 1 进行加法升级，新增可空的 `reply_mention_id`（原始请求者的飞书 `open_id`）和 `reply_mention_name`（可选的已观察显示名称），不改写已有任务或回答正文。
 
 核心表分为：
 
-- `gateway_task`：每个飞书 message ID 一行，保存当前可恢复状态、哈希会话键、Session ID、prompt message ID、回复目标、可空的 `reply_mention_id`/`reply_mention_name` 投递元数据、尝试计数和投递状态。
+- `gateway_task`：每个飞书 message ID 一行，保存当前可恢复状态、哈希会话键、Session ID、prompt message ID、回复目标、仅群聊任务可用的 `reply_mention_id`（原始请求者的飞书 `open_id`）/`reply_mention_name`（可选的已观察显示名称）投递元数据、尝试计数和投递状态。
 - `gateway_event`：仅插入的事件流，至少包含 `event_id`、`event_type`、`occurred_at`、`sequence`、`conversation_id`、`turn_id`、`trace_id`、`parent_event_id`、`message_id`、`sentence_id`、`sentence_index`、actor、版本、状态、耗时、关联事件和净化后的 JSON 内容。
 
 完整用户消息与逐句事件、完整回答与逐句事件均同时保存。拆句器只依据确定性的标点和换行规则；无法可靠拆分时把完整消息作为一个句子，不改写内容。
@@ -127,7 +127,7 @@ SQLite 主日志写入失败时，不得把任务标为已接纳或已完成。�
 
 ### 7. 通过端口适配隔离外部 SDK 和真实模型
 
-飞书 Channel、回复客户端、OpenCode Session 客户端、时钟和 ID/哈希来源在包内以窄接口注入。领域测试使用内存适配器驱动真实路由、状态机和 SQLite，不模拟全局对象；另设少量针对官方 SDK payload 的契约测试。最终答案始终以不含 mention 的正文持久化；仅 Feishu SDK 交付适配器使用可空的投递元数据在群聊回复中渲染原生 requester mention。
+飞书 Channel、回复客户端、OpenCode Session 客户端、时钟和 ID/哈希来源在包内以窄接口注入。领域测试使用内存适配器驱动真实路由、状态机和 SQLite，不模拟全局对象；另设少量针对官方 SDK payload 的契约测试。最终答案始终以不含 mention 的正文持久化；仅 Feishu SDK 交付适配器使用官方 Channel 客户端的 `mentions` send option 和可空的群聊投递元数据渲染原生 requester mention，绝不手工构造飞书 mention markup。
 
 OpenCode 集成测试使用真实 `sdk-next` 内嵌路由、临时 Location 和测试 provider，验证确定性 Session、prompt 重试、事件收集与工具阻断。真实飞书和 DeepSeek 只用于最终手工烟雾测试，避免把外部账号和费用引入常规测试。
 
