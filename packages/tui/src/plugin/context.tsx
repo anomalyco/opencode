@@ -1,4 +1,4 @@
-import { PluginContextProvider, type Plugin } from "@opencode-ai/plugin/tui"
+import type { Plugin } from "@opencode-ai/plugin/tui"
 import {
   batch,
   createComponent,
@@ -20,31 +20,17 @@ import path from "path"
 import { watch } from "fs"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Context, Dialog, Page, Slot, SlotMap, SlotName, Toast } from "@opencode-ai/plugin/tui/context"
+import type { Page, Slot, SlotMap, SlotName } from "@opencode-ai/plugin/tui/context"
 import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
 import { isDeepEqual } from "remeda"
-import { useRenderer } from "@opentui/solid"
 import "#runtime-plugin-support"
 import { useConfig } from "../config"
-import { useClient } from "../context/client"
-import { useData } from "../context/data"
-import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
-import { useTuiApp, useTuiLifecycle, useTuiPaths } from "../context/runtime"
-import { useLocation } from "../context/location"
-import { useThemes } from "../context/theme"
-import { DialogAlert } from "../ui/dialog-alert"
-import { DialogConfirm } from "../ui/dialog-confirm"
-import { DialogPrompt } from "../ui/dialog-prompt"
-import { DialogSelect } from "../ui/dialog-select"
-import { useDialog } from "../ui/dialog"
+import { useTuiLifecycle } from "../context/runtime"
 import { useToast } from "../ui/toast"
-import { useAttention } from "../context/attention"
-import { useStorage } from "../context/storage"
-import { useSessionTabs } from "../context/session-tabs"
 import { errorMessage } from "../util/error"
-import { abbreviateHome } from "../util/path-format"
 import { builtins } from "./builtins"
+import { createPluginContext, usePluginHost, type Dispose } from "./api"
 import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectory } from "./discovery"
 
 export interface PackageResolver {
@@ -72,7 +58,6 @@ type Value = {
   readonly deactivate: (id: string) => Promise<boolean>
 }
 
-type Dispose = () => Promise<void>
 type Registration = {
   plugin: Plugin.Definition
   source: RegisteredPlugin["source"]
@@ -91,24 +76,9 @@ type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "
 const PluginContext = createContext<Value>()
 
 export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>) {
-  const renderer = useRenderer()
-  const client = useClient()
-  const data = useData()
-  const route = useRoute()
+  const host = usePluginHost()
   const config = useConfig()
-  const keymap = Keymap.use()
-  const shortcuts = Keymap.useShortcuts()
-  const keymapState = Keymap.useState()
   const lifecycle = useTuiLifecycle()
-  const app = useTuiApp()
-  const paths = useTuiPaths()
-  const location = useLocation()
-  const themes = useThemes()
-  const dialog = useDialog()
-  const toast = useToast()
-  const attention = useAttention()
-  const storage = useStorage()
-  const sessionTabs = useSessionTabs()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
@@ -126,224 +96,26 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       setStore("registrations", id, "cleanups", [])
     })
     const owned: Dispose[] = []
-    let context: Context
-    const dialogApi: Dialog = {
-      show(render, onClose) {
-        dialog.replace(() => <PluginContextProvider value={context}>{render()}</PluginContextProvider>, onClose)
+    const context = createPluginContext({
+      host,
+      id,
+      options: item.options,
+      owned,
+      registry: {
+        has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
+        set: (kind: "routes" | "slots", name: string, value: Page | Slot) =>
+          setStore("registrations", id, kind, name, () => value),
+        remove: (kind, name) =>
+          setStore(
+            "registrations",
+            produce((registrations) => {
+              if (!registrations[id]) return
+              delete registrations[id][kind][name]
+            }),
+          ),
+        active: () => Boolean(store.registrations[id]?.active),
       },
-      set(options) {
-        dialog.setSize(options.size ?? "medium")
-        dialog.setCentered(options.centered ?? false)
-      },
-      clear() {
-        dialog.clear()
-      },
-      alert(options) {
-        return new Promise<void>((resolve) => {
-          let settled = false
-          const done = () => {
-            if (settled) return
-            settled = true
-            resolve()
-          }
-          dialogApi.show(() => <DialogAlert title={options.title} message={options.message} onConfirm={done} />, done)
-        })
-      },
-      confirm(options) {
-        return new Promise<boolean | undefined>((resolve) => {
-          let settled = false
-          const done = (result: boolean | undefined) => {
-            if (settled) return
-            settled = true
-            resolve(result)
-          }
-          dialogApi.show(
-            () => (
-              <DialogConfirm
-                title={options.title}
-                message={options.message}
-                label={options.label}
-                onConfirm={() => done(true)}
-                onCancel={() => done(false)}
-              />
-            ),
-            () => done(undefined),
-          )
-        })
-      },
-      prompt(options) {
-        return new Promise<string | undefined>((resolve) => {
-          let settled = false
-          const done = (result: string | undefined) => {
-            if (settled) return
-            settled = true
-            resolve(result)
-          }
-          dialogApi.show(
-            () => (
-              <DialogPrompt
-                title={options.title}
-                description={options.description ? () => <text>{options.description}</text> : undefined}
-                placeholder={options.placeholder}
-                value={options.value}
-                onConfirm={(value) => {
-                  done(value)
-                  dialogApi.clear()
-                }}
-              />
-            ),
-            () => done(undefined),
-          )
-        })
-      },
-      select(options) {
-        return new Promise((resolve) => {
-          let settled = false
-          const done = (result: (typeof options.options)[number]["value"] | undefined) => {
-            if (settled) return
-            settled = true
-            resolve(result)
-          }
-          dialogApi.show(
-            () => (
-              <DialogSelect
-                title={options.title}
-                placeholder={options.placeholder}
-                options={options.options.map((option) => ({ ...option }))}
-                current={options.current}
-                onSelect={(option) => {
-                  done(option.value)
-                  dialogApi.clear()
-                }}
-              />
-            ),
-            () => done(undefined),
-          )
-        })
-      },
-    }
-    const toastApi: Toast = {
-      show(options) {
-        toast.show({ ...options, variant: options.variant ?? "info" })
-      },
-    }
-    context = {
-      options: item.options ?? {},
-      get location() {
-        return location.current
-      },
-      app: { version: app.version, channel: app.channel },
-      renderer,
-      client: client.api,
-      data,
-      attention,
-      get theme() {
-        return themes.currentTokens()
-      },
-      keymap: {
-        layer: Keymap.createLayer,
-        dispatch: keymap.dispatch,
-        shortcuts: shortcuts.list,
-        commands: keymapState.commands,
-        pending: keymapState.pending,
-        active: keymapState.active,
-        mode: keymap.mode,
-      },
-      storage: {
-        store: (key, options) => storage.store(`plugin.${item.plugin.id}.${key}`, options),
-        memory: (key, options) => storage.memory(`plugin.${item.plugin.id}.${key}`, options),
-      },
-      ui: {
-        dialog: dialogApi,
-        toast: toastApi,
-        format: {
-          path: (value) => abbreviateHome(value, paths.home),
-        },
-        router: {
-          register(page) {
-            if (store.registrations[item.plugin.id]?.routes[page.name])
-              throw new Error(`Route already registered: ${page.name}`)
-            setStore("registrations", item.plugin.id, "routes", page.name, {
-              ...page,
-              render: (input) => <PluginContextProvider value={context}>{page.render(input)}</PluginContextProvider>,
-            })
-            let registered = true
-            const unregister = () => {
-              if (!registered) return
-              registered = false
-              if (!store.registrations[item.plugin.id]?.active) return
-              setStore(
-                "registrations",
-                produce((registrations) => {
-                  if (!registrations[item.plugin.id]) return
-                  delete registrations[item.plugin.id].routes[page.name]
-                }),
-              )
-            }
-            owned.push(async () => unregister())
-            return unregister
-          },
-          navigate(destination) {
-            if (destination.type === "plugin") {
-              route.navigate({ ...destination, id: "id" in destination ? destination.id : item.plugin.id })
-              return
-            }
-            route.navigate(destination)
-          },
-          current() {
-            return route.data
-          },
-        },
-        tabs: {
-          enabled: sessionTabs.enabled,
-          list: () =>
-            sessionTabs.tabs().map((tab) => ({
-              ...tab,
-              active: sessionTabs.current() === tab.sessionID,
-              ...sessionTabs.status(tab.sessionID),
-            })),
-          open(sessionID) {
-            if (!sessionTabs.enabled()) return false
-            sessionTabs.select(sessionID)
-            return true
-          },
-          focus(sessionID) {
-            if (!sessionTabs.enabled()) return false
-            if (!sessionTabs.tabs().some((tab) => tab.sessionID === sessionID)) return false
-            sessionTabs.select(sessionID)
-            return true
-          },
-          close(sessionID) {
-            if (!sessionTabs.enabled()) return false
-            const target = sessionID ?? sessionTabs.current()
-            if (!target || !sessionTabs.tabs().some((tab) => tab.sessionID === target)) return false
-            sessionTabs.close(target)
-            return true
-          },
-        },
-        slot(name, render) {
-          if (store.registrations[item.plugin.id]?.slots[name]) throw new Error(`Slot already registered: ${name}`)
-          setStore("registrations", item.plugin.id, "slots", name, () => (input: SlotMap[typeof name]) => (
-            <PluginContextProvider value={context}>{render(input)}</PluginContextProvider>
-          ))
-          let registered = true
-          const unregister = () => {
-            if (!registered) return
-            registered = false
-            if (!store.registrations[item.plugin.id]?.active) return
-            setStore(
-              "registrations",
-              produce((registrations) => {
-                if (!registrations[item.plugin.id]) return
-                delete registrations[item.plugin.id].slots[name]
-              }),
-            )
-          }
-          owned.push(async () => unregister())
-          return unregister
-        },
-      },
-    }
+    })
     const cleanup = await setup(item.plugin, context, owned).catch((error) => {
       setStore("registrations", id, "routes", reconcileStore({}))
       setStore("registrations", id, "slots", reconcileStore({}))
@@ -457,8 +229,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
-    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...(config.data.plugins ?? [])]
-    watchSource(tuiPluginDirectory(paths.cwd))
+    const entries = [...(await discoverTuiPlugins(host.paths.cwd)), ...(config.data.plugins ?? [])]
+    watchSource(tuiPluginDirectory(host.paths.cwd))
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -589,7 +361,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         state.status === "failed" &&
         !store.states.some((prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error)
       )
-        toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
+        host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
     setStore("states", reconcileStore(states))
   }
   const slotItems = new WeakMap<Slot, { readonly id: string; readonly render: Slot }>()
