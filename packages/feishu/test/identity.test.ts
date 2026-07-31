@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Session, SessionMessage } from "@opencode-ai/sdk-next"
 import { deriveGatewayIdentity } from "../src/identity"
 
 describe("gateway identity", () => {
@@ -19,8 +18,8 @@ describe("gateway identity", () => {
     expect(first.sessionID).toBe(second.sessionID)
     expect(first.promptMessageID).not.toBe(second.promptMessageID)
     expect(first).toEqual(repeated)
-    expect(() => Session.ID.make(first.sessionID)).not.toThrow()
-    expect(() => SessionMessage.ID.make(first.promptMessageID)).not.toThrow()
+    expect(first.sessionID).toMatch(/^ses_/)
+    expect(first.promptMessageID).toMatch(/^msg_/)
   })
 
   test("isolates direct chats by chat and sender", async () => {

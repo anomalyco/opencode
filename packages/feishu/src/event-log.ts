@@ -1,4 +1,5 @@
 import { splitMessage } from "./sentence"
+import type { InventoryTraceEvent } from "./inventory-trace"
 import type { GatewayEvent, GatewayEventInput, GatewayStore, GatewayTask, NewGatewayTask } from "./store"
 
 type TraceTask = Pick<GatewayTask | NewGatewayTask, "conversationID" | "turnID" | "traceID">
@@ -86,6 +87,24 @@ export function createEventLog(input: {
     },
     append(task: TraceTask, details: EventDetails): GatewayEvent {
       return input.store.appendEvent(event(task, details))
+    },
+    inventory(task: TraceTask, details: InventoryTraceEvent): GatewayEvent {
+      const status = details.data.status
+      const durationMs = details.data.durationMs
+      return input.store.appendEvent({
+        eventID: makeEventID(),
+        eventType: details.type,
+        occurredAt: details.occurredAt,
+        conversationID: task.conversationID,
+        turnID: task.turnID,
+        traceID: task.traceID,
+        messageID: details.messageID,
+        actor: details.type.includes("query_") ? "provider" : "gateway",
+        version: 1,
+        status: typeof status === "string" ? status : "recorded",
+        ...(typeof durationMs === "number" ? { durationMs } : {}),
+        content: details.data,
+      })
     },
   }
 }

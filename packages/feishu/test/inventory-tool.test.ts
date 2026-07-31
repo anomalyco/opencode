@@ -3,6 +3,7 @@ import {
   createInventoryTool,
 } from "../src/inventory-tool"
 import type { InventoryAnswerItem } from "../src/inventory-answer"
+import type { InventoryQueryEvent } from "../src/mysql-inventory"
 
 const context = {
   source: "feishu" as const,
@@ -19,8 +20,27 @@ function inventory(result: InventoryAnswerItem[] = []) {
   return {
     calls,
     adapter: {
-      async query(term: string, limit?: number) {
+      preflight: {
+        mysqlVersion: "8.4.10",
+        database: "inventory",
+        currentUser: "inventory_reader@%",
+        readOnly: false,
+        contractVersion: "mysql-inventory-v1" as const,
+      },
+      async query(term: string, limit?: number, observe?: (event: InventoryQueryEvent) => void | Promise<void>) {
         calls.push({ term, limit })
+        await observe?.({
+          type: "query_started",
+          templateVersion: "mysql-inventory-v1",
+          term,
+          limit: limit ?? 20,
+        })
+        await observe?.({
+          type: "query_completed",
+          templateVersion: "mysql-inventory-v1",
+          rowCount: result.length,
+          durationMs: 10,
+        })
         return result
       },
     },
@@ -49,6 +69,17 @@ describe("inventory tool", () => {
     expect(await tool.query({ context, term: " 6001ZZ " })).toEqual({
       status: "ok",
       text: "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
+      evidence: {
+        templateVersion: "mysql-inventory-v1",
+        schemaVersion: "mysql-inventory-v1",
+        database: "inventory",
+        mysqlVersion: "8.4.10",
+        rowCount: 1,
+        durationMs: 10,
+        itemCount: 1,
+        mappedItems:
+          '[{"name":"6001ZZ","attribute":"清油","size":"12×28×8","shelves":["B-11-13"],"supplier":"上海涂众轴承","inventory":"200","remark":"xxx"}]',
+      },
     })
     expect(input.calls).toEqual([{ term: "6001ZZ", limit: undefined }])
   })
@@ -64,6 +95,16 @@ describe("inventory tool", () => {
     expect(await tool.query({ context, term: "missing" })).toEqual({
       status: "ok",
       text: "未找到相关商品。",
+      evidence: {
+        templateVersion: "mysql-inventory-v1",
+        schemaVersion: "mysql-inventory-v1",
+        database: "inventory",
+        mysqlVersion: "8.4.10",
+        rowCount: 0,
+        durationMs: 10,
+        itemCount: 0,
+        mappedItems: "[]",
+      },
     })
   })
 
@@ -79,14 +120,17 @@ describe("inventory tool", () => {
     expect(await tool.query({ term: "6001ZZ" })).toEqual({
       status: "error",
       text: "库存查询失败，请稍后再试。",
+      reason: "policy",
     })
     expect(await tool.query({ context, term: "6001ZZ" })).toEqual({
       status: "error",
       text: "库存查询失败，请稍后再试。",
+      reason: "policy",
     })
     expect(await tool.query({ context: forged, term: "6001ZZ" })).toEqual({
       status: "error",
       text: "库存查询失败，请稍后再试。",
+      reason: "policy",
     })
     expect(input.calls).toHaveLength(0)
   })
@@ -104,6 +148,7 @@ describe("inventory tool", () => {
     expect(await tool.query({ context, term: "6001ZZ" })).toEqual({
       status: "error",
       text: "库存查询失败，请稍后再试。",
+      reason: "policy",
     })
     expect(input.calls).toHaveLength(0)
   })
@@ -137,6 +182,7 @@ describe("inventory tool", () => {
     expect(await tool.query({ context, term: "6001ZZ" })).toEqual({
       status: "error",
       text: "库存查询失败，请稍后再试。",
+      reason: "query",
     })
   })
 

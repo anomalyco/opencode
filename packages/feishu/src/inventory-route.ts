@@ -5,24 +5,22 @@ import type { PreModelRoute } from "./worker"
 
 export type InventoryIntent =
   | { kind: "chat" }
+  | { kind: "blocked"; productTerm?: string }
   | { kind: "clarify" }
   | { kind: "lookup"; productTerm: string }
 
 export function parseInventoryIntent(text: string): InventoryIntent {
   const normalized = text.trim()
-  if (!hasInventoryKeyword(normalized) || isUnsafe(normalized)) return { kind: "chat" }
+  if (!hasInventoryKeyword(normalized)) return { kind: "chat" }
+  const compact = compactTerms(normalized)
+  if (isUnsafe(normalized)) {
+    return compact.length === 1 ? { kind: "blocked", productTerm: compact[0] } : { kind: "blocked" }
+  }
 
   const quoted = quotedTerms(normalized)
   if (quoted.length > 1) return { kind: "chat" }
   if (quoted.length === 1) return { kind: "lookup", productTerm: quoted[0] }
 
-  const compact = [
-    ...new Set(
-      (normalized.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,63}/g) ?? [])
-        .filter((term) => /\d/.test(term))
-        .map((term) => term.trim()),
-    ),
-  ]
   if (compact.length > 1) return { kind: "chat" }
   if (compact.length === 1) return { kind: "lookup", productTerm: compact[0] }
   if (remainingQueryText(normalized)) return { kind: "chat" }
@@ -44,6 +42,22 @@ export function createInventoryRoute(input: {
       const intent = parseInventoryIntent(task.promptText)
       if (intent.kind === "chat") return { handled: false }
 
+      if (intent.kind === "blocked") {
+        await input.record(task, [
+          trace(task, now(), "inventory_operation_blocked", {
+            status: "blocked",
+            operation: "unapproved_database_operation",
+            ...(intent.productTerm ? { term: intent.productTerm } : {}),
+          }),
+        ])
+        return {
+          handled: true,
+          text: "该操作不支持。",
+          route: "inventory",
+          status: "blocked",
+        }
+      }
+
       if (intent.kind === "clarify") {
         await input.record(task, [
           trace(task, now(), "inventory_intent_admitted", {
@@ -59,16 +73,18 @@ export function createInventoryRoute(input: {
       }
 
       const startedAt = now()
+      const admitted = trace(task, startedAt, "inventory_intent_admitted", {
+        term: intent.productTerm,
+        status: "lookup",
+      })
+      const queryStarted = trace(task, startedAt, "inventory_query_started", {
+        templateVersion: "mysql-inventory-v1",
+        term: intent.productTerm,
+        limit: 20,
+      })
       const prefix = [
-        trace(task, startedAt, "inventory_intent_admitted", {
-          term: intent.productTerm,
-          status: "lookup",
-        }),
-        trace(task, startedAt, "inventory_query_started", {
-          templateVersion: "mysql-inventory-v1",
-          term: intent.productTerm,
-          limit: 20,
-        }),
+        admitted,
+        queryStarted,
       ] satisfies InventoryTraceEvent[]
       const outcome = await input.inventory.query({
         context: input.createContext(task),
@@ -79,11 +95,28 @@ export function createInventoryRoute(input: {
           result: {
             status: "error" as const,
             text: "库存查询失败，请稍后再试。" as const,
+            reason: "query" as const,
           },
           threw: true,
         }),
       )
       const completedAt = now()
+      if (outcome.result.status === "error" && outcome.result.reason === "policy") {
+        await input.record(task, [
+          admitted,
+          trace(task, completedAt, "inventory_operation_blocked", {
+            status: "blocked",
+            operation: "invalid_trusted_context",
+            term: intent.productTerm,
+          }),
+        ])
+        return {
+          handled: true,
+          text: outcome.result.text,
+          route: "inventory",
+          status: outcome.result.status,
+        }
+      }
       if (outcome.threw || outcome.result.status === "error") {
         await input.record(task, [
           ...prefix,
@@ -100,15 +133,26 @@ export function createInventoryRoute(input: {
         }
       }
 
+      const evidence = outcome.result.status === "ok" ? outcome.result.evidence : undefined
       await input.record(task, [
         ...prefix,
         trace(task, completedAt, "inventory_query_completed", {
           status: outcome.result.status,
-          durationMs: completedAt - startedAt,
+          durationMs: evidence?.durationMs ?? completedAt - startedAt,
+          ...(evidence
+            ? {
+                rowCount: evidence.rowCount,
+                schemaVersion: evidence.schemaVersion,
+                database: evidence.database,
+                mysqlVersion: evidence.mysqlVersion,
+              }
+            : {}),
         }),
         trace(task, completedAt, "inventory_answer_mapped", {
           status: outcome.result.status,
-          lineCount: outcome.result.text.split("\n").length,
+          itemCount: evidence?.itemCount ?? outcome.result.text.split("\n").length,
+          ...(evidence ? { mappedItems: evidence.mappedItems } : {}),
+          answer: outcome.result.text,
         }),
       ])
       return {
@@ -147,6 +191,16 @@ function isUnsafe(text: string) {
     /(?:--|\/\*|\*\/|;\s*\S)/.test(text) ||
     /(?:修改|删除|写入|插入|新增|清空|更新).{0,8}(?:库存|存货|货架|位置|记录|数据)|(?:库存|存货|货架|位置|记录|数据).{0,8}(?:修改|删除|写入|插入|新增|清空|更新)/.test(text)
   )
+}
+
+function compactTerms(text: string) {
+  return [
+    ...new Set(
+      (text.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,63}/g) ?? [])
+        .filter((term) => /\d/.test(term))
+        .map((term) => term.trim()),
+    ),
+  ]
 }
 
 function quotedTerms(text: string) {

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createEventLog } from "../src/event-log"
+import type { InventoryTraceEvent } from "../src/inventory-trace"
 import { type NewGatewayTask, openGatewayStore } from "../src/store"
 
 const directories: string[] = []
@@ -12,6 +13,42 @@ afterEach(async () => {
 })
 
 describe("gateway event log", () => {
+  test("bridges inventory evidence into the same gateway trace", async () => {
+    const { log, store } = await fixture()
+    const current = task()
+    store.admit(
+      current,
+      await log.message(current, {
+        eventType: "message_received",
+        actor: "user",
+        status: "received",
+        messageID: current.promptMessageID,
+        text: current.originalText,
+      }),
+    )
+    const inventory: InventoryTraceEvent = {
+      traceID: current.traceID,
+      conversationID: current.conversationID,
+      messageID: current.promptMessageID,
+      type: "inventory_query_completed",
+      occurredAt: 1_700_000_000_010,
+      data: { status: "ok", rowCount: 1, durationMs: 10 },
+    }
+
+    log.inventory(current, inventory)
+
+    expect(store.eventsForTrace(current.traceID).at(-1)).toEqual(
+      expect.objectContaining({
+        eventType: "inventory_query_completed",
+        actor: "provider",
+        status: "ok",
+        durationMs: 10,
+        content: inventory.data,
+      }),
+    )
+    store.close()
+  })
+
   test("builds complete and ordered sentence events without rewriting the message", async () => {
     const { log, store } = await fixture()
     const events = await log.message(task(), {

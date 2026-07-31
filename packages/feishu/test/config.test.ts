@@ -48,8 +48,8 @@ describe("gateway configuration", () => {
     expect(() => parseGatewayConfig({ ...valid, FEISHU_REPLY_TIMEOUT_MS: "abc" })).toThrow("FEISHU_REPLY_TIMEOUT_MS")
   })
 
-  test("allows only a DeepSeek provider and model", () => {
-    expect(() => assertDeepSeekModel({ providerID: "openai", modelID: "deepseek-chat" })).toThrow("DeepSeek")
+  test("allows only a model that resolves as DeepSeek", () => {
+    expect(() => assertDeepSeekModel({ providerID: "opencode", modelID: "deepseek-v4-flash-free" })).not.toThrow()
     expect(() => assertDeepSeekModel({ providerID: "deepseek", modelID: "gpt-4" })).toThrow("DeepSeek")
     expect(() => assertDeepSeekModel({ providerID: "deepseek", modelID: "deepseek-chat" })).not.toThrow()
   })

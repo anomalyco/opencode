@@ -40,8 +40,8 @@ export function parseGatewayConfig(env: Record<string, string | undefined>): Gat
 }
 
 export function assertDeepSeekModel(model: ModelRef) {
-  if (model.providerID.toLowerCase().includes("deepseek") && model.modelID.toLowerCase().includes("deepseek")) return
-  throw new Error("FEISHU_MODEL must select a DeepSeek provider and model")
+  if (model.modelID.toLowerCase().includes("deepseek")) return
+  throw new Error("FEISHU_MODEL must select a DeepSeek model")
 }
 
 export function preflightDeepSeek(

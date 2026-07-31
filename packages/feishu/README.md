@@ -12,11 +12,26 @@
 
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
-- `FEISHU_MODEL`，使用 `providerID/modelID`，例如 `deepseek/deepseek-chat`
+- `FEISHU_MODEL`，使用 `providerID/modelID`；本机当前验证可用的引用为 `opencode/deepseek-v4-flash-free`
 - `FEISHU_DATA_DIRECTORY`，存放网关 SQLite 与降级日志
 - `FEISHU_WORKSPACE_DIRECTORY`，OpenCode Session 使用的项目目录
+- `FEISHU_MYSQL_HOST`、`FEISHU_MYSQL_PORT`、`FEISHU_MYSQL_DATABASE`、`FEISHU_MYSQL_USER`
+- `FEISHU_MYSQL_PASSWORD_FILE`，指向仅保存在本机、内容只有密码的文件
+- 可选的 `FEISHU_MYSQL_CONNECT_TIMEOUT_MS`、`FEISHU_MYSQL_QUERY_TIMEOUT_MS`、`FEISHU_MYSQL_MAX_RESULTS`
 
 DeepSeek API Key 继续由 OpenCode 本机认证状态管理，不复制到飞书包。启动预检会确认模型确实解析到 DeepSeek 且认证可用；失败时只报告字段名或净化后的原因，不打印凭据。
+
+库存和货架位置查询只使用经过 schema 预检的 MySQL 固定只读模板，不接受模型生成的 SQL、写操作或任意数据库工具，也不使用 SQL Server 回退。密码只从 `FEISHU_MYSQL_PASSWORD_FILE` 读取。
+
+## 回复格式
+
+明确的库存或位置查询会在调用模型之前进入可信库存服务。回复不包含内部商品编码、表格、标题、开场或总结；多个商品每个占一行。例如：
+
+```text
+6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx
+```
+
+没有结果时回复 `未找到相关商品。`，查询失败时回复 `库存查询失败，请稍后再试。`。
 
 ## 启动
 
@@ -28,8 +43,31 @@ bun run start
 
 进程以前台方式保持运行。首版只使用 WebSocket Channel，不配置公网回调。
 
+只运行 DeepSeek 与 MySQL 启动预检、但不连接飞书 Channel：
+
+```powershell
+$env:FEISHU_PREFLIGHT_ONLY="true"
+bun run start
+Remove-Item Env:FEISHU_PREFLIGHT_ONLY
+```
+
+显式运行本机 MySQL 契约测试：
+
+```powershell
+bun run test:mysql-contract
+```
+
 ## 数据与审计
 
 主任务库位于 `FEISHU_DATA_DIRECTORY` 下。用户消息、最终回答、逐句事件、模型执行和投递状态以追加式事件记录；认证秘密和模型隐藏思考过程不得写入 SQLite、降级日志或控制台。
 
-后续 MySQL 库存查询仍只允许固定只读模板。Agent 始终不暴露数据库或其他工具。
+Agent 始终保持零工具和默认拒绝权限；库存查询由网关在模型之前调用可信服务，不向 Agent 暴露数据库。
+
+只读检查某个 trace 的事件链：
+
+```powershell
+$database = Join-Path $env:FEISHU_DATA_DIRECTORY "gateway.sqlite"
+bun -e "import { Database } from 'bun:sqlite'; const db = new Database(process.argv[1], { readonly: true }); console.log(JSON.stringify(db.query('SELECT sequence, event_type, actor, status, message_id, sentence_id, sentence_index, parent_event_id, related_event_id FROM gateway_event WHERE trace_id = ? ORDER BY sequence').all(process.argv[2]), null, 2)); db.close()" -- $database "要检查的 trace ID"
+```
+
+该命令只以 `readonly: true` 打开 SQLite，用于核对完整消息与逐句事件、状态推进、父子/纠正关联和最终投递证据，不修改历史。

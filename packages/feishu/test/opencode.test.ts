@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import {
+  assertConfiguredModelAvailable,
   createChatPort,
   createEmbeddedChatPort,
   type SessionAssistant,
@@ -46,6 +47,11 @@ describe("embedded OpenCode chat", () => {
         const first = await port.complete(task())
         const callsAfterFirst = server.calls()
         const repeated = await port.complete(task())
+        if (!first.ok) {
+          throw new Error(
+            `embedded provider fixture failed before projection: calls=${callsAfterFirst} evidence=${JSON.stringify(evidence)}`,
+          )
+        }
 
         expect(first).toEqual({
           ok: true,
@@ -83,6 +89,15 @@ describe("embedded OpenCode chat", () => {
     },
     20_000,
   )
+
+  test("fails startup preflight when the configured model is unavailable", async () => {
+    expect(() =>
+      assertConfiguredModelAvailable(
+        { providerID: "missing", modelID: "missing-model" },
+        [{ providerID: "deepseek", id: "deepseek-chat" }],
+      ),
+    ).toThrow("Configured model is unavailable")
+  })
 
   test("projects only final text and metadata while excluding reasoning", async () => {
     const runtime = new FakeRuntime({

@@ -181,6 +181,14 @@ export async function createEmbeddedChatPort(input: {
   })
 }
 
+export function assertConfiguredModelAvailable(
+  model: { providerID: string; modelID: string },
+  available: readonly { providerID: string; id: string }[],
+) {
+  if (available.some((item) => item.id === model.modelID && item.providerID === model.providerID)) return
+  throw new Error("Configured model is unavailable")
+}
+
 async function createSessionRuntime(config: GatewayConfig): Promise<SessionRuntime> {
   const { AbsolutePath, Agent, Location, Model, OpenCode, Prompt, Provider, Session, SessionMessage } =
     await import("@opencode-ai/sdk-next")
@@ -192,6 +200,29 @@ async function createSessionRuntime(config: GatewayConfig): Promise<SessionRunti
     providerID: Provider.ID.make(config.model.providerID),
   })
   const location = Location.Ref.make({ directory: AbsolutePath.make(config.workspaceDirectory) })
+  const available = await Effect.runPromise(
+    Effect.gen(function* () {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const result = yield* client.models.list({ location })
+        if (result.data.some((item) => item.id === model.id && item.providerID === model.providerID)) return result.data
+        yield* Effect.sleep("50 millis")
+      }
+      return []
+    }),
+  ).catch(async () => {
+    await Effect.runPromise(Scope.close(scope, Exit.void))
+    throw new Error("Configured model preflight failed")
+  })
+  const configured = await Promise.resolve()
+    .then(() => assertConfiguredModelAvailable(config.model, available))
+    .then(
+      () => true,
+      () => false,
+    )
+  if (!configured) {
+    await Effect.runPromise(Scope.close(scope, Exit.void))
+    throw new Error("Configured model is unavailable")
+  }
 
   return {
     async execute(task, onEvent) {

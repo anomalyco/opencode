@@ -34,7 +34,11 @@ export type InventoryQueryEvent =
 
 export type MysqlInventory = {
   preflight: MysqlPreflight
-  query(term: string, limit?: number): Promise<InventoryAnswerItem[]>
+  query(
+    term: string,
+    limit?: number,
+    observe?: (event: InventoryQueryEvent) => void | Promise<void>,
+  ): Promise<InventoryAnswerItem[]>
   close(): Promise<void>
 }
 
@@ -164,7 +168,7 @@ function createInventoryReader(input: {
 }): MysqlInventory {
   return {
     preflight: input.preflight,
-    async query(term, limit = input.maxResults) {
+    async query(term, limit = input.maxResults, observe) {
       const normalized = term.trim()
       if (!normalized) throw new Error("商品查询条件不能为空。")
       if (!Number.isInteger(limit) || limit < 1 || limit > input.maxResults) {
@@ -172,29 +176,35 @@ function createInventoryReader(input: {
       }
 
       const startedAt = Date.now()
-      await input.observe?.({
+      const started = {
         type: "query_started",
         templateVersion: "mysql-inventory-v1",
         term: normalized,
         limit,
-      })
+      } satisfies InventoryQueryEvent
+      await input.observe?.(started)
+      await observe?.(started)
 
       return readInventory(input.query, normalized, limit)
         .then(async (result) => {
-          await input.observe?.({
+          const completed = {
             type: "query_completed",
             templateVersion: "mysql-inventory-v1",
             rowCount: result.rowCount,
             durationMs: Date.now() - startedAt,
-          })
+          } satisfies InventoryQueryEvent
+          await input.observe?.(completed)
+          await observe?.(completed)
           return result.items
         })
         .catch(async () => {
-          await input.observe?.({
+          const failed = {
             type: "query_failed",
             templateVersion: "mysql-inventory-v1",
             durationMs: Date.now() - startedAt,
-          })
+          } satisfies InventoryQueryEvent
+          await input.observe?.(failed)
+          await observe?.(failed)
           throw new Error("库存查询失败，请稍后再试。")
         })
     },

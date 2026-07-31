@@ -28,11 +28,16 @@ describe("inventory intent", () => {
     "库存管理有什么原则",
     "SP0000005943",
     "6001ZZ和6201ZZ库存多少",
-    "SELECT * FROM Product WHERE u_Name='6001ZZ' 查库存",
-    "把6001ZZ库存更新为0",
-    "删除6001ZZ的库存记录",
-  ])("leaves ambiguous, unsafe, or non-query text to restricted chat: %s", (text) => {
+  ])("leaves ambiguous or non-query text to restricted chat: %s", (text) => {
     expect(parseInventoryIntent(text)).toEqual({ kind: "chat" })
+  })
+
+  test.each([
+    ["SELECT * FROM Product WHERE u_Name='6001ZZ' 查库存", "6001ZZ"],
+    ["把6001ZZ库存更新为0", "6001ZZ"],
+    ["删除6001ZZ的库存记录", "6001ZZ"],
+  ])("blocks unsafe inventory operations before chat or MySQL: %s", (text, productTerm) => {
+    expect(parseInventoryIntent(text)).toEqual({ kind: "blocked", productTerm })
   })
 })
 
@@ -48,6 +53,17 @@ describe("inventory pre-model route", () => {
           return {
             status: "ok",
             text: "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
+            evidence: {
+              templateVersion: "mysql-inventory-v1",
+              schemaVersion: "mysql-inventory-v1",
+              database: "inventory",
+              mysqlVersion: "8.4.10",
+              rowCount: 3,
+              durationMs: 10,
+              itemCount: 1,
+              mappedItems:
+                '[{"name":"6001ZZ","attribute":"清油","size":"12×28×8","shelves":["B-11-13"],"supplier":"上海涂众轴承","inventory":"200","remark":"xxx"}]',
+            },
           }
         },
       },
@@ -72,6 +88,21 @@ describe("inventory pre-model route", () => {
       "inventory_answer_mapped",
     ])
     expect(JSON.stringify(batches)).not.toContain("SP000000")
+    expect(batches.flat().find((event) => event.type === "inventory_query_completed")?.data).toEqual({
+      status: "ok",
+      durationMs: 10,
+      rowCount: 3,
+      schemaVersion: "mysql-inventory-v1",
+      database: "inventory",
+      mysqlVersion: "8.4.10",
+    })
+    expect(batches.flat().find((event) => event.type === "inventory_answer_mapped")?.data).toEqual({
+      status: "ok",
+      itemCount: 1,
+      mappedItems:
+        '[{"name":"6001ZZ","attribute":"清油","size":"12×28×8","shelves":["B-11-13"],"supplier":"上海涂众轴承","inventory":"200","remark":"xxx"}]',
+      answer: "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
+    })
   })
 
   test("clarifies without OpenCode or inventory access", async () => {
@@ -111,7 +142,11 @@ describe("inventory pre-model route", () => {
     const route = createInventoryRoute({
       inventory: {
         async query() {
-          return { status: "error" as const, text: "库存查询失败，请稍后再试。" as const }
+          return {
+            status: "error" as const,
+            text: "库存查询失败，请稍后再试。" as const,
+            reason: "query" as const,
+          }
         },
       },
       createContext: trustedContext,
@@ -134,7 +169,43 @@ describe("inventory pre-model route", () => {
     ])
   })
 
-  test("does not handle ordinary chat or unsafe requests", async () => {
+  test("records invalid trusted context as a policy block before query execution", async () => {
+    const events: InventoryTraceEvent[] = []
+    const route = createInventoryRoute({
+      inventory: {
+        async query() {
+          return {
+            status: "error" as const,
+            text: "库存查询失败，请稍后再试。" as const,
+            reason: "policy" as const,
+          }
+        },
+      },
+      createContext: trustedContext,
+      record: async (_task, batch) => {
+        events.push(...batch)
+      },
+      now: times(),
+    })
+
+    expect(await route.handle(task("6001ZZ库存多少"))).toEqual({
+      handled: true,
+      text: "库存查询失败，请稍后再试。",
+      route: "inventory",
+      status: "error",
+    })
+    expect(events.map((event) => event.type)).toEqual([
+      "inventory_intent_admitted",
+      "inventory_operation_blocked",
+    ])
+    expect(events[1]?.data).toEqual({
+      status: "blocked",
+      operation: "invalid_trusted_context",
+      term: "6001ZZ",
+    })
+  })
+
+  test("does not handle ordinary chat", async () => {
     let calls = 0
     let records = 0
     const route = createInventoryRoute({
@@ -151,9 +222,44 @@ describe("inventory pre-model route", () => {
     })
 
     expect(await route.handle(task("库存管理理念是什么"))).toEqual({ handled: false })
-    expect(await route.handle(task("UPDATE Product SET u_Name='x'，再查库存"))).toEqual({ handled: false })
     expect(calls).toBe(0)
     expect(records).toBe(0)
+  })
+
+  test("blocks unsafe requests with a fixed reply and policy trace", async () => {
+    let calls = 0
+    const events: InventoryTraceEvent[] = []
+    const route = createInventoryRoute({
+      inventory: {
+        async query(): Promise<InventoryToolResult> {
+          calls++
+          return { status: "ok", text: "should not run" }
+        },
+      },
+      createContext: trustedContext,
+      record: async (_task, batch) => {
+        events.push(...batch)
+      },
+      now: times(),
+    })
+
+    expect(await route.handle(task("把6001ZZ库存更新为0"))).toEqual({
+      handled: true,
+      text: "该操作不支持。",
+      route: "inventory",
+      status: "blocked",
+    })
+    expect(calls).toBe(0)
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "inventory_operation_blocked",
+        data: {
+          status: "blocked",
+          operation: "unapproved_database_operation",
+          term: "6001ZZ",
+        },
+      }),
+    ])
   })
 })
 

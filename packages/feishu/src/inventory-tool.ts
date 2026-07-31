@@ -1,5 +1,6 @@
 import { formatInventoryAnswer } from "./inventory-answer"
-import type { MysqlInventory } from "./mysql-inventory"
+import type { InventoryQueryEvent, MysqlInventory } from "./mysql-inventory"
+import type { MysqlPreflight } from "./mysql-preflight"
 
 export type TrustedFeishuContext = {
   source: "feishu"
@@ -12,12 +13,25 @@ export type TrustedFeishuContext = {
 }
 
 export type InventoryToolResult =
-  | { status: "ok"; text: string }
+  | {
+      status: "ok"
+      text: string
+      evidence?: {
+        templateVersion: "mysql-inventory-v1"
+        schemaVersion: "mysql-inventory-v1"
+        database: string
+        mysqlVersion: string
+        rowCount: number
+        durationMs: number
+        itemCount: number
+        mappedItems: string
+      }
+    }
   | { status: "clarify"; text: "请告诉我要查询的商品名称或型号。" }
-  | { status: "error"; text: "库存查询失败，请稍后再试。" }
+  | { status: "error"; text: "库存查询失败，请稍后再试。"; reason: "policy" | "query" }
 
 export function createInventoryTool(input: {
-  inventory: Pick<MysqlInventory, "query">
+  inventory: Pick<MysqlInventory, "query"> & { preflight?: MysqlPreflight }
   verifyContext(context: TrustedFeishuContext): boolean
   now(): number
 }) {
@@ -28,12 +42,12 @@ export function createInventoryTool(input: {
     }): Promise<InventoryToolResult> {
       const context = request.context
       if (!isTrustedContextShape(context) || context.expiresAt <= input.now()) {
-        return failure()
+        return failure("policy")
       }
       const verified = await Promise.resolve()
         .then(() => input.verifyContext(context))
         .catch(() => false)
-      if (!verified) return failure()
+      if (!verified) return failure("policy")
 
       const term = typeof request.term === "string" ? request.term.trim() : ""
       if (!term) {
@@ -43,15 +57,36 @@ export function createInventoryTool(input: {
         }
       }
 
+      const events: InventoryQueryEvent[] = []
       return input.inventory
-        .query(term)
+        .query(term, undefined, (event) => {
+          events.push(event)
+        })
         .then(
-          (items): InventoryToolResult => ({
-            status: "ok",
-            text: formatInventoryAnswer(items),
-          }),
+          (items): InventoryToolResult => {
+            const completed = events.find((event) => event.type === "query_completed")
+            const preflight = input.inventory.preflight
+            return {
+              status: "ok",
+              text: formatInventoryAnswer(items),
+              ...(completed?.type === "query_completed" && preflight
+                ? {
+                    evidence: {
+                      templateVersion: completed.templateVersion,
+                      schemaVersion: preflight.contractVersion,
+                      database: preflight.database,
+                      mysqlVersion: preflight.mysqlVersion,
+                      rowCount: completed.rowCount,
+                      durationMs: completed.durationMs,
+                      itemCount: items.length,
+                      mappedItems: JSON.stringify(items),
+                    },
+                  }
+                : {}),
+            }
+          },
         )
-        .catch(failure)
+        .catch(() => failure("query"))
     },
   }
 }
@@ -69,9 +104,10 @@ function isTrustedContextShape(value: unknown): value is TrustedFeishuContext {
   return "expiresAt" in value && typeof value.expiresAt === "number" && Number.isFinite(value.expiresAt)
 }
 
-function failure(): InventoryToolResult {
+function failure(reason: "policy" | "query"): InventoryToolResult {
   return {
     status: "error",
     text: "库存查询失败，请稍后再试。",
+    reason,
   }
 }
