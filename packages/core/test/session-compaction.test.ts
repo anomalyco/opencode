@@ -169,8 +169,12 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
     expect(compaction.required(input(252_000, inputLimited))).toBe(true)
 
     const contextLimited = { context: 100_000, output: 10_000 }
-    expect(compaction.required(input(69_999, contextLimited))).toBe(false)
-    expect(compaction.required(input(70_000, contextLimited))).toBe(true)
+    expect(compaction.required(input(79_999, contextLimited))).toBe(false)
+    expect(compaction.required(input(80_000, contextLimited))).toBe(true)
+
+    const outputLimited = { context: 100_000, output: 30_000 }
+    expect(compaction.required(input(69_999, outputLimited))).toBe(false)
+    expect(compaction.required(input(70_000, outputLimited))).toBe(true)
   }),
 )
 
