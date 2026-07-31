@@ -548,7 +548,10 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     },
     "chat.headers": async (input, output) => {
       if (input.model.providerID !== "openai") return
-      output.headers.originator = "opencode"
+      // The Codex backend grants Fast (priority) routing per client originator and
+      // silently serves the standard tier for originators without the entitlement,
+      // so Fast requests identify as the Codex CLI until "opencode" is entitled.
+      output.headers.originator = input.model.options["serviceTier"] === "priority" ? "codex_cli_rs" : "opencode"
       output.headers["User-Agent"] = `opencode/${InstallationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers["session-id"] = input.sessionID
       // Temporary fetch-layer hack: title generation currently shares the conversation

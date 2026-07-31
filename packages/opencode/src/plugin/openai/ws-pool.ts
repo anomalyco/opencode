@@ -17,6 +17,7 @@ export interface CreateWebSocketFetchOptions {
 interface PoolEntry {
   socket?: WebSocket
   connectedAt?: number
+  sessionID: string
   lastUsedAt: number
   busy: boolean
   fallback: boolean
@@ -67,9 +68,11 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     if (!sessionID) {
       return httpFetch(input, httpInit)
     }
-    const key = `${sessionID}:conversation`
+    // The originator is a connect-time header, so a pooled socket handshaken with a
+    // different originator cannot be reused for this request.
+    const key = `${sessionID}:${internalHeaders["originator"] ?? ""}:conversation`
 
-    const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false, streamFailures: 0 }
+    const entry = pool.get(key) ?? { sessionID, lastUsedAt: Date.now(), busy: false, fallback: false, streamFailures: 0 }
     pool.set(key, entry)
 
     if (entry.fallback) {
@@ -184,11 +187,11 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   }
 
   function remove(sessionID: string) {
-    const key = `${sessionID}:conversation`
-    const entry = pool.get(key)
-    if (!entry) return
-    invalidate(entry)
-    pool.delete(key)
+    for (const [key, entry] of pool) {
+      if (entry.sessionID !== sessionID) continue
+      invalidate(entry)
+      pool.delete(key)
+    }
   }
 
   return Object.assign(websocketFetch, { close, remove })

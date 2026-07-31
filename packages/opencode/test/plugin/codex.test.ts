@@ -149,6 +149,22 @@ describe("plugin.codex", () => {
     await enabled.dispose?.()
   })
 
+  test("uses the Codex CLI originator for priority service tier requests", async () => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const headers = async (options: Record<string, unknown>) => {
+      const output = { headers: {} as Record<string, string> }
+      await hooks["chat.headers"]!(
+        { sessionID: "ses_test", agent: "build", model: { providerID: "openai", options } } as never,
+        output,
+      )
+      return output.headers
+    }
+
+    expect((await headers({})).originator).toBe("opencode")
+    expect((await headers({ serviceTier: "priority" })).originator).toBe("codex_cli_rs")
+    expect((await headers({ serviceTier: "flex" })).originator).toBe("opencode")
+  })
+
   test("filters unsupported modes and uses Codex context limits for OAuth GPT models", async () => {
     const hooks = await CodexAuthPlugin({} as never)
     const limit = { context: 1_050_000, input: 922_000, output: 128_000 }

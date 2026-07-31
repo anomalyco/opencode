@@ -166,6 +166,40 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("pools sockets per originator and removes every session entry", async () => {
+    let connections = 0
+    let messages = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.on("message", () => {
+        messages += 1
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: `resp_${messages}` } }))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    expect(await (await fetch(server.url, streamRequest({ originator: "opencode" }))).text()).toContain("data: [DONE]")
+    expect(await (await fetch(server.url, streamRequest({ originator: "codex_cli_rs" }))).text()).toContain(
+      "data: [DONE]",
+    )
+    expect(connections).toBe(2)
+
+    expect(await (await fetch(server.url, streamRequest({ originator: "codex_cli_rs" }))).text()).toContain(
+      "data: [DONE]",
+    )
+    expect(connections).toBe(2)
+
+    fetch.remove("session-1")
+    expect(await (await fetch(server.url, streamRequest({ originator: "opencode" }))).text()).toContain("data: [DONE]")
+    expect(await (await fetch(server.url, streamRequest({ originator: "codex_cli_rs" }))).text()).toContain(
+      "data: [DONE]",
+    )
+    expect(connections).toBe(4)
+    fetch.close()
+  })
+
   test("rotates a socket that exceeds max connection age", async () => {
     let connections = 0
     await using server = await createWebSocketServer((socket) => {
