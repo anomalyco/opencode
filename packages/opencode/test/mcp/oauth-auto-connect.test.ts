@@ -1,6 +1,7 @@
 import { expect, mock, beforeEach } from "bun:test"
 import { Effect, Layer } from "effect"
 import { testEffect } from "../lib/effect"
+import * as RealMcpClient from "@modelcontextprotocol/client"
 
 // Mock UnauthorizedError to match the SDK's class
 class MockUnauthorizedError extends Error {
@@ -24,8 +25,13 @@ let connectSucceedsImmediately = false
 let serverCapabilities: { tools?: object; resources?: object } = { tools: {} }
 let listToolsCalls = 0
 
-// Mock the transport constructors to simulate OAuth auto-auth on 401
-void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+// fork(mcp-dual-era-client A3): v2 consolidates Client/transports/
+// UnauthorizedError into one @modelcontextprotocol/client package export
+// (v1 spread them across independently-mockable subpaths) — registered in a
+// single mock.module call below; spread the real module so nothing this
+// file doesn't override goes missing.
+await mock.module("@modelcontextprotocol/client", () => ({
+  ...RealMcpClient,
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     authProvider:
       | {
@@ -67,9 +73,6 @@ void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
     }
     async finishAuth(_code: string) {}
   },
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: class MockSSE {
     constructor(url: URL, options?: { authProvider?: unknown }) {
       transportCalls.push({
@@ -82,10 +85,7 @@ void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
       throw new Error("Mock SSE transport cannot connect")
     }
   },
-}))
-
-// Mock the MCP SDK Client
-void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
+  // Mock the MCP SDK Client
   Client: class MockClient {
     setRequestHandler() {}
 
@@ -110,10 +110,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     async close() {}
   },
-}))
-
-// Mock UnauthorizedError in the auth module so instanceof checks work
-void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
+  // Mock UnauthorizedError so instanceof checks work
   UnauthorizedError: MockUnauthorizedError,
 }))
 

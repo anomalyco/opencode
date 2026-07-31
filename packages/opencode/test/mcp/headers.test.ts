@@ -1,6 +1,7 @@
 import { describe, expect, mock, beforeEach } from "bun:test"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
+import * as RealMcpClient from "@modelcontextprotocol/client"
 
 // Track what options were passed to each transport constructor
 const transportCalls: Array<{
@@ -9,8 +10,15 @@ const transportCalls: Array<{
   options: { authProvider?: unknown; requestInit?: RequestInit }
 }> = []
 
-// Mock the transport constructors to capture their arguments
-void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+// fork(mcp-dual-era-client A3): v1 spread Client/transports across
+// independently-mockable subpath modules; v2 consolidates almost everything
+// into one @modelcontextprotocol/client package export. mock.module replaces
+// a module's ENTIRE export set, so mocking only the two transport classes
+// here would also blank out Client/UnauthorizedError that mcp/index.ts
+// imports from the same specifier — spread the real module first, then
+// override just the two constructors this file cares about.
+await mock.module("@modelcontextprotocol/client", () => ({
+  ...RealMcpClient,
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit }) {
       transportCalls.push({
@@ -23,9 +31,6 @@ void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
       throw new Error("Mock transport cannot connect")
     }
   },
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: class MockSSE {
     constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit }) {
       transportCalls.push({

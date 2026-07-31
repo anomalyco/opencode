@@ -1,7 +1,7 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect, mock, beforeEach } from "bun:test"
-import { ListRootsRequestSchema, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import * as RealMcpClient from "@modelcontextprotocol/client"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
@@ -127,28 +127,26 @@ class MockSSE {
   }
 }
 
-void mock.module("@modelcontextprotocol/sdk/client/stdio.js", () => ({
+await mock.module("@modelcontextprotocol/client/stdio", () => ({
   StdioClientTransport: MockStdioTransport,
 }))
 
-void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+// fork(mcp-dual-era-client A3): v1 spread Client/transports/UnauthorizedError
+// across independently-mockable subpath modules; v2 consolidates them into
+// one @modelcontextprotocol/client package export, so they must all be
+// registered in a single mock.module call (a second call for the same
+// specifier would replace, not merge with, the first) — spread the real
+// module first so nothing this file doesn't override goes missing.
+await mock.module("@modelcontextprotocol/client", () => ({
+  ...RealMcpClient,
   StreamableHTTPClientTransport: MockStreamableHTTP,
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: MockSSE,
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: class extends Error {
     constructor() {
       super("Unauthorized")
     }
   },
-}))
-
-// Mock Client that delegates to per-name MockClientState
-void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
+  // Mock Client that delegates to per-name MockClientState
   Client: class MockClient {
     _state!: MockClientState
     transport: any
@@ -274,7 +272,7 @@ it.instance(
         expect(state.clientOptions?.capabilities?.roots).toEqual({})
         expect(state.clientOptions?.capabilities?.roots?.listChanged).toBeUndefined()
 
-        const handler = state.requestHandlers.get(ListRootsRequestSchema)
+        const handler = state.requestHandlers.get("roots/list")
         expect(handler).toBeDefined()
         const result = yield* Effect.promise(() => handler?.() ?? Promise.reject(new Error("roots handler missing")))
         expect(result).toEqual({ roots: [{ uri: pathToFileURL(directory).href }] })
@@ -446,7 +444,7 @@ it.instance(
           { name: "next_tool", description: "next", inputSchema: { type: "object", properties: {} } },
         ]
 
-        const handler = serverState.notificationHandlers.get(ToolListChangedNotificationSchema)
+        const handler = serverState.notificationHandlers.get("notifications/tools/list_changed")
         expect(handler).toBeDefined()
         yield* Effect.promise(() => handler?.())
 

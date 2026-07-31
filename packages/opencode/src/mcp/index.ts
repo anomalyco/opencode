@@ -10,10 +10,9 @@ import {
   StreamableHTTPClientTransport,
   SSEClientTransport,
   UnauthorizedError,
+  type LoggingMessageNotification,
 } from "@modelcontextprotocol/client"
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
-import { LoggingMessageNotificationSchema } from "@modelcontextprotocol/core"
-import { z } from "zod"
 import { Config } from "@/config/config"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -34,8 +33,6 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog, type MCPToolDef } from "./catalog"
-
-type LoggingMessageNotification = z.infer<typeof LoggingMessageNotificationSchema>
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
