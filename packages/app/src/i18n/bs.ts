@@ -638,6 +638,11 @@ export const dict = {
   "session.files.all": "Sve datoteke",
   "session.files.empty": "Nema datoteka",
   "session.files.binaryContent": "Binarna datoteka (sadržaj se ne može prikazati)",
+  "session.files.uploadFile": "Prenesi datoteku",
+  "session.files.downloadFile": "Preuzmi",
+  "session.files.refresh": "Osvježi",
+  "session.files.dropFiles": "Prevucite datoteke ovdje ili kliknite + za prijenos",
+  "session.files.deleteConfirm": "Izbriši \"{{path}}\"?",
 
   "session.messages.renderEarlier": "Prikaži ranije poruke",
   "session.messages.loadingEarlier": "Učitavanje ranijih poruka...",

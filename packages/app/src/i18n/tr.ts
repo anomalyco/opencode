@@ -642,6 +642,11 @@ export const dict = {
   "session.files.all": "Tüm dosyalar",
   "session.files.empty": "Dosya yok",
   "session.files.binaryContent": "İkili dosya (içerik görüntülenemiyor)",
+  "session.files.uploadFile": "Dosya yükle",
+  "session.files.downloadFile": "İndir",
+  "session.files.refresh": "Yenile",
+  "session.files.dropFiles": "Dosyaları buraya bırakın veya yüklemek için +'a tıklayın",
+  "session.files.deleteConfirm": "\"{{path}}\" silinsin mi?",
 
   "session.messages.renderEarlier": "Önceki mesajları göster",
   "session.messages.loadingEarlier": "Önceki mesajlar yükleniyor...",

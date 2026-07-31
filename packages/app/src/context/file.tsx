@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@/utils/toast"
@@ -70,6 +70,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     )
 
     const inflight = new Map<string, Promise<void>>()
+    const [refreshVersion, setRefreshVersion] = createSignal(0)
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -279,6 +280,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         children: tree.children,
         expand: tree.expandDir,
         collapse: tree.collapseDir,
+        version: refreshVersion,
+        bump: () => setRefreshVersion((v) => v + 1),
         toggle(input: string) {
           if (tree.dirState(input)?.expanded) {
             tree.collapseDir(input)

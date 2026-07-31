@@ -639,6 +639,11 @@ export const dict = {
   "session.files.all": "Todos los archivos",
   "session.files.empty": "Sin archivos",
   "session.files.binaryContent": "Archivo binario (el contenido no puede ser mostrado)",
+  "session.files.uploadFile": "Subir archivo",
+  "session.files.downloadFile": "Descargar",
+  "session.files.refresh": "Actualizar",
+  "session.files.dropFiles": "Suelta los archivos aquí o haz clic en + para subir",
+  "session.files.deleteConfirm": "Eliminar \"{{path}}\"?",
 
   "session.messages.renderEarlier": "Renderizar mensajes anteriores",
   "session.messages.loadingEarlier": "Cargando mensajes anteriores...",

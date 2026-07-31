@@ -8,6 +8,8 @@ import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
+import { fsAuthHeaders, uploadFile } from "@/utils/file-transfer"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
@@ -38,7 +40,37 @@ export function SessionFileBrowserTab(props: {
   const language = useLanguage()
   const layout = useLayout()
   const sdk = useSDK()
+  const server = useServer()
   const { workspaceKey } = useSessionLayout()
+  const [uploading, setUploading] = createSignal(false)
+
+  async function handleUpload(upload: File) {
+    setUploading(true)
+    try {
+      await uploadFile({
+        url: sdk().url,
+        directory: sdk().directory,
+        headers: fsAuthHeaders(server.current),
+        path: upload.name,
+        file: upload,
+      })
+
+      await file.tree.refresh("")
+      file.tree.bump()
+    } catch (err) {
+      console.error("Upload failed:", err)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function onUploadPick(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (!file) return
+    void handleUpload(file)
+    input.value = ""
+  }
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [filter, setFilter] = createSignal("")
   const [explicitHighlight, setExplicitHighlight] = createSignal<string>()
@@ -162,8 +194,22 @@ export function SessionFileBrowserTab(props: {
         when={!props.placeholder}
         fallback={
           <SessionFilePanelV2Empty>
-            <div class="flex flex-col items-center gap-3 text-center text-text-weak">
-              <Icon name="file-tree" size="large" />
+            <input id="file-browser-upload-input" type="file" class="hidden" onChange={onUploadPick} disabled={uploading()} />
+            <div
+              class="flex flex-col items-center gap-3 text-center text-text-weak cursor-pointer"
+              onClick={() => document.getElementById("file-browser-upload-input")?.click()}
+              role="button"
+              tabindex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") document.getElementById("file-browser-upload-input")?.click() }}
+            >
+              <Show
+                when={!uploading()}
+                fallback={
+                  <div class="h-1 w-16 bg-accent-base animate-pulse rounded" />
+                }
+              >
+                <Icon name="cloud-upload" size="large" />
+              </Show>
               <div class="text-14-medium text-text-strong">{language.t("command.file.open")}</div>
               <div class="text-13-regular">{language.t("session.files.selectToOpen")}</div>
             </div>

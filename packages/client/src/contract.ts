@@ -50,4 +50,4 @@ export const endpointNames = {
   "question.request.list": "listRequests",
 } as const
 
-export const omitEndpoints = new Set(["fs.read", "pty.connect", "pty.connectToken"])
+export const omitEndpoints = new Set(["fs.read", "fs.download", "pty.connect", "pty.connectToken"])

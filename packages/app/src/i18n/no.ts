@@ -531,6 +531,11 @@ export const dict = {
   "session.files.all": "Alle filer",
   "session.files.empty": "Ingen filer",
   "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
+  "session.files.uploadFile": "Last opp fil",
+  "session.files.downloadFile": "Last ned",
+  "session.files.refresh": "Oppdater",
+  "session.files.dropFiles": "Slipp filer her eller klikk + for å laste opp",
+  "session.files.deleteConfirm": "Slett \"{{path}}\"?",
 
   "session.messages.renderEarlier": "Vis tidligere meldinger",
   "session.messages.loadingEarlier": "Laster inn tidligere meldinger...",

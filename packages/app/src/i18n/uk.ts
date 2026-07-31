@@ -664,6 +664,11 @@ export const dict = {
   "session.files.all": "Усі файли",
   "session.files.empty": "Немає файлів",
   "session.files.binaryContent": "Бінарний файл (вміст не може бути відображено)",
+  "session.files.uploadFile": "Завантажити файл",
+  "session.files.downloadFile": "Завантажити",
+  "session.files.refresh": "Оновити",
+  "session.files.dropFiles": "Перетягніть файли сюди або натисніть +, щоб завантажити",
+  "session.files.deleteConfirm": "Видалити \"{{path}}\"?",
 
   "session.messages.renderEarlier": "Відобразити раніші повідомлення",
   "session.messages.loadingEarlier": "Завантаження раніших повідомлень...",

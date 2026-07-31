@@ -52,6 +52,8 @@ export interface Interface {
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[]>
+  readonly write: (input: { path: string; content: Uint8Array }) => Effect.Effect<void>
+  readonly remove: (input: { path: string }) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem") {}
@@ -71,6 +73,14 @@ const baseLayer = Layer.effect(
       if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
       return { absolute, real, directory: location.directory, root }
     })
+    const resolveParent = Effect.fnUntraced(function* (input: string) {
+      const absolute = path.resolve(location.directory, input)
+      if (!FSUtil.contains(location.directory, absolute))
+        return yield* Effect.die(new Error("Path escapes the location"))
+      const realParent = yield* fs.realPath(path.dirname(absolute)).pipe(Effect.orDie)
+      if (!FSUtil.contains(root, realParent)) return yield* Effect.die(new Error("Path escapes the location"))
+      return { absolute, realParent }
+    })
     return Service.of({
       find: search.find,
       glob: search.glob,
@@ -83,6 +93,14 @@ const baseLayer = Layer.effect(
           content: yield* fs.readFile(target.real).pipe(Effect.orDie),
           mime: FSUtil.mimeType(target.real),
         }
+      }),
+      write: Effect.fn("FileSystem.write")(function* (input) {
+        const target = yield* resolveParent(input.path)
+        yield* fs.writeWithDirs(target.absolute, input.content).pipe(Effect.orDie)
+      }),
+      remove: Effect.fn("FileSystem.remove")(function* (input) {
+        const target = yield* resolveParent(input.path)
+        yield* fs.remove(target.absolute, { recursive: true, force: true }).pipe(Effect.orDie)
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         const target = yield* resolve(input.path)

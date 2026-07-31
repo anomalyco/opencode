@@ -17,6 +17,15 @@ const FindQuery = Schema.Struct({
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
 })
 
+const UploadQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  path: Schema.String,
+})
+
+const UploadPayload = Schema.Struct({
+  content: Schema.String,
+})
+
 export const FileSystemGroup = HttpApiGroup.make("server.fs")
   .add(
     HttpApiEndpoint.get("fs.read", "/api/fs/read/*", {
@@ -57,6 +66,49 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           identifier: "v2.fs.find",
           summary: "Find files",
           description: "Find recursively ranked filesystem entries relative to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("fs.download", "/api/fs/download/*", {
+      query: LocationQuery,
+      success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.fs.download",
+          summary: "Download file",
+          description: "Download one file relative to the requested location with content-disposition attachment header.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.upload", "/api/fs/upload", {
+      payload: UploadPayload,
+      query: UploadQuery,
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.fs.upload",
+          summary: "Upload file",
+          description: "Upload a file to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.delete", "/api/fs/delete", {
+      query: UploadQuery,
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.fs.delete",
+          summary: "Delete file or directory",
+          description: "Delete a file or directory relative to the requested location.",
         }),
       ),
   )

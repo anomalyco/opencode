@@ -17,9 +17,12 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
+import { useSDK } from "@/context/sdk"
+import { useFile } from "@/context/file"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { fsAuthHeaders, uploadFile } from "@/utils/file-transfer"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
@@ -141,11 +144,13 @@ export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
+  const sdk = useSDK()
   const platform = usePlatform()
   const language = useLanguage()
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
+  const file = useFile()
   const { params, view } = useSessionLayout()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
@@ -154,6 +159,26 @@ export function SessionHeader() {
     if (!directory) return
     return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
   })
+
+  async function uploadFromInput(event: Event) {
+    const input = event.target as HTMLInputElement
+    const uploaded = input.files?.[0]
+    if (!uploaded) return
+    input.value = ""
+    try {
+      await uploadFile({
+        url: sdk().url,
+        directory: sdk().directory,
+        headers: fsAuthHeaders(server.current),
+        path: uploaded.name,
+        file: uploaded,
+      })
+      await file.tree.refresh("")
+      file.tree.bump()
+    } catch (err) {
+      console.error("Upload failed:", err)
+    }
+  }
   const name = createMemo(() => {
     const current = project()
     if (current) return current.name || getFilename(current.worktree)
@@ -242,6 +267,8 @@ export function SessionHeader() {
     reviewVisible: isDesktop(),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
+    fileManagerOpened: view().fileManager.opened(),
+    onFileManagerToggle: () => view().fileManager.toggle(),
   }))
 
   const selectApp = (app: OpenApp) => {
@@ -461,6 +488,38 @@ export function SessionHeader() {
                       </Button>
                     </TooltipKeybind>
 
+                    <Tooltip value={language.t("session.header.open.fileManager")}>
+                      <Button
+                        variant="ghost"
+                        class="group/filemanager-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                        onClick={() => view().fileManager.toggle()}
+                        aria-label={language.t("session.header.open.fileManager")}
+                        aria-expanded={view().fileManager.opened()}
+                        aria-controls="file-manager-panel"
+                      >
+                        <Icon
+                          size="small"
+                          name="cloud-upload"
+                          classList={{
+                            "text-icon-strong": view().fileManager.opened(),
+                            "text-icon-weak": !view().fileManager.opened(),
+                          }}
+                        />
+                      </Button>
+                    </Tooltip>
+
+                    <Tooltip value={language.t("session.files.uploadFile")}>
+                      <Button
+                        variant="ghost"
+                        class="group/filemanager-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                        onClick={() => document.getElementById("session-header-upload-input")?.click()}
+                        aria-label={language.t("session.files.uploadFile")}
+                      >
+                        <Icon size="small" name="cloud-upload" />
+                      </Button>
+                      <input id="session-header-upload-input" type="file" class="hidden" onChange={uploadFromInput} />
+                    </Tooltip>
+
                     <div class="hidden md:flex items-center gap-1 shrink-0">
                       <TooltipKeybind
                         title={language.t("command.review.toggle")}
@@ -524,6 +583,8 @@ type SessionHeaderV2ActionsState = {
   reviewVisible: boolean
   reviewOpened: boolean
   onReviewToggle: () => void
+  fileManagerOpened: boolean
+  onFileManagerToggle: () => void
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
@@ -536,6 +597,24 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           <StatusPopoverV2 />
         </Tooltip>
       </Show>
+      <TooltipV2
+        class="shrink-0"
+        placement="bottom"
+        value={language.t("session.header.open.fileManager")}
+      >
+        <IconButtonV2
+          type="button"
+          variant="ghost-muted"
+          size="large"
+          class="!w-9 shrink-0"
+          state={props.state.fileManagerOpened ? "pressed" : undefined}
+          onClick={props.state.onFileManagerToggle}
+          aria-label={language.t("session.header.open.fileManager")}
+          aria-expanded={props.state.fileManagerOpened}
+          aria-controls="file-manager-panel"
+          icon={<IconV2 name="cloud-upload" />}
+        />
+      </TooltipV2>
       <Show when={props.state.reviewVisible}>
         <TooltipV2
           class="shrink-0"
