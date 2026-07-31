@@ -20,11 +20,33 @@ export class ResponseStreamError extends Error {
   }
 }
 
+// Raised when a provider stream reaches EOF without ever sending a finish
+// frame. The AI SDK papers over that truncation with a synthesized
+// finish-step (reason "other", no raw finish reason, no usage); treating it
+// as a completed turn silently drops the rest of the response.
+export class StreamIncompleteError extends Error {
+  public override readonly name = "ProviderStreamIncompleteError"
+
+  constructor() {
+    super("Provider stream ended before sending a finish frame; the response is incomplete")
+  }
+}
+
 function isOpenAiErrorRetryable(e: APICallError) {
   const status = e.statusCode
   if (!status) return e.isRetryable
   // openai sometimes returns 404 for models that are actually available
   return status === 404 || e.isRetryable
+}
+
+// Keeps surfaced provider errors diagnosable without dumping arbitrarily
+// large payloads into session errors and logs.
+const RESPONSE_BODY_PREVIEW_LIMIT = 2_000
+
+function boundedResponseBody(responseBody: string) {
+  const trimmed = responseBody.trim()
+  if (trimmed.length <= RESPONSE_BODY_PREVIEW_LIMIT) return trimmed
+  return `${trimmed.slice(0, RESPONSE_BODY_PREVIEW_LIMIT)}… (response body truncated)`
 }
 
 // Providers not reliably handled in this function:
@@ -41,8 +63,18 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
       return "Unknown error"
     }
 
-    if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
+    if (!e.responseBody) {
       return msg
+    }
+
+    if (e.statusCode && msg !== STATUS_CODES[e.statusCode]) {
+      // Provider SDKs often reduce a rejection to one generic sentence (for
+      // example a bare "Invalid request.") while the response body carries the
+      // actual reason. Keep the bounded body so 4xx failures stay diagnosable.
+      if (/^\s*<!doctype|^\s*<html/i.test(e.responseBody)) return msg
+      const body = boundedResponseBody(e.responseBody)
+      if (body === "" || msg.includes(body)) return msg
+      return `${msg}: ${body}`
     }
 
     try {
@@ -66,7 +98,7 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
       return msg
     }
 
-    return `${msg}: ${e.responseBody}`
+    return `${msg}: ${boundedResponseBody(e.responseBody)}`
   }).trim()
 }
 

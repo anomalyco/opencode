@@ -1488,6 +1488,58 @@ describe("session.message-v2.fromError", () => {
     expect(SessionV1.ContextOverflowError.isInstance(result)).toBe(true)
   })
 
+  test("keeps the provider response body in surfaced 400-class errors", () => {
+    const responseBody = JSON.stringify({
+      error: {
+        message: "Invalid request.",
+        type: "invalid_request_error",
+        param: "input[3].content",
+        code: "invalid_value",
+      },
+    })
+    const result = MessageV2.fromError(
+      new APICallError({
+        message: "Invalid request.",
+        url: "https://example.com/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode: 400,
+        responseHeaders: { "content-type": "application/json" },
+        responseBody,
+        isRetryable: false,
+      }),
+      { providerID },
+    )
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.message).toContain("Invalid request.")
+    expect(result.data.message).toContain("invalid_value")
+    expect(result.data.message).toContain("input[3].content")
+    expect(result.data.responseBody).toBe(responseBody)
+  })
+
+  test("bounds oversized response bodies in surfaced error messages", () => {
+    const responseBody = JSON.stringify({
+      error: { message: "Invalid request.", detail: "x".repeat(10_000) },
+    })
+    const result = MessageV2.fromError(
+      new APICallError({
+        message: "Invalid request.",
+        url: "https://example.com/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode: 400,
+        responseHeaders: { "content-type": "application/json" },
+        responseBody,
+        isRetryable: false,
+      }),
+      { providerID },
+    )
+
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.message.length).toBeLessThan(2_200)
+    expect(result.data.message).toContain("(response body truncated)")
+  })
+
   test("does not classify 429 no body as context overflow", () => {
     const result = MessageV2.fromError(
       new APICallError({

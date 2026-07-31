@@ -8,6 +8,11 @@ import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
 
+const promptCalls = (inputs: Effect.Effect<Record<string, unknown>[]>): Effect.Effect<number> =>
+  inputs.pipe(
+    Effect.map((bodies) => bodies.filter((body) => !JSON.stringify(body).includes("Generate a title")).length),
+  )
+
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
   // If this fails, all the others likely will too — debug here first.
@@ -81,11 +86,12 @@ describe("opencode run (non-interactive subprocess)", () => {
     30_000,
   )
 
-  // The test provider's SSE error item is interpreted by the SDK as an unknown
-  // finish, not a fatal provider/session error. Lock that distinction in so it
-  // is not accidentally used as the failure compatibility oracle.
+  // A stream that dies without a finish frame is a truncated provider
+  // response, not a completed turn. The request is retried within the turn;
+  // when the retry succeeds (the empty queue auto-replies "ok"), the turn
+  // completes with both the preserved partial output and the retried reply.
   cliIt.concurrent(
-    "unknown stream finish preserves partial output and exits 0",
+    "retries a stream that ends without a finish frame and exits 0 once the retry succeeds",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
@@ -97,8 +103,31 @@ describe("opencode run (non-interactive subprocess)", () => {
         yield* llm.fail("upstream provider exploded mid-stream")
         const result = yield* opencode.run("trigger midstream error", { timeoutMs: 30_000 })
         expect(result.exitCode).toBe(0)
-        expect(result.stdout).toBe("partial response\n")
+        expect(result.stdout).toBe("partial response\nok\n")
         expect(result.stderr).not.toContain("upstream provider exploded mid-stream")
+        // Two requests in the truncated attempt plus one retry; the automatic
+        // session-title request is not a prompt attempt.
+        expect(yield* promptCalls(llm.inputs)).toBe(3)
+      }),
+    60_000,
+  )
+
+  // When every retry of a truncated stream is truncated again, the turn must
+  // fail with a provider error and a nonzero exit instead of exiting 0 with
+  // half a turn.
+  cliIt.concurrent(
+    "exits nonzero when streams without a finish frame exhaust the retry budget",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        // Initial attempt + STREAM_INCOMPLETE_RETRY_LIMIT (3) retries.
+        yield* llm.fail("truncated")
+        yield* llm.fail("truncated")
+        yield* llm.fail("truncated")
+        yield* llm.fail("truncated")
+        const result = yield* opencode.run("exhaust truncated retries", { timeoutMs: 45_000 })
+        expect(result.exitCode).not.toBe(0)
+        expect(result.stderr).toContain("finish frame")
+        expect(yield* promptCalls(llm.inputs)).toBe(4)
       }),
     60_000,
   )
@@ -213,7 +242,7 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
-    "--format json records partial output for an unknown stream finish",
+    "--format json records the retried completion after a stream ends without a finish frame",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
@@ -233,10 +262,15 @@ describe("opencode run (non-interactive subprocess)", () => {
           "tool_use",
           "step_finish",
           "step_start",
+          "step_start",
+          "text",
           "step_finish",
         ])
         expect(events[1]?.part).toEqual(expect.objectContaining({ type: "text", text: "partial json" }))
-        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "unknown" }))
+        // The truncated attempt never records a fallback "unknown" step-finish;
+        // the retried attempt concludes the turn with a real finish reason.
+        expect(events.at(-2)?.part).toEqual(expect.objectContaining({ type: "text", text: "ok" }))
+        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "stop" }))
       }),
     60_000,
   )

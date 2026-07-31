@@ -17,6 +17,7 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { testEffect } from "../lib/effect"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
+import { ProviderError } from "@/provider/error"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Permission } from "@/permission"
@@ -501,6 +502,71 @@ describe("session.llm.ai-sdk adapter", () => {
     })
     expect(result.tokens.cache.write).toBe(300)
     expect(result.tokens.cache.read).toBe(200)
+  })
+
+  test("streamFailure flags the synthesized finish-step left by EOF without a finish frame", () => {
+    const failure = LLMAISDK.streamFailure({
+      type: "finish-step",
+      response: { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" },
+      finishReason: "other",
+      rawFinishReason: undefined,
+      usage: {
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
+      },
+      providerMetadata: undefined,
+    })
+
+    expect(failure).toBeInstanceOf(ProviderError.StreamIncompleteError)
+  })
+
+  test("streamFailure keeps finish frames that carry a raw finish reason or usage", () => {
+    const emptyUsage = {
+      inputTokens: undefined,
+      outputTokens: undefined,
+      totalTokens: undefined,
+      inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+      outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
+    }
+    const response = { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" }
+
+    // A provider that maps an unusual raw reason to "other" still sent a finish frame.
+    expect(
+      LLMAISDK.streamFailure({
+        type: "finish-step",
+        response,
+        finishReason: "other",
+        rawFinishReason: "some_provider_reason",
+        usage: emptyUsage,
+        providerMetadata: undefined,
+      }),
+    ).toBeUndefined()
+
+    // Usage is proof of a finish frame even when the raw reason is missing.
+    expect(
+      LLMAISDK.streamFailure({
+        type: "finish-step",
+        response,
+        finishReason: "other",
+        rawFinishReason: undefined,
+        usage: { ...emptyUsage, inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+        providerMetadata: undefined,
+      }),
+    ).toBeUndefined()
+
+    expect(
+      LLMAISDK.streamFailure({
+        type: "finish-step",
+        response,
+        finishReason: "stop",
+        rawFinishReason: "stop",
+        usage: emptyUsage,
+        providerMetadata: undefined,
+      }),
+    ).toBeUndefined()
   })
 
   test("captures Copilot billed usage from raw Anthropic message deltas per step", async () => {
@@ -1996,6 +2062,252 @@ describe("session.llm.stream", () => {
         provider: {
           [geminiFixture.providerID]: {
             options: { apiKey: "test-google-key", baseURL: `${state.server!.url.origin}/v1beta` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "fails the stream when the provider hits EOF without a finish frame",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        // Partial content, then a bare EOF: no finish chunk, no [DONE] marker.
+        void waitRequest(
+          "/chat/completions",
+          new Response(
+            createEventStream([
+              { id: "chatcmpl-eof", object: "chat.completion.chunk", choices: [{ delta: { role: "assistant" } }] },
+              { id: "chatcmpl-eof", object: "chat.completion.chunk", choices: [{ delta: { content: "partial" } }] },
+            ]),
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-eof-no-finish")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const exit = yield* drain({
+          user: {
+            id: MessageID.make("msg_user-eof-no-finish"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        }).pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (!Exit.isFailure(exit)) return
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(ProviderError.StreamIncompleteError)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "chunkTimeout aborts a stream that stalls behind SSE keepalives",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const encoder = new TextEncoder()
+        // Keepalive comments keep raw bytes flowing, so only a deadline on
+        // parsed model chunks can notice that the stream stalled.
+        void waitRequest(
+          "/chat/completions",
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      id: "chatcmpl-stall",
+                      object: "chat.completion.chunk",
+                      choices: [{ delta: { role: "assistant", content: "beginning" } }],
+                    })}\n\n`,
+                  ),
+                )
+                const keepalive = setInterval(() => {
+                  try {
+                    controller.enqueue(encoder.encode(": keepalive\n\n"))
+                  } catch {
+                    clearInterval(keepalive)
+                  }
+                }, 50)
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-keepalive-stall")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const started = Date.now()
+        const exit = yield* drain({
+          user: {
+            id: MessageID.make("msg_user-keepalive-stall"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        }).pipe(Effect.exit)
+        const elapsed = Date.now() - started
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (!Exit.isFailure(exit)) return
+        const failure = Cause.squash(exit.cause)
+        expect(failure).toBeInstanceOf(ProviderError.ResponseStreamError)
+        expect(String(failure)).toContain("no chunk received within 400ms")
+        expect(elapsed).toBeGreaterThanOrEqual(400)
+        expect(elapsed).toBeLessThan(5_000)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1`, chunkTimeout: 400 },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "chunkTimeout does not fire while a slow local tool call executes",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        void waitRequest(
+          "/chat/completions",
+          new Response(
+            createEventStream(
+              [
+                { id: "chatcmpl-tool", object: "chat.completion.chunk", choices: [{ delta: { role: "assistant" } }] },
+                {
+                  id: "chatcmpl-tool",
+                  object: "chat.completion.chunk",
+                  choices: [
+                    {
+                      delta: {
+                        tool_calls: [
+                          {
+                            index: 0,
+                            id: "call-slow",
+                            type: "function",
+                            function: { name: "lookup", arguments: '{"query":"weather"}' },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+                { id: "chatcmpl-tool", object: "chat.completion.chunk", choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+              ],
+              true,
+            ),
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+        )
+        void waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("done"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-slow-tool")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const exit = yield* drain({
+          user: {
+            id: MessageID.make("msg_user-slow-tool"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Use lookup" }],
+          tools: {
+            lookup: tool({
+              description: "Lookup data",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async () => {
+                // Longer than the configured chunkTimeout: the deadline must be
+                // disarmed while the tool call is outstanding.
+                await new Promise((resolve) => setTimeout(resolve, 800))
+                return { output: "looked up" }
+              },
+            }),
+          },
+        }).pipe(Effect.exit)
+
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1`, chunkTimeout: 300 },
           },
         },
       }),

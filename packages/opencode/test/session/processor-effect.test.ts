@@ -604,6 +604,71 @@ it.live("session.processor effect tests retry recognized structured json errors"
   ),
 )
 
+it.live("session.processor effect tests retry a stream that ends without a finish frame within the turn", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        // First attempt: partial content, then EOF with no finish frame. The
+        // fallback finish-step the AI SDK synthesizes for it must not conclude
+        // the turn; the request is retried and the second attempt completes.
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-truncated",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+              {
+                id: "chatcmpl-truncated",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { content: "partial" } }],
+              },
+            ],
+          }),
+        )
+        yield* llm.text("after")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "truncate")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "truncate" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
+        expect(handle.message.error).toBeUndefined()
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests publish retry status updates", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>

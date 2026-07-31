@@ -26,6 +26,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { iife } from "@/util/iife"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
@@ -273,10 +274,20 @@ const live: Layer.Layer<
         "llm.provider": input.model.providerID,
         "llm.model": input.model.id,
       })
+      // The provider-level fetch wrapper only sees raw bytes, so SSE keepalive
+      // comments reset its timer while the model stream delivers nothing. The
+      // chunk deadline wrapped around fullStream consumption below counts
+      // parsed model chunks instead, which is the gap the chunkTimeout
+      // provider option promises to bound.
+      const chunkTimeoutMs = iife(() => {
+        const configured = item.options["chunkTimeout"]
+        return typeof configured === "number" && configured > 0 ? configured : undefined
+      })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
         type: "ai-sdk" as const,
+        chunkTimeoutMs,
         result: streamText({
           onError(error) {
             bridge.fork(
@@ -370,10 +381,19 @@ const live: Layer.Layer<
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
-            return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
-              e instanceof Error ? e : new Error(String(e)),
-            ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
+            const events =
+              result.chunkTimeoutMs === undefined
+                ? result.result.fullStream
+                : LLMAISDK.boundChunkGaps(result.result.fullStream, {
+                    chunkTimeoutMs: result.chunkTimeoutMs,
+                    requestAbort: ctrl,
+                  })
+            return Stream.fromAsyncIterable(events, (e) => (e instanceof Error ? e : new Error(String(e)))).pipe(
+              Stream.mapEffect((event) => {
+                const failure = LLMAISDK.streamFailure(event)
+                if (failure) return Effect.fail(failure)
+                return LLMAISDK.toLLMEvents(state, event)
+              }),
               Stream.flatMap((events) => Stream.fromIterable(events)),
             )
           }),

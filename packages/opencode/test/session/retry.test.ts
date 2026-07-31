@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Exit, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -115,6 +115,72 @@ describe("session.retry.delay", () => {
       })
     }),
   )
+
+  it.instance("policy stops retrying incomplete streams once the bounded budget is spent", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.make("session-incomplete-stream-budget")
+      // Same marker fromError sets for StreamIncompleteError; the zero
+      // retry-after header only keeps the test from sleeping between steps.
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: "Provider stream ended before sending a finish frame; the response is incomplete",
+          isRetryable: true,
+          metadata: { code: "ProviderStreamIncompleteError" },
+          responseHeaders: { "retry-after-ms": "0" },
+        }).toObject(),
+      )
+      expect(SessionRetry.isIncompleteStream(error)).toBe(true)
+      const status = yield* SessionStatus.Service
+
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          parse: (input) => input as ReturnType<NamedError["toObject"]>,
+          set: (info) =>
+            status.set(sessionID, {
+              type: "retry",
+              attempt: info.attempt,
+              message: info.message,
+              next: info.next,
+            }),
+        }),
+      )
+
+      for (let attempt = 1; attempt <= SessionRetry.STREAM_INCOMPLETE_RETRY_LIMIT; attempt++) {
+        const allowed = yield* step(error).pipe(Effect.exit)
+        expect(Exit.isSuccess(allowed)).toBe(true)
+      }
+      const exhausted = yield* step(error).pipe(Effect.exit)
+      expect(Exit.isSuccess(exhausted)).toBe(false)
+    }),
+  )
+
+  it.instance("policy keeps retrying other retryable errors past the incomplete-stream budget", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.make("session-retryable-unbounded")
+      const error = apiError({ "retry-after-ms": "0" })
+      const status = yield* SessionStatus.Service
+
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: (info) =>
+            status.set(sessionID, {
+              type: "retry",
+              attempt: info.attempt,
+              message: info.message,
+              next: info.next,
+            }),
+        }),
+      )
+
+      for (let attempt = 1; attempt <= SessionRetry.STREAM_INCOMPLETE_RETRY_LIMIT + 2; attempt++) {
+        const allowed = yield* step(error).pipe(Effect.exit)
+        expect(Exit.isSuccess(allowed)).toBe(true)
+      }
+    }),
+  )
 })
 
 describe("session.retry.retryable", () => {
@@ -179,6 +245,17 @@ describe("session.retry.retryable", () => {
     expect(SessionV1.APIError.isInstance(request)).toBe(true)
     expect(SessionRetry.retryable(request, retryProvider)).toEqual({
       message: "WebSocket closed before response.completed (code 1006: Connection ended)",
+    })
+  })
+
+  test("retries streams that ended without a finish frame", () => {
+    const request = MessageV2.fromError(new ProviderError.StreamIncompleteError(), { providerID })
+    expect(SessionV1.APIError.isInstance(request)).toBe(true)
+    if (!SessionV1.APIError.isInstance(request)) throw new Error("expected APIError")
+    expect(request.data.metadata?.code).toBe("ProviderStreamIncompleteError")
+    expect(SessionRetry.isIncompleteStream(request)).toBe(true)
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({
+      message: "Provider stream ended before sending a finish frame; the response is incomplete",
     })
   })
 

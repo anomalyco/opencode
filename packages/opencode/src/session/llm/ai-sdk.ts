@@ -2,9 +2,80 @@ import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@open
 import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"
+import { ProviderError } from "@/provider/error"
 
 type Result = Awaited<ReturnType<typeof streamText>>
 type AISDKEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
+
+// A synthesized finish-step (reason "other", no raw finish reason, no usage)
+// means the provider stream hit EOF without a finish frame: the AI SDK falls
+// back to its initial step state instead of failing. A real finish frame
+// always carries the provider's raw finish reason, and legitimate unusual
+// reasons keep flowing through toLLMEvents as "unknown" untouched.
+export function streamFailure(event: AISDKEvent) {
+  if (event.type !== "finish-step") return undefined
+  if (event.finishReason !== "other" || event.rawFinishReason != null) return undefined
+  if (usage(event.usage) !== undefined) return undefined
+  return new ProviderError.StreamIncompleteError()
+}
+
+// Bounds the gap between AI SDK stream events with the provider's
+// chunkTimeout option. The deadline is disarmed while locally executed tool
+// calls are outstanding: their results flow through the same stream, and a
+// long-running tool (a bash call, a human-gated approval) is not a stalled
+// provider. On expiry the request's AbortController is aborted so the
+// underlying HTTP request is torn down, and the stream fails with a terminal
+// provider error.
+export async function* boundChunkGaps(
+  fullStream: AsyncIterable<AISDKEvent>,
+  input: { chunkTimeoutMs: number; requestAbort: AbortController },
+): AsyncGenerator<AISDKEvent> {
+  const iterator = fullStream[Symbol.asyncIterator]()
+  const pendingToolCallIDs = new Set<string>()
+
+  const nextWithDeadline = () =>
+    new Promise<IteratorResult<AISDKEvent>>((resolve, reject) => {
+      const deadline = setTimeout(() => {
+        const failure = new ProviderError.ResponseStreamError(
+          `Provider stream stalled: no chunk received within ${input.chunkTimeoutMs}ms`,
+        )
+        input.requestAbort.abort(failure)
+        reject(failure)
+      }, input.chunkTimeoutMs)
+      iterator.next().then(
+        (result) => {
+          clearTimeout(deadline)
+          resolve(result)
+        },
+        (error) => {
+          clearTimeout(deadline)
+          reject(error)
+        },
+      )
+    })
+
+  try {
+    while (true) {
+      const result = pendingToolCallIDs.size > 0 ? await iterator.next() : await nextWithDeadline()
+      if (result.done) return
+      const event = result.value
+      switch (event.type) {
+        case "tool-call":
+          if (!event.providerExecuted) pendingToolCallIDs.add(event.toolCallId)
+          break
+        case "tool-result":
+          if (!event.preliminary) pendingToolCallIDs.delete(event.toolCallId)
+          break
+        case "tool-error":
+          pendingToolCallIDs.delete(event.toolCallId)
+          break
+      }
+      yield event
+    }
+  } finally {
+    await iterator.return?.()
+  }
+}
 
 export function adapterState() {
   return {
