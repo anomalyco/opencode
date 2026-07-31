@@ -126,7 +126,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       yield* (prepareInput.request.http?.transform?.(request) ?? Effect.void)
       return {
         request: ProviderShared.jsonPost({
-          url: parts.url,
+          url: request.url,
           body: request.body ?? "",
           headers: Headers.fromInput(request.headers),
         }),

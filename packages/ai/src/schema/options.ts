@@ -51,7 +51,7 @@ export const mergeProviderOptions = (
 }
 
 export interface HttpRequest {
-  readonly url: string
+  url: string
   readonly method: string
   headers: Record<string, string>
   body: string | undefined

@@ -166,6 +166,7 @@ export const layer = Layer.effect(
               .pipe(
                 Effect.tap((event) =>
                   Effect.sync(() => {
+                    request.url = event.url
                     request.headers = event.headers
                     request.body = event.body
                   }),

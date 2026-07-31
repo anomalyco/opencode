@@ -148,6 +148,7 @@ describe("request option precedence", () => {
           transform: (request) =>
             Effect.sync(() => {
               expect(request.headers.authorization).toBe("Bearer fresh-key")
+              request.url = "https://proxy.test/v1/chat/completions"
               request.headers["x-plugin"] = "transformed"
               request.body = JSON.stringify({ transformed: true })
             }),
@@ -158,6 +159,7 @@ describe("request option precedence", () => {
         dynamicResponse((input) =>
           Effect.gen(function* () {
             const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.url).toBe("https://proxy.test/v1/chat/completions")
             expect(web.headers.get("x-plugin")).toBe("transformed")
             expect(decodeJson(input.text)).toEqual({ transformed: true })
             return input.respond(sseEvents(deltaChunk({}, "stop")), {
