@@ -229,6 +229,13 @@ export const OpenAIPlugin = define({
         })
       }
     })
+    yield* ctx.session.hook("request", (evt) =>
+      Effect.sync(() => {
+        if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return
+        evt.headers.originator = "opencode"
+        evt.headers["session-id"] = evt.sessionID
+      }),
+    )
 
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(

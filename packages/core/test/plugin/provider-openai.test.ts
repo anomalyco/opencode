@@ -1,4 +1,6 @@
 import { Money } from "@opencode-ai/schema/money"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Session } from "@opencode-ai/schema/session"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -7,6 +9,7 @@ import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { OpenAIPlugin } from "@opencode-ai/core/plugin/provider/openai"
 import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
@@ -94,10 +97,31 @@ describe("OpenAIPlugin", () => {
       })
       yield* addPlugin()
 
+      const request = yield* (yield* PluginHooks.Service).trigger("session", "request", {
+        sessionID: Session.ID.make("ses_test"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.openai, id: Model.ID.make("gpt-5.5") }),
+        url: "https://chatgpt.com/backend-api/codex/responses",
+        method: "POST",
+        headers: {},
+        body: "{}",
+      })
+      const custom = yield* (yield* PluginHooks.Service).trigger("session", "request", {
+        sessionID: Session.ID.make("ses_test"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("custom-openai"), id: Model.ID.make("gpt-5.5") }),
+        url: "https://custom.example/v1/responses",
+        method: "POST",
+        headers: {},
+        body: "{}",
+      })
+
       const provider = required(yield* catalog.provider.get(Provider.ID.openai))
       expect(provider.package).toBe("@opencode-ai/ai/providers/openai")
       expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
       expect(provider.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
+      expect(request.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
+      expect(custom.headers).toEqual({})
       const eligible = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode-ai/ai/providers/openai")
       expect(eligible.cost).toEqual([])
@@ -140,10 +164,21 @@ describe("OpenAIPlugin", () => {
       })
       yield* addPlugin()
 
+      const request = yield* (yield* PluginHooks.Service).trigger("session", "request", {
+        sessionID: Session.ID.make("ses_test"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.openai, id: Model.ID.make("gpt-5.5") }),
+        url: "https://api.openai.com/v1/responses",
+        method: "POST",
+        headers: {},
+        body: "{}",
+      })
+
       const model = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(model.package).toBe("@opencode-ai/ai/providers/openai")
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
+      expect(request.headers).toEqual({})
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(true)
     }),
   )
