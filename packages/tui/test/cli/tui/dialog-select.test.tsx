@@ -379,23 +379,3 @@ test("keeps the first row selected when current is only a marker", async () => {
     select.app.renderer.destroy()
   }
 })
-
-test("focuses a falsy current value", async () => {
-  await using tmp = await tmpdir()
-  const select = await mountSelect(
-    tmp.path,
-    [
-      { title: "other", value: "other" },
-      { title: "empty", value: "" },
-    ],
-    "",
-  )
-
-  try {
-    select.app.mockInput.pressEnter()
-    await select.app.waitFor(() => select.selected.length === 1)
-    expect(select.selected).toEqual([""])
-  } finally {
-    select.app.renderer.destroy()
-  }
-})

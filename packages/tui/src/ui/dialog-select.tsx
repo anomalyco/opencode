@@ -134,7 +134,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       () => props.current,
       (current) => {
         if (props.focusCurrent === false) return
-        if (current !== undefined) {
+        if (current) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
@@ -312,7 +312,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         scrollAfterLayout(true, option.value)
         return
       }
-      if (current === undefined || props.focusCurrent === false) return
+      if (!current || props.focusCurrent === false) return
       const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
       if (currentIndex < 0) return
       moveTo(currentIndex, true)
