@@ -1305,7 +1305,7 @@ export function Prompt(props: PromptProps) {
       dimensions().width < 44
         ? dimensions().width - 5
         : Math.min(75, dimensions().width - 4) - 5
-    return Locale.truncateWidth(value, Math.max(1, width))
+    return Locale.takeWidth(value, Math.max(1, width)).trimEnd()
   })
   const locationLabel = createMemo(() => {
     if (!props.sessionID) {
