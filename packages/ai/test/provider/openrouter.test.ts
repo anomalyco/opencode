@@ -25,12 +25,7 @@ describe("OpenRouter", () => {
       expect(prepared.route).toBe("openrouter")
       expect(prepared.body).toMatchObject({
         model: "openai/gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }],
-          },
-        ],
+        messages: [{ role: "user", content: "Say hello." }],
         stream: true,
         usage: { include: true },
       })
@@ -48,6 +43,7 @@ describe("OpenRouter", () => {
           ],
           tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
           prompt: "Hello",
+          cache: { tools: true, system: true, messages: { tail: 1 } },
         }),
       )
 
