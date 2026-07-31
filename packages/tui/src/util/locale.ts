@@ -16,19 +16,6 @@ export function datetime(input: number): string {
   return `${localTime} · ${localDate}`
 }
 
-export function todayTimeOrDateTime(input: number): string {
-  const date = new Date(input)
-  const now = new Date()
-  const isToday =
-    date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
-
-  if (isToday) {
-    return time(input)
-  } else {
-    return datetime(input)
-  }
-}
-
 export function number(num: number): string {
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + "M"
@@ -106,11 +93,6 @@ export function truncateMiddle(str: string, maxLength: number = 35): string {
   const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
 
   return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
-}
-
-export function pluralize(count: number, singular: string, plural: string): string {
-  const template = count === 1 ? singular : plural
-  return template.replace("{}", count.toString())
 }
 
 export * as Locale from "./locale"
