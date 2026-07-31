@@ -9,6 +9,7 @@ import {
   on,
   onCleanup,
   onMount,
+  Show,
   useContext,
   type JSX,
   type ParentProps,
@@ -39,6 +40,7 @@ import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
 import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
+import { errorMessage } from "../util/error"
 import { abbreviateHome } from "../util/path-format"
 import { builtins } from "./builtins"
 import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectory } from "./discovery"
@@ -247,6 +249,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       },
       storage: {
         store: (key, options) => storage.store(`plugin.${item.plugin.id}.${key}`, options),
+        memory: (key, options) => storage.memory(`plugin.${item.plugin.id}.${key}`, options),
       },
       ui: {
         dialog: dialogApi,
@@ -383,12 +386,16 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
 
   // Hot-reload local plugin sources: watch the discovery directory and any
   // local entrypoints, then rebuild the plugin generation when one changes.
-  // Watches are deduped by path and never torn down individually (a stale
-  // watch costs one fs handle and a no-op reconcile); all die with this
-  // provider. Failed watches leave the set so a later reconcile can retry
-  // once the path exists.
-  const watchers: ReturnType<typeof watch>[] = []
-  const watched = new Set<string>()
+  // Files are watched through their parent directory (editors that save by
+  // rename replace the inode, which silently kills a direct file watch) and
+  // filtered by basename so bursts in busy directories stay quiet. Directory
+  // plugins are watched at their root only: edits to nested helper files do
+  // not change the entrypoint mtime and are not detected. Watches are never
+  // torn down individually (a stale watch costs one fs handle and a no-op
+  // reconcile); all die with this provider. Failed watches are forgotten so
+  // a later reconcile can re-arm once the path exists.
+  const watchers = new Set<ReturnType<typeof watch>>()
+  const watched = new Map<string, Set<string> | null>()
   let disposed = false
   let pending: ReturnType<typeof setTimeout> | undefined
   const scheduleReconcile = () => {
@@ -401,28 +408,36 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     }, 100)
   }
   const watchSource = (target: string) => {
-    if (watched.has(target)) return
-    watched.add(target)
     stat(target)
       .then((info) => {
         if (disposed) return
-        // Watch the parent for files: editors that save by rename replace the
-        // inode, which silently kills a direct file watch after the first save.
         const dir = info.isDirectory() ? target : path.dirname(target)
-        if (dir !== target && watched.has(dir)) return
-        watched.add(dir)
-        const watcher = watch(dir, scheduleReconcile)
+        // Directories accept every filename (null); files accept their basename.
+        const name = info.isDirectory() ? null : path.basename(target)
+        const existing = watched.get(dir)
+        if (existing !== undefined) {
+          if (name === null) watched.set(dir, null)
+          else existing?.add(name)
+          return
+        }
+        watched.set(dir, name === null ? null : new Set([name]))
+        const watcher = watch(dir, (_event, filename) => {
+          // A null filename (platform-dependent) always schedules.
+          const accept = watched.get(dir)
+          if (filename && accept && !accept.has(filename.toString())) return
+          scheduleReconcile()
+        })
         // A watched directory can disappear out from under us; without a
-        // listener the error event would crash the process. Forget the paths
-        // so a later reconcile can re-arm once they exist again.
+        // listener the error event would crash the process. Forget the path
+        // so a later reconcile can re-arm once it exists again.
         watcher.on("error", () => {
           watcher.close()
+          watchers.delete(watcher)
           watched.delete(dir)
-          watched.delete(target)
         })
-        watchers.push(watcher)
+        watchers.add(watcher)
       })
-      .catch(() => watched.delete(target))
+      .catch(() => undefined)
   }
   onCleanup(() => {
     disposed = true
@@ -439,9 +454,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   // Package resolution failures would otherwise retry a full npm install on
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
-  const reconcile = async (configured?: NonNullable<typeof config.data.plugins>) => {
-    if (configured) npmFailures.clear()
-    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...(configured ?? config.data.plugins ?? [])]
+  const reconcile = async () => {
+    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...(config.data.plugins ?? [])]
     watchSource(tuiPluginDirectory(paths.cwd))
 
     // Resolve: fold entries into one desired generation. A source that fails
@@ -472,7 +486,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         ? { status: "failed" as const, error: memo }
         : await resolvePlugin(target, local, options, previous, props.packages).catch((error) => ({
             status: "failed" as const,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage(error),
           }))
       if (resolved.status === "unsupported") {
         failures.push({ target, status: "unsupported" })
@@ -483,16 +497,16 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         failures.push({
           target,
           status: "failed",
-          error: previous ? `${resolved.error} (previous version still active)` : resolved.error,
+          error: previous?.active ? `${resolved.error} (previous version still active)` : resolved.error,
         })
         if (previous)
           desired.set(previous.plugin.id, {
             plugin: previous.plugin,
-            source: "external",
+            source: previous.source,
             target,
             version: previous.version,
             options: previous.options,
-            enabled: true,
+            enabled: previous.active,
           })
         continue
       }
@@ -524,6 +538,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       : desiredIds.filter((id) => {
           const registration = store.registrations[id]!
           const item = desired.get(id)!
+          // enabled derives from config directives alone, so config wins over
+          // manual dialog toggles on every reconcile — the same semantics
+          // config saves had before hot reload existed, just more frequent.
           return (
             registration.version !== item.version ||
             !sameOptions(registration.options, item.options) ||
@@ -547,18 +564,16 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         await deactivate(id).catch(() => undefined)
         continue
       }
-      const error = await activate(id).then(
-        () => undefined,
-        (error) => (error instanceof Error ? error.message : String(error)),
-      )
+      const error = await activate(id).then(() => undefined, errorMessage)
       if (error) errors.set(id, error)
     }
 
+    const failedTargets = new Set(failures.map((failure) => failure.target))
     const states: State[] = [
       ...[...desired.values()].flatMap((item): State[] => {
         if (item.target === undefined) return []
         // A failed reload keeps this item running; the failure entry covers it.
-        if (failures.some((failure) => failure.target === item.target)) return []
+        if (failedTargets.has(item.target)) return []
         const error = errors.get(item.plugin.id)
         if (error) return [{ target: item.target, status: "failed", error }]
         const status = store.registrations[item.plugin.id]?.active ? "active" : "inactive"
@@ -575,13 +590,14 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
     setStore("states", reconcileStore(states))
   }
+  const slotItems = new WeakMap<Slot, { readonly id: string; readonly render: Slot }>()
   let loading = Promise.resolve()
   createEffect(
     on(
       () => JSON.stringify(config.data.plugins ?? []),
       () => {
-        const configured = config.data.plugins ?? []
-        loading = loading.catch(() => undefined).then(() => reconcile(configured))
+        npmFailures.clear()
+        loading = loading.catch(() => undefined).then(() => reconcile())
         void loading.then(
           () => setStore("ready", true),
           () => setStore("ready", true),
@@ -621,9 +637,18 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
           Object.entries(store.registrations).map(([id, plugin]) => ({ id, source: plugin.source, active: plugin.active })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slot: (name) =>
-          Object.entries(store.registrations).flatMap(([id, registration]) =>
-            registration.active && registration.slots[name] ? [{ id, render: registration.slots[name] }] : [],
-          ),
+          Object.entries(store.registrations).flatMap(([id, registration]) => {
+            const render = registration.active ? registration.slots[name] : undefined
+            if (!render) return []
+            // <For> diffs rows by reference; a stable wrapper per render
+            // function keeps untouched plugins' slot rows (and their state)
+            // alive across other plugins' reloads.
+            const cached = slotItems.get(render)
+            if (cached) return [cached]
+            const item = { id, render }
+            slotItems.set(render, item)
+            return [item]
+          }),
         activate,
         deactivate,
       }}
@@ -733,11 +758,13 @@ function PluginBoundary(props: ParentProps<{ id: string; where: string }>) {
   return (
     <ErrorBoundary
       fallback={(error) => {
-        createEffect(() =>
+        // One toast per crash: onMount is untracked, so prop updates while
+        // the boundary is latched cannot re-toast.
+        onMount(() =>
           toast.show({
             variant: "error",
             title: "Plugin",
-            message: `${props.id} crashed in ${props.where}: ${error instanceof Error ? error.message : String(error)}`,
+            message: `${props.id} crashed in ${props.where}: ${errorMessage(error)}`,
           }),
         )
         return null
@@ -751,17 +778,25 @@ function PluginBoundary(props: ParentProps<{ id: string; where: string }>) {
 export function PluginRoute(props: { readonly fallback: (id: string, name: string) => JSX.Element }) {
   const plugins = usePlugin()
   const route = useRoute()
-  const id = createMemo(() => (route.data.type === "plugin" ? route.data.id : ""))
-  const content = createMemo(() => {
+  const current = createMemo(() => {
     if (route.data.type !== "plugin") return
-    const render = plugins.route(route.data.id, route.data.name)
-    if (!render) return props.fallback(route.data.id, route.data.name)
-    return render({ data: route.data.data })
+    return {
+      id: route.data.id,
+      name: route.data.name,
+      render: plugins.route(route.data.id, route.data.name),
+      data: route.data.data,
+    }
   })
   return (
-    <PluginBoundary id={id()} where="route">
-      {content()}
-    </PluginBoundary>
+    // Keyed so navigation or a hot reload recreates the boundary; otherwise
+    // one crash would latch every future plugin route into the fallback.
+    <Show keyed when={current()}>
+      {(item) => (
+        <PluginBoundary id={item.id} where="route">
+          {item.render ? item.render({ data: item.data }) : props.fallback(item.id, item.name)}
+        </PluginBoundary>
+      )}
+    </Show>
   )
 }
 

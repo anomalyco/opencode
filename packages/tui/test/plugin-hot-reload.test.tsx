@@ -26,7 +26,7 @@ async function until(read: () => Promise<string>, expected: (value: string | und
   for (let attempt = 0; attempt < 200; attempt++) {
     value = await read().catch(() => undefined)
     if (expected(value)) return value
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await Bun.sleep(50)
   }
   return value
 }
@@ -124,8 +124,9 @@ test("editing one plugin leaves others untouched and a broken save keeps the las
   await mkdir(directory, { recursive: true })
   const markerA = path.join(tmp.path, "a.txt")
   const markerB = path.join(tmp.path, "b.txt")
+  const sourceA = path.join(directory, "a.ts")
   const sourceB = path.join(directory, "b.ts")
-  await writeFile(path.join(directory, "a.ts"), lifecycleSource(markerA, "test.a", "a1"))
+  await writeFile(sourceA, lifecycleSource(markerA, "test.a", "a1"))
   await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b1"))
 
   await using app = await bootApp(tmp.path)
@@ -139,18 +140,54 @@ test("editing one plugin leaves others untouched and a broken save keeps the las
   expect(await until(readB, (value) => value?.includes("b2:setup") ?? false)).toBe("b1:setup\nb1:cleanup\nb2:setup\n")
   expect(await readA()).toBe("a1:setup\n")
 
-  // A broken save keeps the last good version running: b2 is never cleaned up.
+  // A broken save keeps the last good version running: b2 is never cleaned
+  // up. Editing A afterwards provides a positive completion signal — once
+  // A's swap lands, the serialized reconcile has processed the broken save.
   await writeFile(sourceB, "export default {")
-  await new Promise((resolve) => setTimeout(resolve, 800))
+  await writeFile(sourceA, lifecycleSource(markerA, "test.a", "a2"))
+  expect(await until(readA, (value) => value?.includes("a2:setup") ?? false)).toBe("a1:setup\na1:cleanup\na2:setup\n")
   expect(await readB()).toBe("b1:setup\nb1:cleanup\nb2:setup\n")
-  expect(await readA()).toBe("a1:setup\n")
 
-  // Fixing the file replaces the kept version.
+  // Fixing the file replaces the kept version and leaves A alone.
   await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b3"))
   expect(await until(readB, (value) => value?.includes("b3:setup") ?? false)).toBe(
     "b1:setup\nb1:cleanup\nb2:setup\nb2:cleanup\nb3:setup\n",
   )
-  expect(await readA()).toBe("a1:setup\n")
+  expect(await readA()).toBe("a1:setup\na1:cleanup\na2:setup\n")
+
+  process.emit("SIGHUP")
+  await app.task
+})
+
+test("memory storage survives hot reload while disk storage persists", async () => {
+  await using tmp = await tmpdir()
+  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
+  await mkdir(directory, { recursive: true })
+  const marker = path.join(tmp.path, "counter.txt")
+  const source = path.join(directory, "counter.ts")
+  const counterSource = (note: string) => `
+import { appendFile } from "node:fs/promises"
+// ${note}
+export default {
+  id: "test.counter",
+  setup: async (context: any) => {
+    const [state, update] = context.storage.memory("counter", { initial: { count: 0 } })
+    update((draft: any) => {
+      draft.count += 1
+    })
+    await appendFile(${JSON.stringify(marker)}, "count:" + state.count + "\\n")
+  },
+}
+`
+  await writeFile(source, counterSource("v1"))
+
+  await using app = await bootApp(tmp.path)
+  const read = () => readFile(marker, "utf8")
+  expect(await until(read, (value) => value === "count:1\n")).toBe("count:1\n")
+
+  // The reloaded generation shares the same live store: the count continues.
+  await writeFile(source, counterSource("v2"))
+  expect(await until(read, (value) => value?.includes("count:2") ?? false)).toBe("count:1\ncount:2\n")
 
   process.emit("SIGHUP")
   await app.task
