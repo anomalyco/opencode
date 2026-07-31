@@ -70,7 +70,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
-import { sessionTitle } from "@/utils/session-title"
+import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
@@ -296,11 +296,10 @@ export function MessageTimeline(props: {
     if (!id) return
     return sync().session.get(id)
   })
-  const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => {
     const session = info()
     if (!session) return
-    return sessionTitle(titleValue(), session.parentID)
+    return displayLabel(session)
   })
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
@@ -317,7 +316,7 @@ export function MessageTimeline(props: {
   })
   const parentTitle = createMemo(() => {
     const session = parent()
-    return session ? sessionTitle(session.title, session.parentID) : language.t("command.session.new")
+    return session ? displayLabel(session) : language.t("command.session.new")
   })
   const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
@@ -921,7 +920,7 @@ export function MessageTimeline(props: {
   function DialogDeleteSession(props: { sessionID: string }) {
     const name = createMemo(() => {
       const session = sync().session.get(props.sessionID)
-      return session ? sessionTitle(session.title, session.parentID) : language.t("command.session.new")
+      return session ? displayLabel(session) : language.t("command.session.new")
     })
     const handleDelete = async () => {
       await deleteSession(props.sessionID)

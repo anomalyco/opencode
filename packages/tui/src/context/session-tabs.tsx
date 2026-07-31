@@ -3,7 +3,7 @@ import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { useData } from "./data"
-import { sessionTitle } from "../util/session"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useConfig } from "../config"
@@ -116,7 +116,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const sessionID = root(route.data.sessionID)
       history = recordSessionTabHistory(history, sessionID)
       const session = data.session.get(sessionID)
-      const title = session?.title ?? (newTab() ? NEW_SESSION_TAB_TITLE : session ? sessionTitle(session) : undefined)
+      const title =
+        session?.title ?? (newTab() ? NEW_SESSION_TAB_TITLE : session ? withTimestampedFallback(session) : undefined)
       const tabs = openSessionTab(state().tabs, { sessionID, title })
       if (tabs === state().tabs && !state().unread[sessionID]) return
       update((draft) => {
@@ -130,7 +131,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const next = state().tabs.reduce<SessionTab[]>((tabs, tab) => {
         const sessionID = root(tab.sessionID)
         const session = data.session.get(sessionID)
-        return openSessionTab(tabs, { sessionID, title: session ? sessionTitle(session) : tab.title })
+        return openSessionTab(tabs, {
+          sessionID,
+          title: session ? withTimestampedFallback(session) : tab.title,
+        })
       }, [])
       const unread = Object.entries(state().unread).reduce<Record<string, SessionTabUnread>>((result, entry) => {
         const sessionID = root(entry[0])

@@ -16,7 +16,7 @@ import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { truncateFilePath } from "../ui/file-path"
 import { stringWidth } from "../util/string-width"
-import { sessionTitle } from "../util/session"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { Spinner } from "./spinner"
 
 const RECENT_LIMIT = 8
@@ -80,7 +80,7 @@ export function DialogOpen() {
       const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
       const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
-        title: sessionTitle(session),
+        title: withTimestampedFallback(session),
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
         footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,

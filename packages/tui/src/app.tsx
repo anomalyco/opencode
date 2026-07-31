@@ -76,7 +76,7 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
-import { isDefaultTitle } from "./util/session"
+import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
@@ -537,7 +537,7 @@ function App(props: { pair?: DialogPairCredentials }) {
 
     if (route.data.type === "session") {
       const title = session?.title
-      if (!title || isDefaultTitle(title)) {
+      if (!title || isFallbackTitle(title)) {
         renderer.setTerminalTitle("OpenCode")
         return
       }

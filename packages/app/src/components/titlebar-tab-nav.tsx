@@ -4,6 +4,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { useGlobal } from "@/context/global"
 import { ServerConnection, serverName } from "@/context/server"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
@@ -11,7 +12,6 @@ import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import type { Session } from "@opencode-ai/sdk/v2"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import { TabPreviewPopover } from "./titlebar-tab-popover"
-import { sessionTitle } from "@/utils/session-title"
 import "./titlebar-tab-nav.css"
 
 // MouseEvent.button uses 1 for the middle/wheel button.
@@ -57,7 +57,7 @@ export function TabNavItem(props: {
   })
   const title = createMemo(() => {
     const session = props.session()
-    return session ? sessionTitle(session.title, session.parentID) : props.fallbackTitle
+    return session ? displayLabel(session) : props.fallbackTitle
   })
 
   const projectName = createMemo(() => {

@@ -8,7 +8,7 @@ import { useTheme } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./index"
-import { sessionTitle } from "../../../util/session"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 interface SubagentEntry {
   sessionID: string
@@ -39,7 +39,7 @@ export function SubagentsTab(props: { sessionID: string }) {
     if (current.parentID) {
       const siblings = data.session.list().filter((s) => s.parentID === current.parentID)
       for (const sibling of siblings) {
-        const title = sessionTitle(sibling)
+        const title = withTimestampedFallback(sibling)
         const agentMatch = title.match(/@(\w+) subagent/)
         const agent = sibling.agent
           ? Locale.titlecase(sibling.agent)
@@ -58,7 +58,7 @@ export function SubagentsTab(props: { sessionID: string }) {
     } else {
       const children = data.session.list().filter((s) => s.parentID === props.sessionID)
       for (const child of children) {
-        const title = sessionTitle(child)
+        const title = withTimestampedFallback(child)
         const agentMatch = title.match(/@(\w+) subagent/)
         const agent = child.agent
           ? Locale.titlecase(child.agent)
