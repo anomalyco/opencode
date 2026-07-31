@@ -47,6 +47,7 @@ export interface PromptInputProps {
   controls: PromptInputControls
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
+  newSessionBase?: string
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
   onEditLoaded?: () => void

@@ -977,6 +977,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "로컬",
   "session.new.workspace.local": "로컬 저장소",
   "session.new.workspace.existing": "작업 공간…",
+  "session.new.branch.search": "브랜치 검색",
+  "session.new.branch.checkout": "전환",
+  "session.new.branch.base": "분기 기준",
+  "session.new.branch.local": "로컬",
+  "session.new.branch.empty": "브랜치 없음",
+  "session.new.branch.switchFailed": "브랜치 전환 실패",
   "session.new.git.none": "Git 없음",
 
   "sidebar.empty.title": "열린 프로젝트 없음",

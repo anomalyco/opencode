@@ -214,6 +214,7 @@ type PromptSubmitInput = {
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
   newSessionWorktree?: Accessor<string | undefined>
+  newSessionBase?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
   onQueue?: (draft: FollowupDraft) => void
@@ -353,7 +354,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (isNewSession) {
       if (worktreeSelection === "create") {
         const createdWorktree = await client.worktree
-          .create({ directory: projectDirectory })
+          .create({ directory: projectDirectory, worktreeCreateInput: { base: input.newSessionBase?.() } })
           .then((x) => x.data)
           .catch((err) => {
             showToast({

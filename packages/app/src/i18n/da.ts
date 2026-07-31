@@ -671,6 +671,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokal",
   "session.new.workspace.local": "Lokalt repository",
   "session.new.workspace.existing": "Arbejdsområde…",
+  "session.new.branch.search": "Søg efter grene",
+  "session.new.branch.checkout": "Skift til",
+  "session.new.branch.base": "Forgren fra",
+  "session.new.branch.local": "Lokal",
+  "session.new.branch.empty": "Ingen grene",
+  "session.new.branch.switchFailed": "Kunne ikke skifte gren",
   "session.new.git.none": "Ingen Git",
   "session.new.lastModified": "Sidst ændret",
 

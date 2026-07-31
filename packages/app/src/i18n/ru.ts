@@ -674,6 +674,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальный репозиторий",
   "session.new.workspace.existing": "Рабочее пространство…",
+  "session.new.branch.search": "Поиск веток",
+  "session.new.branch.checkout": "Переключиться на",
+  "session.new.branch.base": "Ответвить от",
+  "session.new.branch.local": "Локально",
+  "session.new.branch.empty": "Веток нет",
+  "session.new.branch.switchFailed": "Не удалось переключить ветку",
   "session.new.git.none": "Нет Git",
   "session.new.lastModified": "Последнее изменение",
 

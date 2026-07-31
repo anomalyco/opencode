@@ -1071,6 +1071,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokalt",
   "session.new.workspace.local": "Lokalt depot",
   "session.new.workspace.existing": "Arbeidsområde…",
+  "session.new.branch.search": "Søk etter grener",
+  "session.new.branch.checkout": "Bytt til",
+  "session.new.branch.base": "Forgren fra",
+  "session.new.branch.local": "Lokalt",
+  "session.new.branch.empty": "Ingen grener",
+  "session.new.branch.switchFailed": "Kunne ikke bytte gren",
   "session.new.git.none": "Ingen Git",
 
   "sidebar.empty.title": "Ingen åpne prosjekter",

@@ -677,6 +677,12 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Repositorio local",
   "session.new.workspace.existing": "Espacio de trabajo…",
+  "session.new.branch.search": "Buscar ramas",
+  "session.new.branch.checkout": "Cambiar a",
+  "session.new.branch.base": "Ramificar desde",
+  "session.new.branch.local": "Local",
+  "session.new.branch.empty": "Sin ramas",
+  "session.new.branch.switchFailed": "Fallo al cambiar de rama",
   "session.new.git.none": "Sin Git",
   "session.new.lastModified": "Última modificación",
 
