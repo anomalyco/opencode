@@ -32,6 +32,7 @@ import { footerWidthPolicy } from "./footer.width"
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
+import { PatchDiff } from "../component/patch-diff"
 
 function buttons(
   list: PermissionOption[],
@@ -405,8 +406,9 @@ export function RunPermissionBody(props: {
                       </Show>
                     }
                   >
-                    <diff
+                    <PatchDiff
                       diff={info().diff!}
+                      hunkFg={props.block.diffLineNumber}
                       view="unified"
                       filetype={ft()}
                       syntaxStyle={props.block.syntax}

@@ -22,6 +22,7 @@ import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
+import { PatchDiff } from "../../component/patch-diff"
 import { ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -959,7 +960,14 @@ export function Session() {
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
-        <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+        <box
+          flexGrow={1}
+          minHeight={0}
+          paddingBottom={1}
+          paddingLeft={dimensions().width < 44 ? 1 : 2}
+          paddingRight={dimensions().width < 44 ? 1 : 2}
+          gap={1}
+        >
           <Show when={session()}>
             <scrollbox
               ref={(r) => (scroll = r)}
@@ -1542,6 +1550,7 @@ function SessionGroupView(props: {
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const ctx = use()
   const local = useLocal()
+  const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const model = createMemo(
     () =>
@@ -1575,8 +1584,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <span style={{ fg: props.message.error ? theme.text.subdued : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
           </span>
-          <span style={{ fg: theme.text.subdued }}> · {model()}</span>
-          <Show when={duration()}>
+          <Show when={dimensions().width >= 28}>
+            <span style={{ fg: theme.text.subdued }}> · {model()}</span>
+          </Show>
+          <Show when={duration() && (dimensions().width < 28 || dimensions().width >= 36)}>
             <span style={{ fg: theme.text.subdued }}> · {Locale.duration(duration())}</span>
           </Show>
           <Show when={interrupted()}>
@@ -3030,8 +3041,9 @@ function Edit(props: ToolProps) {
         {(item) => (
           <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
             <box paddingLeft={1}>
-              <diff
+              <PatchDiff
                 diff={item().patch}
+                hunkFg={theme.diff.text.hunkHeader}
                 view={view()}
                 filetype={filetype(path())}
                 syntaxStyle={syntax()}
@@ -3119,8 +3131,9 @@ function ApplyPatch(props: ToolProps) {
                   }
                 >
                   <box paddingLeft={1}>
-                    <diff
+                    <PatchDiff
                       diff={file.patch}
+                      hunkFg={theme.diff.text.hunkHeader}
                       view={view()}
                       filetype={filetype(file.relativePath)}
                       syntaxStyle={syntax()}

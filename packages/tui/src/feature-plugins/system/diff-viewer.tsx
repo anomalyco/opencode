@@ -2,13 +2,7 @@
 import type { FileDiffInfo } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
 import type { KeymapCommand, Route } from "@opencode-ai/plugin/tui/context"
-import {
-  TextAttributes,
-  type BorderSides,
-  type BoxRenderable,
-  type DiffRenderable,
-  type ScrollBoxRenderable,
-} from "@opentui/core"
+import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
@@ -19,6 +13,7 @@ import { DialogSelect } from "../../ui/dialog-select"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { useThemes } from "../../context/theme"
+import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -154,7 +149,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
   const helpShortcut = shortcut("diff.help")
   let scroll: ScrollBoxRenderable | undefined
   const patchNodeByFileIndex = new Map<number, BoxRenderable>()
-  const diffNodeByFileIndex = new Map<number, DiffRenderable>()
+  const patchDiffByFileIndex = new Map<number, PatchDiffRef>()
   const [selectedHunk, setSelectedHunk] = createSignal<SelectedHunk | undefined>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
   const [patchFillerHeight, setPatchFillerHeight] = createSignal(0)
@@ -270,17 +265,16 @@ function DiffViewer(props: { context: Plugin.Context }) {
     if (!patchScroll) return
     const hunks = visiblePatchFiles()
       .flatMap((entry) => {
-        const node = diffNodeByFileIndex.get(entry.fileIndex)
-        if (!node || node.isDestroyed) return []
-        const contentY = patchScroll.scrollTop + node.y - patchScroll.viewport.y
-        return node.diff
-          .split("\n")
-          .flatMap((line, row) => (line.startsWith("@@") ? [row] : []))
-          .map((row, hunkIndex) => ({
-            fileIndex: entry.fileIndex,
-            hunkIndex,
-            contentY: contentY + row,
-          }))
+        return (
+          patchDiffByFileIndex
+            .get(entry.fileIndex)
+            ?.hunks()
+            .map((node, hunkIndex) => ({
+              fileIndex: entry.fileIndex,
+              hunkIndex,
+              contentY: patchScroll.scrollTop + node.y - patchScroll.viewport.y - (hunkIndex > 0 ? 1 : 0),
+            })) ?? []
+        )
       })
       .sort((left, right) => left.contentY - right.contentY)
     const selected = selectedHunk()
@@ -831,9 +825,10 @@ function DiffViewer(props: { context: Plugin.Context }) {
                             >
                               {(patch) => (
                                 <box border={patchLeftBorder()} borderColor={theme.border.default}>
-                                  <diff
-                                    ref={(element: DiffRenderable) => diffNodeByFileIndex.set(entry.fileIndex, element)}
+                                  <PatchDiff
+                                    ref={(component) => patchDiffByFileIndex.set(entry.fileIndex, component)}
                                     diff={patch()}
+                                    hunkFg={reviewed() ? theme.text.subdued : theme.diff.text.hunkHeader}
                                     view={view()}
                                     filetype={reviewed() ? PLAIN_TEXT_FILETYPE : filetype(entry.file.file)}
                                     syntaxStyle={currentSyntax()}
@@ -847,9 +842,15 @@ function DiffViewer(props: { context: Plugin.Context }) {
                                     removedBg={
                                       reviewed() ? theme.background.surface.overlay : theme.diff.background.removed
                                     }
+                                    contextBg={
+                                      reviewed() ? theme.background.surface.overlay : theme.diff.background.context
+                                    }
                                     addedSignColor={reviewed() ? theme.text.subdued : theme.diff.highlight.added}
                                     removedSignColor={reviewed() ? theme.text.subdued : theme.diff.highlight.removed}
                                     lineNumberFg={theme.diff.lineNumber.text}
+                                    lineNumberBg={
+                                      reviewed() ? theme.background.surface.overlay : theme.diff.background.context
+                                    }
                                     addedLineNumberBg={
                                       reviewed()
                                         ? theme.background.surface.overlay
