@@ -4,18 +4,16 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { type Tool } from "ai"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
-  ListRootsRequestSchema,
-  type LoggingMessageNotification,
-  LoggingMessageNotificationSchema,
-  type Tool as MCPToolDef,
-  ToolListChangedNotificationSchema,
-} from "@modelcontextprotocol/sdk/types.js"
+  Client,
+  type ClientOptions,
+  StreamableHTTPClientTransport,
+  SSEClientTransport,
+  UnauthorizedError,
+} from "@modelcontextprotocol/client"
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
+import { LoggingMessageNotificationSchema } from "@modelcontextprotocol/core"
+import { z } from "zod"
 import { Config } from "@/config/config"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -35,7 +33,9 @@ import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { McpCatalog } from "./catalog"
+import { McpCatalog, type MCPToolDef } from "./catalog"
+
+type LoggingMessageNotification = z.infer<typeof LoggingMessageNotificationSchema>
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -91,7 +91,7 @@ type MCPClient = Client
 
 function createClient(directory: string) {
   const client = new Client({ name: "opencode", version: InstallationVersion }, CLIENT_OPTIONS)
-  client.setRequestHandler(ListRootsRequestSchema, () =>
+  client.setRequestHandler("roots/list", () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )
   return client
@@ -440,12 +440,12 @@ export const layer = Layer.effect(
         )
       }
 
-      client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) =>
+      client.setNotificationHandler("notifications/message", (notification) =>
         bridge.promise(serverLog(name, notification.params)),
       )
 
       if (!client.getServerCapabilities()?.tools) return
-      client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+      client.setNotificationHandler("notifications/tools/list_changed", async () => {
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         const listed = await bridge.promise(McpCatalog.defs(client, timeout))
@@ -472,6 +472,11 @@ export const layer = Layer.effect(
         case "alert":
         case "emergency":
           return Effect.logError("MCP server log", fields)
+        default:
+          // fork: v2's logging level type widened past the 8-value RFC 5424
+          // enum the switch above covers (logging itself is @deprecated,
+          // SEP-2577) — never silently drop a server log line.
+          return Effect.logInfo("MCP server log", fields)
       }
     }
 
