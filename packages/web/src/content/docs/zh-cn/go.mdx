@@ -11,7 +11,7 @@ OpenCode Go 是一项低成本的订阅服务 —— **首月 5 美元**，之�
 
 Go 的工作方式与 OpenCode 中的任何其他提供商（provider）一样。订阅 OpenCode Go 后你将获得 API 密钥。它是 **完全可选** 的，并非使用 OpenCode 所必需的条件。
 
-它主要为国际用户设计，模型托管在美国、欧盟和新加坡，以确保稳定的全球访问。
+它主要面向国际用户，并提供稳定的全球访问。
 
 ---
 
@@ -52,6 +52,7 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **Grok 4.5**
 - **GLM-5.2**
 - **GLM-5.1**
+- **GPT 5.6 Luna**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -85,6 +86,7 @@ OpenCode Go 包含以下限制：
 | Model             | 每 5 小时请求数 | 每周请求数 | 每月请求数 |
 | ----------------- | --------------- | ---------- | ---------- |
 | Grok 4.5          | 120             | 300        | 600        |
+| GPT 5.6 Luna      | 2,050           | 5,100      | 10,250     |
 | GLM-5.2           | 880             | 2,150      | 4,300      |
 | GLM-5.1           | 880             | 2,150      | 4,300      |
 | Kimi K3           | 110             | 250        | 490        |
@@ -105,6 +107,7 @@ OpenCode Go 包含以下限制：
 
 - Grok 4.5 — 每次请求 1,100 个输入 token，71,500 个缓存 token，220 个输出 token
 - GLM-5.2/5.1 — 每次请求 700 个输入 token，52,000 个缓存 token，150 个输出 token
+- GPT 5.6 Luna — 每次请求 1,000 个输入 token，50,000 个缓存 token，220 个输出 token
 - Kimi K3 — 每次请求 1,050 个输入 token，76,500 个缓存 token，300 个输出 token
 - Kimi K2.7/K2.6 — 每次请求 870 个输入 token，55,000 个缓存 token，200 个输出 token
 - DeepSeek V4 Pro — 每次请求 750 个输入 token，82,000 个缓存 token，290 个输出 token
@@ -123,6 +126,8 @@ OpenCode Go 包含以下限制：
 | 模型                         | 输入   | 输出   | 缓存读取  | 缓存写入 | 使用额度 |
 | ---------------------------- | ------ | ------ | --------- | -------- | -------- |
 | Grok 4.5                     | $2.00  | $6.00  | $0.30     | -        | $15      |
+| GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02     | $0.25    | $15      |
+| GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04     | $0.50    | $15      |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26     | -        | $60      |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26     | -        | $60      |
 | Kimi K3                      | $3.00  | $15.00 | $0.30     | -        | $15      |
@@ -177,6 +182,7 @@ OpenCode Go 包含以下限制：
 | 模型              | 模型 ID           | 端点                                             | AI SDK 包                   |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -210,7 +216,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## 隐私保护
 
-该方案主要面向国际用户，模型托管在 US、EU 和 Singapore，以提供稳定的全球访问。我们的提供商遵循零保留政策，不会将您的数据用于模型训练。
+| 模型              | 模型训练 | 数据留存 |
+| ----------------- | -------- | -------- |
+| Grok 4.5          | 不使用   | 30 天    |
+| GPT 5.6 Luna      | 不使用   | 30 天    |
+| GLM-5.2           | 不使用   | 0 天     |
+| GLM-5.1           | 不使用   | 0 天     |
+| Kimi K3           | 不使用   | 0 天     |
+| Kimi K2.7 Code    | 不使用   | 0 天     |
+| Kimi K2.6         | 不使用   | 0 天     |
+| MiMo-V2.5-Pro     | 不使用   | 0 天     |
+| MiMo-V2.5         | 不使用   | 0 天     |
+| Qwen3.7 Max       | 不使用   | 0 天     |
+| Qwen3.7 Plus      | 不使用   | 0 天     |
+| Qwen3.6 Plus      | 不使用   | 0 天     |
+| MiniMax M3        | 不使用   | 0 天     |
+| MiniMax M2.7      | 不使用   | 0 天     |
+| DeepSeek V4 Pro   | 不使用   | 0 天     |
+| DeepSeek V4 Flash | 使用     | 无协议   |
+| Hy3               | 不使用   | 0 天     |
+
+- **Grok 4.5:** ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。[了解更多](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
+- **GPT 5.6 Luna:** 所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。[了解更多](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
 
 ---
 
