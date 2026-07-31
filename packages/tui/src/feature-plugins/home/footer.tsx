@@ -38,7 +38,7 @@ function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
 
   return (
-    <Show when={dimensions().height >= 12}>
+    <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
       <box
         width="100%"
         paddingTop={dimensions().height < 16 ? 0 : 1}

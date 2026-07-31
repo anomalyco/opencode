@@ -51,7 +51,7 @@ export function Logo() {
 
   return (
     <box>
-      {dimensions().height < 12 ? null : dimensions().width < 24 || dimensions().height < 20 ? (
+      {dimensions().height < 12 ? null : dimensions().width < 22 ? (
         <For each={go.right.slice(1)}>
           {(line) => <box flexDirection="row">{renderLine(line, theme.text.default, true)}</box>}
         </For>
