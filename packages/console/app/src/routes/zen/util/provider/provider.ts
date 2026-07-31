@@ -166,14 +166,21 @@ export interface CommonChunk {
   }
 }
 
-export function buildCostChunk(format: ZenData.Format, cost: string): string {
+export function buildCostChunk(format: ZenData.Format, cost: string, model: string): string {
   switch (format) {
     case "anthropic":
       return `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`
     case "openai":
       return `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`
     case "oa-compat":
-      return `data: ${JSON.stringify({ choices: [], cost })}\n\n`
+      return `data: ${JSON.stringify({
+        id: `chatcmpl-${crypto.randomUUID()}`,
+        object: "chat.completion.chunk",
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [],
+        cost,
+      })}\n\n`
     default:
       return `data: ${JSON.stringify({ type: "ping", cost })}\n\n`
   }
