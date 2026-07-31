@@ -14,7 +14,7 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
         settings: {
           ...baseSettings,
           ...mapAPIKey(settings),
-          ...mapProviderOptions("gemini", settings),
+          ...mapGoogleOptions(settings),
         },
       }
     case "@openrouter/ai-sdk-provider":
@@ -46,6 +46,22 @@ function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
 
 function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
   return typeof settings.apiKey === "string" ? { apiKey: settings.apiKey } : {}
+}
+
+function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
+  const input = settings.thinkingConfig
+  if (!isRecord(input)) return {}
+  const thinkingConfig = {
+    ...(typeof input.thinkingBudget === "number" ? { thinkingBudget: input.thinkingBudget } : {}),
+    ...(typeof input.includeThoughts === "boolean" ? { includeThoughts: input.includeThoughts } : {}),
+    ...(typeof input.thinkingLevel === "string" ? { thinkingLevel: input.thinkingLevel } : {}),
+  }
+  if (Object.keys(thinkingConfig).length === 0) return {}
+  return { providerOptions: { gemini: { thinkingConfig } } }
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {

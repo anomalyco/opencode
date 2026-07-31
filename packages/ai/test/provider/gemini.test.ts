@@ -41,7 +41,9 @@ describe("Gemini route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
-          providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } } },
+          providerOptions: {
+            gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false, thinkingLevel: "high" } },
+          },
         }),
       )
       const filtered = yield* compileRequest(
@@ -53,6 +55,7 @@ describe("Gemini route", () => {
       expect(prepared.body.generationConfig?.thinkingConfig).toEqual({
         thinkingBudget: 0,
         includeThoughts: false,
+        thinkingLevel: "high",
       })
       expect(filtered.body.generationConfig?.thinkingConfig).toEqual({ includeThoughts: false })
     }),

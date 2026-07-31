@@ -32,6 +32,7 @@ export interface OptionsInput {
   readonly thinkingConfig?: {
     readonly thinkingBudget?: number
     readonly includeThoughts?: boolean
+    readonly thinkingLevel?: "minimal" | "low" | "medium" | "high"
   }
 }
 
@@ -111,6 +112,7 @@ const GeminiToolConfig = Schema.Struct({
 const GeminiThinkingConfig = Schema.Struct({
   thinkingBudget: Schema.optional(Schema.Number),
   includeThoughts: Schema.optional(Schema.Boolean),
+  thinkingLevel: Schema.optional(Schema.String),
 })
 
 const GeminiGenerationConfig = Schema.Struct({
@@ -321,6 +323,7 @@ const resolveOptions = (request: LLMRequest) => {
   const thinkingConfig = {
     thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
     includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
+    thinkingLevel: typeof value.thinkingLevel === "string" ? value.thinkingLevel : undefined,
   }
   return {
     thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,

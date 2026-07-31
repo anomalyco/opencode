@@ -12,6 +12,19 @@ LLM.request({
 LLM.request({
   model,
   prompt: "Hello",
+  providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high", includeThoughts: true } } },
+})
+
+LLM.request({
+  model,
+  prompt: "Hello",
   // @ts-expect-error Gemini thinking budgets must be numeric.
   providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "large" } } },
+})
+
+LLM.request({
+  model,
+  prompt: "Hello",
+  // @ts-expect-error Gemini thinking levels use Google's supported effort values.
+  providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "maximum" } } },
 })
