@@ -45,6 +45,7 @@ const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 // server cannot recover their Location when settling them. Preserve the event Location
 // until MCP elicitations carry session ownership.
 export type FormWithLocation = FormInfo & { readonly location?: LocationRef }
+type ShellWithLocation = ShellInfo & { readonly location: LocationRef }
 
 type LocationData = {
   info?: LocationGetOutput
@@ -61,7 +62,7 @@ type LocationData = {
   websearch?: WebSearchProvider[]
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
-  shell?: Record<string, ShellInfo>
+  shell?: Record<string, ShellWithLocation>
   skill?: SkillInfo[]
 }
 
@@ -851,7 +852,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "shell.created":
           setStore("location", locationKey(event.location ?? defaultLocation()), (data) => ({
             ...data,
-            shell: { ...data?.shell, [event.data.info.id]: event.data.info },
+            shell: {
+              ...data?.shell,
+              [event.data.info.id]: { ...event.data.info, location: event.location ?? defaultLocation() },
+            },
           }))
           break
         case "shell.exited":
@@ -1106,7 +1110,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const key = locationKey(response.location)
             setStore("location", key, {
               ...store.location[key],
-              shell: Object.fromEntries(response.data.map((info) => [info.id, info])),
+              shell: Object.fromEntries(
+                response.data.map((info) => [
+                  info.id,
+                  {
+                    ...info,
+                    location: {
+                      directory: response.location.directory,
+                      workspaceID: response.location.workspaceID,
+                    },
+                  },
+                ]),
+              ),
             })
           })
         },

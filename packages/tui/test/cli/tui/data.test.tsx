@@ -1798,7 +1798,7 @@ test("keeps shell state scoped to location", async () => {
           cwd: requestDirectory ?? directory,
           shell: "/bin/sh",
           file: "/tmp/opencode-shell",
-          metadata: { sessionID: requestDirectory === other ? "ses_other" : "ses_default" },
+          metadata: { sessionID: "ses_shared" },
           time: { started: 1 },
         },
       ],
@@ -1829,6 +1829,10 @@ test("keeps shell state scoped to location", async () => {
 
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
     expect(data.shell.list({ directory: other }).map((shell) => shell.id)).toEqual(["sh_other"])
+    expect(data.shell.listBySession("ses_shared").map((shell) => [shell.id, shell.location.directory])).toEqual([
+      ["sh_default", directory],
+      ["sh_other", other],
+    ])
 
     events.emit({
       id: "evt_shell_created",
