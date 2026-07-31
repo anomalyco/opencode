@@ -9,6 +9,7 @@ import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
 import { PromptInputV2Composer } from "@/components/prompt-input-v2"
 import { PromptGitStatus, PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
+import { AgentModeBar } from "@/pages/session/composer/agent-mode-bar"
 import {
   PromptProjectAddButton,
   PromptProjectSelector,
@@ -42,6 +43,7 @@ export function NewSessionView(props: {
             <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />
+              <AgentModeBar />
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>

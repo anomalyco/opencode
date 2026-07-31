@@ -83,6 +83,8 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { ExplorerProvider, useExplorer } from "@/context/explorer"
+import { ProjectExplorerSidebar } from "./layout/explorer-sidebar"
 
 export default function LegacyLayout(props: ParentProps) {
   const serverSDK = useServerSDK()
@@ -905,6 +907,13 @@ export default function LegacyLayout(props: ParentProps) {
         category: language.t("command.category.view"),
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
+      },
+      {
+        id: "explorer.toggle",
+        title: language.t("command.fileTree.toggle"),
+        category: language.t("command.category.view"),
+        keybind: "mod+shift+e",
+        onSelect: () => layout.explorer.toggle(),
       },
       {
         id: "project.open",
@@ -2273,6 +2282,9 @@ export default function LegacyLayout(props: ParentProps) {
         <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
       </Show>
       <div class="flex-1 min-h-0 min-w-0 flex">
+        <ExplorerProvider>
+          <ProjectExplorerShell />
+        </ExplorerProvider>
         <div class="flex-1 min-h-0 relative">
           <div class="size-full relative overflow-x-hidden">
             <nav
@@ -2453,4 +2465,13 @@ function UpdateAvailableToast(props: {
   })
 
   return null
+}
+
+function ProjectExplorerShell() {
+  const explorer = useExplorer()
+  return (
+    <Show when={explorer.directory() !== undefined}>
+      <ProjectExplorerSidebar />
+    </Show>
+  )
 }
