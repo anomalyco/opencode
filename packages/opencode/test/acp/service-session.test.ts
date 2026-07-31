@@ -617,6 +617,99 @@ describe("ACP service sessions", () => {
     ])
   })
 
+  it("resumes a failed snapshot replay without duplicating its acknowledged prefix", async () => {
+    const acknowledged: string[] = []
+    let failSecond = true
+    const { service } = makeService(
+      [
+        assistantTextMessage("ses_loaded", "msg_first", "part_first", "first"),
+        assistantTextMessage("ses_loaded", "msg_second", "part_second", "second"),
+      ],
+      {
+        onSessionUpdate: (notification) => {
+          if (notification.update.sessionUpdate !== "agent_message_chunk") return
+          if (notification.update.content.type !== "text") return
+          const text = notification.update.content.text
+          if (text === "second" && failSecond) {
+            failSecond = false
+            throw new Error("connection write failed")
+          }
+          acknowledged.push(text)
+        },
+      },
+    )
+
+    await expect(
+      Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).rejects.toMatchObject({ _tag: "ACPServiceFailureError" })
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    expect(acknowledged).toEqual(["first", "second"])
+    service.close()
+  })
+
+  it("rejects a changed snapshot after a partial delivery without appending incompatible content", async () => {
+    const acknowledged: string[] = []
+    let reads = 0
+    let failSecond = true
+    const first = [
+      assistantTextMessage("ses_loaded", "msg_first", "part_first", "first"),
+      assistantTextMessage("ses_loaded", "msg_second", "part_second", "second"),
+    ]
+    const changed = [
+      assistantTextMessage("ses_loaded", "msg_first", "part_first", "changed"),
+      assistantTextMessage("ses_loaded", "msg_second", "part_second", "second"),
+    ]
+    const { service } = makeService([], {
+      messages: () => Promise.resolve({ data: reads++ === 0 ? first : changed }),
+      onSessionUpdate: (notification) => {
+        if (notification.update.sessionUpdate !== "agent_message_chunk") return
+        if (notification.update.content.type !== "text") return
+        const text = notification.update.content.text
+        if (text === "second" && failSecond) {
+          failSecond = false
+          throw new Error("connection write failed")
+        }
+        acknowledged.push(text)
+      },
+    })
+
+    await expect(
+      Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).rejects.toMatchObject({ _tag: "ACPServiceFailureError" })
+    await expect(
+      Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).rejects.toMatchObject({ _tag: "ACPServiceFailureError" })
+
+    expect(acknowledged).toEqual(["first"])
+    service.close()
+  })
+
+  it("resumes a failed tool snapshot after its acknowledged tool-call prefix", async () => {
+    const acknowledged: string[] = []
+    let failUpdate = true
+    const tool = runningTool("ses_loaded", "call_checkpoint", "latest")
+    const { service } = makeService([assistantToolMessage(tool)], {
+      onSessionUpdate: (notification) => {
+        const kind = notification.update.sessionUpdate
+        if (kind !== "tool_call" && kind !== "tool_call_update") return
+        if (kind === "tool_call_update" && failUpdate) {
+          failUpdate = false
+          throw new Error("connection write failed")
+        }
+        acknowledged.push(kind)
+      },
+    })
+
+    await expect(
+      Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).rejects.toMatchObject({ _tag: "ACPServiceFailureError" })
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    expect(acknowledged).toEqual(["tool_call", "tool_call_update"])
+    service.close()
+  })
+
   it("reconciles a fenced load snapshot with transient and later child deltas exactly once", async () => {
     const events = createEventStream()
     const coveredObserved = Promise.withResolvers<void>()
@@ -805,7 +898,6 @@ describe("ACP service sessions", () => {
     const replayedTool = assistantToolMessage(tool)
     let messageReads = 0
     let toolSent = false
-    let overflowSent = false
     const { service, updates } = makeService([], {
       eventBarrierPublisher: events.push,
       eventSubscriber: events.subscribe,
@@ -819,15 +911,7 @@ describe("ACP service sessions", () => {
         ) {
           toolSent = true
           events.push(toolPartUpdated(tool))
-          return
-        }
-        if (
-          !overflowSent &&
-          notification.update.sessionUpdate === "tool_call_update" &&
-          notification.update.toolCallId === "call_retry"
-        ) {
-          overflowSent = true
-          events.push(textPartDelta("ses_loaded", "msg_overflow", "part_overflow", "x".repeat(2 * 1024 * 1024)))
+          throw new Error("replay delivery failed")
         }
       },
     })

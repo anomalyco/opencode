@@ -318,7 +318,7 @@ export function make(input: {
 
           yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
           yield* sendAvailableCommands(input.connection, state.id, snapshot)
-          yield* replayMessages(events, messages)
+          yield* replayMessages(events, messages, replay)
           if (replay && events) {
             yield* Effect.tryPromise({
               try: () => events.finishReplay(replay, boundaryRevision, messages),
@@ -874,12 +874,23 @@ function makeUsageService(sdk: OpencodeClient) {
   })
 }
 
-function replayMessages(subscription: ACPEvent.Subscription | undefined, messages: SessionMessageResponse[]) {
+function replayMessages(
+  subscription: ACPEvent.Subscription | undefined,
+  messages: SessionMessageResponse[],
+  replay?: ACPEvent.ReplayWindow,
+) {
   if (!subscription) return Effect.void
-  return Effect.promise(async () => {
-    for (const message of messages) {
-      await subscription.replayMessage(message).catch(() => {})
-    }
+  return Effect.tryPromise({
+    try: async () => {
+      for (const message of messages) {
+        await subscription.replayMessage(message, replay)
+      }
+    },
+    catch: () =>
+      new ACPError.ServiceFailureError({
+        safeMessage: "Unable to replay session messages",
+        service: "session",
+      }),
   })
 }
 

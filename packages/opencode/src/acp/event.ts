@@ -24,6 +24,7 @@ import {
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+type SessionUpdateParams = Parameters<Connection["sessionUpdate"]>[0]
 type Listener = (event: Event) => Promise<void>
 type EventSubscriber = (listener: (event: Event) => void) => () => void
 type BufferedReplayEvent = {
@@ -34,15 +35,25 @@ type PendingLiveEvent = {
   readonly event: Event
   claimedByReplay: boolean
 }
+type UnattachedReplayJournal = {
+  readonly events: EventMessagePartDelta[]
+  readonly overflowedParts: Set<string>
+  bufferedBytes: number
+  overflowedUnknown: boolean
+}
 type ReplayGate = {
   readonly token: symbol
   revision: number
   readonly events: BufferedReplayEvent[]
   readonly deliveredRevisions: Set<number>
   readonly previousToolState: ToolReplayState
+  readonly snapshotNotifications: string[]
   draining: boolean
   drainTail: Promise<void>
+  readonly overflowedParts: Set<string>
   overflowed: boolean
+  invalidated: boolean
+  snapshotCursor: number
   bufferedBytes: number
 }
 type ToolReplayState = {
@@ -67,7 +78,9 @@ export type ReplayWindow = {
 
 const maximumBufferedReplayEvents = 10_000
 const maximumBufferedReplayBytes = 2 * 1024 * 1024
+const maximumUnattachedReplaySessions = 10_000
 const maximumDelayedSnapshotParts = 256
+const maximumSnapshotCheckpointUpdates = 10_000
 const textEncoder = new TextEncoder()
 const replayBarrierTimeoutMilliseconds = 5_000
 
@@ -93,11 +106,17 @@ export class Subscription {
   private readonly listeners = new Set<Listener>()
   private readonly replayGates = new Map<string, ReplayGate>()
   private readonly pendingLiveEvents = new Map<string, Set<PendingLiveEvent>>()
+  private readonly unattachedReplayJournals = new Map<string, UnattachedReplayJournal>()
   private readonly delayedSnapshotParts = new Map<string, Map<string, Part>>()
   private readonly replayBarriers = new Map<string, ReplayBarrier>()
+  private readonly failedSnapshotPrefixes = new Map<string, readonly string[]>()
   private readonly connectionWaiters = new Set<PromiseWithResolvers<void>>()
   private removeEventSubscription: (() => void) | undefined
   private eventTail = Promise.resolve()
+  private unattachedReplayEvents = 0
+  private unattachedReplayBytes = 0
+  private unattachedReplayOverflowParts = 0
+  private unattachedReplayCapacityExceeded = false
   private connected = false
   private started = false
 
@@ -147,6 +166,12 @@ export class Subscription {
     this.connectionWaiters.clear()
     for (const barrier of this.replayBarriers.values()) barrier.reached.reject(error)
     this.replayBarriers.clear()
+    this.unattachedReplayJournals.clear()
+    this.unattachedReplayEvents = 0
+    this.unattachedReplayBytes = 0
+    this.unattachedReplayOverflowParts = 0
+    this.unattachedReplayCapacityExceeded = false
+    this.failedSnapshotPrefixes.clear()
     this.delayedSnapshotParts.clear()
   }
 
@@ -166,15 +191,31 @@ export class Subscription {
       events: [],
       deliveredRevisions: new Set(),
       previousToolState: this.captureToolState(sessionID),
+      snapshotNotifications: [...(this.failedSnapshotPrefixes.get(sessionID) ?? [])],
       draining: false,
       drainTail: Promise.resolve(),
+      overflowedParts: new Set(),
       overflowed: false,
+      invalidated: false,
+      snapshotCursor: 0,
       bufferedBytes: 0,
     }
     this.replayGates.set(sessionID, gate)
+    const journal = this.unattachedReplayJournals.get(sessionID)
+    if (journal) {
+      this.unattachedReplayJournals.delete(sessionID)
+      this.unattachedReplayEvents -= journal.events.length
+      this.unattachedReplayBytes -= journal.bufferedBytes
+      this.unattachedReplayOverflowParts -= journal.overflowedParts.size
+      gate.overflowed = journal.overflowedUnknown
+      for (const key of journal.overflowedParts) gate.overflowedParts.add(key)
+      for (const event of journal.events) this.bufferReplayEvent(gate, event)
+    }
+    if (this.unattachedReplayCapacityExceeded) gate.overflowed = true
     for (const pending of this.pendingLiveEvents.get(sessionID) ?? []) {
       if (pending.claimedByReplay) continue
       pending.claimedByReplay = true
+      this.reconcileUnattachedJournal(pending.event)
       this.bufferReplayEvent(gate, pending.event)
     }
     return { sessionID, token }
@@ -200,7 +241,7 @@ export class Subscription {
       if (this.input.publishBarrier) this.input.publishBarrier(marker)
       else GlobalBus.emit("event", { directory: "global", payload: marker })
       const boundaryRevision = await reached.promise
-      if (gate.overflowed) throw new ReplayBoundaryError("event replay buffer exceeded its limit")
+      this.assertReplayCapacity(gate)
       return boundaryRevision
     } finally {
       clearTimeout(timeout)
@@ -215,6 +256,9 @@ export class Subscription {
   async finishReplay(window: ReplayWindow, boundaryRevision: number, snapshot: readonly SessionMessageResponse[] = []) {
     const gate = this.requireReplayGate(window)
     this.assertReplayCapacity(gate)
+    if (gate.snapshotCursor !== gate.snapshotNotifications.length) {
+      throw new ReplayBoundaryError("session replay snapshot changed after a partial delivery")
+    }
     const drainRevision = this.connected ? await this.replayBoundary(window) : gate.revision
     this.assertReplayCapacity(gate)
     const fenced = gate.events.filter((buffered) => buffered.revision <= drainRevision)
@@ -238,16 +282,16 @@ export class Subscription {
       } else if (buffered.revision <= boundaryRevision && buffered.event.type !== "message.part.delta") {
         continue
       }
-      await this.handleUnbuffered(buffered.event).catch(() => {})
-      gate.deliveredRevisions.add(buffered.revision)
+      await this.handleUnbuffered(buffered.event)
+      this.assertReplayCapacity(gate)
+      if (buffered.event.type === "message.part.updated" && reconciliation.contentUpdates.has(buffered.revision)) {
+        await this.replayUncoveredContent(buffered.event)
+        this.assertReplayCapacity(gate)
+      }
       if (buffered.event.type === "message.part.updated") {
         reconciliation.snapshotParts.delete(replayPartKey(buffered.event.properties.part))
       }
-      this.assertReplayCapacity(gate)
-      if (buffered.event.type === "message.part.updated" && reconciliation.contentUpdates.has(buffered.revision)) {
-        await this.replayUncoveredContent(buffered.event).catch(() => {})
-        this.assertReplayCapacity(gate)
-      }
+      gate.deliveredRevisions.add(buffered.revision)
     }
     this.assertReplayCapacity(gate)
     if (reconciliation.snapshotParts.size) {
@@ -267,11 +311,15 @@ export class Subscription {
       live.map((buffered) => buffered.event),
     )
     await this.releaseReplayGate(window, gate)
+    this.failedSnapshotPrefixes.delete(window.sessionID)
   }
 
   async abortReplay(window: ReplayWindow, options?: { reapplyDeliveredToolState?: boolean }) {
     const gate = this.replayGates.get(window.sessionID)
     if (!gate || gate.token !== window.token) return
+    if (gate.snapshotNotifications.length) {
+      this.failedSnapshotPrefixes.set(window.sessionID, [...gate.snapshotNotifications])
+    }
     // Snapshot replay mutates the tool caches before the replay transaction commits.
     // Restore their prior state and, when the attachment survived rollback, reapply
     // only live updates already projected.
@@ -283,6 +331,22 @@ export class Subscription {
         if (part.type === "tool") this.applyToolState(window.sessionID, part)
       }
     }
+    if (gate.invalidated) {
+      this.replayGates.delete(window.sessionID)
+      this.failedSnapshotPrefixes.delete(window.sessionID)
+      return
+    }
+    const attached = await Effect.runPromise(this.input.session.tryGet(window.sessionID))
+    if (!attached) {
+      this.replayGates.delete(window.sessionID)
+      for (const buffered of gate.events) {
+        if (gate.deliveredRevisions.has(buffered.revision) || buffered.event.type !== "message.part.delta") continue
+        this.retainUnattachedDelta(buffered.event)
+      }
+      for (const key of gate.overflowedParts) this.markUnattachedOverflowPart(window.sessionID, key)
+      if (gate.overflowed) this.markUnattachedOverflowUnknown(window.sessionID)
+      return
+    }
     gate.draining = true
     const events = gate.events.filter((buffered) => !gate.deliveredRevisions.has(buffered.revision))
     this.queueReplayDrain(
@@ -293,12 +357,16 @@ export class Subscription {
   }
 
   private assertReplayCapacity(gate: ReplayGate) {
-    if (gate.overflowed) {
+    if (gate.invalidated) {
+      throw new ReplayBoundaryError("session was deleted during replay")
+    }
+    if (gate.overflowed || gate.overflowedParts.size) {
       throw new ReplayBoundaryError("event replay buffer exceeded its limit")
     }
   }
 
   async handle(event: Event) {
+    this.reconcileUnattachedJournal(event)
     if (event.type === "permission.asked") return this.handleUnbuffered(event)
     const sessionID = handledSessionID(event)
     const replay = sessionID ? this.replayGates.get(sessionID) : undefined
@@ -314,6 +382,7 @@ export class Subscription {
   }
 
   private async handleLive(event: Event) {
+    this.reconcileUnattachedJournal(event)
     if (event.type === "message.part.updated" && this.consumeDelayedSnapshot(event)) return
     return this.handleUnbuffered(event)
   }
@@ -325,11 +394,184 @@ export class Subscription {
       gate.events.length >= maximumBufferedReplayEvents ||
       gate.bufferedBytes + eventBytes > maximumBufferedReplayBytes
     ) {
-      gate.overflowed = true
+      this.markReplayGateOverflow(gate, event)
       return
     }
     gate.bufferedBytes += eventBytes
     gate.events.push({ revision: gate.revision, event })
+  }
+
+  private retainUnattachedDelta(event: EventMessagePartDelta) {
+    const sessionID = event.properties.sessionID
+    const gate = this.replayGates.get(sessionID)
+    if (gate) {
+      if (gate.draining) {
+        this.markReplayGateOverflow(gate, event)
+        return
+      }
+      this.bufferReplayEvent(gate, event)
+      return
+    }
+
+    const journal = this.unattachedReplayJournal(sessionID)
+    if (!journal) return
+    const eventBytes = replayEventBytes(event)
+    if (
+      this.unattachedReplayEvents >= maximumBufferedReplayEvents ||
+      this.unattachedReplayBytes + eventBytes > maximumBufferedReplayBytes
+    ) {
+      this.markUnattachedOverflowPart(sessionID, overflowPartKey(event.properties.messageID, event.properties.partID))
+      return
+    }
+    journal.events.push(event)
+    journal.bufferedBytes += eventBytes
+    this.unattachedReplayEvents++
+    this.unattachedReplayBytes += eventBytes
+  }
+
+  private unattachedReplayJournal(sessionID: string) {
+    const existing = this.unattachedReplayJournals.get(sessionID)
+    if (existing) return existing
+    if (this.unattachedReplayJournals.size >= maximumUnattachedReplaySessions) {
+      this.unattachedReplayCapacityExceeded = true
+      return
+    }
+    const journal: UnattachedReplayJournal = {
+      events: [],
+      overflowedParts: new Set(),
+      bufferedBytes: 0,
+      overflowedUnknown: false,
+    }
+    this.unattachedReplayJournals.set(sessionID, journal)
+    return journal
+  }
+
+  private markUnattachedOverflowPart(sessionID: string, key: string) {
+    const journal = this.unattachedReplayJournal(sessionID)
+    if (!journal || journal.overflowedParts.has(key)) return
+    if (this.unattachedReplayOverflowParts >= maximumBufferedReplayEvents) {
+      journal.overflowedUnknown = true
+      return
+    }
+    journal.overflowedParts.add(key)
+    this.unattachedReplayOverflowParts++
+  }
+
+  private markUnattachedOverflowUnknown(sessionID: string) {
+    const journal = this.unattachedReplayJournal(sessionID)
+    if (journal) journal.overflowedUnknown = true
+  }
+
+  private markReplayGateOverflow(gate: ReplayGate, event: Event) {
+    if (event.type !== "message.part.delta") {
+      gate.overflowed = true
+      return
+    }
+    if (gate.overflowedParts.size >= maximumBufferedReplayEvents) {
+      gate.overflowed = true
+      return
+    }
+    gate.overflowedParts.add(overflowPartKey(event.properties.messageID, event.properties.partID))
+  }
+
+  private clearUnattachedJournal(sessionID: string, keep?: (event: EventMessagePartDelta) => boolean) {
+    const journal = this.unattachedReplayJournals.get(sessionID)
+    if (!journal) return
+    const removed = keep ? journal.events.filter((event) => !keep(event)) : journal.events
+    if (!removed.length && keep) return
+    const removedBytes = removed.reduce((total, event) => total + replayEventBytes(event), 0)
+    journal.events.splice(0, journal.events.length, ...(keep ? journal.events.filter(keep) : []))
+    journal.bufferedBytes -= removedBytes
+    this.unattachedReplayEvents -= removed.length
+    this.unattachedReplayBytes -= removedBytes
+    if (!keep || (!journal.events.length && !journal.overflowedParts.size && !journal.overflowedUnknown)) {
+      this.unattachedReplayOverflowParts -= journal.overflowedParts.size
+      this.unattachedReplayJournals.delete(sessionID)
+    }
+  }
+
+  private clearUnattachedOverflowParts(sessionID: string, keep: (key: string) => boolean) {
+    const journal = this.unattachedReplayJournals.get(sessionID)
+    if (!journal) return
+    for (const key of journal.overflowedParts) {
+      if (keep(key)) continue
+      journal.overflowedParts.delete(key)
+      this.unattachedReplayOverflowParts--
+    }
+    if (!journal.events.length && !journal.overflowedParts.size && !journal.overflowedUnknown) {
+      this.unattachedReplayJournals.delete(sessionID)
+    }
+  }
+
+  private clearReplayGateOverflowParts(sessionID: string, keep: (key: string) => boolean) {
+    const gate = this.replayGates.get(sessionID)
+    if (!gate) return
+    for (const key of gate.overflowedParts) {
+      if (!keep(key)) gate.overflowedParts.delete(key)
+    }
+  }
+
+  private clearReplayGateEvents(sessionID: string, keep: (event: Event) => boolean) {
+    const gate = this.replayGates.get(sessionID)
+    if (!gate) return
+    const removed = gate.events.filter((buffered) => !keep(buffered.event))
+    if (!removed.length) return
+    gate.events.splice(0, gate.events.length, ...gate.events.filter((buffered) => keep(buffered.event)))
+    gate.bufferedBytes -= removed.reduce((total, buffered) => total + replayEventBytes(buffered.event), 0)
+  }
+
+  private reconcileUnattachedJournal(event: Event) {
+    switch (event.type) {
+      case "message.part.updated": {
+        const part = event.properties.part
+        if ((part.type !== "text" && part.type !== "reasoning") || !partIsFinalized(part)) return
+        this.clearUnattachedJournal(event.properties.sessionID, (delta) => {
+          return delta.properties.messageID !== part.messageID || delta.properties.partID !== part.id
+        })
+        const key = overflowPartKey(part.messageID, part.id)
+        this.clearUnattachedOverflowParts(event.properties.sessionID, (candidate) => candidate !== key)
+        this.clearReplayGateOverflowParts(event.properties.sessionID, (candidate) => candidate !== key)
+        return
+      }
+      case "message.part.removed": {
+        this.clearUnattachedJournal(event.properties.sessionID, (delta) => {
+          return (
+            delta.properties.messageID !== event.properties.messageID ||
+            delta.properties.partID !== event.properties.partID
+          )
+        })
+        this.clearReplayGateEvents(event.properties.sessionID, (buffered) => {
+          return (
+            buffered.type !== "message.part.delta" ||
+            buffered.properties.messageID !== event.properties.messageID ||
+            buffered.properties.partID !== event.properties.partID
+          )
+        })
+        const key = overflowPartKey(event.properties.messageID, event.properties.partID)
+        this.clearUnattachedOverflowParts(event.properties.sessionID, (candidate) => candidate !== key)
+        this.clearReplayGateOverflowParts(event.properties.sessionID, (candidate) => candidate !== key)
+        return
+      }
+      case "message.removed": {
+        this.clearUnattachedJournal(
+          event.properties.sessionID,
+          (delta) => delta.properties.messageID !== event.properties.messageID,
+        )
+        this.clearReplayGateEvents(event.properties.sessionID, (buffered) => {
+          return buffered.type !== "message.part.delta" || buffered.properties.messageID !== event.properties.messageID
+        })
+        const prefix = overflowMessagePrefix(event.properties.messageID)
+        this.clearUnattachedOverflowParts(event.properties.sessionID, (candidate) => !candidate.startsWith(prefix))
+        this.clearReplayGateOverflowParts(event.properties.sessionID, (candidate) => !candidate.startsWith(prefix))
+        return
+      }
+      case "session.deleted": {
+        this.clearUnattachedJournal(event.properties.sessionID)
+        const gate = this.replayGates.get(event.properties.sessionID)
+        if (gate) gate.invalidated = true
+        return
+      }
+    }
   }
 
   private queueReplayDrain(gate: ReplayGate, events: readonly Event[]) {
@@ -406,21 +648,21 @@ export class Subscription {
     }
   }
 
-  async replayMessage(message: SessionMessageResponse) {
+  async replayMessage(message: SessionMessageResponse, window?: ReplayWindow) {
     if (message.info.role !== "assistant" && message.info.role !== "user") return
 
     const cwd = message.info.role === "assistant" ? message.info.path?.cwd : undefined
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
-        await this.handleToolPart(message.info.sessionID, part, cwd ?? process.cwd())
+        await this.handleToolPart(message.info.sessionID, part, cwd ?? process.cwd(), window)
         continue
       }
-      await this.replayContentPart(message, part)
+      await this.replayContentPart(message, part, window)
     }
   }
 
-  private async replayContentPart(message: SessionMessageResponse, part: Part) {
+  private async replayContentPart(message: SessionMessageResponse, part: Part, window?: ReplayWindow) {
     if (part.type !== "text" && part.type !== "file" && part.type !== "reasoning") return
 
     const sessionUpdate =
@@ -431,15 +673,44 @@ export class Subscription {
           : "agent_message_chunk"
 
     for (const chunk of partsToContentChunks([part as ReplayPart])) {
-      await this.input.connection.sessionUpdate({
-        sessionId: message.info.sessionID,
-        update: {
-          sessionUpdate,
-          messageId: message.info.id,
-          ...chunk,
+      await this.sendSessionUpdate(
+        {
+          sessionId: message.info.sessionID,
+          update: {
+            sessionUpdate,
+            messageId: message.info.id,
+            ...chunk,
+          },
         },
-      })
+        window,
+      )
     }
+  }
+
+  private async sendSessionUpdate(params: SessionUpdateParams, window?: ReplayWindow) {
+    if (!window) {
+      await this.input.connection.sessionUpdate(params)
+      return
+    }
+    const gate = this.requireReplayGate(window)
+    if (params.sessionId !== window.sessionID) {
+      throw new ReplayBoundaryError("session replay update targeted the wrong session")
+    }
+    const fingerprint = await replayNotificationFingerprint(params)
+    const expected = gate.snapshotNotifications[gate.snapshotCursor]
+    if (expected !== undefined) {
+      if (expected !== fingerprint) {
+        throw new ReplayBoundaryError("session replay snapshot changed after a partial delivery")
+      }
+      gate.snapshotCursor++
+      return
+    }
+    if (gate.snapshotNotifications.length >= maximumSnapshotCheckpointUpdates) {
+      throw new ReplayBoundaryError("session replay snapshot exceeded its checkpoint limit")
+    }
+    await this.input.connection.sessionUpdate(params)
+    gate.snapshotNotifications.push(fingerprint)
+    gate.snapshotCursor++
   }
 
   private receive(event: Event) {
@@ -526,7 +797,10 @@ export class Subscription {
   private async handlePartDelta(event: EventMessagePartDelta) {
     const props = event.properties
     const session = await Effect.runPromise(this.input.session.tryGet(props.sessionID))
-    if (!session) return
+    if (!session) {
+      this.retainUnattachedDelta(event)
+      return
+    }
 
     const known = await Effect.runPromise(
       this.input.session.tryGetPartMetadata({
@@ -633,8 +907,8 @@ export class Subscription {
     )
   }
 
-  private async handleToolPart(sessionId: string, part: ToolPart, cwd: string) {
-    await this.toolStart(sessionId, part, cwd)
+  private async handleToolPart(sessionId: string, part: ToolPart, cwd: string, window?: ReplayWindow) {
+    await this.toolStart(sessionId, part, cwd, window)
     const key = toolCacheKey(sessionId, part.callID)
 
     switch (part.state.status) {
@@ -643,98 +917,113 @@ export class Subscription {
         return
 
       case "running":
-        await this.runningTool(sessionId, part, cwd)
+        await this.runningTool(sessionId, part, cwd, window)
         return
 
       case "completed":
         this.clearTool(sessionId, part.callID)
-        await this.input.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...completedToolUpdate({
-              toolCallId: part.callID,
-              toolName: part.tool,
-              state: part.state,
-              cwd,
-            }),
+        await this.sendSessionUpdate(
+          {
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...completedToolUpdate({
+                toolCallId: part.callID,
+                toolName: part.tool,
+                state: part.state,
+                cwd,
+              }),
+            },
           },
-        })
+          window,
+        )
         return
 
       case "error":
         this.clearTool(sessionId, part.callID)
-        await this.input.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...errorToolUpdate({
-              toolCallId: part.callID,
-              toolName: part.tool,
-              state: part.state,
-              cwd,
-            }),
+        await this.sendSessionUpdate(
+          {
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...errorToolUpdate({
+                toolCallId: part.callID,
+                toolName: part.tool,
+                state: part.state,
+                cwd,
+              }),
+            },
           },
-        })
+          window,
+        )
         return
     }
   }
 
-  private async runningTool(sessionId: string, part: ToolPart, cwd: string) {
+  private async runningTool(sessionId: string, part: ToolPart, cwd: string, window?: ReplayWindow) {
     if (part.state.status !== "running") return
 
     const key = toolCacheKey(sessionId, part.callID)
     const output = part.tool === "bash" ? shellOutputSnapshot(part.state) : undefined
     if (output !== undefined) {
       if (this.shellSnapshots.get(key) === output) {
-        await this.input.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "tool_call_update",
-            ...duplicateRunningToolUpdate({
-              toolCallId: part.callID,
-              toolName: part.tool,
-              state: part.state,
-              cwd,
-            }),
+        await this.sendSessionUpdate(
+          {
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call_update",
+              ...duplicateRunningToolUpdate({
+                toolCallId: part.callID,
+                toolName: part.tool,
+                state: part.state,
+                cwd,
+              }),
+            },
           },
-        })
+          window,
+        )
         return
       }
       this.shellSnapshots.set(key, output)
     }
 
-    await this.input.connection.sessionUpdate({
-      sessionId,
-      update: {
-        sessionUpdate: "tool_call_update",
-        ...runningToolUpdate({
-          toolCallId: part.callID,
-          toolName: part.tool,
-          state: part.state,
-          output,
-          cwd,
-        }),
+    await this.sendSessionUpdate(
+      {
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call_update",
+          ...runningToolUpdate({
+            toolCallId: part.callID,
+            toolName: part.tool,
+            state: part.state,
+            output,
+            cwd,
+          }),
+        },
       },
-    })
+      window,
+    )
   }
 
-  private async toolStart(sessionId: string, part: ToolPart, cwd: string) {
+  private async toolStart(sessionId: string, part: ToolPart, cwd: string, window?: ReplayWindow) {
     const key = toolCacheKey(sessionId, part.callID)
     if (this.toolStarts.has(key)) return
     this.toolStarts.add(key)
-    await this.input.connection.sessionUpdate({
-      sessionId,
-      update: {
-        sessionUpdate: "tool_call",
-        ...pendingToolCall({
-          toolCallId: part.callID,
-          toolName: part.tool,
-          state: part.state,
-          cwd,
-        }),
+    await this.sendSessionUpdate(
+      {
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          ...pendingToolCall({
+            toolCallId: part.callID,
+            toolName: part.tool,
+            state: part.state,
+            cwd,
+          }),
+        },
       },
-    })
+      window,
+    )
   }
 
   private clearTool(sessionId: string, toolCallId: string) {
@@ -795,6 +1084,10 @@ function handledSessionID(event: Event) {
     case "message.part.updated":
       return event.properties.part.sessionID || event.properties.sessionID
     case "message.part.delta":
+      return event.properties.sessionID
+    case "message.part.removed":
+    case "message.removed":
+    case "session.deleted":
       return event.properties.sessionID
     default:
       return
@@ -895,6 +1188,19 @@ function reconcileReplay(
 
 function replayDeltaKey(sessionID: string, messageID: string, partID: string, field: string) {
   return `${sessionID}\u0000${messageID}\u0000${partID}\u0000${field}`
+}
+
+async function replayNotificationFingerprint(params: SessionUpdateParams) {
+  const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(JSON.stringify(params)))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+function overflowMessagePrefix(messageID: string) {
+  return `${messageID}\u0000`
+}
+
+function overflowPartKey(messageID: string, partID: string) {
+  return `${overflowMessagePrefix(messageID)}${partID}`
 }
 
 function replayPartKey(part: Part) {

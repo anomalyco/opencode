@@ -16,6 +16,29 @@ type Message = {
 }
 
 describe("ACP agent connection", () => {
+  describe.each(["list", "subscribe"] as const)("_opencode/subagents/%s params", (method) => {
+    it.each([
+      ["an unknown property", { rootSessionID: "root" }],
+      ["an empty root session ID", { rootSessionId: "" }],
+      ["a whitespace-only root session ID", { rootSessionId: " \t\n" }],
+      ["a non-string root session ID", { rootSessionId: 42 }],
+      ["null", null],
+      ["an array", []],
+    ])("returns invalid params for %s", async (_label, params) => {
+      await using harness = makeHarness()
+      await harness.events.started.promise
+
+      await harness.send({
+        jsonrpc: "2.0",
+        id: 1,
+        method: `_opencode/subagents/${method}`,
+        params,
+      })
+
+      expect((await harness.output.next()).error?.code).toBe(-32602)
+    })
+  })
+
   it("closes subagent extension attachments with the connection", async () => {
     await using harness = makeHarness()
     await harness.events.started.promise

@@ -8,6 +8,17 @@ import { Subagent } from "@/acp/subagent"
 const fixture = await Bun.file(`${import.meta.dir}/fixtures/subagents-v1.json`).json()
 
 describe("acp subagent wire contract", () => {
+  test.each([
+    ["an unknown property", { rootSessionID: "root" }],
+    ["an empty root session ID", { rootSessionId: "" }],
+    ["a whitespace-only root session ID", { rootSessionId: " \t\n" }],
+    ["a non-string root session ID", { rootSessionId: 42 }],
+    ["null", null],
+    ["an array", []],
+  ])("rejects list params containing %s", (_label, params) => {
+    expect(() => Subagent.decodeListParams(params)).toThrow()
+  })
+
   test("decodes and encodes the version-1 fixture", () => {
     expect(Subagent.decodeSnapshot(fixture.snapshot)).toEqual(fixture.snapshot)
     expect(Subagent.encodeSnapshot(fixture.snapshot)).toEqual(fixture.snapshot)

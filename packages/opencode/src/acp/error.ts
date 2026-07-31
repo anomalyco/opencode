@@ -46,7 +46,7 @@ export class UnsupportedOperationError extends Schema.TaggedErrorClass<Unsupport
 export class InvalidExtensionParamsError extends Schema.TaggedErrorClass<InvalidExtensionParamsError>()(
   "ACPInvalidExtensionParamsError",
   {
-    params: Schema.Record(Schema.String, Schema.Unknown),
+    params: Schema.Unknown,
   },
 ) {}
 

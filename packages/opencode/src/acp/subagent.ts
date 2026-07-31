@@ -44,7 +44,7 @@ export type ListParams = {
 }
 
 export const ListParams = Schema.Struct({
-  rootSessionId: Schema.optional(Schema.String),
+  rootSessionId: Schema.optional(Schema.String.check(Schema.isPattern(/\S/))),
 })
 
 export const DirectCost = Schema.Struct({
@@ -110,7 +110,7 @@ const decodeSnapshotSchema = Schema.decodeUnknownSync(Snapshot)
 const decodeUpdateSchema = Schema.decodeUnknownSync(Update)
 
 export function decodeListParams(input: unknown): ListParams {
-  return decodeListParamsSchema(input)
+  return decodeListParamsSchema(input, { onExcessProperty: "error" })
 }
 
 export function decodeSnapshot(input: unknown): Snapshot {
