@@ -623,6 +623,11 @@ export const ShellTool = Tool.define(
                     Effect.sync(() => tree.delete()),
                   )
                   const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
+                  if (tree.rootNode.hasError) {
+                    scan.patterns.clear()
+                    scan.patterns.add(params.command)
+                    scan.always.clear()
+                  }
                   if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
                   yield* ask(ctx, scan, params)
                 }),

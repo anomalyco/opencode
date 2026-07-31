@@ -289,6 +289,36 @@ describe("tool.shell permissions", () => {
   }
 
   for (const item of ps) {
+    it.live(`falls back to the raw command when PowerShell parsing fails [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              expect(
+                yield* fail(
+                  {
+                    command: "git diff --",
+                  },
+                  capture(requests, err),
+                ),
+              ).toMatchObject({ message: err.message })
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toEqual(["git diff --"])
+              expect(bashReq!.always).toEqual([])
+            }),
+          )
+        }),
+      ),
+    )
+  }
+
+  for (const item of ps) {
     it.live(`uses PowerShell cmdlet prefixes for always-allow prompts [${item.label}]`, () =>
       withShell(
         item,
