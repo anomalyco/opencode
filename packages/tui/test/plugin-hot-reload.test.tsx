@@ -3,7 +3,7 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createEventStream, createFetch } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
@@ -107,10 +107,16 @@ export default {
 
   await using app = await bootApp(tmp.path)
   const readA = () => readFile(markerA, "utf8")
-  await until(readA, (value) => value === "a1:setup\n")
-  await until(() => readFile(markerCrash, "utf8"), (value) => value === "setup\n")
+  expect(await until(readA, (value) => value === "a1:setup\n")).toBe("a1:setup\n")
+  // The crashing plugin genuinely loaded and registered its slot; without
+  // this the rest of the test would pass even if it never imported.
+  expect(await until(() => readFile(markerCrash, "utf8"), (value) => value === "setup\n")).toBe("setup\n")
 
   // The app survives the crashing slot: hot reload still works for others.
+  // The render-time boundary itself (fallback + toast) is not exercisable
+  // here: the test renderer never executes slot render bodies, so render
+  // containment is verified in the real TUI (see PluginBoundary in
+  // src/plugin/render.tsx and the demo runs on the PR).
   await writeFile(sourceA, lifecycleSource(markerA, "test.a", "a2"))
   expect(await until(readA, (value) => value?.includes("a2:setup") ?? false)).toBe("a1:setup\na1:cleanup\na2:setup\n")
 
@@ -154,6 +160,69 @@ test("editing one plugin leaves others untouched and a broken save keeps the las
     "b1:setup\nb1:cleanup\nb2:setup\nb2:cleanup\nb3:setup\n",
   )
   expect(await readA()).toBe("a1:setup\na1:cleanup\na2:setup\n")
+
+  process.emit("SIGHUP")
+  await app.task
+})
+
+test("a save whose setup throws restores the previous version", async () => {
+  await using tmp = await tmpdir()
+  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
+  await mkdir(directory, { recursive: true })
+  const marker = path.join(tmp.path, "a.txt")
+  const source = path.join(directory, "a.ts")
+  await writeFile(source, lifecycleSource(marker, "test.a", "a1"))
+
+  await using app = await bootApp(tmp.path)
+  const read = () => readFile(marker, "utf8")
+  expect(await until(read, (value) => value === "a1:setup\n")).toBe("a1:setup\n")
+
+  // The module imports fine but its setup throws — unlike an import failure,
+  // the swap has already torn down a1, so keep-last-good means restoring it.
+  await writeFile(
+    source,
+    `
+export default {
+  id: "test.a",
+  setup: async () => {
+    throw new Error("setup boom")
+  },
+}
+`,
+  )
+  expect(await until(read, (value) => value === "a1:setup\na1:cleanup\na1:setup\n")).toBe(
+    "a1:setup\na1:cleanup\na1:setup\n",
+  )
+
+  // Fixing the file swaps out the restored version normally.
+  await writeFile(source, lifecycleSource(marker, "test.a", "a2"))
+  expect(await until(read, (value) => value?.includes("a2:setup") ?? false)).toBe(
+    "a1:setup\na1:cleanup\na1:setup\na1:cleanup\na2:setup\n",
+  )
+
+  process.emit("SIGHUP")
+  await app.task
+})
+
+test("editing a symlinked plugin's target hot-reloads it", async () => {
+  await using tmp = await tmpdir()
+  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
+  await mkdir(directory, { recursive: true })
+  const marker = path.join(tmp.path, "a.txt")
+  // The real source lives outside the discovery directory; only a symlink
+  // is discovered. Edits land at the target, which emits no event in the
+  // plugin directory itself.
+  const target = path.join(tmp.path, "elsewhere", "a.ts")
+  await mkdir(path.dirname(target), { recursive: true })
+  await writeFile(target, lifecycleSource(marker, "test.a", "a1"))
+  await symlink(target, path.join(directory, "a.ts"))
+
+  await using app = await bootApp(tmp.path)
+  const read = () => readFile(marker, "utf8")
+  expect(await until(read, (value) => value === "a1:setup\n")).toBe("a1:setup\n")
+
+  await writeFile(target, lifecycleSource(marker, "test.a", "a2"))
+  expect(await until(read, (value) => value?.includes("a2:setup") ?? false)).toBe("a1:setup\na1:cleanup\na2:setup\n")
 
   process.emit("SIGHUP")
   await app.task

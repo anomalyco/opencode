@@ -140,6 +140,25 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     return true
   }
 
+  // Cleanup failures must not stop a swap or teardown, but they should not
+  // vanish either: the old generation may still own listeners or intervals.
+  const deactivateNoisily = (id: string) =>
+    deactivate(id).catch((error) =>
+      host.toast.show({ variant: "error", title: "Plugin", message: `${id}: cleanup failed: ${errorMessage(error)}` }),
+    )
+
+  // Every lifecycle mutation — reconciles, manual dialog toggles, shutdown —
+  // is serialized through one chain so generations can never interleave.
+  let loading = Promise.resolve()
+  const enqueue = <T,>(task: () => Promise<T>) => {
+    const result = loading.catch(() => undefined).then(task)
+    loading = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+
   // Hot-reload local plugin sources: watch the discovery directory and any
   // local entrypoints (see watch.ts for the mechanics), debounced into a
   // serialized reconcile so bursts of events rebuild the generation once.
@@ -147,10 +166,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   const watcher = createSourceWatcher(() => {
     clearTimeout(pending)
     pending = setTimeout(() => {
-      loading = loading.catch(() => undefined).then(() => reconcile())
       // Observe failures immediately: a plugin cleanup that throws would
       // otherwise surface as an unhandled rejection until the next trigger.
-      void loading.catch(() => undefined)
+      void enqueue(reconcile).catch(() => undefined)
     }, 100)
   })
   onCleanup(() => {
@@ -242,7 +260,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       await Promise.all(
         Object.entries(store.registrations)
           .filter(([, registration]) => registration.active)
-          .map(([id]) => deactivate(id).catch(() => undefined)),
+          .map(([id]) => deactivateNoisily(id)),
       )
       setStore("registrations", reconcileStore({}))
     }
@@ -261,24 +279,49 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
           )
         })
 
-    // Swap: cleanup failures are logged into states, never propagated, so one
+    // Swap: cleanup failures surface as a toast, never propagate, so one
     // broken plugin cannot take the rest of the generation down.
     const errors = new Map<string, string>()
     for (const id of changed) {
       const item = desired.get(id)!
       const registration = store.registrations[id]
-      if (!registration || registration.version !== item.version || !sameOptions(registration.options, item.options)) {
-        if (registration) await deactivate(id).catch(() => undefined)
+      const replaced =
+        !registration || registration.version !== item.version || !sameOptions(registration.options, item.options)
+      // Snapshot the running version before it is overwritten: an import
+      // failure keeps last-good in the resolve phase, and a setup failure
+      // must not cost the previous version either.
+      const fallback: Desired | undefined =
+        replaced && registration
+          ? {
+              plugin: registration.plugin,
+              source: registration.source,
+              target: registration.target,
+              version: registration.version,
+              options: registration.options,
+              enabled: registration.active,
+            }
+          : undefined
+      if (replaced) {
+        if (registration) await deactivateNoisily(id)
         // In-place replacement keeps the registration's key position, which
         // slot ordering (mode "replace" takes the last one) depends on.
         setStore("registrations", id, toRegistration(item))
       }
       if (!item.enabled) {
-        await deactivate(id).catch(() => undefined)
+        await deactivateNoisily(id)
         continue
       }
       const error = await activate(id).then(() => undefined, errorMessage)
-      if (error) errors.set(id, error)
+      if (!error) continue
+      errors.set(id, error)
+      if (!fallback) continue
+      setStore("registrations", id, toRegistration(fallback))
+      if (!fallback.enabled) continue
+      const restored = await activate(id).then(
+        () => true,
+        () => false,
+      )
+      if (restored) errors.set(id, `${error} (previous version still active)`)
     }
 
     const failedTargets = new Set(failures.map((failure) => failure.target))
@@ -304,14 +347,12 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     setStore("states", reconcileStore(states))
   }
   const slotItems = new WeakMap<Slot, { readonly id: string; readonly render: Slot }>()
-  let loading = Promise.resolve()
   createEffect(
     on(
       () => JSON.stringify(config.data.plugins ?? []),
       () => {
         npmFailures.clear()
-        loading = loading.catch(() => undefined).then(() => reconcile())
-        void loading.then(
+        void enqueue(reconcile).then(
           () => setStore("ready", true),
           () => setStore("ready", true),
         )
@@ -362,8 +403,10 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
             slotItems.set(render, item)
             return [item]
           }),
-        activate,
-        deactivate,
+        // Manual dialog toggles join the same chain as reconciles so a
+        // toggle mid-reload cannot mix registrations across generations.
+        activate: (id) => enqueue(() => activate(id)),
+        deactivate: (id) => enqueue(() => deactivate(id)),
       }}
     >
       {props.children}
