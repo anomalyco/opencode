@@ -12,7 +12,14 @@ LLM.request({
 LLM.request({
   model,
   prompt: "Hello",
-  providerOptions: { gemini: { thinkingConfig: { thinkingLevel: "high", includeThoughts: true } } },
+  providerOptions: {
+    gemini: {
+      cachedContent: "cachedContents/example",
+      safetySettings: [{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" }],
+      serviceTier: "future-tier",
+      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+    },
+  },
 })
 
 LLM.request({

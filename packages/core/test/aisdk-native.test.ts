@@ -5,6 +5,9 @@ describe("AISDKNative", () => {
   test("maps every Google thinking setting", () => {
     expect(
       AISDKNative.map("@ai-sdk/google", {
+        cachedContent: "cachedContents/example",
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+        serviceTier: "flex",
         thinkingConfig: {
           thinkingBudget: 0,
           includeThoughts: false,
@@ -17,6 +20,9 @@ describe("AISDKNative", () => {
       settings: {
         providerOptions: {
           gemini: {
+            cachedContent: "cachedContents/example",
+            safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+            serviceTier: "flex",
             thinkingConfig: {
               thinkingBudget: 0,
               includeThoughts: false,
@@ -34,6 +40,26 @@ describe("AISDKNative", () => {
         settings: { providerOptions: { gemini: { thinkingConfig } } },
       })
     }
+  })
+
+  test("maps Google request options without thinking settings", () => {
+    expect(
+      AISDKNative.map("@ai-sdk/google", {
+        cachedContent: "cachedContents/example",
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+        serviceTier: "future-tier",
+      }),
+    ).toMatchObject({
+      settings: {
+        providerOptions: {
+          gemini: {
+            cachedContent: "cachedContents/example",
+            safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+            serviceTier: "future-tier",
+          },
+        },
+      },
+    })
   })
 
   test("maps supported xAI settings", () => {

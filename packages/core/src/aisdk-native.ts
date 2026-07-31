@@ -50,14 +50,21 @@ function mapAPIKey(settings: Readonly<Record<string, unknown>>) {
 
 function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
   const input = settings.thinkingConfig
-  if (!isRecord(input)) return {}
   const thinkingConfig = {
-    ...(typeof input.thinkingBudget === "number" ? { thinkingBudget: input.thinkingBudget } : {}),
-    ...(typeof input.includeThoughts === "boolean" ? { includeThoughts: input.includeThoughts } : {}),
-    ...(typeof input.thinkingLevel === "string" ? { thinkingLevel: input.thinkingLevel } : {}),
+    ...(isRecord(input) && typeof input.thinkingBudget === "number" ? { thinkingBudget: input.thinkingBudget } : {}),
+    ...(isRecord(input) && typeof input.includeThoughts === "boolean"
+      ? { includeThoughts: input.includeThoughts }
+      : {}),
+    ...(isRecord(input) && typeof input.thinkingLevel === "string" ? { thinkingLevel: input.thinkingLevel } : {}),
   }
-  if (Object.keys(thinkingConfig).length === 0) return {}
-  return { providerOptions: { gemini: { thinkingConfig } } }
+  const options = {
+    ...(typeof settings.cachedContent === "string" ? { cachedContent: settings.cachedContent } : {}),
+    ...(Array.isArray(settings.safetySettings) ? { safetySettings: settings.safetySettings } : {}),
+    ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
+    ...(Object.keys(thinkingConfig).length > 0 ? { thinkingConfig } : {}),
+  }
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: { gemini: options } }
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
