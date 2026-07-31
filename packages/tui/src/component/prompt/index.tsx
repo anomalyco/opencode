@@ -1168,6 +1168,29 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  function expandPastedText(extmarkId: number) {
+    const extmark = input.extmarks.get(extmarkId)
+    const ref = store.extmarkToPart.get(extmarkId)
+    if (!extmark || ref?.type !== "pasted") return false
+    const part = store.prompt.pasted[ref.index]
+    if (!part) return false
+
+    setStore(
+      produce((draft) => {
+        draft.prompt.pasted.splice(ref.index, 1)
+        draft.extmarkToPart.delete(extmarkId)
+        draft.extmarkToPart.forEach((value, id) => {
+          if (value.type !== "pasted" || value.index < ref.index) return
+          draft.extmarkToPart.set(id, { type: "pasted", index: value.index - 1 })
+        })
+      }),
+    )
+    input.extmarks.delete(extmarkId)
+    input.setSelection(extmark.start, extmark.end)
+    input.insertText(part.text)
+    return true
+  }
+
   async function pasteInputText(text: string) {
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const pastedContent = normalizedText.trim()
@@ -1191,6 +1214,9 @@ export function Prompt(props: PromptProps) {
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
+      const match = store.prompt.pasted.findIndex((part) => part.text === pastedContent)
+      const extmark = Array.from(store.extmarkToPart).find(([, ref]) => ref.type === "pasted" && ref.index === match)
+      if (extmark && expandPastedText(extmark[0])) return
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
     }
@@ -1427,6 +1453,12 @@ export function Prompt(props: PromptProps) {
               onMouseDown={(r: MouseEvent) => {
                 if (props.disabled) return
                 r.target?.focus()
+                const extmark = input.extmarks
+                  .getAtOffset(input.cursorOffset)
+                  .find((item) => store.extmarkToPart.get(item.id)?.type === "pasted")
+                if (!extmark || !expandPastedText(extmark.id)) return
+                r.preventDefault()
+                r.stopPropagation()
               }}
               focusedBackgroundColor="transparent"
               cursorColor={props.disabled ? theme.background.surface.offset : theme.text.default}
