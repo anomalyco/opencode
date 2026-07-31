@@ -73,7 +73,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function update(mutation: (draft: TabsState) => void) {
       const scope = config.tabs?.scope ?? "global"
       void updateStore((draft) => mutation(scope === "cwd" ? (draft.cwd[paths.cwd] ??= empty()) : draft.global)).catch(
-        () => {},
+        // Failed writes lose only tab layout, but silence would hide tabs resetting every launch.
+        (error) => console.error("Failed to persist session tabs", error),
       )
     }
 
@@ -222,7 +223,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       const closed = closeSessionTab(state().tabs, target)
-      if (closed.tabs.length === state().tabs.length) return
+      if (closed.tabs === state().tabs) return
       const selected = navigate && current() === target
       const previous = selected
         ? moveSessionTabHistory(recordSessionTabHistory(history, target), closed.tabs, target, -1)
