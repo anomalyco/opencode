@@ -173,11 +173,18 @@ describe("Feishu chat gateway", () => {
     ])
     const initialStore = openGatewayStore(databasePath)
     const initialChannel = fakeChannel()
+    const initialRoute = deferred<{ handled: true; text: string; route: "inventory"; status: string }>()
+    const initialRouteStarted = deferred<void>()
     const initialGateway = createGateway({
       config: config(),
       feishu: initialChannel,
       chat: fakeChat(async (task) => completed(`回答:${task.promptText}`)),
-      inventoryRoute: { handle: () => new Promise(() => {}) },
+      inventoryRoute: {
+        handle() {
+          initialRouteStarted.resolve()
+          return initialRoute.promise
+        },
+      },
       store: initialStore,
       fallbackPath: join(directory, "fallback.jsonl"),
     })
@@ -194,6 +201,7 @@ describe("Feishu chat gateway", () => {
       replyTarget: "group_inventory",
       replyRootID: "group_inventory_1",
     })
+    await initialRouteStarted.promise
 
     const admitted = initialStore.recoverableTasks()[0]
     expect(admitted).toMatchObject({
@@ -203,6 +211,8 @@ describe("Feishu chat gateway", () => {
     expect(admitted?.answer).toBeUndefined()
 
     initialStore.close()
+    initialRoute.resolve({ handled: true, text: inventoryBody, route: "inventory", status: "ok" })
+    await initialGateway.stop()
 
     const recoveredStore = openGatewayStore(databasePath)
     const recoveredChannel = fakeChannel()
@@ -236,6 +246,16 @@ describe("Feishu chat gateway", () => {
     )
     expect(recoveredChannel.sent[0]?.text).not.toMatch(/@求精轴承|<at/)
     expect(recoveredChannel.sent[0]?.task.answer).not.toMatch(/@求精轴承|<at/)
+    const answerEvents = recoveredStore
+      .eventsForTrace(admitted!.traceID)
+      .filter((event) => event.eventType === "answer_recorded" || event.eventType === "answer_recorded_sentence")
+    expect(answerEvents.map((event) => event.content)).toEqual([
+      { outcome: "success", route: "inventory", text: inventoryBody },
+      { text: "6001ZZ（货架号：B-11-13）苏州精工轴承库存200，备注：现货\n" },
+      { text: "6301（货架号：B-1-1）宁波宏达轴承库存12\n" },
+      { text: "6401库存9，备注：2024-7-20" },
+    ])
+    answerEvents.forEach((event) => expect(JSON.stringify(event.content)).not.toMatch(/@求精轴承|<at/))
 
     await recoveredGateway.stop()
   })
@@ -415,4 +435,12 @@ async function createStore(secrets: readonly string[] = []) {
 function times() {
   let value = 1_000
   return () => value++
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => {
+    resolve = next
+  })
+  return { promise, resolve }
 }
