@@ -1,4 +1,4 @@
-import { ACCEPTED_FILE_EXTENSIONS, handleNotificationClick, type Platform, ServerConnection } from "@opencode-ai/app"
+import { ACCEPTED_FILE_EXTENSIONS, type Platform, ServerConnection } from "@opencode-ai/app"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
@@ -6,6 +6,7 @@ import pkg from "../../package.json"
 import { t } from "./i18n"
 import { getDesktopWindowID, type DesktopWindowState } from "./window-state"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
+import { windowFullscreen } from "./window-fullscreen"
 
 export function createDesktopPlatform(windowState: DesktopWindowState, updaterState: Accessor<UpdaterState>): Platform {
   const attachmentPaths = new WeakMap<File, string>()
@@ -105,8 +106,11 @@ export function createDesktopPlatform(windowState: DesktopWindowState, updaterSt
       })
     },
 
-    openLink(url: string) {
-      window.api.openLink(url)
+    openExternal(url: string) {
+      window.api.openExternal(url)
+    },
+    openLocalFile(url: string) {
+      window.api.openLocalFile(url)
     },
     async openPath(path: string, app?: string) {
       if (os === "windows") {
@@ -117,14 +121,6 @@ export function createDesktopPlatform(windowState: DesktopWindowState, updaterSt
     },
     async revealPath(path: string) {
       return window.api.revealPath(path)
-    },
-
-    back() {
-      window.history.back()
-    },
-
-    forward() {
-      window.history.forward()
     },
 
     storage,
@@ -146,7 +142,7 @@ export function createDesktopPlatform(windowState: DesktopWindowState, updaterSt
       window.api.relaunch()
     },
 
-    notify: async (title, description, href) => {
+    notify: async (title, description, onClick) => {
       const focused = await window.api.getWindowFocused().catch(() => document.hasFocus())
       if (focused) return
 
@@ -157,7 +153,7 @@ export function createDesktopPlatform(windowState: DesktopWindowState, updaterSt
       notification.onclick = () => {
         void window.api.showWindow()
         void window.api.setWindowFocus()
-        handleNotificationClick(href)
+        onClick?.()
         notification.close()
       }
     },
@@ -187,9 +183,9 @@ export function createDesktopPlatform(windowState: DesktopWindowState, updaterSt
       await window.api.setDisplayBackend(backend)
     },
 
-    parseMarkdown: (markdown: string) => window.api.parseMarkdownCommand(markdown),
-
     webviewZoom,
+
+    windowFullscreen,
 
     getPinchZoomEnabled: () => window.api.getPinchZoomEnabled(),
 

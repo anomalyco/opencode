@@ -8,6 +8,6 @@
 }
 
 [data-component="progress-circle-v2"] [data-slot="progress-circle-v2-progress"] {
-  stroke: var(--v2-icon-icon-muted);
+  stroke: var(--v2-icon-icon-base);
   transition: stroke-dashoffset 0.35s cubic-bezier(0.65, 0, 0.35, 1);
 }

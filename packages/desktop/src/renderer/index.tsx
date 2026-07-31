@@ -1,14 +1,11 @@
 // @refresh reload
 
 import {
-  ACCEPTED_FILE_EXTENSIONS,
   AppBaseProviders,
   AppInterface,
-  handleNotificationClick,
   loadLocaleDict,
   normalizeLocale,
   type Locale,
-  type Platform,
   PlatformProvider,
   ServerConnection,
   useCommand,
@@ -21,7 +18,7 @@ import { createEffect, createMemo, createResource, createSignal, onCleanup, onMo
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
-import { initializationData, initializationReady } from "./initialization"
+import { initializationData } from "./initialization"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
@@ -107,8 +104,6 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
     return next satisfies Locale
   }
 
-  const [windowCount] = createResource(() => window.api.getWindowCount())
-
   // Fetch sidecar credentials (available immediately, before health check)
   const [sidecar] = createResource(() => window.api.awaitInitialization())
 
@@ -121,10 +116,9 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-    if (link?.href) {
-      e.preventDefault()
-      platform.openLink(link.href)
-    }
+    if (!link?.href) return
+    e.preventDefault()
+    platform.openExternal(link.href)
   }
 
   function Inner() {
@@ -148,8 +142,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
   function App() {
     const wslServers = useWslServers()
     const ready = createMemo(
-      () =>
-        !defaultServer.loading && !sidecar.loading && !windowCount.loading && !locale.loading && !wslServers.isLoading,
+      () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading,
     )
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
