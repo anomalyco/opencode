@@ -1,10 +1,12 @@
 import { PluginContextProvider, type Plugin } from "@opencode-ai/plugin/tui"
 import {
   batch,
+  createComponent,
   createContext,
   createEffect,
   createMemo,
   For,
+  mergeProps,
   on,
   onCleanup,
   onMount,
@@ -584,7 +586,7 @@ export function PluginRoute(props: { readonly fallback: (id: string, name: strin
     if (route.data.type !== "plugin") return
     const render = plugins.route(route.data.id, route.data.name)
     if (!render) return props.fallback(route.data.id, route.data.name)
-    return render({ data: route.data.data })
+    return createComponent(render, { data: route.data.data })
   })
   return <>{content()}</>
 }
@@ -600,5 +602,16 @@ export function PluginSlot<Name extends SlotName>(props: {
     if (props.mode === "replace") return items.slice(-1)
     return items
   })
-  return <For each={renderers()}>{(render) => render(props.input)}</For>
+  return (
+    <For each={renderers()}>
+      {(render) =>
+        // Component semantics: the render body runs once and untracked, so
+        // signals and intervals created inside are stable, while props stay
+        // reactive through the merged getter. A bare render(props.input) call
+        // would run inside the host's tracked scope and re-execute the whole
+        // body (resetting plugin state) on every tracked read.
+        createComponent(render, mergeProps(() => props.input) as SlotMap[Name])
+      }
+    </For>
+  )
 }
