@@ -83,9 +83,9 @@ export interface DialogSelectOption<T = any> {
   onSelect?: (ctx: DialogContext) => void
 }
 
-export function dialogSelectFooterWidth(dialogWidth: number, titleWidth: number) {
+export function dialogSelectContentWidth(dialogWidth: number) {
   // Scroll padding, row padding, the gutter, title padding, and the separating gap.
-  return dialogWidth - 12 - titleWidth
+  return dialogWidth - 12
 }
 
 export type DialogSelectRef<T> = {

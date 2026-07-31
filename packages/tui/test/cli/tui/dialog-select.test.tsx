@@ -5,7 +5,10 @@ import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { createSignal, onCleanup, onMount } from "solid-js"
-import { dialogSelectFooterWidth, type DialogSelectOption } from "../../../src/ui/dialog-select"
+import { dialogWidth } from "../../../src/ui/dialog"
+import { dialogSelectContentWidth, type DialogSelectOption } from "../../../src/ui/dialog-select"
+import { truncateFilePath } from "../../../src/ui/file-path"
+import { stringWidth } from "../../../src/util/string-width"
 import { tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -147,8 +150,26 @@ async function mountSelect(root: string, initial: DialogSelectOption<string>[], 
   return { app, moved, replaceOptions, selected }
 }
 
-test("budgets footer width for all option row chrome", () => {
-  expect(dialogSelectFooterWidth(60, 7)).toBe(41)
+test("budgets option content for constrained and full-width large dialogs", () => {
+  expect(dialogSelectContentWidth(Math.min(dialogWidth("large"), 62 - 2)) - 7).toBe(41)
+  expect(dialogSelectContentWidth(Math.min(dialogWidth("large"), 100 - 2)) - 7).toBe(69)
+})
+
+test("renders the complete truncated footer within the option row", async () => {
+  await using tmp = await tmpdir()
+  const title = "Project"
+  const footer = truncateFilePath(
+    "/tmp/opencode/projects/a-very-long-project-directory/distinctive-tail.tsx",
+    dialogSelectContentWidth(dialogWidth("medium")) - stringWidth(title),
+  )
+  const select = await mountSelect(tmp.path, [{ title, footer, value: "project" }])
+
+  try {
+    await select.app.waitForFrame((frame) => frame.includes(footer))
+    expect(select.app.captureCharFrame()).toContain(footer)
+  } finally {
+    select.app.renderer.destroy()
+  }
 })
 
 test("renders actions with a current selection", async () => {
