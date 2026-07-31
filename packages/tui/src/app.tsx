@@ -5,7 +5,7 @@ import { Deferred, Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { ClipboardProvider, useClipboard } from "./context/clipboard"
+import { ClipboardProvider, useClipboard, type ClipboardService } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
@@ -148,6 +148,8 @@ export type TuiInput = {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  // Lets tests inject a deterministic clipboard for the dialog paste command.
+  clipboard?: ClipboardService
   pluginHost: TuiPluginHost
 }
 
@@ -278,7 +280,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                           skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
                         }}
                       >
-                        <ClipboardProvider>
+                        <ClipboardProvider value={input.clipboard}>
                           <OpencodeKeymapProvider keymap={keymap}>
                             <ArgsProvider {...input.args}>
                               <KVProvider>

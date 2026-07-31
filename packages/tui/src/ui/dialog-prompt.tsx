@@ -1,8 +1,10 @@
-import { TextareaRenderable, TextAttributes } from "@opentui/core"
+import { TextareaRenderable, TextAttributes, type KeyEvent, type Renderable } from "@opentui/core"
+import type { CommandContext } from "@opentui/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
+import { useClipboard } from "../context/clipboard"
 import { useTuiConfig } from "../config"
 import { useBindings, useCommandShortcut } from "../keymap"
 
@@ -21,6 +23,7 @@ export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
+  const clipboard = useClipboard()
   const submitShortcut = useCommandShortcut("dialog.prompt.submit")
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   let textarea: TextareaRenderable
@@ -28,6 +31,22 @@ export function DialogPrompt(props: DialogPromptProps) {
   function confirm() {
     if (props.busy) return
     props.onConfirm?.(textarea.plainText)
+  }
+
+  // Many Windows terminals deliver ctrl+v as a key event instead of a bracketed
+  // paste, and the clipboard-reading prompt.paste command only targets the main
+  // session prompt — so dialog fields (API keys in /connect, provider ids) had
+  // no way to paste at all. Bracketed paste still goes through the textarea's
+  // built-in default handler. Newlines are stripped like the single-line
+  // InputRenderable paste: every dialog prompt is a single-line field (return
+  // submits), and onConfirm consumers store the value verbatim.
+  async function paste(ctx: CommandContext<Renderable, KeyEvent>) {
+    ctx.event.preventDefault()
+    ctx.event.stopPropagation()
+    const content = await clipboard.read?.()
+    if (content?.mime !== "text/plain") return
+    if (!textarea || textarea.isDestroyed) return
+    textarea.insertText(content.data.replace(/[\n\r]/g, ""))
   }
 
   useBindings(() => ({
@@ -42,8 +61,15 @@ export function DialogPrompt(props: DialogPromptProps) {
         category: "Dialog",
         run: confirm,
       },
+      {
+        name: "dialog.prompt.paste",
+        title: "Paste into dialog prompt",
+        category: "Dialog",
+        hidden: true,
+        run: paste,
+      },
     ],
-    bindings: tuiConfig.keybinds.gather("dialog.prompt", ["dialog.prompt.submit"]),
+    bindings: tuiConfig.keybinds.gather("dialog.prompt", ["dialog.prompt.submit", "dialog.prompt.paste"]),
   }))
 
   onMount(() => {
