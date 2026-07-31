@@ -72,6 +72,7 @@ function LimitsGraph(props: { href: string }) {
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "270ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna (2x usage)", req: 4100, baseReq: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
+    { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
   ]
