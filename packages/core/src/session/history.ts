@@ -122,16 +122,15 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
-  const rows = yield* db
+  const row = yield* db
     .select()
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
     .orderBy(asc(SessionMessageTable.seq))
-    .limit(1)
-    .all()
+    .get()
     .pipe(Effect.orDie)
-  if (rows.length === 0) return undefined
-  const message = yield* decodeMessageRow(rows[0]).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  if (!row) return undefined
+  const message = yield* decodeMessageRow(row).pipe(Effect.catch(() => Effect.succeed(undefined)))
   return message?.type === "user" ? message : undefined
 })
 

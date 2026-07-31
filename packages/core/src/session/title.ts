@@ -39,8 +39,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
 const isUntitled = (session: SessionSchema.Info) =>
-  session.title === undefined ||
-  session.title === `New session - ${new Date(DateTime.toEpochMillis(session.time.created)).toISOString()}`
+  session.title === undefined || session.title === `New session - ${DateTime.formatIso(session.time.created)}`
 
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
@@ -105,8 +104,7 @@ const make = (dependencies: Dependencies) => {
       .map((line) => line.trim())
       .find((line) => line.length > 0)
     if (!title) return
-    const sequences = yield* dependencies.bus.sequences([sessionID])
-    const expectedSequence = (sequences.get(sessionID) ?? -1) + 1
+    const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
     const current = yield* dependencies.store.get(sessionID)
     if (!current || !isUntitled(current)) return
     yield* dependencies.bus
