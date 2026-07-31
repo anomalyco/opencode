@@ -6,7 +6,6 @@ import type {
   AgentsListOutput,
   SessionsListInput,
   SessionsListOutput,
-  SessionsCostOutput,
   SessionsCreateInput,
   SessionsCreateOutput,
   SessionsActiveOutput,
@@ -38,6 +37,7 @@ import type {
   SessionsInterruptOutput,
   SessionsMessageInput,
   SessionsMessageOutput,
+  SessionsCostOutput,
   MessagesListInput,
   MessagesListOutput,
   ModelsListInput,
@@ -305,11 +305,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      cost: (requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionsCostOutput }>(
-          { method: "GET", path: `/api/session/cost`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
-          requestOptions,
-        ).then((value) => value.data),
       create: (input?: SessionsCreateInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionsCreateOutput }>(
           {
@@ -496,6 +491,11 @@ export function make(options: ClientOptions) {
             declaredStatuses: [404, 400, 401],
             empty: false,
           },
+          requestOptions,
+        ).then((value) => value.data),
+      cost: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsCostOutput }>(
+          { method: "GET", path: `/api/session/cost`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ).then((value) => value.data),
     },
