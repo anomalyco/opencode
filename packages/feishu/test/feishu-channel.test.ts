@@ -189,6 +189,50 @@ describe("Feishu Channel adapter", () => {
     })
   })
 
+  test("sends group requester mentions as native send options without changing the answer text", async () => {
+    const body = "6001ZZ，2×28×8（货架号：A-2-1）上海涂众轴承库位77，备注：2026-07-11"
+    const namedGroup = new FakeChannel()
+    const namedGroupPort = await createFeishuChannelPort(
+      { appID: "cli_test", appSecret: "secret-canary" },
+      { createChannel: () => namedGroup },
+    )
+
+    await namedGroupPort.send(taskWithDelivery({ replyMentionID: "ou_user_1", replyMentionName: "求精轴承" }), body)
+    expect(namedGroup.lastSend).toEqual({
+      to: "oc_chat_1",
+      input: { text: body },
+      options: {
+        replyTo: "om_root_1",
+        replyInThread: true,
+        mentions: [{ key: "ou_user_1", openId: "ou_user_1", name: "求精轴承" }],
+      },
+    })
+
+    const unnamedGroup = new FakeChannel()
+    const unnamedGroupPort = await createFeishuChannelPort(
+      { appID: "cli_test", appSecret: "secret-canary" },
+      { createChannel: () => unnamedGroup },
+    )
+    await unnamedGroupPort.send(taskWithDelivery({ replyMentionID: "ou_user_1" }), body)
+    expect(unnamedGroup.lastSend).toEqual({
+      to: "oc_chat_1",
+      input: { text: body },
+      options: {
+        replyTo: "om_root_1",
+        replyInThread: true,
+        mentions: [{ key: "ou_user_1", openId: "ou_user_1" }],
+      },
+    })
+
+    const direct = new FakeChannel()
+    const directPort = await createFeishuChannelPort(
+      { appID: "cli_test", appSecret: "secret-canary" },
+      { createChannel: () => direct },
+    )
+    await directPort.send(taskWithDelivery({ replyRootID: undefined }), body)
+    expect(direct.lastSend).toEqual({ to: "oc_chat_1", input: { text: body }, options: undefined })
+  })
+
   test("sanitizes handshake failures before they leave the adapter", async () => {
     const fake = new FakeChannel()
     fake.connectError = new Error("credential secret-canary rejected")
@@ -208,7 +252,15 @@ class FakeChannel implements FeishuChannelClient {
   connectError?: Error
   sendError?: unknown
   sendResult = { messageId: "om_reply_default" }
-  lastSend?: { to: string; input: { text: string }; options?: { replyTo?: string; replyInThread?: boolean } }
+  lastSend?: {
+    to: string
+    input: { text: string }
+    options?: {
+      replyTo?: string
+      replyInThread?: boolean
+      mentions?: Array<{ key: string; openId?: string; userId?: string; name?: string; isBot?: boolean }>
+    }
+  }
   handlers: FeishuChannelHandlers = {}
 
   on(handlers: FeishuChannelHandlers) {
@@ -227,7 +279,15 @@ class FakeChannel implements FeishuChannelClient {
     this.disconnects++
   }
 
-  async send(to: string, input: { text: string }, options?: { replyTo?: string; replyInThread?: boolean }) {
+  async send(
+    to: string,
+    input: { text: string },
+    options?: {
+      replyTo?: string
+      replyInThread?: boolean
+      mentions?: Array<{ key: string; openId?: string; userId?: string; name?: string; isBot?: boolean }>
+    },
+  ) {
     this.lastSend = { to, input, options }
     if (this.sendError) throw this.sendError
     return this.sendResult
@@ -289,4 +349,8 @@ function task() {
     receiveSequence: 1,
     sendAttempts: 0,
   }
+}
+
+function taskWithDelivery(overrides: { replyRootID?: string; replyMentionID?: string; replyMentionName?: string }) {
+  return { ...task(), ...overrides }
 }

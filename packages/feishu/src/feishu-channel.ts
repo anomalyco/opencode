@@ -44,7 +44,17 @@ export type FeishuChannelClient = {
   send(
     to: string,
     input: { text: string },
-    options?: { replyTo?: string; replyInThread?: boolean },
+    options?: {
+      replyTo?: string
+      replyInThread?: boolean
+      mentions?: Array<{
+        key: string
+        openId?: string
+        userId?: string
+        name?: string
+        isBot?: boolean
+      }>
+    },
   ): Promise<{ messageId: string }>
 }
 export type FeishuChannelOptions = LarkChannelOptions
@@ -125,12 +135,22 @@ export async function createFeishuChannelPort(
       )
     },
     send(task, text) {
+      const options = {
+        ...(task.replyRootID ? { replyTo: task.replyRootID, replyInThread: true } : {}),
+        ...(task.replyMentionID
+          ? {
+              mentions: [
+                {
+                  key: task.replyMentionID,
+                  openId: task.replyMentionID,
+                  ...(task.replyMentionName ? { name: task.replyMentionName } : {}),
+                },
+              ],
+            }
+          : {}),
+      }
       return channel
-        .send(
-          task.replyTarget,
-          { text },
-          task.replyRootID ? { replyTo: task.replyRootID, replyInThread: true } : undefined,
-        )
+        .send(task.replyTarget, { text }, Object.keys(options).length ? options : undefined)
         .then(
           (result) => ({ kind: "delivered" as const, externalReplyID: result.messageId }),
           (error) => classifySendError(error),
