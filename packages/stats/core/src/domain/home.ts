@@ -1,8 +1,9 @@
 import { Client } from "@planetscale/database"
 import { Effect } from "effect"
 import { Resource } from "sst/resource"
+import { DatabaseError } from "../database"
 import type { GeoStatMetric } from "./geo"
-import type { ModelStatMetric } from "./model"
+import { ModelStatRepo, type ModelStatMetric } from "./model"
 import type { ProviderStatMetric } from "./provider"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
@@ -80,6 +81,28 @@ export type StatsLabData = {
   }
   usage: ModelUsagePoint[]
   models: LabUsageModelEntry[]
+}
+export type StatsModelComparisonEntry = {
+  updatedAt: string | null
+  model: string
+  slug: string
+  provider: string
+  author: string
+  rank: number | null
+  previousRank: number | null
+  totalModels: number
+  tokenShare: number
+  tokenChange: number
+  totals: StatsModelData["totals"]
+  usage: ModelUsagePoint[]
+}
+export type StatsModelComparisonInput = {
+  provider: string
+  model: string
+}
+export type StatsModelComparisonData = {
+  updatedAt: string | null
+  models: (StatsModelComparisonEntry | null)[]
 }
 export type StatsHomeData = {
   updatedAt: string | null
@@ -271,6 +294,35 @@ function dateValue(value: unknown) {
   return value instanceof Date ? value : new Date(stringValue(value))
 }
 
+export const getStatsModelsComparisonData: (
+  models: readonly StatsModelComparisonInput[],
+) => Effect.Effect<StatsModelComparisonData, DatabaseError, ModelStatRepo> = Effect.fn("StatsModelsComparison.getData")(
+  function* (models) {
+    const modelStats = yield* ModelStatRepo
+    const rows = yield* modelStats.listDaily()
+    const entries = models.map((model) => toComparisonEntry(buildStatsModelData(model.model, rows, [], model.provider)))
+    const latest = entries
+      .map((model) => model?.updatedAt)
+      .flatMap((value) => (value ? [dateTime(value)] : []))
+      .toSorted((a, b) => b - a)[0]
+    return {
+      updatedAt: latest === undefined ? null : new Date(latest).toISOString(),
+      models: entries,
+    }
+  },
+)
+
+export const getStatsModelComparisonData = (
+  firstProvider: string,
+  firstModel: string,
+  secondProvider: string,
+  secondModel: string,
+) =>
+  getStatsModelsComparisonData([
+    { provider: firstProvider, model: firstModel },
+    { provider: secondProvider, model: secondModel },
+  ])
+
 function buildStatsHomeData(
   modelRows: ModelStatMetric[],
   providerRows: ProviderStatMetric[],
@@ -445,6 +497,24 @@ function buildStatsLabData(providerParam: string, modelRows: ModelStatMetric[]):
       share: current.totalTokens > 0 ? round((item.totalTokens / current.totalTokens) * 100, 2) : 0,
       slug: modelSlug(item.model),
     })),
+  }
+}
+
+function toComparisonEntry(data: StatsModelData | null): StatsModelComparisonEntry | null {
+  if (!data) return null
+  return {
+    updatedAt: data.updatedAt,
+    model: data.model,
+    slug: data.slug,
+    provider: data.provider,
+    author: data.author,
+    rank: data.rank,
+    previousRank: data.previousRank,
+    totalModels: data.totalModels,
+    tokenShare: data.tokenShare,
+    tokenChange: data.tokenChange,
+    totals: data.totals,
+    usage: data.usage,
   }
 }
 
@@ -646,8 +716,8 @@ function buildModelTokenMix(aggregate: ModelAggregate): ModelMixEntry[] {
 }
 
 function buildModelPeers(peers: ModelAggregate[], rank: number, totalTokens: number): ModelPeerEntry[] {
-  const start = Math.max(0, Math.min(rank - 4, Math.max(peers.length - 7, 0)))
-  return peers.slice(start, start + 7).map((item, index) => ({
+  const start = Math.max(0, Math.min(rank - 5, Math.max(peers.length - 10, 0)))
+  return peers.slice(start, start + 10).map((item, index) => ({
     model: item.model,
     provider: item.provider,
     author: formatProvider(item.provider),

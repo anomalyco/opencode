@@ -9,9 +9,19 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
+import {
+  type BaseRouterProps,
+  Navigate,
+  Route,
+  Router,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import {
   type Component,
   createEffect,
@@ -28,11 +38,12 @@ import {
   Show,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider } from "@/context/server-sdk"
-import { ServerSyncProvider } from "@/context/server-sync"
+import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
@@ -52,10 +63,12 @@ import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
+import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
+import { createSessionLineage } from "@/pages/session/session-lineage"
 
-import { SessionPage, TargetSessionRouteContent } from "@/pages/session"
-import { NewHome, LegacyHome } from "@/pages/home"
+import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
+import { NewHome } from "@/pages/home"
+import { LegacyHome } from "@/pages/home/legacy-home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -88,10 +101,14 @@ const SessionRoute = () => {
     tabs.newDraft({ server: server.key, directory: sdk().directory }, search.prompt)
   })
 
-  return <SessionPage />
+  return (
+    <SessionRouteErrorBoundary sessionID={params.id}>
+      <SessionPage />
+    </SessionRouteErrorBoundary>
+  )
 }
 
-const TargetSessionRoute = () => {
+function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string; id: string }>()
   const global = useGlobal()
   const conn = createMemo(() => {
@@ -105,17 +122,49 @@ const TargetSessionRoute = () => {
     // re-resolves reactively instead); both rely on this key for server changes.
     <Show when={requireServerKey(params.serverKey)} keyed>
       <ServerSDKProvider server={conn}>
-        <ServerSyncProvider server={conn}>
-          <TargetSessionRouteContent />
-        </ServerSyncProvider>
+        <ServerSyncProvider server={conn}>{props.children}</ServerSyncProvider>
       </ServerSDKProvider>
     </Show>
   )
 }
 
+const TargetSessionRoute = () => (
+  <TargetServerRoute>
+    <TargetSessionRouteContent />
+  </TargetServerRoute>
+)
+
+function LegacyTargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  return (
+    <TargetServerRoute>
+      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
+        <LegacyTargetSessionRedirect />
+      </SessionRouteErrorBoundary>
+    </TargetServerRoute>
+  )
+}
+
+function LegacyTargetSessionRedirect() {
+  const params = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const sync = useServerSync()
+  const current = createSessionLineage(
+    () => params.id,
+    () => sync().session.lineage,
+  )
+
+  createEffect(() => {
+    const directory = current()?.session.directory
+    if (!directory) return
+    navigate(legacySessionHref(directory, params.id), { replace: true })
+  })
+
+  return null
+}
+
 // Wraps the non-draft routes. They are gated on (and keyed to) the globally selected
-// server via ServerKey, then provide the server-scoped shell (Permission/Layout/
-// Notification/Models + the visual Layout) for that server.
+// server via ServerKey, then provide the server-scoped shell for that server.
 function SelectedServerProviders(props: ParentProps) {
   return (
     <ServerKey>
@@ -136,6 +185,7 @@ function LegacyServerLayout(props: ParentProps<{ serverScoped?: JSX.Element }>) 
 
 function DraftRoute() {
   const [search] = useSearchParams<{ draftId?: string }>()
+  const settings = useSettings()
   const tabs = useTabs()
   return (
     <Show when={tabs.ready()}>
@@ -144,7 +194,14 @@ function DraftRoute() {
         keyed
         fallback={<Navigate href="/" />}
       >
-        {(draft) => <ResolvedDraftRoute draft={draft} />}
+        {(draft) => (
+          <Show
+            when={settings.general.newLayoutDesigns()}
+            fallback={<Navigate href={`/${base64Encode(draft.directory)}/session`} />}
+          >
+            <ResolvedDraftRoute draft={draft} />
+          </Show>
+        )}
       </Show>
     </Show>
   )
@@ -160,7 +217,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
-          <DraftServerScopedProviders directory={directory}>
+          <ModelsProvider directory={directory}>
             <SDKProvider directory={directory}>
               <DirectoryDataProvider directory={directory} server={serverKey}>
                 <DraftProviders>
@@ -168,7 +225,7 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
                 </DraftProviders>
               </DirectoryDataProvider>
             </SDKProvider>
-          </DraftServerScopedProviders>
+          </ModelsProvider>
         </ServerSyncProvider>
       </ServerSDKProvider>
     </Show>
@@ -180,13 +237,37 @@ function UiI18nBridge(props: ParentProps) {
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
 }
 
+function LayoutCompatibility(props: ParentProps) {
+  const global = useGlobal()
+  const navigate = useNavigate()
+  const server = useServer()
+  const settings = useSettings()
+
+  createEffect(() => {
+    if (settings.general.newLayoutDesigns()) return
+    const current = server.current
+    if (!current) return
+    const protocol = global.ensureServerCtx(current).sdk.protocolKind()
+    if (protocol !== "v2") return
+    const next = global.servers.list().find((s) => {
+      if (ServerConnection.key(s) === ServerConnection.key(current)) return false
+      return global.ensureServerCtx(s).sdk.protocolKind() !== "v2"
+    })
+    if (!next) return
+    navigate("/")
+    queueMicrotask(() => server.setActive(ServerConnection.key(next)))
+  })
+
+  return <>{props.children}</>
+}
+
 declare global {
   interface Window {
     __OPENCODE__?: {
       deepLinks?: string[]
     }
     api?: {
-      setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
+      setTitlebar?: (theme: { mode: "light" | "dark"; scheme?: "system" | "light" | "dark" }) => Promise<void>
       exportDebugLogs?: () => Promise<string>
     }
   }
@@ -262,24 +343,21 @@ function DesktopCommands() {
 // Server-scoped providers shared by the legacy shell and the top-level new shell.
 type ServerScopedShellProps = ParentProps<{
   directory?: () => string | undefined
-  sessionID?: () => string | undefined
   serverScoped?: JSX.Element
 }>
 
 function ServerScopedProviders(props: ServerScopedShellProps) {
   return (
-    <PermissionProvider directory={props.directory}>
-      <LayoutProvider>
-        {props.serverScoped}
-        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-      </LayoutProvider>
-    </PermissionProvider>
+    <LayoutProvider>
+      {props.serverScoped}
+      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
+    </LayoutProvider>
   )
 }
 
 function LegacyServerScopedShell(props: ServerScopedShellProps) {
   return (
-    <ServerScopedProviders directory={props.directory} sessionID={props.sessionID} serverScoped={props.serverScoped}>
+    <ServerScopedProviders directory={props.directory} serverScoped={props.serverScoped}>
       <LegacyLayout>{props.children}</LegacyLayout>
     </ServerScopedProviders>
   )
@@ -292,14 +370,6 @@ function NewAppLayout(props: ParentProps<{ serverScoped?: JSX.Element }>) {
         <NewLayout>{props.children}</NewLayout>
       </ServerScopedProviders>
     </SelectedServerProviders>
-  )
-}
-
-function DraftServerScopedProviders(props: ParentProps<{ directory?: () => string | undefined }>) {
-  return (
-    <PermissionProvider directory={props.directory}>
-      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-    </PermissionProvider>
   )
 }
 
@@ -320,8 +390,8 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
     <MetaProvider>
       <Font />
       <ThemeProvider
-        onThemeApplied={(_, mode) => {
-          void window.api?.setTitlebar?.({ mode })
+        onThemeApplied={(_, mode, scheme) => {
+          void window.api?.setTitlebar?.({ mode, scheme })
         }}
       >
         <LanguageProvider locale={props.locale}>
@@ -512,13 +582,15 @@ export function AppInterface(props: {
                 component={props.router ?? Router}
                 root={(routerProps) => (
                   <TabsProvider>
-                    <NotificationProvider>
-                      <ServerShell>
-                        <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
-                          <NewAppLayout serverScoped={props.serverScoped}>{routerProps.children}</NewAppLayout>
-                        </Show>
-                      </ServerShell>
-                    </NotificationProvider>
+                    <PermissionProvider>
+                      <NotificationProvider>
+                        <ServerShell>
+                          <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
+                            <NewAppLayout serverScoped={props.serverScoped}>{routerProps.children}</NewAppLayout>
+                          </Show>
+                        </ServerShell>
+                      </NotificationProvider>
+                    </PermissionProvider>
                   </TabsProvider>
                 )}
               >
@@ -542,7 +614,14 @@ function Routes(props: { serverScoped?: JSX.Element }) {
           <LegacyServerLayout serverScoped={props.serverScoped}>{routeProps.children}</LegacyServerLayout>
         )}
       >
-        <Show when={!settings.general.newLayoutDesigns()}>{<Route path="/" component={LegacyHome} />}</Show>
+        <Show when={!settings.general.newLayoutDesigns()}>
+          {
+            <>
+              <Route path="/" component={LegacyHome} />
+              <Route path="/server/:serverKey/session/:id" component={LegacyTargetSessionRoute} />
+            </>
+          }
+        </Show>
         <Route path="/:dir" component={DirectoryLayout}>
           <Route path="/" component={() => <Navigate href="session" />} />
           <Route path="/session/:id?" component={SessionRoute} />
@@ -550,15 +629,15 @@ function Routes(props: { serverScoped?: JSX.Element }) {
       </Route>
       <Show when={settings.general.newLayoutDesigns()}>
         <Route path="/" component={NewHome} />
-        <Route path="/:dir/session/:id" component={LegacyTargetSessionRoute} />
+        <Route path="/:dir/session/:id" component={NewLayoutLegacySessionRedirect} />
+        <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
       </Show>
       <Route path="/new-session" component={DraftRoute} />
-      <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
     </>
   )
 }
 
-function LegacyTargetSessionRoute() {
+function NewLayoutLegacySessionRedirect() {
   const server = useServer()
   const tabs = useTabs()
   const params = useParams<{ id: string }>()
