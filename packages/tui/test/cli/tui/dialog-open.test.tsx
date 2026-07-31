@@ -98,6 +98,61 @@ test("shows the current project and opens its root", async () => {
   }
 })
 
+test("preserves a moved project when sessions arrive", async () => {
+  let resolveSessions!: (response: Response) => void
+  const sessions = new Promise<Response>((resolve) => (resolveSessions = resolve))
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return sessions
+    if (url.pathname === "/api/project")
+      return json([
+        {
+          id: "proj_first",
+          canonical: "/tmp/opencode/first",
+          name: "First project",
+          time: { created: 1, updated: 2 },
+          sandboxes: [],
+        },
+        {
+          id: "proj_second",
+          canonical: "/tmp/opencode/second",
+          name: "Second project",
+          time: { created: 1, updated: 1 },
+          sandboxes: [],
+        },
+      ])
+    return undefined
+  })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Second project"))
+    fixture.app.mockInput.pressArrow("down")
+
+    resolveSessions(
+      json({
+        data: [
+          {
+            id: "ses_recent",
+            projectID: "proj_first",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 2, updated: 3 },
+            title: "Recent session",
+            location: { directory: "/tmp/opencode/first" },
+          },
+        ],
+        cursor: {},
+      }),
+    )
+    await fixture.app.waitForFrame((frame) => frame.includes("Recent session"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "home")
+
+    expect(fixture.route.data).toEqual({ type: "home", location: { directory: "/tmp/opencode/second" } })
+  } finally {
+    fixture.dispose()
+  }
+})
+
 async function renderOpen(
   handler: FetchHandler,
   beforeOpen?: (contexts: {

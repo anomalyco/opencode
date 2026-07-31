@@ -69,7 +69,6 @@ type LocationData = {
 type Store = {
   session: {
     info: Record<string, SessionInfo>
-    recent: SessionInfo[]
     // Family index keyed by a family's root (or furthest-known-ancestor when the
     // true root is not yet loaded). The value is a flat deduplicated list of every
     // session ID in that family, including the key itself once its info arrives.
@@ -134,7 +133,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     const [store, setStore] = createStore<Store>({
       session: {
         info: {},
-        recent: [],
         family: {},
         active: {},
         message: {},
@@ -293,7 +291,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           delete draft.input[sessionID]
           delete draft.permission[sessionID]
           delete draft.form[sessionID]
-          draft.recent = draft.recent.filter((session) => session.id !== sessionID)
           for (const [rootID, family] of Object.entries(draft.family)) {
             const next = family.filter((id) => id !== sessionID)
             if (next.length === 0) delete draft.family[rootID]
@@ -306,7 +303,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     function handleEvent(event: OpenCodeEvent) {
       switch (event.type) {
         case "session.created":
-          result.session.recent.invalidate()
           result.session.invalidate(event.data.sessionID)
           void result.session.sync(event.data.sessionID)
           // Band-aid: a newly created session starts empty, so live events can be its source of truth.
@@ -317,7 +313,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           sync.complete(`session.message:${event.data.sessionID}`)
           break
         case "session.deleted":
-          result.session.recent.invalidate()
           removeSession(event.data.sessionID)
           break
         case "session.usage.updated":
@@ -385,7 +380,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             if (store.session.info[event.data.sessionID])
               setStore("session", "info", event.data.sessionID, "title", event.data.title)
           })
-          setStore("session", "recent", (session) => session.id === event.data.sessionID, "title", event.data.title)
           break
         case "session.moved":
           if (store.session.info[event.data.sessionID]) {
@@ -394,16 +388,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
             setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
           }
-          setStore(
-            "session",
-            "recent",
-            (session) => session.id === event.data.sessionID,
-            produce((session) => {
-              session.location = event.data.location
-              if (event.data.projectID) session.projectID = event.data.projectID
-              session.subpath = event.data.subpath
-            }),
-          )
           break
         case "session.input.promoted": {
           removePending(event.data.sessionID, event.data.inputID)
@@ -745,7 +729,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.execution.succeeded":
         case "session.execution.failed":
         case "session.execution.interrupted":
-          result.session.recent.invalidate()
           setSessionActive(event.data.sessionID, "idle")
           message.update(event.data.sessionID, (draft) => {
             const currentAssistant = message.activeAssistant(draft)
@@ -932,20 +915,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         list() {
           return Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated)
         },
-        recent: {
-          list() {
-            return store.session.recent
-          },
-          sync() {
-            return sync.run("session.recent", async () => {
-              const response = await client.api.session.list({ limit: 50, order: "desc", parentID: null })
-              setStore("session", "recent", reconcile(response.data))
-            })
-          },
-          invalidate() {
-            sync.invalidate("session.recent")
-          },
-        },
         get(sessionID: string) {
           return store.session.info[sessionID]
         },
@@ -966,11 +935,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         },
         status(sessionID: string) {
           return store.session.active[sessionID] ?? "idle"
-        },
-        running(sessionID: string) {
-          const root = resolveRoot(sessionID)
-          const family = store.session.family[root]
-          return (family?.length ? family : [root]).some((id) => store.session.active[id] === "running")
         },
         input: {
           list(sessionID: string) {

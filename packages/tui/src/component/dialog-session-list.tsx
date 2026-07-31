@@ -49,10 +49,6 @@ export function DialogSessionList() {
         if (!data.location.info()) await data.location.sync()
         const current = data.location.info()
         if (!current) throw new Error("Location unavailable")
-        if (allProjects && !query) {
-          await data.session.recent.sync()
-          return { query, allProjects, sessions: data.session.recent.list(), error: undefined }
-        }
         const response = await client.api.session.list({
           ...(allProjects
             ? {}
@@ -159,11 +155,13 @@ export function DialogSessionList() {
         footer,
         bg: deleting ? theme.background.action.destructive.focused : undefined,
         fg: deleting ? theme.text.action.destructive.focused : undefined,
-        gutter: data.session.running(session.id)
-          ? () => <Spinner />
-          : slot === undefined
-            ? undefined
-            : () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,
+        gutter:
+          data.session.status(session.id) === "running" ||
+          data.session.family(session.id).some((id) => data.session.status(id) === "running")
+            ? () => <Spinner />
+            : slot === undefined
+              ? undefined
+              : () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,
       }
     }
 

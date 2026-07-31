@@ -1,10 +1,12 @@
 import path from "path"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
+import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
+import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
 import { useTheme, useThemes } from "../context/theme"
@@ -25,6 +27,7 @@ export function DialogOpen() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
+  const client = useClient()
   const location = useLocation()
   const sessionTabs = useSessionTabs()
   const themes = useThemes()
@@ -34,6 +37,7 @@ export function DialogOpen() {
   const dimensions = useTerminalDimensions()
   const shortcuts = Keymap.useShortcuts()
   const [filter, setFilter] = createSignal("")
+  const [selectionMoved, setSelectionMoved] = createSignal(false)
 
   void data.project.sync().catch(() => {})
 
@@ -41,10 +45,10 @@ export function DialogOpen() {
   // immediately from the local store and never blocks on the network.
   const [fetched] = createResource(
     () =>
-      data.session.recent
-        .sync()
-        .then(() => data.session.recent.list())
-        .catch(() => []),
+      client.api.session
+        .list({ limit: 50, order: "desc", parentID: null })
+        .then((response) => response.data)
+        .catch(() => [] as SessionInfo[]),
     { initialValue: [] },
   )
 
@@ -78,7 +82,9 @@ export function DialogOpen() {
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
       const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
-      const running = data.session.running(session.id)
+      const running =
+        data.session.status(session.id) === "running" ||
+        data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: withTimestampedFallback(session),
         value: { type: "session", sessionID: session.id } as OpenTarget,
@@ -132,6 +138,8 @@ export function DialogOpen() {
       options={options()}
       current={currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined}
       focusCurrent={false}
+      preserveSelection={selectionMoved()}
+      onMove={() => setSelectionMoved(true)}
       onFilter={setFilter}
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>

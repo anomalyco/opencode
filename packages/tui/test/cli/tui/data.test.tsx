@@ -169,51 +169,6 @@ test("proactively syncs project metadata newest first", async () => {
   }
 })
 
-test("caches recent sessions and reports unhydrated running sessions", async () => {
-  const events = createEventStream()
-  let requests = 0
-  const calls = createFetch((url) => {
-    if (url.pathname === "/api/session/active")
-      return json({ data: { ses_recent: { type: "running" } } })
-    if (url.pathname !== "/api/session" || url.searchParams.get("parentID") !== "null") return
-    requests++
-    return json({ data: [sessionInfo("ses_recent", undefined)], cursor: {} })
-  }, events)
-  let data!: ReturnType<typeof useData>
-
-  function Probe() {
-    data = useData()
-    return <box />
-  }
-
-  const app = await testRender(() => (
-    <TestTuiContexts>
-      <ClientProvider api={createApi(calls.fetch)}>
-        <ProjectProvider>
-          <DataProvider>
-            <Probe />
-          </DataProvider>
-        </ProjectProvider>
-      </ClientProvider>
-    </TestTuiContexts>
-  ))
-
-  try {
-    await data.session.recent.sync()
-    await data.session.recent.sync()
-    expect(requests).toBe(1)
-    expect(data.session.recent.list().map((session) => session.id)).toEqual(["ses_recent"])
-
-    await wait(() => data.session.running("ses_recent"))
-
-    data.session.recent.invalidate()
-    await data.session.recent.sync()
-    expect(requests).toBe(2)
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
 test("bootstraps MCP data for the TUI location", async () => {
   const events = createEventStream()
   const requests: URL[] = []

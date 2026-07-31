@@ -380,37 +380,6 @@ test("keeps the first row selected when current is only a marker", async () => {
   }
 })
 
-test("keeps an explicitly moved selection when options are prepended", async () => {
-  await using tmp = await tmpdir()
-  const project = { title: "project", value: "project" }
-  const select = await mountSelect(
-    tmp.path,
-    [
-      { title: "first project", value: "first-project" },
-      project,
-    ],
-    "current",
-    false,
-  )
-
-  try {
-    select.app.mockInput.pressArrow("down")
-    await select.app.waitFor(() => select.moved.at(-1) === "project")
-    select.replaceOptions([
-      { title: "recent session", value: "recent" },
-      { title: "first project", value: "first-project" },
-      project,
-    ])
-    await select.app.waitForFrame((frame) => frame.includes("recent session"))
-    select.app.mockInput.pressEnter()
-    await select.app.waitFor(() => select.selected.length === 1)
-
-    expect(select.selected).toEqual(["project"])
-  } finally {
-    select.app.renderer.destroy()
-  }
-})
-
 test("focuses a falsy current value", async () => {
   await using tmp = await tmpdir()
   const select = await mountSelect(
