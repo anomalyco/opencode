@@ -31,9 +31,9 @@ export type MemSnapshot = {
  * to the workflow range. Returns null when there isn't enough signal to compute.
  *
  * `maxFitCtx` is llama-skein's `/api/fit` `max_fit_ctx`: the largest hard n_ctx
- * that fits this host's VRAM, already capped at the model's TRAINED context. It
- * is a hard ceiling — without it this returned ~250k for a 32k-trained model.
- * 0/undefined means "ceiling unknown", in which case nothing is capped.
+ * that fits this host's VRAM. It is a hard ceiling — without it this returned
+ * ~250k for a model with lots of free VRAM. 0/undefined means "ceiling unknown",
+ * in which case nothing is capped.
  */
 export function computeRecommendedCtx(m: MemSnapshot, currentCtx: number, maxFitCtx?: number): number | null {
   if (m.kvEstMb <= 0 || currentCtx <= 0) return null

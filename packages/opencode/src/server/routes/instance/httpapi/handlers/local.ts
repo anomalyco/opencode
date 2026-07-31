@@ -281,11 +281,10 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const client = llamaClient(baseURL)
       // fork: last line of defence against writing a --ctx-size the model cannot
       // load. The TUI dialog annotates and refuses over-ceiling sizes, but this
-      // endpoint is reachable directly, and a 98304 patched onto a 32k-trained
-      // model is what wedged the backend. `max_fit_ctx` is llama-skein's
-      // VRAM-achievable hard n_ctx, already capped at the trained context. When it
-      // is unknown (0 — non-llama-skein backend, VRAM unreadable) there is nothing
-      // to judge against, so let the patch through rather than block a valid change.
+      // endpoint is reachable directly. `max_fit_ctx` is llama-skein's
+      // VRAM-achievable hard n_ctx. When it is unknown (0 — non-llama-skein
+      // backend, VRAM unreadable) there is nothing to judge against, so let the
+      // patch through rather than block a valid change.
       const fit = yield* Effect.tryPromise(() => client.getModelFit({ model: modelID })).pipe(
         Effect.orElseSucceed(() => null),
       )

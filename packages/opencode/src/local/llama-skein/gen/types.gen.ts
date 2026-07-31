@@ -454,7 +454,7 @@ export type ModelFit = {
      */
     under_configured?: boolean;
     /**
-     * Largest --ctx-size (hard n_ctx) that fits this host's VRAM, capped at the trained context. The grow target for an under-configured model. 0 when VRAM is unknown.
+     * Largest --ctx-size (hard n_ctx) that fits this host's VRAM. The grow target for an under-configured model. 0 when VRAM is unknown.
      */
     max_fit_ctx?: number;
     /**
