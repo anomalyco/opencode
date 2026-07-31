@@ -4,12 +4,16 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "start": "bun run src/index.ts",
     "test": "bun test",
     "test:mysql-contract": "bun test test/mysql-inventory.contract.test.ts",
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint -c ../../.oxlintrc.json src test"
   },
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "1.71.1",
+    "@opencode-ai/sdk-next": "workspace:*",
+    "effect": "catalog:",
     "mysql2": "3.14.4"
   },
   "devDependencies": {
