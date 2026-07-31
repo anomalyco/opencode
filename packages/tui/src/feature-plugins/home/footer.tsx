@@ -63,8 +63,8 @@ function View(props: { context: Plugin.Context }) {
   return (
     <box
       width="100%"
-      paddingTop={1}
-      paddingBottom={1}
+      paddingTop={dimensions().height < 16 ? 0 : 1}
+      paddingBottom={dimensions().height < 16 ? 0 : 1}
       paddingLeft={2}
       paddingRight={2}
       flexDirection="row"

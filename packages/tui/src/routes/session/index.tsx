@@ -1547,6 +1547,7 @@ function SessionGroupView(props: {
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const ctx = use()
   const local = useLocal()
+  const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const model = createMemo(
     () =>
@@ -1580,8 +1581,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <span style={{ fg: props.message.error ? theme.text.subdued : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
           </span>
-          <span style={{ fg: theme.text.subdued }}> · {model()}</span>
-          <Show when={duration()}>
+          <Show when={dimensions().width >= 28}>
+            <span style={{ fg: theme.text.subdued }}> · {model()}</span>
+          </Show>
+          <Show when={duration() && (dimensions().width < 28 || dimensions().width >= 36)}>
             <span style={{ fg: theme.text.subdued }}> · {Locale.duration(duration())}</span>
           </Show>
           <Show when={interrupted()}>

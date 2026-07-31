@@ -62,23 +62,17 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
               <Show when={status().length > 0}>{status().join(" · ")}</Show>
             </text>
           </Match>
-          <Match when={true}>
+          <Match when={dimensions().width >= 44}>
             <text fg={props.context.theme.text.default} flexShrink={0}>
-              {shortcut("agent.cycle")}
-              <Show when={dimensions().width >= 44}>
-                {" "}
-                <span style={{ fg: props.context.theme.text.subdued }}>agents</span>
-              </Show>
+              {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.subdued }}>agents</span>
             </text>
           </Match>
         </Switch>
-        <text fg={props.context.theme.text.default} flexShrink={0}>
-          {shortcut("command.palette.show")}
-          <Show when={dimensions().width >= 44}>
-            {" "}
-            <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
-          </Show>
-        </text>
+        <Show when={dimensions().width >= 44}>
+          <text fg={props.context.theme.text.default} flexShrink={0}>
+            {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
+          </text>
+        </Show>
       </Match>
       <Match when={props.mode === "shell"}>
         <text fg={props.context.theme.text.default} flexShrink={0}>

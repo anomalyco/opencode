@@ -1443,7 +1443,7 @@ export function Prompt(props: PromptProps) {
                       >
                         <text fg={fadeColor(theme.text.subdued, agentMetaAlpha())}>auto</text>
                       </Show>
-                      <Show when={store.mode === "normal"}>
+                      <Show when={store.mode === "normal" && dimensions().width >= 28}>
                         <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
                           <text fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>·</text>
                           <text
