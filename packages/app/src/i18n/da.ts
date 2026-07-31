@@ -296,6 +296,7 @@ export const dict = {
   "prompt.action.stop": "Stop",
 
   "prompt.toast.pasteUnsupported.title": "Ikke understøttet vedhæftning",
+  "prompt.toast.attachmentDuplicate.title": "Denne fil er allerede uploadet",
   "prompt.toast.pasteUnsupported.description": "Kun billeder, PDF'er eller tekstfiler kan vedhæftes her.",
   "prompt.toast.modelAgentRequired.title": "Vælg en agent og model",
   "prompt.toast.modelAgentRequired.description": "Vælg en agent og model før du sender en forespørgsel.",

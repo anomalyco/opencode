@@ -302,6 +302,7 @@ export const dict = {
   "prompt.action.stop": "Durdur",
 
   "prompt.toast.pasteUnsupported.title": "Desteklenmeyen ek",
+  "prompt.toast.attachmentDuplicate.title": "Bu dosya zaten yüklendi",
   "prompt.toast.pasteUnsupported.description": "Buraya yalnızca resimler, PDF'ler veya metin dosyaları eklenebilir.",
   "prompt.toast.modelAgentRequired.title": "Bir ajan ve model seçin",
   "prompt.toast.modelAgentRequired.description": "Komut göndermeden önce bir ajan ve model seçin.",

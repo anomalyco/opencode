@@ -17,7 +17,6 @@ import { CHANNEL } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
-import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import {
   finishFirstLaunchOnboarding,
@@ -292,7 +291,6 @@ const main = Effect.gen(function* () {
     isOldLayoutEligible,
     getDisplayBackend: async () => null,
     setDisplayBackend: async () => undefined,
-    parseMarkdown: async (markdown) => parseMarkdown(markdown),
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     updater,
