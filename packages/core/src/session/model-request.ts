@@ -100,19 +100,20 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
   )
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
+  const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
   const size = (data: string | Uint8Array) =>
     typeof data === "string" ? Buffer.byteLength(data) : Math.ceil(data.byteLength / 3) * 4
   const imageBytes = messages.reduce(
     (total, message) =>
       total +
       message.content.reduce((sum, part) => {
-        if (part.type === "media" && part.mediaType.startsWith("image/")) return sum + size(part.data)
+        if (part.type === "media" && isImage(part.mediaType)) return sum + size(part.data)
         if (part.type !== "tool-result" || part.result.type !== "content") return sum
         return (
           sum +
           part.result.value.reduce(
             (bytes: number, item: Content) =>
-              bytes + (item.type === "file" && item.mime.startsWith("image/") ? Buffer.byteLength(item.uri) : 0),
+              bytes + (item.type === "file" && isImage(item.mime) ? Buffer.byteLength(item.uri) : 0),
             0,
           )
         )
@@ -126,7 +127,7 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
     Message.make({
       ...message,
       content: message.content.map((part) => {
-        if (part.type === "media" && part.mediaType.startsWith("image/") && imageBytes - removed > IMAGE_BYTES_TARGET) {
+        if (part.type === "media" && isImage(part.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
           removed += size(part.data)
           return Message.text(IMAGE_REMOVED)
         }
@@ -136,7 +137,7 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
           result: {
             ...part.result,
             value: part.result.value.map((item: Content) => {
-              if (item.type !== "file" || !item.mime.startsWith("image/") || imageBytes - removed <= IMAGE_BYTES_TARGET)
+              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET)
                 return item
               removed += Buffer.byteLength(item.uri)
               return { type: "text" as const, text: IMAGE_REMOVED }
