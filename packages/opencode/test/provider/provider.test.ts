@@ -1862,8 +1862,9 @@ test("openai-compatible: discovers models from /v1/models", async () => {
 })
 
 test("openai-compatible: discovery completes when /api/fit hangs forever", async () => {
-  // fork: the fit fetch must share the /models 2s abort budget — a host that
-  // accepts TCP but never answers /api/fit must not stall discovery.
+  // fork: fit has its own (more generous) abort budget than /models, but it
+  // is still bounded — a host that accepts TCP but never answers /api/fit
+  // must not stall discovery indefinitely.
   const server = Bun.serve({
     port: 0,
     idleTimeout: 30,
@@ -1911,6 +1912,173 @@ test("openai-compatible: discovery completes when /api/fit hangs forever", async
     expect(elapsed).toBeLessThan(5000)
   } finally {
     await server.stop(true)
+  }
+})
+
+function fakeModel(overrides: { providerID: ProviderV2.ID; id: ModelV2.ID; context: number }): Provider.Model {
+  return {
+    id: overrides.id,
+    providerID: overrides.providerID,
+    name: overrides.id,
+    api: { id: overrides.id, url: "", npm: "@ai-sdk/openai-compatible" },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: overrides.context, input: undefined, output: 0 },
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    family: "",
+    release_date: "",
+    variants: {},
+  }
+}
+
+function fakeState(model: Provider.Model): Provider.State {
+  return {
+    models: new Map(),
+    providers: {
+      [model.providerID]: {
+        id: model.providerID,
+        name: model.providerID,
+        env: [],
+        npm: "@ai-sdk/openai-compatible",
+        api: "",
+        source: "config",
+        models: { [model.id]: model },
+      } as unknown as Provider.Info,
+    } as unknown as Record<ProviderV2.ID, Provider.Info>,
+    catalog: {} as Record<ProviderV2.ID, Provider.Info>,
+    sdk: new Map(),
+    modelLoaders: {},
+    varsLoaders: {},
+  }
+}
+
+test("adjustLocalContextOnOverflow: prompt-overflow 413 self-heals limit.context from X-Skein-Max-Safe-Ctx and does not retry inline", async () => {
+  // Real llama-skein contract from internal/server/promptguard.go — the
+  // handler used to gate on `type === "context_too_large"`, which this body
+  // never sends, so recovery never fired (that is the bug this locks in).
+  const providerID = ProviderV2.ID.make("local-llm")
+  const modelID = ModelV2.ID.make("qwopus3.6-27b-v2-mtp-q8-0")
+  const model = fakeModel({ providerID, id: modelID, context: 90112 })
+  const state = fakeState(model)
+  const res = new Response(
+    JSON.stringify({
+      error: {
+        message:
+          'prompt (~106692 tokens) exceeds the safe context for model "qwopus3.6-27b-v2-mtp-q8-0" on this host (max_safe_ctx 74711); trim the prompt and retry',
+        type: "exceed_context_size_error",
+        code: "prompt_over_max_safe_ctx",
+      },
+    }),
+    { status: 413, headers: { "X-Skein-Max-Safe-Ctx": "74711" } },
+  )
+  const shouldRetryInline = await Provider.adjustLocalContextOnOverflow(
+    state,
+    model,
+    "http://localhost:1/v1",
+    JSON.stringify({ model: modelID }),
+    res,
+  )
+  // The same oversized body would just 413 again — recovery is self-healing
+  // the cached limit and letting the reactive needsCompaction path
+  // (session/processor.ts) compact against the corrected budget, not a
+  // blind immediate retry.
+  expect(shouldRetryInline).toBe(false)
+  expect(state.providers[providerID].models[modelID].limit.context).toBe(74711)
+})
+
+test("adjustLocalContextOnOverflow: prompt-overflow 413 falls back to /api/fit when the header is missing", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname === "/api/fit/qwopus") {
+        return Response.json({ model: "qwopus", fit_level: "tight", max_safe_ctx: 74711, backend: "llamacpp" })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const providerID = ProviderV2.ID.make("local-llm")
+    const modelID = ModelV2.ID.make("qwopus")
+    const model = fakeModel({ providerID, id: modelID, context: 90112 })
+    const state = fakeState(model)
+    const res = new Response(
+      JSON.stringify({
+        error: { message: "prompt too large", type: "exceed_context_size_error", code: "prompt_over_max_safe_ctx" },
+      }),
+      { status: 413 }, // no X-Skein-Max-Safe-Ctx header
+    )
+    const shouldRetryInline = await Provider.adjustLocalContextOnOverflow(
+      state,
+      model,
+      `http://localhost:${server.port}/v1`,
+      JSON.stringify({ model: modelID }),
+      res,
+    )
+    expect(shouldRetryInline).toBe(false)
+    expect(state.providers[providerID].models[modelID].limit.context).toBe(74711)
+  } finally {
+    await server.stop()
+  }
+})
+
+test("adjustLocalContextOnOverflow: context_too_large (failed model load) still patches ctx and retries", async () => {
+  // Distinct from the prompt-overflow class above: proxy/proxymanager.go
+  // sends this when the model fails to LOAD because its configured ctx
+  // doesn't fit available memory — patching ctx_size and retrying the same
+  // request is the correct remedy here, unlike the prompt-overflow class.
+  let patched: unknown
+  const server = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      const url = new URL(req.url)
+      if (url.pathname === "/api/fit/qwen3") {
+        return Response.json({
+          model: "qwen3",
+          fit_level: "good",
+          max_fit_ctx: 131072,
+          max_safe_ctx: 131072,
+          backend: "llamacpp",
+        })
+      }
+      if (url.pathname === "/api/config/models/qwen3" && req.method === "PATCH") {
+        patched = await req.json()
+        return Response.json({})
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const providerID = ProviderV2.ID.make("local-llm")
+    const modelID = ModelV2.ID.make("qwen3")
+    const model = fakeModel({ providerID, id: modelID, context: 393216 })
+    const state = fakeState(model)
+    const res = new Response(
+      JSON.stringify({ error: { type: "context_too_large", max_ctx: 393216 } }),
+      { status: 413 },
+    )
+    const shouldRetryInline = await Provider.adjustLocalContextOnOverflow(
+      state,
+      model,
+      `http://localhost:${server.port}/v1`,
+      JSON.stringify({ model: modelID }),
+      res,
+    )
+    expect(shouldRetryInline).toBe(true)
+    expect(patched).toMatchObject({ ctx_size: 131072 })
+    // this class does not touch the cached prompt budget
+    expect(state.providers[providerID].models[modelID].limit.context).toBe(393216)
+  } finally {
+    await server.stop()
   }
 })
 

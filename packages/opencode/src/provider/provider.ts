@@ -1229,7 +1229,7 @@ export interface Interface {
   ) => Effect.Effect<boolean>
 }
 
-interface State {
+export interface State {
   models: Map<string, LanguageModelV3>
   providers: Record<ProviderV2.ID, Info>
   catalog: Record<ProviderV2.ID, Info>
@@ -1366,19 +1366,46 @@ function openAICompatibleDiscoveryEnabled(provider: NonNullable<Config.Info["pro
   return provider.discoverModels ?? provider.models === undefined
 }
 
+// fork: llama-skein's prompt-overflow contract (internal/server/promptguard.go
+// in the llama-skein repo). Single-sourced here so the two repos' error
+// strings can only drift in one place — see the contract-drift guard test.
+const LLAMA_SKEIN_PROMPT_OVERFLOW_TYPE = "exceed_context_size_error"
+const LLAMA_SKEIN_PROMPT_OVERFLOW_CODE = "prompt_over_max_safe_ctx"
+const LLAMA_SKEIN_MAX_SAFE_CTX_HEADER = "X-Skein-Max-Safe-Ctx"
+
 /**
- * fork: recover from a local backend rejecting a request because the model's
- * configured context is too large to load (llama-skein returns HTTP 413 with
- * `{ error: { type: "context_too_large", max_ctx } }`). Lowers the model's ctx
- * to the reported safe maximum via the control plane. Returns true if the
- * caller should retry the request. Never throws.
+ * fork: recover from a local backend rejecting a request with HTTP 413. Two
+ * distinct llama-skein failure classes share this status code:
+ *
+ *  - `type: "context_too_large"` (proxy/proxymanager.go, on a failed model
+ *    LOAD: the configured ctx doesn't fit available memory). The request
+ *    itself is fine — the model just needs to reload smaller. Patch the
+ *    backend's ctx_size down and retry once.
+ *  - `type: "exceed_context_size_error"`, `code: "prompt_over_max_safe_ctx"`
+ *    (internal/server/promptguard.go, on an already-loaded, correctly
+ *    configured model: THIS prompt is too big). Patching ctx_size would not
+ *    help — and can OOM a VRAM-tight host that has no headroom to grow into.
+ *    Trimming the prompt is a session-level concern this function cannot
+ *    perform, so it only self-heals the model's cached `limit.context` to
+ *    the authoritative ceiling and returns false; the 413 propagates as a
+ *    normal ContextOverflowError, and the existing reactive `needsCompaction`
+ *    path (session/processor.ts) compacts against the now-correct budget on
+ *    the next turn instead of repeating the same oversized request forever.
+ *
+ * Returns true only when the caller should retry the SAME request
+ * immediately (the model-misconfigured class). Never throws.
  */
-async function adjustLocalContextOnOverflow(baseURL: string, requestBody: string, res: Response): Promise<boolean> {
+export async function adjustLocalContextOnOverflow(
+  s: State,
+  model: Model,
+  baseURL: string,
+  requestBody: string,
+  res: Response,
+): Promise<boolean> {
   try {
-    const peek = (await res.clone().json()) as { error?: { type?: string; max_ctx?: number } }
-    if (peek?.error?.type !== "context_too_large") return false
-    const maxCtx = Number(peek.error.max_ctx)
-    if (!Number.isFinite(maxCtx) || maxCtx <= 0) return false
+    const peek = (await res.clone().json()) as {
+      error?: { type?: string; code?: string; max_ctx?: number }
+    }
     let modelID: string | undefined
     try {
       modelID = JSON.parse(requestBody)?.model
@@ -1387,20 +1414,50 @@ async function adjustLocalContextOnOverflow(baseURL: string, requestBody: string
     }
     if (!modelID) return false
     const ctrlBase = baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
-    const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
-    // The 413's max_ctx is often the model's NATIVE ceiling, which on a
-    // VRAM-constrained host does not load (this is what set z4 to 393216 >
-    // trained 262144 and OOM'd on reload). Cap the new ctx at max_fit_ctx — the
-    // largest hard n_ctx that fits this host's VRAM, capped at the trained
-    // context. (fit_level can't gate this: fit trusts any configured/hypothetical
-    // ctx and reports "perfect"/"marginal", never "no", so it would always pass.)
-    const probe = await client.getModelFit({ model: modelID }).catch(() => null)
-    const maxFit = probe?.data?.max_fit_ctx ?? 0
-    if (maxFit <= 0) return false // can't determine a safe ceiling — surface the overflow
-    const target = Math.min(maxCtx, maxFit)
-    if (target <= 0) return false
-    const patch = await client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size: target } })
-    return !patch.error
+
+    if (
+      peek?.error?.type === LLAMA_SKEIN_PROMPT_OVERFLOW_TYPE &&
+      peek?.error?.code === LLAMA_SKEIN_PROMPT_OVERFLOW_CODE
+    ) {
+      // Ceiling comes from the machine-readable header first — never the
+      // human-readable message — falling back to a live /api/fit probe.
+      // Never gated on max_fit_ctx: that field is legitimately absent for a
+      // VRAM-tight model whose KV budget is negative, and absence there says
+      // nothing about whether max_safe_ctx (a different computation) exists.
+      const headerCtx = Number(res.headers.get(LLAMA_SKEIN_MAX_SAFE_CTX_HEADER))
+      let safeCtx = Number.isFinite(headerCtx) && headerCtx > 0 ? headerCtx : undefined
+      if (safeCtx === undefined) {
+        const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
+        const probe = await client.getModelFit({ model: modelID }).catch(() => null)
+        const fromFit = numberFrom(probe?.data?.max_safe_ctx)
+        if (fromFit) safeCtx = fromFit
+      }
+      if (safeCtx === undefined) return false // can't determine a ceiling — surface the overflow
+      const live = s.providers[model.providerID]?.models[model.id]
+      if (live) live.limit = { ...live.limit, context: safeCtx }
+      return false
+    }
+
+    if (peek?.error?.type === "context_too_large") {
+      const maxCtx = Number(peek.error.max_ctx)
+      if (!Number.isFinite(maxCtx) || maxCtx <= 0) return false
+      const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
+      // The 413's max_ctx is often the model's NATIVE ceiling, which on a
+      // VRAM-constrained host does not load (this is what set z4 to 393216 >
+      // trained 262144 and OOM'd on reload). Cap the new ctx at max_fit_ctx — the
+      // largest hard n_ctx that fits this host's VRAM, capped at the trained
+      // context. (fit_level can't gate this: fit trusts any configured/hypothetical
+      // ctx and reports "perfect"/"marginal", never "no", so it would always pass.)
+      const probe = await client.getModelFit({ model: modelID }).catch(() => null)
+      const maxFit = probe?.data?.max_fit_ctx ?? 0
+      if (maxFit <= 0) return false // can't determine a safe ceiling — surface the overflow
+      const target = Math.min(maxCtx, maxFit)
+      if (target <= 0) return false
+      const patch = await client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size: target } })
+      return !patch.error
+    }
+
+    return false
   } catch {
     return false
   }
@@ -1487,15 +1544,24 @@ async function discoverOpenAICompatibleModels(input: {
   if (!base) return {}
   const url = `${base}/models`
   // fork: control-plane root for /api/fit lives one level up from the openai-compatible
-  // `/v1` path. Fetched in parallel under the same 2s abort budget as the
-  // /models fetch; empty for non-llama-skein backends or on timeout.
+  // `/v1` path. Fetched in parallel with, but under its own abort budget from,
+  // the /models fetch — sharing one controller meant a fit that would have
+  // succeeded a little after /models resolved was killed anyway, silently
+  // discarding a valid (smaller, safer) ceiling in favor of the raw reported
+  // context_length. Fit's own budget is a little more generous since it does
+  // real VRAM/quant math per model instead of returning a static listing;
+  // still bounded so a host that accepts TCP but never answers /api/fit
+  // cannot stall model discovery. Empty for non-llama-skein backends or on
+  // timeout — /models discovery always proceeds regardless of fit's outcome.
   const controlBase = base.replace(/\/v1$/, "")
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 2000)
-  const fitPromise = fetchLocalModelFit(controlBase, controller.signal)
+  const modelsController = new AbortController()
+  const modelsTimer = setTimeout(() => modelsController.abort(), 2000)
+  const fitController = new AbortController()
+  const fitTimer = setTimeout(() => fitController.abort(), 3000)
+  const fitPromise = fetchLocalModelFit(controlBase, fitController.signal)
   const apiKey = typeof input.provider.options?.apiKey === "string" ? input.provider.options.apiKey : undefined
   return fetch(url, {
-    signal: controller.signal,
+    signal: modelsController.signal,
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
   })
     .then((response) => {
@@ -1520,7 +1586,26 @@ async function discoverOpenAICompatibleModels(input: {
         const fit = fitByModel.get(modelID)
         const reportedContext =
           numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? existingModel?.limit.context ?? 0
-        const context = fit?.maxSafeCtx ?? reportedContext
+        // fork: when fit is unavailable (probe lost the race, non-llama-skein,
+        // fit_level "no"), do NOT blindly adopt the raw reported context if a
+        // previously-known (smaller) max_safe_ctx exists — a too-large budget
+        // silently wedges every request behind a 413 the client never
+        // recovers from (see adjustLocalContextOnOverflow), while a too-small
+        // one merely under-uses headroom. Prefer the conservative value and
+        // say so, rather than silently regressing to the larger number.
+        const previouslyKnownContext = existingModel?.limit.context
+        let context: number
+        if (fit?.maxSafeCtx) {
+          context = fit.maxSafeCtx
+        } else if (previouslyKnownContext && reportedContext > previouslyKnownContext) {
+          log.warn(
+            "openai-compatible model discovery: fit probe unavailable and reported context_length exceeds the previously-known context — keeping the conservative value",
+            { providerID: input.providerID, modelID, reportedContext, previouslyKnownContext },
+          )
+          context = previouslyKnownContext
+        } else {
+          context = reportedContext
+        }
         // contextMax is the enforced hard n_ctx used as the display ceiling.
         // Prefer fit's configured_ctx; when fit is unavailable fall back to the
         // backend's self-reported context_length (the fork emits this straight
@@ -1588,7 +1673,8 @@ async function discoverOpenAICompatibleModels(input: {
       return {}
     })
     .finally(() => {
-      clearTimeout(timer)
+      clearTimeout(modelsTimer)
+      clearTimeout(fitTimer)
     })
 }
 
@@ -2129,7 +2215,7 @@ export const layer = Layer.effect(
             typeof options["baseURL"] === "string" &&
             opts.method === "POST" &&
             typeof opts.body === "string" &&
-            (await adjustLocalContextOnOverflow(options["baseURL"] as string, opts.body, res))
+            (await adjustLocalContextOnOverflow(s, model, options["baseURL"] as string, opts.body, res))
           ) {
             res = await fetchFn(input, {
               ...opts,
