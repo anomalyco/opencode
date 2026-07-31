@@ -1,5 +1,7 @@
 export * as AISDKNative from "./aisdk-native"
 
+import { isRecord } from "@opencode-ai/ai/utils/record"
+
 export interface Mapping {
   readonly package: string
   readonly settings: Readonly<Record<string, unknown>>
@@ -65,10 +67,6 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
   }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: { gemini: options } }
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {
