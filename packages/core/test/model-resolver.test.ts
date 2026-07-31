@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { LLM, Model } from "@opencode-ai/ai"
+import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { Effect } from "effect"
 import { Headers } from "effect/unstable/http"
@@ -544,6 +545,37 @@ describe("ModelResolver", () => {
         ),
       )
     }),
+  )
+
+  it.effect("merges mapped OpenRouter headers and body with catalog overlays", () =>
+    ModelResolver.fromCatalogModel(
+      model(Provider.aisdk("@openrouter/ai-sdk-provider"), {
+        settings: {
+          appName: "OpenCode",
+          appUrl: "https://opencode.ai",
+          extraBody: { transforms: ["middle-out"], provider: { sort: "price" } },
+        },
+        headers: { "X-OpenRouter-Title": "Custom" },
+        body: { provider: { only: ["anthropic"] } },
+      }),
+      undefined,
+      {
+        loadPackage: () =>
+          Effect.succeed({
+            model: (modelID, settings) => {
+              expect(settings.headers).toEqual({
+                "HTTP-Referer": "https://opencode.ai",
+                "X-OpenRouter-Title": "Custom",
+              })
+              expect(settings.body).toEqual({
+                transforms: ["middle-out"],
+                provider: { sort: "price", only: ["anthropic"] },
+              })
+              return Model.make({ id: modelID, provider: "openrouter", route: OpenAIChat.route })
+            },
+          }),
+      },
+    ),
   )
 
   it.effect("loads supported AISDK catalog packages as native routes", () =>

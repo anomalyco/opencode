@@ -1,10 +1,13 @@
 export * as AISDKNative from "./aisdk-native"
 
 import { isRecord } from "@opencode-ai/ai/utils/record"
+import { Provider } from "./provider"
 
 export interface Mapping {
   readonly package: string
   readonly settings: Readonly<Record<string, unknown>>
+  readonly headers?: Readonly<Record<string, string>>
+  readonly body?: Readonly<Record<string, unknown>>
 }
 
 export function map(packageName: string | undefined, settings: Readonly<Record<string, unknown>>): Mapping | undefined {
@@ -20,14 +23,7 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
         },
       }
     case "@openrouter/ai-sdk-provider":
-      return {
-        package: "@opencode-ai/ai/providers/openrouter",
-        settings: {
-          ...baseSettings,
-          ...mapAPIKey(settings),
-          ...mapProviderOptions("openrouter", settings),
-        },
-      }
+      return mapOpenRouter(settings, baseSettings)
     case "@ai-sdk/xai":
       return {
         package: "@opencode-ai/ai/providers/xai",
@@ -69,6 +65,61 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
   return { providerOptions: { gemini: options } }
 }
 
+function mapOpenRouter(
+  settings: Readonly<Record<string, unknown>>,
+  baseSettings: Readonly<Record<string, unknown>>,
+): Mapping {
+  const headers =
+    Provider.mergeHeaders(
+      {
+        ...(typeof settings.appName === "string" ? { "X-OpenRouter-Title": settings.appName } : {}),
+        ...(typeof settings.appUrl === "string" ? { "HTTP-Referer": settings.appUrl } : {}),
+        ...(isStringRecord(settings.api_keys) && Object.keys(settings.api_keys).length > 0
+          ? { "X-Provider-API-Keys": JSON.stringify(settings.api_keys) }
+          : {}),
+      },
+      isStringRecord(settings.headers) ? settings.headers : undefined,
+    ) ?? {}
+  return {
+    package: "@opencode-ai/ai/providers/openrouter",
+    settings: {
+      ...baseSettings,
+      ...mapAPIKey(settings),
+      ...mapOpenRouterOptions(settings),
+    },
+    ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    ...(isRecord(settings.extraBody) ? { body: settings.extraBody } : {}),
+  }
+}
+
+function mapOpenRouterOptions(settings: Readonly<Record<string, unknown>>) {
+  const options = Object.fromEntries(
+    Object.entries(settings).filter(
+      ([key]) =>
+        ![
+          "apiKey",
+          "api_keys",
+          "appName",
+          "appUrl",
+          "authToken",
+          "baseURL",
+          "chunkTimeout",
+          "compatibility",
+          "extraBody",
+          "fetch",
+          "headers",
+          "timeout",
+        ].includes(key),
+    ),
+  )
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: { openrouter: options } }
+}
+
+function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "string")
+}
+
 function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {
   const options = {
     ...(typeof settings.reasoningEffort === "string" ? { reasoningEffort: settings.reasoningEffort } : {}),
@@ -77,14 +128,4 @@ function mapXAIOptions(settings: Readonly<Record<string, unknown>>) {
   }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: { xai: options } }
-}
-
-function mapProviderOptions(namespace: string, settings: Readonly<Record<string, unknown>>) {
-  const values = Object.fromEntries(
-    Object.entries(settings).filter(
-      ([key]) => !["apiKey", "authToken", "baseURL", "chunkTimeout", "fetch", "timeout"].includes(key),
-    ),
-  )
-  if (Object.keys(values).length === 0) return {}
-  return { providerOptions: { [namespace]: values } }
 }

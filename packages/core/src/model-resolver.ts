@@ -96,9 +96,7 @@ const providerHeaders = (model: Info) => {
   return Provider.mergeHeaders(generated.size === 0 ? undefined : Object.fromEntries(generated), model.headers)
 }
 
-const providerOptions = (
-  model: Info,
-): { readonly [key: string]: { readonly [key: string]: unknown } } | undefined => {
+const providerOptions = (model: Info): { readonly [key: string]: { readonly [key: string]: unknown } } | undefined => {
   if (!Provider.isAISDK(model.package) || model.settings === undefined) return undefined
   const { apiKey: _, baseURL: _baseURL, ...settings } = model.settings
   if (Object.keys(settings).length === 0) return undefined
@@ -202,8 +200,8 @@ export const fromCatalogModel = (
     const settings = {
       ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
       ...nativeCredentialSettings(specifier, credential),
-      headers: resolved.headers,
-      body: resolved.body,
+      headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
+      body: Provider.mergeOverlay(mapping?.body, resolved.body),
       limits: { context: resolved.limit.context, input: resolved.limit.input, output: resolved.limit.output },
     }
     return yield* Effect.try({
@@ -266,10 +264,7 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
-    const load = Effect.fn("ModelResolver.resolveModel")(function* (
-      selected: Info,
-      variant?: VariantID,
-    ) {
+    const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* catalog.provider.get(selected.providerID)
       const connection = yield* integrations.connection.active(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),

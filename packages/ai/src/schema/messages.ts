@@ -124,6 +124,7 @@ export const ToolCallPart = Object.assign(
     name: Schema.String,
     input: Schema.Unknown,
     providerExecuted: Schema.optional(Schema.Boolean),
+    cache: Schema.optional(CacheHint),
     metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolCall" }),
@@ -168,6 +169,7 @@ export const ReasoningPart = Schema.Struct({
   type: Schema.Literal("reasoning"),
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
+  cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Reasoning" })
