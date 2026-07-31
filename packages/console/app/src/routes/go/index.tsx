@@ -68,14 +68,10 @@ function LimitsGraph(props: { href: string }) {
     { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
     { id: "kimi-k3", name: "Kimi K3", req: 110, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
-    { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
-    { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
-    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 3250, d: "240ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "270ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna (2x usage)", req: 4100, baseReq: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
-    { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
   ]
@@ -84,7 +80,7 @@ function LimitsGraph(props: { href: string }) {
   const left = 40
   const right = 60
   const top = 18
-  const bottom = 18
+  const bottom = 44
   const plot = w - left - right
 
   const ratio = (n: number) => n / baseline
@@ -93,6 +89,24 @@ function LimitsGraph(props: { href: string }) {
   const base = 24
   const p = 2.2
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
+  const ticks = [1, 5, 10, 25, 50, 100, 250].filter((t) => t <= rmax)
+  const labels = (() => {
+    const set = new Set<number>()
+    let last = -Infinity
+    for (const t of ticks) {
+      if (t === 1) {
+        set.add(t)
+        last = x(t)
+        continue
+      }
+      const pos = x(t)
+      if (pos - last < 44) continue
+      set.add(t)
+      last = pos
+    }
+    return set
+  })()
+  const shown = ticks.filter((t) => labels.has(t))
   const bh = 8
   const gap = 20
   const step = bh + gap
@@ -102,6 +116,7 @@ function LimitsGraph(props: { href: string }) {
   const px = (n: number) => `${(n / w) * 100}%`
   const py = (n: number) => `${(n / h) * 100}%`
   const lx = px(left - 16)
+  const ty = py(h - 18)
 
   return (
     <figure
@@ -118,6 +133,12 @@ function LimitsGraph(props: { href: string }) {
           aria-hidden="true"
           style={{ height: `${h}px` }}
         >
+          <g data-slot="grid">
+            <For each={ticks}>
+              {(t) => <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />}
+            </For>
+          </g>
+
           <line x1={left} y1={top} x2={left} y2={h - bottom} data-stub />
 
           <g data-slot="bars">
@@ -154,6 +175,16 @@ function LimitsGraph(props: { href: string }) {
           <span data-ylabel style={{ "--x": lx, "--y": py(my) } as any}>
             {i18n.t("go.graph.go")}
           </span>
+        </div>
+
+        <div data-slot="xlabels" aria-hidden="true">
+          <For each={shown}>
+            {(t) => (
+              <span data-xlabel data-tick={t} style={{ "--x": px(x(t)), "--y": ty } as any}>
+                {i18n.t("go.graph.tick", { n: t })}
+              </span>
+            )}
+          </For>
         </div>
 
         <div data-slot="pills" aria-hidden="true">
