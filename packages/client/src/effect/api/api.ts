@@ -118,6 +118,7 @@ export type SessionListOperation<E = never> = (input?: Endpoint5_0Input) => Effe
 
 export type Endpoint5_1Input = {
   readonly id?: Session.ID | undefined
+  readonly title?: string | undefined
   readonly agent?: Agent.ID | undefined
   readonly model?: Model.Ref | undefined
   readonly location?: Location.Ref | undefined

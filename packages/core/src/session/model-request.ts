@@ -19,6 +19,11 @@ import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
 
+const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
+const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
+const IMAGE_REMOVED =
+  "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
+
 /** Failures a prepared execution can surface: infrastructure errors plus user declines resurfaced from the defect tunnel. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
 
@@ -94,6 +99,56 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
     }),
   )
 
+export const boundImages = (messages: LLMRequest["messages"]) => {
+  const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
+  const size = (data: string | Uint8Array) =>
+    typeof data === "string" ? Buffer.byteLength(data) : Math.ceil(data.byteLength / 3) * 4
+  const imageBytes = messages.reduce(
+    (total, message) =>
+      total +
+      message.content.reduce((sum, part) => {
+        if (part.type === "media" && isImage(part.mediaType)) return sum + size(part.data)
+        if (part.type !== "tool-result" || part.result.type !== "content") return sum
+        return (
+          sum +
+          part.result.value.reduce(
+            (bytes: number, item: Content) =>
+              bytes + (item.type === "file" && isImage(item.mime) ? Buffer.byteLength(item.uri) : 0),
+            0,
+          )
+        )
+      }, 0),
+    0,
+  )
+  if (imageBytes <= IMAGE_BYTES_TRIGGER) return messages
+
+  let removed = 0
+  return messages.map((message) =>
+    Message.make({
+      ...message,
+      content: message.content.map((part) => {
+        if (part.type === "media" && isImage(part.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
+          removed += size(part.data)
+          return Message.text(IMAGE_REMOVED)
+        }
+        if (part.type !== "tool-result" || part.result.type !== "content") return part
+        return {
+          ...part,
+          result: {
+            ...part.result,
+            value: part.result.value.map((item: Content) => {
+              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET)
+                return item
+              removed += Buffer.byteLength(item.uri)
+              return { type: "text" as const, text: IMAGE_REMOVED }
+            }),
+          },
+        }
+      }),
+    }),
+  )
+}
+
 /**
  * Builds an outbound model request and captures the tool-call capability that
  * must remain paired with it. It does not execute the request or mutate
@@ -160,7 +215,7 @@ export const layer = Layer.effect(
         },
         providerOptions: { [providerMetadataKey]: { promptCacheKey } },
         system: contextEvent.system,
-        messages: unsupportedParts(contextEvent.messages, resolved.capabilities),
+        messages: boundImages(unsupportedParts(contextEvent.messages, resolved.capabilities)),
         tools: hookedTools,
         toolChoice: stepLimitReached ? "none" : undefined,
       })

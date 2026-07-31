@@ -14,6 +14,7 @@ import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { SimulationSemantics } from "../../simulation/semantics"
+import { PatchDiff } from "../../component/patch-diff"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -50,8 +51,9 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
             },
           }}
         >
-          <diff
+          <PatchDiff
             diff={diff()}
+            hunkFg={theme.diff.text.hunkHeader}
             view={view()}
             filetype={ft()}
             syntaxStyle={syntax()}
