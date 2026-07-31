@@ -19,6 +19,7 @@ import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { sessionTitle } from "../util/session"
+import { useConfig } from "../config"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -30,12 +31,15 @@ export function DialogSessionList() {
   const client = useClient()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
+  const config = useConfig().data
   const toast = useToast()
   const [filter, setFilter] = createSignal("")
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
-  const [prefs, updatePrefs] = useStorage().store("session-list", { initial: { allProjects: false } })
+  const [prefs, updatePrefs] = useStorage().store("session-list", {
+    initial: { allProjects: config.tabs?.scope !== "cwd" },
+  })
   const allProjects = () => prefs.allProjects
 
   const [searchResults, { mutate: setSearchResults }] = createResource(
@@ -236,7 +240,9 @@ export function DialogSessionList() {
               .remove({ sessionID: option.value })
               .then(() => {
                 setSearchResults((result) =>
-                  result ? { ...result, sessions: result.sessions.filter((session) => session.id !== option.value) } : result,
+                  result
+                    ? { ...result, sessions: result.sessions.filter((session) => session.id !== option.value) }
+                    : result,
                 )
               })
               .catch((error) => {
