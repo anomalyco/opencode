@@ -137,24 +137,61 @@ describe("request option precedence", () => {
     ),
   )
 
-  it.effect("rejects raw body overlays for protocol-owned roots", () =>
-    Effect.gen(function* () {
-      const model = OpenAIChat.route
-        .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-        .model({ id: "gpt-4o-mini" })
-      const error = yield* compileRequest(
-        LLM.request({
-          model,
-          prompt: "Say hello.",
-          http: { body: { model: "gpt-5", messages: [], tools: [] } },
-        }),
-      ).pipe(Effect.flip)
+  it.effect("transforms the final HTTP request after serialization and authentication", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAIChat.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("fresh-key") })
+          .model({ id: "gpt-4o-mini" }),
+        prompt: "Say hello.",
+      }),
+      {
+        transform: (request) =>
+          Effect.sync(() => {
+            expect(request.headers.authorization).toBe("Bearer fresh-key")
+            request.url = "https://proxy.test/v1/chat/completions"
+            request.headers["x-plugin"] = "transformed"
+            request.body = JSON.stringify({ transformed: true })
+          }),
+      },
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.url).toBe("https://proxy.test/v1/chat/completions")
+            expect(web.headers.get("x-plugin")).toBe("transformed")
+            expect(decodeJson(input.text)).toEqual({ transformed: true })
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
+  )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
-        message: "http.body cannot overlay protocol-owned field(s): model, messages, tools",
-      })
-    }),
+  it.effect("applies raw body overlays after protocol lowering", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAIChat.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+          .model({ id: "gpt-4o-mini" }),
+        prompt: "Say hello.",
+        http: { body: { model: "gpt-5", messages: [], tools: [] } },
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            expect(decodeJson(input.text)).toMatchObject({ model: "gpt-5", messages: [], tools: [] })
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
   )
 
   it.effect("uses model output limits after route limits and before call maxTokens", () =>

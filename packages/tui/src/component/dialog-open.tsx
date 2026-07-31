@@ -2,8 +2,8 @@ import path from "path"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
-import { useDialog } from "../ui/dialog"
-import { DialogSelect } from "../ui/dialog-select"
+import { dialogWidth, useDialog } from "../ui/dialog"
+import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -16,6 +16,7 @@ import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { truncateFilePath } from "../ui/file-path"
 import { stringWidth } from "../util/string-width"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { Spinner } from "./spinner"
 
 const RECENT_LIMIT = 8
@@ -36,8 +37,8 @@ export function DialogOpen() {
   const dimensions = useTerminalDimensions()
   const shortcuts = Keymap.useShortcuts()
   const [filter, setFilter] = createSignal("")
+  const [selectionMoved, setSelectionMoved] = createSignal(false)
 
-  data.project.invalidate()
   void data.project.sync().catch(() => {})
 
   // One background fetch fills in recent sessions from other projects; the menu renders
@@ -51,8 +52,12 @@ export function DialogOpen() {
     { initialValue: [] },
   )
 
-  const openTabs = createMemo(() => new Set(sessionTabs.tabs().map((tab) => tab.sessionID)))
-  const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
+  const openTabs = createMemo(
+    () => new Set(sessionTabs.enabled() ? sessionTabs.tabs().map((tab) => tab.sessionID) : []),
+  )
+  const currentSessionID = createMemo(() =>
+    route.data.type === "session" ? data.session.root(route.data.sessionID) : undefined,
+  )
   const sessions = createMemo(() => {
     const seen = new Set<string>()
     return [...data.session.list(), ...fetched()]
@@ -68,7 +73,7 @@ export function DialogOpen() {
     const tabs = openTabs()
     // With an empty query the menu shows what is not already one keystroke away: open tabs are
     // visible in the strip, so recents exclude them. Typing widens the pool to every session so
-    // matching a tab by name still switches to it.
+    // matching a loaded tab by name still switches to it.
     const recent = filter().trim()
       ? sessions()
       : sessions()
@@ -76,13 +81,16 @@ export function DialogOpen() {
           .slice(0, RECENT_LIMIT)
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
-      const name = project?.name || path.basename(project?.canonical ?? session.location.directory)
-      const running = data.session.family(session.id).some((id) => data.session.status(id) === "running")
+      const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
+      const running =
+        data.session.status(session.id) === "running" ||
+        data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
-        title: session.title,
+        title: withTimestampedFallback(session),
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
-        footer: `${Locale.truncate(name, 20)} · ${timeAgo(session.time.updated)}`,
+        footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,
+        onSelect: () => location.set(session.location),
         gutter: running
           ? () => <Spinner />
           : tabs.has(session.id)
@@ -96,21 +104,25 @@ export function DialogOpen() {
     const projectOptions = data.project
       .list()
       .filter((project) => {
-        if (project.canonical === "/" || project.id === current?.id || seen.has(project.canonical)) return false
+        if (project.canonical === "/" || seen.has(project.canonical)) return false
         seen.add(project.canonical)
         return true
       })
       .map((project) => {
         const title = project.name ?? path.basename(project.canonical)
-        const description = abbreviateHome(project.canonical, paths.home)
-        // Dialog padding, the gutter column, title padding, and the separating space use nine columns.
-        const width = Math.min(60, dimensions().width - 2) - 9 - stringWidth(title)
+        const footer = abbreviateHome(project.canonical, paths.home)
+        const width =
+          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title)
         return {
           title,
-          description: truncateFilePath(description, width),
-          searchText: description,
+          footer: truncateFilePath(footer, width),
+          searchText: footer,
           value: { type: "project", directory: project.canonical } as OpenTarget,
           category: "Projects",
+          gutter:
+            project.canonical === current?.canonical
+              ? () => <text fg={theme.text.formfield.selected}>●</text>
+              : undefined,
         }
       })
 
@@ -126,6 +138,8 @@ export function DialogOpen() {
       options={options()}
       current={currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined}
       focusCurrent={false}
+      preserveSelection={selectionMoved()}
+      onMove={() => setSelectionMoved(true)}
       onFilter={setFilter}
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>

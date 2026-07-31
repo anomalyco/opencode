@@ -1757,7 +1757,7 @@ export type SessionInfo = {
   cost: MoneyUSD
   tokens: TokenUsageInfo
   time: { created: number; updated: number; archived?: number }
-  title: string
+  title?: string
   location: LocationRef
   subpath?: string
   revert?: SessionRevert
@@ -2006,7 +2006,7 @@ export type SessionV1Info = {
   cost?: number
   tokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
   share?: { url: string }
-  title: string
+  title?: string
   agent?: string
   model?: { id: string; providerID: string; variant?: string }
   version: string

@@ -117,21 +117,20 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
     .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
 })
 
-/** Returns the session's sole user message, or `undefined` once a second one exists. */
-export const firstUserMessageIfOnly = Effect.fn("SessionHistory.firstUserMessageIfOnly")(function* (
+/** Returns the session's first user message. */
+export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
-  const rows = yield* db
+  const row = yield* db
     .select()
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
     .orderBy(asc(SessionMessageTable.seq))
-    .limit(2)
-    .all()
+    .get()
     .pipe(Effect.orDie)
-  if (rows.length !== 1) return undefined
-  const message = yield* decodeMessageRow(rows[0]).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  if (!row) return undefined
+  const message = yield* decodeMessageRow(row).pipe(Effect.catch(() => Effect.succeed(undefined)))
   return message?.type === "user" ? message : undefined
 })
 

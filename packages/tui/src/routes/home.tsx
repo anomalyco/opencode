@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
 import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
@@ -31,7 +31,13 @@ export function Home() {
   const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
   let sent = false
 
-  createEffect(() => location.set(currentLocation()))
+  // Track only the route location and (when absent) the default location; location.set
+  // reads other signals internally and tracking them would re-assert the route location
+  // after the user overrides it with /cd.
+  createEffect(() => {
+    const target = currentLocation()
+    untrack(() => location.set(target))
+  })
 
   onMount(() => {
     editor.clearSelection()

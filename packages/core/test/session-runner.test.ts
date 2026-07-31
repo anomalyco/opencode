@@ -796,6 +796,59 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("retries title generation from the first prompt after execution and title failures", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const agents = yield* Agent.Service
+      const { db } = yield* Database.Service
+      yield* db.update(SessionTable).set({ title: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+      yield* agents.transform((draft) =>
+        draft.update(Agent.ID.make("title"), (agent) => {
+          agent.mode = "primary"
+          agent.hidden = true
+          agent.system = "Generate a title."
+        }),
+      )
+
+      yield* admit(session, "First prompt")
+      yield* TestLLM.push(Stream.fail(invalidRequest()))
+      expect((yield* session.resume(sessionID).pipe(Effect.exit))._tag).toBe("Failure")
+
+      yield* admit(session, "Second prompt")
+      const titleFailed = yield* Deferred.make<void>()
+      yield* TestLLM.push(
+        TestLLM.text("Recovered", "text-recovered"),
+        Stream.make(LLMEvent.providerError({ message: "Title provider unavailable" })).pipe(
+          Stream.ensuring(Deferred.succeed(titleFailed, undefined)),
+        ),
+      )
+      yield* session.resume(sessionID)
+      yield* Deferred.await(titleFailed)
+      yield* Effect.yieldNow
+      expect((yield* session.get(sessionID)).title).toBeUndefined()
+
+      const bus = yield* Bus.Service
+      const renamed = yield* bus.subscribe(SessionEvent.Renamed).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* admit(session, "Third prompt")
+      yield* TestLLM.push(
+        TestLLM.text("Recovered again", "text-recovered-again"),
+        TestLLM.text("Generated title", "text-title"),
+      )
+      yield* session.resume(sessionID)
+      yield* Fiber.join(renamed)
+
+      expect(requests).toHaveLength(5)
+      expect(requests[2]?.messages).toContainEqual(Message.user("First prompt"))
+      expect(requests[4]?.messages).toContainEqual(Message.user("First prompt"))
+      expect((yield* session.get(sessionID)).title).toBe("Generated title")
+    }),
+  )
+
   it.effect("applies session context hooks without exposing unavailable tools", () =>
     Effect.gen(function* () {
       const session = yield* setup

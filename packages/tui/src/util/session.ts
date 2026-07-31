@@ -1,10 +1,6 @@
 import type { ModelInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { Locale } from "./locale"
 
-export function isDefaultTitle(title: string) {
-  return /^(New session - |Child session - )\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(title)
-}
-
 export function lastAssistantWithUsage(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string) {
   const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
   if (boundary && boundaryIndex === -1) return undefined

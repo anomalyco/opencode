@@ -3,6 +3,7 @@ import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { useData } from "./data"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useConfig } from "../config"
@@ -65,18 +66,33 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     let closedTabs: ClosedSessionTab[] = []
 
     function state() {
-      if (config.tabs?.scope === "global") return store.global
-      return store.cwd[paths.cwd] ?? fallback
+      if (config.tabs?.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
+      return store.global
     }
 
     function update(mutation: (draft: TabsState) => void) {
-      const scope = config.tabs?.scope ?? "cwd"
+      const scope = config.tabs?.scope ?? "global"
       void updateStore((draft) => mutation(scope === "cwd" ? (draft.cwd[paths.cwd] ??= empty()) : draft.global)).catch(
         () => {},
       )
     }
 
     const root = (sessionID: string) => data.session.root(sessionID)
+    const title = (sessionID: string, persisted?: string, fallback?: string) => {
+      const session = data.session.get(sessionID)
+      return session?.title ?? persisted ?? fallback ?? (session ? withTimestampedFallback(session) : undefined)
+    }
+    const normalize = (value: TabsState) => ({
+      tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {
+        const sessionID = root(tab.sessionID)
+        return openSessionTab(tabs, { sessionID, title: title(sessionID, tab.title) })
+      }, []),
+      unread: Object.entries(value.unread).reduce<Record<string, SessionTabUnread>>((result, entry) => {
+        const sessionID = root(entry[0])
+        result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
+        return result
+      }, {}),
+    })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
     const newTab = createMemo((open = false) => {
       if (route.data.type === "home") return true
@@ -114,37 +130,29 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
       history = recordSessionTabHistory(history, sessionID)
-      const title = data.session.get(sessionID)?.title ?? (newTab() ? NEW_SESSION_TAB_TITLE : undefined)
-      const tabs = openSessionTab(state().tabs, { sessionID, title })
+      const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
+      const tabs = openSessionTab(state().tabs, {
+        sessionID,
+        title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
+      })
       if (tabs === state().tabs && !state().unread[sessionID]) return
       update((draft) => {
-        draft.tabs = openSessionTab(draft.tabs, { sessionID, title })
+        draft.tabs = openSessionTab(draft.tabs, {
+          sessionID,
+          title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
+        })
         delete draft.unread[sessionID]
       })
     })
 
     createEffect(() => {
       if (!enabled()) return
-      const next = state().tabs.reduce<SessionTab[]>((tabs, tab) => {
-        const sessionID = root(tab.sessionID)
-        return openSessionTab(tabs, { sessionID, title: data.session.get(sessionID)?.title ?? tab.title })
-      }, [])
-      const unread = Object.entries(state().unread).reduce<Record<string, SessionTabUnread>>((result, entry) => {
-        const sessionID = root(entry[0])
-        result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
-        return result
-      }, {})
-      if (isDeepEqual(next, state().tabs) && isDeepEqual(unread, state().unread)) return
+      const next = normalize(state())
+      if (isDeepEqual(next, state())) return
       update((draft) => {
-        draft.tabs = draft.tabs.reduce<SessionTab[]>((tabs, tab) => {
-          const sessionID = root(tab.sessionID)
-          return openSessionTab(tabs, { sessionID, title: data.session.get(sessionID)?.title ?? tab.title })
-        }, [])
-        draft.unread = Object.entries(draft.unread).reduce<Record<string, SessionTabUnread>>((result, entry) => {
-          const sessionID = root(entry[0])
-          result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
-          return result
-        }, {})
+        const next = normalize(draft)
+        draft.tabs = next.tabs
+        draft.unread = next.unread
       })
     })
 

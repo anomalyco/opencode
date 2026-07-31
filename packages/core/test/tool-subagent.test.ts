@@ -47,7 +47,7 @@ const executionNode = makeGlobalNode({
       const completed = new Set<Session.ID>()
       const complete = Effect.fn("SubagentTest.complete")(function* (sessionID: Session.ID) {
         if (completed.has(sessionID)) return
-        if ((yield* store.get(sessionID))?.title.includes("fail")) {
+        if ((yield* store.get(sessionID))?.title?.includes("fail")) {
           yield* new SessionRunnerModel.ModelNotSelectedError({ sessionID })
           return
         }

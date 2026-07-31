@@ -8,6 +8,7 @@ import {
   type SessionMessageInfo,
   type SkillInfo,
 } from "@opencode-ai/client/promise"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import type {
   AgentSideConnection,
   AuthenticateRequest,
@@ -213,7 +214,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         sessions: page.data.map((session) => ({
           sessionId: session.id,
           cwd: session.location.directory,
-          title: session.title,
+          title: withTimestampedFallback(session),
           updatedAt: new Date(session.time.updated).toISOString(),
         })),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),

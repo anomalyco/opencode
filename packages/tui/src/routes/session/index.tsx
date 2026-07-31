@@ -51,7 +51,6 @@ import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
-import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
@@ -94,6 +93,7 @@ import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 addDefaultParsers(parsers.parsers)
 
@@ -144,8 +144,8 @@ export function Session() {
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
-  const location = createMemo(() => session()?.location)
   const currentLocation = useLocation()
+  const location = createMemo(() => session()?.location ?? currentLocation.ref)
 
   createEffect(() => currentLocation.set(location()))
 
@@ -522,32 +522,6 @@ export function Session() {
       group: "Session",
       slash: { name: "rename" },
       run: () => DialogSessionRename.show(dialog, route.sessionID, session()?.title),
-    },
-    {
-      title: "Delete session",
-      id: "session.delete",
-      group: "Session",
-      slash: { name: "delete" },
-      run: async () => {
-        const current = session()
-        if (!current) return
-        const confirmed = await DialogConfirm.show(
-          dialog,
-          "Delete Session",
-          `Delete "${current.title}"? This action cannot be undone.`,
-        )
-        if (confirmed !== true) return
-        const error = await client.api.session.remove({ sessionID: route.sessionID }).then(
-          () => undefined,
-          (error) => error,
-        )
-        if (!error) return
-        toast.show({
-          message: `Failed to delete session: ${errorMessage(error)}`,
-          variant: "error",
-          duration: 5000,
-        })
-      },
     },
     {
       title: "Jump to message",
@@ -3336,7 +3310,7 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
     })
     return [`## Assistant\n\n${content.join("\n\n")}`]
   })
-  return `# ${session.title}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
+  return `# ${withTimestampedFallback(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
 }
 
 export function parseApplyPatchFiles(value: unknown) {

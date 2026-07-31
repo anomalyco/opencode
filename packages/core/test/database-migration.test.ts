@@ -26,6 +26,7 @@ import timeSuspendedMigration from "@opencode-ai/core/database/migration/2026070
 import instructionSyncMigration from "@opencode-ai/core/database/migration/20260710025429_instruction_sync"
 import deleteToolProgressEventsMigration from "@opencode-ai/core/database/migration/20260722011141_delete_tool_progress_events"
 import canonicalToolResultsMigration from "@opencode-ai/core/database/migration/20260722170000_canonical_tool_results"
+import optionalSessionTitleMigration from "@opencode-ai/core/database/migration/20260730195856_optional_session_title"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -397,6 +398,40 @@ describe("DatabaseMigration", () => {
         }),
       ),
     ).rejects.toThrow("Database is not empty and has no session table")
+  })
+
+  test("makes session titles nullable without deleting dependent rows", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+        yield* db.run(sql`
+          CREATE TABLE session (
+            id text PRIMARY KEY,
+            title text NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          CREATE TABLE message (
+            id text PRIMARY KEY,
+            session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE
+          )
+        `)
+        yield* db.run(sql`INSERT INTO session VALUES ('ses_existing', 'Existing title')`)
+        yield* db.run(sql`INSERT INTO message VALUES ('msg_existing', 'ses_existing')`)
+
+        yield* DatabaseMigration.applyOnly(db, [optionalSessionTitleMigration])
+
+        expect(yield* db.get(sql`SELECT title FROM session WHERE id = 'ses_existing'`)).toEqual({
+          title: "Existing title",
+        })
+        expect(yield* db.get(sql`SELECT id FROM message WHERE id = 'msg_existing'`)).toEqual({ id: "msg_existing" })
+        expect(
+          yield* db.get<{ notnull: number }>(sql`SELECT "notnull" FROM pragma_table_info('session') WHERE name = 'title'`),
+        ).toEqual({ notnull: 0 })
+        expect(yield* db.get<{ foreign_keys: number }>(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 })
+      }),
+    )
   })
 
   test("backfills existing Context Epoch rows to the build agent", async () => {

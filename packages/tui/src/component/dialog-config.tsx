@@ -105,7 +105,7 @@ export const settings: Setting[] = [
     title: "Scope",
     category: "Tabs",
     path: ["tabs", "scope"],
-    default: "cwd",
+    default: "global",
     values: ["cwd", "global"],
     labels: ["current directory", "global"],
   },

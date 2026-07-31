@@ -83,6 +83,11 @@ export interface DialogSelectOption<T = any> {
   onSelect?: (ctx: DialogContext) => void
 }
 
+export function dialogSelectContentWidth(dialogWidth: number) {
+  // Scroll padding, row padding, the gutter, title padding, and the separating gap.
+  return dialogWidth - 12
+}
+
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
@@ -240,7 +245,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.options,
       () => {
-        if (!props.preserveSelection) {
+        if (!props.preserveSelection && (props.current === undefined || props.focusCurrent === false)) {
           const count = flat().length
           if (count === 0) return
           const next = reconcileSelection(store.selected, count)
@@ -276,7 +281,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           setStore("selected", index)
           selection = option
           if (!moved) return
-          if (!props.preserveSelection || store.filter.length > 0) return
+          if (
+            (!props.preserveSelection && (props.current === undefined || props.focusCurrent === false)) ||
+            store.filter.length > 0
+          )
+            return
           scrollAfterLayout(false, option.value)
           return
         }

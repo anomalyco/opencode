@@ -4,6 +4,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { useGlobal } from "@/context/global"
 import { ServerConnection, serverName } from "@/context/server"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
@@ -54,7 +55,10 @@ export function TabNavItem(props: {
     if (!session) return
     return projectForSession(session, serverCtx()?.projects.list() ?? [])
   })
-  const title = createMemo(() => props.session()?.title ?? props.fallbackTitle)
+  const title = createMemo(() => {
+    const session = props.session()
+    return session ? displayLabel(session) : props.fallbackTitle
+  })
 
   const projectName = createMemo(() => {
     const session = props.session()
@@ -143,7 +147,7 @@ export function TabNavItem(props: {
     if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
     const session = props.session()
     if (!session) return
-    titleEl.textContent = session.title
+    titleEl.textContent = session.title ?? ""
     setEditing(true)
 
     requestAnimationFrame(() => {
@@ -302,7 +306,7 @@ export function TabNavItem(props: {
       }}
       data={{
         projectName: projectName(),
-        title: props.session()?.title,
+        title: title(),
         path: previewPath(),
         serverName: serverLabel(),
       }}

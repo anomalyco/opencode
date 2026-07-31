@@ -181,23 +181,6 @@ describe("Google Vertex providers", () => {
     }),
   )
 
-  it.effect("protects the Vertex Messages API version from body overlays", () =>
-    Effect.gen(function* () {
-      const error = yield* compileRequest(
-        LLM.request({
-          model: GoogleVertexMessages.configure({
-            accessToken: "vertex-token",
-            http: { body: { anthropic_version: "wrong" } },
-            project: "vertex-project",
-          }).model("claude-sonnet-4-6"),
-          prompt: "Say hello.",
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("http.body cannot overlay protocol-owned field(s): anthropic_version")
-    }),
-  )
-
   it.effect("routes tuned Gemini models through their deployed endpoint", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(

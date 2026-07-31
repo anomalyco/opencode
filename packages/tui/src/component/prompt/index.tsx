@@ -240,7 +240,6 @@ export function Prompt(props: PromptProps) {
               return undefined
             })
             if (!location) return
-            move.setDirectory(location.directory, location.directory !== location.project.directory)
             currentLocation.set(location)
             return
           }
@@ -963,7 +962,10 @@ export function Prompt(props: PromptProps) {
       const directory = await move.getDirectory()
       if (move.pending() && !directory) return false
       finishMoveProgress = Boolean(move.progress())
-      const location = data.location.default()
+      // The location context is where the next session is created: seeded by the home
+      // route (launch cwd, inherited session location, or picked project) and updated
+      // by /cd before a session exists.
+      const location = currentLocation.ref ?? data.location.default()
 
       const created = await client.api.session
         .create({
@@ -1166,6 +1168,19 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  function expandPastedText(extmarkId: number) {
+    const extmark = input.extmarks.get(extmarkId)
+    const ref = store.extmarkToPart.get(extmarkId)
+    if (!extmark || ref?.type !== "pasted") return false
+    const part = store.prompt.pasted[ref.index]
+    if (!part) return false
+
+    input.extmarks.delete(extmarkId)
+    input.setSelection(extmark.start, extmark.end)
+    input.insertText(part.text)
+    return true
+  }
+
   async function pasteInputText(text: string) {
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const pastedContent = normalizedText.trim()
@@ -1189,6 +1204,15 @@ export function Prompt(props: PromptProps) {
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
+      const extmark = input.extmarks.getAllForTypeId(promptPartTypeId).find((extmark) => {
+        const ref = store.extmarkToPart.get(extmark.id)
+        return (
+          (extmark.end === input.cursorOffset || extmark.end + 1 === input.cursorOffset) &&
+          ref?.type === "pasted" &&
+          store.prompt.pasted[ref.index]?.text === pastedContent
+        )
+      })
+      if (extmark && expandPastedText(extmark.id)) return
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
     }
@@ -1299,7 +1323,12 @@ export function Prompt(props: PromptProps) {
     return `Ask anything... "${list()[store.placeholder % list().length]}"`
   })
   const locationLabel = createMemo(() => {
-    if (!props.sessionID || status() !== "idle") return
+    if (!props.sessionID) {
+      // No session yet: show where the next session will be created.
+      const directory = currentLocation.ref?.directory ?? data.location.default().directory
+      return abbreviateHome(directory, paths.home)
+    }
+    if (status() !== "idle") return
     const directory = data.session.get(props.sessionID)?.location.directory
     return directory ? abbreviateHome(directory, paths.home) : undefined
   })
@@ -1418,8 +1447,14 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => {
-                if (props.disabled) return
+                if (props.disabled || r.button !== 0) return
                 r.target?.focus()
+                const extmark = input.extmarks
+                  .getAtOffset(input.cursorOffset)
+                  .find((item) => store.extmarkToPart.get(item.id)?.type === "pasted")
+                if (!extmark || !expandPastedText(extmark.id)) return
+                r.preventDefault()
+                r.stopPropagation()
               }}
               focusedBackgroundColor="transparent"
               cursorColor={props.disabled ? theme.background.surface.offset : theme.text.default}

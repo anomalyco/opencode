@@ -20,7 +20,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
-import { Effect, Layer, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -39,27 +39,30 @@ const cost = [
     },
   },
 ]
+const successfulTitle = () =>
+  Stream.make(
+    LLMEvent.textDelta({ id: "title", text: "Generated Title\n" }),
+    LLMEvent.stepFinish({
+      index: 0,
+      reason: { normalized: "stop" },
+      usage: {
+        inputTokens: 15,
+        outputTokens: 6,
+        nonCachedInputTokens: 10,
+        cacheReadInputTokens: 3,
+        cacheWriteInputTokens: 2,
+        reasoningTokens: 2,
+      },
+    }),
+    LLMEvent.finish({
+      reason: { normalized: "stop" },
+    }),
+  )
+let titleStream: () => Stream.Stream<LLMEvent> = successfulTitle
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
-    return Stream.make(
-      LLMEvent.textDelta({ id: "title", text: "Generated Title\n" }),
-      LLMEvent.stepFinish({
-        index: 0,
-        reason: { normalized: "stop" },
-        usage: {
-          inputTokens: 15,
-          outputTokens: 6,
-          nonCachedInputTokens: 10,
-          cacheReadInputTokens: 3,
-          cacheWriteInputTokens: 2,
-          reasoningTokens: 2,
-        },
-      }),
-      LLMEvent.finish({
-        reason: { normalized: "stop" },
-      }),
-    )
+    return titleStream()
   },
   generate: () => Effect.die("unused"),
 })
@@ -89,7 +92,7 @@ const it = testEffect(
   ),
 )
 
-const insertSession = (id: Session.ID) =>
+const insertSession = (id: Session.ID, title?: string, created?: number) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -105,7 +108,8 @@ const insertSession = (id: Session.ID) =>
         project_id: Project.ID.global,
         slug: id,
         directory: "/project",
-        title: "New session - fake",
+        title,
+        time_created: created,
         version: "test",
       })
       .onConflictDoNothing()
@@ -131,6 +135,7 @@ const prompt = (sessionID: Session.ID, text: string) =>
 it.effect("generates a title from the sole user message and renames the session", () =>
   Effect.gen(function* () {
     requests = []
+    titleStream = successfulTitle
     const agentService = yield* Agent.Service
     yield* agentService.transform((editor) => {
       editor.update(Agent.ID.make("title"), (agent) => {
@@ -144,11 +149,8 @@ it.effect("generates a title from the sole user message and renames the session"
     yield* prompt(sessionID, "Help me debug the failing build")
 
     const store = yield* SessionStore.Service
-    const session = yield* store
-      .get(sessionID)
-      .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die("session missing"))))
     const title = yield* SessionTitle.Service
-    yield* title.generateForFirstPrompt(session)
+    yield* title.generateForFirstPrompt(sessionID)
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.http?.headers).toEqual({
@@ -167,9 +169,10 @@ it.effect("generates a title from the sole user message and renames the session"
   }),
 )
 
-it.effect("does not generate once a second user message exists", () =>
+it.effect("generates from the first user message after later messages exist", () =>
   Effect.gen(function* () {
     requests = []
+    titleStream = successfulTitle
     const agentService = yield* Agent.Service
     yield* agentService.transform((editor) => {
       editor.update(Agent.ID.make("title"), (agent) => {
@@ -184,21 +187,46 @@ it.effect("does not generate once a second user message exists", () =>
     yield* prompt(sessionID, "Second message")
 
     const store = yield* SessionStore.Service
-    const session = yield* store
-      .get(sessionID)
-      .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die("session missing"))))
     const title = yield* SessionTitle.Service
-    yield* title.generateForFirstPrompt(session)
+    yield* title.generateForFirstPrompt(sessionID)
 
-    expect(requests).toHaveLength(0)
-    const untouched = yield* store.get(sessionID)
-    expect(untouched?.title).toBe("New session - fake")
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0]?.messages)).toContain("First message")
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("Second message")
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("retries a legacy persisted fallback title", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = successfulTitle
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_legacy")
+    const created = Date.parse("2026-07-30T18:45:03.662Z")
+    yield* insertSession(sessionID, "New session - 2026-07-30T18:45:03.662Z", created)
+    yield* prompt(sessionID, "Retry the legacy title")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    const store = yield* SessionStore.Service
+    expect(requests).toHaveLength(1)
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
   }),
 )
 
 it.effect("does not generate for a child session", () =>
   Effect.gen(function* () {
     requests = []
+    titleStream = successfulTitle
     const agentService = yield* Agent.Service
     yield* agentService.transform((editor) => {
       editor.update(Agent.ID.make("title"), (agent) => {
@@ -223,7 +251,6 @@ it.effect("does not generate for a child session", () =>
         parent_id: Session.ID.make("ses_title_parent"),
         slug: sessionID,
         directory: "/project",
-        title: "Child session - fake",
         version: "test",
       })
       .onConflictDoNothing()
@@ -231,12 +258,8 @@ it.effect("does not generate for a child session", () =>
       .pipe(Effect.orDie)
     yield* prompt(sessionID, "Do this subtask")
 
-    const store = yield* SessionStore.Service
-    const session = yield* store
-      .get(sessionID)
-      .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die("session missing"))))
     const title = yield* SessionTitle.Service
-    yield* title.generateForFirstPrompt(session)
+    yield* title.generateForFirstPrompt(sessionID)
 
     expect(requests).toHaveLength(0)
   }),
@@ -245,19 +268,100 @@ it.effect("does not generate for a child session", () =>
 it.effect("does not generate when the title agent is removed", () =>
   Effect.gen(function* () {
     requests = []
+    titleStream = successfulTitle
     const sessionID = Session.ID.make("ses_title_no_agent")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Help me debug the failing build")
 
     const store = yield* SessionStore.Service
-    const session = yield* store
-      .get(sessionID)
-      .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die("session missing"))))
     const title = yield* SessionTitle.Service
-    yield* title.generateForFirstPrompt(session)
+    yield* title.generateForFirstPrompt(sessionID)
 
     expect(requests).toHaveLength(0)
     const untouched = yield* store.get(sessionID)
-    expect(untouched?.title).toBe("New session - fake")
+    expect(untouched?.title).toBeUndefined()
+  }),
+)
+
+it.effect("does not overwrite an explicit title", () =>
+  Effect.gen(function* () {
+    requests = []
+    titleStream = successfulTitle
+    const sessionID = Session.ID.make("ses_title_explicit")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Help me debug the failing build")
+    const events = yield* Bus.Service
+    yield* events.publish(SessionEvent.Renamed, { sessionID, title: "New session - 2099-01-01T00:00:00.000Z" })
+
+    const title = yield* SessionTitle.Service
+    yield* title.generateForFirstPrompt(sessionID)
+
+    const store = yield* SessionStore.Service
+    expect(requests).toHaveLength(0)
+    expect((yield* store.get(sessionID))?.title).toBe("New session - 2099-01-01T00:00:00.000Z")
+  }),
+)
+
+it.effect("retries after a failed title request", () =>
+  Effect.gen(function* () {
+    requests = []
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_retry")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Retry this title")
+    const title = yield* SessionTitle.Service
+    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
+
+    yield* title.generateForFirstPrompt(sessionID)
+    titleStream = successfulTitle
+    yield* title.generateForFirstPrompt(sessionID)
+
+    const store = yield* SessionStore.Service
+    expect(requests).toHaveLength(2)
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("preserves a manual rename completed while generation is in flight", () =>
+  Effect.gen(function* () {
+    requests = []
+    const agentService = yield* Agent.Service
+    yield* agentService.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.mode = "primary"
+        agent.hidden = true
+        agent.system = "You are a title generator."
+      })
+    })
+    const sessionID = Session.ID.make("ses_title_manual_rename")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Generate this title")
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    titleStream = () =>
+      Stream.unwrap(
+        Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.as(successfulTitle()),
+        ),
+      )
+    const title = yield* SessionTitle.Service
+    const fiber = yield* title.generateForFirstPrompt(sessionID).pipe(Effect.forkScoped)
+    yield* Deferred.await(started)
+    const events = yield* Bus.Service
+    yield* events.publish(SessionEvent.Renamed, { sessionID, title: "Manual title" })
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(fiber)
+
+    const store = yield* SessionStore.Service
+    expect(requests).toHaveLength(1)
+    expect((yield* store.get(sessionID))?.title).toBe("Manual title")
   }),
 )
