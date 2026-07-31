@@ -18,6 +18,7 @@ import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { Context, Dialog, Page, Slot, SlotMap, SlotName, Toast } from "@opencode-ai/plugin/tui/context"
 import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
+import { isDeepEqual } from "remeda"
 import { useRenderer } from "@opentui/solid"
 import "#runtime-plugin-support"
 import { useConfig } from "../config"
@@ -39,7 +40,7 @@ import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
 import { abbreviateHome } from "../util/path-format"
 import { builtins } from "./builtins"
-import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
+import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectory } from "./discovery"
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
@@ -80,16 +81,7 @@ type Registration = {
 }
 
 // One entry of the desired plugin generation produced by the resolve phase.
-type Desired = {
-  plugin: Plugin.Definition
-  source: RegisteredPlugin["source"]
-  target?: string
-  version: string
-  options?: Readonly<Record<string, any>>
-  enabled: boolean
-  // The source failed to re-import and this is the running previous version.
-  stale?: boolean
-}
+type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
 
 const PluginContext = createContext<Value>()
 
@@ -396,8 +388,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   // once the path exists.
   const watchers: ReturnType<typeof watch>[] = []
   const watched = new Set<string>()
+  let disposed = false
   let pending: ReturnType<typeof setTimeout> | undefined
-  const changed = () => {
+  const scheduleReconcile = () => {
     clearTimeout(pending)
     pending = setTimeout(() => {
       loading = loading.catch(() => undefined).then(() => reconcile())
@@ -411,12 +404,13 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     watched.add(target)
     stat(target)
       .then((info) => {
+        if (disposed) return
         // Watch the parent for files: editors that save by rename replace the
         // inode, which silently kills a direct file watch after the first save.
         const dir = info.isDirectory() ? target : path.dirname(target)
         if (dir !== target && watched.has(dir)) return
         watched.add(dir)
-        const watcher = watch(dir, changed)
+        const watcher = watch(dir, scheduleReconcile)
         // A watched directory can disappear out from under us; without a
         // listener the error event would crash the process. Forget the paths
         // so a later reconcile can re-arm once they exist again.
@@ -430,6 +424,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       .catch(() => watched.delete(target))
   }
   onCleanup(() => {
+    disposed = true
     clearTimeout(pending)
     for (const watcher of watchers) watcher.close()
   })
@@ -440,9 +435,13 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   // touched), no-op when the generation is unchanged, and restart only the
   // plugins that differ. Membership or order changes rebuild the whole
   // generation to preserve slot-order semantics.
-  const reconcile = async (configured = config.data.plugins ?? []) => {
-    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...configured]
-    watchSource(path.join(paths.cwd, ".opencode", "plugins", "tui"))
+  // Package resolution failures would otherwise retry a full npm install on
+  // every watch event; remember them until the configuration changes.
+  const npmFailures = new Map<string, string>()
+  const reconcile = async (configured?: NonNullable<typeof config.data.plugins>) => {
+    if (configured) npmFailures.clear()
+    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...(configured ?? config.data.plugins ?? [])]
+    watchSource(tuiPluginDirectory(paths.cwd))
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -467,15 +466,19 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       const local = localSource(target, directory)
       if (local) watchSource(fileURLToPath(local))
       const previous = Object.values(store.registrations).find((registration) => registration.target === target)
-      const resolved = await resolvePlugin(target, local, options, previous, props.packages).catch((error) => ({
-        status: "failed" as const,
-        error: error instanceof Error ? error.message : String(error),
-      }))
+      const memo = local ? undefined : npmFailures.get(target)
+      const resolved = memo
+        ? { status: "failed" as const, error: memo }
+        : await resolvePlugin(target, local, options, previous, props.packages).catch((error) => ({
+            status: "failed" as const,
+            error: error instanceof Error ? error.message : String(error),
+          }))
       if (resolved.status === "unsupported") {
         failures.push({ target, status: "unsupported" })
         continue
       }
       if (resolved.status === "failed") {
+        if (!local && !previous) npmFailures.set(target, resolved.error)
         failures.push({
           target,
           status: "failed",
@@ -489,7 +492,6 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
             version: previous.version,
             options: previous.options,
             enabled: true,
-            stale: true,
           })
         continue
       }
@@ -508,27 +510,6 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     const currentIds = Object.keys(store.registrations)
     const desiredIds = [...desired.keys()]
     const structural = currentIds.length !== desiredIds.length || currentIds.some((id, index) => desiredIds[index] !== id)
-    const changed = desiredIds.filter((id) => {
-      const registration = store.registrations[id]
-      if (!registration) return true
-      const item = desired.get(id)!
-      return (
-        registration.version !== item.version ||
-        !sameOptions(registration.options, item.options) ||
-        registration.active !== item.enabled
-      )
-    })
-
-    // Swap: cleanup failures are logged into states, never propagated, so one
-    // broken plugin cannot take the rest of the generation down.
-    const errors = new Map<string, string>()
-    const start = async (id: string) => {
-      const error = await activate(id).then(
-        () => undefined,
-        (error) => (error instanceof Error ? error.message : String(error)),
-      )
-      if (error) errors.set(id, error)
-    }
     if (structural) {
       await Promise.all(
         Object.entries(store.registrations)
@@ -536,28 +517,47 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
           .map(([id]) => deactivate(id).catch(() => undefined)),
       )
       setStore("registrations", reconcileStore({}))
-      for (const [id, item] of desired) {
-        setStore("registrations", id, register(item))
-        if (item.enabled) await start(id)
+    }
+    const changed = structural
+      ? desiredIds
+      : desiredIds.filter((id) => {
+          const registration = store.registrations[id]!
+          const item = desired.get(id)!
+          return (
+            registration.version !== item.version ||
+            !sameOptions(registration.options, item.options) ||
+            registration.active !== item.enabled
+          )
+        })
+
+    // Swap: cleanup failures are logged into states, never propagated, so one
+    // broken plugin cannot take the rest of the generation down.
+    const errors = new Map<string, string>()
+    for (const id of changed) {
+      const item = desired.get(id)!
+      const registration = store.registrations[id]
+      if (!registration || registration.version !== item.version || !sameOptions(registration.options, item.options)) {
+        if (registration) await deactivate(id).catch(() => undefined)
+        // In-place replacement keeps the registration's key position, which
+        // slot ordering (mode "replace" takes the last one) depends on.
+        setStore("registrations", id, toRegistration(item))
       }
-    } else {
-      for (const id of changed) {
-        const item = desired.get(id)!
-        const registration = store.registrations[id]!
-        if (registration.version !== item.version || !sameOptions(registration.options, item.options)) {
-          await deactivate(id).catch(() => undefined)
-          // In-place replacement keeps the registration's key position, which
-          // slot ordering (mode "replace" takes the last one) depends on.
-          setStore("registrations", id, register(item))
-        }
-        if (item.enabled) await start(id)
-        else await deactivate(id).catch(() => undefined)
+      if (!item.enabled) {
+        await deactivate(id).catch(() => undefined)
+        continue
       }
+      const error = await activate(id).then(
+        () => undefined,
+        (error) => (error instanceof Error ? error.message : String(error)),
+      )
+      if (error) errors.set(id, error)
     }
 
     const states: State[] = [
       ...[...desired.values()].flatMap((item): State[] => {
-        if (item.target === undefined || item.stale) return []
+        if (item.target === undefined) return []
+        // A failed reload keeps this item running; the failure entry covers it.
+        if (failures.some((failure) => failure.target === item.target)) return []
         const error = errors.get(item.plugin.id)
         if (error) return [{ target: item.target, status: "failed", error }]
         const status = store.registrations[item.plugin.id]?.active ? "active" : "inactive"
@@ -565,13 +565,14 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       }),
       ...failures,
     ]
-    if (JSON.stringify(states) === JSON.stringify(store.states)) return
     // Surface newly failing plugins; repeated reconciles stay silent.
-    const known = new Set(store.states.flatMap((state) => (state.status === "failed" ? [state.target + state.error] : [])))
     for (const state of states)
-      if (state.status === "failed" && !known.has(state.target + state.error))
+      if (
+        state.status === "failed" &&
+        !store.states.some((prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error)
+      )
         toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
-    setStore("states", states)
+    setStore("states", reconcileStore(states))
   }
   let loading = Promise.resolve()
   createEffect(
@@ -657,18 +658,23 @@ async function resolvePlugin(
   previous: Registration | undefined,
   packages: PackageResolver,
 ) {
+  // Package entrypoints never change within a session, so a loaded previous
+  // version needs no re-resolution (which could otherwise hit npm).
+  if (!local && previous && sameOptions(previous.options, options))
+    return { status: "unchanged" as const, plugin: previous.plugin, version: previous.version }
   const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec)
   if (!entrypoint) return { status: "unsupported" as const }
-  const mtime = local ? (await stat(new URL(entrypoint))).mtimeMs : undefined
-  const version = mtime === undefined ? entrypoint : `${entrypoint}?mtime=${mtime}`
+  // The cache-busted specifier doubles as the version: unique per entrypoint
+  // and mtime, so equal versions mean an identical module.
+  const version = local ? freshSpecifier(entrypoint, (await stat(new URL(entrypoint))).mtimeMs) : entrypoint
   if (previous && previous.version === version && sameOptions(previous.options, options))
     return { status: "unchanged" as const, plugin: previous.plugin, version }
-  const mod: { readonly default?: unknown } = await import(mtime === undefined ? entrypoint : freshSpecifier(entrypoint, mtime))
+  const mod: { readonly default?: unknown } = await import(version)
   if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
   return { status: "loaded" as const, plugin: mod.default, version }
 }
 
-function register(item: Desired): Registration {
+function toRegistration(item: Desired): Registration {
   return {
     plugin: item.plugin,
     source: item.source,
@@ -682,8 +688,8 @@ function register(item: Desired): Registration {
   }
 }
 
-function sameOptions(a: Readonly<Record<string, any>> | undefined, b: Readonly<Record<string, any>> | undefined) {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+function sameOptions(a: Registration["options"], b: Registration["options"]) {
+  return isDeepEqual(a ?? null, b ?? null)
 }
 
 async function resolveLocal(url: URL) {

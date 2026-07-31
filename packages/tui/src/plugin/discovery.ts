@@ -4,8 +4,12 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
+export function tuiPluginDirectory(cwd: string) {
+  return path.join(cwd, ".opencode", "plugins", "tui")
+}
+
 export async function discoverTuiPlugins(cwd: string) {
-  const directory = path.join(cwd, ".opencode", "plugins", "tui")
+  const directory = tuiPluginDirectory(cwd)
   const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
     if (error && typeof error === "object" && Reflect.get(error, "code") === "ENOENT") return []
     return Promise.reject(error)
