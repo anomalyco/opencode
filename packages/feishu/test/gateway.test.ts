@@ -9,6 +9,7 @@ import type {
   NormalizedFeishuMessage,
 } from "../src/feishu-channel"
 import { createGateway } from "../src/gateway"
+import { formatInventoryAnswer } from "../src/inventory-answer"
 import { createInventoryRoute } from "../src/inventory-route"
 import type { ChatCompletion, ChatFailure, ChatPort } from "../src/opencode"
 import {
@@ -143,6 +144,100 @@ describe("Feishu chat gateway", () => {
     await gateway.stop()
     expect(channel.stops).toBe(1)
     expect(chat.closes).toBe(1)
+  })
+
+  test("recovers a mentioned group inventory reply with native requester metadata and an exact body", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "feishu-gateway-recovery-"))
+    directories.push(directory)
+    const databasePath = join(directory, "gateway.sqlite")
+    const inventoryBody = formatInventoryAnswer([
+      {
+        name: "6001ZZ",
+        shelves: ["B-11-13"],
+        supplier: "苏州精工轴承",
+        inventory: "200",
+        remark: "现货",
+      },
+      {
+        name: "6301",
+        shelves: ["B-1-1"],
+        supplier: "宁波宏达轴承",
+        inventory: "12",
+      },
+      {
+        name: "6401",
+        shelves: [],
+        inventory: "9",
+        remark: "2024-7-20",
+      },
+    ])
+    const initialStore = openGatewayStore(databasePath)
+    const initialChannel = fakeChannel()
+    const initialGateway = createGateway({
+      config: config(),
+      feishu: initialChannel,
+      chat: fakeChat(async (task) => completed(`回答:${task.promptText}`)),
+      inventoryRoute: { handle: () => new Promise(() => {}) },
+      store: initialStore,
+      fallbackPath: join(directory, "fallback.jsonl"),
+    })
+
+    await initialGateway.start()
+    await initialChannel.emit({
+      chatType: "group",
+      chatID: "group_inventory",
+      senderID: "ou_requester",
+      senderName: "求精轴承",
+      messageID: "group_inventory_1",
+      originalText: "@机器人 6001ZZ库存",
+      promptText: "6001ZZ库存",
+      replyTarget: "group_inventory",
+      replyRootID: "group_inventory_1",
+    })
+
+    const admitted = initialStore.recoverableTasks()[0]
+    expect(admitted).toMatchObject({
+      replyMentionID: "ou_requester",
+      replyMentionName: "求精轴承",
+    })
+    expect(admitted?.answer).toBeUndefined()
+
+    initialStore.close()
+
+    const recoveredStore = openGatewayStore(databasePath)
+    const recoveredChannel = fakeChannel()
+    const recoveredGateway = createGateway({
+      config: config(),
+      feishu: recoveredChannel,
+      chat: fakeChat(async (task) => completed(`回答:${task.promptText}`)),
+      inventoryRoute: {
+        async handle() {
+          return { handled: true, text: inventoryBody, route: "inventory", status: "ok" }
+        },
+      },
+      store: recoveredStore,
+      fallbackPath: join(directory, "fallback.jsonl"),
+    })
+
+    await recoveredGateway.start()
+    await recoveredGateway.idle()
+
+    expect(recoveredChannel.sent).toHaveLength(1)
+    expect(recoveredChannel.sent[0]).toMatchObject({
+      task: {
+        replyMentionID: "ou_requester",
+        replyMentionName: "求精轴承",
+      },
+      text: inventoryBody,
+    })
+    expect(recoveredStore.getTask(admitted!.id)?.answer).toBe(inventoryBody)
+    expect(inventoryBody).toBe(
+      "6001ZZ（货架号：B-11-13）苏州精工轴承库存200，备注：现货\n6301（货架号：B-1-1）宁波宏达轴承库存12\n6401库存9，备注：2024-7-20",
+    )
+    expect(recoveredChannel.sent[0]?.text).not.toMatch(/@求精轴承|<at/)
+    expect(recoveredChannel.sent[0]?.task.answer).not.toMatch(/@求精轴承|<at/)
+
+    await recoveredGateway.stop()
   })
 
   test("recovers received work and sends one trace-bearing response for policy or provider failure", async () => {
