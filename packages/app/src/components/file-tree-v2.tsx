@@ -1,4 +1,5 @@
 import { useFile } from "@/context/file"
+import type { ExplorerTree } from "@/context/explorer"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import {
@@ -126,17 +127,18 @@ export default function FileTreeV2(props: {
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
+  tree?: ExplorerTree
   onFileClick?: (file: FileNode) => void
   onFileDoubleClick?: (file: FileNode) => void
 }) {
-  const file = useFile()
+  const tree = () => props.tree ?? useFile().tree
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
   const model = createMemo(() => (live() ? undefined : buildFileTreeV2Model(props.allowed ?? [])))
-  const expanded = (path: string) => file.tree.state(path)?.expanded ?? !live()
+  const expanded = (path: string) => tree().state(path)?.expanded ?? !live()
   const rows = createMemo(() => {
-    if (live()) return flattenLiveFileTreeV2((path) => file.tree.children(path), expanded)
+    if (live()) return flattenLiveFileTreeV2((path) => tree().children(path), expanded)
     return flattenFileTreeV2(model()!, expanded)
   })
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -165,7 +167,7 @@ export default function FileTreeV2(props: {
 
   createEffect(() => {
     if (!live()) return
-    void file.tree.list("")
+    void tree().list("")
   })
 
   // Only scroll when the active path changes (or first appears in the tree).
@@ -199,10 +201,10 @@ export default function FileTreeV2(props: {
 
   const toggleDirectory = (path: string, originalPath: string) => {
     if (expanded(path)) {
-      file.tree.collapse(originalPath)
+      tree().collapse(originalPath)
       return
     }
-    file.tree.expand(originalPath, live() ? undefined : { list: false })
+    tree().expand(originalPath, live() ? undefined : { list: false })
   }
 
   const rowByKey = createMemo(() => new Map(rows().map((row) => [row.node.path, row] as const)))

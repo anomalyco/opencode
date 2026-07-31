@@ -1,12 +1,17 @@
-import { createEffect, Suspense, type ParentProps } from "solid-js"
+import { createEffect, Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
 import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
+import { useCommand } from "@/context/command"
+import { useExplorer, ExplorerProvider } from "@/context/explorer"
+import { useLayout } from "@/context/layout"
+import { useLanguage } from "@/context/language"
 import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { ProjectExplorerSidebar } from "@/pages/layout/explorer-sidebar"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
@@ -42,12 +47,38 @@ export default function NewLayout(props: ParentProps) {
             : undefined
         }
       />
-      <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-        <Suspense>{props.children}</Suspense>
-      </main>
+      <ExplorerProvider>
+        <ProjectExplorerShell>{props.children}</ProjectExplorerShell>
+      </ExplorerProvider>
       {import.meta.env.DEV && state.debugTools && <DebugBar inline />}
       <TabsInfoPopup />
       <ToastRegion v2 />
+    </div>
+  )
+}
+
+function ProjectExplorerShell(props: ParentProps) {
+  const explorer = useExplorer()
+  const layout = useLayout()
+  const language = useLanguage()
+  const command = useCommand()
+
+  command.register("explorer", () => [
+    {
+      id: "explorer.toggle",
+      title: language.t("command.fileTree.toggle"),
+      category: language.t("command.category.view"),
+      keybind: "mod+shift+e",
+      onSelect: () => layout.explorer.toggle(),
+    },
+  ])
+
+  return (
+    <div class="flex flex-1 min-h-0 min-w-0 gap-2">
+      <ProjectExplorerSidebar />
+      <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
+        <Suspense>{props.children}</Suspense>
+      </main>
     </div>
   )
 }
