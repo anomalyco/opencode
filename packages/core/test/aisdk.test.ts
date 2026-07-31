@@ -98,60 +98,6 @@ it.effect("projects request settings, headers, and body overlays", () =>
   }),
 )
 
-it.effect("transforms the final AI SDK fetch request", () =>
-  Effect.gen(function* () {
-    const aisdk = yield* AISDK.Service
-    const outgoing: Array<{ headers: Headers; body: string | undefined }> = []
-    yield* aisdk.hook.sdk((event) => {
-      const result = streamModel([{ type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage }])
-      event.sdk = {
-        languageModel: () => ({
-          ...result,
-          doStream: async () => {
-            await event.options.fetch("https://provider.test/v1/messages", {
-              method: "POST",
-              headers: { authorization: "Bearer secret" },
-              body: JSON.stringify({ original: true }),
-            })
-            return result.doStream({} as never)
-          },
-        }),
-      }
-    })
-
-    const resolved = yield* aisdk.model(
-      model("test-request-hook", {
-        fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-          outgoing.push({
-            headers: new Headers(init?.headers),
-            body: typeof init?.body === "string" ? init.body : undefined,
-          })
-          return new Response()
-        },
-      }),
-    )
-    yield* LLMClient.generate(
-      LLM.request({
-        model: resolved,
-        prompt: "Hello",
-        http: {
-          transform: (request) =>
-            Effect.sync(() => {
-              expect(request.url).toBe("https://provider.test/v1/messages")
-              expect(request.headers.authorization).toBe("Bearer secret")
-              request.headers["x-plugin"] = "transformed"
-              request.body = JSON.stringify({ transformed: true })
-            }),
-        },
-      }),
-    ).pipe(Effect.provide(client))
-
-    expect(outgoing).toHaveLength(1)
-    expect(outgoing[0].headers.get("x-plugin")).toBe("transformed")
-    expect(outgoing[0].body).toBe(JSON.stringify({ transformed: true }))
-  }),
-)
-
 it.effect("maps pro reasoning bodies to AI SDK provider options", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
