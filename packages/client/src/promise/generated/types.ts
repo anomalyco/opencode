@@ -108,11 +108,7 @@ export type ToolTextContent = { type: "text"; text: string }
 
 export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string | null }
 
-export type SessionStructuredError = {
-  type: string
-  message: string
-  status?: number | "Infinity" | "-Infinity" | "NaN"
-}
+export type SessionStructuredError = { type: string; message: string; status?: number }
 
 export type SessionMessageCompactionRunning = {
   type: "compaction"
@@ -141,8 +137,6 @@ export type InstructionEntryKey = string
 export type SessionGenerateResponse = { data: { text: string } }
 
 export type SessionPendingSyntheticData1 = { text: string; description?: string; metadata?: { [x: string]: any } }
-
-export type SessionStructuredError2 = { type: string; message: string; status?: number }
 
 export type ShellInfo = {
   id: string
@@ -1243,14 +1237,6 @@ export type SessionMessageCompactionFailed = {
   error: SessionStructuredError
 }
 
-export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue }
-
-export type SessionPendingSyntheticMessage = {
-  type: "synthetic"
-  data: SessionPendingSyntheticData1
-  delivery: "steer" | "queue"
-}
-
 export type SessionExecutionFailed = {
   id: string
   created: number
@@ -1258,7 +1244,7 @@ export type SessionExecutionFailed = {
   type: "session.execution.failed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; error: SessionStructuredError2 }
+  data: { sessionID: string; error: SessionStructuredError }
 }
 
 export type SessionStepFailed = {
@@ -1271,7 +1257,7 @@ export type SessionStepFailed = {
   data: {
     sessionID: string
     assistantMessageID: string
-    error: SessionStructuredError2
+    error: SessionStructuredError
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
     snapshot?: string
@@ -1286,7 +1272,7 @@ export type SessionRetryScheduled = {
   type: "session.retry.scheduled"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; attempt: number; at: number; error: SessionStructuredError2 }
+  data: { sessionID: string; assistantMessageID: string; attempt: number; at: number; error: SessionStructuredError }
 }
 
 export type SessionCompactionFailed = {
@@ -1296,7 +1282,15 @@ export type SessionCompactionFailed = {
   type: "session.compaction.failed"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; reason: "auto" | "manual"; error: SessionStructuredError2; inputID?: string }
+  data: { sessionID: string; reason: "auto" | "manual"; error: SessionStructuredError; inputID?: string }
+}
+
+export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue }
+
+export type SessionPendingSyntheticMessage = {
+  type: "synthetic"
+  data: SessionPendingSyntheticData1
+  delivery: "steer" | "queue"
 }
 
 export type SessionShellStarted = {
@@ -1852,7 +1846,7 @@ export type SessionToolFailed = {
     sessionID: string
     assistantMessageID: string
     callID: string
-    error: SessionStructuredError2
+    error: SessionStructuredError
     content?: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean

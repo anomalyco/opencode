@@ -33,6 +33,7 @@ describe("provider error classification", () => {
         expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" }),
       ),
     )
+    expect(isContextOverflow("413 status code (no body)")).toBe(false)
   })
 
   test("does not classify rate limits as context overflow", () => {

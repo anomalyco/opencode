@@ -48,7 +48,7 @@ const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, 
 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
-  (patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))
+  (patterns.some((pattern) => pattern.test(message)) || /^400\s*(status code)?\s*\(no body\)/i.test(message))
 
 export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 

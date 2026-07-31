@@ -7,5 +7,5 @@ export interface Error extends Schema.Schema.Type<typeof Error> {}
 export const Error = Schema.Struct({
   type: Schema.String,
   message: Schema.String,
-  status: Schema.Number.pipe(optional),
+  status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })).pipe(optional),
 }).annotate({ identifier: "Session.StructuredError" })
