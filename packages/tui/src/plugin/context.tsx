@@ -13,6 +13,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import path from "path"
+import { watch } from "fs"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { Context, Dialog, Page, Slot, SlotMap, SlotName, Toast } from "@opencode-ai/plugin/tui/context"
@@ -38,7 +39,7 @@ import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
 import { abbreviateHome } from "../util/path-format"
 import { builtins } from "./builtins"
-import { discoverTuiPlugins } from "./discovery"
+import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
@@ -374,6 +375,40 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     return true
   }
 
+  // Hot-reload local plugin sources: watch the discovery directory and any
+  // local entrypoints, then rebuild the plugin generation when one changes.
+  // Watches are deduped by path and never torn down individually (a stale
+  // watch costs one fs handle and a no-op reconcile); all die with this
+  // provider. Failed watches leave the set so a later reconcile can retry
+  // once the path exists.
+  const watchers: ReturnType<typeof watch>[] = []
+  const watched = new Set<string>()
+  let pending: ReturnType<typeof setTimeout> | undefined
+  const changed = () => {
+    clearTimeout(pending)
+    pending = setTimeout(() => {
+      loading = loading.catch(() => undefined).then(() => reconcile())
+    }, 100)
+  }
+  const watchSource = (target: string) => {
+    if (watched.has(target)) return
+    watched.add(target)
+    stat(target)
+      .then((info) => {
+        // Watch the parent for files: editors that save by rename replace the
+        // inode, which silently kills a direct file watch after the first save.
+        const dir = info.isDirectory() ? target : path.dirname(target)
+        if (dir !== target && watched.has(dir)) return
+        watched.add(dir)
+        watchers.push(watch(dir, changed))
+      })
+      .catch(() => watched.delete(target))
+  }
+  onCleanup(() => {
+    clearTimeout(pending)
+    for (const watcher of watchers) watcher.close()
+  })
+
   const reconcile = async (configured = config.data.plugins ?? []) => {
     await Promise.all(
       Object.entries(store.registrations)
@@ -381,6 +416,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         .map(([id]) => deactivate(id)),
     )
     const entries = [...(await discoverTuiPlugins(paths.cwd)), ...configured]
+    watchSource(path.join(paths.cwd, ".opencode", "plugins", "tui"))
     batch(() => {
       setStore("registrations", reconcileStore({}))
       setStore("states", [])
@@ -413,6 +449,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       }
 
       const options = typeof entry === "string" ? undefined : entry.options
+      // Watch even when the load below fails so fixing a broken plugin reloads it.
+      const local = localSource(target, directory)
+      if (local) watchSource(fileURLToPath(local))
       setStore("states", (items) => [...items, { target, status: "loading" }])
       const plugin = await loadPlugin(target, directory, props.packages).catch((error) => {
         setStore("states", (items) =>
@@ -532,14 +571,10 @@ function matches(selector: string, id: string) {
 }
 
 async function loadPlugin(spec: string, directory: string, packages: PackageResolver) {
-  const local = spec.startsWith("file://")
-    ? new URL(spec)
-    : spec.startsWith("./") || spec.startsWith("../") || path.isAbsolute(spec)
-      ? pathToFileURL(path.resolve(directory, spec))
-      : undefined
+  const local = localSource(spec, directory)
   const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec)
   if (!entrypoint) return
-  const mod: { readonly default?: unknown } = await import(entrypoint)
+  const mod: { readonly default?: unknown } = await import(local ? await freshSpecifier(entrypoint) : entrypoint)
   if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
   return mod.default
 }
