@@ -122,6 +122,52 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
   })
 }
 
+function messageRows(
+  db: Database.Interface["db"],
+  input: {
+    sessionID: SessionID
+    limit: number
+    before?: string
+  },
+) {
+  return Effect.gen(function* () {
+    const before = input.before ? cursor.decode(input.before) : undefined
+    const where = before
+      ? and(eq(MessageTable.session_id, input.sessionID), older(before))
+      : eq(MessageTable.session_id, input.sessionID)
+    const rows = yield* db
+      .select()
+      .from(MessageTable)
+      .where(where)
+      .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+      .limit(input.limit + 1)
+      .all()
+      .pipe(Effect.orDie)
+    if (rows.length === 0) {
+      const row = yield* db
+        .select({ id: SessionTable.id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, input.sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+      return {
+        rows: [],
+        more: false,
+      }
+    }
+
+    const more = rows.length > input.limit
+    const slice = more ? rows.slice(0, input.limit) : rows
+    const tail = slice.at(-1)
+    return {
+      rows: slice,
+      more,
+      cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
+    }
+  })
+}
+
 function providerMeta(metadata: Record<string, any> | undefined) {
   if (!metadata) return undefined
   const { providerExecuted: _, ...rest } = metadata
@@ -428,41 +474,13 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
   before?: string
 }) {
   const { db } = yield* Database.Service
-  const before = input.before ? cursor.decode(input.before) : undefined
-  const where = before
-    ? and(eq(MessageTable.session_id, input.sessionID), older(before))
-    : eq(MessageTable.session_id, input.sessionID)
-  const rows = yield* db
-    .select()
-    .from(MessageTable)
-    .where(where)
-    .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
-    .limit(input.limit + 1)
-    .all()
-    .pipe(Effect.orDie)
-  if (rows.length === 0) {
-    const row = yield* db
-      .select({ id: SessionTable.id })
-      .from(SessionTable)
-      .where(eq(SessionTable.id, input.sessionID))
-      .get()
-      .pipe(Effect.orDie)
-    if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-    return {
-      items: [] as WithParts[],
-      more: false,
-    }
-  }
-
-  const more = rows.length > input.limit
-  const slice = more ? rows.slice(0, input.limit) : rows
-  const items = yield* hydrate(db, slice)
+  const result = yield* messageRows(db, input)
+  const items = yield* hydrate(db, result.rows)
   items.reverse()
-  const tail = slice.at(-1)
   return {
     items,
-    more,
-    cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
+    more: result.more,
+    cursor: result.cursor,
   }
 })
 
@@ -572,7 +590,49 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
 }
 
 export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
-  return filterCompacted(yield* stream(sessionID))
+  const { db } = yield* Database.Service
+  const size = 50
+  const rows = [] as (typeof MessageTable.$inferSelect)[]
+  const completed = new Set<string>()
+  let retain: MessageID | undefined
+  let before: string | undefined
+
+  pages: while (true) {
+    const next = yield* messageRows(db, { sessionID, limit: size, before }).pipe(
+      Effect.catchIf(
+        (error): error is NotFoundError => NotFoundError.isInstance(error),
+        () => Effect.succeed({ rows: [] as (typeof MessageTable.$inferSelect)[], more: false, cursor: undefined }),
+      ),
+    )
+    if (next.rows.length === 0) break
+    for (const row of next.rows) {
+      rows.push(row)
+      const message = info(row)
+      if (retain) {
+        if (message.id === retain) break pages
+        continue
+      }
+      if (message.role === "user" && completed.has(message.id)) {
+        const compaction = (yield* parts(message.id)).find((item): item is CompactionPart => item.type === "compaction")
+        if (!compaction) continue
+        if (!compaction.tail_start_id) break pages
+        retain = compaction.tail_start_id
+        if (message.id === retain) break pages
+        continue
+      }
+      if (message.role === "assistant" && message.summary && message.finish && !message.error) {
+        completed.add(message.parentID)
+      }
+    }
+    if (!next.more || !next.cursor) break
+    before = next.cursor
+  }
+
+  const result = [] as WithParts[]
+  for (let index = 0; index < rows.length; index += size) {
+    result.push(...(yield* hydrate(db, rows.slice(index, index + size))))
+  }
+  return filterCompacted(result)
 })
 
 // filterCompacted reorders messages for model consumption
