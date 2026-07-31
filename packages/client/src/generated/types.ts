@@ -266,8 +266,6 @@ export type SessionsListOutput = {
   readonly cursor: { readonly previous?: string | null; readonly next?: string | null }
 }
 
-export type SessionsCostOutput = { readonly data: number }["data"]
-
 export type SessionsCreateInput = {
   readonly id?: {
     readonly id?: string | null
@@ -1754,6 +1752,8 @@ export type SessionsMessageOutput = {
         readonly time: { readonly created: number }
       }
 }["data"]
+
+export type SessionsCostOutput = { readonly data: number }["data"]
 
 export type MessagesListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
