@@ -309,6 +309,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Grok 4.5</li>
             <li>GLM-5.2</li>
             <li>GLM-5.1</li>
+            <li>GPT 5.6 Luna</li>
             <li>Kimi K3</li>
             <li>Kimi K2.7 Code</li>
             <li>Kimi K2.6</li>

@@ -224,6 +224,7 @@ export function TabNavItem(props: {
         <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
           <Show
             when={props.session()}
+            keyed
             fallback={
               <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
             }
@@ -231,8 +232,8 @@ export function TabNavItem(props: {
             {(session) => (
               <SessionTabAvatar
                 project={project()}
-                directory={session().directory}
-                sessionId={session().id}
+                directory={session.directory}
+                sessionId={session.id}
                 server={props.server}
               />
             )}

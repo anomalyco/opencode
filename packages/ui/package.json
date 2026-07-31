@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.18.9",
+  "version": "1.18.10",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -104,6 +104,7 @@
     "remend": "catalog:",
     "shiki": "catalog:",
     "solid-list": "catalog:",
+    "solid-sonner": "catalog:",
     "strip-ansi": "7.1.2"
   },
   "peerDependencies": {
