@@ -158,7 +158,10 @@ export const layer = Layer.effect(
         http: {
           headers: SessionModelHeaders.make(session, app),
         },
-        providerOptions: { openai: { promptCacheKey } },
+        providerOptions:
+          model.route.id === "openrouter"
+            ? { openrouter: { promptCacheKey } }
+            : { openai: { promptCacheKey } },
         system: contextEvent.system,
         messages: unsupportedParts(contextEvent.messages, resolved.capabilities),
         tools: hookedTools,

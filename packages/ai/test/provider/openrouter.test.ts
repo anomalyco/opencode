@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, Message } from "../../src"
+import { CacheHint, LLM, Message } from "../../src"
 import { LLMClient } from "../../src/route"
 import { compileRequest } from "../../src/route/client"
 import * as OpenRouter from "../../src/providers/openrouter"
@@ -27,7 +27,128 @@ describe("OpenRouter", () => {
         model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: "Say hello." }],
         stream: true,
+        usage: { include: true },
       })
+    }),
+  )
+
+  it.effect("lowers the native cache policy to OpenRouter cache controls", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          system: [
+            { type: "text", text: "Base agent", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3_600 }) },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          prompt: "Hello",
+          cache: { tools: true, system: true, messages: { tail: 1 } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ cache_control: { type: "ephemeral" } }],
+        messages: [
+          {
+            role: "system",
+            content: [
+              { text: "Base agent", cache_control: { type: "ephemeral", ttl: "1h" } },
+              { text: "Project instructions", cache_control: { type: "ephemeral" } },
+            ],
+          },
+          {
+            role: "user",
+            content: [{ text: "Hello", cache_control: { type: "ephemeral" } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("lowers manual assistant and tool-result cache hints", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: "none",
+          messages: [
+            Message.user("Call the tool"),
+            Message.assistant([
+              { type: "text", text: "Calling", cache: new CacheHint({ type: "ephemeral" }) },
+              { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+            ]),
+            Message.tool({
+              id: "call_1",
+              name: "lookup",
+              result: "Done",
+              cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3_600 }),
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "user", content: "Call the tool" },
+        { role: "assistant", content: "Calling", cache_control: { type: "ephemeral" } },
+        { role: "tool", content: '"Done"', cache_control: { type: "ephemeral", ttl: "1h" } },
+      ])
+    }),
+  )
+
+  it.effect("caps manual cache controls at four breakpoints", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: "none",
+          system: [1, 2, 3, 4, 5].map((index) => ({ type: "text" as const, text: `System ${index}`, cache })),
+          prompt: "Hello",
+        }),
+      )
+
+      const system = prepared.body.messages[0]
+      expect(system?.role).toBe("system")
+      expect(
+        system && Array.isArray(system.content)
+          ? system.content.filter((part) => "cache_control" in part && part.cache_control !== undefined)
+          : [],
+      ).toHaveLength(4)
+    }),
+  )
+
+  it.effect("preserves cache policy hints on reasoning-only assistant messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: { messages: "latest-assistant" },
+          messages: [Message.user("Think"), Message.assistant([{ type: "reasoning", text: "Reasoning" }])],
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "user", content: "Think" },
+        { role: "assistant", cache_control: { type: "ephemeral" } },
+      ])
+    }),
+  )
+
+  it.effect("allows usage accounting to be disabled explicitly", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({
+            apiKey: "test-key",
+            providerOptions: { openrouter: { usage: false } },
+          }).model("openai/gpt-4o-mini"),
+          cache: "none",
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.usage).toEqual({ include: false })
     }),
   )
 
@@ -42,6 +163,13 @@ describe("OpenRouter", () => {
                 usage: true,
                 reasoning: { effort: "high" },
                 promptCacheKey: "session_123",
+                models: ["anthropic/claude-sonnet-4.6", "google/gemini-3.1-pro"],
+                provider: { order: ["anthropic", "google"], require_parameters: true },
+                plugins: [{ id: "response-healing" }],
+                web_search_options: { engine: "native", max_results: 3 },
+                debug: { echo_upstream_body: true },
+                user: "user_123",
+                future_option: { enabled: true },
               },
             },
           }).model("anthropic/claude-3.7-sonnet:thinking"),
@@ -53,6 +181,13 @@ describe("OpenRouter", () => {
         usage: { include: true },
         reasoning: { effort: "high" },
         prompt_cache_key: "session_123",
+        models: ["anthropic/claude-sonnet-4.6", "google/gemini-3.1-pro"],
+        provider: { order: ["anthropic", "google"], require_parameters: true },
+        plugins: [{ id: "response-healing" }],
+        web_search_options: { engine: "native", max_results: 3 },
+        debug: { echo_upstream_body: true },
+        user: "user_123",
+        future_option: { enabled: true },
       })
     }),
   )
@@ -104,6 +239,7 @@ describe("OpenRouter", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: "none",
           messages: [
             Message.assistant([
               {
@@ -137,6 +273,7 @@ describe("OpenRouter", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: "none",
           messages: [
             Message.assistant({
               type: "reasoning",
@@ -162,6 +299,7 @@ describe("OpenRouter", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: "none",
           messages: [
             Message.assistant({
               type: "reasoning",
@@ -183,6 +321,7 @@ describe("OpenRouter", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          cache: "none",
           messages: [Message.assistant({ type: "reasoning", text: "Thinking" })],
         }),
       )

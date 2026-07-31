@@ -2,6 +2,42 @@ import { describe, expect, test } from "bun:test"
 import { AISDKNative } from "@opencode-ai/core/aisdk-native"
 
 describe("AISDKNative", () => {
+  test("maps OpenRouter settings to native destinations", () => {
+    expect(
+      AISDKNative.map("@openrouter/ai-sdk-provider", {
+        appName: "OpenCode",
+        appUrl: "https://opencode.ai",
+        headers: { "x-openrouter-title": "Configured", "x-provider-api-keys": "Configured BYOK" },
+        api_keys: { anthropic: "provider-key" },
+        extraBody: { transforms: ["middle-out"] },
+        models: ["anthropic/claude-sonnet-4.6"],
+        provider: { only: ["anthropic"], require_parameters: true },
+        reasoning: { effort: "high" },
+        promptCacheKey: "session_123",
+        future_option: { enabled: true },
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/openrouter",
+      settings: {
+        providerOptions: {
+          openrouter: {
+            models: ["anthropic/claude-sonnet-4.6"],
+            provider: { only: ["anthropic"], require_parameters: true },
+            reasoning: { effort: "high" },
+            promptCacheKey: "session_123",
+            future_option: { enabled: true },
+          },
+        },
+      },
+      headers: {
+        "x-openrouter-title": "Configured",
+        "HTTP-Referer": "https://opencode.ai",
+        "x-provider-api-keys": "Configured BYOK",
+      },
+      body: { transforms: ["middle-out"] },
+    })
+  })
+
   test("maps every Google thinking setting", () => {
     expect(
       AISDKNative.map("@ai-sdk/google", {

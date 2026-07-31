@@ -11,6 +11,7 @@ import {
   Usage,
   type FinishReason,
   type FinishReasonDetails,
+  type CacheHint,
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
@@ -38,6 +39,11 @@ export const PATH = "/chat/completions"
 // The body schema is the provider-native JSON body. `fromRequest` below builds
 // this shape from the common `LLMRequest`, then `Route.make` validates and
 // JSON-encodes it before transport.
+const OpenAIChatCacheControl = Schema.Struct({
+  type: Schema.Literal("ephemeral"),
+  ttl: Schema.optional(Schema.String),
+})
+
 const OpenAIChatFunction = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
@@ -47,6 +53,7 @@ const OpenAIChatFunction = Schema.Struct({
 const OpenAIChatTool = Schema.Struct({
   type: Schema.tag("function"),
   function: OpenAIChatFunction,
+  cache_control: Schema.optional(OpenAIChatCacheControl),
 })
 type OpenAIChatTool = Schema.Schema.Type<typeof OpenAIChatTool>
 
@@ -61,7 +68,11 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
 
 const OpenAIChatUserContent = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
+  Schema.Struct({
+    type: Schema.Literal("text"),
+    text: Schema.String,
+    cache_control: Schema.optional(OpenAIChatCacheControl),
+  }),
   Schema.Struct({
     type: Schema.Literal("image_url"),
     image_url: Schema.Struct({ url: Schema.String }),
@@ -69,7 +80,10 @@ const OpenAIChatUserContent = Schema.Union([
 ])
 
 const OpenAIChatMessage = Schema.Union([
-  Schema.Struct({ role: Schema.Literal("system"), content: Schema.String }),
+  Schema.Struct({
+    role: Schema.Literal("system"),
+    content: Schema.Union([Schema.String, Schema.Array(OpenAIChatUserContent)]),
+  }),
   Schema.Struct({
     role: Schema.Literal("user"),
     content: Schema.Union([Schema.String, Schema.Array(OpenAIChatUserContent)]),
@@ -83,10 +97,16 @@ const OpenAIChatMessage = Schema.Union([
       reasoning: Schema.optional(Schema.String),
       reasoning_text: Schema.optional(Schema.String),
       reasoning_details: Schema.optional(Schema.Unknown),
+      cache_control: Schema.optional(OpenAIChatCacheControl),
     }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
-  Schema.Struct({ role: Schema.Literal("tool"), tool_call_id: Schema.String, content: Schema.String }),
+  Schema.Struct({
+    role: Schema.Literal("tool"),
+    tool_call_id: Schema.String,
+    content: Schema.String,
+    cache_control: Schema.optional(OpenAIChatCacheControl),
+  }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type OpenAIChatMessage = Schema.Schema.Type<typeof OpenAIChatMessage>
 
@@ -210,13 +230,20 @@ export interface ParserState {
 // Lowering is the only place that knows how common LLM messages map onto the
 // OpenAI Chat wire format. Keep provider quirks here instead of leaking native
 // fields into `LLMRequest`.
-const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIChatTool => ({
+interface LoweringOptions {
+  readonly cacheControl?: (
+    cache: CacheHint | undefined,
+  ) => Schema.Schema.Type<typeof OpenAIChatCacheControl> | undefined
+}
+
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema, options: LoweringOptions): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
     parameters: ToolSchemaProjection.openAI(inputSchema),
   },
+  cache_control: options.cacheControl?.(tool.cache),
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -258,11 +285,14 @@ const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown) 
   if (isRecord(native) && Array.isArray(native.reasoning_details)) return native.reasoning_details
 }
 
-const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
+const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
+  message: OpenAIChatRequestMessage,
+  options: LoweringOptions,
+) {
   const content: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
     if (part.type === "text") {
-      content.push({ type: "text", text: part.text })
+      content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
       continue
     }
     if (part.type === "media") {
@@ -271,14 +301,18 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (mes
     }
     return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
   }
-  if (content.every((part) => part.type === "text"))
-    return { role: "user" as const, content: content.map((part) => part.text).join("") }
+  if (content.every((part) => part.type === "text" && part.cache_control === undefined))
+    return {
+      role: "user" as const,
+      content: content.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }
   return { role: "user" as const, content }
 })
 
 const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(function* (
   message: OpenAIChatRequestMessage,
   configuredField?: string,
+  options: LoweringOptions = {},
 ) {
   const content: TextPart[] = []
   const reasoning: ReasoningPart[] = []
@@ -316,29 +350,44 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     if (reasoning.length === 0) return nativeReasoning
     return text
   })()
+  const cached = message.content.findLast((part) => "cache" in part && part.cache !== undefined)
   const result = {
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
     reasoning_details: details,
+    cache_control: options.cacheControl?.(cached && "cache" in cached ? cached.cache : undefined),
   }
   if (field === undefined || reasoningText === undefined) return result
   return { ...result, [field]: reasoningText }
 })
 
-const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
+const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
+  message: OpenAIChatRequestMessage,
+  options: LoweringOptions,
+) {
   const messages: OpenAIChatMessage[] = []
   const images: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
     if (part.result.type !== "content") {
-      messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
+      messages.push({
+        role: "tool",
+        tool_call_id: part.id,
+        content: ProviderShared.toolResultText(part),
+        cache_control: options.cacheControl?.(part.cache),
+      })
       continue
     }
     const content: ReadonlyArray<Tool.Content> = part.result.value
     const text = content.filter((item) => item.type === "text").map((item) => item.text)
-    messages.push({ role: "tool", tool_call_id: part.id, content: text.join("\n") })
+    messages.push({
+      role: "tool",
+      tool_call_id: part.id,
+      content: text.join("\n"),
+      cache_control: options.cacheControl?.(part.cache),
+    })
     const files = content.filter((item) => item.type === "file")
     images.push(
       ...(yield* Effect.forEach(files, (item) =>
@@ -352,15 +401,29 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (m
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
   message: OpenAIChatRequestMessage,
   reasoningField?: string,
+  options: LoweringOptions = {},
 ) {
-  if (message.role === "user") return [yield* lowerUserMessage(message)]
-  if (message.role === "assistant") return [yield* lowerAssistantMessage(message, reasoningField)]
-  return (yield* lowerToolMessages(message)).messages
+  if (message.role === "user") return [yield* lowerUserMessage(message, options)]
+  if (message.role === "assistant") return [yield* lowerAssistantMessage(message, reasoningField, options)]
+  return (yield* lowerToolMessages(message, options)).messages
 })
 
-const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest, options: LoweringOptions) {
   const system: OpenAIChatMessage[] =
-    request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
+    request.system.length === 0
+      ? []
+      : request.system.some((part) => part.cache !== undefined) && options.cacheControl !== undefined
+        ? [
+            {
+              role: "system",
+              content: request.system.map((part) => ({
+                type: "text",
+                text: part.text,
+                cache_control: options.cacheControl?.(part.cache),
+              })),
+            },
+          ]
+        : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const messages = [...system]
   const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   const flushImages = () => {
@@ -371,28 +434,53 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
       if (pendingImages.length > 0) {
-        messages.push({ role: "user", content: [...pendingImages.splice(0), { type: "text", text: part.text }] })
+        messages.push({
+          role: "user",
+          content: [
+            ...pendingImages.splice(0),
+            { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
+          ],
+        })
         continue
       }
       const previous = messages.at(-1)
       if (previous?.role === "user" && typeof previous.content === "string")
-        messages[messages.length - 1] = { role: "user", content: `${previous.content}\n${part.text}` }
+        messages[messages.length - 1] = options.cacheControl?.(part.cache)
+          ? {
+              role: "user",
+              content: [
+                { type: "text", text: previous.content },
+                { type: "text", text: part.text, cache_control: options.cacheControl(part.cache) },
+              ],
+            }
+          : { role: "user", content: `${previous.content}\n${part.text}` }
       else if (previous?.role === "user" && Array.isArray(previous.content))
         messages[messages.length - 1] = {
           role: "user",
-          content: [...previous.content, { type: "text", text: part.text }],
+          content: [
+            ...previous.content,
+            { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
+          ],
         }
-      else messages.push({ role: "user", content: part.text })
+      else
+        messages.push(
+          options.cacheControl?.(part.cache)
+            ? {
+                role: "user",
+                content: [{ type: "text", text: part.text, cache_control: options.cacheControl(part.cache) }],
+              }
+            : { role: "user", content: part.text },
+        )
       continue
     }
     if (message.role === "tool") {
-      const lowered = yield* lowerToolMessages(message)
+      const lowered = yield* lowerToolMessages(message, options)
       messages.push(...lowered.messages)
       pendingImages.push(...lowered.images)
       continue
     }
     flushImages()
-    messages.push(...(yield* lowerMessage(message, request.model.compatibility?.reasoningField)))
+    messages.push(...(yield* lowerMessage(message, request.model.compatibility?.reasoningField, options)))
   }
   flushImages()
   return messages
@@ -406,7 +494,10 @@ const lowerOptions = (request: LLMRequest) => {
   }
 }
 
-const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMRequest) {
+export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
+  request: LLMRequest,
+  options: LoweringOptions = {},
+) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
   const reasoningField = request.model.compatibility?.reasoningField
@@ -419,12 +510,16 @@ const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMR
   const maxTokensField = request.model.compatibility?.maxTokensField ?? "max_tokens"
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(request),
+    messages: yield* lowerMessages(request, options),
     tools:
       request.tools.length === 0
         ? undefined
         : request.tools.map((tool) =>
-            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+            lowerTool(
+              tool,
+              ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
+              options,
+            ),
           ),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
