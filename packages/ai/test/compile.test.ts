@@ -144,16 +144,16 @@ describe("request option precedence", () => {
           .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("fresh-key") })
           .model({ id: "gpt-4o-mini" }),
         prompt: "Say hello.",
-        http: {
-          transform: (request) =>
-            Effect.sync(() => {
-              expect(request.headers.authorization).toBe("Bearer fresh-key")
-              request.url = "https://proxy.test/v1/chat/completions"
-              request.headers["x-plugin"] = "transformed"
-              request.body = JSON.stringify({ transformed: true })
-            }),
-        },
       }),
+      {
+        transformRequest: (request) =>
+          Effect.sync(() => {
+            expect(request.headers.authorization).toBe("Bearer fresh-key")
+            request.url = "https://proxy.test/v1/chat/completions"
+            request.headers["x-plugin"] = "transformed"
+            request.body = JSON.stringify({ transformed: true })
+          }),
+      },
     ).pipe(
       Effect.provide(
         dynamicResponse((input) =>

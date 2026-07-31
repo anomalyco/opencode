@@ -123,7 +123,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
     Effect.gen(function* () {
       const parts = yield* jsonRequestParts({ ...prepareInput })
       const request = { url: parts.url, method: "POST", headers: { ...parts.headers }, body: parts.bodyText }
-      yield* (prepareInput.request.http?.transform?.(request) ?? Effect.void)
+      yield* (prepareInput.transformRequest?.(request) ?? Effect.void)
       return {
         request: ProviderShared.jsonPost({
           url: request.url,

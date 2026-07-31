@@ -279,7 +279,7 @@ const layer = Layer.effect(
       // event durably, fork one fiber per local tool call, and hold back a virgin
       // context-overflow provider error so settlement may recover it via compaction.
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = llm.stream(prepared.request).pipe(
+      const providerStream = llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
