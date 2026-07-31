@@ -887,22 +887,6 @@ export function Session() {
         dialog.clear()
       },
     },
-    {
-      title: "Next subagent",
-      id: "session.child.next",
-      group: "Session",
-      palette: undefined,
-      enabled: !!session()?.parentID,
-      run: () => unavailable("Subagent navigation"),
-    },
-    {
-      title: "Previous subagent",
-      id: "session.child.previous",
-      group: "Session",
-      palette: undefined,
-      enabled: !!session()?.parentID,
-      run: () => unavailable("Subagent navigation"),
-    },
   ])
 
   const commands = createMemo(() =>
