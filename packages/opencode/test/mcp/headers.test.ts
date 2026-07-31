@@ -1,4 +1,4 @@
-import { describe, expect, mock, beforeEach } from "bun:test"
+import { describe, expect, mock, beforeEach, afterAll } from "bun:test"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import * as RealMcpClient from "@modelcontextprotocol/client"
@@ -47,6 +47,16 @@ await mock.module("@modelcontextprotocol/client", () => ({
 
 beforeEach(() => {
   transportCalls.length = 0
+})
+
+// fork(mcp-dual-era-client D2): mock.module() mutates the module registry
+// for the rest of the bun:test process, not just this file — without
+// restoring it, any later-running file (alphabetically after this one) that
+// needs the REAL @modelcontextprotocol/client silently gets this file's
+// mock instead. Found via test/mcp/tool-profiles.test.ts failing only when
+// run as part of the full suite, never in isolation.
+afterAll(() => {
+  mock.restore()
 })
 
 // Import MCP after mocking

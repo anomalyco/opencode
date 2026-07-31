@@ -3,6 +3,20 @@ export * as ConfigMCPV1 from "./mcp"
 import { Schema } from "effect"
 import { PositiveInt } from "../../schema"
 
+export const ProtocolMode = Schema.Union([
+  Schema.Literal("legacy"),
+  Schema.Literal("auto"),
+  Schema.Literal("modern"),
+]).annotate({
+  identifier: "McpProtocolMode",
+  description:
+    "MCP protocol era negotiation. 'legacy' always uses the pre-2026-07-28 initialize handshake (the safe default for " +
+    "most servers today). 'auto' probes server/discover and falls back to legacy — use for servers you know or expect " +
+    "may support the 2026-07-28 revision. 'modern' pins strictly to the latest protocol revision and fails rather than " +
+    "falling back — mainly useful for test fixtures. Falls back to `experimental.mcp_protocol_mode`, then 'auto'.",
+})
+export type ProtocolMode = Schema.Schema.Type<typeof ProtocolMode>
+
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
   command: Schema.mutable(Schema.Array(Schema.String)).annotate({
@@ -19,6 +33,12 @@ export const Local = Schema.Struct({
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
+  }),
+  protocolMode: Schema.optional(ProtocolMode),
+  toolProfile: Schema.optional(Schema.String).annotate({
+    description:
+      "Name of an entry in the top-level `mcpToolProfiles` map. When set, only the listed tool names from this " +
+      "server are exposed to the model; all others are filtered out before tool definitions are built.",
   }),
 }).annotate({ identifier: "McpLocalConfig" })
 export type Local = Schema.Schema.Type<typeof Local>
@@ -55,6 +75,12 @@ export const Remote = Schema.Struct({
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
+  }),
+  protocolMode: Schema.optional(ProtocolMode),
+  toolProfile: Schema.optional(Schema.String).annotate({
+    description:
+      "Name of an entry in the top-level `mcpToolProfiles` map. When set, only the listed tool names from this " +
+      "server are exposed to the model; all others are filtered out before tool definitions are built.",
   }),
 }).annotate({ identifier: "McpRemoteConfig" })
 export type Remote = Schema.Schema.Type<typeof Remote>

@@ -1,6 +1,6 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { expect, mock, beforeEach } from "bun:test"
+import { expect, mock, beforeEach, afterAll } from "bun:test"
 import * as RealMcpClient from "@modelcontextprotocol/client"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
@@ -177,6 +177,17 @@ await mock.module("@modelcontextprotocol/client", () => ({
       return this._state?.capabilities
     }
 
+    // fork(mcp-dual-era-client B3): stubs for the diagnostics the real v2
+    // Client exposes post-connect; undefined here simulates a legacy-era
+    // connection (no server/discover), which is what these mocks emulate.
+    getDiscoverResult() {
+      return undefined
+    }
+
+    getNegotiatedProtocolVersion() {
+      return undefined
+    }
+
     async listTools(params?: { cursor?: string }) {
       if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
@@ -246,6 +257,12 @@ beforeEach(() => {
   connectError = "Mock transport cannot connect"
   clientCreateCount = 0
   transportCloseCount = 0
+})
+
+// fork(mcp-dual-era-client D2): see headers.test.ts's comment — mock.module()
+// leaks past this file without an explicit restore.
+afterAll(() => {
+  mock.restore()
 })
 
 // Import after mocks

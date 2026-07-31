@@ -1,4 +1,4 @@
-import { expect, mock, beforeEach } from "bun:test"
+import { expect, mock, beforeEach, afterAll } from "bun:test"
 import { EventEmitter } from "events"
 import { Deferred, Effect, Layer, Option } from "effect"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
@@ -98,6 +98,15 @@ await mock.module("@modelcontextprotocol/client", () => ({
     getServerCapabilities() {
       return { tools: {} }
     }
+
+    // fork(mcp-dual-era-client B3): stubs for post-connect diagnostics; undefined simulates legacy era.
+    getDiscoverResult() {
+      return undefined
+    }
+
+    getNegotiatedProtocolVersion() {
+      return undefined
+    }
   },
   // Mock UnauthorizedError
   UnauthorizedError: MockUnauthorizedError,
@@ -108,6 +117,12 @@ beforeEach(() => {
   openCalledWith = undefined
   openDeferred = undefined
   transportCalls.length = 0
+})
+
+// fork(mcp-dual-era-client D2): see headers.test.ts's comment — mock.module()
+// leaks past this file without an explicit restore.
+afterAll(() => {
+  mock.restore()
 })
 
 // Import modules after mocking

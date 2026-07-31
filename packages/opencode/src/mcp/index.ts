@@ -11,6 +11,8 @@ import {
   SSEClientTransport,
   UnauthorizedError,
   type LoggingMessageNotification,
+  type PriorDiscovery,
+  LATEST_PROTOCOL_VERSION,
 } from "@modelcontextprotocol/client"
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
 import { Config } from "@/config/config"
@@ -86,15 +88,31 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
 
 type MCPClient = Client
 
-function createClient(directory: string) {
-  const client = new Client({ name: "opencode", version: InstallationVersion }, CLIENT_OPTIONS)
+function createClient(directory: string, versionNegotiation: NonNullable<ClientOptions["versionNegotiation"]>) {
+  const client = new Client({ name: "opencode", version: InstallationVersion }, { ...CLIENT_OPTIONS, versionNegotiation })
   client.setRequestHandler("roots/list", () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )
   return client
 }
 
-const StatusConnected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
+const StatusConnected = Schema.Struct({
+  status: Schema.Literal("connected"),
+  // fork(mcp-dual-era-client B3): connection diagnostics, populated from the
+  // negotiated Client after a successful connect (see diagnosticsFor()).
+  era: Schema.optional(Schema.Union([Schema.Literal("legacy"), Schema.Literal("modern")])).annotate({
+    description: "Negotiated protocol era for this connection",
+  }),
+  protocolVersion: Schema.optional(Schema.String).annotate({
+    description: "Negotiated MCP protocol revision, when known",
+  }),
+  transport: Schema.optional(Schema.String).annotate({
+    description: "Transport that succeeded: StreamableHTTP, SSE, or stdio",
+  }),
+  capabilities: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Top-level server capability keys (e.g. tools, resources, prompts)",
+  }),
+}).annotate({
   identifier: "MCPStatusConnected",
 })
 const StatusDisabled = Schema.Struct({ status: Schema.Literal("disabled") }).annotate({
@@ -137,6 +155,22 @@ function remoteURL(value: string) {
   if (URL.canParse(value)) return new URL(value)
 }
 
+// fork(mcp-dual-era-client B1): our config vocabulary is legacy/auto/modern;
+// the SDK's own is legacy/auto/{pin}. "modern" maps to pinning the latest
+// revision — strict, no fallback, matching the proposal's "mainly for test
+// fixtures" intent. versionNegotiation is a ClientOptions field (constructor
+// time), not a per-connect() option, and its own SDK default is 'legacy' —
+// we override that default to 'auto' so an unconfigured server still gets a
+// chance to speak the modern era instead of silently staying pinned to 2025.
+function versionNegotiationFor(mode: ConfigMCPV1.ProtocolMode): NonNullable<ClientOptions["versionNegotiation"]> {
+  if (mode === "modern") return { mode: { pin: LATEST_PROTOCOL_VERSION } }
+  return { mode }
+}
+
+function resolveProtocolMode(cfg: ConfigV1.Info, mcp: ConfigMCPV1.Info): ConfigMCPV1.ProtocolMode {
+  return mcp.protocolMode ?? cfg.experimental?.mcp_protocol_mode ?? "auto"
+}
+
 interface CreateResult {
   mcpClient?: MCPClient
   status: Status
@@ -156,6 +190,11 @@ interface State {
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
+  // fork(mcp-dual-era-client B2): cached era verdict per server, adopted on
+  // reconnect via ConnectOptions.prior so a known-legacy server never repeats
+  // the server/discover probe within the same process. Never cleared on
+  // disconnect — only a fresh process re-probes.
+  priorDiscovery: Record<string, PriorDiscovery>
 }
 
 export interface Interface {
@@ -197,22 +236,30 @@ export const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner
     const auth = yield* McpAuth.Service
     const events = yield* EventV2Bridge.Service
+    const cfgSvc = yield* Config.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
     /**
      * Connect a client via the given transport with resource safety:
      * on failure the transport is closed; on success the caller owns it.
+     * `prior`, when given (B2), short-circuits era negotiation entirely —
+     * takes precedence over the client's own `versionNegotiation` mode.
      */
-    const connectTransport = Effect.fn("MCP.connectTransport")(function* (transport: Transport, timeout: number) {
+    const connectTransport = Effect.fn("MCP.connectTransport")(function* (
+      transport: Transport,
+      timeout: number,
+      versionNegotiation: NonNullable<ClientOptions["versionNegotiation"]>,
+      prior: PriorDiscovery | undefined,
+    ) {
       const directory = yield* InstanceState.directory
       return yield* Effect.acquireUseRelease(
         Effect.succeed(transport),
         (t) =>
           Effect.tryPromise({
             try: () => {
-              const client = createClient(directory)
-              return withTimeout(client.connect(t), timeout).then(() => client)
+              const client = createClient(directory, versionNegotiation)
+              return withTimeout(client.connect(t, prior ? { prior } : undefined), timeout).then(() => client)
             },
             catch: (e) => (e instanceof Error ? e : new Error(String(e))),
           }),
@@ -220,11 +267,39 @@ export const layer = Layer.effect(
       )
     })
 
+    // fork(mcp-dual-era-client B2/B3): read back what actually got negotiated
+    // after a successful connect — both to cache the verdict for the next
+    // reconnect (PriorDiscovery) and to populate connection diagnostics.
+    // getDiscoverResult() is defined only on a modern connection; its
+    // presence/absence IS the era signal (no dedicated getter exists).
+    function diagnosticsFor(client: MCPClient, transport: string) {
+      const discover = client.getDiscoverResult()
+      const era: "legacy" | "modern" = discover ? "modern" : "legacy"
+      const prior: PriorDiscovery = discover ? { kind: "modern", discover } : { kind: "legacy" }
+      // fork: capability discovery failing is a real, expected failure mode
+      // (create()'s own explicit getServerCapabilities() check handles it
+      // with proper client.close() cleanup) — never let reading it here for
+      // diagnostics purposes throw a defect earlier in the pipeline instead.
+      let capabilities: string[] = []
+      try {
+        capabilities = Object.keys(client.getServerCapabilities() ?? {})
+      } catch {}
+      return {
+        era,
+        protocolVersion: client.getNegotiatedProtocolVersion(),
+        transport,
+        capabilities,
+        prior,
+      }
+    }
+
     const DISABLED_RESULT: CreateResult = { status: { status: "disabled" } }
 
     const connectRemote = Effect.fn("MCP.connectRemote")(function* (
       key: string,
       mcp: ConfigMCPV1.Info & { type: "remote" },
+      versionNegotiation: NonNullable<ClientOptions["versionNegotiation"]>,
+      prior: PriorDiscovery | undefined,
     ) {
       const oauthDisabled = mcp.oauth === false
       const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
@@ -233,6 +308,7 @@ export const layer = Layer.effect(
         return {
           client: undefined as MCPClient | undefined,
           status: { status: "failed" as const, error: `Invalid MCP URL for "${key}"` },
+          prior: undefined as PriorDiscovery | undefined,
         }
       }
       let authProvider: McpOAuthProvider | undefined
@@ -276,7 +352,7 @@ export const layer = Layer.effect(
       let lastStatus: Status | undefined
 
       for (const { name, transport } of transports) {
-        const result = yield* connectTransport(transport, connectTimeout).pipe(
+        const result = yield* connectTransport(transport, connectTimeout, versionNegotiation, prior).pipe(
           Effect.map((client) => ({ client, transportName: name })),
           Effect.catch((error) => {
             const lastError = error instanceof Error ? error : new Error(String(error))
@@ -315,7 +391,20 @@ export const layer = Layer.effect(
             return Effect.void
           }),
         )
-        if (result) return { client: result.client, status: { status: "connected" } as Status }
+        if (result) {
+          const diag = diagnosticsFor(result.client, result.transportName)
+          return {
+            client: result.client,
+            status: {
+              status: "connected",
+              era: diag.era,
+              protocolVersion: diag.protocolVersion,
+              transport: diag.transport,
+              capabilities: diag.capabilities,
+            } as Status,
+            prior: diag.prior,
+          }
+        }
         // If this was an auth error, stop trying other transports
         if (lastStatus?.status === "needs_auth" || lastStatus?.status === "needs_client_registration") break
       }
@@ -323,12 +412,15 @@ export const layer = Layer.effect(
       return {
         client: undefined as MCPClient | undefined,
         status: (lastStatus ?? { status: "failed", error: "Unknown error" }) as Status,
+        prior: undefined as PriorDiscovery | undefined,
       }
     })
 
     const connectLocal = Effect.fn("MCP.connectLocal")(function* (
       key: string,
       mcp: ConfigMCPV1.Info & { type: "local" },
+      versionNegotiation: NonNullable<ClientOptions["versionNegotiation"]>,
+      prior: PriorDiscovery | undefined,
     ) {
       const [cmd, ...args] = mcp.command
       const baseDir = yield* InstanceState.directory
@@ -346,28 +438,46 @@ export const layer = Layer.effect(
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-      return yield* connectTransport(transport, connectTimeout).pipe(
-        Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
-          client,
-          status: { status: "connected" },
-        })),
-        Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
-          const msg = error instanceof Error ? error.message : String(error)
-          return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })
+      return yield* connectTransport(transport, connectTimeout, versionNegotiation, prior).pipe(
+        Effect.map((client): { client: MCPClient | undefined; status: Status; prior: PriorDiscovery | undefined } => {
+          const diag = diagnosticsFor(client, "stdio")
+          return {
+            client,
+            status: {
+              status: "connected",
+              era: diag.era,
+              protocolVersion: diag.protocolVersion,
+              transport: diag.transport,
+              capabilities: diag.capabilities,
+            },
+            prior: diag.prior,
+          }
         }),
+        Effect.catch(
+          (error): Effect.Effect<{ client: MCPClient | undefined; status: Status; prior: PriorDiscovery | undefined }> => {
+            const msg = error instanceof Error ? error.message : String(error)
+            return Effect.succeed({ client: undefined, status: { status: "failed", error: msg }, prior: undefined })
+          },
+        ),
       )
     })
 
     const create = Effect.fn("MCP.create")(
-      function* (key: string, mcp: ConfigMCPV1.Info) {
+      function* (key: string, mcp: ConfigMCPV1.Info, s: State) {
         if (mcp.enabled === false) {
           return DISABLED_RESULT
         }
 
-        const { client: mcpClient, status } =
+        const cfg = yield* cfgSvc.get()
+        const versionNegotiation = versionNegotiationFor(resolveProtocolMode(cfg, mcp))
+        const prior = s.priorDiscovery[key]
+
+        const { client: mcpClient, status, prior: newPrior } =
           mcp.type === "remote"
-            ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
-            : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
+            ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" }, versionNegotiation, prior)
+            : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" }, versionNegotiation, prior)
+
+        if (newPrior) s.priorDiscovery[key] = newPrior
 
         if (!mcpClient) {
           if (status.status !== "connected" && status.status !== "disabled") {
@@ -397,7 +507,6 @@ export const layer = Layer.effect(
         })
       }),
     )
-    const cfgSvc = yield* Config.Service
 
     const descendants = Effect.fnUntraced(
       function* (pid: number) {
@@ -487,6 +596,7 @@ export const layer = Layer.effect(
           status: {},
           clients: {},
           defs: {},
+          priorDiscovery: {},
         }
 
         yield* Effect.forEach(
@@ -503,7 +613,7 @@ export const layer = Layer.effect(
                 return
               }
 
-              const result = yield* create(key, mcp)
+              const result = yield* create(key, mcp, s)
               s.status[key] = result.status
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
@@ -558,10 +668,15 @@ export const layer = Layer.effect(
       client: MCPClient,
       listed: MCPToolDef[],
       timeout?: number,
+      status?: Status,
     ) {
       const bridge = yield* EffectBridge.make()
       const previous = s.clients[name]
-      s.status[name] = { status: "connected" }
+      // fork(mcp-dual-era-client B3): accept an already-diagnosed status
+      // (era/protocolVersion/transport/capabilities) from the caller instead
+      // of hardcoding a bare "connected" — this used to silently discard the
+      // diagnostics createAndStore had just computed moments earlier.
+      s.status[name] = status ?? { status: "connected" }
       s.clients[name] = client
       s.defs[name] = listed
       watch(s, name, client, bridge, timeout)
@@ -595,7 +710,7 @@ export const layer = Layer.effect(
 
     const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {
       const s = yield* InstanceState.get(state)
-      const result = yield* create(name, mcp)
+      const result = yield* create(name, mcp, s)
 
       s.status[name] = result.status
       if (!result.mcpClient) {
@@ -604,7 +719,7 @@ export const layer = Layer.effect(
         return result.status
       }
 
-      return yield* storeClient(s, name, result.mcpClient, result.defs!, mcp.timeout)
+      return yield* storeClient(s, name, result.mcpClient, result.defs!, mcp.timeout, result.status)
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
@@ -649,7 +764,23 @@ export const layer = Layer.effect(
           continue
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
-        for (const mcpTool of listed) {
+        // fork(mcp-dual-era-client C1): filter to the configured tool profile
+        // BEFORE conversion — an allowlisted server's unlisted tools never
+        // reach convertTool/dynamicTool, so they never enter the model's
+        // context at all, not merely get hidden from a UI.
+        const profileName = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig.toolProfile : undefined
+        const allowlist = profileName ? cfg.mcpToolProfiles?.[profileName] : undefined
+        if (profileName && !allowlist) {
+          // Fail closed: a toolProfile referencing a missing/misspelled
+          // mcpToolProfiles entry must not silently fall back to exposing
+          // every tool — that's the exact bloat this feature exists to stop.
+          yield* Effect.logWarning("mcpToolProfiles has no entry for the configured toolProfile — exposing no tools", {
+            clientName,
+            profileName,
+          })
+        }
+        const filtered = profileName ? listed.filter((mcpTool) => (allowlist ?? []).includes(mcpTool.name)) : listed
+        for (const mcpTool of filtered) {
           const key = McpCatalog.sanitize(clientName) + "_" + McpCatalog.sanitize(mcpTool.name)
           result[key] = McpCatalog.convertTool(mcpTool, client, timeout)
         }
@@ -797,10 +928,12 @@ export const layer = Layer.effect(
         requestInit: mcpConfig.headers ? { headers: mcpConfig.headers } : undefined,
       })
       const directory = yield* InstanceState.directory
+      const cfg = yield* cfgSvc.get()
+      const versionNegotiation = versionNegotiationFor(resolveProtocolMode(cfg, mcpConfig))
 
       return yield* Effect.tryPromise({
         try: () => {
-          const client = createClient(directory)
+          const client = createClient(directory, versionNegotiation)
           return client
             .connect(transport)
             .then(() => ({ authorizationUrl: "", oauthState, client }) satisfies AuthResult)
@@ -837,7 +970,16 @@ export const layer = Layer.effect(
 
         const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
-        return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
+        // OAuth completion is always over a remote StreamableHTTP transport.
+        const diag = diagnosticsFor(client, "StreamableHTTP")
+        s.priorDiscovery[mcpName] = diag.prior
+        return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout, {
+          status: "connected",
+          era: diag.era,
+          protocolVersion: diag.protocolVersion,
+          transport: diag.transport,
+          capabilities: diag.capabilities,
+        })
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)

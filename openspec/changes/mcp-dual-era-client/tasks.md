@@ -25,33 +25,43 @@
 
 ## Phase B: Protocol mode + diagnostics (3 tasks)
 
-- [ ] Add `protocolMode` config (`legacy`/`auto`/`modern`), global default + per-server override, wired to v2's `versionNegotiation` option. #config #B1 #m
-  - File: `packages/opencode/src/mcp/index.ts`, config schema (`ConfigMCPV1`)
-  - Validation: unit test asserting each mode produces the expected `versionNegotiation` value passed to `Client`
+- [x] Add `protocolMode` config (`legacy`/`auto`/`modern`), global default + per-server override, wired to v2's `versionNegotiation` option. #config #B1 #m
+  - File: `packages/core/src/v1/config/mcp.ts` (new `ProtocolMode` schema, per-server `protocolMode` on `Local`/`Remote`), `packages/core/src/v1/config/config.ts` (`experimental.mcp_protocol_mode` global default), `packages/opencode/src/mcp/index.ts` (`versionNegotiationFor`, `resolveProtocolMode`, threaded through `createClient`/`connectTransport`/`connectRemote`/`connectLocal`/`create`/`startAuth`)
+  - Verified against the installed package rather than assumed: `versionNegotiation` is a **constructor-time** `ClientOptions` field (not per-`connect()`), mode is `'legacy' | 'auto' | { pin: string }`, and the SDK's own default is `'legacy'` — confirming A2's open question ("v2's connect() with no options defaults to some negotiation mode, unverified which") was legacy. Our `protocolMode: "legacy"|"auto"|"modern"` vocabulary maps `"modern"` → `{ mode: { pin: LATEST_PROTOCOL_VERSION } }`; default resolution is per-server `protocolMode` ?? `experimental.mcp_protocol_mode` ?? `"auto"` (overriding the SDK's own `"legacy"` default, per the proposal's intent).
+  - Validation: `test/mcp/protocol-mode.test.ts` (6 tests, mocked `Client` capturing constructor options) — default-to-auto, per-server legacy/modern, global fallback, per-server-overrides-global, and a reconnect test proving the cached prior is adopted (see B2).
 
-- [ ] Cache negotiation verdicts per server via `PriorDiscovery`, keyed by server name, persisted across reconnects within a session. #client #B2 #m
-  - File: `packages/opencode/src/mcp/index.ts`
-  - Validation: integration test — reconnecting a known-legacy server does not re-issue `server/discover`
+- [x] Cache negotiation verdicts per server via `PriorDiscovery`, keyed by server name, persisted across reconnects within a session. #client #B2 #m
+  - File: `packages/opencode/src/mcp/index.ts` (`State.priorDiscovery`, `diagnosticsFor()` computes and returns the verdict, `create()` reads/writes the cache, `connectTransport` passes `{ prior }` to `client.connect()`)
+  - `getDiscoverResult()`/`getNegotiatedProtocolVersion()` are real public `Client` methods, verified against the installed package. Era is derived as `getDiscoverResult() ? "modern" : "legacy"` — no dedicated era getter exists.
+  - Validation: `protocol-mode.test.ts`'s reconnect test (mocked) plus `fixtures.test.ts`'s real integration test (disconnect + reconnect against the actual dual-era fixture, confirms `era: modern` survives reconnect) and manual verification (see D1/D2).
 
-- [ ] Extend the `Status` union (or add a sibling `Diagnostics` type) with era, negotiated protocol version, transport, capabilities; surface in `opencode mcp` CLI. #diagnostics #B3 #m
-  - File: `packages/opencode/src/mcp/index.ts`, `packages/opencode/src/cli/cmd/mcp.ts`
-  - Validation: `opencode mcp` output includes era/protocol/capabilities columns, verified against a running legacy and a running modern fixture server
+- [x] Extend the `Status` union with era, negotiated protocol version, transport, capabilities; surface in `opencode mcp` CLI. #diagnostics #B3 #m
+  - File: `packages/opencode/src/mcp/index.ts` (`StatusConnected` schema extended), `packages/opencode/src/cli/cmd/mcp.ts` (`mcp list` renders an `era: … protocol: … transport: … capabilities: …` line for connected servers)
+  - Found and fixed a real latent bug surfaced by writing the first real-fixture integration test (not by the mocked unit tests, which couldn't have caught it): `storeClient()` hardcoded `s.status[name] = { status: "connected" }`, silently discarding the diagnostics `createAndStore`/`authenticate` had just computed. Fixed by threading the already-diagnosed `Status` through `storeClient`'s new optional `status` parameter; also computed real diagnostics for the OAuth-completion path (`authenticate()`), which previously stored a bare status too.
+  - **Live-verified end to end** against the real `skein` binary (see D2) — `opencode mcp list` output: `✓ skein connected` / `era: legacy  protocol: 2024-11-05  transport: stdio  capabilities: tools`.
+  - Validation: `fixtures.test.ts` asserts `era`/`protocolVersion`/`capabilities` on real connections; manual `opencode mcp list` run against real `skein` and against the dual-era/legacy fixtures.
 
 ## Phase C: Per-server tool allowlists (2 tasks)
 
-- [ ] Add `mcpToolProfiles` config (named tool-name lists) and a per-server `toolProfile` reference; filter `MCP.tools()` before defs are handed to the model. #tools #C1 #m
-  - File: `packages/opencode/src/mcp/index.ts` (`tools` function, ~line 633), config schema
-  - Validation: unit test — a server with a configured profile only yields the allowlisted tool keys from `MCP.tools()`
+- [x] Add `mcpToolProfiles` config (named tool-name lists) and a per-server `toolProfile` reference; filter `MCP.tools()` before defs are handed to the model. #tools #C1 #m
+  - File: `packages/core/src/v1/config/config.ts` (top-level `mcpToolProfiles` map), `packages/core/src/v1/config/mcp.ts` (per-server `toolProfile` on `Local`/`Remote`), `packages/opencode/src/mcp/index.ts` (`tools()` filters `listed` against the resolved allowlist before `convertTool`, so filtered-out tools never reach `dynamicTool`/the model — not merely hidden from a UI)
+  - **Fails closed**: a `toolProfile` referencing a missing/misspelled `mcpToolProfiles` entry exposes zero tools (with a WARN log), not all of them — the original draft fell open (unfiltered) on a typo, which is the exact failure mode this feature exists to prevent. Caught and fixed via the "typo" test case, not by inspection.
+  - `tools()` resolves per-server config from the static `Config.Service`, not from what's passed to `mcp.add()` at runtime — `toolProfile`/`mcpToolProfiles` must live in the static config file/fixture for the filter to see them (an existing, pre-dating-this-change architectural fact discovered while writing tests, documented in `fixtures.test.ts`).
+  - Validation: `fixtures.test.ts`, 4 tests against the real dual-era fixture's one real tool (`echo`) — no-profile (unfiltered), allowlisted (kept), non-listed (filtered out), and the fail-closed typo case.
 
-- [ ] Document `protocolMode` and `mcpToolProfiles` in config docs/schema. #docs #C2 #s
-  - File: `packages/opencode/src/config/config.ts` schema comments or `packages/docs`
-  - Validation: `openspec validate mcp-dual-era-client --strict` (schema/docs consistency)
+- [x] Document `protocolMode` and `mcpToolProfiles` in config docs/schema. #docs #C2 #s
+  - File: `packages/core/src/v1/config/mcp.ts`, `packages/core/src/v1/config/config.ts` — every new field carries a `.annotate({ description })` matching this codebase's existing schema-as-docs convention (config docs are presumably generated/surfaced from these schemas elsewhere, matching `timeout`/`mcp_timeout`'s existing precedent).
+  - Validation: `openspec validate mcp-dual-era-client --strict` passes (spec deltas below).
 
 ## Phase D: Compatibility fixtures (2 tasks, blocks Phase B/C validation)
 
-- [ ] Build a legacy-only and a dual-era MCP test fixture server (stdio) for CI. #fixtures #D1 #m
-  - File: new `packages/opencode/test/fixtures/mcp-legacy`, `mcp-dual-era`
-  - Validation: both fixtures pass a basic `tools/list` + `tools/call` round trip under the existing test runner
+- [x] Build a legacy-only and a dual-era MCP test fixture server (stdio) for CI. #fixtures #D1 #m
+  - File: `packages/opencode/test/fixtures/mcp-legacy/server.ts` (hand-rolled raw JSON-RPC, deliberately no `server/discover` handler — proves the client's *fallback* path against a server that genuinely cannot speak the modern era, not one that merely chooses not to), `packages/opencode/test/fixtures/mcp-dual-era/server.ts` (real `@modelcontextprotocol/server` v2, added as a devDependency)
+  - Non-obvious finding, confirmed empirically before writing the fixture: a bare `new Server() + new StdioServerTransport() + connect()` does **not** answer `server/discover` (raw probe returns `Method not found`) — the modern-probe/legacy-fallback contract lives in `serveStdio()`'s per-connection factory model (`@modelcontextprotocol/server/stdio`), not automatically on the low-level `Server`/`Protocol` classes. Would have shipped a fake "dual-era" fixture that was actually legacy-only without this check.
+  - Validation: `fixtures.test.ts` — both fixtures pass real `tools/list` + `tools/call` round trips (5 tests, raw `Client`, no mocks).
 
-- [ ] Verify reconnect/fallback behavior against both fixtures plus one real legacy server (`skein`, pre-upgrade). #fixtures #D2 #m
-  - Validation: manual `opencode mcp` run against `skein` shows `era: legacy`, connects and lists tools successfully
+- [x] Verify reconnect/fallback behavior against both fixtures plus one real legacy server (`skein`, pre-upgrade). #fixtures #D2 #m
+  - Empirically confirmed all four combinations via a real client script before formalizing as tests: `mcp-dual-era`+`auto` → modern (`2026-07-28`); `mcp-dual-era`+`legacy` (pinned) → legacy (`2025-11-25`), proving the same factory genuinely serves both eras, not modern-only; `mcp-legacy`+`auto` → legacy (no `server/discover` to probe); `mcp-legacy`+`legacy` → legacy. All four round-trip `tools/list`/`tools/call` correctly.
+  - **Verified against the real `skein` binary** (`skein mcp serve`, still on its hand-rolled `2024-11-05` handshake): `auto` and `legacy` modes both connect successfully and list its 48 tools; `opencode mcp list` (real CLI, temp config pointing at the real skein binary) renders `era: legacy  protocol: 2024-11-05  transport: stdio  capabilities: tools` — the exact validation criterion.
+  - Validation: `fixtures.test.ts` (era-under-each-mode assertions) + the manual `opencode mcp list` run against real `skein` documented above (not itself an automated test, since it depends on a path outside this repo).
+  - **Known test-infrastructure limitation found and worked around, not fully root-caused**: an earlier standalone `test/mcp/tool-profiles.test.ts` (real, unmocked `MCP.defaultLayer` usage) failed *only* when `bun test` ran the whole `test/mcp/` directory together with `oauth-auto-connect.test.ts`/`oauth-browser.test.ts`/`protocol-mode.test.ts` specifically — never in isolation, never paired with other files. Confirmed real (not a production bug) via extensive isolation: `mcp.add()`'s own returned status showed a fully successful real connection with correct capabilities each time; the empty tool list appeared later. Tried and rejected as fixes: `mock.restore()` in the three mocking files' `afterAll` (confirmed via debug logging that `afterAll` **does** run, but the mock persists regardless — `mock.restore()` does not undo `mock.module()` registrations in this bun version), explicit re-mocking to the real module, static vs. dynamic import of `mcp/index`, cache-busted import specifiers, and alphabetical file-name reordering. The mechanism was never conclusively identified. Resolved pragmatically by merging the tool-profile tests into `fixtures.test.ts` (co-locating with that file's already-proven-safe `MCP.defaultLayer` usage sidesteps whatever the interaction is) — full suite is green and stable across repeated runs. Left the `afterAll(() => mock.restore())` calls added to the five mocking files in place (harmless, arguably still good hygiene for the mock-function subsystem `restore()` does cover) but they should not be trusted to isolate module mocks between files. A real fix would need someone to either root-cause bun:test's `mock.module()` semantics across files or move real-fixture-based MCP tests to run as a separate `bun test` invocation from the mock-heavy ones.

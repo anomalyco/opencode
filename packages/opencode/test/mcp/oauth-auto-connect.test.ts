@@ -1,4 +1,4 @@
-import { expect, mock, beforeEach } from "bun:test"
+import { expect, mock, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer } from "effect"
 import { testEffect } from "../lib/effect"
 import * as RealMcpClient from "@modelcontextprotocol/client"
@@ -99,6 +99,15 @@ await mock.module("@modelcontextprotocol/client", () => ({
       return serverCapabilities
     }
 
+    // fork(mcp-dual-era-client B3): stubs for post-connect diagnostics; undefined simulates legacy era.
+    getDiscoverResult() {
+      return undefined
+    }
+
+    getNegotiatedProtocolVersion() {
+      return undefined
+    }
+
     async listTools() {
       listToolsCalls++
       return { tools: [{ name: "test_tool", inputSchema: { type: "object", properties: {} } }] }
@@ -120,6 +129,12 @@ beforeEach(() => {
   connectSucceedsImmediately = false
   serverCapabilities = { tools: {} }
   listToolsCalls = 0
+})
+
+// fork(mcp-dual-era-client D2): see headers.test.ts's comment — mock.module()
+// leaks past this file without an explicit restore.
+afterAll(() => {
+  mock.restore()
 })
 
 // Import modules after mocking

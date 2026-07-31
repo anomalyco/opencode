@@ -44,3 +44,7 @@ definitions passed to the model.
 #### Scenario: an unprofiled server is unaffected
 - **WHEN** a server has no `toolProfile` configured
 - **THEN** all of its advertised tools are included, unchanged from current behavior
+
+#### Scenario: a misconfigured toolProfile fails closed
+- **WHEN** a server's `toolProfile` references a name with no matching entry in `mcpToolProfiles`
+- **THEN** `MCP.tools()` includes none of that server's tools (not all of them), and a warning is logged

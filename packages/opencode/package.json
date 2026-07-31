@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.4",
+    "@modelcontextprotocol/server": "2.0.0",
     "@octokit/webhooks-types": "7.6.1",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/http-recorder": "workspace:*",

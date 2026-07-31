@@ -140,6 +140,19 @@ export const McpListCommand = effectCmd({
         if (hasOAuth && hasStoredTokens) {
           hint = " (OAuth)"
         }
+        // fork(mcp-dual-era-client B3): surface what actually got negotiated,
+        // not just that the connection succeeded — era/protocol/transport/
+        // capabilities are the visible protocol/capability diagnostic the
+        // proposal calls for.
+        const diagParts = [
+          status.era ? `era: ${status.era}` : undefined,
+          status.protocolVersion ? `protocol: ${status.protocolVersion}` : undefined,
+          status.transport ? `transport: ${status.transport}` : undefined,
+          status.capabilities?.length ? `capabilities: ${status.capabilities.join(", ")}` : undefined,
+        ].filter((part): part is string => part !== undefined)
+        if (diagParts.length > 0) {
+          hint += `\n    ${UI.Style.TEXT_DIM}${diagParts.join("  ")}`
+        }
       } else if (status.status === "disabled") {
         statusIcon = "○"
         statusText = "disabled"

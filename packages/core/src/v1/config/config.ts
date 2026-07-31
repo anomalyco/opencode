@@ -110,6 +110,13 @@ export const Info = Schema.Struct({
   mcp: Schema.optional(
     Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
   ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
+  mcpToolProfiles: Schema.optional(Schema.Record(Schema.String, Schema.mutable(Schema.Array(Schema.String)))).annotate(
+    {
+      description:
+        "Named tool allowlists (profile name -> list of tool names) for MCP servers. Referenced by a server's " +
+        "`mcp.<name>.toolProfile` field; a server with no toolProfile set exposes all of its tools unfiltered.",
+    },
+  ),
   formatter: Schema.optional(ConfigFormatterV1.Info).annotate({
     description:
       "Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",
@@ -178,6 +185,9 @@ export const Info = Schema.Struct({
       }),
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
+      }),
+      mcp_protocol_mode: Schema.optional(ConfigMCPV1.ProtocolMode).annotate({
+        description: "Default protocolMode for MCP servers that don't set their own. Falls back to 'auto' if unset.",
       }),
       local_subagent_placement: Schema.optional(Schema.Boolean).annotate({
         description:
