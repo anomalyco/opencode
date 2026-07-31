@@ -1072,4 +1072,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "建立持續性專案圖示失敗",
   "error.childStore.storeCreateFailed": "建立儲存區失敗",
   "terminal.connectionLost.abnormalClose": "WebSocket 異常關閉：{{code}}",
+  "explorer.rename.title": "Rename",
+  "explorer.rename.button": "Rename",
+  "explorer.delete.title": "Delete",
+  "explorer.delete.confirm": 'Delete "{{name}}"? This cannot be undone.',
+  "explorer.delete.button": "Delete",
 } satisfies Partial<Record<Keys, string>>

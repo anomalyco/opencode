@@ -40,6 +40,12 @@ type PlatformBase = {
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
+  /** Rename a local path on disk (desktop only) */
+  renamePath?(from: string, to: string): Promise<boolean>
+
+  /** Remove a local path on disk, recursively for directories (desktop only) */
+  removePath?(path: string): Promise<boolean>
+
   /** Restart the app  */
   restart(): Promise<void>
 

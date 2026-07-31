@@ -1085,4 +1085,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "ไม่สามารถสร้างไอคอนโปรเจกต์ถาวร",
   "error.childStore.storeCreateFailed": "ไม่สามารถสร้างที่เก็บ",
   "terminal.connectionLost.abnormalClose": "WebSocket ปิดอย่างผิดปกติ: {{code}}",
+  "explorer.rename.title": "Rename",
+  "explorer.rename.button": "Rename",
+  "explorer.delete.title": "Delete",
+  "explorer.delete.confirm": 'Delete "{{name}}"? This cannot be undone.',
+  "explorer.delete.button": "Delete",
 }

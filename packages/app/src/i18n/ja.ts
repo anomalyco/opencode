@@ -1014,4 +1014,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "永続プロジェクトアイコンの作成に失敗しました",
   "error.childStore.storeCreateFailed": "ストアの作成に失敗しました",
   "terminal.connectionLost.abnormalClose": "WebSocket が異常終了しました: {{code}}",
+  "explorer.rename.title": "Rename",
+  "explorer.rename.button": "Rename",
+  "explorer.delete.title": "Delete",
+  "explorer.delete.confirm": 'Delete "{{name}}"? This cannot be undone.',
+  "explorer.delete.button": "Delete",
 }

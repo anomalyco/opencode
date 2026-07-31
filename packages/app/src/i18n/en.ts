@@ -1075,6 +1075,12 @@ export const dict = {
   "session.delete.confirm": 'Delete session "{{name}}"?',
   "session.delete.button": "Delete session",
 
+  "explorer.delete.confirm": 'Delete "{{name}}"? This cannot be undone.',
+  "explorer.rename.title": "Rename",
+  "explorer.rename.button": "Rename",
+  "explorer.delete.title": "Delete",
+  "explorer.delete.button": "Delete",
+
   "workspace.new": "New workspace",
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",

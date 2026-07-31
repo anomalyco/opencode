@@ -1104,4 +1104,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kalıcı proje simgesi oluşturulamadı",
   "error.childStore.storeCreateFailed": "Depo oluşturulamadı",
   "terminal.connectionLost.abnormalClose": "WebSocket anormal şekilde kapandı: {{code}}",
+  "explorer.rename.title": "Rename",
+  "explorer.rename.button": "Rename",
+  "explorer.delete.title": "Delete",
+  "explorer.delete.confirm": 'Delete "{{name}}"? This cannot be undone.',
+  "explorer.delete.button": "Delete",
 } satisfies Partial<Record<Keys, string>>

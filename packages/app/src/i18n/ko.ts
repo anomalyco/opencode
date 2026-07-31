@@ -1013,4 +1013,9 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "트랙패드 핀치 및 Ctrl-스크롤 제스처로 확대/축소 허용",
   "settings.updates.action.downloading": "다운로드 중...",
   "settings.updates.action.installing": "설치 중...",
+  "explorer.rename.title": "Rename",
+  "explorer.rename.button": "Rename",
+  "explorer.delete.title": "Delete",
+  "explorer.delete.confirm": 'Delete "{{name}}"? This cannot be undone.',
+  "explorer.delete.button": "Delete",
 }

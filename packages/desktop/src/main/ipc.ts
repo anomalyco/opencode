@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { stat } from "node:fs/promises"
+import { rename, rm, stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
@@ -197,6 +197,18 @@ export function registerIpcHandlers(deps: Deps) {
     )
     if (!exists) return false
     shell.showItemInFolder(path)
+    return true
+  })
+
+  ipcMain.handle("rename-path", async (_event: IpcMainInvokeEvent, from: string, to: string) => {
+    if (!from || !to || from === to) return false
+    await rename(from, to)
+    return true
+  })
+
+  ipcMain.handle("remove-path", async (_event: IpcMainInvokeEvent, path: string) => {
+    if (!path) return false
+    await rm(path, { recursive: true, force: true })
     return true
   })
 

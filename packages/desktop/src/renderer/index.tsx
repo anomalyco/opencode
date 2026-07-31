@@ -223,6 +223,14 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       return window.api.revealPath(path)
     },
 
+    async renamePath(from: string, to: string) {
+      return window.api.renamePath(from, to)
+    },
+
+    async removePath(path: string) {
+      return window.api.removePath(path)
+    },
+
     back() {
       window.history.back()
     },

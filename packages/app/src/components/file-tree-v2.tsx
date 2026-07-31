@@ -130,6 +130,8 @@ export default function FileTreeV2(props: {
   tree?: ExplorerTree
   onFileClick?: (file: FileNode) => void
   onFileDoubleClick?: (file: FileNode) => void
+  onFileContextMenu?: (file: FileNode, event: MouseEvent) => void
+  onFileKeyDown?: (file: FileNode, event: KeyboardEvent) => void
 }) {
   const tree = () => props.tree ?? useFile().tree
   const live = () => props.allowed === undefined
@@ -253,6 +255,8 @@ export default function FileTreeV2(props: {
                           onBlur={() => setFocused(undefined)}
                           onClick={() => selectFile(row().node, props.onFileClick)}
                           onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
+                          onContextMenu={(event: MouseEvent) => props.onFileContextMenu?.(row().node, event)}
+                          onKeyDown={(event: KeyboardEvent) => props.onFileKeyDown?.(row().node, event)}
                         >
                           <GuideLines level={row().level} />
                           <Show when={row().level > 0}>
@@ -278,6 +282,8 @@ export default function FileTreeV2(props: {
                         onBlur={() => setFocused(undefined)}
                         aria-expanded={expanded(row().node.path)}
                         onClick={() => toggleDirectory(row().node.path, row().node.originalPath)}
+                        onContextMenu={(event: MouseEvent) => props.onFileContextMenu?.(row().node, event)}
+                        onKeyDown={(event: KeyboardEvent) => props.onFileKeyDown?.(row().node, event)}
                       >
                         <GuideLines level={row().level} />
                         <div
