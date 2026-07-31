@@ -244,6 +244,7 @@ export const dict = {
   "prompt.placeholder.simple": "Pitaj bilo šta...",
   "prompt.placeholder.summarizeComments": "Sažmi komentare…",
   "prompt.placeholder.summarizeComment": "Sažmi komentar…",
+  "prompt.placeholder.design": "Pitaj bilo šta, / za komande, @ za kontekst...",
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc za izlaz",

@@ -243,6 +243,7 @@ export const dict = {
   "prompt.placeholder.simple": "Спросите что угодно...",
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
   "prompt.placeholder.summarizeComment": "Суммировать комментарий…",
+  "prompt.placeholder.design": "Спросите что угодно, / для команд, @ для контекста...",
   "prompt.mode.shell": "Оболочка",
   "prompt.mode.normal": "Промпт",
   "prompt.mode.shell.exit": "esc для выхода",

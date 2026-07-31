@@ -215,6 +215,7 @@ export const dict = {
   "prompt.placeholder.simple": "무엇이든 물어보세요...",
   "prompt.placeholder.summarizeComments": "댓글 요약…",
   "prompt.placeholder.summarizeComment": "댓글 요약…",
+  "prompt.placeholder.design": "무엇이든 물어보세요, / 명령어, @ 컨텍스트...",
   "prompt.mode.shell": "셸",
   "prompt.mode.normal": "프롬프트",
   "prompt.mode.shell.exit": "종료하려면 esc",

@@ -243,6 +243,7 @@ export const dict = {
   "prompt.placeholder.simple": "ถามอะไรก็ได้...",
   "prompt.placeholder.summarizeComments": "สรุปความคิดเห็น…",
   "prompt.placeholder.summarizeComment": "สรุปความคิดเห็น…",
+  "prompt.placeholder.design": "ถามอะไรก็ได้, / สำหรับคำสั่ง, @ สำหรับบริบท...",
   "prompt.mode.shell": "เชลล์",
   "prompt.mode.normal": "พรอมต์",
   "prompt.mode.shell.exit": "กด esc เพื่อออก",

@@ -226,6 +226,7 @@ export const dict = {
   "prompt.placeholder.simple": "Pergunte qualquer coisa...",
   "prompt.placeholder.summarizeComments": "Resumir comentários…",
   "prompt.placeholder.summarizeComment": "Resumir comentário…",
+  "prompt.placeholder.design": "Pergunte qualquer coisa, / para comandos, @ para contexto...",
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc para sair",

@@ -243,6 +243,7 @@ export const dict = {
   "prompt.placeholder.simple": "隨便問點什麼...",
   "prompt.placeholder.summarizeComments": "摘要評論…",
   "prompt.placeholder.summarizeComment": "摘要這則評論…",
+  "prompt.placeholder.design": "隨便問點什麼，/ 查看命令，@ 查看上下文...",
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "按 esc 退出",

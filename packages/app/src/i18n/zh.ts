@@ -265,6 +265,7 @@ export const dict = {
   "prompt.placeholder.simple": "随便问点什么...",
   "prompt.placeholder.summarizeComments": "总结评论…",
   "prompt.placeholder.summarizeComment": "总结该评论…",
+  "prompt.placeholder.design": "随便问点什么，/ 查看命令，@ 查看上下文...",
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "按 esc 退出",
