@@ -9,7 +9,7 @@ import { useEditorContext } from "../context/editor"
 import { useData } from "../context/data"
 import { useLocation } from "../context/location"
 import { FormPrompt } from "./session/form"
-import { PluginSlot } from "../plugin/context"
+import { PluginSlot } from "../plugin/render"
 
 let once = false
 const placeholder = {

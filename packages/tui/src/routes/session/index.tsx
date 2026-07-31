@@ -80,7 +80,7 @@ import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
-import { PluginSlot } from "../../plugin/context"
+import { PluginSlot } from "../../plugin/render"
 import {
   cacheReuseDrop,
   createSessionRows,

@@ -53,7 +53,7 @@ import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
-import { PluginSlot } from "../../plugin/context"
+import { PluginSlot } from "../../plugin/render"
 
 registerOpencodeSpinner()
 

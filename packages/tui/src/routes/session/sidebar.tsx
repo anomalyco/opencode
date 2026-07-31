@@ -2,7 +2,7 @@ import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
-import { PluginSlot } from "../../plugin/context"
+import { PluginSlot } from "../../plugin/render"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
