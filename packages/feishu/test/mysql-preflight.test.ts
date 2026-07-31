@@ -5,7 +5,7 @@ const identityRows = [
   {
     mysql_version: "8.4.10",
     database_name: "t1_full_20260717_133707",
-    current_user: "inventory_reader@%",
+    authenticated_account: "inventory_reader@%",
     read_only: 0,
   },
 ]
@@ -66,6 +66,7 @@ describe("runMysqlPreflight", () => {
       contractVersion: "mysql-inventory-v1",
     })
     expect(input.calls).toHaveLength(2)
+    expect(input.calls[0]?.sql).toContain("CURRENT_USER() AS authenticated_account")
     expect(input.calls[1]?.values).toEqual(["t1_full_20260717_133707"])
   })
 

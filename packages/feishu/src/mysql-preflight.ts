@@ -15,7 +15,7 @@ const identitySQL = `
   SELECT
     VERSION() AS mysql_version,
     DATABASE() AS database_name,
-    CURRENT_USER() AS current_user,
+    CURRENT_USER() AS authenticated_account,
     @@read_only AS read_only
 `
 
@@ -78,7 +78,7 @@ async function inspectMysql(query: QueryExecutor, expectedDatabase: string): Pro
 
   const mysqlVersion = text(identity.mysql_version)
   const database = text(identity.database_name)
-  const currentUser = text(identity.current_user)
+  const currentUser = text(identity.authenticated_account)
   const readOnly = booleanFlag(identity.read_only)
   if (!mysqlVersion.startsWith("8.4.") || database !== expectedDatabase || !currentUser) {
     throw new Error("identity mismatch")
