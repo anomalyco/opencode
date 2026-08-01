@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { useDialog, type DialogContext } from "./dialog"
+import { useDialog } from "./dialog"
 
 export type DialogAlertProps = {
   title: string
@@ -55,13 +55,4 @@ export function DialogAlert(props: DialogAlertProps) {
       </box>
     </box>
   )
-}
-
-DialogAlert.show = (dialog: DialogContext, title: string, message: string) => {
-  return new Promise<void>((resolve) => {
-    dialog.replace(
-      () => <DialogAlert title={title} message={message} onConfirm={() => resolve()} />,
-      () => resolve(),
-    )
-  })
 }

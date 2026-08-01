@@ -80,6 +80,11 @@ describe("session tabs", () => {
     expect(closeSessionTab([{ sessionID: "a" }], "a").next).toBeUndefined()
   })
 
+  test("closing an unknown session returns the same tabs reference", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }]
+    expect(closeSessionTab(tabs, "missing").tabs).toBe(tabs)
+  })
+
   test("cycles through a filtered tab set in either direction", () => {
     const tabs = ["a", "c", "e"].map((sessionID) => ({ sessionID }))
     expect(cycleSessionTab(tabs, "c", 1)?.sessionID).toBe("e")
@@ -120,6 +125,15 @@ describe("session tabs", () => {
 
     expect(moveSessionTabHistory(history, tabs, "b", -1).sessionID).toBe("a")
     expect(recordSessionTabHistory(history, "b")).toBe(history)
+  })
+
+  test("drops the oldest history entries beyond the limit", () => {
+    const sessions = Array.from({ length: 150 }, (_, index) => `session-${index}`)
+    const history = sessions.reduce(recordSessionTabHistory, { entries: [], index: -1 })
+
+    expect(history.entries.length).toBe(100)
+    expect(history.entries[0]).toBe("session-50")
+    expect(history.entries[history.index]).toBe("session-149")
   })
 
   test("returns to the latest history entry when no tab is active", () => {

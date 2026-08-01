@@ -141,22 +141,6 @@ export function moveFileTreeSelectionToParent(rows: readonly FileTreeRow[], sele
   return rows.findLast((item, itemIndex) => itemIndex < index && item.depth < row.depth)?.id ?? selected
 }
 
-export function moveFileTreeSelectionToFile(
-  rows: readonly FileTreeRow[],
-  selected: number | undefined,
-  offset: number,
-) {
-  const fileRows = rows.filter((row) => row.fileIndex !== undefined)
-  if (fileRows.length === 0) return undefined
-  const selectedIndex = selected === undefined ? -1 : rows.findIndex((row) => row.id === selected)
-  if (selectedIndex === -1) return offset < 0 ? fileRows[fileRows.length - 1]!.id : fileRows[0]!.id
-  const next =
-    offset < 0
-      ? fileRows.findLast((row) => rows.findIndex((item) => item.id === row.id) < selectedIndex)
-      : fileRows.find((row) => rows.findIndex((item) => item.id === row.id) > selectedIndex)
-  return next?.id ?? (offset < 0 ? fileRows[0]!.id : fileRows[fileRows.length - 1]!.id)
-}
-
 export function fileTreeFileSelection(tree: FileTree, fileIndex: number) {
   const node = tree.nodes.find((item) => item.kind === "file" && item.fileIndex === fileIndex)
   if (!node) return undefined

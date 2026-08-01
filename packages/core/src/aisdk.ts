@@ -299,8 +299,6 @@ export const locationLayer = Layer.effect(
   }),
 )
 
-export const defaultLayer = locationLayer
-
 function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)

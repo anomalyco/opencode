@@ -341,6 +341,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       create: (input) =>
         runtime.session.create({
           id: input?.id,
+          title: input?.title,
           agent: input?.agent,
           model: input?.model,
           location:
@@ -350,8 +351,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       prompt: runtime.session.prompt,
       generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,
+      rename: runtime.session.rename,
       synthetic: runtime.session.synthetic,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),
+      wait: (input) => runtime.session.wait(input.sessionID),
     },
   } satisfies Plugin.Context
 })

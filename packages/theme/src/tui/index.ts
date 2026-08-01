@@ -45,6 +45,7 @@ export type {
   StatefulColor,
 } from "./types.js"
 export { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
+export { expandTheme } from "./expand.js"
 export { migrateV1 } from "./v1-migrate.js"
 export { resolveTheme, resolveThemeDocument, themeDecodeError } from "./resolve.js"
 export { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "./select.js"

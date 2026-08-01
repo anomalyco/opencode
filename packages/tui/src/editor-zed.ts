@@ -194,10 +194,6 @@ export function resolveZedDbPath() {
   return candidates.find((item) => isFile(item))
 }
 
-export function isZedTerminal() {
-  return process.env.ZED_TERM === "true" || process.env.TERM_PROGRAM?.toLowerCase() === "zed"
-}
-
 function isFile(item: string) {
   try {
     return statSync(item).isFile()
@@ -218,11 +214,6 @@ function zedWorkspacePaths(value: string | null) {
   const parsed = parseJson(value)
   if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === "string")
   return value.split(/\r?\n/).filter(Boolean)
-}
-
-export function offsetToPosition(text: string, offset: number) {
-  const stringOffset = utf8ByteOffsetToStringIndex(text, offset)
-  return offsetsToSelection(text, stringOffset, stringOffset).start
 }
 
 function utf8ByteOffsetToStringIndex(text: string, byteOffset: number) {

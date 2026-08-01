@@ -11,7 +11,17 @@ import { Session } from "../session"
 export interface Interface {
   readonly session: Pick<
     Session.Interface,
-    "get" | "create" | "messages" | "prompt" | "generate" | "command" | "resume" | "interrupt" | "synthetic"
+    | "get"
+    | "create"
+    | "messages"
+    | "prompt"
+    | "generate"
+    | "command"
+    | "rename"
+    | "resume"
+    | "interrupt"
+    | "synthetic"
+    | "wait"
   >
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel">
   readonly location: {
@@ -52,9 +62,11 @@ export const layerWithCell = (cell: Cell) =>
         prompt: (input) => require(cell, (runtime) => runtime.session.prompt(input)),
         generate: (input) => require(cell, (runtime) => runtime.session.generate(input)),
         command: (input) => require(cell, (runtime) => runtime.session.command(input)),
+        rename: (input) => require(cell, (runtime) => runtime.session.rename(input)),
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
         interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
+        wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
       },
       job: {
         start: (input) => require(cell, (runtime) => runtime.job.start(input)),
@@ -108,7 +120,6 @@ export const providerLayerWithCell = (cell: Cell) =>
   )
 
 export const layer = layerWithCell(defaultCell)
-export const providerLayer = providerLayerWithCell(defaultCell)
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
 

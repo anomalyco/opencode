@@ -1,5 +1,5 @@
 import { batch, createContext, onCleanup, useContext, type ParentProps } from "solid-js"
-import { createStore, reconcile, type Store } from "solid-js/store"
+import { createStore, produce, reconcile, type Store } from "solid-js/store"
 import path from "path"
 import { mkdirSync, readFileSync, watch } from "fs"
 import { Flock } from "@opencode-ai/util/flock"
@@ -13,12 +13,20 @@ type Options<Value extends object> = {
 }
 
 type Entry<Value extends object> = readonly [Store<Value>, (mutation: (draft: Value) => void) => Promise<void>]
+type MemoryEntry<Value extends object> = readonly [Store<Value>, (mutation: (draft: Value) => void) => void]
 
 export interface Storage {
   store<Value extends object>(
     key: string,
     options: Options<Value>,
   ): readonly [Store<Value>, (mutation: (draft: Value) => void) => Promise<void>]
+  /**
+   * Ephemeral in-process state. Entries are memoized here, above consumer
+   * lifecycles, so the same live store survives plugin hot reloads; it is
+   * gone when the TUI exits. Updates are synchronous and values need not be
+   * JSON-serializable.
+   */
+  memory<Value extends object>(key: string, options: { readonly initial: Value }): MemoryEntry<Value>
 }
 
 function clone<Value extends object>(value: Value) {
@@ -37,6 +45,7 @@ function segment(value: string) {
 
 function createStorage(root: string, channel: string) {
   const entries = new Map<string, { readonly value: Entry<object>; readonly reload: () => void }>()
+  const memories = new Map<string, MemoryEntry<object>>()
   const directory = path.join(root, segment(channel), "tui")
   const locks = path.join(root, segment(channel), "locks")
   mkdirSync(directory, { recursive: true })
@@ -71,6 +80,14 @@ function createStorage(root: string, channel: string) {
         )
       const entry = [store, update] as const
       entries.set(file, { value: entry as Entry<object>, reload })
+      return entry
+    },
+    memory<Value extends object>(key: string, options: { readonly initial: Value }) {
+      const existing = memories.get(key)
+      if (existing) return existing as MemoryEntry<Value>
+      const [store, setStore] = createStore(options.initial)
+      const entry = [store, (mutation: (draft: Value) => void) => setStore(produce(mutation))] as const
+      memories.set(key, entry as MemoryEntry<object>)
       return entry
     },
   }

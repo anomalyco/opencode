@@ -6,7 +6,6 @@ import {
   flattenFileTree,
   moveFileTreeSelection,
   moveFileTreeSelectionToFirstChild,
-  moveFileTreeSelectionToFile,
   moveFileTreeSelectionToParent,
   movePatchFileIndex,
   orderedPatchFileIndexes,
@@ -217,25 +216,6 @@ describe("diff viewer file tree utilities", () => {
     expect(moveFileTreeSelectionToParent(rows, cli.id)).toBe(root.id)
     expect(moveFileTreeSelectionToParent(rows, root.id)).toBe(root.id)
     expect(moveFileTreeSelectionToParent(rows, undefined)).toBeUndefined()
-  })
-
-  test("moves file selection relative to the highlighted row", () => {
-    const rows = flattenFileTree(
-      buildFileTree([{ file: "src/config/tui.ts" }, { file: "src/session/index.ts" }, { file: "README.md" }]),
-    )
-    const config = rows.find((row) => row.kind === "directory" && row.name === "config")!
-    const session = rows.find((row) => row.kind === "directory" && row.name === "session")!
-    const tui = rows.find((row) => row.name === "tui.ts")!
-    const index = rows.find((row) => row.name === "index.ts")!
-    const readme = rows.find((row) => row.name === "README.md")!
-
-    expect(moveFileTreeSelectionToFile(rows, undefined, 1)).toBe(tui.id)
-    expect(moveFileTreeSelectionToFile(rows, undefined, -1)).toBe(readme.id)
-    expect(moveFileTreeSelectionToFile(rows, config.id, 1)).toBe(tui.id)
-    expect(moveFileTreeSelectionToFile(rows, session.id, -1)).toBe(tui.id)
-    expect(moveFileTreeSelectionToFile(rows, tui.id, 1)).toBe(index.id)
-    expect(moveFileTreeSelectionToFile(rows, index.id, -1)).toBe(tui.id)
-    expect(moveFileTreeSelectionToFile(rows, readme.id, 1)).toBe(readme.id)
   })
 
   test("selects a file tree node and expands its parents for a patch file", () => {

@@ -116,13 +116,6 @@ export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<strin
               : { grouping: kv.exploration_grouping ? ("auto" as const) : ("none" as const) }),
           },
         }),
-    ...(kv.dismissed_getting_started === undefined
-      ? {}
-      : {
-          hints: {
-            onboarding: !kv.dismissed_getting_started,
-          },
-        }),
     ...(kv.animations_enabled === undefined ? {} : { animations: kv.animations_enabled }),
     ...(legacy?.mouse === undefined ? {} : { mouse: legacy.mouse }),
   }

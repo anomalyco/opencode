@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
-import { expect, test } from "bun:test"
+import { afterAll, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
-import { mkdtempSync, rmSync, watch } from "fs"
+import { mkdtempSync, readdirSync, rmSync, watch } from "fs"
 import { tmpdir } from "os"
 import path from "path"
 import { ConfigProvider } from "../../src/config"
@@ -25,8 +25,32 @@ async function wait(fn: () => boolean | Promise<boolean>, timeout = 2_000) {
   }
 }
 
+// State directories are removed after the whole suite instead of per test: persistence writes are
+// fire-and-forget behind a file lock, so a teardown-time removal races any still-queued write.
+const stateDirs: string[] = []
+
+afterAll(async () => {
+  for (const dir of stateDirs) {
+    // Drain any lock still held by a late write before deleting the tree beneath it.
+    await wait(() => {
+      try {
+        return readdirSync(path.join(dir, "test", "locks")).length === 0
+      } catch {
+        return true
+      }
+    }).catch(() => undefined)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+function stateDir(prefix: string) {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix))
+  stateDirs.push(dir)
+  return dir
+}
+
 async function renderSessionTabs(initialSessionID: string, options?: { state?: string; title?: string }) {
-  const state = options?.state ?? mkdtempSync(path.join(tmpdir(), "opencode-session-tabs-"))
+  const state = options?.state ?? stateDir("opencode-session-tabs-")
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname !== `/api/session/${initialSessionID}`) return
@@ -84,7 +108,6 @@ async function renderSessionTabs(initialSessionID: string, options?: { state?: s
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
     destroy() {
       app.renderer.destroy()
-      if (!options?.state) rmSync(state, { recursive: true, force: true })
     },
   }
 }
@@ -105,7 +128,7 @@ test("stores session tabs globally by default", async () => {
 })
 
 test("concurrent TUIs do not alternate shared tab titles from divergent session caches", async () => {
-  const state = mkdtempSync(path.join(tmpdir(), "opencode-session-tabs-shared-"))
+  const state = stateDir("opencode-session-tabs-shared-")
   let titled: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
   let untitled: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
 
@@ -144,7 +167,6 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
   } finally {
     titled?.destroy()
     untitled?.destroy()
-    rmSync(state, { recursive: true, force: true })
   }
 })
 

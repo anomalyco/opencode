@@ -26,12 +26,27 @@ import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
 
 export interface Storage {
+  /**
+   * Durable JSON state: persisted to disk, survives hot reloads and TUI
+   * restarts, and stays live-synced across running TUI instances.
+   */
   store<Value extends object>(
     key: string,
     options: {
       readonly initial: Value
     },
   ): readonly [Store<Value>, (mutation: (draft: Value) => void) => Promise<void>]
+  /**
+   * Ephemeral in-memory state: survives plugin hot reloads (old and new
+   * generations share the same live store) and is gone when the TUI exits.
+   * Updates are synchronous and values need not be JSON-serializable.
+   */
+  memory<Value extends object>(
+    key: string,
+    options: {
+      readonly initial: Value
+    },
+  ): readonly [Store<Value>, (mutation: (draft: Value) => void) => void]
 }
 
 interface LocationCollection<Value> {
@@ -135,6 +150,9 @@ export interface SlotMap {
   readonly "prompt.footer.end": {
     readonly sessionID?: string
     readonly mode: "normal" | "shell"
+  }
+  readonly "session.composer.top": {
+    readonly sessionID: string
   }
   readonly "sidebar.content": {
     readonly sessionID: string

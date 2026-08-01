@@ -6,6 +6,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useTheme, useThemes } from "../context/theme"
 import {
   adaptiveSessionTabLayout,
+  moveSessionTab,
   NEW_SESSION_TAB_TITLE,
   sessionTabComplete,
   seedSessionTabMotion,
@@ -48,6 +49,10 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
   const animations = () => props.animations ?? config.animations ?? true
   const [hovered, setHovered] = createSignal<string>()
   const [dragging, setDragging] = createSignal<string>()
+  // A drag reorders a local preview and persists one move on release instead of writing
+  // per slot crossing; the preview holds after release until the store reflects the move,
+  // so the strip never flashes the pre-drag order while the write is in flight.
+  const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
   let strip: { screenX: number } | undefined
   const hueStep = () => (mode() === "light" ? 800 : 200)
   const accent = () => theme.hue.accent[hueStep()]
@@ -55,7 +60,18 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
   const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
-  const items = createMemo(() => (newTab() ? [...tabs.tabs(), NEW_SESSION_TAB] : tabs.tabs()))
+  const ordered = createMemo(() => {
+    const pending = preview()
+    if (!pending) return tabs.tabs()
+    return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
+  })
+  const items = createMemo(() => (newTab() ? [...ordered(), NEW_SESSION_TAB] : ordered()))
+  createEffect(() => {
+    const pending = preview()
+    if (!pending || dragging()) return
+    const index = tabs.tabs().findIndex((tab) => tab.sessionID === pending.sessionID)
+    if (index === -1 || index === Math.min(pending.index, tabs.tabs().length - 1)) setPreview(undefined)
+  })
   const layout = createMemo((previous: ReturnType<typeof adaptiveSessionTabLayout> | undefined) =>
     adaptiveSessionTabLayout(items(), activeID(), dimensions().width, previous?.start),
   )
@@ -279,6 +295,8 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
           // keeping sloppy clicks indistinguishable from clean ones.
           const release = () => {
             setDragging(undefined)
+            const pending = preview()
+            if (pending?.sessionID === tab.sessionID) tabs.move(pending.sessionID, pending.index)
             if (tab === NEW_SESSION_TAB) return
             tabs.select(tab.sessionID)
           }
@@ -295,7 +313,8 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
               onMouseDrag={(event) => {
                 if (tab === NEW_SESSION_TAB) return
                 const slot = slotAt(event.x)
-                if (slot !== undefined && slot !== tabNumber() - 1) tabs.move(tab.sessionID, slot)
+                if (slot !== undefined && slot !== tabNumber() - 1)
+                  setPreview({ sessionID: tab.sessionID, index: slot })
               }}
               onMouseDragEnd={release}
             >
@@ -341,6 +360,9 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
                   fg={closeColor()}
                   selectable={false}
                   onMouseUp={(event) => {
+                    // The close mark only renders while hovered; without motion events a click can
+                    // land here first, and must select the tab instead of closing it invisibly.
+                    if (hovered() !== tab.sessionID) return
                     event.stopPropagation()
                     tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
                   }}

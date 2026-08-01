@@ -4,7 +4,7 @@ import { createMemo, createSignal } from "solid-js"
 import { Locale } from "../util/locale"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { usePromptStash, type StashEntry } from "./prompt/stash"
+import { usePromptStash, type StashEntry } from "../prompt/stash"
 
 function getRelativeTime(timestamp: number): string {
   const now = Date.now()

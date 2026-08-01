@@ -29,9 +29,11 @@ export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[
   return tabs.map((item, position) => (position === index ? { ...item, title: tab.title } : item))
 }
 
-export function closeSessionTab(tabs: readonly SessionTab[], sessionID: string) {
+export function closeSessionTab(tabs: SessionTab[], sessionID: string) {
   const index = tabs.findIndex((tab) => tab.sessionID === sessionID)
-  if (index === -1) return { tabs: [...tabs], next: undefined }
+  // Like openSessionTab and moveSessionTab, a no-op returns the same reference so callers can
+  // detect it by identity.
+  if (index === -1) return { tabs, next: undefined }
   return {
     tabs: tabs.filter((tab) => tab.sessionID !== sessionID),
     next: tabs[index + 1]?.sessionID ?? tabs[index - 1]?.sessionID,
@@ -87,9 +89,13 @@ export function cycleSessionTab(tabs: readonly SessionTab[], active: string | un
   return tabs[(start + direction + tabs.length) % tabs.length]
 }
 
+// In-memory navigation history is bounded so a long-lived TUI does not accumulate one entry per
+// session switch forever; the oldest entries fall off first.
+const SESSION_TAB_HISTORY_LIMIT = 100
+
 export function recordSessionTabHistory(history: SessionTabHistory, sessionID: string): SessionTabHistory {
   if (history.entries[history.index] === sessionID) return history
-  const entries = [...history.entries.slice(0, history.index + 1), sessionID]
+  const entries = [...history.entries.slice(0, history.index + 1), sessionID].slice(-SESSION_TAB_HISTORY_LIMIT)
   return { entries, index: entries.length - 1 }
 }
 
