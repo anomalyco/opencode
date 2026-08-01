@@ -92,6 +92,7 @@ export const dict = {
   "command.session.unshare.description": "Slutt å dele denne sesjonen",
 
   "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
+  "palette.search.placeholder.home": "Søk i kommandoer og sesjoner",
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -287,6 +288,7 @@ export const dict = {
   "prompt.action.stop": "Stopp",
 
   "prompt.toast.pasteUnsupported.title": "Ikke støttet vedlegg",
+  "prompt.toast.attachmentDuplicate.title": "Denne filen er allerede lastet opp",
   "prompt.toast.pasteUnsupported.description": "Kun bilder, PDF-er eller tekstfiler kan legges ved her.",
   "prompt.toast.modelAgentRequired.title": "Velg en agent og modell",
   "prompt.toast.modelAgentRequired.description": "Velg en agent og modell før du sender en forespørsel.",
@@ -1069,6 +1071,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokalt",
   "session.new.workspace.local": "Lokalt depot",
   "session.new.workspace.existing": "Arbeidsområde…",
+  "session.new.git.none": "Ingen Git",
 
   "sidebar.empty.title": "Ingen åpne prosjekter",
   "sidebar.empty.description": "Åpne et prosjekt for å komme i gang",

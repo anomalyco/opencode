@@ -120,6 +120,7 @@ export const dict = {
   "command.session.unshare.description": "停止分享此会话",
 
   "palette.search.placeholder": "搜索文件、命令和会话",
+  "palette.search.placeholder.home": "搜索命令和会话",
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
   "palette.group.files": "文件",
@@ -315,6 +316,7 @@ export const dict = {
   "prompt.action.send": "发送",
   "prompt.action.stop": "停止",
   "prompt.toast.pasteUnsupported.title": "不支持的附件",
+  "prompt.toast.attachmentDuplicate.title": "此文件已上传",
   "prompt.toast.pasteUnsupported.description": "此处仅能附加图片、PDF 或文本文件。",
   "prompt.toast.modelAgentRequired.title": "请选择智能体和模型",
   "prompt.toast.modelAgentRequired.description": "发送提示前请先选择智能体和模型。",
@@ -665,6 +667,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "本地",
   "session.new.workspace.local": "本地仓库",
   "session.new.workspace.existing": "工作区…",
+  "session.new.git.none": "无 Git",
   "session.new.lastModified": "最后修改",
   "session.header.search.placeholder": "搜索 {{project}}",
   "session.header.searchFiles": "搜索文件",

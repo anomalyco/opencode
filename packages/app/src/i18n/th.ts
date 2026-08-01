@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "หยุดการแชร์เซสชันนี้",
 
   "palette.search.placeholder": "ค้นหาไฟล์ คำสั่ง และเซสชัน",
+  "palette.search.placeholder.home": "ค้นหาคำสั่งและเซสชัน",
   "palette.empty": "ไม่พบผลลัพธ์",
   "palette.group.commands": "คำสั่ง",
   "palette.group.files": "ไฟล์",
@@ -296,6 +297,7 @@ export const dict = {
   "prompt.action.stop": "หยุด",
 
   "prompt.toast.pasteUnsupported.title": "ไฟล์แนบที่ไม่รองรับ",
+  "prompt.toast.attachmentDuplicate.title": "ไฟล์นี้ถูกอัปโหลดแล้ว",
   "prompt.toast.pasteUnsupported.description": "แนบได้เฉพาะรูปภาพ, PDF หรือไฟล์ข้อความเท่านั้น",
   "prompt.toast.modelAgentRequired.title": "เลือกเอเจนต์และโมเดล",
   "prompt.toast.modelAgentRequired.description": "เลือกเอเจนต์และโมเดลก่อนส่งพร้อมท์",
@@ -668,6 +670,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "ในเครื่อง",
   "session.new.workspace.local": "รีโพซิทอรีในเครื่อง",
   "session.new.workspace.existing": "พื้นที่ทำงาน…",
+  "session.new.git.none": "ไม่มี Git",
   "session.new.lastModified": "แก้ไขล่าสุด",
 
   "session.header.search.placeholder": "ค้นหา {{project}}",

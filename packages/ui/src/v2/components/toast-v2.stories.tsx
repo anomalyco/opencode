@@ -19,7 +19,7 @@ Use brief titles/descriptions; limit actions to 1-2.
 - Toasts render in a portal and auto-dismiss unless persistent.
 
 ### Accessibility
-- TODO: confirm aria-live behavior from Kobalte Toast.
+- The region announces additions through an ARIA live region and expands with Alt+T.
 
 ### Theming/tokens
 - Uses \`data-component="toast-v2"\` and slot data attributes.
@@ -57,10 +57,10 @@ export const AllExamples = {
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M13.5554 10.4453V13.5564H11.7777H4.22211C3.23989 13.5564 2.44434 13.5564 2.44434 13.5564V10.4453"
-                  stroke="var(--icon-icon-base)"
+                  stroke="currentColor"
                 />
-                <path d="M4.88867 6L7.99978 9.11111L11.1109 6" stroke="var(--icon-icon-base)" />
-                <path d="M8 9.11198V2.44531" stroke="var(--icon-icon-base)" />
+                <path d="M4.88867 6L7.99978 9.11111L11.1109 6" stroke="currentColor" />
+                <path d="M8 9.11198V2.44531" stroke="currentColor" />
               </svg>
             ),
             actions: [

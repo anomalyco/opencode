@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Прекратить публикацию сессии",
 
   "palette.search.placeholder": "Поиск файлов, команд и сессий",
+  "palette.search.placeholder.home": "Поиск команд и сессий",
   "palette.empty": "Ничего не найдено",
   "palette.group.commands": "Команды",
   "palette.group.files": "Файлы",
@@ -296,6 +297,7 @@ export const dict = {
   "prompt.action.stop": "Остановить",
 
   "prompt.toast.pasteUnsupported.title": "Неподдерживаемое вложение",
+  "prompt.toast.attachmentDuplicate.title": "Этот файл уже загружен",
   "prompt.toast.pasteUnsupported.description": "Здесь можно прикрепить только изображения, PDF или текстовые файлы.",
   "prompt.toast.modelAgentRequired.title": "Выберите агента и модель",
   "prompt.toast.modelAgentRequired.description": "Выберите агента и модель перед отправкой запроса.",
@@ -672,6 +674,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальный репозиторий",
   "session.new.workspace.existing": "Рабочее пространство…",
+  "session.new.git.none": "Нет Git",
   "session.new.lastModified": "Последнее изменение",
 
   "session.header.search.placeholder": "Поиск {{project}}",

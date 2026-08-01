@@ -90,6 +90,7 @@ export const dict = {
   "command.session.unshare": "Teilen der Sitzung aufheben",
   "command.session.unshare.description": "Teilen dieser Sitzung beenden",
   "palette.search.placeholder": "Dateien, Befehle und Sitzungen durchsuchen",
+  "palette.search.placeholder.home": "Befehle und Sitzungen durchsuchen",
   "palette.empty": "Keine Ergebnisse gefunden",
   "palette.group.commands": "Befehle",
   "palette.group.files": "Dateien",
@@ -281,6 +282,7 @@ export const dict = {
   "prompt.action.send": "Senden",
   "prompt.action.stop": "Stopp",
   "prompt.toast.pasteUnsupported.title": "Nicht unterstützter Anhang",
+  "prompt.toast.attachmentDuplicate.title": "Diese Datei wurde bereits hochgeladen",
   "prompt.toast.pasteUnsupported.description": "Hier können nur Bilder, PDFs oder Textdateien angehängt werden.",
   "prompt.toast.modelAgentRequired.title": "Wählen Sie einen Agenten und ein Modell",
   "prompt.toast.modelAgentRequired.description":
@@ -627,6 +629,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokal",
   "session.new.workspace.local": "Lokales Repository",
   "session.new.workspace.existing": "Arbeitsbereich…",
+  "session.new.git.none": "Kein Git",
   "session.new.lastModified": "Zuletzt geändert",
   "session.header.search.placeholder": "{{project}} durchsuchen",
   "session.header.searchFiles": "Dateien suchen",

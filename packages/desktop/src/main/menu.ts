@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, shell } from "electron"
+import { BrowserWindow, Menu } from "electron"
 import type { MenuItemConstructorOptions } from "electron"
 import {
   DESKTOP_MENU,
@@ -9,6 +9,7 @@ import {
 
 import { UPDATER_ENABLED } from "./constants"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
+import { openExternalURL } from "./windows"
 
 type Deps = {
   trigger: (id: string) => void
@@ -56,7 +57,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   }
   if (entry.href) {
     const href = entry.href
-    item.click = () => shell.openExternal(href)
+    item.click = () => openExternalURL(href)
   }
 
   return item

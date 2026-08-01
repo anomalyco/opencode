@@ -93,6 +93,7 @@ export const dict = {
   "command.session.unshare.description": "Zaustavi dijeljenje ove sesije",
 
   "palette.search.placeholder": "Pretraži datoteke, komande i sesije",
+  "palette.search.placeholder.home": "Pretraži komande i sesije",
   "palette.empty": "Nema rezultata",
   "palette.group.commands": "Komande",
   "palette.group.files": "Datoteke",
@@ -297,6 +298,7 @@ export const dict = {
   "prompt.action.stop": "Zaustavi",
 
   "prompt.toast.pasteUnsupported.title": "Nepodržan prilog",
+  "prompt.toast.attachmentDuplicate.title": "Ova datoteka je već učitana",
   "prompt.toast.pasteUnsupported.description": "Ovdje se mogu priložiti samo slike, PDF-ovi ili tekstualne datoteke.",
   "prompt.toast.modelAgentRequired.title": "Odaberi agenta i model",
   "prompt.toast.modelAgentRequired.description": "Odaberi agenta i model prije slanja upita.",
@@ -674,6 +676,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokalno",
   "session.new.workspace.local": "Lokalni repozitorij",
   "session.new.workspace.existing": "Radni prostor…",
+  "session.new.git.none": "Nema Gita",
   "session.new.lastModified": "Posljednja izmjena",
 
   "session.header.search.placeholder": "Pretraži {{project}}",
