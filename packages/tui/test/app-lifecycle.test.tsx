@@ -29,7 +29,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
     const task = Effect.runPromise(
       run({
         app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() }, local: true },
+        server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
         args: {},
@@ -107,7 +107,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     const task = Effect.runPromise(
       run({
         app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() }, local: true },
+        server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
         args: { sessionID: "dummy" },
@@ -183,7 +183,7 @@ test("session title generated while an untitled session is loading remains visib
     const task = Effect.runPromise(
       run({
         app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() }, local: true },
+        server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
         args: { sessionID: "dummy" },
@@ -276,7 +276,7 @@ test("session startup prompt is submitted exactly once", async () => {
     const task = Effect.runPromise(
       run({
         app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() }, local: true },
+        server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
         args: { sessionID: "dummy", prompt: "RESUME_READY" },

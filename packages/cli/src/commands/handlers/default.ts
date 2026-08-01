@@ -48,7 +48,6 @@ export default Runtime.handler(Commands, (input) =>
       app: { name: process.env.OPENCODE_CLIENT ?? "cli", version: OPENCODE_VERSION, channel: OPENCODE_CHANNEL },
       server: {
         endpoint: server.endpoint,
-        local: server.local,
         service: service
           ? {
               reconnect: (signal) => runServicePromise(service.reconnect(), { signal }),

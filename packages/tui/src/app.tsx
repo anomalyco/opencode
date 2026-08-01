@@ -1,7 +1,6 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Deferred, Effect } from "effect"
-import path from "node:path"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
@@ -168,7 +167,6 @@ export type TuiInput = {
   app: TuiApp
   server: {
     endpoint: Endpoint
-    local: boolean
     service?: {
       reconnect: (signal: AbortSignal) => Promise<Endpoint>
       restart: () => Promise<void>
@@ -216,12 +214,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.catch(() => Effect.tryPromise(() => api.location.get())),
   )
   const directory = location.directory
-  const projectDirectory =
-    input.server.local && path.resolve(location.project.directory) !== path.parse(location.project.directory).root
-      ? location.project.directory
-      : process.cwd()
   const pluginDirectories = yield* Effect.promise(() =>
-    tuiPluginDirectories({ cwd: process.cwd(), projectDirectory, configDirectory: global.config }),
+    tuiPluginDirectories(process.cwd(), global.config),
   )
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service

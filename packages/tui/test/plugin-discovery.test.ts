@@ -16,26 +16,14 @@ test("discovers project TUI plugin files in stable order", async () => {
   ])
 
   expect(
-    await discoverTuiPlugins(
-      await tuiPluginDirectories({
-        cwd: tmp.path,
-        projectDirectory: tmp.path,
-        configDirectory: path.join(tmp.path, "config"),
-      }),
-    ),
+    await discoverTuiPlugins(await tuiPluginDirectories(tmp.path, path.join(tmp.path, "config"))),
   ).toEqual([path.join(directory, "first.js"), path.join(directory, "second.tsx")])
 })
 
 test("returns no project TUI plugins when the directory is absent", async () => {
   await using tmp = await tmpdir()
   expect(
-    await discoverTuiPlugins(
-      await tuiPluginDirectories({
-        cwd: tmp.path,
-        projectDirectory: tmp.path,
-        configDirectory: path.join(tmp.path, "config"),
-      }),
-    ),
+    await discoverTuiPlugins(await tuiPluginDirectories(tmp.path, path.join(tmp.path, "config"))),
   ).toEqual([])
 })
 
@@ -49,12 +37,13 @@ test("discovers global and ancestor plugin roots in precedence order", async () 
     path.join(tmp.path, "repo", ".opencode", "plugins", "tui"),
     path.join(tmp.path, "repo", "packages", ".opencode", "plugins", "tui"),
   ]
+  await mkdir(path.join(project, ".git"), { recursive: true })
   await Promise.all(directories.map((directory) => mkdir(directory, { recursive: true })))
   await Promise.all(
     directories.map((directory, index) => writeFile(path.join(directory, `${index}.ts`), "export default {}")),
   )
 
-  const roots = await tuiPluginDirectories({ cwd, projectDirectory: project, configDirectory: config })
+  const roots = await tuiPluginDirectories(cwd, config)
   expect(await discoverTuiPlugins(roots)).toEqual(
     directories.map((directory, index) => path.join(directory, `${index}.ts`)),
   )

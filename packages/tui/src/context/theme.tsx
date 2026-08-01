@@ -30,7 +30,7 @@ import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
 import { Global } from "@opencode-ai/util/global"
 import { DevTools } from "../devtools"
-import { configDirectories } from "../config/directories"
+import { configDirectories } from "../util/config-directories"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
 export type ThemeError = { name: string; error: Error }

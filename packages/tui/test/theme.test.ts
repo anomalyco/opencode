@@ -13,7 +13,7 @@ import {
   upsertTheme,
 } from "../src/theme"
 import { discoverThemes } from "../src/theme/discovery"
-import { configDirectories } from "../src/config/directories"
+import { configDirectories } from "../src/util/config-directories"
 import { terminalMode } from "../src/theme/system"
 import { tmpdir } from "./fixture/fixture"
 

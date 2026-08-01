@@ -1,20 +1,16 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { configDirectories } from "../config/directories"
+import { configDirectories, localProjectDirectory } from "../util/config-directories"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
-export async function tuiPluginDirectories(input: {
-  cwd: string
-  projectDirectory: string
-  configDirectory: string
-}) {
-  const projectConfig = path.join(input.projectDirectory, ".opencode")
-  const directories = configDirectories(input.configDirectory, input.cwd)
+export async function tuiPluginDirectories(cwd: string, configDirectory: string) {
+  const projectConfig = path.join(await localProjectDirectory(cwd), ".opencode")
+  const directories = configDirectories(configDirectory, cwd)
   const exists = await Promise.all(
     directories.map((directory) => {
-      if (directory === input.configDirectory || directory === projectConfig) return true
+      if (directory === configDirectory || directory === projectConfig) return true
       return stat(directory).then(
         (info) => info.isDirectory(),
         () => false,

@@ -30,7 +30,7 @@ async function until(read: () => Promise<string>, expected: (value: string | und
   return value
 }
 
-async function bootApp(directory: string, projectDirectory = directory) {
+async function bootApp(directory: string) {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
@@ -40,7 +40,7 @@ async function bootApp(directory: string, projectDirectory = directory) {
     return json({
       location: {
         directory,
-        project: { id: "proj_test", directory: projectDirectory, canonical: projectDirectory },
+        project: { id: "proj_test", directory, canonical: directory },
       },
       data: [],
     })
@@ -52,7 +52,7 @@ async function bootApp(directory: string, projectDirectory = directory) {
   const task = Effect.runPromise(
     run({
       app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() }, local: true },
+      server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => ({}), update: async () => ({}) },
       packages: { resolve: async () => undefined },
       args: {},
@@ -77,13 +77,14 @@ test("discovers an ancestor TUI plugin directory created after startup", async (
   await using tmp = await tmpdir()
   const cwd = path.join(tmp.path, "repo", "packages", "app")
   await mkdir(cwd, { recursive: true })
+  await mkdir(path.join(tmp.path, "repo", ".git"))
   const ready = path.join(tmp.path, "ready.txt")
   const marker = path.join(tmp.path, "marker.txt")
   const initial = path.join(cwd, ".opencode", "plugins", "tui")
   await mkdir(initial, { recursive: true })
   await writeFile(path.join(initial, "ready.ts"), lifecycleSource(ready, "test.ready", "ready"))
 
-  await using app = await bootApp(cwd, path.join(tmp.path, "repo"))
+  await using app = await bootApp(cwd)
   expect(await until(() => readFile(ready, "utf8"), (value) => value === "ready:setup\n")).toBe("ready:setup\n")
   const directory = path.join(tmp.path, "repo", ".opencode", "plugins", "tui")
   await mkdir(directory, { recursive: true })
