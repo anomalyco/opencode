@@ -1,6 +1,6 @@
 import type { BackgroundJobInfo } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { createResource, createSignal, Show } from "solid-js"
+import { createEffect, createSignal, onCleanup, Show } from "solid-js"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 
@@ -10,7 +10,7 @@ const POLL_MS = 5000
 
 function formatTime(ms: number | string) {
   const elapsed = Date.now() - Number(ms)
-  if (Number.isNaN(elapsed)) return "?"
+  if (!Number.isFinite(elapsed)) return "?"
   if (elapsed < 60_000) return `${Math.round(elapsed / 1000)}s`
   if (elapsed < 3_600_000) return `${Math.round(elapsed / 60_000)}m`
   return `${Math.round(elapsed / 3_600_000)}h`
@@ -41,10 +41,10 @@ function View(props: { api: TuiPluginApi }) {
     }
   }
 
-  createResource(async () => {
-    await refresh()
+  createEffect(() => {
+    void refresh()
     const timer = setInterval(refresh, POLL_MS)
-    return () => clearInterval(timer)
+    onCleanup(() => clearInterval(timer))
   })
 
   const rows = (): DialogSelectOption<string>[] =>
@@ -64,9 +64,10 @@ function View(props: { api: TuiPluginApi }) {
         { jobID, directory },
         { throwOnError: true },
       )
+      const job = jobs().find((x) => x.id === jobID)
       props.api.ui.toast({
         variant: result.data ? "success" : "error",
-        message: result.data ? `Cancelled background job ${jobLabel(jobs().find((x) => x.id === jobID)!)!}` : "Job already finished",
+        message: result.data ? `Cancelled background job ${job ? jobLabel(job) : jobID}` : "Job already finished",
       })
     } catch {
       props.api.ui.toast({ variant: "error", message: "Failed to cancel background job" })
@@ -125,10 +126,10 @@ function RunningJobs(props: { api: TuiPluginApi }) {
     }
   }
 
-  createResource(async () => {
-    await refresh()
+  createEffect(() => {
+    void refresh()
     const timer = setInterval(refresh, POLL_MS)
-    return () => clearInterval(timer)
+    onCleanup(() => clearInterval(timer))
   })
 
   const theme = () => props.api.theme.current

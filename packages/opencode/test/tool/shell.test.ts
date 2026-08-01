@@ -1254,7 +1254,7 @@ describe("tool.shell truncation", () => {
           }
           const res = yield* run(
             {
-              command: `ping -n 18 127.0.0.1`,
+              command: process.platform === "win32" ? `ping -n 18 127.0.0.1` : `ping -c 18 127.0.0.1`,
               background: true,
             },
             {

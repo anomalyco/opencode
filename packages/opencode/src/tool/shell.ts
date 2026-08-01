@@ -26,8 +26,6 @@ import { Identifier } from "@/id/id"
 import { Database } from "@opencode-ai/core/database/database"
 import { MessageV2 } from "@/session/message-v2"
 import type { TaskPromptOps } from "./task"
-import type { SessionPrompt } from "@/session/prompt"
-import { SessionID } from "@/session/schema"
 
 export { Parameters } from "./shell/prompt"
 
