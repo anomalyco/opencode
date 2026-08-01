@@ -347,6 +347,19 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
+test.each([
+  [
+    "https://llm.example.com/thinking-coding:Qwen3.6-27B-DFlash:high",
+    "https://llm.example.com",
+    "thinking-coding:Qwen3.6-27B-DFlash:high",
+  ],
+  ["http://127.0.0.1:8787/anthropic/claude-sonnet-4-5", "http://127.0.0.1:8787", "anthropic/claude-sonnet-4-5"],
+])("parseModel handles URL provider IDs", (input, providerID, modelID) => {
+  const result = Provider.parseModel(input)
+  expect(String(result.providerID)).toBe(providerID)
+  expect(String(result.modelID)).toBe(modelID)
+})
+
 it.instance("defaultModel returns first available model when no config set", () =>
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
