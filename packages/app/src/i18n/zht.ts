@@ -3,6 +3,28 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "marketplace.component.enabled": "已啟用",
+  "marketplace.component.disabled": "已停用",
+  "marketplace.component.plugin.title": "外掛程式",
+  "marketplace.component.plugin.description": "啟用或停用此外掛程式的全部功能。",
+  "marketplace.component.plugin.toggle": "切換外掛程式 {{name}}",
+  "marketplace.component.plugin.enabled": "已啟用 {{name}}",
+  "marketplace.component.plugin.disabled": "已停用 {{name}}",
+  "marketplace.component.skills.title": "技能",
+  "marketplace.component.skills.description": "選擇哪些外掛內工作流程可供代理程式使用。",
+  "marketplace.component.skill.toggle": "切換技能 {{name}}",
+  "marketplace.component.skill.enabled": "已啟用技能 {{name}}",
+  "marketplace.component.skill.disabled": "已停用技能 {{name}}",
+  "marketplace.component.mcp.title": "MCP 伺服器",
+  "marketplace.component.mcp.description": "啟用的伺服器會隨外掛自動啟動；在此停用的伺服器會保持關閉。",
+  "marketplace.component.mcp.toggle": "切換 MCP 伺服器 {{name}}",
+  "marketplace.component.mcp.enabled": "已啟用 MCP 伺服器 {{name}}",
+  "marketplace.component.mcp.disabled": "已停用 MCP 伺服器 {{name}}",
+  "marketplace.toggle.conflict.title": "無法變更外掛程式設定",
+  "marketplace.toggle.conflict.description": "請先解決衝突設定：{{settings}}",
+  "marketplace.toggle.preserved.title": "已保留設定",
+  "marketplace.toggle.preserved.description": "已保留使用者修改的設定：{{settings}}",
+
   "command.category.suggested": "建議",
   "command.category.view": "檢視",
   "command.category.project": "專案",
