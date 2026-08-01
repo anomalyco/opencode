@@ -365,12 +365,16 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin --help 1`] = `
-"opencode plugin <module>
+"opencode plugin
 
-install plugin and update config
+install plugins and manage plugin marketplaces
+
+Commands:
+  opencode plugin marketplace  manage plugin marketplace catalogs
+  opencode plugin <module>     install plugin and update config                            [default]
 
 Positionals:
-  module  npm module name                                                        [string] [required]
+  module  npm module name                                                                   [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
@@ -607,6 +611,66 @@ Options:
       --pure        run without external plugins                                           [boolean]
       --event       GitHub mock event to run the agent for                                  [string]
       --token       GitHub personal access token (github_pat_********)                      [string]"
+`;
+
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin marketplace --help 1`] = `
+"opencode plugin marketplace
+
+manage plugin marketplace catalogs
+
+Commands:
+  opencode plugin marketplace add <url>      add a plugin marketplace catalog
+  opencode plugin marketplace list           list marketplace items and installation status
+  opencode plugin marketplace install <key>  plan and install a marketplace item
+  opencode plugin marketplace update         atomically update all installed marketplace items
+  opencode plugin marketplace export [file]  export the installed marketplace set as a portable
+                                             profile
+  opencode plugin marketplace import <file>  plan and apply a Marketplace profile
+  opencode plugin marketplace lock [file]    export an exact Marketplace artifact lock
+  opencode plugin marketplace verify <file>  verify installed packages against a Marketplace lock
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin marketplace add --help 1`] = `
+"opencode plugin marketplace add <url>
+
+add a plugin marketplace catalog
+
+Positionals:
+  url  catalog URL or Git repository URL                                         [string] [required]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --name        catalog display name                                                    [string]
+      --trust       catalog trust level
+                                   [string] [choices: "community", "private"] [default: "community"]"
+`;
+
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin marketplace export --help 1`] = `
+"opencode plugin marketplace export [file]
+
+export the installed marketplace set as a portable profile
+
+Positionals:
+  file  output file; omit to print JSON to stdout                                           [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --name        profile name                                       [string] [default: "default"]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode db path --help 1`] = `
