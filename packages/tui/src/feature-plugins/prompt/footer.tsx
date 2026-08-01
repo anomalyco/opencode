@@ -10,24 +10,18 @@ const money = new Intl.NumberFormat("en-US", {
 
 export function PromptFooter(props: { context: Plugin.Context; sessionID?: string; mode: "normal" | "shell" }) {
   const dimensions = useTerminalDimensions()
-  const activeSubagents = createMemo(() => {
+  const subagents = createMemo(() => {
     if (!props.sessionID) return 0
-    return props.context.data.session
+    const count = props.context.data.session
       .family(props.sessionID)
       .filter((id) => id !== props.sessionID && props.context.data.session.status(id) === "running").length
-  })
-  const runningShells = createMemo(() => {
-    if (!props.sessionID) return 0
-    return props.context.data.shell
-      .list(props.context.location)
-      .filter((shell) => shell.metadata.sessionID === props.sessionID).length
-  })
-  const subagents = createMemo(() => {
-    const count = activeSubagents()
     return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
   })
   const shells = createMemo(() => {
-    const count = runningShells()
+    if (!props.sessionID) return 0
+    const count = props.context.data.shell
+      .list(props.context.location)
+      .filter((shell) => shell.metadata.sessionID === props.sessionID).length
     return count ? `${count} shell${count === 1 ? "" : "s"}` : undefined
   })
   const status = createMemo(() => {
@@ -40,8 +34,10 @@ export function PromptFooter(props: { context: Plugin.Context; sessionID?: strin
       session.revert?.messageID,
     )
     const cost = props.context.data.session.cost(props.sessionID)
-    return [usage ? formatContextUsage(usage.tokens, usage.percent) : undefined, cost > 0 ? money.format(cost) : undefined]
-      .filter((item): item is string => Boolean(item))
+    return [
+      usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
+      cost > 0 ? money.format(cost) : undefined,
+    ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
   const shortcut = (id: string) => props.context.keymap.shortcuts(id)[0]

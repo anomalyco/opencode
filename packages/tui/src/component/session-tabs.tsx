@@ -65,6 +65,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const accent = () => theme.hue.accent[hueStep()]
   const activeNumber = () => theme.hue.interactive[hueStep()]
   const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
+  const separatorUpperPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.04))
+  const separatorLowerPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.05))
   const [hovered, setHovered] = createSignal<string>()
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
@@ -199,12 +201,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               }
               const separatorUpperColor = createMemo(() => tint(theme.background.default, previousGlowHue(), 0.1))
               const separatorLowerColor = createMemo(() => tint(theme.background.default, glowHue(), 0.12))
-              const separatorUpperPulseColor = createMemo(() =>
-                tint(theme.background.default, theme.text.default, 0.04),
-              )
-              const separatorLowerPulseColor = createMemo(() =>
-                tint(theme.background.default, theme.text.default, 0.05),
-              )
               const titleColor = (index: number) => {
                 const color = glows()
                   ? glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width())
@@ -297,7 +293,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   <box height={1} width="100%" flexDirection="row" position="relative">
                     <TabPulse
                       enabled={animations()}
-                      active={status().busy && !status().attention}
+                      active={runs()}
                       promptPulse={status().promptPulse}
                       complete={complete() && !status().attention}
                       glow={glows()}
@@ -350,7 +346,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   <box height={1} width="100%" position="relative" flexDirection="row">
                     <TabPulse
                       enabled={animations()}
-                      active={status().busy && !status().attention}
+                      active={runs()}
                       promptPulse={status().promptPulse}
                       complete={complete() && !status().attention}
                       glow={glows()}

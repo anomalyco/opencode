@@ -200,19 +200,21 @@ export function Session() {
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
-  const tabRailWidth = createMemo(() =>
-    config.tabs?.enabled && config.tabs.vertical && sessionTabsFitVertically(dimensions().width)
-      ? SESSION_SIDEBAR_WIDTH
-      : 0,
+  const availableWidth = createMemo(
+    () =>
+      dimensions().width -
+      (config.tabs?.enabled && config.tabs.vertical && sessionTabsFitVertically(dimensions().width)
+        ? SESSION_SIDEBAR_WIDTH
+        : 0),
   )
-  const wide = createMemo(() => dimensions().width - tabRailWidth() > 120)
+  const wide = createMemo(() => availableWidth() > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const contentWidth = createMemo(() => dimensions().width - tabRailWidth() - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => availableWidth() - (sidebarVisible() ? 42 : 0) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
