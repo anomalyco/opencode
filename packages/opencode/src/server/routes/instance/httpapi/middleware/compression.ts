@@ -9,7 +9,7 @@ const COMPRESSIBLE_CONTENT_TYPE_REGEX =
 const NO_TRANSFORM_REGEX = /(?:^|,)\s*?no-transform\s*?(?:,|$)/i
 
 const STREAMING_PATHS = new Set(["/event", "/global/event"])
-const STREAMING_POST_REGEX = /^\/session\/[^/]+\/(?:message|prompt_async)$/
+const STREAMING_POST_REGEX = /^\/session\/[^/]+\/(?:message|prompt_async|shell)$/
 
 const THRESHOLD_BYTES = 1024
 
