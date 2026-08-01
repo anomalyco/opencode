@@ -63,15 +63,15 @@ export function DialogModel(props: { providerID?: string }) {
         .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
         .map((model) => {
           const provider = providers().get(model.providerID)
+          const favorite = favorites.some((item) => item.providerID === model.providerID && item.modelID === model.id)
           return {
             value: { providerID: model.providerID, modelID: model.id },
             providerID: model.providerID,
             providerName: provider?.name ?? model.providerID,
             title: model.name,
             releaseDate: model.time.released,
-            description: favorites.some((item) => item.providerID === model.providerID && item.modelID === model.id)
-              ? "(Favorite)"
-              : undefined,
+            favorite,
+            description: favorite ? "(Favorite)" : undefined,
             category: connected() ? (provider?.name ?? model.providerID) : undefined,
             footer: free(model) ? "Free" : undefined,
             onSelect() {
@@ -96,7 +96,9 @@ export function DialogModel(props: { providerID?: string }) {
     )
 
     if (needle) {
-      return fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj)
+      return prioritizeFavorites(
+        fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
+      )
     }
 
     return [...favoriteOptions, ...recentOptions, ...modelOptions]
@@ -158,6 +160,10 @@ export function DialogModel(props: { providerID?: string }) {
       focusCurrent={false}
     />
   )
+}
+
+export function prioritizeFavorites<T extends { favorite: boolean }>(options: T[]) {
+  return options.toSorted((a, b) => Number(b.favorite) - Number(a.favorite))
 }
 
 export function sortModelOptions<
