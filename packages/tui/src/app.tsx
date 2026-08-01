@@ -519,6 +519,9 @@ function App(props: { pair?: DialogPairCredentials }) {
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
   const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
+  const tabsVertical = () => config.data.tabs?.vertical ?? false
+  const tabsVisible = () =>
+    sessionTabs.enabled() && (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) && route.data.type !== "plugin"
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse
@@ -1214,16 +1217,13 @@ function App(props: { pair?: DialogPairCredentials }) {
       onMouseUp={copyOnSelectEnabled() ? () => Selection.copy(renderer, toast, clipboard) : undefined}
     >
       <box flexGrow={1} minHeight={0} flexDirection="row">
+        <Show when={tabsVisible() && tabsVertical()}>
+          <SessionTabs orientation="vertical" />
+        </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
-              <Show
-                when={
-                  sessionTabs.enabled() &&
-                  (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) &&
-                  route.data.type !== "plugin"
-                }
-              >
+              <Show when={tabsVisible() && !tabsVertical()}>
                 <SessionTabs />
               </Show>
               <Switch>

@@ -101,6 +101,15 @@ export const settings: Setting[] = [
     labels: ["current directory", "global"],
   },
   {
+    title: "Vertical",
+    category: "Tabs",
+    path: ["tabs", "vertical"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["sidebar", "orientation", "left"],
+  },
+  {
     title: "Layout",
     category: "Diffs",
     path: ["diffs", "view"],

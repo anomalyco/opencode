@@ -20,6 +20,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { useConfig } from "../config"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { projectName } from "../util/project"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -123,8 +124,7 @@ export function DialogSessionList() {
     const current = data.location.info()
     if (!current) return ""
     const project = data.project.get(current.project.id)
-    if (!project) return ""
-    return project.name || path.basename(project.canonical)
+    return projectName(project) ?? ""
   })
 
   const options = createMemo(() => {
@@ -141,9 +141,7 @@ export function DialogSessionList() {
     const option = (session: SessionInfo, category: string) => {
       const directory = session.location.directory
       const project = data.project.get(session.projectID)
-      const footer = allProjects()
-        ? Locale.truncate(project?.name || path.basename(project?.canonical ?? directory), 20)
-        : undefined
+      const footer = allProjects() ? Locale.truncate(projectName(project, directory) ?? "", 20) : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {

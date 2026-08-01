@@ -1,4 +1,3 @@
-import path from "path"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -18,6 +17,8 @@ import { truncateFilePath } from "../ui/file-path"
 import { stringWidth } from "../util/string-width"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { Spinner } from "./spinner"
+import { projectName } from "../util/project"
+import { timeAgo } from "../util/time"
 
 const RECENT_LIMIT = 8
 
@@ -81,7 +82,7 @@ export function DialogOpen() {
           .slice(0, RECENT_LIMIT)
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
-      const name = project?.canonical === "/" ? undefined : project?.name || path.basename(project?.canonical ?? "")
+      const name = projectName(project)
       const running =
         data.session.status(session.id) === "running" ||
         data.session.family(session.id).some((id) => data.session.status(id) === "running")
@@ -109,7 +110,7 @@ export function DialogOpen() {
         return true
       })
       .map((project) => {
-        const title = project.name ?? path.basename(project.canonical)
+        const title = projectName(project) ?? project.canonical
         const footer = abbreviateHome(project.canonical, paths.home)
         const width =
           dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title)
@@ -162,17 +163,4 @@ export function DialogOpen() {
       }}
     />
   )
-}
-
-function timeAgo(timestamp: number) {
-  const minutes = Math.floor((Date.now() - timestamp) / 60_000)
-  if (minutes < 1) return "now"
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d`
-  const months = Math.floor(days / 30)
-  if (months < 12) return `${months}mo`
-  return `${Math.floor(days / 365)}y`
 }

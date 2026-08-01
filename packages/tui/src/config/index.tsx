@@ -132,6 +132,9 @@ export const Info = Schema.Struct({
       scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
         description: "Share tabs globally or keep a separate set for each working directory",
       }),
+      vertical: Schema.optional(Schema.Boolean).annotate({
+        description: "Show tabs in a left sidebar instead of a horizontal strip",
+      }),
     }),
   ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(

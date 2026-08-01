@@ -45,7 +45,11 @@ export default Runtime.handler(Commands, (input) =>
     const runPromise = Effect.runPromiseWith(context)
     const service = server.service
     yield* run({
-      app: { name: process.env.OPENCODE_CLIENT ?? "cli", version: OPENCODE_VERSION, channel: OPENCODE_CHANNEL },
+      app: {
+        name: process.env.OPENCODE_CLIENT ?? "cli",
+        version: OPENCODE_VERSION,
+        channel: process.env.OPENCODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
+      },
       server: {
         endpoint: server.endpoint,
         service: service
