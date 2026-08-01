@@ -689,7 +689,85 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     project: projectApi,
     session,
     homeSessions,
+    marketplace: {
+      get: () => serverSDK.client.marketplace.get().then((result) => result.data!),
+      refresh: () => serverSDK.client.marketplace.refresh().then((result) => result.data!),
+      icon: (input: { key: string; variant: "src-light" | "src-dark" }) =>
+        serverSDK.client.marketplace.icon(input).then((result) => result.data!),
+      plan: (input: { key: string }) =>
+        serverSDK.client.marketplace.plan({ marketplacePlanInput: input }).then((result) => result.data!),
+      install: (input: { plan_id: string; expected_revision: number; force?: boolean; accept_untrusted?: boolean }) =>
+        serverSDK.client.marketplace.install({ marketplaceInstallInput: input }).then((result) => result.data!),
+      updateAll: (input: { expected_revision: number; force?: boolean; accept_untrusted?: boolean }) =>
+        serverSDK.client.marketplace.updateAll({ marketplaceUpdateAllInput: input }).then((result) => result.data!),
+      uninstall: (input: { key: string; expected_revision: number }) =>
+        serverSDK.client.marketplace
+          .uninstall({
+            key: input.key,
+            expected_revision: String(input.expected_revision),
+          })
+          .then((result) => result.data!),
+      toggle: (input: {
+        key: string
+        expected_revision: number
+        component: "package" | "skill" | "mcp"
+        id?: string
+        enabled: boolean
+      }) =>
+        serverSDK.client.marketplace
+          .toggle({
+            key: input.key,
+            marketplaceToggleInput: {
+              expected_revision: input.expected_revision,
+              component: input.component,
+              id: input.id,
+              enabled: input.enabled,
+            },
+          })
+          .then((result) => result.data!),
+      sourceAdd: (input: {
+        expected_revision: number
+        url: string
+        name?: string
+        trust?: "community" | "private"
+        format?: "auto" | "opencode" | "codex"
+        header_env?: Record<string, string>
+      }) => serverSDK.client.marketplace.sourceAdd({ marketplaceSourceAddInput: input }).then((result) => result.data!),
+      sourceToggle: (input: { id: string; expected_revision: number; enabled: boolean }) =>
+        serverSDK.client.marketplace
+          .sourceToggle({
+            id: input.id,
+            marketplaceSourceToggleInput: {
+              expected_revision: input.expected_revision,
+              enabled: input.enabled,
+            },
+          })
+          .then((result) => result.data!),
+      sourceRemove: (input: { id: string; expected_revision: number }) =>
+        serverSDK.client.marketplace
+          .sourceRemove({
+            id: input.id,
+            expected_revision: String(input.expected_revision),
+          })
+          .then((result) => result.data!),
+      profileExport: (input: { name?: string; description?: string }) =>
+        serverSDK.client.marketplace
+          .profileExport({ marketplaceProfileExportInput: input })
+          .then((result) => result.data!),
+      cachePrune: (input: { max_age_days?: number }) =>
+        serverSDK.client.marketplace.cachePrune({ marketplaceCachePruneInput: input }).then((result) => result.data!),
+    },
     mcp: {
+      connect: async (directory: string, name: string) => {
+        const key = directoryKey(directory)
+        if ((await serverSDK.protocol) === "v1") {
+          await sdkFor(directory).mcp.connect({ name })
+        } else {
+          await serverSDK.api.mcp.connect({ server: name, location: { directory: key } })
+        }
+        await queryClient.refetchQueries(queryOptionsApi.mcp(key))
+        await queryClient.refetchQueries(queryOptionsApi.mcpResources(key))
+      },
       toggle: async (directory: string, name: string) => {
         const key = directoryKey(directory)
         const sdk = sdkFor(key)

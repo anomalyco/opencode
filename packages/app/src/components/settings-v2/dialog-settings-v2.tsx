@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, startTransition } from "solid-js"
+import { Component, Show, Suspense, createMemo, createSignal, lazy, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -14,6 +14,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useTabs } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
+
+const MarketplacePanel = lazy(() =>
+  import("../marketplace-dialog").then((module) => ({ default: module.MarketplacePanel })),
+)
 
 export const DialogSettings: Component<{
   sessionID?: string
@@ -83,6 +87,10 @@ export const DialogSettings: Component<{
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="marketplace">
+                      <Icon name="archive" />
+                      Marketplace
+                    </TabsV2.Trigger>
                   </div>
                 </div>
               </div>
@@ -107,6 +115,13 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="marketplace" class="settings-v2-panel">
+          <Show when={tab() === "marketplace"}>
+            <Suspense fallback={<div class="p-6 text-v2-text-text-muted">Loading marketplace…</div>}>
+              <MarketplacePanel />
+            </Suspense>
+          </Show>
         </TabsV2.Content>
       </TabsV2>
     </Dialog>

@@ -28,6 +28,7 @@ export function useSettingsCommand() {
   const command = useCommand()
   const language = useLanguage()
   const show = useSettingsDialog()
+  const marketplace = useSettingsDialog("marketplace")
 
   command.register("settings", () => [
     {
@@ -36,6 +37,12 @@ export function useSettingsCommand() {
       category: language.t("command.category.settings"),
       keybind: "mod+comma",
       onSelect: show,
+    },
+    {
+      id: "marketplace.open",
+      title: "Open marketplace",
+      category: language.t("command.category.settings"),
+      onSelect: marketplace,
     },
   ])
 
