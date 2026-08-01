@@ -140,10 +140,11 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 return value ? data.project.get(value.projectID) : undefined
               })
               const numberWidth = () => String(index() + 1).length + 1
-              const titleWidth = () => Math.max(1, width() - numberWidth() - 3)
+              const titleWidth = () => Math.max(1, width() - numberWidth() - 2 - (hovered() === tab.sessionID ? 1 : 0))
               const title = () => tab.title ?? "Untitled session"
               const visibleTitle = createMemo(() => Locale.takeWidth(title(), titleWidth()))
               const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
+              const titleFades = createMemo(() => stringWidth(title()) >= titleWidth() && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
                 if (tab === NEW_SESSION_TAB) return Locale.takeWidth("Start a new session", titleWidth())
                 const value = session()
@@ -205,8 +206,14 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const separatorLowerPulseColor = createMemo(() =>
                 tint(theme.background.default, theme.text.default, 0.05),
               )
-              const titleColor = (index: number) =>
-                glows() ? glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width()) : foreground()
+              const titleColor = (index: number) => {
+                const color = glows()
+                  ? glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width())
+                  : foreground()
+                if (!titleFades() || index < visibleTitleParts().length - FADE_WIDTH) return color
+                const position = index - (visibleTitleParts().length - FADE_WIDTH)
+                return tint(color, pulseBackground(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
+              }
               const release = () => {
                 setDragging(undefined)
                 const pending = preview()
@@ -318,13 +325,16 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         selectable={false}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       >
-                        <Show when={glows()} fallback={visibleTitle()}>
+                        <Show when={glows() || titleFades()} fallback={visibleTitle()}>
                           <For each={visibleTitleParts()}>
                             {(character, index) => <span style={{ fg: titleColor(index()) }}>{character}</span>}
                           </For>
                         </Show>
                       </text>
                       <text
+                        position="absolute"
+                        right={1}
+                        zIndex={2}
                         width={1}
                         fg={theme.text.subdued}
                         selectable={false}
