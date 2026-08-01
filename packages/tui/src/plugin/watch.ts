@@ -10,9 +10,9 @@ import { lstat, realpath, stat } from "fs/promises"
 // Directory targets are watched at their root only: edits to nested helper
 // files do not change the entrypoint mtime and are not detected. Watches are
 // never torn down individually (a stale watch costs one fs handle and a
-// spurious onChange); all die with dispose(). Missing or temporarily
-// unwatchable targets are polled until they can be armed without relying on a
-// racy chain of ancestor watches.
+// spurious onChange); all die with dispose(). Missing retryable targets are
+// polled until they can be armed without relying on a racy chain of ancestor
+// watches.
 export function createSourceWatcher(onChange: () => void) {
   const watchers = new Map<string, ReturnType<typeof watch>>()
   const watched = new Map<string, Set<string> | null>()

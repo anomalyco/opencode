@@ -211,7 +211,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; c
       const options = typeof entry === "string" ? undefined : entry.options
       // Watch even when the resolve below fails so fixing a broken plugin reloads it.
       const local = localSource(target, directory)
-      if (local) void watcher.add(fileURLToPath(local))
+      if (local) await watcher.add(fileURLToPath(local))
       const previous = Object.values(store.registrations).find((registration) => registration.target === target)
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo

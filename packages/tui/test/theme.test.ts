@@ -12,8 +12,7 @@ import {
   setCustomThemes,
   upsertTheme,
 } from "../src/theme"
-import { discoverThemes } from "../src/theme/discovery"
-import { configDirectories } from "../src/config/directories"
+import { discoverThemes, themeDirectories } from "../src/theme/discovery"
 import { terminalMode } from "../src/theme/system"
 import { tmpdir } from "./fixture/fixture"
 
@@ -188,7 +187,7 @@ test("theme directories include global config before project directories", async
   await writeFile(path.join(global, "themes", "global.json"), JSON.stringify({ source: "global" }))
   await writeFile(path.join(project, ".opencode", "themes", "project.json"), JSON.stringify({ source: "project" }))
 
-  await expect(discoverThemes(configDirectories(global, project))).resolves.toEqual({
+  await expect(discoverThemes(themeDirectories(global, project))).resolves.toEqual({
     global: { source: "global" },
     project: { source: "project" },
   })

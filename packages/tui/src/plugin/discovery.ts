@@ -1,19 +1,22 @@
 import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { configDirectories } from "../config/directories"
+import { themeDirectories } from "../theme/discovery"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
 export function tuiPluginDirectories(cwd: string, configDirectory: string) {
-  return configDirectories(configDirectory, cwd).map((directory) => path.join(directory, "plugins", "tui"))
+  return themeDirectories(configDirectory, cwd).map((directory) => path.join(directory, "plugins", "tui"))
 }
 
 export async function discoverTuiPlugins(directories: string[]) {
   return (
     await Promise.all(
       directories.map(async (directory) => {
-        const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
+        const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
+          if (isMissing(error)) return []
+          return Promise.reject(error)
+        })
         return entries
           .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && extensions.has(path.extname(entry.name)))
           .map((entry) => path.join(directory, entry.name))
@@ -21,6 +24,12 @@ export async function discoverTuiPlugins(directories: string[]) {
       }),
     )
   ).flat()
+}
+
+function isMissing(error: unknown) {
+  if (!error || typeof error !== "object") return false
+  const code = Reflect.get(error, "code")
+  return code === "ENOENT" || code === "ENOTDIR"
 }
 
 export function localSource(spec: string, directory: string) {
