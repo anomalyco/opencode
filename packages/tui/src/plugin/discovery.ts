@@ -1,23 +1,47 @@
-import { readdir } from "node:fs/promises"
+import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import {
+  isMissingPath,
+  localProjectDirectory,
+  projectConfigDirectories,
+} from "../util/config-directories"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
-export function tuiPluginDirectory(cwd: string) {
-  return path.join(cwd, ".opencode", "plugins", "tui")
+export async function tuiPluginDirectories(cwd: string, configDirectory: string) {
+  const projectDirectory = await localProjectDirectory(cwd)
+  const projectConfig = path.join(projectDirectory, ".opencode")
+  const directories = [configDirectory, ...projectConfigDirectories(projectDirectory, cwd)]
+  const exists = await Promise.all(
+    directories.map((directory) => {
+      if (directory === configDirectory || directory === projectConfig) return true
+      return stat(directory).then(
+        (info) => info.isDirectory(),
+        (error) => (isMissingPath(error) ? false : Promise.reject(error)),
+      )
+    }),
+  )
+  return directories
+    .filter((_, index) => exists[index])
+    .map((directory) => path.join(directory, "plugins", "tui"))
 }
 
-export async function discoverTuiPlugins(cwd: string) {
-  const directory = tuiPluginDirectory(cwd)
-  const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
-    if (error && typeof error === "object" && Reflect.get(error, "code") === "ENOENT") return []
-    return Promise.reject(error)
-  })
-  return entries
-    .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && extensions.has(path.extname(entry.name)))
-    .map((entry) => path.join(directory, entry.name))
-    .sort()
+export async function discoverTuiPlugins(directories: string[]) {
+  return (
+    await Promise.all(
+      directories.map(async (directory) => {
+        const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
+          if (isMissingPath(error)) return []
+          return Promise.reject(error)
+        })
+        return entries
+          .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && extensions.has(path.extname(entry.name)))
+          .map((entry) => path.join(directory, entry.name))
+          .sort()
+      }),
+    )
+  ).flat()
 }
 
 export function localSource(spec: string, directory: string) {

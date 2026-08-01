@@ -22,7 +22,7 @@ import {
   type ThemeDocumentSource,
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"
-import { discoverThemes, themeDirectories } from "../theme/discovery"
+import { discoverThemes } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/component"
 import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -30,6 +30,7 @@ import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
 import { Global } from "@opencode-ai/util/global"
 import { DevTools } from "../devtools"
+import { configDirectories } from "../util/config-directories"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
 export type ThemeError = { name: string; error: Error }
@@ -70,7 +71,7 @@ export type ThemeSource = Readonly<{
 
 const themeSource: ThemeSource = {
   async discover() {
-    return discoverThemes(themeDirectories(Global.Path.config, process.cwd()))
+    return discoverThemes(configDirectories(Global.Path.config, process.cwd()))
   },
   subscribeRefresh(refresh) {
     process.on("SIGUSR2", refresh)

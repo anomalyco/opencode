@@ -90,10 +90,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     draining = (async () => {
       try {
         while (!state.closed && state.queue.length > 0) {
-          const prompt = state.queue.shift()
-          if (!prompt) {
-            continue
-          }
+          const prompt = state.queue.shift()!
 
           if (prompt.mode !== "shell" && isNewCommand(prompt.text)) {
             if (!input.onNewSession) {

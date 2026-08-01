@@ -67,8 +67,6 @@ function initialRoute(value: unknown): Route | undefined {
   }
 }
 
-export type RouteContext = ReturnType<typeof useRoute>
-
 export function useRouteData<T extends Route["type"]>(type: T) {
   const route = useRoute()
   return route.data as Extract<Route, { type: typeof type }>

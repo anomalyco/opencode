@@ -68,6 +68,7 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogOpen } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
+import { sessionTabsFitVertically } from "./ui/layout"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
@@ -83,6 +84,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
+import { tuiPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, PluginSlot } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
@@ -208,9 +210,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
-  const directory = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
-    Effect.map((response) => response.location.directory),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
+  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
+    Effect.map((response) => response.location),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+  )
+  const directory = location.directory
+  const pluginDirectories = yield* Effect.promise(() =>
+    tuiPluginDirectories(process.cwd(), global.config),
   )
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
@@ -378,7 +384,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                   <PromptRefProvider>
                                                                     <EditorContextProvider>
                                                                       <AttentionProvider>
-                                                                        <PluginProvider packages={input.packages}>
+                                                                        <PluginProvider
+                                                                          packages={input.packages}
+                                                                          directories={pluginDirectories}
+                                                                        >
                                                                           <App
                                                                             pair={
                                                                               input.server.endpoint.auth
@@ -519,6 +528,9 @@ function App(props: { pair?: DialogPairCredentials }) {
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
   const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
+  const tabsVertical = () => (config.data.tabs?.vertical ?? false) && sessionTabsFitVertically(dimensions().width)
+  const tabsVisible = () =>
+    sessionTabs.enabled() && (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) && route.data.type !== "plugin"
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse
@@ -1214,16 +1226,13 @@ function App(props: { pair?: DialogPairCredentials }) {
       onMouseUp={copyOnSelectEnabled() ? () => Selection.copy(renderer, toast, clipboard) : undefined}
     >
       <box flexGrow={1} minHeight={0} flexDirection="row">
+        <Show when={tabsVisible() && tabsVertical()}>
+          <SessionTabs orientation="vertical" />
+        </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
-              <Show
-                when={
-                  sessionTabs.enabled() &&
-                  (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) &&
-                  route.data.type !== "plugin"
-                }
-              >
+              <Show when={tabsVisible() && !tabsVertical()}>
                 <SessionTabs />
               </Show>
               <Switch>

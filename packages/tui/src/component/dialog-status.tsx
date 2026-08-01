@@ -4,8 +4,6 @@ import { useDialog } from "../ui/dialog"
 import { useData } from "../context/data"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
-export type DialogStatusProps = {}
-
 export function DialogStatus() {
   const data = useData()
   const theme = useTheme("elevated")

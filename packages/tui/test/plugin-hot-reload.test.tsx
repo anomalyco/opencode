@@ -1,11 +1,10 @@
 import { expect, mock, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { createEventStream, createFetch } from "./fixture/tui-client"
+import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
 function lifecycleSource(marker: string, id: string, version: string) {
@@ -36,7 +35,16 @@ async function bootApp(directory: string) {
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventStream()
-  const calls = createFetch(undefined, events)
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/fs/list") return
+    return json({
+      location: {
+        directory,
+        project: { id: "proj_test", directory, canonical: directory },
+      },
+      data: [],
+    })
+  }, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
   const cwd = process.cwd()
   process.chdir(directory)
@@ -49,7 +57,10 @@ async function bootApp(directory: string) {
       packages: { resolve: async () => undefined },
       args: {},
       log: () => {},
-    }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    }).pipe(
+      Effect.provide(Global.layerWith({ config: path.join(directory, ".global") })),
+      Effect.provide(FileSystem.layerNoop({})),
+    ),
   )
   return {
     task,
@@ -61,6 +72,34 @@ async function bootApp(directory: string) {
     },
   }
 }
+
+test("discovers an ancestor TUI plugin directory created after startup", async () => {
+  await using tmp = await tmpdir()
+  const cwd = path.join(tmp.path, "repo", "packages", "app")
+  await mkdir(cwd, { recursive: true })
+  await mkdir(path.join(tmp.path, "repo", ".git"))
+  const ready = path.join(tmp.path, "ready.txt")
+  const marker = path.join(tmp.path, "marker.txt")
+  const initial = path.join(cwd, ".opencode", "plugins", "tui")
+  await mkdir(initial, { recursive: true })
+  await writeFile(path.join(initial, "ready.ts"), lifecycleSource(ready, "test.ready", "ready"))
+
+  await using app = await bootApp(cwd)
+  expect(await until(() => readFile(ready, "utf8"), (value) => value === "ready:setup\n")).toBe("ready:setup\n")
+  const directory = path.join(tmp.path, "repo", ".opencode", "plugins", "tui")
+  await mkdir(directory, { recursive: true })
+  await writeFile(path.join(directory, "hot.ts"), lifecycleSource(marker, "test.hot", "v1"))
+
+  expect(
+    await until(
+      () => readFile(marker, "utf8"),
+      (value) => value === "v1:setup\n",
+    ),
+  ).toBe("v1:setup\n")
+
+  process.emit("SIGHUP")
+  await app.task
+})
 
 test("editing a discovered TUI plugin hot-reloads its fresh module", async () => {
   await using tmp = await tmpdir()

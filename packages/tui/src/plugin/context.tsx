@@ -13,7 +13,7 @@ import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose } from "./api"
 import { createSourceWatcher } from "./watch"
-import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectory } from "./discovery"
+import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
@@ -57,7 +57,7 @@ type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "
 
 const PluginContext = createContext<Value>()
 
-export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>) {
+export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
   const host = usePluginHost()
   const config = useConfig()
   const lifecycle = useTuiLifecycle()
@@ -171,10 +171,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       void enqueue(reconcile).catch(() => undefined)
     }, 100)
   })
-  onCleanup(() => {
+  const stopWatching = () => {
     clearTimeout(pending)
     watcher.dispose()
-  })
+  }
+  onCleanup(stopWatching)
 
   // Rebuild the plugin generation as resolve → compare → swap, mirroring the
   // core plugin registry: fold the ordered entries into a desired end state
@@ -186,8 +187,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
-    const entries = [...(await discoverTuiPlugins(host.paths.cwd)), ...(config.data.plugins ?? [])]
-    watcher.add(tuiPluginDirectory(host.paths.cwd))
+    await Promise.all(props.directories.map(watcher.wait))
+    const entries = [...(await discoverTuiPlugins(props.directories)), ...(config.data.plugins ?? [])]
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -210,7 +211,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       const options = typeof entry === "string" ? undefined : entry.options
       // Watch even when the resolve below fails so fixing a broken plugin reloads it.
       const local = localSource(target, directory)
-      if (local) watcher.add(fileURLToPath(local))
+      if (local) await watcher.add(fileURLToPath(local))
       const previous = Object.values(store.registrations).find((registration) => registration.target === target)
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo
@@ -363,6 +364,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     let disposing: Promise<void> | undefined
     const dispose = () => {
       if (disposing) return disposing
+      stopWatching()
       disposing = loading
         .catch(() => undefined)
         .then(() =>

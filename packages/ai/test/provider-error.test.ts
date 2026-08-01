@@ -6,7 +6,6 @@ describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
     const messages = [
       "tokens in request more than max tokens allowed",
-      '{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}',
       "Requested token count exceeds the model's maximum context length of 131072 tokens.",
       "Input length (265330) exceeds model's maximum context length (262144).",
       "Input length 131393 exceeds the maximum allowed input length of 131040 tokens.",
@@ -17,6 +16,24 @@ describe("provider error classification", () => {
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)
+  })
+
+  test("classifies request size failures separately from context overflow", () => {
+    const failures = [
+      classifyProviderFailure({ message: "request too large", status: 413 }),
+      classifyProviderFailure({
+        message: '{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}',
+        status: 400,
+      }),
+      classifyProviderFailure({ message: "upstream request entity too large", status: 502 }),
+    ]
+
+    expect(failures).toEqual(
+      failures.map((failure) =>
+        expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" }),
+      ),
+    )
+    expect(isContextOverflow("413 status code (no body)")).toBe(false)
   })
 
   test("does not classify rate limits as context overflow", () => {
@@ -59,9 +76,10 @@ describe("provider error classification", () => {
   })
 
   test("classifies transient client statuses as provider internal", () => {
-    expect(
-      [408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag),
-    ).toEqual(["ProviderInternal", "ProviderInternal"])
+    expect([408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag)).toEqual([
+      "ProviderInternal",
+      "ProviderInternal",
+    ])
   })
 
   test("classifies nested provider codes when a top-level code is also present", () => {

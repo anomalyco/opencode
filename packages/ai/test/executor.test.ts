@@ -85,14 +85,17 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("does not classify generic HTTP 413 payload errors as context overflow", () =>
+  it.effect("classifies generic HTTP 413 payload errors", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
       expectLLMError(error)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
-      expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        classification: "payload-too-large",
+        http: { response: { status: 413 } },
+      })
     }).pipe(Effect.provide(responsesLayer([new Response("request too large", { status: 413 })]))),
   )
 

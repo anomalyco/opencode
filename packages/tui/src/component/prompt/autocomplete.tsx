@@ -23,6 +23,7 @@ import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/client"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
+import { moveSelection, revealSelectionOffset } from "../../ui/select-controller"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -501,22 +502,19 @@ export function Autocomplete(props: {
   function move(direction: -1 | 1) {
     if (!store.visible) return
     if (!options().length) return
-    let next = store.selected + direction
-    if (next < 0) next = options().length - 1
-    if (next >= options().length) next = 0
-    moveTo(next)
+    moveTo(moveSelection(store.selected, { count: options().length, delta: direction, policy: "wrap" }))
   }
 
   function moveTo(next: number) {
     setStore("selected", next)
     if (!scroll) return
-    const viewportHeight = Math.min(height(), options().length)
-    const scrollBottom = scroll.scrollTop + viewportHeight
-    if (next < scroll.scrollTop) {
-      scroll.scrollBy(next - scroll.scrollTop)
-    } else if (next + 1 > scrollBottom) {
-      scroll.scrollBy(next + 1 - scrollBottom)
-    }
+    const offset = revealSelectionOffset(scroll.scrollTop, {
+      count: options().length,
+      limit: Math.min(height(), options().length),
+      selected: next,
+    })
+    if (offset === scroll.scrollTop) return
+    scroll.scrollBy(offset - scroll.scrollTop)
   }
 
   function select() {

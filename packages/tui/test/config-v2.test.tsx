@@ -17,7 +17,7 @@ test("validates mini replay settings", () => {
 test("validates the session tabs setting", () => {
   const decode = Schema.decodeUnknownSync(Info)
 
-  expect(decode({ tabs: { enabled: true } })).toEqual({ tabs: { enabled: true } })
+  expect(decode({ tabs: { enabled: true, vertical: true } })).toEqual({ tabs: { enabled: true, vertical: true } })
   expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
 })
 

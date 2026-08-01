@@ -1,8 +1,9 @@
-import { RGBA, TextAttributes } from "@opentui/core"
+import { RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { For, Show, createComputed, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
+import { useData } from "../context/data"
 import { useTheme, useThemes } from "../context/theme"
 import {
   adaptiveSessionTabLayout,
@@ -19,6 +20,8 @@ import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
+import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
+import { projectName } from "../util/project"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -39,8 +42,338 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
 }
 
 const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
+const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number) =>
+  tint(base, glow, 0.12 * unreadGlowIntensity(index, width))
 
-export function SessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
+export function SessionTabs(
+  props: { controller?: SessionTabsController; animations?: boolean; orientation?: "horizontal" | "vertical" } = {},
+) {
+  if (props.orientation === "vertical")
+    return <VerticalSessionTabs controller={props.controller} animations={props.animations} />
+  return <HorizontalSessionTabs controller={props.controller} animations={props.animations} />
+}
+
+function VerticalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean }) {
+  const tabs = props.controller ?? useSessionTabs()
+  const data = useData()
+  const theme = useTheme("elevated")
+  const { mode } = useThemes()
+  const config = useConfig().data
+  const animations = () => props.animations ?? config.animations ?? true
+  const width = () => SESSION_SIDEBAR_WIDTH
+  const hueStep = () => (mode() === "light" ? 800 : 200)
+  const accent = () => theme.hue.accent[hueStep()]
+  const activeNumber = () => theme.hue.interactive[hueStep()]
+  const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
+  const separatorUpperPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.04))
+  const separatorLowerPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.05))
+  const [hovered, setHovered] = createSignal<string>()
+  const [dragging, setDragging] = createSignal<string>()
+  const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
+  const newTab = () => tabs.newTab?.() ?? false
+  const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
+  const ordered = createMemo(() => {
+    const pending = preview()
+    if (!pending) return tabs.tabs()
+    return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
+  })
+  const items = createMemo(() => (newTab() ? [...ordered(), NEW_SESSION_TAB] : ordered()))
+  const statuses = createMemo(
+    () =>
+      new Map(
+        items().map((tab) => {
+          const status = tab === NEW_SESSION_TAB ? EMPTY_SESSION_TAB_STATUS : tabs.status(tab.sessionID)
+          return [
+            tab.sessionID,
+            {
+              ...status,
+              complete: sessionTabComplete(status.unread, status.busy),
+              runs: status.busy && !status.attention,
+              glows:
+                tab.sessionID !== activeID() && (status.attention || (!status.busy && status.unread !== undefined)),
+            },
+          ] as const
+        }),
+      ),
+  )
+  const itemStatus = (tab: SessionTab) => statuses().get(tab.sessionID)!
+  let rail: { screenY: number } | undefined
+  let scroll: ScrollBoxRenderable | undefined
+
+  createEffect(() => {
+    const pending = preview()
+    if (!pending || dragging()) return
+    const index = tabs.tabs().findIndex((tab) => tab.sessionID === pending.sessionID)
+    if (index === -1 || index === Math.min(pending.index, tabs.tabs().length - 1)) setPreview(undefined)
+  })
+
+  createEffect(() => {
+    if (!scroll) return
+    const index = items().findIndex((tab) => tab.sessionID === activeID())
+    if (index === -1) return
+    const top = index * 3
+    if (top < scroll.scrollTop) return scroll.scrollTo(top)
+    if (top + 2 > scroll.scrollTop + scroll.viewport.height) {
+      scroll.scrollTo(top + 2 - scroll.viewport.height)
+    }
+  })
+
+  return (
+    <box
+      ref={(element) => (rail = element)}
+      width={width()}
+      height="100%"
+      flexShrink={0}
+      flexDirection="column"
+      paddingTop={1}
+      backgroundColor={theme.background.default}
+    >
+      <scrollbox ref={(element) => (scroll = element)} flexGrow={1} scrollbarOptions={{ visible: false }}>
+        <box flexShrink={0} flexDirection="column" gap={1}>
+          <For each={items()}>
+            {(tab, index) => {
+              const selected = () => activeID() === tab.sessionID
+              const status = createMemo(() => itemStatus(tab))
+              const [sweepLevel, setSweepLevel] = createSignal(0)
+              const session = createMemo(() => (tab === NEW_SESSION_TAB ? undefined : data.session.get(tab.sessionID)))
+              const project = createMemo(() => {
+                const value = session()
+                return value ? data.project.get(value.projectID) : undefined
+              })
+              const numberWidth = () => String(index() + 1).length + 1
+              const titleWidth = () => Math.max(1, width() - numberWidth() - 2 - (hovered() === tab.sessionID ? 1 : 0))
+              const title = () => tab.title ?? "Untitled session"
+              const visibleTitle = createMemo(() => Locale.takeWidth(title(), titleWidth()))
+              const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
+              const titleFades = createMemo(() => stringWidth(title()) >= titleWidth() && titleWidth() > FADE_WIDTH)
+              const detail = createMemo(() => {
+                if (tab === NEW_SESSION_TAB) return Locale.takeWidth("Start a new session", titleWidth())
+                const value = session()
+                return Locale.takeWidth(projectName(project(), value?.location.directory) ?? "", titleWidth())
+              })
+              const background = createMemo(() => {
+                if (selected()) return theme.background.action.primary.selected
+                if (hovered() === tab.sessionID || dragging() === tab.sessionID)
+                  return theme.background.action.primary.hovered
+                return theme.background.default
+              })
+              const pulseBackground = createMemo(() => tint(theme.background.default, background(), background().a))
+              const numberColor = () => {
+                if (status().attention) return theme.text.feedback.warning.default
+                if (status().unread === "error") return theme.text.feedback.error.default
+                const base =
+                  hovered() === tab.sessionID && !selected()
+                    ? foreground()
+                    : tint(idleNumber(), activeNumber(), Number(selected()))
+                const color = tint(base, accent(), Number(complete()))
+                return sweepLevel() === 0 ? color : tint(color, theme.text.default, 0.15 * sweepLevel())
+              }
+              const foreground = () => {
+                if (hovered() === tab.sessionID) return theme.text.default
+                return selected() ? theme.text.default : theme.text.subdued
+              }
+              const complete = () => status().complete
+              const glowHue = () => {
+                if (status().attention) return theme.text.feedback.warning.default
+                if (status().unread === "error") return theme.text.feedback.error.default
+                return accent()
+              }
+              const pulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.25))
+              const glowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.45))
+              const detailPulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.13))
+              const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25))
+              const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
+              const glows = () => status().glows
+              const previous = createMemo(() => items()[index() - 1])
+              const previousStatus = createMemo(() => {
+                const tab = previous()
+                return tab
+                  ? itemStatus(tab)
+                  : { ...EMPTY_SESSION_TAB_STATUS, complete: false, runs: false, glows: false }
+              })
+              const previousGlows = () => previousStatus().glows
+              const runs = () => status().runs
+              const previousRuns = () => previousStatus().runs
+              const previousGlowHue = () => {
+                if (previousStatus().attention) return theme.text.feedback.warning.default
+                if (previousStatus().unread === "error") return theme.text.feedback.error.default
+                return accent()
+              }
+              const separatorUpperColor = createMemo(() => tint(theme.background.default, previousGlowHue(), 0.1))
+              const separatorLowerColor = createMemo(() => tint(theme.background.default, glowHue(), 0.12))
+              const titleColor = (index: number) => {
+                const color = glows()
+                  ? glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width())
+                  : foreground()
+                if (!titleFades() || index < visibleTitleParts().length - FADE_WIDTH) return color
+                const position = index - (visibleTitleParts().length - FADE_WIDTH)
+                return tint(color, pulseBackground(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
+              }
+              const release = () => {
+                setDragging(undefined)
+                const pending = preview()
+                if (pending?.sessionID === tab.sessionID) tabs.move(pending.sessionID, pending.index)
+                if (tab !== NEW_SESSION_TAB) tabs.select(tab.sessionID)
+              }
+              return (
+                <box
+                  height={2}
+                  width="100%"
+                  position="relative"
+                  flexDirection="column"
+                  backgroundColor={background()}
+                  onMouseOver={() => setHovered(tab.sessionID)}
+                  onMouseOut={() => setHovered(undefined)}
+                  onMouseDown={() => setDragging(tab.sessionID)}
+                  onMouseUp={release}
+                  onMouseDrag={(event) => {
+                    if (!rail || tab === NEW_SESSION_TAB) return
+                    const target = Math.max(
+                      0,
+                      Math.min(
+                        tabs.tabs().length - 1,
+                        Math.floor((event.y - rail.screenY - 1 + (scroll?.scrollTop ?? 0)) / 3),
+                      ),
+                    )
+                    if (target !== index() && preview()?.index !== target)
+                      setPreview({ sessionID: tab.sessionID, index: target })
+                  }}
+                  onMouseDragEnd={release}
+                >
+                  <TabPulse
+                    top={-1}
+                    edge="above"
+                    enabled={animations()}
+                    active={runs()}
+                    outerActive={previousRuns()}
+                    promptPulse={status().promptPulse}
+                    outerPromptPulse={previousStatus().promptPulse}
+                    complete={complete() && !status().attention}
+                    outerComplete={previousStatus().complete && !previousStatus().attention}
+                    glow={glows()}
+                    outerGlow={previousGlows()}
+                    breathe={status().attention}
+                    outerBreathe={previousStatus().attention}
+                    color={separatorLowerPulseColor()}
+                    outerColor={separatorUpperPulseColor()}
+                    glowColor={separatorLowerColor()}
+                    outerGlowColor={separatorUpperColor()}
+                    glowTail={8}
+                    outerGlowTail={5}
+                    completionColor={separatorLowerColor()}
+                    outerCompletionColor={separatorUpperColor()}
+                    backgroundColor={theme.background.default}
+                  />
+                  <Show when={index() === items().length - 1}>
+                    <TabPulse
+                      top={2}
+                      edge="below"
+                      enabled={animations()}
+                      active={runs()}
+                      outerActive={false}
+                      promptPulse={status().promptPulse}
+                      outerPromptPulse={0}
+                      complete={complete() && !status().attention}
+                      outerComplete={false}
+                      glow={glows()}
+                      outerGlow={false}
+                      breathe={status().attention}
+                      outerBreathe={false}
+                      color={tint(theme.background.default, theme.text.default, 0.04)}
+                      outerColor={tint(theme.background.default, theme.text.default, 0.006)}
+                      glowColor={tint(theme.background.default, glowHue(), 0.1)}
+                      outerGlowColor={theme.background.default}
+                      glowTail={8}
+                      outerGlowTail={5}
+                      completionColor={tint(theme.background.default, glowHue(), 0.1)}
+                      outerCompletionColor={theme.background.default}
+                      backgroundColor={theme.background.default}
+                    />
+                  </Show>
+                  <box height={1} width="100%" flexDirection="row" position="relative">
+                    <TabPulse
+                      enabled={animations()}
+                      active={runs()}
+                      promptPulse={status().promptPulse}
+                      complete={complete() && !status().attention}
+                      glow={glows()}
+                      breathe={status().attention}
+                      color={pulseColor()}
+                      glowColor={glowColor()}
+                      completionColor={glowColor()}
+                      backgroundColor={pulseBackground()}
+                      onLevel={setSweepLevel}
+                    />
+                    <box zIndex={1} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1}>
+                      <text
+                        width={numberWidth()}
+                        fg={numberColor()}
+                        selectable={false}
+                        attributes={selected() ? TextAttributes.BOLD : undefined}
+                      >
+                        {index() + 1}
+                      </text>
+                      <text
+                        width={titleWidth()}
+                        fg={foreground()}
+                        wrapMode="none"
+                        selectable={false}
+                        attributes={selected() ? TextAttributes.BOLD : undefined}
+                      >
+                        <Show when={glows() || titleFades()} fallback={visibleTitle()}>
+                          <For each={visibleTitleParts()}>
+                            {(character, index) => <span style={{ fg: titleColor(index()) }}>{character}</span>}
+                          </For>
+                        </Show>
+                      </text>
+                      <text
+                        position="absolute"
+                        right={1}
+                        zIndex={2}
+                        width={1}
+                        fg={theme.text.subdued}
+                        selectable={false}
+                        onMouseUp={(event) => {
+                          if (hovered() !== tab.sessionID) return
+                          event.stopPropagation()
+                          tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
+                        }}
+                      >
+                        {hovered() === tab.sessionID ? "×" : ""}
+                      </text>
+                    </box>
+                  </box>
+                  <box height={1} width="100%" position="relative" flexDirection="row">
+                    <TabPulse
+                      enabled={animations()}
+                      active={runs()}
+                      promptPulse={status().promptPulse}
+                      complete={complete() && !status().attention}
+                      glow={glows()}
+                      breathe={status().attention}
+                      color={detailPulseColor()}
+                      glowColor={detailGlowColor()}
+                      glowTail={10}
+                      completionColor={detailGlowColor()}
+                      backgroundColor={pulseBackground()}
+                    />
+                    <box zIndex={1} width="100%" flexDirection="row" paddingLeft={numberWidth() + 1} paddingRight={2}>
+                      <text fg={detailColor()} wrapMode="none" selectable={false}>
+                        {detail()}
+                      </text>
+                    </box>
+                  </box>
+                </box>
+              )
+            }}
+          </For>
+        </box>
+      </scrollbox>
+    </box>
+  )
+}
+
+function HorizontalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
   const tabs = props.controller ?? useSessionTabs()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
@@ -269,9 +602,7 @@ export function SessionTabs(props: { controller?: SessionTabsController; animati
           // spatial falloff as the glow itself; characters beyond the tail stay neutral.
           const characterColor = (index: number) => {
             const base = foreground()
-            const color = glows()
-              ? tint(base, glowColor(), 0.12 * unreadGlowIntensity(1 + numberWidth() + index, width()))
-              : base
+            const color = glows() ? glowTextColor(base, glowColor(), 1 + numberWidth() + index, width()) : base
             if (!titleFades() || index < displayedParts().length - FADE_WIDTH) return color
             const position = index - (displayedParts().length - FADE_WIDTH)
             return tint(color, background(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
