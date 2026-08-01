@@ -204,10 +204,11 @@ const layer = Layer.effect(
           cause: new Error("stdin option only supports StandardCommand; received PipedCommand"),
         })
       }
-      const next = ChildProcess.make(command.command, command.args, {
-        ...command.options,
-        stdin: normalizeStdin(options.stdin),
-      })
+       const next = ChildProcess.make(command.command, command.args, {
+         ...command.options,
+         stdin: normalizeStdin(options.stdin),
+         extendEnv: true,
+       })
       return yield* runCommand(next, options)
     })
 

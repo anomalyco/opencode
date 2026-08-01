@@ -364,5 +364,18 @@ describe("AppProcess", () => {
         }),
       ),
     )
-  })
-})
+   })
+
+   it.effect(
+     "inherits environment variables including PATH",
+     Effect.gen(function* () {
+       const svc = yield* AppProcess.Service
+       // Test that PATH is inherited by checking we can find a basic command
+       const result = yield* svc.run(cmd("-e", "process.stdout.write(process.env.PATH || '')"))
+       expect(result.exitCode).toBe(0)
+       const pathValue = result.stdout.toString("utf8").trim()
+       expect(pathValue.length).toBeGreaterThan(0)
+       expect(pathValue.includes("/")).toBe(true) // PATH should contain path separators
+     }),
+   )
+ })

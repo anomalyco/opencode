@@ -155,13 +155,14 @@ const layer = Layer.effectDiscard(
               const shell =
                 Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
                   .shell ?? defaultShell()
-              const command = ChildProcess.make(input.command, [], {
-                cwd: target.canonical,
-                shell,
-                stdin: "ignore",
-                detached: process.platform !== "win32",
-                forceKillAfter: Duration.seconds(3),
-              })
+               const command = ChildProcess.make(input.command, [], {
+                 cwd: target.canonical,
+                 shell,
+                 stdin: "ignore",
+                 detached: process.platform !== "win32",
+                 forceKillAfter: Duration.seconds(3),
+                 extendEnv: true,
+               })
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
               const result = yield* appProcess
                 .run(command, {
