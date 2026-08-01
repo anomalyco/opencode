@@ -693,6 +693,83 @@ const adaptGroup17 = (raw: RawClient["server.projectCopy"]) => ({
   refresh: Endpoint17_2(raw),
 })
 
+type Endpoint18_0Request = Parameters<RawClient["server.automation"]["automation.list"]>[0]
+type Endpoint18_0Input = {
+  readonly location?: Endpoint18_0Request["query"]["location"]
+  readonly sessionID?: Endpoint18_0Request["query"]["sessionID"]
+}
+const Endpoint18_0 = (raw: RawClient["server.automation"]) => (input?: Endpoint18_0Input) =>
+  raw["automation.list"]({ query: { location: input?.["location"], sessionID: input?.["sessionID"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint18_1Request = Parameters<RawClient["server.automation"]["automation.get"]>[0]
+type Endpoint18_1Input = { readonly id: Endpoint18_1Request["params"]["id"] }
+const Endpoint18_1 = (raw: RawClient["server.automation"]) => (input: Endpoint18_1Input) =>
+  raw["automation.get"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_2Request = Parameters<RawClient["server.automation"]["automation.create"]>[0]
+type Endpoint18_2Input = {
+  readonly id?: Endpoint18_2Request["payload"]["id"]
+  readonly sessionID: Endpoint18_2Request["payload"]["sessionID"]
+  readonly name: Endpoint18_2Request["payload"]["name"]
+  readonly prompt: Endpoint18_2Request["payload"]["prompt"]
+  readonly schedule: Endpoint18_2Request["payload"]["schedule"]
+  readonly enabled?: Endpoint18_2Request["payload"]["enabled"]
+  readonly agent?: Endpoint18_2Request["payload"]["agent"]
+}
+const Endpoint18_2 = (raw: RawClient["server.automation"]) => (input: Endpoint18_2Input) =>
+  raw["automation.create"]({
+    payload: {
+      id: input["id"],
+      sessionID: input["sessionID"],
+      name: input["name"],
+      prompt: input["prompt"],
+      schedule: input["schedule"],
+      enabled: input["enabled"],
+      agent: input["agent"],
+    },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_3Request = Parameters<RawClient["server.automation"]["automation.update"]>[0]
+type Endpoint18_3Input = {
+  readonly id: Endpoint18_3Request["params"]["id"]
+  readonly name?: Endpoint18_3Request["payload"]["name"]
+  readonly prompt?: Endpoint18_3Request["payload"]["prompt"]
+  readonly enabled?: Endpoint18_3Request["payload"]["enabled"]
+  readonly agent?: Endpoint18_3Request["payload"]["agent"]
+}
+const Endpoint18_3 = (raw: RawClient["server.automation"]) => (input: Endpoint18_3Input) =>
+  raw["automation.update"]({
+    params: { id: input["id"] },
+    payload: { name: input["name"], prompt: input["prompt"], enabled: input["enabled"], agent: input["agent"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_4Request = Parameters<RawClient["server.automation"]["automation.remove"]>[0]
+type Endpoint18_4Input = { readonly id: Endpoint18_4Request["params"]["id"] }
+const Endpoint18_4 = (raw: RawClient["server.automation"]) => (input: Endpoint18_4Input) =>
+  raw["automation.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_5Request = Parameters<RawClient["server.automation"]["automation.fire"]>[0]
+type Endpoint18_5Input = { readonly id: Endpoint18_5Request["params"]["id"] }
+const Endpoint18_5 = (raw: RawClient["server.automation"]) => (input: Endpoint18_5Input) =>
+  raw["automation.fire"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_6Request = Parameters<RawClient["server.automation"]["automation.webhook"]>[0]
+type Endpoint18_6Input = { readonly id: Endpoint18_6Request["params"]["id"] }
+const Endpoint18_6 = (raw: RawClient["server.automation"]) => (input: Endpoint18_6Input) =>
+  raw["automation.webhook"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
+
+const adaptGroup18 = (raw: RawClient["server.automation"]) => ({
+  list: Endpoint18_0(raw),
+  get: Endpoint18_1(raw),
+  create: Endpoint18_2(raw),
+  update: Endpoint18_3(raw),
+  remove: Endpoint18_4(raw),
+  fire: Endpoint18_5(raw),
+  webhook: Endpoint18_6(raw),
+})
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
   location: adaptGroup1(raw["server.location"]),
@@ -712,6 +789,7 @@ const adaptClient = (raw: RawClient) => ({
   questions: adaptGroup15(raw["server.question"]),
   references: adaptGroup16(raw["server.reference"]),
   projectCopies: adaptGroup17(raw["server.projectCopy"]),
+  "server.automation": adaptGroup18(raw["server.automation"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

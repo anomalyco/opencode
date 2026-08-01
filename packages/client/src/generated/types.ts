@@ -101,6 +101,14 @@ export type ProjectCopyError = {
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
 
+export type AutomationNotFoundError = {
+  readonly _tag: "AutomationNotFoundError"
+  readonly id: string
+  readonly message: string
+}
+export const isAutomationNotFoundError = (value: unknown): value is AutomationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AutomationNotFoundError"
+
 export type HealthGetOutput = { readonly healthy: true }
 
 export type LocationGetInput = {
@@ -2888,3 +2896,203 @@ export type ProjectCopiesRefreshInput = {
 }
 
 export type ProjectCopiesRefreshOutput = void
+
+export type ServerAutomationListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly sessionID?: string | undefined
+  }["location"]
+  readonly sessionID?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly sessionID?: string | undefined
+  }["sessionID"]
+}
+
+export type ServerAutomationListOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | null }
+    readonly enabled: boolean
+    readonly agent?: string | null
+    readonly lastFired?: number | "Infinity" | "-Infinity" | "NaN" | null
+    readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly timeUpdated: number | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
+export type ServerAutomationGetInput = { readonly id: { readonly id: string }["id"] }
+
+export type ServerAutomationGetOutput = {
+  readonly id: string
+  readonly sessionID: string
+  readonly name: string
+  readonly prompt: string
+  readonly schedule:
+    | { readonly type: "cron"; readonly expression: string }
+    | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+  readonly enabled: boolean
+  readonly agent?: string | undefined
+  readonly lastFired?: number | undefined
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}
+
+export type ServerAutomationCreateInput = {
+  readonly id?: {
+    readonly id?: string | undefined
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["id"]
+  readonly sessionID: {
+    readonly id?: string | undefined
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["sessionID"]
+  readonly name: {
+    readonly id?: string | undefined
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["name"]
+  readonly prompt: {
+    readonly id?: string | undefined
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["prompt"]
+  readonly schedule: {
+    readonly id?: string | undefined
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["schedule"]
+  readonly enabled?: {
+    readonly id?: string | undefined
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["enabled"]
+  readonly agent?: {
+    readonly id?: string | undefined
+    readonly sessionID: string
+    readonly name: string
+    readonly prompt: string
+    readonly schedule:
+      | { readonly type: "cron"; readonly expression: string }
+      | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["agent"]
+}
+
+export type ServerAutomationCreateOutput = {
+  readonly id: string
+  readonly sessionID: string
+  readonly name: string
+  readonly prompt: string
+  readonly schedule:
+    | { readonly type: "cron"; readonly expression: string }
+    | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+  readonly enabled: boolean
+  readonly agent?: string | undefined
+  readonly lastFired?: number | undefined
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}
+
+export type ServerAutomationUpdateInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly name?: {
+    readonly name?: string | undefined
+    readonly prompt?: string | undefined
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["name"]
+  readonly prompt?: {
+    readonly name?: string | undefined
+    readonly prompt?: string | undefined
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["prompt"]
+  readonly enabled?: {
+    readonly name?: string | undefined
+    readonly prompt?: string | undefined
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["enabled"]
+  readonly agent?: {
+    readonly name?: string | undefined
+    readonly prompt?: string | undefined
+    readonly enabled?: boolean | undefined
+    readonly agent?: string | undefined
+  }["agent"]
+}
+
+export type ServerAutomationUpdateOutput = {
+  readonly id: string
+  readonly sessionID: string
+  readonly name: string
+  readonly prompt: string
+  readonly schedule:
+    | { readonly type: "cron"; readonly expression: string }
+    | { readonly type: "webhook"; readonly path: string; readonly secret?: string | undefined }
+  readonly enabled: boolean
+  readonly agent?: string | undefined
+  readonly lastFired?: number | undefined
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}
+
+export type ServerAutomationRemoveInput = { readonly id: { readonly id: string }["id"] }
+
+export type ServerAutomationRemoveOutput = void
+
+export type ServerAutomationFireInput = { readonly id: { readonly id: string }["id"] }
+
+export type ServerAutomationFireOutput = void
+
+export type ServerAutomationWebhookInput = { readonly id: { readonly id: string }["id"] }
+
+export type ServerAutomationWebhookOutput = void

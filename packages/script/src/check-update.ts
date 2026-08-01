@@ -99,6 +99,11 @@ async function main() {
   const [, , ...args] = process.argv
   const json = args.includes("--json")
 
+  const origin = (await Bun.$`git remote get-url origin`.nothrow().quiet()).text().trim()
+  const isFork = !origin.includes("anomalyco/opencode")
+  const upstream = isFork ? "anomalyco/opencode.git" : undefined
+  const upstreamBranch = upstream ? "upstream/dev" : "origin/dev"
+
   const result = await checkRebase(json)
 
   if (result.status === "current") {
@@ -155,4 +160,4 @@ main().catch((e) => {
   process.exit(1)
 })
 
-export { checkRebase, type RebaseCheckResult }
+export { checkRebase }

@@ -1076,6 +1076,38 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     void exit()
   })
 
+const rebaseCheckUnsub = event.subscribe((evt: any) => {
+    if (evt.payload?.type !== "installation.rebase-check-ready") return
+    const { status, version, conflictingFiles, typeErrors } = evt.payload.properties
+
+    if (status === "clean") return
+
+    let message = `A new release v${version} is available, but your custom branch has local changes.`
+
+    if (status === "conflicts") {
+      message += `\n\nMerge conflicts detected in ${conflictingFiles?.length ?? 0} file(s):`
+      conflictingFiles?.slice(0, 10).forEach((f: string) => {
+        message += `\n  • ${f}`
+      })
+      if ((conflictingFiles?.length ?? 0) > 10) {
+        message += `\n  … and ${conflictingFiles.length - 10} more`
+      }
+      message += `\n\nPlease run \`git rebase upstream/dev\` to resolve.`
+    } else if (status === "type-errors") {
+      message += `\n\nTypeScript errors detected after merge:`
+      typeErrors?.slice(0, 5).forEach((e: string) => {
+        message += `\n  ${e.trim()}`
+      })
+      if ((typeErrors?.length ?? 0) > 5) {
+        message += `\n  … and ${typeErrors.length - 5} more`
+      }
+    }
+
+    void DialogAlert.show(dialog, "Update Blocked", message)
+  })
+
+  onCleanup(() => rebaseCheckUnsub())
+
   const plugin = createMemo(() => {
     if (!ready()) return
     if (route.data.type !== "plugin") return

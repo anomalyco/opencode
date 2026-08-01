@@ -17,4 +17,14 @@ export const UpdateAvailable = Event.define({
   },
 })
 
-export const Definitions = Event.inventory(Updated, UpdateAvailable)
+export const RebaseCheckReady = Event.define({
+  type: "installation.rebase-check-ready",
+  schema: {
+    status: Schema.Literals(["clean", "conflicts", "type-errors"]),
+    version: Schema.String,
+    conflictingFiles: Schema.Array(Schema.String).pipe(Schema.optional),
+    typeErrors: Schema.Array(Schema.String).pipe(Schema.optional),
+  },
+})
+
+export const Definitions = Event.inventory(Updated, UpdateAvailable, RebaseCheckReady)

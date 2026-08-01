@@ -114,6 +114,20 @@ import type {
   ProjectCopiesRemoveOutput,
   ProjectCopiesRefreshInput,
   ProjectCopiesRefreshOutput,
+  ServerAutomationListInput,
+  ServerAutomationListOutput,
+  ServerAutomationGetInput,
+  ServerAutomationGetOutput,
+  ServerAutomationCreateInput,
+  ServerAutomationCreateOutput,
+  ServerAutomationUpdateInput,
+  ServerAutomationUpdateOutput,
+  ServerAutomationRemoveInput,
+  ServerAutomationRemoveOutput,
+  ServerAutomationFireInput,
+  ServerAutomationFireOutput,
+  ServerAutomationWebhookInput,
+  ServerAutomationWebhookOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -996,6 +1010,96 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    "server.automation": {
+      list: (input?: ServerAutomationListInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationListOutput>(
+          {
+            method: "GET",
+            path: `/api/automation`,
+            query: { location: input?.["location"], sessionID: input?.["sessionID"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: ServerAutomationGetInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationGetOutput>(
+          {
+            method: "GET",
+            path: `/api/automation/${encodeURIComponent(input.id)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      create: (input: ServerAutomationCreateInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationCreateOutput>(
+          {
+            method: "POST",
+            path: `/api/automation`,
+            body: {
+              id: input["id"],
+              sessionID: input["sessionID"],
+              name: input["name"],
+              prompt: input["prompt"],
+              schedule: input["schedule"],
+              enabled: input["enabled"],
+              agent: input["agent"],
+            },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      update: (input: ServerAutomationUpdateInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationUpdateOutput>(
+          {
+            method: "PATCH",
+            path: `/api/automation/${encodeURIComponent(input.id)}`,
+            body: { name: input["name"], prompt: input["prompt"], enabled: input["enabled"], agent: input["agent"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      remove: (input: ServerAutomationRemoveInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/automation/${encodeURIComponent(input.id)}`,
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      fire: (input: ServerAutomationFireInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationFireOutput>(
+          {
+            method: "POST",
+            path: `/api/automation/${encodeURIComponent(input.id)}/fire`,
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      webhook: (input: ServerAutomationWebhookInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationWebhookOutput>(
+          {
+            method: "POST",
+            path: `/api/automation/${encodeURIComponent(input.id)}/webhook`,
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
             empty: true,
           },
           requestOptions,

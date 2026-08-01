@@ -57,6 +57,21 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`automation_trigger\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`name\` text NOT NULL,
+          \`prompt\` text NOT NULL,
+          \`schedule\` text NOT NULL,
+          \`enabled\` integer DEFAULT true NOT NULL,
+          \`agent\` text,
+          \`last_fired\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_automation_trigger_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`credential\` (
           \`id\` text PRIMARY KEY,
           \`integration_id\` text,
@@ -236,6 +251,8 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`CREATE INDEX \`automation_trigger_session_idx\` ON \`automation_trigger\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_trigger_enabled_idx\` ON \`automation_trigger\` (\`enabled\`);`)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(

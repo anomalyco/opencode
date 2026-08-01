@@ -75,3 +75,5 @@ export const Script = {
   },
 }
 console.log(`opencode script`, JSON.stringify(Script, null, 2))
+
+export { checkRebase, type RebaseCheckResult } from "./check-update"
