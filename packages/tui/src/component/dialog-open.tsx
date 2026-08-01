@@ -18,7 +18,6 @@ import { stringWidth } from "../util/string-width"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
-import { timeAgo } from "../util/time"
 
 const RECENT_LIMIT = 8
 
@@ -163,4 +162,17 @@ export function DialogOpen() {
       }}
     />
   )
+}
+
+function timeAgo(timestamp: number) {
+  const minutes = Math.floor((Date.now() - timestamp) / 60_000)
+  if (minutes < 1) return "now"
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo`
+  return `${Math.floor(days / 365)}y`
 }
