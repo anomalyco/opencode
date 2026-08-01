@@ -2029,6 +2029,333 @@ export type Config = {
   }
 }
 
+export type MarketplaceSource = {
+  id: string
+  name: string
+  url: string
+  reference?: string
+  enabled?: boolean
+  trust?: "official" | "verified" | "community" | "private"
+  format?: "auto" | "opencode" | "codex"
+  header_env?: {
+    [key: string]: string
+  }
+}
+
+export type MarketplaceInstalled = {
+  source: string
+  source_url?: string
+  source_trust?: "official" | "verified" | "community" | "private"
+  catalog: string
+  catalog_name?: string
+  item: string
+  name: string
+  kind: "plugin" | "skill" | "agent" | "command" | "mcp" | "bundle"
+  version: string
+  publisher?: string
+  fingerprint: string
+  listing_digest?: string
+  plan_digest?: string
+  priority?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  installed_at: string
+  updated_at: string
+  snapshot?: unknown
+  plan: unknown
+  materialized_plan?: unknown
+  active_plan?: unknown
+  receipt: unknown
+  enabled?: boolean
+  disabled_skills?: Array<string>
+  disabled_mcp?: Array<string>
+  catalog_digest?: string
+  manifest_digest?: string
+  materialized_digest?: string
+  artifact_digests?: Array<string>
+}
+
+export type MarketplaceState = {
+  revision?: number
+  sources?: Array<MarketplaceSource>
+  installed?: {
+    [key: string]: MarketplaceInstalled
+  }
+}
+
+export type MarketplaceListing = {
+  key: string
+  source: MarketplaceSource
+  catalog: unknown
+  item: unknown
+  orphaned?: boolean
+  catalog_url?: string
+  catalog_digest?: string
+  listing_digest?: string
+  plan_digest?: string
+  compatibility?: {
+    compatible: boolean
+    reasons: Array<string>
+  }
+}
+
+export type MarketplaceLoadError = {
+  source: MarketplaceSource
+  message: string
+}
+
+export type MarketplaceCacheSummary = {
+  root: string
+  objects: number
+  total_bytes: number
+  fetch_entries: number
+  materializations: number
+}
+
+export type MarketplaceView = {
+  state: MarketplaceState
+  listings: Array<MarketplaceListing>
+  errors: Array<MarketplaceLoadError>
+  cache: MarketplaceCacheSummary
+  next_cursor?: string
+}
+
+export type MarketplaceIconResult = {
+  data_url?: string
+}
+
+export type MarketplacePlanInput = {
+  key: string
+}
+
+export type MarketplaceConflict = {
+  path: string
+  current: unknown
+  incoming: unknown
+}
+
+export type MarketplacePlanResult =
+  | {
+      ok: true
+      plan_id: string
+      expires_at: string
+      key: string
+      action: "install" | "update"
+      listing_digest: string
+      plan_digest: string
+      compatibility: {
+        compatible: boolean
+        reasons: Array<string>
+      }
+      trust_warning: boolean
+      conflicts: Array<MarketplaceConflict>
+      permissions: Array<string>
+      summary: string
+    }
+  | {
+      ok: false
+      reason: "not_found" | "materialization" | "incompatible"
+      message: string
+    }
+
+export type MarketplaceInstallInput = {
+  plan_id: string
+  expected_revision: number
+  force?: boolean
+  accept_untrusted?: boolean
+}
+
+export type MarketplaceMutationResult =
+  | {
+      ok: true
+      changed: boolean
+      view: MarketplaceView
+      connect_mcp: Array<string>
+      preserved: Array<string>
+    }
+  | {
+      ok: false
+      reason:
+        | "conflict"
+        | "revision"
+        | "trust"
+        | "not_found"
+        | "materialization"
+        | "incompatible"
+        | "plan_not_found"
+        | "plan_expired"
+        | "plan_consumed"
+      message: string
+      revision?: number
+      conflicts?: Array<MarketplaceConflict>
+    }
+
+export type MarketplaceUpdateAllInput = {
+  expected_revision: number
+  force?: boolean
+  accept_untrusted?: boolean
+}
+
+export type MarketplaceProfilePlanResult =
+  | {
+      ok: true
+      plan_id: string
+      expires_at: string
+      actions: Array<{
+        key: string
+        action: "install" | "update"
+      }>
+      trust_warning: boolean
+      conflicts: Array<MarketplaceConflict>
+    }
+  | {
+      ok: false
+      reason: "not_found" | "materialization" | "incompatible" | "digest"
+      message: string
+    }
+
+export type MarketplaceToggleInput = {
+  expected_revision: number
+  component: "package" | "skill" | "mcp"
+  id?: string
+  enabled: boolean
+}
+
+export type MarketplaceSourceAddInput = {
+  expected_revision: number
+  url: string
+  name?: string
+  trust?: "community" | "private"
+  format?: "auto" | "opencode" | "codex"
+  header_env?: {
+    [key: string]: string
+  }
+}
+
+export type MarketplaceSourceToggleInput = {
+  expected_revision: number
+  enabled: boolean
+}
+
+export type MarketplaceProfileExportInput = {
+  name?: string
+  description?: string
+}
+
+export type MarketplaceProfile = {
+  schema: "opencode.marketplace.profile/v2"
+  name: string
+  description?: string
+  generated_at: string
+  sources: Array<{
+    id: string
+    name: string
+    url: string
+    trust?: "official" | "verified" | "community" | "private"
+    format?: "auto" | "opencode" | "codex"
+  }>
+  packages: Array<{
+    key: string
+    source: string
+    catalog: string
+    item: string
+    name: string
+    kind: string
+    version: string
+    listing_digest?: string
+    plan_digest?: string
+    priority?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    enabled: boolean
+    components: {
+      skills: {
+        [key: string]: boolean
+      }
+      mcp: {
+        [key: string]: boolean
+      }
+    }
+  }>
+}
+
+export type MarketplaceProfileDocument =
+  | MarketplaceProfile
+  | {
+      schema: "opencode.marketplace.profile/v1"
+      name: string
+      description?: string
+      generated_at: string
+      sources: Array<{
+        id: string
+        name: string
+        url: string
+        trust?: "official" | "verified" | "community" | "private"
+        format?: "auto" | "opencode" | "codex"
+      }>
+      packages: Array<{
+        key: string
+        source: string
+        catalog: string
+        item: string
+        name: string
+        kind: string
+        version: string
+        listing_digest?: string
+        plan_digest?: string
+        priority?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        enabled: boolean
+        components: {
+          skills: {
+            [key: string]: boolean
+          }
+          mcp: {
+            [key: string]: boolean
+          }
+        }
+      }>
+    }
+
+export type MarketplaceProfilePlanInput = {
+  profile: MarketplaceProfileDocument
+  mode?: "merge" | "replace"
+}
+
+export type MarketplaceCachePruneInput = {
+  max_age_days?: number
+}
+
+export type MarketplaceLock = {
+  schema: "opencode.marketplace.lock/v1"
+  generated_at: string
+  packages: Array<{
+    key: string
+    source_url?: string
+    catalog: string
+    item: string
+    version: string
+    listing_digest?: string
+    plan_digest?: string
+    materialized_digest?: string
+    artifact_digests: Array<string>
+  }>
+}
+
+export type MarketplaceLockVerifyInput = {
+  lock: MarketplaceLock
+}
+
+export type MarketplaceLockVerifyResult = {
+  ok: boolean
+  errors: Array<string>
+}
+
+export type MarketplaceAuditEntry = {
+  id: number
+  revision: number
+  action: string
+  data: {
+    [key: string]: unknown
+  }
+  time_created: number
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -7385,6 +7712,527 @@ export type GlobalUpgradeResponses = {
 }
 
 export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
+
+export type MarketplaceGetData = {
+  body?: never
+  path?: never
+  query?: {
+    cursor?: string
+    limit?: string
+  }
+  url: "/marketplace"
+}
+
+export type MarketplaceGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceGetError = MarketplaceGetErrors[keyof MarketplaceGetErrors]
+
+export type MarketplaceGetResponses = {
+  /**
+   * Marketplace state and catalog
+   */
+  200: MarketplaceView
+}
+
+export type MarketplaceGetResponse = MarketplaceGetResponses[keyof MarketplaceGetResponses]
+
+export type MarketplaceRefreshData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/marketplace/refresh"
+}
+
+export type MarketplaceRefreshErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceRefreshError = MarketplaceRefreshErrors[keyof MarketplaceRefreshErrors]
+
+export type MarketplaceRefreshResponses = {
+  /**
+   * Refreshed Marketplace
+   */
+  200: MarketplaceView
+}
+
+export type MarketplaceRefreshResponse = MarketplaceRefreshResponses[keyof MarketplaceRefreshResponses]
+
+export type MarketplaceIconData = {
+  body?: never
+  path: {
+    key: string
+    variant: "src-light" | "src-dark"
+  }
+  query?: never
+  url: "/marketplace/icon/{key}/{variant}"
+}
+
+export type MarketplaceIconErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceIconError = MarketplaceIconErrors[keyof MarketplaceIconErrors]
+
+export type MarketplaceIconResponses = {
+  /**
+   * Marketplace icon data
+   */
+  200: MarketplaceIconResult
+}
+
+export type MarketplaceIconResponse = MarketplaceIconResponses[keyof MarketplaceIconResponses]
+
+export type MarketplacePlanData = {
+  body?: MarketplacePlanInput
+  path?: never
+  query?: never
+  url: "/marketplace/plan"
+}
+
+export type MarketplacePlanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplacePlanError = MarketplacePlanErrors[keyof MarketplacePlanErrors]
+
+export type MarketplacePlanResponses = {
+  /**
+   * Marketplace install plan
+   */
+  200: MarketplacePlanResult
+}
+
+export type MarketplacePlanResponse = MarketplacePlanResponses[keyof MarketplacePlanResponses]
+
+export type MarketplaceInstallData = {
+  body?: MarketplaceInstallInput
+  path?: never
+  query?: never
+  url: "/marketplace/install"
+}
+
+export type MarketplaceInstallErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceInstallError = MarketplaceInstallErrors[keyof MarketplaceInstallErrors]
+
+export type MarketplaceInstallResponses = {
+  /**
+   * Marketplace install result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceInstallResponse = MarketplaceInstallResponses[keyof MarketplaceInstallResponses]
+
+export type MarketplaceUpdateAllData = {
+  body?: MarketplaceUpdateAllInput
+  path?: never
+  query?: never
+  url: "/marketplace/update-all"
+}
+
+export type MarketplaceUpdateAllErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceUpdateAllError = MarketplaceUpdateAllErrors[keyof MarketplaceUpdateAllErrors]
+
+export type MarketplaceUpdateAllResponses = {
+  /**
+   * Marketplace update result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceUpdateAllResponse = MarketplaceUpdateAllResponses[keyof MarketplaceUpdateAllResponses]
+
+export type MarketplaceUpdatePlanData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/marketplace/update/plan"
+}
+
+export type MarketplaceUpdatePlanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceUpdatePlanError = MarketplaceUpdatePlanErrors[keyof MarketplaceUpdatePlanErrors]
+
+export type MarketplaceUpdatePlanResponses = {
+  /**
+   * Marketplace update plan
+   */
+  200: MarketplaceProfilePlanResult
+}
+
+export type MarketplaceUpdatePlanResponse = MarketplaceUpdatePlanResponses[keyof MarketplaceUpdatePlanResponses]
+
+export type MarketplaceUpdateApplyData = {
+  body?: MarketplaceInstallInput
+  path?: never
+  query?: never
+  url: "/marketplace/update/apply"
+}
+
+export type MarketplaceUpdateApplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceUpdateApplyError = MarketplaceUpdateApplyErrors[keyof MarketplaceUpdateApplyErrors]
+
+export type MarketplaceUpdateApplyResponses = {
+  /**
+   * Marketplace update result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceUpdateApplyResponse = MarketplaceUpdateApplyResponses[keyof MarketplaceUpdateApplyResponses]
+
+export type MarketplaceUninstallData = {
+  body?: never
+  path: {
+    key: string
+  }
+  query: {
+    expected_revision: string
+  }
+  url: "/marketplace/install/{key}"
+}
+
+export type MarketplaceUninstallErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceUninstallError = MarketplaceUninstallErrors[keyof MarketplaceUninstallErrors]
+
+export type MarketplaceUninstallResponses = {
+  /**
+   * Marketplace uninstall result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceUninstallResponse = MarketplaceUninstallResponses[keyof MarketplaceUninstallResponses]
+
+export type MarketplaceToggleData = {
+  body?: MarketplaceToggleInput
+  path: {
+    key: string
+  }
+  query?: never
+  url: "/marketplace/install/{key}"
+}
+
+export type MarketplaceToggleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceToggleError = MarketplaceToggleErrors[keyof MarketplaceToggleErrors]
+
+export type MarketplaceToggleResponses = {
+  /**
+   * Marketplace component toggle result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceToggleResponse = MarketplaceToggleResponses[keyof MarketplaceToggleResponses]
+
+export type MarketplaceSourceAddData = {
+  body?: MarketplaceSourceAddInput
+  path?: never
+  query?: never
+  url: "/marketplace/source"
+}
+
+export type MarketplaceSourceAddErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceSourceAddError = MarketplaceSourceAddErrors[keyof MarketplaceSourceAddErrors]
+
+export type MarketplaceSourceAddResponses = {
+  /**
+   * Marketplace source result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceSourceAddResponse = MarketplaceSourceAddResponses[keyof MarketplaceSourceAddResponses]
+
+export type MarketplaceSourceRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query: {
+    expected_revision: string
+  }
+  url: "/marketplace/source/{id}"
+}
+
+export type MarketplaceSourceRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceSourceRemoveError = MarketplaceSourceRemoveErrors[keyof MarketplaceSourceRemoveErrors]
+
+export type MarketplaceSourceRemoveResponses = {
+  /**
+   * Marketplace source result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceSourceRemoveResponse = MarketplaceSourceRemoveResponses[keyof MarketplaceSourceRemoveResponses]
+
+export type MarketplaceSourceToggleData = {
+  body?: MarketplaceSourceToggleInput
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/marketplace/source/{id}"
+}
+
+export type MarketplaceSourceToggleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceSourceToggleError = MarketplaceSourceToggleErrors[keyof MarketplaceSourceToggleErrors]
+
+export type MarketplaceSourceToggleResponses = {
+  /**
+   * Marketplace source result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceSourceToggleResponse = MarketplaceSourceToggleResponses[keyof MarketplaceSourceToggleResponses]
+
+export type MarketplaceProfileExportData = {
+  body?: MarketplaceProfileExportInput
+  path?: never
+  query?: never
+  url: "/marketplace/profile"
+}
+
+export type MarketplaceProfileExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceProfileExportError = MarketplaceProfileExportErrors[keyof MarketplaceProfileExportErrors]
+
+export type MarketplaceProfileExportResponses = {
+  /**
+   * Portable Marketplace profile
+   */
+  200: MarketplaceProfile
+}
+
+export type MarketplaceProfileExportResponse =
+  MarketplaceProfileExportResponses[keyof MarketplaceProfileExportResponses]
+
+export type MarketplaceProfilePlanData = {
+  body?: MarketplaceProfilePlanInput
+  path?: never
+  query?: never
+  url: "/marketplace/profile/plan"
+}
+
+export type MarketplaceProfilePlanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceProfilePlanError = MarketplaceProfilePlanErrors[keyof MarketplaceProfilePlanErrors]
+
+export type MarketplaceProfilePlanResponses = {
+  /**
+   * Marketplace profile plan
+   */
+  200: MarketplaceProfilePlanResult
+}
+
+export type MarketplaceProfilePlanResponse = MarketplaceProfilePlanResponses[keyof MarketplaceProfilePlanResponses]
+
+export type MarketplaceProfileApplyData = {
+  body?: MarketplaceInstallInput
+  path?: never
+  query?: never
+  url: "/marketplace/profile/apply"
+}
+
+export type MarketplaceProfileApplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceProfileApplyError = MarketplaceProfileApplyErrors[keyof MarketplaceProfileApplyErrors]
+
+export type MarketplaceProfileApplyResponses = {
+  /**
+   * Marketplace profile result
+   */
+  200: MarketplaceMutationResult
+}
+
+export type MarketplaceProfileApplyResponse = MarketplaceProfileApplyResponses[keyof MarketplaceProfileApplyResponses]
+
+export type MarketplaceCachePruneData = {
+  body?: MarketplaceCachePruneInput
+  path?: never
+  query?: never
+  url: "/marketplace/cache/prune"
+}
+
+export type MarketplaceCachePruneErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceCachePruneError = MarketplaceCachePruneErrors[keyof MarketplaceCachePruneErrors]
+
+export type MarketplaceCachePruneResponses = {
+  /**
+   * Marketplace cache summary
+   */
+  200: MarketplaceCacheSummary
+}
+
+export type MarketplaceCachePruneResponse = MarketplaceCachePruneResponses[keyof MarketplaceCachePruneResponses]
+
+export type MarketplaceLockExportData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/marketplace/lock"
+}
+
+export type MarketplaceLockExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceLockExportError = MarketplaceLockExportErrors[keyof MarketplaceLockExportErrors]
+
+export type MarketplaceLockExportResponses = {
+  /**
+   * Marketplace lock
+   */
+  200: MarketplaceLock
+}
+
+export type MarketplaceLockExportResponse = MarketplaceLockExportResponses[keyof MarketplaceLockExportResponses]
+
+export type MarketplaceLockVerifyData = {
+  body?: MarketplaceLockVerifyInput
+  path?: never
+  query?: never
+  url: "/marketplace/lock/verify"
+}
+
+export type MarketplaceLockVerifyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceLockVerifyError = MarketplaceLockVerifyErrors[keyof MarketplaceLockVerifyErrors]
+
+export type MarketplaceLockVerifyResponses = {
+  /**
+   * Marketplace lock verification
+   */
+  200: MarketplaceLockVerifyResult
+}
+
+export type MarketplaceLockVerifyResponse = MarketplaceLockVerifyResponses[keyof MarketplaceLockVerifyResponses]
+
+export type MarketplaceAuditData = {
+  body?: never
+  path?: never
+  query?: {
+    limit?: string
+  }
+  url: "/marketplace/audit"
+}
+
+export type MarketplaceAuditErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MarketplaceAuditError = MarketplaceAuditErrors[keyof MarketplaceAuditErrors]
+
+export type MarketplaceAuditResponses = {
+  /**
+   * Marketplace audit log
+   */
+  200: Array<MarketplaceAuditEntry>
+}
+
+export type MarketplaceAuditResponse = MarketplaceAuditResponses[keyof MarketplaceAuditResponses]
 
 export type EventSubscribeData = {
   body?: never
