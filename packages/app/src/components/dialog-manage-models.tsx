@@ -17,6 +17,7 @@ import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogConnectProvider } from "./dialog-connect-provider"
+import { DialogModelRatings } from "./dialog-model-ratings"
 import { decode64 } from "@/utils/base64"
 import { SettingsListV2 } from "./settings-v2/parts/list"
 import { SettingsRowV2 } from "./settings-v2/parts/row"
@@ -33,6 +34,9 @@ export const DialogManageModels: Component = () => {
   const handleConnectProvider = () => {
     void dialog.show(() => <DialogConnectProvider directory={directory} />)
   }
+  const handleOpenRatings = () => {
+    void dialog.show(() => <DialogModelRatings />)
+  }
   const providerRank = (id: string) => popularProviders.indexOf(id)
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
   const providerVisible = (providerID: string) =>
@@ -48,9 +52,14 @@ export const DialogManageModels: Component = () => {
       title={language.t("dialog.model.manage")}
       description={language.t("dialog.model.manage.description")}
       action={
-        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={handleConnectProvider}>
-          {language.t("command.provider.connect")}
-        </Button>
+        <div class="flex items-center gap-x-2">
+          <Button class="h-7 -my-1 text-14-medium" variant="secondary" onClick={handleOpenRatings}>
+            {language.t("dialog.model.ratings.button")}
+          </Button>
+          <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={handleConnectProvider}>
+            {language.t("command.provider.connect")}
+          </Button>
+        </div>
       }
     >
       <List
