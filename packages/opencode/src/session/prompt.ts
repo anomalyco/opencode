@@ -1183,7 +1183,7 @@ const layer = Layer.effect(
             Effect.provideService(FSUtil.Service, fsys),
             Effect.provideService(Session.Service, sessions),
           )
-          LoopDetection.apply(msgs)
+          msgs = LoopDetection.apply(msgs)
 
           const msg: SessionV1.Assistant = {
             id: MessageID.ascending(),

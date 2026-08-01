@@ -1,5 +1,6 @@
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { PartID } from "./schema"
+import { ShellID } from "../tool/shell/id"
 
 /**
  * Repeatedly failing the same shell command without changing the underlying
@@ -30,7 +31,7 @@ export function apply(messages: SessionV1.WithParts[]) {
   for (const msg of messages) {
     if (msg.info.role !== "assistant") continue
     for (const part of msg.parts) {
-      if (part.type !== "tool" || part.tool !== "shell" || part.state.status !== "completed") continue
+      if (part.type !== "tool" || part.tool !== ShellID.ToolID || part.state.status !== "completed") continue
       const command = (part.state.input as { command?: string } | undefined)?.command
       if (!command) continue
       const exit = part.state.metadata?.exit

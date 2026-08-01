@@ -48,7 +48,7 @@ function shellFail(command: string, exit: number): SessionV1.WithParts {
         sessionID,
         type: "tool",
         callID: `call_${id}`,
-        tool: "shell",
+        tool: "bash",
         state: {
           status: "completed",
           input: { command },
