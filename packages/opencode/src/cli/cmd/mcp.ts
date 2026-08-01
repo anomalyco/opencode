@@ -115,7 +115,9 @@ export const McpListCommand = effectCmd({
     prompts.intro("MCP Servers")
 
     const { config, statuses, stored } = yield* listState()
-    const servers = configuredServers(config)
+    // Every declared entry, not just the well-formed ones: an entry the user
+    // wrote and we cannot parse must not read as "no servers configured" (#198).
+    const servers = Object.entries(config.mcp ?? {})
 
     if (servers.length === 0) {
       prompts.log.warn("No MCP servers configured")
@@ -157,7 +159,14 @@ export const McpListCommand = effectCmd({
         hint = "\n    " + status.error
       }
 
-      const typeHint = serverConfig.type === "remote" ? serverConfig.url : serverConfig.command.join(" ")
+      const typeHint = !isMcpConfigured(serverConfig)
+        ? // No `type`, so there is no command or url to show. Either it is the
+          // legacy disable shorthand, or it is broken and the diagnostic is the
+          // most useful thing this line can carry.
+          (ConfigMCP.entryIssues(serverConfig)[0] ?? "disabled in config")
+        : serverConfig.type === "remote"
+          ? serverConfig.url
+          : serverConfig.command.join(" ")
       prompts.log.info(
         `${statusIcon} ${name} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint}`,
       )

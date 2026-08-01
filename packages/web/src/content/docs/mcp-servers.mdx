@@ -30,17 +30,38 @@ You can define MCP servers in your [OpenCode Config](https://opencode.ai/docs/co
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "name-of-mcp-server": {
-      // ...
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
       "enabled": true,
     },
     "name-of-other-mcp-server": {
-      // ...
+      "type": "remote",
+      "url": "https://example.com/mcp",
     },
   },
 }
 ```
 
-You can also disable a server by setting `enabled` to `false`. This is useful if you want to temporarily disable a server without removing it from your config.
+Every entry needs a `type` of either `local` or `remote`. An entry without one is
+rejected when the config loads, naming the server and what is missing — it is not
+silently ignored.
+
+You can also disable a server by setting `enabled` to `false`. This is useful if you want to temporarily disable a server without removing it from your config. `{ "enabled": false }` on its own is the one entry that may omit `type`:
+
+```jsonc title="aixplain-code.jsonc"
+{
+  "mcp": {
+    "name-of-mcp-server": { "enabled": false },
+  },
+}
+```
+
+:::caution
+Field names differ from other MCP clients. This project uses `environment` (not `env`)
+for a local server's variables, `command` as an array (not a string), and `local` /
+`remote` for `type` (not `stdio` / `sse` / `http`). Using the other spelling is
+reported as an error when the config loads.
+:::
 
 ---
 

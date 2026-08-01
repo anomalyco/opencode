@@ -16,7 +16,7 @@ import {
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "@/config/config"
-import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
+import { ConfigMCP, ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
@@ -34,6 +34,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
+import { log } from "effect/Effect"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -120,7 +121,31 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
   return typeof entry === "object" && entry !== null && "type" in entry
 }
 
-function remoteURL(value: string) {
+/** The legacy `{ "enabled": false }` shorthand for switching a server off. */
+function isDisableShorthand(entry: McpEntry) {
+  return !isMcpConfigured(entry) && typeof entry === "object" && entry !== null && entry.enabled === false
+}
+
+/**
+ * Status for an entry that carries no usable `type`.
+ *
+ * The legacy disable shorthand is a legitimate config and reports as disabled.
+ * Anything else is a config we cannot start, and it gets reported as failed
+ * rather than dropped. Config loading now rejects the shapes that produce one
+ * (#198), so reaching here means it arrived another way — a merged remote or
+ * global fragment, a stale cached config, a future schema change. `/mcps` and
+ * `mcp list` already render `failed`; an empty list is the one failure mode
+ * users read as "this feature does not exist".
+ */
+function unconfiguredStatus(entry: McpEntry): Status {
+  if (isDisableShorthand(entry)) return { status: "disabled" }
+  const detail = ConfigMCP.entryIssues(entry)[0] ?? `missing "type": expected "local" or "remote"`
+  return { status: "failed", error: `invalid MCP config — ${detail}` }
+}
+
+const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+function remoteURL(key: string, value: string) {
   if (URL.canParse(value)) return new URL(value)
 }
 
@@ -239,7 +264,7 @@ const layer = Layer.effect(
     ) {
       const oauthDisabled = mcp.oauth === false
       const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
-      const url = remoteURL(mcp.url)
+      const url = remoteURL(key, mcp.url)
       if (!url) {
         return {
           client: undefined as MCPClient | undefined,
@@ -507,7 +532,9 @@ const layer = Layer.effect(
           ([key, mcp]) =>
             Effect.gen(function* () {
               if (!isMcpConfigured(mcp)) {
-                yield* Effect.logError("Ignoring MCP config entry without type", { key })
+                const status = unconfiguredStatus(mcp)
+                if (status.status === "failed") log("MCP config entry without type", { key, error: status.error })
+                s.status[key] = status
                 return
               }
 
@@ -596,8 +623,9 @@ const layer = Layer.effect(
       const result: Record<string, Status> = {}
 
       for (const [key, mcp] of Object.entries(config)) {
-        if (!isMcpConfigured(mcp)) continue
-        result[key] = s.status[key] ?? { status: "disabled" }
+        // A typeless entry still gets a row — being absent is indistinguishable
+        // from the feature not existing (#198).
+        result[key] = s.status[key] ?? (isMcpConfigured(mcp) ? { status: "disabled" } : unconfiguredStatus(mcp))
       }
 
       for (const key of Object.keys(s.config)) {
