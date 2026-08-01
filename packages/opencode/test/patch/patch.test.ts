@@ -204,6 +204,28 @@ PATCH`
       }),
     )
 
+    it.live("should match canonically equivalent Unicode lines", () =>
+      Effect.gen(function* () {
+        const filePath = path.join(tempDir, "unicode.md")
+        yield* Effect.promise(() =>
+          fs.writeFile(filePath, "# Сводка\nРайон: Астана\n".normalize("NFD"), "utf-8"),
+        )
+
+        const patchText = `*** Begin Patch
+*** Update File: ${filePath}
+@@
+-Район: Астана
++Район: Алматы
+*** End Patch`
+
+        const result = yield* Patch.applyPatch(patchText)
+        expect(result.modified).toEqual([filePath])
+
+        const content = yield* Effect.promise(() => fs.readFile(filePath, "utf-8"))
+        expect(content).toContain("Район: Алматы")
+      }),
+    )
+
     it.live("should move and update a file", () =>
       Effect.gen(function* () {
         const oldPath = path.join(tempDir, "old-name.txt")
