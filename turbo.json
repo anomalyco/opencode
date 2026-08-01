@@ -8,6 +8,10 @@
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
+    "@opencode-ai/plugin#build": {
+      "dependsOn": ["@opencode-ai/sdk#build"],
+      "outputs": ["dist/**"]
+    },
     "opencode#test": {
       "dependsOn": ["^build"],
       "outputs": [],
