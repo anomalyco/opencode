@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import { parsePluginSpecifier, readV1Plugin } from "../../src/plugin/shared"
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
@@ -84,5 +84,25 @@ describe("parsePluginSpecifier", () => {
       pkg: "@opencode/acme",
       version: "latest",
     })
+  })
+})
+
+describe("readV1Plugin", () => {
+  test("detect mode skips plugins missing the requested entrypoint", () => {
+    expect(readV1Plugin({ default: { id: "only-tui", tui: () => undefined } }, "only-tui", "server", "detect")).toBe(
+      undefined,
+    )
+    expect(
+      readV1Plugin({ default: { id: "only-server", server: () => undefined } }, "only-server", "tui", "detect"),
+    ).toBe(undefined)
+  })
+
+  test("strict mode still rejects plugins missing the requested entrypoint", () => {
+    expect(() => readV1Plugin({ default: { id: "only-tui", tui: () => undefined } }, "only-tui", "server")).toThrow(
+      "server()",
+    )
+    expect(() => readV1Plugin({ default: { id: "only-server", server: () => undefined } }, "only-server", "tui")).toThrow(
+      "tui()",
+    )
   })
 })
