@@ -2,6 +2,29 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "marketplace.component.enabled": "Aktivert",
+  "marketplace.component.disabled": "Deaktivert",
+  "marketplace.component.plugin.title": "Programtillegg",
+  "marketplace.component.plugin.description": "Slå alle funksjonene i dette programtillegget på eller av.",
+  "marketplace.component.plugin.toggle": "Bytt programtillegg {{name}}",
+  "marketplace.component.plugin.enabled": "{{name}} aktivert",
+  "marketplace.component.plugin.disabled": "{{name}} deaktivert",
+  "marketplace.component.skills.title": "Ferdigheter",
+  "marketplace.component.skills.description": "Velg hvilke medfølgende arbeidsflyter agenter kan bruke.",
+  "marketplace.component.skill.toggle": "Bytt ferdighet {{name}}",
+  "marketplace.component.skill.enabled": "Ferdigheten {{name}} er aktivert",
+  "marketplace.component.skill.disabled": "Ferdigheten {{name}} er deaktivert",
+  "marketplace.component.mcp.title": "MCP-servere",
+  "marketplace.component.mcp.description":
+    "Aktiverte servere starter automatisk med programtillegget. Servere du slår av her, forblir av.",
+  "marketplace.component.mcp.toggle": "Bytt MCP-server {{name}}",
+  "marketplace.component.mcp.enabled": "MCP-serveren {{name}} er aktivert",
+  "marketplace.component.mcp.disabled": "MCP-serveren {{name}} er deaktivert",
+  "marketplace.toggle.conflict.title": "Kunne ikke endre innstillingene for programtillegget",
+  "marketplace.toggle.conflict.description": "Løs først innstillingene som er i konflikt: {{settings}}",
+  "marketplace.toggle.preserved.title": "Innstillinger bevart",
+  "marketplace.toggle.preserved.description": "Brukerendringene ble bevart: {{settings}}",
+
   "command.category.suggested": "Foreslått",
   "command.category.view": "Visning",
   "command.category.project": "Prosjekt",
