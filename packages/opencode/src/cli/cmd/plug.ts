@@ -1,5 +1,6 @@
 import { intro, log, outro, spinner } from "@clack/prompts"
 import { Effect } from "effect"
+import path from "path"
 
 import { ConfigPaths } from "@/config/paths"
 import { Global } from "@opencode-ai/core/global"
@@ -9,8 +10,22 @@ import { errorMessage } from "../../util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { UI } from "../ui"
+import { cmd } from "./cmd"
 import { effectCmd } from "../effect-cmd"
 import { InstanceRef } from "@/effect/instance-ref"
+import {
+  createMarketplaceSource,
+  upsertMarketplaceSource,
+  type MarketplaceConfiguredTrust,
+  type MarketplaceHostConfig,
+  type MarketplaceMutationResult,
+} from "@opencode-ai/core/marketplace"
+import { exportMarketplaceProfile } from "@opencode-ai/core/marketplace-profile"
+import { Config } from "@/config/config"
+import * as MarketplaceRegistry from "@/marketplace/registry"
+import { resolveMarketplaceSourceReference } from "@/marketplace/source"
+import { MarketplaceService } from "@/marketplace/service"
+import { parseMarketplaceLock } from "@opencode-ai/core/marketplace-lock"
 
 type Spin = {
   start: (msg: string) => void
@@ -175,9 +190,8 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
   }
 }
 
-export const PluginCommand = effectCmd({
-  command: "plugin <module>",
-  aliases: ["plug"],
+const PluginInstallCommand = effectCmd({
+  command: "$0 <module>",
   describe: "install plugin and update config",
   builder: (yargs) =>
     yargs
@@ -227,4 +241,236 @@ export const PluginCommand = effectCmd({
     outro("Done")
     if (!ok) process.exitCode = 1
   }),
+})
+
+const PluginMarketplaceAddCommand = effectCmd({
+  command: "add <url>",
+  describe: "add a plugin marketplace catalog",
+  builder: (yargs) =>
+    yargs
+      .positional("url", {
+        type: "string",
+        describe: "catalog URL or Git repository URL",
+        demandOption: true,
+      })
+      .option("name", {
+        type: "string",
+        describe: "catalog display name",
+      })
+      .option("trust", {
+        type: "string",
+        choices: ["community", "private"] as const,
+        default: "community" as const,
+        describe: "catalog trust level",
+      }),
+  handler: Effect.fn("Cli.plugin.marketplace.add")(function* (args) {
+    const config = yield* Config.Service
+    const registry = yield* MarketplaceRegistry.Service
+    const resolved = yield* Effect.promise(() => resolveMarketplaceSourceReference(String(args.url)))
+    const source = {
+      ...createMarketplaceSource({
+        url: resolved.url,
+        name: args.name ? String(args.name) : resolved.name,
+        trust: args.trust as MarketplaceConfiguredTrust,
+      }),
+      reference: resolved.reference,
+    }
+    const current = yield* registry.read()
+    const next = upsertMarketplaceSource({ marketplace: current } as MarketplaceHostConfig, source).marketplace!
+    const result = yield* registry.replace(next).pipe(Effect.orDie)
+    if (result.changed) yield* config.invalidate()
+    log.success(`${result.changed ? "Added" : "Already configured"} marketplace ${source.name}`)
+    log.info(source.reference ?? source.url)
+  }),
+})
+
+const PluginMarketplaceExportCommand = effectCmd({
+  command: "export [file]",
+  describe: "export the installed marketplace set as a portable profile",
+  builder: (yargs) =>
+    yargs
+      .positional("file", {
+        type: "string",
+        describe: "output file; omit to print JSON to stdout",
+      })
+      .option("name", {
+        type: "string",
+        default: "default",
+        describe: "profile name",
+      }),
+  handler: Effect.fn("Cli.plugin.marketplace.export")(function* (args) {
+    const registry = yield* MarketplaceRegistry.Service
+    const profile = exportMarketplaceProfile(yield* registry.read(), { name: String(args.name) })
+    const output = `${JSON.stringify(profile, null, 2)}\n`
+    if (args.file) {
+      const file = path.resolve(String(args.file))
+      yield* Effect.promise(() => Filesystem.write(file, output))
+      log.success(`Exported marketplace profile to ${file}`)
+      return
+    }
+    process.stdout.write(output)
+  }),
+})
+
+function reportMarketplaceMutation(result: MarketplaceMutationResult, success: string) {
+  if (!result.ok) {
+    log.error(result.message)
+    process.exitCode = 1
+    return false
+  }
+  log.success(success)
+  return true
+}
+
+const PluginMarketplaceListCommand = effectCmd({
+  command: "list",
+  describe: "list marketplace items and installation status",
+  builder: (yargs) => yargs.option("refresh", { type: "boolean", default: false }),
+  handler: Effect.fn("Cli.plugin.marketplace.list")(function* (args) {
+    const marketplace = yield* MarketplaceService
+    const view = yield* marketplace.get({ refresh: Boolean(args.refresh) })
+    for (const listing of view.listings) {
+      const installed = view.state.installed?.[listing.key]
+      log.info(`${installed ? "installed" : "available"}\t${listing.key}\t${listing.item.name}@${listing.item.version}`)
+    }
+    for (const error of view.errors) log.warn(`${error.source.name}: ${error.message}`)
+  }),
+})
+
+const PluginMarketplaceInstallCommand = effectCmd({
+  command: "install <key>",
+  describe: "plan and install a marketplace item",
+  builder: (yargs) =>
+    yargs
+      .positional("key", { type: "string", demandOption: true })
+      .option("force", { type: "boolean", default: false })
+      .option("accept-untrusted", { type: "boolean", default: false }),
+  handler: Effect.fn("Cli.plugin.marketplace.install")(function* (args) {
+    const marketplace = yield* MarketplaceService
+    const plan = yield* marketplace.plan(String(args.key))
+    if (!plan.ok) {
+      log.error(plan.message)
+      process.exitCode = 1
+      return
+    }
+    log.info(`${plan.summary}; plan ${plan.plan_digest}`)
+    reportMarketplaceMutation(
+      yield* marketplace.install({
+        planId: plan.plan_id,
+        expectedRevision: (yield* marketplace.get()).state.revision ?? 0,
+        force: Boolean(args.force),
+        acceptUntrusted: Boolean(args.acceptUntrusted),
+      }),
+      `${plan.action === "update" ? "Updated" : "Installed"} ${plan.key}`,
+    )
+  }),
+})
+
+const PluginMarketplaceUpdateCommand = effectCmd({
+  command: "update",
+  describe: "atomically update all installed marketplace items",
+  builder: (yargs) =>
+    yargs
+      .option("force", { type: "boolean", default: false })
+      .option("accept-untrusted", { type: "boolean", default: false }),
+  handler: Effect.fn("Cli.plugin.marketplace.update")(function* (args) {
+    const marketplace = yield* MarketplaceService
+    reportMarketplaceMutation(
+      yield* marketplace.updateAll({
+        expectedRevision: (yield* marketplace.get()).state.revision ?? 0,
+        force: Boolean(args.force),
+        acceptUntrusted: Boolean(args.acceptUntrusted),
+      }),
+      "Marketplace packages updated",
+    )
+  }),
+})
+
+const PluginMarketplaceImportCommand = effectCmd({
+  command: "import <file>",
+  describe: "plan and apply a Marketplace profile",
+  builder: (yargs) =>
+    yargs
+      .positional("file", { type: "string", demandOption: true })
+      .option("mode", { type: "string", choices: ["merge", "replace"] as const, default: "merge" as const })
+      .option("force", { type: "boolean", default: false })
+      .option("accept-untrusted", { type: "boolean", default: false }),
+  handler: Effect.fn("Cli.plugin.marketplace.import")(function* (args) {
+    const marketplace = yield* MarketplaceService
+    const profile = yield* Effect.promise(() => Bun.file(path.resolve(String(args.file))).json() as Promise<unknown>)
+    const plan = yield* marketplace.profilePlan({ profile, mode: args.mode })
+    if (!plan.ok) {
+      log.error(plan.message)
+      process.exitCode = 1
+      return
+    }
+    log.info(`${plan.actions.length} package action${plan.actions.length === 1 ? "" : "s"} prepared`)
+    reportMarketplaceMutation(
+      yield* marketplace.profileApply({
+        planId: plan.plan_id,
+        expectedRevision: (yield* marketplace.get()).state.revision ?? 0,
+        force: Boolean(args.force),
+        acceptUntrusted: Boolean(args.acceptUntrusted),
+      }),
+      "Marketplace profile applied",
+    )
+  }),
+})
+
+const PluginMarketplaceLockCommand = effectCmd({
+  command: "lock [file]",
+  describe: "export an exact Marketplace artifact lock",
+  builder: (yargs) => yargs.positional("file", { type: "string" }),
+  handler: Effect.fn("Cli.plugin.marketplace.lock")(function* (args) {
+    const lock = yield* (yield* MarketplaceService).lockExport()
+    const output = `${JSON.stringify(lock, null, 2)}\n`
+    if (!args.file) {
+      process.stdout.write(output)
+      return
+    }
+    const file = path.resolve(String(args.file))
+    yield* Effect.promise(() => Filesystem.write(file, output))
+    log.success(`Exported Marketplace lock to ${file}`)
+  }),
+})
+
+const PluginMarketplaceVerifyCommand = effectCmd({
+  command: "verify <file>",
+  describe: "verify installed packages against a Marketplace lock",
+  builder: (yargs) => yargs.positional("file", { type: "string", demandOption: true }),
+  handler: Effect.fn("Cli.plugin.marketplace.verify")(function* (args) {
+    const value = yield* Effect.promise(() => Bun.file(path.resolve(String(args.file))).json() as Promise<unknown>)
+    const result = yield* (yield* MarketplaceService).lockVerify(parseMarketplaceLock(value))
+    if (result.ok) {
+      log.success("Marketplace lock verified")
+      return
+    }
+    for (const error of result.errors) log.error(error)
+    process.exitCode = 1
+  }),
+})
+
+const PluginMarketplaceCommand = cmd({
+  command: "marketplace",
+  describe: "manage plugin marketplace catalogs",
+  builder: (yargs) =>
+    yargs
+      .command(PluginMarketplaceAddCommand)
+      .command(PluginMarketplaceListCommand)
+      .command(PluginMarketplaceInstallCommand)
+      .command(PluginMarketplaceUpdateCommand)
+      .command(PluginMarketplaceExportCommand)
+      .command(PluginMarketplaceImportCommand)
+      .command(PluginMarketplaceLockCommand)
+      .command(PluginMarketplaceVerifyCommand)
+      .demandCommand(),
+  async handler() {},
+})
+
+export const PluginCommand = cmd({
+  command: "plugin",
+  aliases: ["plug"],
+  describe: "install plugins and manage plugin marketplaces",
+  builder: (yargs) => yargs.command(PluginMarketplaceCommand).command(PluginInstallCommand).demandCommand(),
+  async handler() {},
 })
