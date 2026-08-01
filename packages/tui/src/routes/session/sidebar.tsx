@@ -27,9 +27,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox
+          ref={(scroll) => queueMicrotask(() => scroll.verticalScrollBar.resetVisibilityControl())}
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
+            visible: false,
             trackOptions: {
               backgroundColor: theme.background.default,
               foregroundColor: theme.scrollbar.default,
