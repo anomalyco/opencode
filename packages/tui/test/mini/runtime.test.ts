@@ -55,6 +55,9 @@ describe("run interactive runtime", () => {
     const api = ui.api
     const selected = defer<Awaited<ReturnType<typeof sdk.model.default>>>()
     const catalogLoaded = defer<void>()
+    const defaultModelReloaded = defer<void>()
+    const modelShown = defer<void>()
+    const turnStarted = defer<void>()
     const model = catalogModel({
       id: "resolved",
       providerID: "test",
@@ -69,7 +72,17 @@ describe("run interactive runtime", () => {
       providers: [catalogProvider("test", "Test Provider")],
       models: [model],
     })
-    const defaultModel = spyOn(sdk.model, "default").mockImplementation(() => selected.promise)
+    let defaultModelCalls = 0
+    const defaultModel = spyOn(sdk.model, "default").mockImplementation(() => {
+      defaultModelCalls++
+      if (defaultModelCalls === 2) defaultModelReloaded.resolve()
+      return selected.promise
+    })
+    const emit = api.event.bind(api)
+    api.event = (event) => {
+      emit(event)
+      if (event.type === "model") modelShown.resolve()
+    }
 
     const task = runInteractiveDeferredMode(
       {
@@ -110,6 +123,7 @@ describe("run interactive runtime", () => {
               runPromptTurn: async (input) => {
                 turnAgent = input.agent
                 turnModel = input.model
+                turnStarted.resolve()
                 api.close()
               },
               queuePromptTurn: async () => {},
@@ -133,8 +147,8 @@ describe("run interactive runtime", () => {
       location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
       data: model,
     })
-    while (defaultModel.mock.calls.length < 2) await Bun.sleep(0)
-    while (!events.some((event) => event.type === "model")) await Bun.sleep(0)
+    await defaultModelReloaded.promise
+    await modelShown.promise
     expect(events).toContainEqual({
       type: "model",
       model: "Resolved Model · Test Provider",
@@ -142,8 +156,9 @@ describe("run interactive runtime", () => {
     })
     expect(lifecycle.onCycleVariant?.()).toMatchObject({ status: "variant low", variant: "low" })
     lifecycle.onAgentSelect?.("review")
-    ui.submit("hello")
-    while (!turnModel) await Bun.sleep(0)
+    await ui.promptReady
+    expect(ui.submit("hello")).toBe(true)
+    await turnStarted.promise
     expect(turnAgent).toBe("review")
     expect(turnModel).toEqual({ providerID: "test", modelID: "resolved" })
     await task
