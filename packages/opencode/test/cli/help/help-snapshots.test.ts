@@ -82,6 +82,9 @@ const SUBCOMMANDS = [
   ["session", "delete"],
   ["github", "install"],
   ["github", "run"],
+  ["plugin", "marketplace"],
+  ["plugin", "marketplace", "add"],
+  ["plugin", "marketplace", "export"],
   ["db", "path"],
 ] as const
 
