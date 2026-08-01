@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber } from "effect"
+import { Duration, Effect, Exit, Fiber } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -66,6 +66,30 @@ describe("PluginV2", () => {
 
       yield* plugins.remove(PluginV2.ID.make("managed"))
       expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
+    }),
+  )
+
+  it.live("flush hangs until the initial batch is sealed, then resolves", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      yield* plugins.add(PluginV2.ID.make("fast"), () => Effect.void)
+
+      const early = yield* plugins.flush().pipe(Effect.timeout(Duration.millis(50)), Effect.exit)
+      expect(Exit.isFailure(early)).toBe(true)
+
+      yield* plugins.sealInitial()
+      yield* plugins.flush()
+    }),
+  )
+
+  it.live("flush is idempotent once the initial batch is sealed", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      yield* plugins.sealInitial()
+      yield* plugins.flush()
+      yield* plugins.flush()
+      yield* plugins.add(PluginV2.ID.make("later"), () => Effect.void)
+      yield* plugins.flush()
     }),
   )
 })

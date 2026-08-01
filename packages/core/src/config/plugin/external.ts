@@ -70,6 +70,8 @@ export const Plugin = define({
         }
       }
 
+      // External plugins contribute to the initial catalog, so they must finish
+      // loading before the loader seals initial readiness.
       for (const ref of configured) {
         yield* Effect.gen(function* () {
           const entrypoint = path.isAbsolute(ref.package)
@@ -86,6 +88,6 @@ export const Plugin = define({
           })
         }).pipe(Effect.ignoreCause)
       }
-    }).pipe(Effect.forkScoped({ startImmediately: true }))
+    })
   }),
 })

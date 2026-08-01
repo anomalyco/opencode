@@ -24,6 +24,14 @@ export interface Interface {
   readonly add: (id: ID, effect: PluginRuntime["effect"]) => Effect.Effect<void>
   readonly remove: (id: ID) => Effect.Effect<void>
   readonly wait: (id: ID) => Effect.Effect<void>
+  /**
+   * One-shot initial-readiness barrier. Completes once the loader's initial
+   * plugin batch has finished loading. Catalog read handlers await this so a
+   * cold start never serves a partially populated catalog as authoritative.
+   */
+  readonly flush: () => Effect.Effect<void>
+  /** Marks the end of the initial plugin batch. Called by the loader after boot. */
+  readonly sealInitial: () => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
@@ -38,6 +46,9 @@ const layer = Layer.effect(
     const loading = new Set<ID>()
     const waiters = new Map<ID, Set<Deferred.Deferred<void>>>()
     const failures = new Map<ID, Exit.Exit<void, never>>()
+    const initialDone = yield* Deferred.make<void>()
+    let initialSealed = false
+    let initialSettled = false
     let host: Parameters<PluginRuntime["effect"]>[0]
 
     const add = Effect.fn("Plugin.add")(function* (id: ID, effect: PluginRuntime["effect"]) {
@@ -125,6 +136,22 @@ const layer = Layer.effect(
       )
     })
 
+    const sealInitial = (): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        if (initialSealed) return Effect.void
+        initialSealed = true
+        return Deferred.succeed(initialDone, undefined)
+      })
+
+    const flush = (): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        if (initialSettled) return Effect.void
+        return Deferred.await(initialDone).pipe(
+          Effect.asVoid,
+          Effect.tap(() => Effect.sync(() => (initialSettled = true))),
+        )
+      })
+
     yield* Effect.addFinalizer((exit) =>
       Effect.gen(function* () {
         active.clear()
@@ -136,6 +163,8 @@ const layer = Layer.effect(
       add,
       remove,
       wait,
+      flush,
+      sealInitial,
     })
     host = yield* PluginHost.make(service)
     return service
