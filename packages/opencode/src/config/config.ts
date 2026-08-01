@@ -354,7 +354,7 @@ const layer = Layer.effect(
         }
 
         for (const [key, value] of Object.entries(auth)) {
-          if (value.type === "wellknown") {
+          if (value.type === "wellknown" && !Flag.OPENCODE_AIRGAP) {
             const url = key.replace(/\/+$/, "")
             authEnv[value.key] = value.token
             const wellknownURL = `${url}/.well-known/opencode`

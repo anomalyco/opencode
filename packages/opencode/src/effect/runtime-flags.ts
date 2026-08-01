@@ -19,7 +19,10 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
   disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
-  disableLspDownload: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
+  disableLspDownload: Config.all({
+    direct: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
+    airgap: bool("OPENCODE_AIRGAP"),
+  }).pipe(Config.map((flags) => flags.direct || flags.airgap)),
   disableClaudeCodePrompt: Config.all({
     broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
     direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
