@@ -262,6 +262,7 @@ export default defineConfig({
             "policies",
             "lsp",
             "mcp-servers",
+            "marketplace",
             "acp",
             "skills",
             "references",
