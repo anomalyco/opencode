@@ -55,6 +55,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         controller={props.controller}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
+        variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         modelControl={
@@ -367,6 +368,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
           title: language.t("prompt.toast.pasteUnsupported.title"),
           description: language.t("prompt.toast.pasteUnsupported.description"),
         }),
+      duplicate: () => showToast({ title: language.t("prompt.toast.attachmentDuplicate.title") }),
       onError: (error) =>
         showToast({
           variant: "error",
