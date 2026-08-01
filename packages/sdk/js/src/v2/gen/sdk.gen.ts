@@ -93,6 +93,56 @@ import type {
   LocationRef,
   LspStatusErrors,
   LspStatusResponses,
+  MarketplaceAuditErrors,
+  MarketplaceAuditResponses,
+  MarketplaceCachePruneErrors,
+  MarketplaceCachePruneInput,
+  MarketplaceCachePruneResponses,
+  MarketplaceGetErrors,
+  MarketplaceGetResponses,
+  MarketplaceIconErrors,
+  MarketplaceIconResponses,
+  MarketplaceInstallErrors,
+  MarketplaceInstallInput,
+  MarketplaceInstallResponses,
+  MarketplaceLockExportErrors,
+  MarketplaceLockExportResponses,
+  MarketplaceLockVerifyErrors,
+  MarketplaceLockVerifyInput,
+  MarketplaceLockVerifyResponses,
+  MarketplacePlanErrors,
+  MarketplacePlanInput,
+  MarketplacePlanResponses,
+  MarketplaceProfileApplyErrors,
+  MarketplaceProfileApplyResponses,
+  MarketplaceProfileExportErrors,
+  MarketplaceProfileExportInput,
+  MarketplaceProfileExportResponses,
+  MarketplaceProfilePlanErrors,
+  MarketplaceProfilePlanInput,
+  MarketplaceProfilePlanResponses,
+  MarketplaceRefreshErrors,
+  MarketplaceRefreshResponses,
+  MarketplaceSourceAddErrors,
+  MarketplaceSourceAddInput,
+  MarketplaceSourceAddResponses,
+  MarketplaceSourceRemoveErrors,
+  MarketplaceSourceRemoveResponses,
+  MarketplaceSourceToggleErrors,
+  MarketplaceSourceToggleInput,
+  MarketplaceSourceToggleResponses,
+  MarketplaceToggleErrors,
+  MarketplaceToggleInput,
+  MarketplaceToggleResponses,
+  MarketplaceUninstallErrors,
+  MarketplaceUninstallResponses,
+  MarketplaceUpdateAllErrors,
+  MarketplaceUpdateAllInput,
+  MarketplaceUpdateAllResponses,
+  MarketplaceUpdateApplyErrors,
+  MarketplaceUpdateApplyResponses,
+  MarketplaceUpdatePlanErrors,
+  MarketplaceUpdatePlanResponses,
   McpAddErrors,
   McpAddResponses,
   McpAuthAuthenticateErrors,
@@ -1379,6 +1429,539 @@ export class Global extends HeyApiClient {
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
+  }
+}
+
+export class Marketplace extends HeyApiClient {
+  /**
+   * Get Marketplace
+   *
+   * Get local Marketplace state, cached catalogs, and cache statistics.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<MarketplaceGetResponses, MarketplaceGetErrors, ThrowOnError>({
+      url: "/marketplace",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Refresh Marketplace
+   *
+   * Revalidate enabled catalog sources and return the current Marketplace view.
+   */
+  public refresh<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<MarketplaceRefreshResponses, MarketplaceRefreshErrors, ThrowOnError>({
+      url: "/marketplace/refresh",
+      ...options,
+    })
+  }
+
+  /**
+   * Get Marketplace icon
+   *
+   * Load a catalog icon through the authenticated server for local filesystem sources.
+   */
+  public icon<ThrowOnError extends boolean = false>(
+    parameters: {
+      key: string
+      variant: "src-light" | "src-dark"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "key" },
+            { in: "path", key: "variant" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<MarketplaceIconResponses, MarketplaceIconErrors, ThrowOnError>({
+      url: "/marketplace/icon/{key}/{variant}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Plan Marketplace install
+   *
+   * Preview trust requirements, permissions, and configuration conflicts.
+   */
+  public plan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplacePlanInput?: MarketplacePlanInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplacePlanInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<MarketplacePlanResponses, MarketplacePlanErrors, ThrowOnError>({
+      url: "/marketplace/plan",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Install Marketplace item
+   *
+   * Materialize and install a Marketplace item using revision-based concurrency control.
+   */
+  public install<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceInstallInput?: MarketplaceInstallInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceInstallInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<MarketplaceInstallResponses, MarketplaceInstallErrors, ThrowOnError>({
+      url: "/marketplace/install",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update Marketplace items
+   *
+   * Atomically update all available Marketplace items.
+   */
+  public updateAll<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceUpdateAllInput?: MarketplaceUpdateAllInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceUpdateAllInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceUpdateAllResponses,
+      MarketplaceUpdateAllErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/update-all",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Plan Marketplace updates
+   *
+   * Materialize every available update and return one aggregate one-time plan.
+   */
+  public updatePlan<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      MarketplaceUpdatePlanResponses,
+      MarketplaceUpdatePlanErrors,
+      ThrowOnError
+    >({ url: "/marketplace/update/plan", ...options })
+  }
+
+  /**
+   * Apply Marketplace updates
+   *
+   * Atomically apply a previously prepared aggregate update plan.
+   */
+  public updateApply<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceInstallInput?: MarketplaceInstallInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceInstallInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceUpdateApplyResponses,
+      MarketplaceUpdateApplyErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/update/apply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Uninstall Marketplace item
+   *
+   * Remove an installed Marketplace item without rewriting user configuration.
+   */
+  public uninstall<ThrowOnError extends boolean = false>(
+    parameters: {
+      key: string
+      expected_revision: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "key" },
+            { in: "query", key: "expected_revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      MarketplaceUninstallResponses,
+      MarketplaceUninstallErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/install/{key}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Toggle Marketplace component
+   *
+   * Enable or disable a package, skill, or MCP server.
+   */
+  public toggle<ThrowOnError extends boolean = false>(
+    parameters: {
+      key: string
+      marketplaceToggleInput?: MarketplaceToggleInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "key" },
+            { key: "marketplaceToggleInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<MarketplaceToggleResponses, MarketplaceToggleErrors, ThrowOnError>({
+      url: "/marketplace/install/{key}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Add Marketplace source
+   *
+   * Add or replace an HTTPS, Git repository, file URL, or local filesystem Marketplace source.
+   */
+  public sourceAdd<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceSourceAddInput?: MarketplaceSourceAddInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceSourceAddInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceSourceAddResponses,
+      MarketplaceSourceAddErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/source",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove Marketplace source
+   *
+   * Remove a source while keeping installed packages manageable.
+   */
+  public sourceRemove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      expected_revision: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "expected_revision" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      MarketplaceSourceRemoveResponses,
+      MarketplaceSourceRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/source/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Toggle Marketplace source
+   *
+   * Enable or disable a Marketplace catalog source.
+   */
+  public sourceToggle<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      marketplaceSourceToggleInput?: MarketplaceSourceToggleInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { key: "marketplaceSourceToggleInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      MarketplaceSourceToggleResponses,
+      MarketplaceSourceToggleErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/source/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Export Marketplace profile
+   *
+   * Export a deterministic profile without credentials or local cache paths.
+   */
+  public profileExport<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceProfileExportInput?: MarketplaceProfileExportInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceProfileExportInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceProfileExportResponses,
+      MarketplaceProfileExportErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/profile",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Plan Marketplace profile
+   *
+   * Resolve and materialize an imported v1 or v2 profile without changing registry state.
+   */
+  public profilePlan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceProfilePlanInput?: MarketplaceProfilePlanInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceProfilePlanInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceProfilePlanResponses,
+      MarketplaceProfilePlanErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/profile/plan",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Apply Marketplace profile
+   *
+   * Atomically apply a previously prepared one-time profile plan.
+   */
+  public profileApply<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceInstallInput?: MarketplaceInstallInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceInstallInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceProfileApplyResponses,
+      MarketplaceProfileApplyErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/profile/apply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Prune Marketplace cache
+   *
+   * Remove stale unreferenced content-addressed artifacts.
+   */
+  public cachePrune<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceCachePruneInput?: MarketplaceCachePruneInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceCachePruneInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceCachePruneResponses,
+      MarketplaceCachePruneErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/cache/prune",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Export Marketplace lock
+   *
+   * Export exact package and artifact digests for reproducibility checks.
+   */
+  public lockExport<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      MarketplaceLockExportResponses,
+      MarketplaceLockExportErrors,
+      ThrowOnError
+    >({ url: "/marketplace/lock", ...options })
+  }
+
+  /**
+   * Verify Marketplace lock
+   *
+   * Compare installed Marketplace packages and artifacts with an exported lock.
+   */
+  public lockVerify<ThrowOnError extends boolean = false>(
+    parameters?: {
+      marketplaceLockVerifyInput?: MarketplaceLockVerifyInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "marketplaceLockVerifyInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      MarketplaceLockVerifyResponses,
+      MarketplaceLockVerifyErrors,
+      ThrowOnError
+    >({
+      url: "/marketplace/lock/verify",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get Marketplace audit log
+   *
+   * Return recent durable registry revisions and mutation summaries.
+   */
+  public audit<ThrowOnError extends boolean = false>(
+    parameters?: {
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "limit" }] }])
+    return (options?.client ?? this.client).get<MarketplaceAuditResponses, MarketplaceAuditErrors, ThrowOnError>({
+      url: "/marketplace/audit",
+      ...options,
+      ...params,
+    })
   }
 }
 
@@ -7100,6 +7683,11 @@ export class OpencodeClient extends HeyApiClient {
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
+  }
+
+  private _marketplace?: Marketplace
+  get marketplace(): Marketplace {
+    return (this._marketplace ??= new Marketplace({ client: this.client }))
   }
 
   private _event?: Event
