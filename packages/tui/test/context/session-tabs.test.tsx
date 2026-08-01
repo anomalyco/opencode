@@ -49,22 +49,43 @@ function stateDir(prefix: string) {
   return dir
 }
 
-async function renderSessionTabs(initialSessionID: string, options?: { state?: string; title?: string }) {
+type SessionFixture = { parentID?: string; title?: string; updated?: number }
+
+async function renderSessionTabs(
+  initialSessionID: string,
+  options?: { state?: string; title?: string; sessions?: Record<string, SessionFixture> },
+) {
   const state = options?.state ?? stateDir("opencode-session-tabs-")
   const events = createEventStream()
   const calls = createFetch((url) => {
-    if (url.pathname !== `/api/session/${initialSessionID}`) return
-    return json({
-      data: {
-        id: initialSessionID,
-        title: options?.title,
+    if (url.pathname === "/api/session" && url.searchParams.has("parentID")) {
+      const parentID = url.searchParams.get("parentID")
+      return json({
+        data: Object.entries(options?.sessions ?? {}).flatMap(([id, fixture]) =>
+          fixture.parentID === parentID ? [session(id, fixture)] : [],
+        ),
+        cursor: {},
+      })
+    }
+    const match = /^\/api\/session\/([^/]+)$/.exec(url.pathname)
+    if (!match) return
+    const id = match[1]!
+    const fixture = options?.sessions?.[id] ?? (id === initialSessionID ? { title: options?.title } : undefined)
+    if (!fixture) return
+    return json({ data: session(id, fixture) })
+
+    function session(id: string, fixture: SessionFixture) {
+      return {
+        id,
+        parentID: fixture.parentID,
+        title: fixture.title,
         projectID: "project",
         location: { directory },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        time: { created: 0, updated: 0 },
-      },
-    })
+        time: { created: 0, updated: fixture.updated ?? 0 },
+      }
+    }
   }, events)
   let tabs!: ReturnType<typeof useSessionTabs>
   let route!: ReturnType<typeof useRoute>
@@ -218,6 +239,68 @@ test("user prompt admissions pulse an already-busy background tab", async () => 
   }
 })
 
+test("tracks live inbox recency beyond cached session metadata", async () => {
+  const setup = await renderSessionTabs("background")
+
+  try {
+    expect(setup.tabs.updated("background")).toBe(0)
+    setup.emit({
+      id: "evt_admitted",
+      created: 100,
+      type: "session.input.admitted",
+      durable: { aggregateID: "background", seq: 1, version: 1 },
+      data: {
+        sessionID: "background",
+        inputID: "msg_1",
+        input: { type: "user", data: { text: "work" }, delivery: "steer" },
+      },
+    })
+    await wait(() => setup.tabs.updated("background") === 100)
+
+    setup.emit({
+      id: "evt_succeeded",
+      created: 200,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "background", seq: 2, version: 1 },
+      data: { sessionID: "background" },
+    })
+    await wait(() => setup.tabs.updated("background") === 200)
+  } finally {
+    setup.destroy()
+  }
+})
+
+test("tracks child activity before family hydration and after restart", async () => {
+  const state = stateDir("opencode-session-tabs-recency-")
+  const sessions: Record<string, SessionFixture> = { child: { parentID: "parent" } }
+  const first = await renderSessionTabs("parent", { state, sessions })
+
+  try {
+    first.emit({
+      id: "evt_child_succeeded",
+      created: 200,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: { sessionID: "child" },
+    })
+    expect(first.tabs.updated("parent")).toBe(0)
+    await first.data.session.sync("child")
+    await wait(() => first.tabs.updated("parent") === 200)
+  } finally {
+    first.destroy()
+  }
+
+  sessions.child.updated = 200
+  const second = await renderSessionTabs("parent", { state, sessions })
+  try {
+    expect(second.tabs.updated("parent")).toBe(0)
+    await second.data.session.sync("parent", { children: true })
+    await wait(() => second.tabs.updated("parent") === 200)
+  } finally {
+    second.destroy()
+  }
+})
+
 test("tracks a temporary new session tab across close and creation", async () => {
   const setup = await renderSessionTabs("first")
 
@@ -244,6 +327,60 @@ test("tracks a temporary new session tab across close and creation", async () =>
 
     expect(setup.tabs.newTab()).toBe(false)
     expect(setup.tabs.tabs().find((tab) => tab.sessionID === "third")?.title).toBe(NEW_SESSION_TAB_TITLE)
+  } finally {
+    setup.destroy()
+  }
+})
+
+test("navigates the inbox without changing sessions and confirms done twice", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first")
+    setup.route.navigate({ type: "session", sessionID: "second" })
+    await wait(() => setup.tabs.current() === "second" && setup.tabs.tabs().length === 2)
+    setup.route.navigate({ type: "session", sessionID: "first" })
+    await wait(() => setup.tabs.current() === "first")
+
+    expect(setup.tabs.navigation.focus()).toBe(true)
+    expect(setup.tabs.navigation.selected()).toBe("first")
+    setup.tabs.navigation.move(1)
+    expect(setup.tabs.navigation.selected()).toBe("second")
+    expect(setup.tabs.current()).toBe("first")
+
+    setup.tabs.navigation.done()
+    expect(setup.tabs.navigation.pendingDone()).toBe("second")
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "second"])
+    setup.tabs.navigation.done()
+    await wait(() => setup.tabs.tabs().length === 1)
+
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first"])
+    expect(setup.tabs.current()).toBe("first")
+    expect(setup.tabs.navigation.selected()).toBe("first")
+  } finally {
+    setup.destroy()
+  }
+})
+
+test("keeps inbox focus aligned with history after marking the current session done", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first")
+    setup.route.navigate({ type: "session", sessionID: "second" })
+    await wait(() => setup.tabs.current() === "second")
+    setup.route.navigate({ type: "session", sessionID: "third" })
+    await wait(() => setup.tabs.current() === "third")
+    setup.route.navigate({ type: "session", sessionID: "first" })
+    await wait(() => setup.tabs.current() === "first" && setup.tabs.tabs().length === 3)
+
+    setup.tabs.navigation.focus()
+    setup.tabs.navigation.done()
+    setup.tabs.navigation.done()
+    await wait(() => setup.tabs.tabs().length === 2)
+
+    expect(setup.tabs.current()).toBe("third")
+    expect(setup.tabs.navigation.selected()).toBe("third")
   } finally {
     setup.destroy()
   }

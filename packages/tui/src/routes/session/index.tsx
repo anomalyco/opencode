@@ -73,6 +73,8 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { sessionEpilogue } from "../../util/presentation"
 import { useConfig } from "../../config"
+import { useSessionTabs } from "../../context/session-tabs"
+import { SESSION_INBOX_MIN_TERMINAL_WIDTH, sessionInboxWidth } from "../../context/session-tabs-model"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -190,6 +192,7 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
+  const sessionTabs = useSessionTabs()
   const sidebar = createMemo(() => config.session?.sidebar ?? "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
@@ -199,14 +202,20 @@ export function Session() {
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
-  const wide = createMemo(() => dimensions().width > 120)
+  const viewportWidth = createMemo(() => {
+    const width = dimensions().width
+    if (!sessionTabs.enabled() || config.tabs?.layout !== "inbox" || width < SESSION_INBOX_MIN_TERMINAL_WIDTH)
+      return width
+    return width - sessionInboxWidth(width)
+  })
+  const wide = createMemo(() => viewportWidth() > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => viewportWidth() - (sidebarVisible() ? 42 : 0) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -281,7 +290,6 @@ export function Session() {
         return
       }
       editor.reconnect(info.location.directory)
-      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -915,8 +923,8 @@ export function Session() {
     bindings: [...baseAndUnfocusedCommands, ...baseCommands()].map((command) => command.id),
   }))
 
-  // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
+  // The keyed Session remount and stickyStart="bottom" establish the initial position before draw.
+  // A deferred scroll here causes a visible second jump whenever tabs switch.
   createEffect(
     on(
       () => route.sessionID,

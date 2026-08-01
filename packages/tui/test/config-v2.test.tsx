@@ -17,8 +17,11 @@ test("validates mini replay settings", () => {
 test("validates the session tabs setting", () => {
   const decode = Schema.decodeUnknownSync(Info)
 
-  expect(decode({ tabs: { enabled: true } })).toEqual({ tabs: { enabled: true } })
+  expect(decode({ tabs: { enabled: true, layout: "inbox" } })).toEqual({
+    tabs: { enabled: true, layout: "inbox" },
+  })
   expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
+  expect(() => decode({ tabs: { layout: "sidebar" } })).toThrow()
 })
 
 test("resolves nested config and keybind defaults", () => {

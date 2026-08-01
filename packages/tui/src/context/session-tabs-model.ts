@@ -22,6 +22,34 @@ export const SESSION_TAB_MIN_WIDTH = 8
 // Overflow markers reserve one gap cell beside the arrow and count, e.g. "‹12 " and " 12›".
 export const sessionTabOverflowWidth = (count: number) => String(count).length + 2
 
+export type SessionInboxGroup = "running" | "today" | "yesterday" | "earlier"
+
+export const SESSION_INBOX_MIN_TERMINAL_WIDTH = 72
+
+export function sessionInboxWidth(terminalWidth: number) {
+  return Math.max(28, Math.min(40, Math.floor(terminalWidth * 0.28)))
+}
+
+export function sessionInboxGroup(updated: number, running: boolean, now = Date.now()): SessionInboxGroup {
+  if (running) return "running"
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+  if (updated >= today.getTime()) return "today"
+  today.setDate(today.getDate() - 1)
+  if (updated >= today.getTime()) return "yesterday"
+  return "earlier"
+}
+
+export function orderSessionTabs(
+  tabs: readonly SessionTab[],
+  status: (sessionID: string) => { busy: boolean; updated: number },
+) {
+  return tabs
+    .map((tab, index) => ({ tab, index, ...status(tab.sessionID) }))
+    .toSorted((a, b) => Number(b.busy) - Number(a.busy) || b.updated - a.updated || a.index - b.index)
+    .map((item) => item.tab)
+}
+
 export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[] {
   const index = tabs.findIndex((item) => item.sessionID === tab.sessionID)
   if (index === -1) return [...tabs, tab]

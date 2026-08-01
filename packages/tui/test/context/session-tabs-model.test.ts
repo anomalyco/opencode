@@ -6,15 +6,49 @@ import {
   moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
+  orderSessionTabs,
   recordClosedSessionTab,
   recordSessionTabHistory,
   reopenSessionTab,
   seedSessionTabMotion,
+  sessionInboxGroup,
+  sessionInboxWidth,
   sessionTabComplete,
   sessionTabOverflowWidth,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
+  test("orders running sessions first and completed sessions by recent update", () => {
+    const tabs = ["old", "running-old", "new", "running-new"].map((sessionID) => ({ sessionID }))
+    const state = {
+      old: { busy: false, updated: 10 },
+      "running-old": { busy: true, updated: 20 },
+      new: { busy: false, updated: 40 },
+      "running-new": { busy: true, updated: 30 },
+    }
+
+    expect(orderSessionTabs(tabs, (sessionID) => state[sessionID as keyof typeof state]).map((tab) => tab.sessionID)).toEqual([
+      "running-new",
+      "running-old",
+      "new",
+      "old",
+    ])
+  })
+
+  test("groups inbox tabs by running state and local calendar day", () => {
+    const now = new Date(2026, 6, 31, 12).getTime()
+    expect(sessionInboxGroup(new Date(2026, 6, 20).getTime(), true, now)).toBe("running")
+    expect(sessionInboxGroup(new Date(2026, 6, 31, 1).getTime(), false, now)).toBe("today")
+    expect(sessionInboxGroup(new Date(2026, 6, 30, 1).getTime(), false, now)).toBe("yesterday")
+    expect(sessionInboxGroup(new Date(2026, 6, 29, 23).getTime(), false, now)).toBe("earlier")
+  })
+
+  test("sizes the inbox within its minimum and maximum rails", () => {
+    expect(sessionInboxWidth(72)).toBe(28)
+    expect(sessionInboxWidth(120)).toBe(33)
+    expect(sessionInboxWidth(200)).toBe(40)
+  })
+
   test("moves a tab to a clamped index and returns the same tabs for no-ops", () => {
     const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
     expect(moveSessionTab(tabs, "a", 2).map((tab) => tab.sessionID)).toEqual(["b", "c", "a"])

@@ -16,6 +16,7 @@ import {
   moveSessionTabHistory,
   NEW_SESSION_TAB_TITLE,
   openSessionTab,
+  orderSessionTabs,
   recordClosedSessionTab,
   recordSessionTabHistory,
   reopenSessionTab,
@@ -61,6 +62,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     })
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
+    const [lastActivity, setLastActivity] = createSignal<Record<string, number>>({})
+    const [navigationActive, setNavigationActive] = createSignal(false)
+    const [navigationSelection, setNavigationSelection] = createSignal<string>()
+    const [navigationPendingDone, setNavigationPendingDone] = createSignal<string>()
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
@@ -79,11 +84,29 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     const root = (sessionID: string) => data.session.root(sessionID)
+    const updated = (sessionID: string) => {
+      const session = root(sessionID)
+      const members = data.session.family(session)
+      return (members.length > 0 ? members : [session]).reduce(
+        (latest, id) =>
+          Math.max(
+            latest,
+            data.session.get(id)?.time.updated ?? 0,
+            lastActivity()[id] ?? 0,
+          ),
+        0,
+      )
+    }
+    const touch = (sessionID: string, created: number) => {
+      if (!enabled()) return
+      if ((lastActivity()[sessionID] ?? 0) >= created) return
+      setLastActivity((value) => ({ ...value, [sessionID]: Math.max(value[sessionID] ?? 0, created) }))
+    }
     const title = (sessionID: string, persisted?: string, fallback?: string) => {
       const session = data.session.get(sessionID)
       return session?.title ?? persisted ?? fallback ?? (session ? withTimestampedFallback(session) : undefined)
     }
-    const normalize = (value: TabsState) => ({
+    const normalize = (value: TabsState): TabsState => ({
       tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {
         const sessionID = root(tab.sessionID)
         return openSessionTab(tabs, { sessionID, title: title(sessionID, tab.title) })
@@ -114,6 +137,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         busy: family.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
       }
     }
+    const recent = () =>
+      orderSessionTabs(state().tabs, (sessionID) => ({
+        busy: status(sessionID).busy,
+        updated: updated(sessionID),
+      }))
 
     function markUnread(sessionID: string, unread: SessionTabUnread) {
       if (!enabled()) return
@@ -144,6 +172,20 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         })
         delete draft.unread[sessionID]
       })
+    })
+
+    createEffect(() => {
+      if (!navigationActive()) return
+      const tabs = state().tabs
+      if (tabs.length === 0) {
+        setNavigationActive(false)
+        setNavigationSelection(undefined)
+        setNavigationPendingDone(undefined)
+        return
+      }
+      if (tabs.some((tab) => tab.sessionID === navigationSelection())) return
+      setNavigationSelection(current() ?? recent()[0]?.sessionID)
+      setNavigationPendingDone(undefined)
     })
 
     createEffect(() => {
@@ -182,7 +224,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         for (const sessionID of sessions) {
           if (stale) return
           await Promise.allSettled([
-            data.session.sync(sessionID),
+            data.session.sync(sessionID, { children: true }),
             data.session.message.sync(sessionID),
             data.session.pending.sync(sessionID),
             data.session.permission.sync(sessionID),
@@ -196,12 +238,28 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       })
     })
 
-    onCleanup(event.on("session.execution.succeeded", (evt) => markUnread(evt.data.sessionID, "activity")))
-    onCleanup(event.on("session.execution.interrupted", (evt) => markUnread(evt.data.sessionID, "activity")))
-    onCleanup(event.on("session.execution.failed", (evt) => markUnread(evt.data.sessionID, "error")))
+    onCleanup(
+      event.on("session.execution.succeeded", (evt) => {
+        touch(evt.data.sessionID, evt.created)
+        markUnread(evt.data.sessionID, "activity")
+      }),
+    )
+    onCleanup(
+      event.on("session.execution.interrupted", (evt) => {
+        touch(evt.data.sessionID, evt.created)
+        markUnread(evt.data.sessionID, "activity")
+      }),
+    )
+    onCleanup(
+      event.on("session.execution.failed", (evt) => {
+        touch(evt.data.sessionID, evt.created)
+        markUnread(evt.data.sessionID, "error")
+      }),
+    )
     onCleanup(
       event.on("session.input.admitted", (evt) => {
         if (!enabled() || evt.data.input.type !== "user") return
+        touch(evt.data.sessionID, evt.created)
         const sessionID = root(evt.data.sessionID)
         if (current() === sessionID || !state().tabs.some((tab) => tab.sessionID === sessionID)) return
         setPromptPulses((pulses) => ({ ...pulses, [sessionID]: (pulses[sessionID] ?? 0) + 1 }))
@@ -240,6 +298,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         delete next[target]
         return next
       })
+      setLastActivity((activity) => {
+        const family = data.session.family(target)
+        const members = family.length > 0 ? family : [target]
+        if (!members.some((id) => activity[id] !== undefined)) return activity
+        const next = { ...activity }
+        for (const id of members) delete next[id]
+        return next
+      })
       if (selected) route.navigate(next ? { type: "session", sessionID: next } : { type: "home" })
     }
 
@@ -248,6 +314,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       tabs() {
         return state().tabs
       },
+      recent,
+      updated,
       newTab() {
         return newTab()
       },
@@ -291,24 +359,73 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           draft.tabs = moveSessionTab(draft.tabs, session, index)
         })
       },
-      cycle(direction: 1 | -1) {
+      cycle(direction: 1 | -1, order: "tabs" | "recent" = "tabs") {
         if (!enabled()) return
-        const tab = cycleSessionTab(state().tabs, current(), direction)
+        const tab = cycleSessionTab(order === "recent" ? recent() : state().tabs, current(), direction)
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
-      cycleUnread(direction: 1 | -1) {
+      cycleUnread(direction: 1 | -1, order: "tabs" | "recent" = "tabs") {
         if (!enabled()) return
         const tab = cycleSessionTab(
-          state().tabs.filter((tab) => state().unread[tab.sessionID] || status(tab.sessionID).attention),
+          (order === "recent" ? recent() : state().tabs).filter(
+            (tab) => state().unread[tab.sessionID] || status(tab.sessionID).attention,
+          ),
           current(),
           direction,
         )
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
-      selectIndex(index: number) {
+      selectIndex(index: number, order: "tabs" | "recent" = "tabs") {
         if (!enabled()) return
-        const tab = state().tabs[index]
+        const tab = (order === "recent" ? recent() : state().tabs)[index]
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
+      },
+      navigation: {
+        active: navigationActive,
+        selected: navigationSelection,
+        pendingDone: navigationPendingDone,
+        focus() {
+          if (!enabled() || state().tabs.length === 0) return false
+          setNavigationSelection(current() ?? recent()[0]?.sessionID)
+          setNavigationPendingDone(undefined)
+          setNavigationActive(true)
+          return true
+        },
+        blur() {
+          setNavigationActive(false)
+          setNavigationPendingDone(undefined)
+        },
+        move(direction: 1 | -1) {
+          const tabs = recent().map((tab) => tab.sessionID)
+          if (!navigationActive() || tabs.length === 0) return
+          const index = tabs.findIndex((sessionID) => sessionID === navigationSelection())
+          const start = index === -1 ? (direction === 1 ? -1 : 0) : index
+          setNavigationSelection(tabs[(start + direction + tabs.length) % tabs.length])
+          setNavigationPendingDone(undefined)
+        },
+        select() {
+          const sessionID = navigationSelection()
+          if (!navigationActive() || !sessionID) return
+          setNavigationActive(false)
+          setNavigationPendingDone(undefined)
+          route.navigate({ type: "session", sessionID })
+        },
+        done() {
+          const sessionID = navigationSelection()
+          if (!navigationActive() || !sessionID) return
+          if (navigationPendingDone() !== sessionID) {
+            setNavigationPendingDone(sessionID)
+            return
+          }
+          const tabs = recent().map((tab) => tab.sessionID)
+          const index = tabs.indexOf(sessionID)
+          const next = tabs[index + 1] ?? tabs[index - 1]
+          const selected = current() === sessionID
+          setNavigationPendingDone(undefined)
+          remove(sessionID, true)
+          setNavigationSelection(selected ? (current() ?? next) : next)
+          if (!next) setNavigationActive(false)
+        },
       },
     }
   },

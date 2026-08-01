@@ -139,3 +139,40 @@ test("global commands stay reachable when the mode changes", async () => {
     app.renderer.destroy()
   }
 })
+
+test("dispatches direct and leader tab-number bindings", async () => {
+  const calls: number[] = []
+
+  function Harness() {
+    Keymap.createLayer(() => ({
+      mode: "global",
+      commands: Array.from({ length: 2 }, (_, index) => ({
+        id: `session.tab.select.${index + 1}`,
+        run: () => void calls.push(index + 1),
+      })),
+    }))
+    Keymap.createLayer(() => ({
+      mode: "global",
+      bindings: ["session.tab.select.1", "session.tab.select.2"],
+    }))
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    app.mockInput.pressKey("1", { ctrl: true })
+    expect(calls).toEqual([])
+    app.mockInput.pressKey("1", { meta: true })
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("2")
+    expect(calls).toEqual([1, 2])
+  } finally {
+    app.renderer.destroy()
+  }
+})

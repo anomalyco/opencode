@@ -7,6 +7,7 @@ import { Bus } from "../bus"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Model } from "../model"
 import { SessionEvent } from "./event"
+import type { SessionSchema } from "./schema"
 import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
@@ -444,6 +445,39 @@ function run(db: DatabaseService, event: MessageEvent) {
   })
 }
 
+function runAndTouch(db: DatabaseService, event: MessageEvent) {
+  return Effect.gen(function* () {
+    yield* run(db, event)
+    yield* touchAncestors(db, event.data.sessionID, DateTime.toEpochMillis(event.created))
+  })
+}
+
+function touchAncestors(
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  updated: number,
+  seen = new Set<string>(),
+): Effect.Effect<void> {
+  if (seen.has(sessionID)) return Effect.void
+  seen.add(sessionID)
+  return Effect.gen(function* () {
+    const session = yield* db
+      .select({ parentID: SessionTable.parent_id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, sessionID))
+      .get()
+      .pipe(Effect.orDie)
+    if (!session) return
+    yield* db
+      .update(SessionTable)
+      .set({ time_updated: updated })
+      .where(and(eq(SessionTable.id, sessionID), lt(SessionTable.time_updated, updated)))
+      .run()
+      .pipe(Effect.orDie)
+    if (session.parentID) yield* touchAncestors(db, session.parentID, updated, seen)
+  })
+}
+
 function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, message: SessionMessage.Info) {
   if (event.durable === undefined) return Effect.die(new Error("Durable Session event is missing aggregate sequence"))
   const encoded = encodeMessage(message)
@@ -678,9 +712,9 @@ const layer = Layer.effectDiscard(
         })
       }),
     )
-    yield* bus.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Execution.Failed, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Execution.Succeeded, (event) => runAndTouch(db, event))
+    yield* bus.project(SessionEvent.Execution.Failed, (event) => runAndTouch(db, event))
+    yield* bus.project(SessionEvent.Execution.Interrupted, (event) => runAndTouch(db, event))
     yield* bus.project(SessionEvent.InstructionsUpdated, (event) =>
       InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta),
     )
