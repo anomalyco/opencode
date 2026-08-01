@@ -67,6 +67,8 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { Automation } from "@opencode-ai/core/automation/automation"
+import { AutomationScheduler } from "@opencode-ai/core/automation/scheduler"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -269,6 +271,8 @@ const app = LayerNode.group([
   ProjectV2.node,
   ProjectCopy.node,
   PtyTicket.node,
+  Automation.node,
+  AutomationScheduler.node,
 ])
 
 export function createRoutes(

@@ -109,3 +109,12 @@ export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>(
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class AutomationNotFoundError extends Schema.TaggedErrorClass<AutomationNotFoundError>()(
+  "AutomationNotFoundError",
+  {
+    id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
