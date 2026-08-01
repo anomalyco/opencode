@@ -222,7 +222,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## Prywatność
 
-Plan został zaprojektowany przede wszystkim z myślą o użytkownikach z całego świata i zapewnia stabilny dostęp globalny. Twoje dane nie będą wykorzystywane do trenowania modeli.
+| Model             | Trenowanie modelu | Retencja danych |
+| ----------------- | ----------------- | --------------- |
+| Grok 4.5          | Niewykorzystywane | 30 dni          |
+| GPT 5.6 Luna      | Niewykorzystywane | 30 dni          |
+| GLM-5.2           | Niewykorzystywane | 0 dni           |
+| GLM-5.1           | Niewykorzystywane | 0 dni           |
+| Kimi K3           | Niewykorzystywane | 0 dni           |
+| Kimi K2.7 Code    | Niewykorzystywane | 0 dni           |
+| Kimi K2.6         | Niewykorzystywane | 0 dni           |
+| MiMo-V2.5-Pro     | Niewykorzystywane | 0 dni           |
+| MiMo-V2.5         | Niewykorzystywane | 0 dni           |
+| Qwen3.7 Max       | Niewykorzystywane | 0 dni           |
+| Qwen3.7 Plus      | Niewykorzystywane | 0 dni           |
+| Qwen3.6 Plus      | Niewykorzystywane | 0 dni           |
+| MiniMax M3        | Niewykorzystywane | 0 dni           |
+| MiniMax M2.7      | Niewykorzystywane | 0 dni           |
+| DeepSeek V4 Pro   | Niewykorzystywane | 0 dni           |
+| DeepSeek V4 Flash | Wykorzystywane    | Brak umowy      |
+| Hy3               | Niewykorzystywane | 0 dni           |
+
+- **Grok 4.5:** ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API. [Dowiedz się więcej](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni. [Dowiedz się więcej](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 
 ---
 

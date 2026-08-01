@@ -216,7 +216,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## Gizlilik
 
-Plan, öncelikle uluslararası kullanıcılar için tasarlanmıştır ve dünya genelinde istikrarlı erişim sağlar. Verileriniz model eğitimi için kullanılmaz.
+| Model             | Model eğitimi | Veri saklama |
+| ----------------- | ------------- | ------------ |
+| Grok 4.5          | Kullanılmaz   | 30 gün       |
+| GPT 5.6 Luna      | Kullanılmaz   | 30 gün       |
+| GLM-5.2           | Kullanılmaz   | 0 gün        |
+| GLM-5.1           | Kullanılmaz   | 0 gün        |
+| Kimi K3           | Kullanılmaz   | 0 gün        |
+| Kimi K2.7 Code    | Kullanılmaz   | 0 gün        |
+| Kimi K2.6         | Kullanılmaz   | 0 gün        |
+| MiMo-V2.5-Pro     | Kullanılmaz   | 0 gün        |
+| MiMo-V2.5         | Kullanılmaz   | 0 gün        |
+| Qwen3.7 Max       | Kullanılmaz   | 0 gün        |
+| Qwen3.7 Plus      | Kullanılmaz   | 0 gün        |
+| Qwen3.6 Plus      | Kullanılmaz   | 0 gün        |
+| MiniMax M3        | Kullanılmaz   | 0 gün        |
+| MiniMax M2.7      | Kullanılmaz   | 0 gün        |
+| DeepSeek V4 Pro   | Kullanılmaz   | 0 gün        |
+| DeepSeek V4 Flash | Kullanılır    | Anlaşma yok  |
+| Hy3               | Kullanılmaz   | 0 gün        |
+
+- **Grok 4.5:** ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 
 ---
 

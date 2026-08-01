@@ -1060,7 +1060,46 @@ body {
       margin-bottom: 32px;
 
       [data-slot="faq-models"] {
+        margin: 16px 0 0;
+        padding-left: 20px;
+
+        li {
+          margin-bottom: 0;
+          list-style: disc;
+        }
+      }
+
+      [data-slot="faq-model-table"] {
+        max-width: 560px;
         margin-top: 16px;
+        overflow-x: auto;
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          line-height: 150%;
+        }
+
+        th,
+        td {
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--color-border-weak);
+          text-align: left;
+          white-space: nowrap;
+        }
+
+        th {
+          color: var(--color-text-strong);
+          font-weight: 500;
+        }
+      }
+
+      [data-slot="faq-retention-notes"] {
+        margin-top: 16px;
+
+        p {
+          margin: 8px 0 0;
+        }
       }
     }
   }

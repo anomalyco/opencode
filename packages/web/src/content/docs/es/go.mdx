@@ -230,7 +230,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## Privacidad
 
-El plan está diseñado principalmente para usuarios internacionales y ofrece un acceso global estable. Tus datos no se utilizarán para entrenar modelos.
+| Modelo            | Entrenamiento del modelo | Retención de datos |
+| ----------------- | ------------------------ | ------------------ |
+| Grok 4.5          | No utilizado             | 30 días            |
+| GPT 5.6 Luna      | No utilizado             | 30 días            |
+| GLM-5.2           | No utilizado             | 0 días             |
+| GLM-5.1           | No utilizado             | 0 días             |
+| Kimi K3           | No utilizado             | 0 días             |
+| Kimi K2.7 Code    | No utilizado             | 0 días             |
+| Kimi K2.6         | No utilizado             | 0 días             |
+| MiMo-V2.5-Pro     | No utilizado             | 0 días             |
+| MiMo-V2.5         | No utilizado             | 0 días             |
+| Qwen3.7 Max       | No utilizado             | 0 días             |
+| Qwen3.7 Plus      | No utilizado             | 0 días             |
+| Qwen3.6 Plus      | No utilizado             | 0 días             |
+| MiniMax M3        | No utilizado             | 0 días             |
+| MiniMax M2.7      | No utilizado             | 0 días             |
+| DeepSeek V4 Pro   | No utilizado             | 0 días             |
+| DeepSeek V4 Flash | Utilizado                | Sin acuerdo        |
+| Hy3               | No utilizado             | 0 días             |
+
+- **Grok 4.5:** ZDR deshabilita funciones importantes de la API que dependen de datos almacenados, incluidas la Responses API con estado, Files and Collections y la Batch API. [Más información](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días. [Más información](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 
 ---
 
