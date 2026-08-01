@@ -156,10 +156,12 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                 // Discovery walks upward, so an enclosing repository with a
                 // matching origin could masquerade as the cache entry; reuse
                 // requires the checkout to live exactly at the cache path.
+                // Git and realpath may return different drive-letter casing on
+                // Windows, so compare canonical paths using platform semantics.
                 const worktree = existing ? yield* fs.resolve(localPath) : undefined
                 const reuse = Boolean(
                   existing &&
-                    existing.worktree === worktree &&
+                    samePath(existing.worktree, worktree) &&
                     originReference &&
                     Repository.same(originReference, cloneTarget),
                 )
@@ -245,6 +247,13 @@ export const node = makeGlobalNode({
   layer,
   deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node],
 })
+
+function samePath(left: string, right: string | undefined) {
+  if (!right) return false
+  const a = path.normalize(path.resolve(left))
+  const b = path.normalize(path.resolve(right))
+  return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b
+}
 
 function errorMessage(error: unknown) {
   return error instanceof globalThis.Error ? error.message : String(error)
