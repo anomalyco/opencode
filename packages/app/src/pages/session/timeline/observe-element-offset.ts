@@ -21,10 +21,16 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
 
   let removed = false
   let frame: number | undefined
+  let reconnectFrame: number | undefined
   const clearCheck = () => {
     if (frame === undefined) return
     targetWindow.cancelAnimationFrame(frame)
     frame = undefined
+  }
+  const clearReconnect = () => {
+    if (reconnectFrame === undefined) return
+    targetWindow.cancelAnimationFrame(reconnectFrame)
+    reconnectFrame = undefined
   }
   const startCheck = () => {
     clearCheck()
@@ -44,18 +50,34 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
     }
     frame = targetWindow.requestAnimationFrame(check)
   }
+  const reconcileReconnect = () => {
+    reconnectFrame = undefined
+    if (!removed || !element.isConnected) return
+    removed = false
+    startCheck()
+  }
+  const scheduleReconnect = () => {
+    if (reconnectFrame !== undefined) return
+    reconnectFrame = targetWindow.requestAnimationFrame(reconcileReconnect)
+  }
   const observer = new targetWindow.MutationObserver((records) => {
     if (!active) return
-    records.forEach((record) => {
-      if (record.target === element || element.contains(record.target)) return
+
+    let relevant = false
+    for (const record of records) {
+      if (record.target === element || element.contains(record.target)) continue
       if (mutationNodesContainElement(record.removedNodes, element)) {
         removed = true
         clearCheck()
+        relevant = true
       }
-      if (!removed || !element.isConnected || !mutationNodesContainElement(record.addedNodes, element)) return
-      removed = false
-      startCheck()
-    })
+      if (mutationNodesContainElement(record.addedNodes, element)) relevant = true
+    }
+
+    // HappyDOM and browsers may report a synchronous move in one batch, split it
+    // across callbacks, or expose addition before removal. Reconcile after mutation
+    // delivery and rely on the element's final connection state instead of record order.
+    if (relevant) scheduleReconnect()
   })
   // Session routes are replaced below persistent main; body is the fallback for isolated hosts.
   observer.observe(root, { childList: true, subtree: true })
@@ -63,6 +85,7 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
   return () => {
     active = false
     observer.disconnect()
+    clearReconnect()
     clearCheck()
     cleanupOffset?.()
   }
