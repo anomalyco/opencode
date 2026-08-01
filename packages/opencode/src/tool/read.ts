@@ -42,7 +42,7 @@ const findPriorRead = (
       const display = state.metadata?.display
       if (display?.type !== "file" || display.path !== filepath) continue
       const input = state.input as { offset?: number; limit?: number }
-      if ((input.offset ?? 1) !== offset) continue
+      if ((input.offset || 1) !== offset) continue
       if ((input.limit ?? DEFAULT_READ_LIMIT) !== limit) continue
       if (state.metadata?.mtimeMs !== mtimeMs || state.metadata?.size !== size) continue
       return true
@@ -336,6 +336,7 @@ export const ReadTool = Tool.define<
       const limit = params.limit ?? DEFAULT_READ_LIMIT
       const mtimeMs = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
       const size = Number(stat.size)
+      const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
       if (findPriorRead(ctx.messages, filepath, offset, limit, mtimeMs, size)) {
         return {
           title,
@@ -343,18 +344,20 @@ export const ReadTool = Tool.define<
             `<path>${filepath}</path>`,
             `<type>file</type>`,
             "File unchanged since last read. Its full contents are already in the conversation history, so they were not re-sent.",
+            ...(loaded.length > 0
+              ? [`\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`]
+              : []),
           ].join("\n"),
           metadata: {
             preview: "File unchanged since last read",
             truncated: false,
-            loaded: [] as string[],
+            loaded: loaded.map((item) => item.filepath),
             mtimeMs,
             size,
           },
         }
       }
 
-      const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
       const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
       const mime = sniffAttachmentMime(sample, FSUtil.mimeType(filepath))
