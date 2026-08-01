@@ -159,6 +159,12 @@ export interface McpTool {
   readonly def: MCPToolDef
   readonly client: MCPClient
   readonly timeout?: number
+  /**
+   * Re-establish the connection to this tool's MCP server. Consumers invoke it
+   * when a call fails because the server restarted, so the next `tools()`
+   * snapshot carries a fresh client (issue #40015).
+   */
+  readonly reconnect?: () => Effect.Effect<void>
 }
 
 export interface Interface {
@@ -439,7 +445,14 @@ const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
-    function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+    function watch(
+      s: State,
+      name: string,
+      client: MCPClient,
+      bridge: EffectBridge.Shape,
+      timeout?: number,
+      getReconnect?: () => Effect.Effect<void>,
+    ) {
       client.onclose = () => {
         if (s.clients[name] !== client) return
         delete s.clients[name]
@@ -452,6 +465,14 @@ const layer = Layer.effect(
             Effect.ignore,
           ),
         )
+        // A dead connection (e.g. the MCP server restarted) should not leave the
+        // tool set stale forever: re-establish the client with exponential
+        // backoff and republish the tools when the server comes back.
+        if (getReconnect) {
+          bridge.fork(
+            reconnectLoop(s, name, getReconnect, 1).pipe(Effect.ignore),
+          )
+        }
       }
 
       client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) =>
@@ -522,7 +543,7 @@ const layer = Layer.effect(
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
                 if (result.instructions) s.instructions[key] = result.instructions
-                watch(s, key, result.mcpClient, bridge, mcp.timeout)
+                watch(s, key, result.mcpClient, bridge, mcp.timeout, () => connect(key).pipe(Effect.ignore))
               }
             }),
           { concurrency: "unbounded" },
@@ -568,6 +589,27 @@ const layer = Layer.effect(
       return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
     }
 
+    // Retry connecting to a dead MCP server with exponential backoff (1s, 2s,
+    // 4s, … capped at 60s) until it comes back. Each attempt goes through the
+    // normal connect/createAndStore path, which refreshes the cached tool
+    // definitions.
+    const reconnectLoop = (
+      s: State,
+      name: string,
+      reconnect: () => Effect.Effect<void, never, never>,
+      delaySeconds: number,
+    ): Effect.Effect<void, never, never> =>
+      Effect.gen(function* () {
+        yield* Effect.sleep(`${delaySeconds} seconds`)
+        // The client was manually reconnected/disconnected meanwhile.
+        if (s.clients[name] || s.status[name]?.status === "disabled") return
+        yield* reconnect().pipe(
+          Effect.catchCause(() =>
+            reconnectLoop(s, name, reconnect, Math.min(delaySeconds * 2, 60)),
+          ),
+        )
+      })
+
     const storeClient = Effect.fnUntraced(function* (
       s: State,
       name: string,
@@ -583,7 +625,7 @@ const layer = Layer.effect(
       s.defs[name] = listed
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
-      watch(s, name, client, bridge, timeout)
+      watch(s, name, client, bridge, timeout, () => connect(name).pipe(Effect.ignore))
       if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
     })
@@ -681,7 +723,12 @@ const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const def of listed) {
-          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
+          result[McpCatalog.toolName(clientName, def.name)] = {
+            def,
+            client,
+            timeout,
+            reconnect: () => connect(clientName).pipe(Effect.ignore),
+          }
         }
       }
       return result
