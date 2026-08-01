@@ -762,6 +762,7 @@ export const dict = {
   "settings.desktop.wsl.description": "Ejecutar el servidor OpenCode dentro de WSL en Windows.",
 
   "settings.general.section.appearance": "Apariencia",
+  "settings.general.section.input": "Entrada",
   "settings.general.section.advanced": "Avanzado",
   "settings.general.section.notifications": "Notificaciones del sistema",
   "settings.general.section.updates": "Actualizaciones",
@@ -789,6 +790,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "Fuente de la interfaz",
   "settings.general.row.uiFont.description": "Personaliza la fuente usada en toda la interfaz",
   "settings.general.row.followup.title": "Comportamiento de seguimiento",
+  "settings.general.row.sendKey.title": "Tecla de envío",
+  "settings.general.row.sendKey.description": "Elige qué tecla envía mensajes. La otra tecla Enter inserta una nueva línea.",
+  "settings.general.row.sendKey.option.enter": "Enter",
+  "settings.general.row.sendKey.option.shiftEnter": "Shift+Enter",
+  "settings.general.row.sendKey.option.modEnter": "Ctrl+Enter / Cmd+Enter",
   "settings.general.row.followup.description":
     "Elige si los prompts de seguimiento se dirigen inmediatamente o esperan en una cola",
   "settings.general.row.followup.option.queue": "Cola",

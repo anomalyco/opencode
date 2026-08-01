@@ -26,6 +26,7 @@ import {
   terminalFontFamily,
   terminalInput,
   useSettings,
+  type SendKey,
 } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
@@ -215,6 +216,12 @@ export const SettingsGeneral: Component = () => {
       label: language.label(locale),
     })),
   )
+
+  const sendKeyOptions = createMemo((): { value: SendKey; label: string }[] => [
+    { value: "enter", label: language.t("settings.general.row.sendKey.option.enter") },
+    { value: "shiftEnter", label: language.t("settings.general.row.sendKey.option.shiftEnter") },
+    { value: "modEnter", label: language.t("settings.general.row.sendKey.option.modEnter") },
+  ])
 
   const noneSound = { id: "none", label: "sound.option.none" } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
@@ -574,6 +581,31 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  const InputSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.input")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.sendKey.title")}
+          description={language.t("settings.general.row.sendKey.description")}
+        >
+          <Select
+            data-action="settings-send-key"
+            options={sendKeyOptions()}
+            current={sendKeyOptions().find((o) => o.value === settings.general.sendKey())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.general.setSendKey(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+          />
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
   const NotificationsSection = () => (
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
@@ -759,6 +791,8 @@ export const SettingsGeneral: Component = () => {
         <GeneralSection />
 
         <AppearanceSection />
+
+        <InputSection />
 
         <NotificationsSection />
 

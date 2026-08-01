@@ -19,6 +19,8 @@ export interface SoundSettings {
   errors: string
 }
 
+export type SendKey = "enter" | "shiftEnter" | "modEnter"
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -32,6 +34,7 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    sendKey: SendKey
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
     newLayoutDesigns?: boolean
@@ -193,6 +196,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
+    sendKey: "enter",
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
   },
@@ -416,6 +420,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        sendKey: withFallback(() => store.general?.sendKey, defaultSettings.general.sendKey),
+        setSendKey(value: SendKey) {
+          setStore("general", "sendKey", value)
         },
         showCustomAgents,
         setShowCustomAgents(value: boolean) {

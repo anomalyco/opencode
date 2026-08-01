@@ -50,6 +50,7 @@ import { useCommand } from "@/context/command"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
@@ -122,6 +123,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const prompt = props.state ?? usePrompt()
   const layout = useLayout()
   const comments = useComments()
+  const settings = useSettings()
   const dialog = useDialog()
   const command = useCommand()
   const permission = usePermission()
@@ -1304,9 +1306,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
-    // and should always insert a newline regardless of composition state
+    // Shift+Enter is handled BEFORE the IME check - Shift+Enter is never used for IME
+    // input, so it can either submit (when configured as the send key) or insert a
+    // newline regardless of composition state
     if (event.key === "Enter" && event.shiftKey) {
+      if (settings.general.sendKey() === "shiftEnter") {
+        trySubmit(event)
+        return
+      }
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
       return
@@ -1374,24 +1381,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
-      if (event.repeat) return
-      if (
-        working() &&
-        prompt
-          .current()
-          .map((part) => ("content" in part ? part.content : ""))
-          .join("")
-          .trim().length === 0 &&
-        imageAttachments().length === 0 &&
-        commentCount() === 0
-      ) {
-        return
+    if (event.key === "Enter") {
+      const sendKey = settings.general.sendKey()
+      const modEnter = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
+      if (sendKey === "enter" || (sendKey === "modEnter" && modEnter)) {
+        trySubmit(event)
+      } else {
+        addPart({ type: "text", content: "\n", start: 0, end: 0 })
+        event.preventDefault()
       }
-      void handleSubmit(event)
     }
+  }
+
+  const trySubmit = (event: KeyboardEvent) => {
+    event.preventDefault()
+    if (event.repeat) return
+    if (
+      working() &&
+      prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
+        .trim().length === 0 &&
+      imageAttachments().length === 0 &&
+      commentCount() === 0
+    ) {
+      return
+    }
+    void handleSubmit(event)
   }
 
   const handleSlashMenuKeyDown = (event: KeyboardEvent) => {

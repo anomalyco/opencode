@@ -759,6 +759,7 @@ export const dict = {
   "settings.desktop.wsl.description": "Запускать сервер OpenCode внутри WSL на Windows.",
 
   "settings.general.section.appearance": "Внешний вид",
+  "settings.general.section.input": "Ввод",
   "settings.general.section.advanced": "Дополнительно",
   "settings.general.section.notifications": "Системные уведомления",
   "settings.general.section.updates": "Обновления",
@@ -786,6 +787,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "Шрифт интерфейса",
   "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всем интерфейсе",
   "settings.general.row.followup.title": "Поведение уточняющих вопросов",
+  "settings.general.row.sendKey.title": "Клавиша отправки",
+  "settings.general.row.sendKey.description": "Выберите, какая клавиша отправляет сообщения. Другая клавиша Enter вставляет новую строку.",
+  "settings.general.row.sendKey.option.enter": "Enter",
+  "settings.general.row.sendKey.option.shiftEnter": "Shift+Enter",
+  "settings.general.row.sendKey.option.modEnter": "Ctrl+Enter / Cmd+Enter",
   "settings.general.row.followup.description":
     "Выберите, отправлять ли уточняющие вопросы сразу или помещать их в очередь",
   "settings.general.row.followup.option.queue": "Очередь",

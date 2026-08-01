@@ -764,6 +764,7 @@ export const dict = {
   "settings.desktop.wsl.description": "OpenCode sunucusunu Windows'ta WSL içinde çalıştırın.",
 
   "settings.general.section.appearance": "Görünüm",
+  "settings.general.section.input": "Giriş",
   "settings.general.section.advanced": "Gelişmiş",
   "settings.general.section.notifications": "Sistem bildirimleri",
   "settings.general.section.updates": "Güncellemeler",
@@ -792,6 +793,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "Arayüz Yazı Tipi",
   "settings.general.row.uiFont.description": "Arayüz genelinde kullanılan yazı tipini özelleştirin",
   "settings.general.row.followup.title": "Takip davranışı",
+  "settings.general.row.sendKey.title": "Gönderim tuşu",
+  "settings.general.row.sendKey.description": "Mesaj gönderen tuşu seçin. Diğer Enter tuşu yeni satır ekler.",
+  "settings.general.row.sendKey.option.enter": "Enter",
+  "settings.general.row.sendKey.option.shiftEnter": "Shift+Enter",
+  "settings.general.row.sendKey.option.modEnter": "Ctrl+Enter / Cmd+Enter",
   "settings.general.row.followup.description":
     "Takip komutlarının hemen yönlendirilmesini mi yoksa sırada beklemesini mi istediğinizi seçin",
   "settings.general.row.followup.option.queue": "Sıra",
