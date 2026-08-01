@@ -65,8 +65,8 @@ function LimitsGraph(props: { href: string }) {
 
   const baseline = 100
   const graph = [
-    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
     { id: "kimi-k3", name: "Kimi K3", req: 110, d: "75ms" },
+    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "270ms" },
