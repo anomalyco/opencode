@@ -312,4 +312,40 @@ describe("PermissionV2", () => {
       expect(yield* saved.list()).toEqual([])
     }),
   )
+
+  it.effect("sanitizes undefined metadata properties on permission requests", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      const asked = yield* Deferred.make<PermissionV2.Request>()
+      const events = yield* EventV2.Service
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Asked.type
+          ? Deferred.succeed(asked, event.data as PermissionV2.Request).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const fiber = yield* service
+        .assert(
+          assertion({
+            metadata: {
+              root: ".",
+              path: undefined,
+              limit: undefined,
+              nested: { valid: "ok", empty: undefined },
+            },
+          }),
+        )
+        .pipe(Effect.forkScoped)
+      const request = yield* Deferred.await(asked)
+      expect(request.metadata).toEqual({
+        root: ".",
+        nested: { valid: "ok" },
+      })
+      expect(Object.prototype.hasOwnProperty.call(request.metadata, "path")).toBe(false)
+      expect(Object.prototype.hasOwnProperty.call(request.metadata, "limit")).toBe(false)
+      yield* service.reply({ requestID: request.id, reply: "once" })
+      yield* Fiber.join(fiber)
+    }),
+  )
 })

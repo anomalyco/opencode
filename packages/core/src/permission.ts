@@ -161,6 +161,29 @@ const layer = Layer.effect(
       return { effect, rules: all }
     })
 
+    function sanitizeValue(value: unknown): unknown {
+      if (value === undefined) return undefined
+      if (Array.isArray(value)) {
+        return value.map(sanitizeValue).filter((item) => item !== undefined)
+      }
+      if (typeof value === "object" && value !== null) {
+        const cleaned: Record<string, unknown> = {}
+        for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+          if (val !== undefined) {
+            cleaned[key] = sanitizeValue(val)
+          }
+        }
+        return cleaned
+      }
+      return value
+    }
+
+    function sanitizeMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+      if (!metadata) return undefined
+      const cleaned = sanitizeValue(metadata) as Record<string, unknown>
+      return Object.keys(cleaned).length > 0 ? cleaned : undefined
+    }
+
     function request(input: AssertInput): Request {
       return {
         id: input.id ?? ID.create(),
@@ -168,7 +191,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        metadata: input.metadata,
+        metadata: sanitizeMetadata(input.metadata),
         source: input.source,
       }
     }
