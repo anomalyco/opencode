@@ -13,7 +13,7 @@ import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose } from "./api"
 import { createSourceWatcher } from "./watch"
-import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectories } from "./discovery"
+import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
@@ -57,12 +57,11 @@ type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "
 
 const PluginContext = createContext<Value>()
 
-export function PluginProvider(props: ParentProps<{ packages: PackageResolver; configDirectory: string }>) {
+export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
   const host = usePluginHost()
   const config = useConfig()
   const lifecycle = useTuiLifecycle()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
-  const pluginDirectories = tuiPluginDirectories(host.paths.cwd, props.configDirectory)
   const [store, setStore] = createStore({
     ready: false,
     states: [] as ReadonlyArray<State>,
@@ -172,10 +171,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; c
       void enqueue(reconcile).catch(() => undefined)
     }, 100)
   })
-  onCleanup(() => {
+  const stopWatching = () => {
     clearTimeout(pending)
     watcher.dispose()
-  })
+  }
+  onCleanup(stopWatching)
 
   // Rebuild the plugin generation as resolve → compare → swap, mirroring the
   // core plugin registry: fold the ordered entries into a desired end state
@@ -187,8 +187,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; c
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
-    await Promise.all(pluginDirectories.map(watcher.wait))
-    const entries = [...(await discoverTuiPlugins(pluginDirectories)), ...(config.data.plugins ?? [])]
+    await Promise.all(props.directories.map(watcher.wait))
+    const entries = [...(await discoverTuiPlugins(props.directories)), ...(config.data.plugins ?? [])]
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -364,6 +364,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; c
     let disposing: Promise<void> | undefined
     const dispose = () => {
       if (disposing) return disposing
+      stopWatching()
       disposing = loading
         .catch(() => undefined)
         .then(() =>

@@ -4,7 +4,7 @@ import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode-ai/util/global"
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { createEventStream, createFetch } from "./fixture/tui-client"
+import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
 function lifecycleSource(marker: string, id: string, version: string) {
@@ -30,12 +30,21 @@ async function until(read: () => Promise<string>, expected: (value: string | und
   return value
 }
 
-async function bootApp(directory: string) {
+async function bootApp(directory: string, projectDirectory = directory) {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventStream()
-  const calls = createFetch(undefined, events)
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/fs/list") return
+    return json({
+      location: {
+        directory,
+        project: { id: "proj_test", directory: projectDirectory, canonical: projectDirectory },
+      },
+      data: [],
+    })
+  }, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
   const cwd = process.cwd()
   process.chdir(directory)
@@ -43,7 +52,7 @@ async function bootApp(directory: string) {
   const task = Effect.runPromise(
     run({
       app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
+      server: { endpoint: { url: server.url.toString() }, local: true },
       config: { get: async () => ({}), update: async () => ({}) },
       packages: { resolve: async () => undefined },
       args: {},
@@ -74,7 +83,7 @@ test("discovers an ancestor TUI plugin directory created after startup", async (
   await mkdir(initial, { recursive: true })
   await writeFile(path.join(initial, "ready.ts"), lifecycleSource(ready, "test.ready", "ready"))
 
-  await using app = await bootApp(cwd)
+  await using app = await bootApp(cwd, path.join(tmp.path, "repo"))
   expect(await until(() => readFile(ready, "utf8"), (value) => value === "ready:setup\n")).toBe("ready:setup\n")
   const directory = path.join(tmp.path, "repo", ".opencode", "plugins", "tui")
   await mkdir(directory, { recursive: true })

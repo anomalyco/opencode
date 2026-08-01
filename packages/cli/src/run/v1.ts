@@ -58,7 +58,7 @@ export function runV1Bridge(input: V1RunCommandInput) {
 
 function nativeInput(input: V1RunCommandInput, endpoint: Endpoint): RunCommandInput {
   return {
-    server: { endpoint },
+    server: { endpoint, local: true },
     message: input.message,
     continue: input.continue,
     session: input.session,

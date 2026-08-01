@@ -1,12 +1,29 @@
-import { readdir } from "node:fs/promises"
+import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { themeDirectories } from "../theme/discovery"
+import { configDirectories } from "../config/directories"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
-export function tuiPluginDirectories(cwd: string, configDirectory: string) {
-  return themeDirectories(configDirectory, cwd).map((directory) => path.join(directory, "plugins", "tui"))
+export async function tuiPluginDirectories(input: {
+  cwd: string
+  projectDirectory: string
+  configDirectory: string
+}) {
+  const projectConfig = path.join(input.projectDirectory, ".opencode")
+  const directories = configDirectories(input.configDirectory, input.cwd)
+  const exists = await Promise.all(
+    directories.map((directory) => {
+      if (directory === input.configDirectory || directory === projectConfig) return true
+      return stat(directory).then(
+        (info) => info.isDirectory(),
+        () => false,
+      )
+    }),
+  )
+  return directories
+    .filter((_, index) => exists[index])
+    .map((directory) => path.join(directory, "plugins", "tui"))
 }
 
 export async function discoverTuiPlugins(directories: string[]) {

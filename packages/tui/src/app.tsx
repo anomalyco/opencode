@@ -1,6 +1,7 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Deferred, Effect } from "effect"
+import path from "node:path"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { OpenCode } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
@@ -83,6 +84,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
+import { tuiPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, PluginSlot } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
@@ -166,6 +168,7 @@ export type TuiInput = {
   app: TuiApp
   server: {
     endpoint: Endpoint
+    local: boolean
     service?: {
       reconnect: (signal: AbortSignal) => Promise<Endpoint>
       restart: () => Promise<void>
@@ -208,9 +211,17 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
-  const directory = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
-    Effect.map((response) => response.location.directory),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
+  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
+    Effect.map((response) => response.location),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+  )
+  const directory = location.directory
+  const projectDirectory =
+    input.server.local && path.resolve(location.project.directory) !== path.parse(location.project.directory).root
+      ? location.project.directory
+      : process.cwd()
+  const pluginDirectories = yield* Effect.promise(() =>
+    tuiPluginDirectories({ cwd: process.cwd(), projectDirectory, configDirectory: global.config }),
   )
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
@@ -380,7 +391,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                       <AttentionProvider>
                                                                         <PluginProvider
                                                                           packages={input.packages}
-                                                                          configDirectory={global.config}
+                                                                          directories={pluginDirectories}
                                                                         >
                                                                           <App
                                                                             pair={

@@ -15,6 +15,7 @@ export type Args = {
 
 export type Resolved = {
   readonly endpoint: Endpoint
+  readonly local: boolean
   readonly service?: ReturnType<typeof managedService>
 }
 
@@ -36,15 +37,16 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
       process.stderr.write(
         `Warning: Server at ${endpoint.url} has version ${health.version}; this client is ${OPENCODE_VERSION}. Continuing anyway.\n`,
       )
-    return { endpoint } satisfies Resolved
+    return { endpoint, local: false } satisfies Resolved
   }
   if (args.standalone) {
-    return { endpoint: yield* Standalone.start() } satisfies Resolved
+    return { endpoint: yield* Standalone.start(), local: true } satisfies Resolved
   }
 
   const options = yield* ServiceConfig.options()
   return {
     endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, args.mismatch ?? "replace"),
+    local: true,
     service: managedService(options),
   } satisfies Resolved
 })
