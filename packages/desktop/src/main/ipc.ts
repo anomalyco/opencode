@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
@@ -193,6 +193,19 @@ export function registerIpcHandlers(deps: Deps) {
 
   ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
     if (!app) return shell.openPath(path)
+    // PowerShell treats a positional path argument as a command to run, so open
+    // it in its own console with the path as the working directory instead.
+    if (process.platform === "win32" && /^(powershell|pwsh)(\.exe)?$/i.test(basename(app))) {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(app, [], { cwd: path, detached: true, stdio: "ignore" })
+        child.once("error", reject)
+        child.once("spawn", () => {
+          child.unref()
+          resolve()
+        })
+      })
+      return
+    }
     await new Promise<void>((resolve, reject) => {
       const [cmd, args] =
         process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
