@@ -309,6 +309,25 @@ describe("buildRequestParts", () => {
     })
   })
 
+  test("uses a valid UNC file URL when workspace is on a network share", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "file", path: "src\\foo.ts", content: "@src\\foo.ts", start: 0, end: 11 }],
+      context: [],
+      images: [],
+      text: "@src\\foo.ts",
+      messageID: "msg_unc_1",
+      sessionID: "ses_unc_1",
+      sessionDirectory: "\\\\server\\share\\project",
+    })
+
+    const filePart = result.requestParts.find((part) => part.type === "file")
+    expect(filePart).toBeDefined()
+    if (filePart?.type === "file") {
+      expect(filePart.url).toBe("file://server/share/project/src/foo.ts")
+      expect(() => new URL(filePart.url)).not.toThrow()
+    }
+  })
+
   test("handles absolute Windows paths (user manually specifies full path)", () => {
     const prompt: Prompt = [
       { type: "file", path: "D:\\other\\project\\file.ts", content: "@D:\\other\\project\\file.ts", start: 0, end: 25 },

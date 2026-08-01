@@ -81,8 +81,13 @@ export function decodeFilePath(input: string) {
 }
 
 export function encodeFilePath(filepath: string): string {
+  const unc = filepath.startsWith("\\\\")
   // Normalize Windows paths: convert backslashes to forward slashes
   let normalized = filepath.replace(/\\/g, "/")
+
+  if (unc) {
+    normalized = normalized.replace(/^\/+/, "")
+  }
 
   // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
   if (/^[A-Za-z]:/.test(normalized)) {

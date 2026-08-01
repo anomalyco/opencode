@@ -142,6 +142,19 @@ describe("encodeFilePath", () => {
       expect(result).toBe("/D:/dev/projects/opencode/README.bs.md")
     })
 
+    test("should encode UNC paths as file URL hosts", () => {
+      const uncPath = "\\\\server\\share\\project\\src\\app.ts"
+      const result = encodeFilePath(uncPath)
+      const fileUrl = `file://${result}`
+
+      expect(result).toBe("server/share/project/src/app.ts")
+      expect(() => new URL(fileUrl)).not.toThrow()
+
+      const url = new URL(fileUrl)
+      expect(url.host).toBe("server")
+      expect(url.pathname).toBe("/share/project/src/app.ts")
+    })
+
     test("should handle mixed separator path (Windows + Unix)", () => {
       // This is what happens in build-request-parts.ts when concatenating paths
       const mixedPath = "D:\\dev\\projects\\opencode/README.bs.md"
