@@ -3,6 +3,7 @@ import type { BrowserPreviewResult, BrowserPreviewState } from "@/browser-previe
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { showToast } from "@/utils/toast"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -23,12 +24,14 @@ export function BrowserPreviewPanel() {
   const platform = usePlatform()
   const layout = useLayout()
   const language = useLanguage()
+  const settings = useSettings()
   const size = createSizing()
   const preview = platform.browserPreview
   const opened = createMemo(() => !!preview && layout.browserPreview.opened())
   const [state, setState] = createSignal(emptyState)
   const [address, setAddress] = createSignal(layout.browserPreview.url())
   const [artifact, setArtifact] = createSignal<Exclude<BrowserPreviewResult, { type: "none" }>>()
+  const [renderedWidth, setRenderedWidth] = createSignal(layout.browserPreview.width())
   let viewport: HTMLDivElement | undefined
   let resizeObserver: ResizeObserver | undefined
   let frame: number | undefined
@@ -53,6 +56,7 @@ export function BrowserPreviewPanel() {
       frame = undefined
       if (!opened() || !viewport) return
       const rect = viewport.getBoundingClientRect()
+      setRenderedWidth(rect.width)
       void preview
         .setBounds({
           x: rect.x,
@@ -92,6 +96,8 @@ export function BrowserPreviewPanel() {
       const currentRevision = ++lifecycleRevision
       if (!preview) return
       if (!isOpen) {
+        if (viewport) resizeObserver?.unobserve(viewport)
+        viewport = undefined
         setState(emptyState)
         setArtifact()
         return
@@ -150,11 +156,13 @@ export function BrowserPreviewPanel() {
       aria-label={language.t("browserPreview.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative shrink-0 h-full overflow-hidden border-l border-border-weak-base bg-background-base"
+      class="relative shrink h-full overflow-hidden border-l border-border-weak-base bg-background-base"
       classList={{
-        "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none":
+        "transition-[width,min-width,margin-left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none":
           !size.active(),
         "pointer-events-none": !opened(),
+        "min-w-[200px]": opened(),
+        "ml-2": opened() && settings.general.newLayoutDesigns(),
       }}
       style={{ width: opened() ? `${layout.browserPreview.width()}px` : "0px" }}
     >
@@ -163,8 +171,8 @@ export function BrowserPreviewPanel() {
           <ResizeHandle
             class="-left-1"
             direction="horizontal"
-            size={layout.browserPreview.width()}
-            min={320}
+            size={renderedWidth()}
+            min={200}
             max={typeof window === "undefined" ? 960 : window.innerWidth * 0.65}
             onResize={(width) => {
               size.touch()
@@ -175,7 +183,7 @@ export function BrowserPreviewPanel() {
           />
         </div>
 
-        <div class="flex h-full min-w-[320px] flex-col">
+        <div class="flex h-full min-w-0 flex-col">
           <div class="flex h-9 shrink-0 items-center gap-1 border-b border-border-weaker-base px-2">
             <div class="text-12-medium text-text-strong">{language.t("browserPreview.title")}</div>
             <Show when={active()?.autoRefresh}>
@@ -349,7 +357,14 @@ export function BrowserPreviewPanel() {
           </div>
 
           <div class="relative min-h-0 flex-1 bg-background-stronger">
-            <div ref={viewport} class="absolute inset-0" />
+            <div
+              ref={(element) => {
+                if (viewport && viewport !== element) resizeObserver?.unobserve(viewport)
+                viewport = element
+                resizeObserver?.observe(element)
+              }}
+              class="absolute inset-0"
+            />
             <Show when={active()?.loading && !artifact()}>
               <div class="pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-surface-base">
                 <div class="h-full w-1/3 animate-pulse bg-surface-info-strong" />

@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -51,6 +51,7 @@ export function SessionSidePanel(props: {
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
   size: Sizing
+  browserPreviewOpen: () => boolean
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -62,25 +63,43 @@ export function SessionSidePanel(props: {
   const { sessionKey, tabs, view, params } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isWideDesktop = createMediaQuery("(min-width: 1024px)")
   const shown = settings.visibility.fileTree
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const fileOpen = createMemo(
-    () =>
-      isDesktop() &&
-      shouldShowFileTree({
-        visible: shown(),
-        opened: layout.fileTree.opened(),
-      }),
-  )
+  const fileOpen = createMemo(() => {
+    if (!isDesktop()) return false
+    if (reviewOpen() && props.browserPreviewOpen() && !isWideDesktop()) return false
+    return shouldShowFileTree({
+      visible: shown(),
+      opened: layout.fileTree.opened(),
+    })
+  })
   const open = createMemo(() => reviewOpen() || fileOpen())
   const reviewTab = createMemo(() => isDesktop())
+  const [renderedTreeWidth, setRenderedTreeWidth] = createSignal(layout.fileTree.width())
+  let treePanel: HTMLDivElement | undefined
+  let treeResizeObserver: ResizeObserver | undefined
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return "auto"
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+
+  onMount(() => {
+    treeResizeObserver = new ResizeObserver(() => {
+      if (treePanel) setRenderedTreeWidth(treePanel.getBoundingClientRect().width)
+    })
+    if (treePanel) treeResizeObserver.observe(treePanel)
+    onCleanup(() => treeResizeObserver?.disconnect())
+  })
+
+  createEffect(() => {
+    if (shown() || !treePanel) return
+    treeResizeObserver?.unobserve(treePanel)
+    treePanel = undefined
+  })
 
   const diffs = createMemo(() => props.diffs().filter(renderDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
@@ -219,10 +238,13 @@ export function SessionSidePanel(props: {
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base"
+        class="relative min-w-0 h-full flex shrink overflow-hidden bg-background-base"
         classList={{
           "pointer-events-none": !open(),
-          "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
+          "min-w-[200px]": open() && !(reviewOpen() && fileOpen()),
+          "min-w-[400px]": reviewOpen() && fileOpen(),
+          "ml-2": open() && settings.general.newLayoutDesigns(),
+          "transition-[width,min-width,margin-left] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
           "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": settings.general.newLayoutDesigns(),
           "flex-1": reviewOpen(),
@@ -242,6 +264,7 @@ export function SessionSidePanel(props: {
               class="relative min-w-0 h-full flex-1 overflow-hidden bg-background-base"
               classList={{
                 "pointer-events-none": !reviewOpen(),
+                "min-w-[200px]": reviewOpen(),
               }}
             >
               <div class="size-full min-w-0 h-full bg-background-base">
@@ -376,13 +399,19 @@ export function SessionSidePanel(props: {
 
             <Show when={shown()}>
               <div
+                ref={(element) => {
+                  if (treePanel && treePanel !== element) treeResizeObserver?.unobserve(treePanel)
+                  treePanel = element
+                  treeResizeObserver?.observe(element)
+                }}
                 id="file-tree-panel"
                 aria-hidden={!fileOpen()}
                 inert={!fileOpen()}
-                class="relative min-w-0 h-full shrink-0 overflow-hidden"
+                class="relative min-w-0 h-full shrink overflow-hidden"
                 classList={{
                   "pointer-events-none": !fileOpen(),
-                  "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
+                  "min-w-[200px]": fileOpen(),
+                  "transition-[width,min-width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
                     !props.size.active(),
                 }}
                 style={{ width: treeWidth() }}
@@ -455,7 +484,7 @@ export function SessionSidePanel(props: {
                     <ResizeHandle
                       direction="horizontal"
                       edge="start"
-                      size={layout.fileTree.width()}
+                      size={renderedTreeWidth()}
                       min={200}
                       max={480}
                       onResize={(width) => {

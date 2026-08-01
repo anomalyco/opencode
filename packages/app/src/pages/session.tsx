@@ -425,31 +425,37 @@ export default function Page() {
   )
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isWideDesktop = createMediaQuery("(min-width: 1024px)")
   const size = createSizing()
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopBrowserPreviewOpen = createMemo(
+    () => isDesktop() && !!platform.browserPreview && layout.browserPreview.opened(),
+  )
   const desktopFileTreeOpen = createMemo(
     () =>
       isDesktop() &&
       shouldShowFileTree({
         visible: settings.visibility.fileTree(),
         opened: layout.fileTree.opened(),
-      }),
+      }) &&
+      (!desktopReviewOpen() || !desktopBrowserPreviewOpen() || isWideDesktop()),
   )
-  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
-  const desktopBrowserPreviewOpen = createMemo(
-    () => isDesktop() && !!platform.browserPreview && layout.browserPreview.opened(),
+  const desktopSidePanelOpen = createMemo(
+    () => (desktopReviewOpen() || desktopFileTreeOpen()) && !(settings.general.newLayoutDesigns() && !params.id),
   )
   const sessionPanelWidth = createMemo(() => {
     const previewWidth = desktopBrowserPreviewOpen() ? layout.browserPreview.width() : 0
-    const previewGaps = previewWidth && settings.general.newLayoutDesigns() ? (params.id ? 16 : 8) : 0
+    const panelGaps = settings.general.newLayoutDesigns()
+      ? 8 * Number(desktopSidePanelOpen()) + 8 * Number(!!previewWidth)
+      : 0
     if (!desktopSidePanelOpen()) {
-      return previewWidth ? `calc(100% - ${previewWidth + previewGaps}px)` : "100%"
+      return previewWidth ? `max(320px, calc(100% - ${previewWidth + panelGaps}px))` : "100%"
     }
     if (desktopReviewOpen()) {
-      if (!previewWidth) return `${layout.session.width()}px`
-      return `min(${layout.session.width()}px, max(0px, calc(100% - ${previewWidth + previewGaps}px)))`
+      const sideWidth = desktopFileTreeOpen() ? 400 : 200
+      return `min(${layout.session.width()}px, max(320px, calc(100% - ${previewWidth + panelGaps + sideWidth}px)))`
     }
-    return `calc(100% - ${layout.fileTree.width() + previewWidth + previewGaps}px)`
+    return `max(320px, calc(100% - ${layout.fileTree.width() + previewWidth + panelGaps}px))`
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
@@ -2010,7 +2016,7 @@ export default function Page() {
       <div
         class="flex-1 min-h-0 flex flex-col md:flex-row"
         classList={{
-          "gap-2 p-2": settings.general.newLayoutDesigns(),
+          "p-2": settings.general.newLayoutDesigns(),
         }}
       >
         <Show when={!isDesktop() && !!params.id && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>
@@ -2064,6 +2070,7 @@ export default function Page() {
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}
           size={size}
+          browserPreviewOpen={desktopBrowserPreviewOpen}
         />
         <Show when={isDesktop() && platform.browserPreview}>
           <BrowserPreviewPanel />
