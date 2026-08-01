@@ -136,16 +136,17 @@ export async function handler(
             Workspace.setDefaultRegion({ country: countryFromRequest(input.request) }),
           )
         })()
-    /*
-    if (true) {
-      if (!allowedRegions?.includes("unavailable"))
-        throw new RegionError(
-          t("zen.api.error.regionNotAllowed", {
-            consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
-          }),
-        )
-    }
-    */
+    if (
+      authInfo &&
+      opts.modelList === "lite" &&
+      modelInfo.id === "deepseek-v4-flash" &&
+      !allowedRegions?.includes("cn")
+    )
+      throw new RegionError(
+        t("zen.api.error.regionNotAllowed", {
+          consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
+        }),
+      )
     const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
     const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
     const stickyProvider = await stickyTracker?.get()
@@ -212,7 +213,11 @@ export async function handler(
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const isNewInference = providerInfo.id.startsWith("console.") || providerInfo.id.startsWith("console-go.")
+      const isNewInference =
+        providerInfo.id.startsWith("console.") ||
+        providerInfo.id.startsWith("console-go.") ||
+        providerInfo.id.startsWith("inf.") ||
+        providerInfo.id.startsWith("inf-go.")
       const res = await fetchWithRetryableStatus(
         reqUrl,
         {

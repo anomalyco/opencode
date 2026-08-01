@@ -28,9 +28,8 @@ import {
   Switch,
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useQueryClient } from "@tanstack/solid-query"
 import { useParams } from "@solidjs/router"
-import { Link } from "@/components/link"
+import { ExternalLink } from "@/components/external-link"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -38,7 +37,6 @@ import { useSettings } from "@/context/settings"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
-import { pathKey } from "@/utils/path-key"
 
 const CUSTOM_ID = "_custom"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
@@ -159,7 +157,7 @@ function ProviderPicker(props: {
   const settings = useSettings()
   if (settings.general.newLayoutDesigns())
     return <ProviderPickerV2 directory={props.directory} onSelect={props.onSelect} onPrepare={props.onPrepare} />
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory?.())
   const language = useLanguage()
   const popularGroup = () => language.t("dialog.provider.group.popular")
   const otherGroup = () => language.t("dialog.provider.group.other")
@@ -231,7 +229,7 @@ function ProviderPickerV2(props: {
   onSelect: (provider: string) => void
   onPrepare?: () => void
 }) {
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory?.())
   const language = useLanguage()
   const [store, setStore] = createStore({
     filter: "",
@@ -386,12 +384,11 @@ function ProviderConnection(props: {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
-  const queryClient = useQueryClient()
   const params = useParams()
   const language = useLanguage()
   const settings = useSettings()
   const newLayout = settings.general.newLayoutDesigns
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory?.())
   const directory = () => props.directory?.() ?? decode64(params.dir)
   const location = () => {
     const value = directory()
@@ -707,9 +704,8 @@ function ProviderConnection(props: {
   })
 
   async function complete() {
-    const value = directory()
-    await queryClient
-      .refetchQueries(serverSync().queryOptions.providers(value ? pathKey(value) : null))
+    await serverSync()
+      .refreshProviders()
       .catch(() => undefined)
     dialog.close()
     showToast({
@@ -840,12 +836,12 @@ function ProviderConnection(props: {
               <div>{language.t("provider.connect.opencodeZen.line2")}</div>
               <div>
                 {language.t("provider.connect.opencodeZen.visit.prefix")}
-                <Link
+                <ExternalLink
                   href="https://opencode.ai/zen"
                   class="text-v2-text-text-base focus-visible:rounded-xs focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
                 >
                   {language.t("provider.connect.opencodeZen.visit.link")}
-                </Link>
+                </ExternalLink>
                 {language.t("provider.connect.opencodeZen.visit.suffix")}
               </div>
             </div>
@@ -857,6 +853,7 @@ function ProviderConnection(props: {
                 ref={apiKey}
                 class="!w-full"
                 name="apiKey"
+                data-input="provider-api-key"
                 placeholder={language.t("provider.connect.apiKey.placeholder")}
                 value={formStore.value}
                 invalid={formStore.error !== undefined}
@@ -873,7 +870,7 @@ function ProviderConnection(props: {
                 </div>
               )}
             </Show>
-            <ButtonV2 type="submit" variant="contrast">
+            <ButtonV2 type="submit" variant="contrast" data-action="provider-connect-submit">
               {language.t("common.continue")}
             </ButtonV2>
           </form>
@@ -889,9 +886,9 @@ function ProviderConnection(props: {
               <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line2")}</div>
               <div class="text-14-regular text-text-base">
                 {language.t("provider.connect.opencodeZen.visit.prefix")}
-                <Link href="https://opencode.ai/zen" tabIndex={-1}>
+                <ExternalLink href="https://opencode.ai/zen" tabIndex={-1}>
                   {language.t("provider.connect.opencodeZen.visit.link")}
-                </Link>
+                </ExternalLink>
                 {language.t("provider.connect.opencodeZen.visit.suffix")}
               </div>
             </div>
@@ -970,9 +967,9 @@ function ProviderConnection(props: {
         <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
           <div>
             {language.t("provider.connect.oauth.code.visit.prefix")}
-            <Link href={store.authorization!.url} class="text-v2-text-text-base">
+            <ExternalLink href={store.authorization!.url} class="text-v2-text-text-base">
               {language.t("provider.connect.oauth.code.visit.link")}
-            </Link>
+            </ExternalLink>
             {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
           </div>
           <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
@@ -1009,7 +1006,9 @@ function ProviderConnection(props: {
       <div class="flex flex-col gap-6">
         <div class="text-14-regular text-text-base">
           {language.t("provider.connect.oauth.code.visit.prefix")}
-          <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.code.visit.link")}</Link>
+          <ExternalLink href={store.authorization!.url}>
+            {language.t("provider.connect.oauth.code.visit.link")}
+          </ExternalLink>
           {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
         </div>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
@@ -1080,7 +1079,9 @@ function ProviderConnection(props: {
       <div class="flex flex-col gap-6">
         <div class="text-14-regular text-text-base">
           {language.t("provider.connect.oauth.auto.visit.prefix")}
-          <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.auto.visit.link")}</Link>
+          <ExternalLink href={store.authorization!.url}>
+            {language.t("provider.connect.oauth.auto.visit.link")}
+          </ExternalLink>
           {language.t("provider.connect.oauth.auto.visit.suffix", { provider: provider().name })}
         </div>
         <TextField

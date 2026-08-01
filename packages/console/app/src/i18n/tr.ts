@@ -256,9 +256,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "Kimi K3 sınırlı bir süre için 2x kullanım limiti sunuyor",
+  "go.banner.text": "GPT 5.6 Luna sınırlı bir süre için 2x kullanım limiti sunuyor",
   "go.meta.description":
-    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash ve Hy3 için cömert 5 saatlik istek limitleri sunar.",
+    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
@@ -306,8 +306,7 @@ export const dict = {
   "go.problem.item1": "Düşük maliyetli abonelik fiyatlandırması",
   "go.problem.item2": "Cömert limitler ve güvenilir erişim",
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
-  "go.problem.item4":
-    "Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash ve Hy3 içerir",
+  "go.problem.item4": "Ajan tabanlı kodlama için test edilmiş, özenle seçilmiş model seçenekleri",
   "go.how.title": "Go nasıl çalışır?",
   "go.how.body":
     "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
@@ -333,7 +332,7 @@ export const dict = {
   "go.faq.a2": "Go, aşağıda listelenen modelleri cömert limitler ve güvenilir erişimle sunar.",
   "go.faq.q3": "Go, Zen ile aynı mı?",
   "go.faq.a3":
-    "Hayır. Zen kullandıkça öde modelidir, Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash ve Hy3 açık kaynak modellerine cömert limitler ve güvenilir erişim sunar.",
+    "Hayır. Zen kullandıkça öde modelidir; Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar ve özenle seçilmiş model seçeneklerine cömert limitlerle güvenilir erişim sunar.",
   "go.faq.q4": "Go ne kadar?",
   "go.faq.a4.p1.beforePricing": "Go'nun maliyeti",
   "go.faq.a4.p1.pricingLink": "İlk ay $5",
@@ -342,8 +341,20 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "hesabınızdan",
   "go.faq.a4.p3": "yönetebilirsiniz. İstediğiniz zaman iptal edin.",
   "go.faq.q5": "Veri ve gizlilik ne olacak?",
-  "go.faq.a5.body":
-    "Bu plan öncelikle uluslararası kullanıcılar için tasarlanmış olup, istikrarlı küresel erişim için modeller ABD, AB ve Singapur'da barındırılmaktadır. Sağlayıcılarımız sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz.",
+  "go.faq.a5.model": "Model",
+  "go.faq.a5.training": "Model eğitimi",
+  "go.faq.a5.retention": "Veri saklama",
+  "go.faq.a5.retention30": "30 gün",
+  "go.faq.a5.retention0": "0 gün",
+  "go.faq.a5.used": "Kullanılır",
+  "go.faq.a5.notUsed": "Kullanılmaz",
+  "go.faq.a5.noAgreement": "Anlaşma yok",
+  "go.faq.a5.grokRetention":
+    "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
+  "go.faq.a5.gptRetention":
+    "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
+  "go.faq.a5.learnMore": "Daha fazla bilgi",
+
   "go.faq.a5.beforeExceptions":
     "Go modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "go.faq.a5.exceptionsLink": "aşağıdaki istisnalar",
@@ -357,7 +368,7 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotası ile Big Pickle ve o sırada mevcut olan promosyonel modelleri içerir. Go ise Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash ve Hy3 modellerini; yuvarlanan pencereler (5 saatlik, haftalık ve aylık) üzerinden uygulanan daha yüksek istek kotalarıyla içerir. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında (5 saatlik, haftalık ve aylık) uygulanan daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
 
   "zen.api.error.rateLimitExceeded": "İstek limiti aşıldı. Lütfen daha sonra tekrar deneyin.",
   "zen.api.error.modelNotSupported": "{{model}} modeli desteklenmiyor",
@@ -382,7 +393,7 @@ export const dict = {
     "Aylık ${{amount}} harcama limitinize ulaştınız. Limitlerinizi buradan yönetin: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model devre dışı",
   "zen.api.error.regionNotAllowed":
-    "Bu model Çin'de barındırılıyor. Bu modeli kullanmak istiyorsanız ayarlarınızdan etkinleştirin: {{consoleGoUrl}}",
+    "Bu modelin en son sürümü yalnızca Çin'de barındırılıyor ve kullanabilmek için açıkça onay vermeniz gerekiyor: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}} için ücretsiz promosyon sona erdi. OpenCode Go'ya abone olarak modeli kullanmaya devam edebilirsiniz - {{link}}",
 
@@ -674,7 +685,7 @@ export const dict = {
   "workspace.lite.promo.price": "İlk ay $5",
   "workspace.lite.promo.modelsTitle": "Neler Dahil",
   "workspace.lite.promo.footer":
-    "Plan öncelikle uluslararası kullanıcılar için tasarlanmıştır; modeller istikrarlı küresel erişim için ABD, AB ve Singapur'da barındırılmaktadır. Erken kullanımdan öğrendikçe ve geri bildirim topladıkça fiyatlandırma ve kullanım limitleri değişebilir.",
+    "Plan öncelikle uluslararası kullanıcılar için tasarlanmıştır ve istikrarlı küresel erişim sağlar. Erken kullanım ve geri bildirimlerden öğrendiklerimiz doğrultusunda fiyatlandırma ve kullanım limitleri değişebilir.",
   "workspace.lite.promo.subscribe": "Go'ya Abone Ol",
   "workspace.lite.promo.subscribing": "Yönlendiriliyor...",
   "workspace.lite.promo.otherMethods": "Diğer ödeme yöntemleri",

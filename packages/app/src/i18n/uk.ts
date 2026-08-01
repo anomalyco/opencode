@@ -299,6 +299,7 @@ export const dict = {
   "prompt.action.stop": "Зупинити",
 
   "prompt.toast.pasteUnsupported.title": "Непідтримуване вкладення",
+  "prompt.toast.attachmentDuplicate.title": "Цей файл уже завантажено",
   "prompt.toast.pasteUnsupported.description": "Сюди можна прикріплювати лише зображення, PDF або текстові файли.",
   "prompt.toast.modelAgentRequired.title": "Виберіть агента та модель",
   "prompt.toast.modelAgentRequired.description": "Виберіть агента та модель перед надсиланням запиту.",

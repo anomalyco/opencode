@@ -5,7 +5,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { Prompt, ReferenceInfo } from "@opencode-ai/sdk/v2/client"
+import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
 import { createEffect, createMemo, on, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
@@ -37,11 +37,9 @@ export type PromptInputV2ComposerProps = {
   class?: string
   controller: PromptInputV2ComposerController
   borderUnderlay?: boolean
-  edit?: PromptInputProps["edit"]
-  onEditLoaded?: PromptInputProps["onEditLoaded"]
 }
 
-export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "edit" | "onEditLoaded" | "submission">
+export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
 }
@@ -51,15 +49,13 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   const command = useCommand()
   const language = useLanguage()
 
-  useCommands(props)
-  useEditHandler(props)
-
   return (
     <div class="flex flex-col gap-3">
       <PromptInputV2
         controller={props.controller}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
+        variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         modelControl={
@@ -80,70 +76,6 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
       />
     </div>
   )
-}
-
-const useEditHandler = (props: PromptInputV2ComposerProps) => {
-  const prompt = usePrompt()
-
-  createEffect(
-    on(
-      () => props.edit?.id,
-      (id) => {
-        const edit = props.edit
-        if (!id || !edit) return
-        prompt.context.items().forEach((item) => prompt.context.remove(item.key))
-        edit.context.forEach((item) =>
-          prompt.context.add({
-            type: item.type,
-            path: item.path,
-            selection: item.selection,
-            comment: item.comment,
-            commentID: item.commentID,
-            commentOrigin: item.commentOrigin,
-            preview: item.preview,
-          }),
-        )
-        props.controller.dispatch({ type: "mode.normal" })
-        props.controller.resetHistory()
-        prompt.set(edit.prompt, promptLength(edit.prompt))
-        props.controller.restoreFocus()
-        props.onEditLoaded?.()
-      },
-      { defer: true },
-    ),
-  )
-}
-
-const useCommands = (props: PromptInputV2ComposerProps) => {
-  const command = useCommand()
-  const language = useLanguage()
-
-  command.register("prompt-input", () => [
-    {
-      id: "file.attach",
-      title: language.t("prompt.action.attachFile"),
-      category: language.t("command.category.file"),
-      keybind: "mod+u",
-      disabled: props.controller.state.mode !== "normal",
-      onSelect: () => props.controller.attach(),
-    },
-    {
-      id: "prompt.mode.shell",
-      title: language.t("command.prompt.mode.shell"),
-      category: language.t("command.category.session"),
-      keybind: "mod+shift+x",
-      disabled: props.controller.state.mode === "shell",
-      onSelect: () => props.controller.dispatch({ type: "mode.shell" }),
-    },
-    {
-      id: "prompt.mode.normal",
-      title: language.t("command.prompt.mode.normal"),
-      category: language.t("command.category.session"),
-      keybind: "mod+shift+e",
-      disabled: props.controller.state.mode === "normal",
-      onSelect: () => props.controller.dispatch({ type: "mode.normal" }),
-    },
-  ])
 }
 
 export function usePromptInputV2Controller(props: PromptInputV2ControllerProps): PromptInputV2ComposerController {
@@ -436,6 +368,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
           title: language.t("prompt.toast.pasteUnsupported.title"),
           description: language.t("prompt.toast.pasteUnsupported.description"),
         }),
+      duplicate: () => showToast({ title: language.t("prompt.toast.attachmentDuplicate.title") }),
       onError: (error) =>
         showToast({
           variant: "error",
@@ -472,6 +405,62 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
   })
   Object.defineProperty(controller, "model", { get: () => props.controls.model })
+
+  command.register("prompt-input", () => [
+    {
+      id: "file.attach",
+      title: language.t("prompt.action.attachFile"),
+      category: language.t("command.category.file"),
+      keybind: "mod+u",
+      disabled: controller.state.mode !== "normal",
+      onSelect: () => controller.attach(),
+    },
+    {
+      id: "prompt.mode.shell",
+      title: language.t("command.prompt.mode.shell"),
+      category: language.t("command.category.session"),
+      keybind: "mod+shift+x",
+      disabled: controller.state.mode === "shell",
+      onSelect: () => controller.dispatch({ type: "mode.shell" }),
+    },
+    {
+      id: "prompt.mode.normal",
+      title: language.t("command.prompt.mode.normal"),
+      category: language.t("command.category.session"),
+      keybind: "mod+shift+e",
+      disabled: controller.state.mode === "normal",
+      onSelect: () => controller.dispatch({ type: "mode.normal" }),
+    },
+  ])
+
+  createEffect(
+    on(
+      () => props.edit?.id,
+      (id) => {
+        const edit = props.edit
+        if (!id || !edit) return
+        prompt.context.items().forEach((item) => prompt.context.remove(item.key))
+        edit.context.forEach((item) =>
+          prompt.context.add({
+            type: item.type,
+            path: item.path,
+            selection: item.selection,
+            comment: item.comment,
+            commentID: item.commentID,
+            commentOrigin: item.commentOrigin,
+            preview: item.preview,
+          }),
+        )
+        controller.dispatch({ type: "mode.normal" })
+        controller.resetHistory()
+        prompt.set(edit.prompt, promptLength(edit.prompt))
+        controller.restoreFocus()
+        props.onEditLoaded?.()
+      },
+      { defer: true },
+    ),
+  )
+
   return controller as PromptInputV2ComposerController
 }
 
@@ -521,6 +510,7 @@ function PromptInputV2ModelControl(props: {
           fallback={
             <ButtonV2
               data-action="prompt-model"
+              data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
               class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
@@ -534,19 +524,22 @@ function PromptInputV2ModelControl(props: {
         >
           <ModelSelectorPopoverV2
             model={props.model}
-            triggerAs={ButtonV2}
-            triggerProps={{
-              variant: "ghost-muted",
-              size: "normal",
-              style: { height: "28px" },
-              class: "min-w-0 max-w-[220px] justify-start ![font-weight:440] group",
-              classList: { "animate-in fade-in": shouldAnimate() },
-              "data-action": "prompt-model",
-            }}
+            trigger={(triggerProps) => (
+              <ButtonV2
+                {...triggerProps}
+                variant="ghost-muted"
+                size="normal"
+                style={{ height: "28px" }}
+                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                classList={{ "animate-in fade-in": shouldAnimate() }}
+                data-action="prompt-model"
+                data-control-type="popover"
+              >
+                {content()}
+              </ButtonV2>
+            )}
             onClose={props.onClose}
-          >
-            {content()}
-          </ModelSelectorPopoverV2>
+          />
         </Show>
       </TooltipV2>
     </Show>

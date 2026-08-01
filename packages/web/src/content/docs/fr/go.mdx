@@ -11,7 +11,7 @@ OpenCode Go est un abonnement à bas coût — **5 $ pour votre premier mois**, 
 
 Go fonctionne comme n'importe quel autre fournisseur dans OpenCode. Vous vous abonnez à OpenCode Go et obtenez votre clé d'API. C'est **totalement facultatif** et vous n'avez pas besoin de l'utiliser pour utiliser OpenCode.
 
-Il est conçu principalement pour les utilisateurs internationaux, avec des modèles hébergés aux États-Unis, dans l'UE et à Singapour pour un accès mondial stable.
+Il est conçu principalement pour les utilisateurs internationaux et offre un accès mondial stable.
 
 ---
 
@@ -52,6 +52,7 @@ La liste actuelle des modèles comprend :
 - **Grok 4.5**
 - **GLM-5.2**
 - **GLM-5.1**
+- **GPT 5.6 Luna**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -85,6 +86,7 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 | Model             | requêtes par 5 heures | requêtes par semaine | requêtes par mois |
 | ----------------- | --------------------- | -------------------- | ----------------- |
 | Grok 4.5          | 120                   | 300                  | 600               |
+| GPT 5.6 Luna      | 2,050                 | 5,100                | 10,250            |
 | GLM-5.2           | 880                   | 2,150                | 4,300             |
 | GLM-5.1           | 880                   | 2,150                | 4,300             |
 | Kimi K3           | 110                   | 250                  | 490               |
@@ -105,6 +107,7 @@ Les estimations sont basées sur les schémas de requêtes observés :
 
 - Grok 4.5 — 1,100 tokens en entrée, 71,500 en cache, 220 tokens en sortie par requête
 - GLM-5.2/5.1 — 700 tokens en entrée, 52,000 en cache, 150 tokens en sortie par requête
+- GPT 5.6 Luna — 1,000 tokens en entrée, 50,000 en cache, 220 tokens en sortie par requête
 - Kimi K3 — 1,050 tokens en entrée, 76,500 en cache, 300 tokens en sortie par requête
 - Kimi K2.7/K2.6 — 870 tokens en entrée, 55,000 en cache, 200 tokens en sortie par requête
 - DeepSeek V4 Pro — 750 tokens en entrée, 82,000 en cache, 290 tokens en sortie par requête
@@ -123,6 +126,8 @@ Les estimations sont également basées sur les prix suivants par 1M tokens et s
 | Modèle                       | Input  | Output | Cached Read | Cached Write | Utilisation |
 | ---------------------------- | ------ | ------ | ----------- | ------------ | ----------- |
 | Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15         |
+| GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02       | $0.25        | $15         |
+| GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04       | $0.50        | $15         |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60         |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60         |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15         |
@@ -177,6 +182,7 @@ Vous pouvez également accéder aux modèles Go via les points de terminaison d'
 | Modèle            | ID de modèle      | Point de terminaison                             | Package AI SDK              |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -210,7 +216,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## Confidentialité
 
-Cette offre est conçue avant tout pour les utilisateurs internationaux, avec des modèles hébergés aux US, dans l’EU et à Singapore afin d’assurer un accès mondial stable. Nos fournisseurs appliquent une politique de rétention zéro et n’utilisent pas vos données pour l’entraînement des modèles.
+| Modèle            | Entraînement des modèles | Conservation des données |
+| ----------------- | ------------------------ | ------------------------ |
+| Grok 4.5          | Non utilisé              | 30 jours                 |
+| GPT 5.6 Luna      | Non utilisé              | 30 jours                 |
+| GLM-5.2           | Non utilisé              | 0 jour                   |
+| GLM-5.1           | Non utilisé              | 0 jour                   |
+| Kimi K3           | Non utilisé              | 0 jour                   |
+| Kimi K2.7 Code    | Non utilisé              | 0 jour                   |
+| Kimi K2.6         | Non utilisé              | 0 jour                   |
+| MiMo-V2.5-Pro     | Non utilisé              | 0 jour                   |
+| MiMo-V2.5         | Non utilisé              | 0 jour                   |
+| Qwen3.7 Max       | Non utilisé              | 0 jour                   |
+| Qwen3.7 Plus      | Non utilisé              | 0 jour                   |
+| Qwen3.6 Plus      | Non utilisé              | 0 jour                   |
+| MiniMax M3        | Non utilisé              | 0 jour                   |
+| MiniMax M2.7      | Non utilisé              | 0 jour                   |
+| DeepSeek V4 Pro   | Non utilisé              | 0 jour                   |
+| DeepSeek V4 Flash | Utilisé                  | Aucun accord             |
+| Hy3               | Non utilisé              | 0 jour                   |
+
+- **Grok 4.5:** Le ZDR désactive d’importantes fonctionnalités API qui dépendent des données stockées, notamment Responses API avec état, Files and Collections et Batch API. [En savoir plus](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** Des journaux de surveillance des abus sont générés pour toute utilisation des fonctionnalités API et conservés pendant un maximum de 30 jours. [En savoir plus](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 
 ---
 
