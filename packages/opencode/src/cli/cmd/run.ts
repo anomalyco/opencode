@@ -826,25 +826,49 @@ export const RunCommand = effectCmd({
         await share(client, sessionID)
 
         if (!interactive) {
-          const events = await client.event.subscribe()
-          const completed = loop(client, events).catch((e) => {
-            console.error(e)
+          const eventAbort = new AbortController()
+          const events = await client.event.subscribe(undefined, { signal: eventAbort.signal })
+          const completed = loop(client, events).catch((error) => {
+            if (eventAbort.signal.aborted) return
+            console.error(error)
             process.exitCode = 1
           })
           async function finish() {
-            if (args.attach) return
             const error = await completed
             if (error) process.exitCode = 1
           }
+          async function stopEvents() {
+            eventAbort.abort()
+            await events.stream.return(undefined as never).catch(() => {})
+            await completed
+          }
 
-          if (args.command) {
-            const result = await client.session.command({
+          try {
+            if (args.command) {
+              const result = await client.session.command({
+                sessionID,
+                agent,
+                model: args.model,
+                command: args.command,
+                arguments: message,
+                variant: args.variant,
+              })
+              if (result.error) {
+                if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+                process.exitCode = 1
+                return
+              }
+              await finish()
+              return
+            }
+
+            const model = pick(args.model)
+            const result = await client.session.prompt({
               sessionID,
               agent,
-              model: args.model,
-              command: args.command,
-              arguments: message,
+              model,
               variant: args.variant,
+              parts: [...files, { type: "text", text: message }],
             })
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
@@ -853,23 +877,9 @@ export const RunCommand = effectCmd({
             }
             await finish()
             return
+          } finally {
+            await stopEvents()
           }
-
-          const model = pick(args.model)
-          const result = await client.session.prompt({
-            sessionID,
-            agent,
-            model,
-            variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
-          })
-          if (result.error) {
-            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
-            process.exitCode = 1
-            return
-          }
-          await finish()
-          return
         }
 
         const model = pick(args.model)
