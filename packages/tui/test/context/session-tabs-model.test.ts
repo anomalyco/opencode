@@ -12,16 +12,9 @@ import {
   seedSessionTabMotion,
   sessionTabComplete,
   sessionTabOverflowWidth,
-  sessionTabVerticalWidth,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
-  test("keeps the vertical rail compact while preserving narrow-terminal content", () => {
-    expect(sessionTabVerticalWidth(140)).toBe(30)
-    expect(sessionTabVerticalWidth(90)).toBe(27)
-    expect(sessionTabVerticalWidth(60)).toBe(20)
-  })
-
   test("moves a tab to a clamped index and returns the same tabs for no-ops", () => {
     const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
     expect(moveSessionTab(tabs, "a", 2).map((tab) => tab.sessionID)).toEqual(["b", "c", "a"])

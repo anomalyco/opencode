@@ -12,7 +12,6 @@ import {
   sessionTabComplete,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
-  sessionTabVerticalWidth,
   type SessionTab,
   type SessionTabUnread,
 } from "../context/session-tabs-model"
@@ -21,6 +20,7 @@ import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
+import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
 import { projectName } from "../util/project"
 
 // A long title fades out over its last cells instead of cutting hard.
@@ -56,12 +56,11 @@ export function SessionTabs(
 function VerticalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean }) {
   const tabs = props.controller ?? useSessionTabs()
   const data = useData()
-  const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const { mode } = useThemes()
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
-  const width = () => sessionTabVerticalWidth(dimensions().width)
+  const width = () => SESSION_SIDEBAR_WIDTH
   const hueStep = () => (mode() === "light" ? 800 : 200)
   const accent = () => theme.hue.accent[hueStep()]
   const activeNumber = () => theme.hue.interactive[hueStep()]

@@ -64,7 +64,7 @@ import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
-import { sessionTabVerticalWidth } from "../../context/session-tabs-model"
+import { sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 import { projectedPromptInput } from "../../prompt/codec"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
@@ -201,7 +201,9 @@ export function Session() {
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
   const tabRailWidth = createMemo(() =>
-    config.tabs?.enabled && config.tabs.vertical ? sessionTabVerticalWidth(dimensions().width) : 0,
+    config.tabs?.enabled && config.tabs.vertical && sessionTabsFitVertically(dimensions().width)
+      ? SESSION_SIDEBAR_WIDTH
+      : 0,
   )
   const wide = createMemo(() => dimensions().width - tabRailWidth() > 120)
   const sidebarVisible = createMemo(() => {

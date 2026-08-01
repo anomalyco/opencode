@@ -6,6 +6,7 @@ import { PluginSlot } from "../../plugin/render"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 import { getScrollAcceleration } from "../../util/scroll"
+import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const data = useData()
@@ -18,7 +19,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     <Show when={session()}>
       <box
         backgroundColor={theme.background.default}
-        width={42}
+        width={SESSION_SIDEBAR_WIDTH}
         height="100%"
         paddingTop={1}
         paddingBottom={1}
