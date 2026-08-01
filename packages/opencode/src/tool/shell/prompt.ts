@@ -48,7 +48,9 @@ function powershellNotes(name: string) {
 - Prefer full cmdlet names like \`Get-ChildItem\`, \`Set-Content\`, \`Remove-Item\`, and \`New-Item\` over aliases.
 - Use \`$(...)\` for subexpressions. Use \`@(...)\` for array expressions.
 - To call a native executable whose path contains spaces, use the call operator: \`& "path/to/exe" args\`.
-- Escape special characters with the PowerShell backtick character.`
+- Escape special characters with the PowerShell backtick character.
+- Backslash is NOT an escape character in this shell. Sequences like \`\\n\`, \`\\t\`, or \`\\\`\` are not interpreted and land literally in arguments and output; never use POSIX/bash-style backslash escaping.
+- Pass multi-line or verbatim content (markdown, code, commit messages, PR bodies) with a single-quoted here-string (\`@'...'@\`) or write it to a file and use file-based flags such as \`git commit -F\` or \`gh pr create --body-file\`; do not inline it with escape sequences.`
   }
   if (name === "powershell") {
     return `# Windows PowerShell (5.1) shell notes
@@ -57,7 +59,9 @@ function powershellNotes(name: string) {
 - Prefer full cmdlet names like \`Get-ChildItem\`, \`Set-Content\`, \`Remove-Item\`, and \`New-Item\` over aliases.
 - Use \`$(...)\` for subexpressions. Use \`@(...)\` for array expressions.
 - To call a native executable whose path contains spaces, use the call operator: \`& "path/to/exe" args\`.
-- Escape special characters with the PowerShell backtick character.`
+- Escape special characters with the PowerShell backtick character.
+- Backslash is NOT an escape character in this shell. Sequences like \`\\n\`, \`\\t\`, or \`\\\`\` are not interpreted and land literally in arguments and output; never use POSIX/bash-style backslash escaping.
+- Pass multi-line or verbatim content (markdown, code, commit messages, PR bodies) with a single-quoted here-string (\`@'...'@\`) or write it to a file and use file-based flags such as \`git commit -F\` or \`gh pr create --body-file\`; do not inline it with escape sequences.`
   }
   return ""
 }
