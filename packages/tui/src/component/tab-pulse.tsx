@@ -32,6 +32,7 @@ type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
 const clamp = (value: number) => Math.max(0, Math.min(1, value))
 const smootherstep = (value: number) => value * value * value * (value * (value * 6 - 15) + 10)
 const RUN_DURATION = 2_800
+const RUN_ATTACK = 450
 const RUN_HEAD = 4
 const RUN_TAIL = 18
 const RUN_FADE_OUT = 500
@@ -163,12 +164,13 @@ class PulseState {
   private clock = 0
   private breatheClock = 0
   private completionPending = false
+  private runAttack = new Envelope(RUN_ATTACK, smootherstep)
   private runFade = new Envelope(RUN_FADE_OUT, fadeOut)
   private completionPulse = new Envelope(COMPLETION_DURATION, completionPulseOpacity)
   private edgeFlash = new Envelope(EDGE_FLASH_DURATION, (progress) => attackDecay(progress, EDGE_FLASH_ATTACK, 1, 0))
   private ignition = new Envelope(GLOW_IGNITION_DURATION, glowIgnitionLevel)
   private glowOff = new Envelope(GLOW_FADE_OUT, fadeOut)
-  private envelopes = [this.runFade, this.completionPulse, this.edgeFlash, this.ignition, this.glowOff]
+  private envelopes = [this.runAttack, this.runFade, this.completionPulse, this.edgeFlash, this.ignition, this.glowOff]
 
   constructor(options: PulseStateOptions) {
     this.enabled = options.enabled
@@ -177,6 +179,7 @@ class PulseState {
     this.complete = options.complete
     this.glow = options.glow
     this.breathe = options.breathe
+    if (this.enabled && this.active) this.runAttack.start()
   }
 
   private get breathing() {
@@ -189,7 +192,7 @@ class PulseState {
 
   get running() {
     if (!this.enabled) return 0
-    return this.active ? 1 : this.runFade.level()
+    return this.active ? (this.runAttack.active ? this.runAttack.level() : 1) : this.runFade.level()
   }
 
   get completion() {
@@ -216,6 +219,8 @@ class PulseState {
       for (const envelope of this.envelopes) envelope.stop()
       this.completionPending = false
       this.breatheClock = 0
+    } else if (this.active) {
+      this.runAttack.restart()
     }
     return true
   }
@@ -225,11 +230,15 @@ class PulseState {
     this.active = value
     if (!this.enabled) return true
     if (value) {
+      this.clock = 0
+      this.runAttack.restart()
       this.runFade.stop()
       this.completionPulse.stop()
       this.completionPending = false
     } else {
-      this.runFade.start()
+      const level = this.runAttack.active ? this.runAttack.level() : 1
+      this.runAttack.stop()
+      this.runFade.start(level)
       this.completionPending = true
     }
     this.edgeFlash.start()
@@ -292,10 +301,12 @@ class PulseState {
   }
 
   fronts(width: number) {
-    const progress = (this.clock % RUN_DURATION) / RUN_DURATION
+    const cycles = this.clock / RUN_DURATION
+    const progress = cycles % 1
     const start = -RUN_HEAD
     const end = width - 1 + RUN_TAIL
-    return [start + coast(progress) * (end - start), start + coast((progress + 0.5) % 1) * (end - start)] as const
+    const secondProgress = cycles < 0.5 ? 0 : (cycles + 0.5) % 1
+    return [start + coast(progress) * (end - start), start + coast(secondProgress) * (end - start)] as const
   }
 }
 
