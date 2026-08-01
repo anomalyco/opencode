@@ -5,6 +5,13 @@ export function configDirectories(config: string, cwd: string) {
   return [...new Set([config, ...ancestors(cwd).map((directory) => path.join(directory, ".opencode"))])]
 }
 
+export function projectConfigDirectories(project: string, cwd: string) {
+  const directories = ancestors(cwd)
+  return directories
+    .slice(directories.indexOf(path.resolve(project)))
+    .map((directory) => path.join(directory, ".opencode"))
+}
+
 export async function localProjectDirectory(cwd: string) {
   const directories = ancestors(cwd)
   const repositories = await Promise.all(
@@ -13,13 +20,19 @@ export async function localProjectDirectory(cwd: string) {
         [".git", ".hg"].map((name) =>
           stat(path.join(directory, name)).then(
             () => true,
-            () => false,
+            (error) => (isMissingPath(error) ? false : Promise.reject(error)),
           ),
         ),
       ).then((matches) => matches.some(Boolean)),
     ),
   )
   return directories.findLast((_, index) => repositories[index]) ?? path.resolve(cwd)
+}
+
+export function isMissingPath(error: unknown) {
+  if (!error || typeof error !== "object") return false
+  const code = Reflect.get(error, "code")
+  return code === "ENOENT" || code === "ENOTDIR"
 }
 
 function ancestors(cwd: string) {

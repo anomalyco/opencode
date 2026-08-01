@@ -1,19 +1,24 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { configDirectories, localProjectDirectory } from "../util/config-directories"
+import {
+  isMissingPath,
+  localProjectDirectory,
+  projectConfigDirectories,
+} from "../util/config-directories"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
 export async function tuiPluginDirectories(cwd: string, configDirectory: string) {
-  const projectConfig = path.join(await localProjectDirectory(cwd), ".opencode")
-  const directories = configDirectories(configDirectory, cwd)
+  const projectDirectory = await localProjectDirectory(cwd)
+  const projectConfig = path.join(projectDirectory, ".opencode")
+  const directories = [configDirectory, ...projectConfigDirectories(projectDirectory, cwd)]
   const exists = await Promise.all(
     directories.map((directory) => {
       if (directory === configDirectory || directory === projectConfig) return true
       return stat(directory).then(
         (info) => info.isDirectory(),
-        () => false,
+        (error) => (isMissingPath(error) ? false : Promise.reject(error)),
       )
     }),
   )
@@ -27,7 +32,7 @@ export async function discoverTuiPlugins(directories: string[]) {
     await Promise.all(
       directories.map(async (directory) => {
         const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
-          if (isMissing(error)) return []
+          if (isMissingPath(error)) return []
           return Promise.reject(error)
         })
         return entries
@@ -37,12 +42,6 @@ export async function discoverTuiPlugins(directories: string[]) {
       }),
     )
   ).flat()
-}
-
-function isMissing(error: unknown) {
-  if (!error || typeof error !== "object") return false
-  const code = Reflect.get(error, "code")
-  return code === "ENOENT" || code === "ENOTDIR"
 }
 
 export function localSource(spec: string, directory: string) {
