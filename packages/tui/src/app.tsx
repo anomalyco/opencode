@@ -378,7 +378,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                   <PromptRefProvider>
                                                                     <EditorContextProvider>
                                                                       <AttentionProvider>
-                                                                        <PluginProvider packages={input.packages}>
+                                                                        <PluginProvider
+                                                                          packages={input.packages}
+                                                                          configDirectory={global.config}
+                                                                        >
                                                                           <App
                                                                             pair={
                                                                               input.server.endpoint.auth

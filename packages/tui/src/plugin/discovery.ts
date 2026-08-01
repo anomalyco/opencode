@@ -4,20 +4,33 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
-export function tuiPluginDirectory(cwd: string) {
-  return path.join(cwd, ".opencode", "plugins", "tui")
+export function tuiPluginDirectories(cwd: string, configDirectory: string) {
+  const ancestors: string[] = []
+  let current = path.resolve(cwd)
+  while (true) {
+    ancestors.push(path.join(current, ".opencode", "plugins", "tui"))
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  return [...new Set([path.join(configDirectory, "plugins", "tui"), ...ancestors.reverse()])]
 }
 
-export async function discoverTuiPlugins(cwd: string) {
-  const directory = tuiPluginDirectory(cwd)
-  const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
-    if (error && typeof error === "object" && Reflect.get(error, "code") === "ENOENT") return []
-    return Promise.reject(error)
-  })
-  return entries
-    .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && extensions.has(path.extname(entry.name)))
-    .map((entry) => path.join(directory, entry.name))
-    .sort()
+export async function discoverTuiPlugins(directories: string[]) {
+  return (
+    await Promise.all(
+      directories.map(async (directory) => {
+        const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
+          if (error && typeof error === "object" && Reflect.get(error, "code") === "ENOENT") return []
+          return Promise.reject(error)
+        })
+        return entries
+          .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && extensions.has(path.extname(entry.name)))
+          .map((entry) => path.join(directory, entry.name))
+          .sort()
+      }),
+    )
+  ).flat()
 }
 
 export function localSource(spec: string, directory: string) {

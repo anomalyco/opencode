@@ -13,7 +13,7 @@ import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose } from "./api"
 import { createSourceWatcher } from "./watch"
-import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectory } from "./discovery"
+import { discoverTuiPlugins, freshSpecifier, localSource, tuiPluginDirectories } from "./discovery"
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
@@ -57,11 +57,12 @@ type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "
 
 const PluginContext = createContext<Value>()
 
-export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>) {
+export function PluginProvider(props: ParentProps<{ packages: PackageResolver; configDirectory: string }>) {
   const host = usePluginHost()
   const config = useConfig()
   const lifecycle = useTuiLifecycle()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
+  const pluginDirectories = tuiPluginDirectories(host.paths.cwd, props.configDirectory)
   const [store, setStore] = createStore({
     ready: false,
     states: [] as ReadonlyArray<State>,
@@ -186,8 +187,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
-    const entries = [...(await discoverTuiPlugins(host.paths.cwd)), ...(config.data.plugins ?? [])]
-    watcher.add(tuiPluginDirectory(host.paths.cwd))
+    const entries = [...(await discoverTuiPlugins(pluginDirectories)), ...(config.data.plugins ?? [])]
+    pluginDirectories.forEach((directory) => watcher.add(directory, true))
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
