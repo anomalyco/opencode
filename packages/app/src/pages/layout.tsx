@@ -83,6 +83,9 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 
+export const loadEditProjectDialog = () =>
+  import("@/components/dialog-edit-project-v2").then((module) => module.DialogEditProjectV2)
+
 export default function LegacyLayout(props: ParentProps) {
   const serverSDK = useServerSDK()
   const [store, setStore, , ready] = persisted(
@@ -1359,9 +1362,9 @@ export default function LegacyLayout(props: ParentProps) {
 
   const showEditProjectDialog = (conn: ServerConnection.Any, project: LocalProject) => {
     const run = ++dialogRun
-    void import("@/components/dialog-edit-project").then((x) => {
+    void loadEditProjectDialog().then((DialogEditProject) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogEditProject server={conn} project={project} />)
+      void dialog.show(() => <DialogEditProject server={conn} project={project} onClose={() => dialog.close()} />)
     })
   }
 

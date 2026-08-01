@@ -8,8 +8,12 @@ import { useGlobal } from "@/context/global"
 import { type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/server"
 
-export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
-  const dialog = useDialog()
+export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any; onClose?: () => void }) {
+  const dialog = props.onClose ? undefined : useDialog()
+  const close = () => {
+    if (props.onClose) return props.onClose()
+    dialog?.close()
+  }
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
   const folderName = createMemo(() => getFilename(props.project.worktree))
@@ -92,7 +96,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
           items.map((item) => (item.id === project.id ? normalizeProjectInfo(project) : item)),
         )
         serverCtx().sync.project.icon(props.project.worktree, store.iconOverride || undefined)
-        dialog.close()
+        close()
         return
       }
 
@@ -101,7 +105,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         icon: { color: store.color || undefined, override: store.iconOverride || undefined },
         commands: { start: start || undefined },
       })
-      dialog.close()
+      close()
     },
   }))
 
@@ -123,9 +127,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     dragLeave,
     inputChange,
     iconClick,
-    close() {
-      dialog.close()
-    },
+    close,
     setIconInput(input: HTMLInputElement) {
       iconInput = input
     },

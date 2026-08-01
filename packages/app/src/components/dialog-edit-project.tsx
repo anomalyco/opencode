@@ -12,7 +12,7 @@ import { createEditProjectModel } from "./edit-project"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
-export function DialogEditProject(props: { project: LocalProject; server: ServerConnection.Any }) {
+export function DialogEditProject(props: { project: LocalProject; server: ServerConnection.Any; onClose?: () => void }) {
   const language = useLanguage()
   const model = createEditProjectModel(props)
 
