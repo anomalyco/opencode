@@ -165,6 +165,8 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
+    const parent = path.basename(path.dirname(match))
+    if (parent === "skill" || parent === "skills") continue
     state.matches.add(match)
     state.dirs.add(path.dirname(match))
   }

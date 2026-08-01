@@ -122,6 +122,43 @@ Instructions here.
     ),
   )
 
+  it.live("ignores SKILL.md directly under .opencode/skills", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "SKILL.md"),
+                `---
+name: root-skill
+description: Root skill should be ignored.
+---
+
+# Root Skill
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "nested-skill", "SKILL.md"),
+                `---
+name: nested-skill
+description: Nested skill should be loaded.
+---
+
+# Nested Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.map((item) => item.name)).toEqual(["nested-skill"])
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("returns skill directories from Skill.dirs", () =>
     provideTmpdirInstance(
       (dir) =>
