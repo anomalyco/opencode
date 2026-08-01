@@ -1234,7 +1234,8 @@ describe("tool.shell truncation", () => {
         })
         expect(result.metadata.exit).toBe(3)
         expect(result.metadata.truncated).toBe(false)
-        expect(result.output).toBe("(no output)")
+        expect(result.output).toContain("Command failed with exit code 3")
+        expect(result.output).toContain("(no output)")
       }),
     ),
     30_000,

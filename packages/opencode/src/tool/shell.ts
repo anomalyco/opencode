@@ -581,10 +581,12 @@ export const ShellTool = Tool.define(
       let output = end.text
       if (!output) output = "(no output)"
 
+      const status = failed ? `Command failed with exit code ${code}.\n\n` : ""
       if (cut && file) {
-        const status = failed ? `Command failed with exit code ${code}.\n\n` : ""
         output =
           `...output truncated...\n\n${status}Full output saved to: ${file}\n\n` + output
+      } else if (status) {
+        output = status + output
       }
 
       if (meta.length > 0) {
