@@ -19,7 +19,12 @@ export function adapterState() {
 }
 
 function finishReason(value: string | undefined): FinishReason {
-  return Schema.is(FinishReason)(value) ? value : "unknown"
+  if (Schema.is(FinishReason)(value)) return value
+  // The AI SDK reports "other" (or undefined) when a stream ends without a
+  // provider finish frame — e.g. an upstream SSE connection was cut mid-turn
+  // (issue #39968). That is an interrupted generation, not a normal
+  // completion, so surface it as "error" instead of the benign "unknown".
+  return "error"
 }
 
 function providerMetadata(value: unknown): ProviderMetadata | undefined {

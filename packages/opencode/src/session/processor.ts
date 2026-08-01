@@ -433,6 +433,25 @@ const layer = Layer.effect(
             return
 
           case "step-finish": {
+            // A stream that ended without a provider finish frame (e.g. an
+            // upstream SSE connection was cut mid-turn) surfaces an "error"
+            // finish. That is an interrupted generation — fail the turn so the
+            // caller (opencode run, the loop, integrations) does not treat the
+            // truncated output as a successful completion (issue #39968).
+            if (value.reason === "error") {
+              ctx.assistantMessage.finish = "error"
+              ctx.assistantMessage.error = new SessionV1.APIError({
+                message: "The model stream ended without a finish frame",
+                isRetryable: true,
+                responseBody: "Stream terminated before a finish reason was received",
+              }).toObject()
+              yield* events.publish(Session.Event.Error, {
+                sessionID: ctx.assistantMessage.sessionID,
+                error: ctx.assistantMessage.error,
+              })
+              yield* status.set(ctx.sessionID, { type: "idle" })
+              return
+            }
             const completedSnapshot = yield* snapshot.track()
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             const usage = Session.getUsage({

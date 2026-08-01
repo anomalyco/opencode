@@ -83,9 +83,11 @@ describe("opencode run (non-interactive subprocess)", () => {
 
   // The test provider's SSE error item is interpreted by the SDK as an unknown
   // finish, not a fatal provider/session error. Lock that distinction in so it
-  // is not accidentally used as the failure compatibility oracle.
+  // A stream that ends without a finish frame (upstream SSE cut mid-turn) is an
+  // interrupted generation, not a successful completion: partial output is
+  // still surfaced, but the process must fail (issue #39968).
   cliIt.concurrent(
-    "unknown stream finish preserves partial output and exits 0",
+    "unknown stream finish preserves partial output but exits non-zero",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
@@ -96,9 +98,8 @@ describe("opencode run (non-interactive subprocess)", () => {
         )
         yield* llm.fail("upstream provider exploded mid-stream")
         const result = yield* opencode.run("trigger midstream error", { timeoutMs: 30_000 })
-        expect(result.exitCode).toBe(0)
+        expect(result.exitCode).not.toBe(0)
         expect(result.stdout).toBe("partial response\n")
-        expect(result.stderr).not.toContain("upstream provider exploded mid-stream")
       }),
     60_000,
   )
@@ -213,7 +214,7 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
-    "--format json records partial output for an unknown stream finish",
+    "--format json records partial output and an error for an interrupted stream finish",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
@@ -226,17 +227,10 @@ describe("opencode run (non-interactive subprocess)", () => {
         const result = yield* opencode.run("fail after output", { format: "json" })
 
         const events = opencode.parseJsonEvents(result.stdout)
-        expect(result.exitCode).toBe(0)
-        expect(events.map((event) => event.type)).toEqual([
-          "step_start",
-          "text",
-          "tool_use",
-          "step_finish",
-          "step_start",
-          "step_finish",
-        ])
+        // A stream cut without a finish frame must fail the run, not exit 0.
+        expect(result.exitCode).not.toBe(0)
+        expect(events.map((event) => event.type)).toContain("error")
         expect(events[1]?.part).toEqual(expect.objectContaining({ type: "text", text: "partial json" }))
-        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "unknown" }))
       }),
     60_000,
   )
