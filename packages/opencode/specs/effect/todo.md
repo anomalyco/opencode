@@ -138,12 +138,13 @@ shapes and sometimes collapse rich errors into opaque strings.
 - [x] Session HTTP error contracts tightened (#27308); busy-session
       mapping centralized (#27375, #27473).
 - [x] Provider init (#27484) and LSP init (#27494) errors typed.
+- [x] `ERR-4` part 1: [`tool/skill.ts`](../../src/tool/skill.ts) propagate typed Skill.NotFoundError instead of defect
 
 ### First PR Candidates
 
 - [ ] `HTTP-2` Audit one route group for explicit error contracts and
       decide which mappings stay inline vs. shared helper.
-- [ ] `ERR-4` Sweep remaining `NamedError.create(...)` and
+- [ ] `ERR-5` Sweep remaining `NamedError.create(...)` and
       `Effect.die(...)` callsites for expected failures — re-run `git
 grep` to build a current inventory.
 - [ ] `RENDER-2` Audit CLI and TUI surfaces for any remaining opaque
