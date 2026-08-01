@@ -55,6 +55,7 @@ async function bootApp(directory: string) {
   )
   return {
     task,
+    renderer: setup,
     async [Symbol.asyncDispose]() {
       process.chdir(cwd)
       if (!setup.renderer.isDestroyed) setup.renderer.destroy()
@@ -69,8 +70,17 @@ test("discovers an ancestor TUI plugin directory created after startup", async (
   const cwd = path.join(tmp.path, "repo", "packages", "app")
   await mkdir(cwd, { recursive: true })
   const marker = path.join(tmp.path, "marker.txt")
+  const placeholders = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 
   await using app = await bootApp(cwd)
+  const frame = await until(
+    async () => {
+      await app.renderer.renderOnce()
+      return app.renderer.captureCharFrame()
+    },
+    (value) => placeholders.some((text) => value?.includes(text)),
+  )
+  expect(placeholders.some((text) => frame?.includes(text))).toBe(true)
   const directory = path.join(tmp.path, "repo", ".opencode", "plugins", "tui")
   await mkdir(directory, { recursive: true })
   await writeFile(path.join(directory, "hot.ts"), lifecycleSource(marker, "test.hot", "v1"))

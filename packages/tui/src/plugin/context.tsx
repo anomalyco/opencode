@@ -187,8 +187,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; c
   // every watch event; remember them until the configuration changes.
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
+    await Promise.all(pluginDirectories.map(watcher.wait))
     const entries = [...(await discoverTuiPlugins(pluginDirectories)), ...(config.data.plugins ?? [])]
-    pluginDirectories.forEach((directory) => watcher.add(directory, true))
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -211,7 +211,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; c
       const options = typeof entry === "string" ? undefined : entry.options
       // Watch even when the resolve below fails so fixing a broken plugin reloads it.
       const local = localSource(target, directory)
-      if (local) watcher.add(fileURLToPath(local))
+      if (local) void watcher.add(fileURLToPath(local))
       const previous = Object.values(store.registrations).find((registration) => registration.target === target)
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo

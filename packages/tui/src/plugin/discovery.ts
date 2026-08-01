@@ -1,29 +1,19 @@
 import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { configDirectories } from "../config/directories"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
 export function tuiPluginDirectories(cwd: string, configDirectory: string) {
-  const ancestors: string[] = []
-  let current = path.resolve(cwd)
-  while (true) {
-    ancestors.push(path.join(current, ".opencode", "plugins", "tui"))
-    const parent = path.dirname(current)
-    if (parent === current) break
-    current = parent
-  }
-  return [...new Set([path.join(configDirectory, "plugins", "tui"), ...ancestors.reverse()])]
+  return configDirectories(configDirectory, cwd).map((directory) => path.join(directory, "plugins", "tui"))
 }
 
 export async function discoverTuiPlugins(directories: string[]) {
   return (
     await Promise.all(
       directories.map(async (directory) => {
-        const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
-          if (error && typeof error === "object" && Reflect.get(error, "code") === "ENOENT") return []
-          return Promise.reject(error)
-        })
+        const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
         return entries
           .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && extensions.has(path.extname(entry.name)))
           .map((entry) => path.join(directory, entry.name))

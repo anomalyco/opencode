@@ -17,14 +17,20 @@ export function createSourceWatcher(onChange: () => void) {
   const watchers = new Map<string, ReturnType<typeof watch>>()
   const watched = new Map<string, Set<string> | null>()
   const missing = new Set<string>()
+  const arming = new Map<string, Promise<void>>()
   let disposed = false
+  const notify = () => {
+    if (!disposed) onChange()
+  }
   const forget = (dir: string) => {
     watchers.get(dir)?.close()
     watchers.delete(dir)
     watched.delete(dir)
   }
   const arm = (target: string, retry: boolean) => {
-    stat(target)
+    const active = arming.get(target)
+    if (active) return active
+    const result = stat(target)
       .then((info) => {
         if (disposed) return
         const appeared = missing.delete(target)
@@ -35,7 +41,7 @@ export function createSourceWatcher(onChange: () => void) {
         if (existing !== undefined) {
           if (name === null) watched.set(dir, null)
           else existing?.add(name)
-          if (appeared) onChange()
+          if (appeared) notify()
           return
         }
         const watcher = watch(dir, (_event, filename) => {
@@ -44,32 +50,35 @@ export function createSourceWatcher(onChange: () => void) {
           // the recreated path, and still schedule so reconcile runs now.
           if (!existsSync(dir)) {
             forget(dir)
-            onChange()
+            notify()
             return
           }
           // A null filename (platform-dependent) always schedules.
           const accept = watched.get(dir)
           if (filename && accept && !accept.has(filename.toString())) return
-          onChange()
+          notify()
         })
         watched.set(dir, name === null ? null : new Set([name]))
         // Reconcile after watcher errors so every source is re-added and any
         // temporarily unavailable target moves into the polling set.
         watcher.on("error", () => {
           forget(dir)
-          onChange()
+          notify()
         })
         watchers.set(dir, watcher)
-        if (appeared) onChange()
+        if (appeared) notify()
       })
-      .catch(() => {
-        if (retry) missing.add(target)
+      .catch((error: unknown) => {
+        if (!disposed && retry && isMissing(error)) missing.add(target)
       })
+      .finally(() => arming.delete(target))
+    arming.set(target, result)
+    return result
   }
-  const add = (target: string, retry = false) => {
-    arm(target, retry)
+  const add = async (target: string, retry: boolean) => {
+    await arm(target, retry)
     // A symlinked source receives edits at its resolved target.
-    lstat(target)
+    await lstat(target)
       .then((info) => {
         if (!info.isSymbolicLink()) return
         return realpath(target).then((target) => arm(target, retry))
@@ -80,8 +89,21 @@ export function createSourceWatcher(onChange: () => void) {
     disposed = true
     clearInterval(poll)
     for (const watcher of watchers.values()) watcher.close()
+    watchers.clear()
+    watched.clear()
+    missing.clear()
   }
   const poll = setInterval(() => missing.forEach((target) => arm(target, true)), 500)
   poll.unref()
-  return { add, dispose }
+  return {
+    add: (target: string) => add(target, false),
+    wait: (target: string) => add(target, true),
+    dispose,
+  }
+}
+
+function isMissing(error: unknown) {
+  if (!error || typeof error !== "object") return false
+  const code = Reflect.get(error, "code")
+  return code === "ENOENT" || code === "ENOTDIR"
 }
