@@ -239,6 +239,11 @@ export function SessionHeader() {
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
+    browserPreviewLabel: language.t("command.browserPreview.toggle"),
+    browserPreviewKeybind: command.keybindParts("browserPreview.toggle"),
+    browserPreviewVisible: isDesktop() && !!platform.browserPreview,
+    browserPreviewOpened: layout.browserPreview.opened(),
+    onBrowserPreviewToggle: () => layout.browserPreview.toggle(),
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: reviewTooltipKeybind(command),
     reviewVisible: isDesktop(),
@@ -547,6 +552,11 @@ export function SessionHeader() {
 type SessionHeaderV2ActionsState = {
   statusVisible: boolean
   statusLabel: string
+  browserPreviewLabel: string
+  browserPreviewKeybind: string[]
+  browserPreviewVisible: boolean
+  browserPreviewOpened: boolean
+  onBrowserPreviewToggle: () => void
   reviewLabel: string
   reviewKeybind: string[]
   reviewVisible: boolean
@@ -555,14 +565,39 @@ type SessionHeaderV2ActionsState = {
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
-  const language = useLanguage()
-
   return (
     <div class="flex items-center gap-2">
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
         </Tooltip>
+      </Show>
+      <Show when={props.state.browserPreviewVisible}>
+        <TooltipV2
+          class="shrink-0"
+          placement="bottom"
+          value={
+            <>
+              {props.state.browserPreviewLabel}
+              <Show when={props.state.browserPreviewKeybind.length > 0}>
+                <KeybindV2 keys={props.state.browserPreviewKeybind} variant="neutral" />
+              </Show>
+            </>
+          }
+        >
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.browserPreviewOpened ? "pressed" : undefined}
+            onClick={props.state.onBrowserPreviewToggle}
+            aria-label={props.state.browserPreviewLabel}
+            aria-expanded={props.state.browserPreviewOpened}
+            aria-controls="browser-preview-panel"
+            icon={<IconV2 name="monitor" />}
+          />
+        </TooltipV2>
       </Show>
       <Show when={props.state.reviewVisible}>
         <TooltipV2

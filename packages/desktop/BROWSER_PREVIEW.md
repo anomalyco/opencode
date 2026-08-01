@@ -3,11 +3,12 @@
 ## Understanding
 
 - Add an optional right-docked browser preview for web developers using OpenCode Desktop.
-- Load HTTP and HTTPS URLs on `localhost`, `127.0.0.1`, or `[::1]` without weakening the trusted app renderer.
+- Load arbitrary HTTP and HTTPS pages without weakening the trusted app renderer.
 - Preserve browser storage across refreshes, but release all preview resources when the panel is hidden or closed.
 - Provide normal navigation, tabs, auto-refresh, DevTools, device emulation, zoom, cache controls, and hard reload.
 - Never capture page content, screenshots, DOM, or console output for the model automatically.
 - Make inspection actions explicit and keep their results memory-only until the user chooses what to do with them.
+- Let the user select a rendered element and add bounded, sanitized context to the captured chat draft.
 
 ## Architecture
 
@@ -21,19 +22,22 @@ Hiding, collapsing, toggling off, or closing the panel destroys every tab and cl
 
 - Preview web contents have no preload, Node integration, permissions, downloads, popups, or application IPC access.
 - New IPC accepts only the trusted top-level OpenCode renderer and resolves its owning `BrowserWindow`.
-- URLs allow only `http:` and `https:`, reject credentials and invalid ports, and require the normalized host to be exactly `localhost`, `127.0.0.1`, or `::1`.
+- URLs allow only `http:` and `https:`, are capped at 2 KiB, and reject credentials, missing hosts, and malformed addresses.
 - The same URL policy applies to direct loads, redirects, history navigation, and popup conversion.
 - Bounds are finite, revisioned, rate-limited, and clamped to the owning window's content area.
 - Certificate errors are rejected without an override.
 - Inspection data is excluded from persistence, application logs, telemetry, crash reports, and debug exports.
+- Element selection runs in an isolated JavaScript world. It removes scripts, styles, form state, URLs, event handlers, and non-allowlisted attributes before data crosses IPC. The selected page URL is included without its query string or fragment so tokens are not attached to chat.
+- Selected page text and markup are labeled as untrusted data before being attached to chat.
 
 ## Inspection Limits
 
-- One inspection operation may run per tab at a time, with a five-second timeout.
+- One inspection operation may run per tab at a time. Non-interactive inspections have a five-second timeout; element selection remains active until a click, `Esc`, cancellation, or navigation.
 - DOM output is capped at 2 MiB.
 - Screenshots are capped at 4096 by 4096 pixels and 10 MiB encoded.
 - Console capture starts only after an explicit action and retains at most 200 entries, 4 KiB per entry, and 512 KiB total.
 - Inspection results are discarded after navigation, reload, tab destruction, renderer reload, crash, or window close.
+- Element selectors are capped at 4 KiB, visible text at 16 KiB, and sanitized HTML at 64 KiB.
 
 ## UX Contract
 
@@ -43,17 +47,19 @@ Hiding, collapsing, toggling off, or closing the panel destroys every tab and cl
 - Failure states distinguish unreachable servers, blocked URLs, TLS failures, and renderer crashes.
 - The first console action is `Start Console Capture`; subsequent actions can retrieve captured logs.
 - Opening externally warns that the system browser has a different session.
+- Editor mode is a pressed toolbar action. Hover outlines the target; click attaches it to the draft that started selection; pressing `Esc` cancels.
 
 ## Decision Log
 
-| Decision | Alternatives | Rationale |
-| --- | --- | --- |
-| Main-owned `WebContentsView` | iframe, webview | Preserves browser compatibility without enabling `webviewTag` or weakening the app renderer. |
-| Exact loopback allowlist | arbitrary URLs, DNS-based local detection | Meets the localhost goal with deterministic validation and no DNS rebinding boundary. |
-| In-memory per-window partition | default session, persistent partition | Preserves storage across refreshes while making destructive close and idle cleanup reliable. |
-| Main-authoritative tab state | renderer-authoritative state | Prevents stale native views and out-of-order IPC from diverging from the toolbar. |
-| Five-tab cap | one tab, unbounded tabs | Satisfies the optional multi-tab goal while bounding Chromium resource use. |
-| Explicit-only diagnostics | automatic capture | Protects privacy and preserves the developer-preview-only contract. |
-| Full teardown on panel hide | detached hidden views | Directly satisfies the no-resource-usage requirement. |
+| Decision                        | Alternatives                          | Rationale                                                                                                                 |
+| ------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Main-owned `WebContentsView`    | iframe, webview                       | Preserves browser compatibility without enabling `webviewTag` or weakening the app renderer.                              |
+| Arbitrary HTTP/HTTPS navigation | loopback allowlist, embedded iframe   | Matches a normal preview browser while protocol, credentials, permissions, downloads, popups, and app IPC remain blocked. |
+| In-memory per-window partition  | default session, persistent partition | Preserves storage across refreshes while making destructive close and idle cleanup reliable.                              |
+| Main-authoritative tab state    | renderer-authoritative state          | Prevents stale native views and out-of-order IPC from diverging from the toolbar.                                         |
+| Five-tab cap                    | one tab, unbounded tabs               | Satisfies the optional multi-tab goal while bounding Chromium resource use.                                               |
+| Explicit-only diagnostics       | automatic capture                     | Protects privacy and preserves the developer-preview-only contract.                                                       |
+| Isolated-world element picker   | page preload, renderer DOM access     | Supports Claude-style element attachment without giving arbitrary pages app privileges or exposing the trusted renderer.  |
+| Full teardown on panel hide     | detached hidden views                 | Directly satisfies the no-resource-usage requirement.                                                                     |
 
 Structured review disposition: **APPROVED** after navigation confinement, IPC authorization, inspection privacy, geometry validation, and lifecycle rules were made explicit.

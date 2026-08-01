@@ -8,7 +8,7 @@ import type {
   BrowserPreviewState,
   BrowserPreviewTab,
 } from "@opencode-ai/app"
-import { normalizePreviewBounds, normalizePreviewUrl } from "./browser-preview-policy"
+import { normalizePreviewBounds, normalizePreviewElement, normalizePreviewUrl } from "./browser-preview-policy"
 
 const DEFAULT_URL = "http://localhost:3000/"
 const MAX_TABS = 5
@@ -20,6 +20,131 @@ const MAX_CONSOLE_ENTRIES = 200
 const MAX_CONSOLE_ENTRY_BYTES = 4 * 1024
 const MAX_CONSOLE_BYTES = 512 * 1024
 const INSPECTION_TIMEOUT_MS = 5_000
+const ELEMENT_PICKER_WORLD_ID = 1001
+const ELEMENT_PICKER_SCRIPT = String.raw`(() => new Promise((resolve) => {
+  const key = "__opencodeBrowserPreviewPicker"
+  const previous = globalThis[key]
+  if (previous && typeof previous.cancel === "function") previous.cancel()
+
+  const outline = document.createElement("div")
+  const label = document.createElement("div")
+  outline.setAttribute("data-opencode-element-picker", "")
+  label.setAttribute("data-opencode-element-picker", "")
+  outline.style.cssText = "position:fixed;display:none;pointer-events:none;z-index:2147483646;border:2px solid #6c8cff;background:rgba(108,140,255,.12);box-sizing:border-box;"
+  label.style.cssText = "position:fixed;display:none;pointer-events:none;z-index:2147483647;max-width:320px;padding:4px 7px;border-radius:4px;background:#172033;color:#fff;font:11px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 8px rgba(0,0,0,.3);"
+  document.documentElement.append(outline, label)
+
+  let done = false
+  const sensitive = /password|secret|token|auth|cookie|session/i
+  const safeToken = (value) => value.length <= 64 && !sensitive.test(value)
+  const escape = (value) => CSS.escape(String(value))
+  const targetFrom = (event) => event.composedPath().find((item) => item instanceof Element && !item.hasAttribute("data-opencode-element-picker"))
+  const selectorFor = (element) => {
+    if (element.id && safeToken(element.id)) return "#" + escape(element.id)
+    const parts = []
+    let current = element
+    for (let depth = 0; current && current.nodeType === Node.ELEMENT_NODE && depth < 8; depth += 1) {
+      let part = current.tagName.toLowerCase()
+      const classes = Array.from(current.classList).filter((value) => value && safeToken(value)).slice(0, 2)
+      if (classes.length) part += "." + classes.map(escape).join(".")
+      const parent = current.parentElement
+      if (parent) {
+        const siblings = Array.from(parent.children).filter((item) => item.tagName === current.tagName)
+        if (siblings.length > 1) part += ":nth-of-type(" + (siblings.indexOf(current) + 1) + ")"
+      }
+      parts.unshift(part)
+      if (!parent || current.tagName === "BODY") break
+      current = parent
+    }
+    return parts.join(" > ")
+  }
+  const truncate = (value, max) => {
+    const bytes = new TextEncoder().encode(value)
+    if (bytes.length <= max) return { value, truncated: false }
+    return { value: new TextDecoder().decode(bytes.slice(0, max)), truncated: true }
+  }
+  const cleanHtml = (element) => {
+    const clone = element.cloneNode(true)
+    const nodes = [clone, ...clone.querySelectorAll("*")]
+    for (const node of nodes) {
+      if (node.matches("script,style,template,noscript")) {
+        node.remove()
+        continue
+      }
+      for (const attribute of Array.from(node.attributes)) {
+        const name = attribute.name.toLowerCase()
+        const allowed = ["id", "class", "role", "aria-label", "title", "alt", "type"].includes(name)
+        if (!allowed || sensitive.test(name) || sensitive.test(attribute.value) || attribute.value.length > 512) {
+          node.removeAttribute(attribute.name)
+        }
+      }
+      if (node.matches("textarea,select")) node.textContent = ""
+      node.removeAttribute("checked")
+      node.removeAttribute("selected")
+    }
+    return clone.outerHTML
+  }
+  const cleanup = () => {
+    window.removeEventListener("pointermove", move, true)
+    window.removeEventListener("click", pick, true)
+    window.removeEventListener("keydown", keydown, true)
+    outline.remove()
+    label.remove()
+    if (globalThis[key] && globalThis[key].cancel === cancel) delete globalThis[key]
+  }
+  const finish = (value) => {
+    if (done) return
+    done = true
+    cleanup()
+    resolve(value)
+  }
+  const cancel = () => finish({ cancelled: true })
+  const move = (event) => {
+    const element = targetFrom(event)
+    if (!element) return
+    const rect = element.getBoundingClientRect()
+    outline.style.display = "block"
+    outline.style.left = rect.left + "px"
+    outline.style.top = rect.top + "px"
+    outline.style.width = rect.width + "px"
+    outline.style.height = rect.height + "px"
+    label.style.display = "block"
+    label.style.left = Math.max(4, Math.min(innerWidth - 324, rect.left)) + "px"
+    label.style.top = Math.max(4, rect.top - 25) + "px"
+    label.textContent = selectorFor(element)
+  }
+  const pick = (event) => {
+    const element = targetFrom(event)
+    if (!event.isTrusted || !element || element.matches("script,style,template,noscript")) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
+    const rect = element.getBoundingClientRect()
+    const text = truncate((element.innerText || element.textContent || "").trim(), 16384)
+    const html = truncate(cleanHtml(element), 65536)
+    finish({
+      selector: selectorFor(element),
+      tag: element.tagName.toLowerCase(),
+      text: text.value,
+      html: html.value,
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      textTruncated: text.truncated,
+      htmlTruncated: html.truncated,
+    })
+  }
+  const keydown = (event) => {
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    event.stopPropagation()
+    cancel()
+  }
+
+  globalThis[key] = { cancel }
+  window.addEventListener("pointermove", move, true)
+  window.addEventListener("click", pick, true)
+  window.addEventListener("keydown", keydown, true)
+}))()`
+const CANCEL_ELEMENT_PICKER_SCRIPT = `globalThis.__opencodeBrowserPreviewPicker?.cancel?.()`
 
 type ConsoleEntry = { level: number; message: string; source: string; line: number }
 type Tab = {
@@ -27,7 +152,7 @@ type Tab = {
   view: WebContentsView
   revision: number
   navigationRevision: number
-  inspecting: boolean
+  inspecting?: "generic" | "picker"
   consoleEntries: ConsoleEntry[]
   consoleBytes: number
   consoleListener?: (...args: any[]) => void
@@ -39,7 +164,7 @@ const controllers = new WeakMap<BrowserWindow, BrowserPreviewController>()
 const controllerByContents = new Map<number, BrowserPreviewController>()
 
 function sanitizeErrorMessage(value: string) {
-  return value.replace(/https?:\/\/[^\s]+/g, "localhost URL")
+  return value.replace(/https?:\/\/[^\s]+/g, "preview URL")
 }
 
 function redactConsole(value: string) {
@@ -70,6 +195,7 @@ export class BrowserPreviewController {
   private boundsRevision = 0
   private pendingBounds: Electron.Rectangle | undefined
   private boundsTimer: ReturnType<typeof setTimeout> | undefined
+  private transition = Promise.resolve()
   private retired = false
 
   constructor(private readonly win: BrowserWindow) {
@@ -87,17 +213,19 @@ export class BrowserPreviewController {
   }
 
   async show(url = DEFAULT_URL) {
-    if (this.retired) throw new Error("Browser Preview controller is closed")
-    this.visible = true
-    if (this.tabs.size === 0) await this.createTab(url)
-    if (this.retired) return this.state()
-    this.attachActive()
-    this.emit()
-    return this.state()
+    return this.lifecycle(async () => {
+      if (this.retired) throw new Error("Browser Preview controller is closed")
+      this.visible = true
+      if (this.tabs.size === 0) await this.createTab(url)
+      if (this.retired) return this.state()
+      this.attachActive()
+      this.emit()
+      return this.state()
+    })
   }
 
   async hide() {
-    await this.destroyAll()
+    await this.lifecycle(() => this.destroyAll())
   }
 
   setBounds(input: BrowserPreviewBounds) {
@@ -221,6 +349,11 @@ export class BrowserPreviewController {
           if (png.byteLength > MAX_SCREENSHOT_BYTES) throw new Error("Browser Preview screenshot exceeds 10 MiB")
           return { type: "screenshot", dataUrl: `data:image/png;base64,${png.toString("base64")}` }
         })
+      case "pick-element":
+        return this.pickElement(tab)
+      case "cancel-element-picker":
+        await this.cancelElementPicker(tab)
+        break
     }
     this.update(tab)
     return { type: "none" }
@@ -270,7 +403,6 @@ export class BrowserPreviewController {
       view,
       revision: 0,
       navigationRevision: 0,
-      inspecting: false,
       consoleEntries: [],
       consoleBytes: 0,
       disposers: [],
@@ -316,6 +448,11 @@ export class BrowserPreviewController {
       }
       this.update(tab)
     }
+    const didNavigateInPage = (_event: Electron.Event, url: string, isMainFrame: boolean) => {
+      if (!isMainFrame) return
+      this.invalidateInspection(tab)
+      didNavigate(_event, url)
+    }
     const pageTitleUpdated = (event: Electron.Event, title: string) => {
       event.preventDefault()
       tab.state.title = title || new URL(tab.state.url).host
@@ -346,12 +483,14 @@ export class BrowserPreviewController {
     contents.on("did-start-loading", didStartLoading)
     contents.on("did-stop-loading", didStopLoading)
     contents.on("did-navigate", didNavigate)
+    contents.on("did-navigate-in-page", didNavigateInPage)
     contents.on("page-title-updated", pageTitleUpdated)
     contents.on("did-fail-load", didFailLoad)
     contents.on("render-process-gone", renderProcessGone)
     tab.disposers.push(() => contents.removeListener("did-start-loading", didStartLoading))
     tab.disposers.push(() => contents.removeListener("did-stop-loading", didStopLoading))
     tab.disposers.push(() => contents.removeListener("did-navigate", didNavigate))
+    tab.disposers.push(() => contents.removeListener("did-navigate-in-page", didNavigateInPage))
     tab.disposers.push(() => contents.removeListener("page-title-updated", pageTitleUpdated))
     tab.disposers.push(() => contents.removeListener("did-fail-load", didFailLoad))
     tab.disposers.push(() => contents.removeListener("render-process-gone", renderProcessGone))
@@ -384,6 +523,8 @@ export class BrowserPreviewController {
   private activate(id: string) {
     const next = this.tabs.get(id)
     if (!next) throw new Error("Browser Preview tab not found")
+    const current = this.active()
+    if (current && current !== next) void this.cancelElementPicker(current)
     this.detachActive()
     this.activeTabId = id
     this.attachActive()
@@ -485,29 +626,81 @@ export class BrowserPreviewController {
 
   private invalidateInspection(tab: Tab) {
     tab.revision += 1
+    void this.cancelElementPicker(tab)
     tab.consoleEntries = []
     tab.consoleBytes = 0
   }
 
   private async inspect<T extends BrowserPreviewResult>(tab: Tab, operation: () => Promise<T>): Promise<T> {
     if (tab.inspecting) throw new Error("A Browser Preview inspection is already running")
-    tab.inspecting = true
+    tab.inspecting = "generic"
     const revision = tab.revision
     const pending = operation()
     void pending.then(
       () => {
-        tab.inspecting = false
+        if (tab.inspecting === "generic") tab.inspecting = undefined
       },
       () => {
-        tab.inspecting = false
+        if (tab.inspecting === "generic") tab.inspecting = undefined
       },
     )
     const result = await withTimeout(pending)
     if (revision !== tab.revision || !this.tabs.has(tab.state.id)) {
-      tab.inspecting = false
+      if (tab.inspecting === "generic") tab.inspecting = undefined
       throw new Error("Preview changed during inspection")
     }
     return result
+  }
+
+  private lifecycle<T>(operation: () => Promise<T>) {
+    const result = this.transition.then(operation, operation)
+    this.transition = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+
+  private async cancelElementPicker(tab: Tab) {
+    if (tab.inspecting !== "picker" || tab.view.webContents.isDestroyed()) return
+    tab.revision += 1
+    try {
+      await tab.view.webContents.executeJavaScriptInIsolatedWorld(ELEMENT_PICKER_WORLD_ID, [
+        { code: CANCEL_ELEMENT_PICKER_SCRIPT },
+      ])
+    } catch {
+      // Navigation or teardown can destroy the renderer while cancellation is in flight.
+    } finally {
+      if (tab.inspecting === "picker") tab.inspecting = undefined
+    }
+  }
+
+  private async pickElement(tab: Tab): Promise<BrowserPreviewResult> {
+    if (tab.inspecting) throw new Error("A Browser Preview inspection is already running")
+    tab.inspecting = "picker"
+    const revision = tab.revision
+    try {
+      let result: unknown
+      try {
+        result = await tab.view.webContents.executeJavaScriptInIsolatedWorld(
+          ELEMENT_PICKER_WORLD_ID,
+          [{ code: ELEMENT_PICKER_SCRIPT }],
+          true,
+        )
+      } catch (error) {
+        if (revision !== tab.revision || !this.tabs.has(tab.state.id) || tab.view.webContents.isDestroyed()) {
+          return { type: "none" }
+        }
+        throw error
+      }
+      if (result && typeof result === "object" && "cancelled" in result && result.cancelled === true) {
+        return { type: "none" }
+      }
+      if (revision !== tab.revision || !this.tabs.has(tab.state.id)) return { type: "none" }
+      return { type: "element", element: normalizePreviewElement(result, tab.state.url) }
+    } finally {
+      if (revision === tab.revision && tab.inspecting === "picker") tab.inspecting = undefined
+    }
   }
 
   private update(tab: Tab) {

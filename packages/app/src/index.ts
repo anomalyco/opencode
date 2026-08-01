@@ -24,6 +24,7 @@ export { handleNotificationClick } from "./utils/notification-click"
 export type {
   BrowserPreviewBounds,
   BrowserPreviewCommand,
+  BrowserPreviewElement,
   BrowserPreviewError,
   BrowserPreviewPlatform,
   BrowserPreviewResult,

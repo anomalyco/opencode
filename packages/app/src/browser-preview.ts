@@ -33,6 +33,17 @@ export type BrowserPreviewBounds = {
   revision: number
 }
 
+export type BrowserPreviewElement = {
+  url: string
+  selector: string
+  tag: string
+  text: string
+  html: string
+  rect: { x: number; y: number; width: number; height: number }
+  textTruncated: boolean
+  htmlTruncated: boolean
+}
+
 export type BrowserPreviewCommand =
   | { type: "new-tab"; url?: string }
   | { type: "close-tab"; tabId: string }
@@ -52,12 +63,15 @@ export type BrowserPreviewCommand =
   | { type: "get-console-logs" }
   | { type: "read-dom" }
   | { type: "capture-screenshot" }
+  | { type: "pick-element" }
+  | { type: "cancel-element-picker" }
 
 export type BrowserPreviewResult =
   | { type: "none" }
   | { type: "dom"; content: string; truncated: boolean }
   | { type: "screenshot"; dataUrl: string }
   | { type: "console"; entries: { level: number; message: string; source: string; line: number }[] }
+  | { type: "element"; element: BrowserPreviewElement }
 
 export type BrowserPreviewPlatform = {
   show(url?: string): Promise<BrowserPreviewState>

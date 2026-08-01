@@ -70,13 +70,18 @@ const previewCommandTypes = new Set([
   "get-console-logs",
   "read-dom",
   "capture-screenshot",
+  "pick-element",
+  "cancel-element-picker",
 ])
 
 function previewCommand(value: BrowserPreviewCommand) {
   if (!value || typeof value !== "object" || !previewCommandTypes.has(value.type)) {
     throw new Error("Invalid Browser Preview command")
   }
-  if ((value.type === "navigate" || value.type === "new-tab") && "url" in value && value.url !== undefined) {
+  if (value.type === "navigate" && (!("url" in value) || typeof value.url !== "string" || value.url.length > 2048)) {
+    throw new Error("Invalid Browser Preview URL")
+  }
+  if (value.type === "new-tab" && "url" in value && value.url !== undefined) {
     if (typeof value.url !== "string" || value.url.length > 2048) throw new Error("Invalid Browser Preview URL")
   }
   if ((value.type === "close-tab" || value.type === "activate-tab") && typeof value.tabId !== "string") {
@@ -316,7 +321,8 @@ export function registerIpcHandlers(deps: Deps) {
     })
   })
   ipcMain.handle("browser-preview-show", (event: IpcMainInvokeEvent, url?: string) => {
-    if (url !== undefined && (typeof url !== "string" || url.length > 2048)) throw new Error("Invalid Browser Preview URL")
+    if (url !== undefined && (typeof url !== "string" || url.length > 2048))
+      throw new Error("Invalid Browser Preview URL")
     return getBrowserPreview(trustedWindow(event)).show(url)
   })
   ipcMain.handle("browser-preview-hide", async (event: IpcMainInvokeEvent) => {
