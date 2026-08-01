@@ -3,11 +3,11 @@ import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   LLM,
-  LLMError,
+  AIError,
   LLMEvent,
   LLMRequest,
   Message,
-  Model,
+  LanguageModel,
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
@@ -304,7 +304,9 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       yield* LLMClient.generate(
         LLMRequest.update(request, {
-          model: Model.update(model, { route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }) }),
+          model: LanguageModel.update(model, {
+            route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
+          }),
         }),
       ).pipe(
         Effect.provide(
@@ -985,9 +987,7 @@ describe("OpenAI Responses route", () => {
 
       for (const event of events) {
         const error = yield* LLMClient.generate(request).pipe(
-          Effect.provide(
-            fixedResponse(sseEvents(event, { type: "response.completed", response: { id: "resp_1" } })),
-          ),
+          Effect.provide(fixedResponse(sseEvents(event, { type: "response.completed", response: { id: "resp_1" } }))),
           Effect.flip,
         )
         expect(error.reason._tag).toBe("InvalidProviderOutput")
@@ -1843,7 +1843,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "rate_limit_exceeded: Slow down" })
     }),
   )
@@ -2037,7 +2037,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),

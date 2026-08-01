@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM, Model } from "@opencode-ai/ai"
+import { LLM, LanguageModel } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { Effect } from "effect"
@@ -439,7 +439,7 @@ describe("ModelResolver", () => {
                   body: { custom: true },
                   limits: { context: 100, output: 20 },
                 })
-                return Model.make({ id: modelID, provider: "package-provider", route: native.route })
+                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
               },
             })
           },
@@ -481,7 +481,7 @@ describe("ModelResolver", () => {
               model: (modelID, settings) => {
                 expect(settings).toMatchObject({ [key]: "oauth-token" })
                 expect(settings).not.toHaveProperty("apiKey")
-                return Model.make({ id: modelID, provider: "package-provider", route: native.route })
+                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
               },
             }),
         }),
@@ -536,7 +536,7 @@ describe("ModelResolver", () => {
                     limits: { context: 100, output: 20 },
                     providerOptions,
                   })
-                  return Model.make({ id: modelID, provider: "native-provider", route: native.route })
+                  return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
                 },
               })
             },
@@ -571,7 +571,7 @@ describe("ModelResolver", () => {
                 transforms: ["middle-out"],
                 provider: { sort: "price", only: ["anthropic"] },
               })
-              return Model.make({ id: modelID, provider: "openrouter", route: OpenAIChat.route })
+              return LanguageModel.make({ id: modelID, provider: "openrouter", route: OpenAIChat.route })
             },
           }),
       },
@@ -632,7 +632,7 @@ describe("ModelResolver", () => {
                 headers: { "x-aisdk": "header" },
                 body: { custom: true },
               })
-              return Model.make({
+              return LanguageModel.make({
                 id: runtime.modelID ?? runtime.id,
                 provider: runtime.providerID,
                 route: native.route,

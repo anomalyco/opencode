@@ -12,7 +12,7 @@ import {
   HttpRateLimitDetails,
   HttpRequestDetails,
   HttpResponseDetails,
-  LLMError,
+  AIError,
   TransportReason,
 } from "../schema"
 import { classifyProviderFailure } from "../provider-error"
@@ -20,10 +20,10 @@ import { classifyProviderFailure } from "../provider-error"
 export interface Interface {
   readonly execute: (
     request: HttpClientRequest.HttpClientRequest,
-  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, LLMError>
+  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/RequestExecutor") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/AI/RequestExecutor") {}
 
 const BODY_LIMIT = 16_384
 const REDACTED = "<redacted>"
@@ -220,7 +220,7 @@ const statusError =
       const retryAfter = retryAfterMs(headers)
       const rateLimit = rateLimitDetails(headers, retryAfter)
       const details = responseBody(body, request)
-      return yield* new LLMError({
+      return yield* new AIError({
         module: "RequestExecutor",
         method: "execute",
         reason: classifyProviderFailure({
@@ -246,7 +246,7 @@ const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: u
     readonly kind?: string | undefined
     readonly request?: HttpClientRequest.HttpClientRequest | undefined
   }) =>
-    new LLMError({
+    new AIError({
       module: "RequestExecutor",
       method: "execute",
       reason: new TransportReason({

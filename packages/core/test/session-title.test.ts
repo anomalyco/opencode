@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
@@ -24,7 +24,7 @@ import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
-const model = Model.make({
+const model = LanguageModel.make({
   id: "title-model",
   provider: "test",
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
@@ -77,14 +77,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionProjector.node,
-      SessionStore.node,
-      Agent.node,
-      SessionTitle.node,
-    ]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Agent.node, SessionTitle.node]),
     [
       [llmClient, client],
       [SessionRunnerModel.node, models],

@@ -1,6 +1,6 @@
 export * as SessionRunnerRetry from "./retry"
 
-import { LLMError } from "@opencode-ai/ai"
+import { AIError } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Data, Duration, Effect, Schedule } from "effect"
 import { Bus } from "../../bus"
@@ -9,12 +9,12 @@ import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 
 export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableFailure")<{
-  readonly cause: LLMError
+  readonly cause: AIError
   readonly error: SessionError.Error
   readonly step: number
 }> {}
 
-export function isRetryable(error: LLMError) {
+export function isRetryable(error: AIError) {
   switch (error.reason._tag) {
     case "RateLimit":
     case "ProviderInternal":
@@ -41,7 +41,11 @@ const retryAfter = (failure: RetryableFailure) => {
   return undefined
 }
 
-export const schedule = (bus: Bus.Interface, sessionID: SessionSchema.ID, assistantMessageID: () => SessionMessage.ID) =>
+export const schedule = (
+  bus: Bus.Interface,
+  sessionID: SessionSchema.ID,
+  assistantMessageID: () => SessionMessage.ID,
+) =>
   Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
     Schedule.setInputType<RetryableFailure>(),
     Schedule.modifyDelay(({ input: failure, duration: delay }) => {

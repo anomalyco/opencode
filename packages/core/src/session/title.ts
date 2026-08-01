@@ -1,6 +1,6 @@
 export * as SessionTitle from "./title"
 
-import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
+import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Agent } from "../agent"
 import { Database } from "../database/database"
@@ -24,7 +24,7 @@ type Dependencies = {
   readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
-    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
+    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError>
   }
   readonly agents: Agent.Interface
   readonly models: SessionRunnerModel.Interface
@@ -97,7 +97,7 @@ const make = (dependencies: Dependencies) => {
           return Effect.void
         }),
         Effect.as(true),
-        Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+        Effect.catchTag("AI.Error", () => Effect.succeed(false)),
         Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
       )
     yield* recordUsage

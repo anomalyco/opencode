@@ -76,7 +76,7 @@ export type OpenRouterProviderOptionsInput = ProviderOptions & {
   readonly openrouter?: OpenRouterOptions
 }
 
-export type ModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenRouterProviderOptionsInput
@@ -175,7 +175,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-const configuredRoute = (input: ModelOptions) => {
+const configuredRoute = (input: LanguageModelOptions) => {
   const { apiKey: _, auth: _auth, baseURL, ...rest } = input
   return route.with({
     ...rest,
@@ -184,7 +184,7 @@ const configuredRoute = (input: ModelOptions) => {
   })
 }
 
-export const configure = (input: ModelOptions = {}) => {
+export const configure = (input: LanguageModelOptions = {}) => {
   const route = configuredRoute(input)
   return {
     id,

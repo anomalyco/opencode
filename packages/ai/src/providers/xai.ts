@@ -16,7 +16,7 @@ export type XAIProviderOptionsInput = ProviderOptions & {
   readonly xai?: OpenAIOptionsInput
 }
 
-export type ModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: XAIProviderOptionsInput
@@ -53,7 +53,7 @@ export const routes = [responsesRoute, chatRoute]
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "XAI_API_KEY")
 
-const configuredResponsesRoute = (input: ModelOptions) => {
+const configuredResponsesRoute = (input: LanguageModelOptions) => {
   const { apiKey: _, auth: _auth, baseURL, ...rest } = input
   return responsesRoute.with({
     ...rest,
@@ -62,7 +62,7 @@ const configuredResponsesRoute = (input: ModelOptions) => {
   })
 }
 
-const configuredChatRoute = (input: ModelOptions) => {
+const configuredChatRoute = (input: LanguageModelOptions) => {
   const { apiKey: _, auth: _auth, baseURL, ...rest } = input
   return chatRoute.with({
     ...rest,
@@ -71,7 +71,7 @@ const configuredChatRoute = (input: ModelOptions) => {
   })
 }
 
-export const configure = (input: ModelOptions = {}) => {
+export const configure = (input: LanguageModelOptions = {}) => {
   const responsesRoute = configuredResponsesRoute(input)
   const chatRoute = configuredChatRoute(input)
   const responses = (modelID: string | ModelID) => responsesRoute.model<XAIProviderOptionsInput>({ id: modelID })

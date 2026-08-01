@@ -1,6 +1,6 @@
 import type { Stream } from "effect"
 import * as ProviderShared from "../protocols/shared"
-import type { LLMError } from "../schema"
+import type { AIError } from "../schema"
 
 /**
  * Decode a streaming HTTP response body into provider-protocol frames.
@@ -18,7 +18,7 @@ import type { LLMError } from "../schema"
  */
 export interface Definition<Frame> {
   readonly id: string
-  readonly frame: (bytes: Stream.Stream<Uint8Array, LLMError>) => Stream.Stream<Frame, LLMError>
+  readonly frame: (bytes: Stream.Stream<Uint8Array, AIError>) => Stream.Stream<Frame, AIError>
 }
 
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */

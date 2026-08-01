@@ -1,6 +1,6 @@
 export * as Generate from "./generate"
 
-import { LLM, LLMClient, LLMError } from "@opencode-ai/ai"
+import { LLM, LLMClient, AIError } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "./effect/app-node-platform"
@@ -57,7 +57,7 @@ export const layer = Layer.effect(
         })
       const response = yield* llm.generate(LLM.request({ model: resolved.model, prompt: input.prompt })).pipe(
         Effect.mapError(
-          (error: LLMError) =>
+          (error: AIError) =>
             new UnavailableError({
               message: error.message,
               service: resolved.ref.providerID,

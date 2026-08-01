@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { LLM, type Model, type ModelProviderOptions, type ProviderOptions } from "../src"
+import { LLM, type LanguageModel, type LanguageModelProviderOptions, type ProviderOptions } from "../src"
 import { OpenAIChat } from "../src/protocols"
 
 interface ExampleOptions {
@@ -40,8 +40,8 @@ LLM.generateObject({
   providerOptions: { example: { mode: false } },
 })
 
-declare const generic: Model
+declare const generic: LanguageModel
 LLM.request({ model: generic, prompt: "Hello", providerOptions: { arbitrary: { option: true } } })
 
-const options: ModelProviderOptions<typeof model> = { example: { mode: "fast" } }
+const options: LanguageModelProviderOptions<typeof model> = { example: { mode: "fast" } }
 void options

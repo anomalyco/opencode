@@ -5,8 +5,8 @@ export { Provider } from "./provider"
 export { ProviderPackage } from "./provider-package"
 export { isContextOverflow, isContextOverflowFailure } from "./provider-error"
 export type {
-  RouteModelInput,
-  RouteRoutedModelInput,
+  RouteLanguageModelInput,
+  RouteRoutedLanguageModelInput,
   Interface as LLMClientShape,
   Service as LLMClientService,
 } from "./route/client"
@@ -33,7 +33,7 @@ export type {
 export * as LLM from "./llm"
 export type {
   Definition as ProviderDefinition,
-  ModelFactory as ProviderModelFactory,
-  ModelOptions as ProviderModelOptions,
+  LanguageModelFactory as ProviderLanguageModelFactory,
+  LanguageModelOptions as ProviderLanguageModelOptions,
 } from "./provider"
 export type { Definition as ProviderPackageDefinition, Settings as ProviderPackageSettings } from "./provider-package"

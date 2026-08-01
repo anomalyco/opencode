@@ -1,11 +1,21 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
-import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ProviderID, Usage } from "../src/schema"
+import {
+  AIError,
+  ContentPart,
+  InvalidRequestReason,
+  LLMEvent,
+  LLMRequest,
+  LanguageModel,
+  ModelID,
+  ProviderID,
+  Usage,
+} from "../src/schema"
 import { ProviderShared } from "../src/protocols/shared"
 
-const model = new Model({
+const model = new LanguageModel({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
   route: OpenAIChat.route,
@@ -33,7 +43,7 @@ describe("llm schema", () => {
 
   test("accepts custom route ids", () => {
     const decoded = decodeLLMRequest({
-      model: Model.update(model, { route: OpenAIResponses.route }),
+      model: LanguageModel.update(model, { route: OpenAIResponses.route }),
       system: [],
       messages: [],
       tools: [],
@@ -51,9 +61,7 @@ describe("llm schema", () => {
     expect(
       LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" }, usage: { inputTokens: 1 } }).usage,
     ).toBeInstanceOf(Usage)
-    expect(LLMEvent.finish({ reason: { normalized: "stop" }, usage: { outputTokens: 2 } }).usage).toBeInstanceOf(
-      Usage,
-    )
+    expect(LLMEvent.finish({ reason: { normalized: "stop" }, usage: { outputTokens: 2 } }).usage).toBeInstanceOf(Usage)
   })
 
   test("content part tagged union exposes guards", () => {
@@ -62,7 +70,7 @@ describe("llm schema", () => {
   })
 })
 
-describe("LLM.Usage", () => {
+describe("AI.Usage", () => {
   test("subtractTokens clamps non-sensical breakdowns to zero", () => {
     // Defense against a provider reporting cached_tokens > prompt_tokens or
     // reasoning_tokens > completion_tokens — the negative would otherwise
@@ -87,4 +95,16 @@ describe("LLM.Usage", () => {
     expect(new Usage({ outputTokens: 4, reasoningTokens: 10 }).visibleOutputTokens).toBe(0)
     expect(new Usage({}).visibleOutputTokens).toBe(0)
   })
+})
+
+test("AI errors expose the shared runtime tag", async () => {
+  const error = new AIError({
+    module: "test",
+    method: "call",
+    reason: new InvalidRequestReason({ message: "invalid" }),
+  })
+  expect(error._tag).toBe("AI.Error")
+  expect(
+    await Effect.runPromise(Effect.fail(error).pipe(Effect.catchTag("AI.Error", () => Effect.succeed("caught")))),
+  ).toBe("caught")
 })

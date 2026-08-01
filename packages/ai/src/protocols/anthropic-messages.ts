@@ -6,7 +6,7 @@ import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { Protocol } from "../route/protocol"
 import {
-  LLMError,
+  AIError,
   LLMEvent,
   mergeJsonRecords,
   Usage,
@@ -242,16 +242,14 @@ const AnthropicUsage = Schema.StructWithRest(
     cache_creation_input_tokens: optionalNull(Schema.Number),
     cache_read_input_tokens: optionalNull(Schema.Number),
     server_tool_use: optionalNull(
-      Schema.StructWithRest(
-        Schema.Struct({ web_search_requests: Schema.optional(Schema.Number) }),
-        [Schema.Record(Schema.String, Schema.Unknown)],
-      ),
+      Schema.StructWithRest(Schema.Struct({ web_search_requests: Schema.optional(Schema.Number) }), [
+        Schema.Record(Schema.String, Schema.Unknown),
+      ]),
     ),
     output_tokens_details: optionalNull(
-      Schema.StructWithRest(
-        Schema.Struct({ thinking_tokens: Schema.optional(Schema.Number) }),
-        [Schema.Record(Schema.String, Schema.Unknown)],
-      ),
+      Schema.StructWithRest(Schema.Struct({ thinking_tokens: Schema.optional(Schema.Number) }), [
+        Schema.Record(Schema.String, Schema.Unknown),
+      ]),
     ),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -725,8 +723,7 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
     reasoningTokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     providerMetadata: {
-      anthropic:
-        mergeJsonRecords(left.providerMetadata?.["anthropic"], right.providerMetadata?.["anthropic"]) ?? {},
+      anthropic: mergeJsonRecords(left.providerMetadata?.["anthropic"], right.providerMetadata?.["anthropic"]) ?? {},
     },
   })
 }
@@ -816,7 +813,8 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
   if (block.type === "thinking" && block.thinking !== undefined) {
     const events: LLMEvent[] = []
     const id = `reasoning-${event.index ?? 0}`
-    const providerMetadata = block.signature === undefined ? undefined : anthropicMetadata({ signature: block.signature })
+    const providerMetadata =
+      block.signature === undefined ? undefined : anthropicMetadata({ signature: block.signature })
     const lifecycle = Lifecycle.reasoningStart(state.lifecycle, events, id, providerMetadata)
     return [
       {
@@ -980,7 +978,7 @@ const providerErrorMessage = (event: AnthropicEvent): string => {
 }
 
 const onError = (event: AnthropicEvent) =>
-  new LLMError({
+  new AIError({
     module: ADAPTER,
     method: "stream",
     reason: classifyProviderFailure({ message: providerErrorMessage(event), code: event.error?.type }),

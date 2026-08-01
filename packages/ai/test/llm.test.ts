@@ -6,7 +6,7 @@ import {
   GenerationOptions,
   LLMRequest,
   Message,
-  Model,
+  LanguageModel,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
@@ -20,13 +20,13 @@ describe("llm constructors", () => {
   test("builds canonical schema classes from ergonomic input", () => {
     const request = LLM.request({
       id: "req_1",
-      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       system: "You are concise.",
       prompt: "Say hello.",
     })
 
     expect(request).toBeInstanceOf(LLMRequest)
-    expect(request.model).toBeInstanceOf(Model)
+    expect(request.model).toBeInstanceOf(LanguageModel)
     expect(request.messages[0]).toBeInstanceOf(Message)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
@@ -37,7 +37,7 @@ describe("llm constructors", () => {
   test("updates requests without spreading schema class instances", () => {
     const base = LLM.request({
       id: "req_1",
-      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
     const updated = LLMRequest.update(base, {
@@ -54,7 +54,7 @@ describe("llm constructors", () => {
 
   test("keeps request options separate from route defaults", () => {
     const request = LLM.request({
-      model: Model.make({
+      model: LanguageModel.make({
         id: "fake-model",
         provider: "fake",
         route: chatRoute.with({
@@ -81,7 +81,7 @@ describe("llm constructors", () => {
   test("updates canonical requests from the request datatype", () => {
     const base = LLM.request({
       id: "req_1",
-      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
     const updated = LLMRequest.update(base, { messages: [...base.messages, Message.assistant("Hi.")] })
@@ -94,19 +94,19 @@ describe("llm constructors", () => {
   })
 
   test("updates canonical models from the model datatype", () => {
-    const base = Model.make({
+    const base = LanguageModel.make({
       id: "fake-model",
       provider: "fake",
       route: chatRoute,
     })
-    const updated = Model.update(base, {
+    const updated = LanguageModel.update(base, {
       route: responsesRoute,
       defaults: { generation: { maxTokens: 20 } },
       compatibility: { toolSchema: "gemini" },
     })
-    const updatedInput = Model.input(updated)
+    const updatedInput = LanguageModel.input(updated)
 
-    expect(updated).toBeInstanceOf(Model)
+    expect(updated).toBeInstanceOf(LanguageModel)
     expect(String(updated.id)).toBe("fake-model")
     expect(updated.route).toBe(responsesRoute)
     expect(updated.defaults?.generation).toEqual({ maxTokens: 20 })
@@ -114,7 +114,7 @@ describe("llm constructors", () => {
     expect(updatedInput.defaults).toBe(updated.defaults)
     expect(updatedInput.compatibility).toBe(updated.compatibility)
     expect(String(updatedInput.provider)).toBe("fake")
-    expect(Model.update(updated, {})).toBe(updated)
+    expect(LanguageModel.update(updated, {})).toBe(updated)
   })
 
   test("carries model defaults and compatibility through route model selection", () => {
@@ -155,7 +155,7 @@ describe("llm constructors", () => {
     expect(ToolChoice.make("required")).toEqual(new ToolChoice({ type: "required" }))
     expect(
       LLM.request({
-        model: Model.make({
+        model: LanguageModel.make({
           id: "fake-model",
           provider: "fake",
           route: chatRoute,
@@ -181,7 +181,7 @@ describe("llm constructors", () => {
       { type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral" }) },
     ])
     const request = LLM.request({
-      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
+      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       system: "Initial operator prompt.",
       messages: [Message.user("Review this."), update],
     })

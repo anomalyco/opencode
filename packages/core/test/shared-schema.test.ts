@@ -17,6 +17,7 @@ import { Connection } from "@opencode-ai/schema/connection"
 import { Credential } from "@opencode-ai/schema/credential"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Integration } from "@opencode-ai/schema/integration"
+import { AI } from "@opencode-ai/schema/ai"
 import { LLM } from "@opencode-ai/schema/llm"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Pty } from "@opencode-ai/schema/pty"
@@ -34,7 +35,7 @@ test("Core reuses the canonical shared schemas", async () => {
     coreFileSystem,
     coreIntegration,
     coreLocation,
-    coreLLM,
+    coreAI,
     coreModel,
     corePermission,
     corePermissionV1,
@@ -100,8 +101,8 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreIntegration.Inputs, Integration.Inputs],
     [coreIntegration.Ref, Integration.Ref],
     [coreLocation.Ref, Location.Ref],
-    [coreLLM.ProviderMetadata, LLM.ProviderMetadata],
-    [coreLLM.FinishReason, LLM.FinishReason],
+    [coreAI.ProviderMetadata, AI.ProviderMetadata],
+    [coreAI.FinishReason, LLM.FinishReason],
     [coreModel.ID, Model.ID],
     [coreModel.VariantID, Model.VariantID],
     [coreModel.Ref, Model.Ref],

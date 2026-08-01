@@ -1,6 +1,13 @@
 export * as SessionRunnerLLM from "./llm"
 
-import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent, type ToolCall } from "@opencode-ai/ai"
+import {
+  LLMClient,
+  AIError,
+  LLMEvent,
+  isContextOverflowFailure,
+  type ProviderErrorEvent,
+  type ToolCall,
+} from "@opencode-ai/ai"
 import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database"
 import { Bus } from "../../bus"
@@ -60,16 +67,20 @@ const classifyToolExits = (
       : [],
   )
   const causes =
-    settled._tag === "Failure" ? [settled.cause] : exits.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
+    settled._tag === "Failure"
+      ? [settled.cause]
+      : exits.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
   // The first non-interrupt, non-decline failure, rebuilt without decline reasons so the
   // drain's error channel never carries a decline.
-  const failure = causes.flatMap((cause) => {
-    if (Cause.hasInterrupts(cause)) return []
-    const reasons = cause.reasons.flatMap((reason): Array<Cause.Reason<never>> =>
-      Cause.isFailReason(reason) ? [] : [reason],
-    )
-    return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
-  }).at(0)
+  const failure = causes
+    .flatMap((cause) => {
+      if (Cause.hasInterrupts(cause)) return []
+      const reasons = cause.reasons.flatMap(
+        (reason): Array<Cause.Reason<never>> => (Cause.isFailReason(reason) ? [] : [reason]),
+      )
+      return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
+    })
+    .at(0)
   return {
     interrupted: causes.some(Cause.hasInterrupts),
     declines,
@@ -356,9 +367,14 @@ const layer = Layer.effect(
           if (overflowFailure) yield* publisher.publish(overflowFailure)
           // A thrown LLM failure not already recorded as the provider error either
           // escapes as a scheduled retry or fails the assistant durably.
-          const llmFailure = streamFailure instanceof LLMError ? streamFailure : undefined
+          const llmFailure = streamFailure instanceof AIError ? streamFailure : undefined
           const llmError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
-          if (llmFailure && llmError && SessionRunnerRetry.isRetryable(llmFailure) && !publisher.record().outputStarted) {
+          if (
+            llmFailure &&
+            llmError &&
+            SessionRunnerRetry.isRetryable(llmFailure) &&
+            !publisher.record().outputStarted
+          ) {
             // RetryScheduled and Step.Failed fold onto an existing assistant message, so
             // Step.Started must be durable before the failure escapes.
             yield* publisher.startAssistant()

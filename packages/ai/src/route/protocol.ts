@@ -1,5 +1,5 @@
 import { Schema, type Effect } from "effect"
-import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
+import type { AIError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
 
 /**
  * The semantic API contract of one model server family.
@@ -47,7 +47,7 @@ export interface ProtocolBody<Body> {
   /** Schema for the validated provider-native body sent as the JSON request. */
   readonly schema: Schema.Codec<Body, unknown>
   /** Build the provider-native body from a common `LLMRequest`. */
-  readonly from: (request: LLMRequest) => Effect.Effect<Body, LLMError>
+  readonly from: (request: LLMRequest) => Effect.Effect<Body, AIError>
 }
 
 export interface ProtocolStream<Frame, Event, State> {
@@ -56,7 +56,7 @@ export interface ProtocolStream<Frame, Event, State> {
   /** Initial parser state. Called once per response with the resolved request. */
   readonly initial: (request: LLMRequest) => State
   /** Translate one event into emitted `LLMEvent`s plus the next state. */
-  readonly step: (state: State, event: Event) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
+  readonly step: (state: State, event: Event) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], AIError>
   /** Optional request-completion signal for transports that do not end naturally. */
   readonly terminal?: (event: Event) => boolean
   /** Optional flush emitted when the framed stream ends. */

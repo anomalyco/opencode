@@ -1,4 +1,4 @@
-import { LLMError, ToolFailure } from "@opencode-ai/ai"
+import { AIError, ToolFailure } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Permission } from "../permission"
@@ -8,7 +8,7 @@ import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./err
 import { SessionRunnerModel } from "./runner/model"
 
 export function toSessionError(cause: unknown): SessionError.Error {
-  if (cause instanceof LLMError) {
+  if (cause instanceof AIError) {
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
@@ -59,7 +59,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 
-function providerError(type: string, reason: LLMError["reason"]): SessionError.Error {
+function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status =
     ("http" in reason ? reason.http?.response?.status : undefined) ?? ("status" in reason ? reason.status : undefined)
   return { type, message: reason.message, ...(status === undefined ? {} : { status }) }

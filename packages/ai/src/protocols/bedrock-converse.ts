@@ -3,7 +3,7 @@ import { Route } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Protocol } from "../route/protocol"
 import {
-  LLMError,
+  AIError,
   LLMEvent,
   Usage,
   type CacheHint,
@@ -11,7 +11,7 @@ import {
   type FinishReasonDetails,
   type JsonSchema,
   type LLMRequest,
-  type ModelToolSchemaCompatibility,
+  type LanguageModelToolSchemaCompatibility,
   type ProviderMetadata,
   type ReasoningPart,
   type ToolCallPart,
@@ -232,7 +232,7 @@ const lowerToolSpec = (tool: ToolDefinition, inputSchema: JsonSchema): BedrockTo
 })
 
 const lowerTools = (
-  compatibility: ModelToolSchemaCompatibility | undefined,
+  compatibility: LanguageModelToolSchemaCompatibility | undefined,
   breakpoints: BedrockCache.Breakpoints,
   tools: ReadonlyArray<ToolDefinition>,
 ): BedrockTool[] => {
@@ -274,9 +274,7 @@ const reasoningSignature = (part: ReasoningPart) => {
 
 const reasoningRedactedData = (part: ReasoningPart) => {
   const bedrock = part.providerMetadata?.bedrock
-  return ProviderShared.isRecord(bedrock) && typeof bedrock.redactedData === "string"
-    ? bedrock.redactedData
-    : undefined
+  return ProviderShared.isRecord(bedrock) && typeof bedrock.redactedData === "string" ? bedrock.redactedData : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
@@ -656,7 +654,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
       ] as const
     ).find((entry) => entry[1] !== undefined)
     if (exception) {
-      return yield* new LLMError({
+      return yield* new AIError({
         module: ADAPTER,
         method: "stream",
         reason: classifyProviderFailure({

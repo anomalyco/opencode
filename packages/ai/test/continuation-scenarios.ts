@@ -1,4 +1,12 @@
-import { LLM, Message, ToolCallPart, ToolDefinition, ToolResultPart, type ContentPart, type Model } from "../src"
+import {
+  LLM,
+  Message,
+  ToolCallPart,
+  ToolDefinition,
+  ToolResultPart,
+  type ContentPart,
+  type LanguageModel,
+} from "../src"
 
 export const basicContinuation = ["system", "user-text", "assistant-text", "user-follow-up"] as const
 export const toolContinuation = ["tool-call", "tool-result"] as const
@@ -40,7 +48,7 @@ export const continuationTool = ToolDefinition.make({
 
 export function continuationRequest(input: {
   readonly id: string
-  readonly model: Model
+  readonly model: LanguageModel
   readonly features: ReadonlyArray<ContinuationFeature>
   readonly image?: string
 }) {

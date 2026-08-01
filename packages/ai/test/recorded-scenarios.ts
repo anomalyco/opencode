@@ -12,7 +12,7 @@ import {
   toDefinitions,
   type ContentPart,
   type FinishReason,
-  type Model,
+  type LanguageModel,
 } from "../src"
 import { LLMClient } from "../src/route"
 import { Tool } from "../src/tool"
@@ -54,7 +54,7 @@ export const weatherRuntimeTool = Tool.make({
 
 export const weatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: Model
+  readonly model: LanguageModel
   readonly system?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
@@ -73,7 +73,7 @@ export const weatherToolLoopRequest = (input: {
 
 export const goldenWeatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: Model
+  readonly model: LanguageModel
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
@@ -163,7 +163,7 @@ export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => 
 
 export interface GoldenScenarioContext {
   readonly id: string
-  readonly model: Model
+  readonly model: LanguageModel
   readonly maxTokens?: number
   readonly temperature?: number | false
 }
