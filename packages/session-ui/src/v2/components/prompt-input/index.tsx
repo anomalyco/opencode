@@ -152,6 +152,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             role="textbox"
             aria-multiline="true"
             aria-label="Prompt"
+            dir="auto"
             contenteditable={!props.disabled && !props.readOnly}
             autocapitalize={state.mode === "normal" ? "sentences" : "off"}
             autocorrect={state.mode === "normal" ? "on" : "off"}

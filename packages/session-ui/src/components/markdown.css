@@ -183,6 +183,8 @@
 
   [data-component="markdown-code"] {
     position: relative;
+    direction: ltr;
+    text-align: left;
   }
 
   [data-component="markdown-code"][data-code-kind="shell"] .shiki {
@@ -237,6 +239,8 @@
   }
 
   :not(pre) > code {
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--v2-text-text-base);
