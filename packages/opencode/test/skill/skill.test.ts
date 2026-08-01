@@ -6,6 +6,7 @@ import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "../../src/config/config"
+import * as MarketplaceRegistry from "../../src/marketplace/registry"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
@@ -16,7 +17,13 @@ import fs from "fs/promises"
 
 const node = LayerNode.compile(CrossSpawnSpawner.node)
 
-const it = testEffect(Layer.mergeAll(LayerNode.compile(Skill.node), node, testInstanceStoreLayer))
+const it = testEffect(
+  Layer.mergeAll(
+    LayerNode.compile(LayerNode.group([Skill.node, Config.node, MarketplaceRegistry.node])),
+    node,
+    testInstanceStoreLayer,
+  ),
+)
 const itWithoutClaudeCodeSkills = testEffect(
   Layer.mergeAll(
     LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: true })]]),
@@ -185,6 +192,90 @@ description: Second test skill.
           expect(list.length).toBe(2)
           expect(list.find((x) => x.name === "skill-one")).toBeDefined()
           expect(list.find((x) => x.name === "skill-two")).toBeDefined()
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("filters skills disabled by an installed marketplace plugin", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "marketplace-enabled", "SKILL.md"),
+                `---
+name: marketplace-enabled
+description: Enabled marketplace skill.
+---
+
+# Enabled
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "marketplace-disabled", "SKILL.md"),
+                `---
+name: marketplace-disabled
+description: Disabled marketplace skill.
+---
+
+# Disabled
+`,
+              ),
+            ]),
+          )
+
+          const registry = yield* MarketplaceRegistry.Service
+          const config = yield* Config.Service
+          const before = yield* registry.read()
+          yield* registry.replace({
+            ...before,
+            installed: {
+              ...(before.installed ?? {}),
+              "source:catalog:plugin": {
+                source: "source",
+                catalog: "catalog",
+                item: "plugin",
+                name: "Plugin",
+                kind: "plugin",
+                version: "1.0.0",
+                fingerprint: "test",
+                installed_at: "2026-01-01T00:00:00.000Z",
+                updated_at: "2026-01-01T00:00:00.000Z",
+                plan: {
+                  skills: {
+                    items: [
+                      { id: "enabled", name: "marketplace-enabled" },
+                      { id: "disabled", name: "marketplace-disabled" },
+                    ],
+                  },
+                },
+                receipt: {},
+                disabled_skills: ["disabled"],
+              },
+            },
+          })
+          yield* config.invalidate()
+
+          yield* Effect.gen(function* () {
+            const skill = yield* Skill.Service
+            const list = (yield* skill.all()).filter((item) => item.location !== "<built-in>")
+            expect(list.map((item) => item.name)).toEqual(["marketplace-enabled"])
+          }).pipe(
+            Effect.ensuring(
+              Effect.gen(function* () {
+                const current = yield* registry.read()
+                yield* registry
+                  .replace({
+                    ...before,
+                    revision: current.revision ?? 0,
+                  })
+                  .pipe(Effect.orDie)
+                yield* config.invalidate()
+              }),
+            ),
+          )
         }),
       { git: true },
     ),

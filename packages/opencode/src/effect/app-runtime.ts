@@ -7,6 +7,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
 import { Config } from "@/config/config"
+import * as MarketplaceRegistry from "@/marketplace/registry"
 import { Git } from "@/git"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Storage } from "@/storage/storage"
@@ -54,6 +55,8 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { MarketplaceCacheNode } from "@/marketplace/cache"
+import { MarketplaceServiceNode } from "@/marketplace/service"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -63,6 +66,9 @@ export const AppLayer = AppNodeBuilderV1.build(
     Auth.node,
     Account.node,
     Config.node,
+    MarketplaceRegistry.node,
+    MarketplaceCacheNode,
+    MarketplaceServiceNode,
     Git.node,
     Storage.node,
     Snapshot.node,
