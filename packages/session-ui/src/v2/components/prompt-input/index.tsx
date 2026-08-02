@@ -172,7 +172,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
                 event.preventDefault()
                 if (event.repeat) return
-                props.controller.submit()
+                if (props.controller.canSubmit()) props.controller.submit()
               }
             }}
             onKeyUp={updateCursor}
