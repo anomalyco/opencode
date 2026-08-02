@@ -412,7 +412,7 @@ function renderMathInText(text: string): string {
 }
 
 const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
-const blockMathRegex = /^\$\$\n([\s\S]+?)\n\$\$(?:\n|$)/
+const blockMathRegex = /^(?:\$\$((?:(?!\$\$)[\s\S])+?)\$\$|\\\[((?:(?!\\\])[\s\S])+?)\\\])(?:\n|$)/
 
 const katexExtension: MarkedExtension = {
   extensions: [
@@ -445,7 +445,7 @@ const katexExtension: MarkedExtension = {
         return {
           type: "blockKatex",
           raw: match[0],
-          text: match[1].trim(),
+          text: (match[1] ?? match[2]).trim(),
           displayMode: true,
         }
       },
