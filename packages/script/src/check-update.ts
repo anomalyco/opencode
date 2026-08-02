@@ -155,9 +155,11 @@ async function main() {
   process.exit(0)
 }
 
-main().catch((e) => {
-  console.error("Error:", e.message)
-  process.exit(1)
-})
+if (import.meta.main) {
+  main().catch((e) => {
+    console.error("Error:", e.message)
+    process.exit(1)
+  })
+}
 
 export { checkRebase }
