@@ -449,6 +449,8 @@ export const TaskTool = Tool.define(
       // before starting (or extending) so a reused task_id doesn't inherit a
       // cancelled terminal record from its previous run.
       yield* interrupt.clear(nextSession.id)
+      // A reused task_id must not inherit a structured result envelope from its previous run.
+      if (session) yield* sessions.setResult({ sessionID: nextSession.id, result: null })
 
       if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
         return {

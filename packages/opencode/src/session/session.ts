@@ -296,7 +296,7 @@ export const SetMetadataInput = Schema.Struct({
 })
 export const SetResultInput = Schema.Struct({
   sessionID: SessionID,
-  result: Result,
+  result: Schema.NullOr(Result),
 })
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
@@ -491,12 +491,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 export const use = serviceUse(Service)
 
-export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" | "permission"> & {
+export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" | "permission" | "result"> & {
   time?: Partial<Info["time"]>
   share?: Partial<NonNullable<Info["share"]>> | null
   summary?: Info["summary"] | null
   revert?: Info["revert"] | null
   permission?: Info["permission"] | null
+  result?: Info["result"] | null
 }
 
 const layer: Layer.Layer<
@@ -762,6 +763,7 @@ const layer: Layer.Layer<
           summary: info.summary === null ? undefined : (info.summary ?? current.summary),
           revert: info.revert === null ? undefined : (info.revert ?? current.revert),
           permission: info.permission === null ? undefined : (info.permission ?? current.permission),
+          result: info.result === null ? undefined : (info.result ?? current.result),
         } as Info
         yield* events.publish(SessionV1.Event.Updated, { sessionID, info: next })
       })

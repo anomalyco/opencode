@@ -18,6 +18,7 @@ import { SessionStatus } from "@/session/status"
 
 import { Interrupt } from "../../src/session/interrupt"
 import { TaskTool, renderOutput, Event as TaskEventDef, type TaskPromptOps, childResultBlock } from "../../src/tool/task"
+import { TaskReturnTool } from "../../src/tool/task-return"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -273,6 +274,60 @@ describe("tool.task", () => {
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
       expect(seen?.variant).toBe("xhigh")
+    }),
+  )
+
+  it.instance("does not replay a prior task_return result when resuming a task session", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
+      const taskReturn = yield* TaskReturnTool
+      const taskReturnDef = yield* taskReturn.init()
+      const staleResult = { verdict: "OLD" }
+
+      yield* taskReturnDef.execute({ result: staleResult }, {
+        sessionID: child.id,
+        messageID: MessageID.ascending(),
+        agent: "general",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+
+      const captured = yield* Deferred.make<any>()
+      yield* events.listen((event) => {
+        if (event.type === TaskEventDef.Completed.type) return Deferred.succeed(captured, event)
+        return Effect.void
+      })
+
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const result = yield* def.execute(
+        {
+          description: "continue investigation",
+          prompt: "continue the investigation without returning a structured result",
+          subagent_type: "general",
+          task_id: child.id,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ text: "round two" }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).not.toContain(JSON.stringify(staleResult, null, 2))
+      expect(result.output).not.toContain("<task_return>")
+      const event = yield* Deferred.await(captured)
+      expect(event.data.result).toBeUndefined()
     }),
   )
 
