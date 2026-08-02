@@ -14,6 +14,8 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceState } from "@/effect/instance-state"
+import { createTlsFetch, readCaFile, validatePemCert, verifyAndPinFingerprint } from "../../mcp/tls"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
@@ -677,6 +679,44 @@ export const McpDebugCommand = effectCmd({
             entry: auth.get(args.name),
           })
         : undefined
+    let tlsFetch: typeof fetch | undefined
+    if (serverConfig && isMcpRemote(serverConfig) && serverConfig.tls) {
+      const directory = yield* InstanceState.directory
+      let tlsCa = ""
+
+      if (serverConfig.tls.caPem) {
+        const result = yield* Effect.try({
+          try: () => {
+            validatePemCert(serverConfig.tls.caPem!, "caPem config entry")
+            return serverConfig.tls.caPem!
+          },
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+        if (result instanceof Error) throw new Error(result.message)
+        tlsCa += result
+      }
+
+      if (serverConfig.tls.caFile) {
+        const pem = yield* Effect.try({
+          try: () => readCaFile(serverConfig.tls.caFile!, directory),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+        if (pem instanceof Error) throw new Error(pem.message)
+        tlsCa += pem
+      }
+
+      if (serverConfig.tls.fingerprint) {
+        const url = new URL(serverConfig.url)
+        const result = yield* Effect.tryPromise({
+          try: () => verifyAndPinFingerprint(url, serverConfig.tls.fingerprint!),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+        if (result instanceof Error) throw new Error(`Fingerprint verification failed: ${result.message}`)
+        tlsCa += result
+      }
+
+      if (tlsCa) tlsFetch = createTlsFetch(tlsCa)
+    }
     yield* Effect.promise(async () => {
       UI.empty()
       prompts.intro("MCP OAuth Debug")
@@ -733,7 +773,7 @@ export const McpDebugCommand = effectCmd({
 
       // Test basic HTTP connectivity first
       try {
-        const response = await fetch(serverConfig.url, {
+        const response = await (tlsFetch ?? fetch)(serverConfig.url, {
           method: "POST",
           headers: {
             ...serverConfig.headers,
@@ -786,6 +826,7 @@ export const McpDebugCommand = effectCmd({
           const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
             authProvider,
             requestInit: serverConfig.headers ? { headers: serverConfig.headers } : undefined,
+            ...(tlsFetch ? { fetch: tlsFetch } : {}),
           })
 
           try {

@@ -34,6 +34,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
+import { createTlsFetch, readCaFile, validatePemCert, verifyAndPinFingerprint } from "./tls"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -266,12 +267,68 @@ const layer = Layer.effect(
         )
       }
 
+      let tlsFetch: typeof fetch | undefined
+
+      if (mcp.tls) {
+        const directory = yield* InstanceState.directory
+        let tlsCa = ""
+
+        if (mcp.tls.caPem) {
+          const result = yield* Effect.try({
+            try: () => {
+              validatePemCert(mcp.tls.caPem!, "caPem config entry")
+              return mcp.tls.caPem!
+            },
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          })
+          if (result instanceof Error) {
+            return {
+              client: undefined as MCPClient | undefined,
+              status: { status: "failed" as const, error: result.message },
+            }
+          }
+          tlsCa += result
+        }
+
+        if (mcp.tls.caFile) {
+          const pem = yield* Effect.try({
+            try: () => readCaFile(mcp.tls.caFile!, directory),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          })
+          if (pem instanceof Error) {
+            return {
+              client: undefined as MCPClient | undefined,
+              status: { status: "failed" as const, error: pem.message },
+            }
+          }
+          tlsCa += pem
+        }
+
+        if (mcp.tls.fingerprint) {
+          const result = yield* Effect.tryPromise({
+            try: () => verifyAndPinFingerprint(url, mcp.tls.fingerprint),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          })
+
+          if (result instanceof Error) {
+            return {
+              client: undefined as MCPClient | undefined,
+              status: { status: "failed" as const, error: `Fingerprint verification failed: ${result.message}` },
+            }
+          }
+          tlsCa += result
+        }
+
+        if (tlsCa) tlsFetch = createTlsFetch(tlsCa)
+      }
+
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            ...(tlsFetch ? { fetch: tlsFetch } : {}),
           }),
         },
         {
@@ -279,6 +336,7 @@ const layer = Layer.effect(
           transport: new SSEClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            ...(tlsFetch ? { fetch: tlsFetch } : {}),
           }),
         },
       ]
@@ -843,9 +901,50 @@ const layer = Layer.effect(
         auth,
       )
 
+      let tlsFetch: typeof fetch | undefined
+
+      if (mcpConfig.tls) {
+        const tlsDir = yield* InstanceState.directory
+        let tlsCa = ""
+
+        if (mcpConfig.tls.caPem) {
+          const result = yield* Effect.try({
+            try: () => {
+              validatePemCert(mcpConfig.tls.caPem!, "caPem config entry")
+              return mcpConfig.tls.caPem!
+            },
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          })
+          if (result instanceof Error) throw new Error(result.message)
+          tlsCa += result
+        }
+
+        if (mcpConfig.tls.caFile) {
+          const pem = yield* Effect.try({
+            try: () => readCaFile(mcpConfig.tls.caFile!, tlsDir),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          })
+          if (pem instanceof Error) throw new Error(pem.message)
+          tlsCa += pem
+        }
+
+        if (mcpConfig.tls.fingerprint) {
+          const result = yield* Effect.tryPromise({
+            try: () => verifyAndPinFingerprint(url, mcpConfig.tls.fingerprint!),
+            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+          })
+
+          if (result instanceof Error) throw new Error(`Fingerprint verification failed: ${result.message}`)
+          tlsCa += result
+        }
+
+        if (tlsCa) tlsFetch = createTlsFetch(tlsCa)
+      }
+
       const transport = new StreamableHTTPClientTransport(url, {
         authProvider,
         requestInit: mcpConfig.headers ? { headers: mcpConfig.headers } : undefined,
+        ...(tlsFetch ? { fetch: tlsFetch } : {}),
       })
       const directory = yield* InstanceState.directory
 
