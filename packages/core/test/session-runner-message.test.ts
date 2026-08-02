@@ -498,4 +498,80 @@ Recent work
       },
     ])
   })
+
+  test("drops tool parts when a failed turn loses its reasoning block", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-thinking-failed"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            // Reasoning text is empty whenever thinking display is "omitted", so once the
+            // failed turn's provider metadata is stripped there is nothing left to replay
+            // and the reasoning part is dropped as empty.
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-failed",
+              text: "",
+              providerMetadata: { anthropic: { signature: "sig_1" } },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "orphan-call",
+              name: "read",
+              state: SessionMessage.ToolStatePending.make({ status: "pending", input: '{"path":"README.md"}' }),
+              time: { created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Provider turn interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    // The tool call must not survive on its own: Anthropic rejects a tool_use that is not
+    // preceded by its thinking block.
+    expect(messages).toEqual([])
+  })
+
+  test("keeps tool parts when reasoning survives a failed turn as text", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-text-reasoning-failed"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-partial",
+              text: "Partial thought",
+              providerMetadata: { openai: { itemId: "rs_failed" } },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "kept-call",
+              name: "read",
+              state: SessionMessage.ToolStatePending.make({ status: "pending", input: '{"path":"README.md"}' }),
+              time: { created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Provider turn interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "reasoning", text: "Partial thought", providerMetadata: undefined },
+      { type: "tool-call", id: "kept-call", name: "read", input: { path: "README.md" } },
+    ])
+  })
 })
