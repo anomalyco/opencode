@@ -15,6 +15,31 @@ function moveReminderText(directory: string) {
   return `<system-reminder>The user has changed the current working directory to "${directory}". This is still the same project but at a possibly new location; take this into account when working with any files from now on.</system-reminder>`
 }
 
+export function createMoveSessionSelectionHandler(input: {
+  validate: (directory: string) => Promise<unknown>
+  onSelect: (selection: MoveSessionSelection) => void | Promise<unknown>
+  onError: (error: unknown) => void
+}) {
+  let pending = false
+  return async (selection: MoveSessionSelection) => {
+    if (pending) return
+    pending = true
+    try {
+      if (selection.type !== "new") {
+        try {
+          await input.validate(selection.directory)
+        } catch (error) {
+          input.onError(error)
+          return
+        }
+      }
+      await input.onSelect(selection)
+    } finally {
+      pending = false
+    }
+  }
+}
+
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const sdk = useSDK()
@@ -26,6 +51,21 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
   const [progress, setProgress] = createSignal<string>()
+  const select = createMoveSessionSelectionHandler({
+    validate: (directory) => sdk.client.file.list({ directory, path: "." }, { throwOnError: true }),
+    onSelect: (selection) => {
+      const sessionID = input.sessionID()
+      if (!sessionID) {
+        homeDestination?.setDestination(selection)
+        dialog.clear()
+        return
+      }
+      return moveExistingSession(sessionID, selection)
+    },
+    onError: (error) => {
+      toast.show({ title: "Project directory unavailable", message: errorMessage(error), variant: "error" })
+    },
+  })
 
   async function create(context?: string) {
     const projectID = input.projectID()
@@ -88,15 +128,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
               })
         }
         onCurrentChange={(selection) => homeDestination?.setDestination(selection)}
-        onSelect={(selection) => {
-          const sessionID = input.sessionID()
-          if (!sessionID) {
-            homeDestination?.setDestination(selection)
-            dialog.clear()
-            return
-          }
-          void moveExistingSession(sessionID, selection)
-        }}
+        onSelect={(selection) => void select(selection)}
       />
     ))
   }
