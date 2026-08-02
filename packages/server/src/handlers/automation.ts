@@ -72,7 +72,7 @@ export const AutomationHandler = HttpApiBuilder.group(Api, "server.automation", 
           )
         }),
       )
-      .handle("automation.runs.list", ({ query }) =>
+      .handle("automation.runList", ({ query }) =>
         Effect.gen(function* () {
           const runs = yield* automation.getRuns({
             ...(query.triggerID ? { triggerID: query.triggerID } : {}),
@@ -83,7 +83,7 @@ export const AutomationHandler = HttpApiBuilder.group(Api, "server.automation", 
           return runs
         }).pipe(response),
       )
-      .handle("automation.runs.get", ({ params }) =>
+      .handle("automation.runGet", ({ params }) =>
         Effect.gen(function* () {
           return yield* automation.getRun(params.id).pipe(
             Effect.catchTag("Automation.NotFoundError", () =>

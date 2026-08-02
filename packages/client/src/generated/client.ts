@@ -128,6 +128,10 @@ import type {
   ServerAutomationFireOutput,
   ServerAutomationWebhookInput,
   ServerAutomationWebhookOutput,
+  ServerAutomationRunListInput,
+  ServerAutomationRunListOutput,
+  ServerAutomationRunGetInput,
+  ServerAutomationRunGetOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -1087,9 +1091,10 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/automation/${encodeURIComponent(input.id)}/fire`,
-            successStatus: 204,
-            declaredStatuses: [404, 401, 400],
-            empty: true,
+            body: { payload: input["payload"] },
+            successStatus: 200,
+            declaredStatuses: [404, 409, 401, 400],
+            empty: false,
           },
           requestOptions,
         ),
@@ -1098,9 +1103,38 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/automation/${encodeURIComponent(input.id)}/webhook`,
-            successStatus: 204,
+            successStatus: 200,
             declaredStatuses: [404, 401, 400],
-            empty: true,
+            empty: false,
+          },
+          requestOptions,
+        ),
+      runList: (input?: ServerAutomationRunListInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationRunListOutput>(
+          {
+            method: "GET",
+            path: `/api/automation/runs`,
+            query: {
+              location: input?.["location"],
+              triggerID: input?.["triggerID"],
+              sessionID: input?.["sessionID"],
+              status: input?.["status"],
+              limit: input?.["limit"],
+            },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      runGet: (input: ServerAutomationRunGetInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationRunGetOutput>(
+          {
+            method: "GET",
+            path: `/api/automation/runs/${encodeURIComponent(input.id)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
           },
           requestOptions,
         ),

@@ -751,14 +751,43 @@ const Endpoint18_4 = (raw: RawClient["server.automation"]) => (input: Endpoint18
   raw["automation.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
 type Endpoint18_5Request = Parameters<RawClient["server.automation"]["automation.fire"]>[0]
-type Endpoint18_5Input = { readonly id: Endpoint18_5Request["params"]["id"] }
+type Endpoint18_5Input = {
+  readonly id: Endpoint18_5Request["params"]["id"]
+  readonly payload: Endpoint18_5Request["payload"]["payload"]
+}
 const Endpoint18_5 = (raw: RawClient["server.automation"]) => (input: Endpoint18_5Input) =>
-  raw["automation.fire"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
+  raw["automation.fire"]({ params: { id: input["id"] }, payload: { payload: input["payload"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
 
 type Endpoint18_6Request = Parameters<RawClient["server.automation"]["automation.webhook"]>[0]
 type Endpoint18_6Input = { readonly id: Endpoint18_6Request["params"]["id"] }
 const Endpoint18_6 = (raw: RawClient["server.automation"]) => (input: Endpoint18_6Input) =>
   raw["automation.webhook"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_7Request = Parameters<RawClient["server.automation"]["automation.runList"]>[0]
+type Endpoint18_7Input = {
+  readonly location?: Endpoint18_7Request["query"]["location"]
+  readonly triggerID?: Endpoint18_7Request["query"]["triggerID"]
+  readonly sessionID?: Endpoint18_7Request["query"]["sessionID"]
+  readonly status?: Endpoint18_7Request["query"]["status"]
+  readonly limit?: Endpoint18_7Request["query"]["limit"]
+}
+const Endpoint18_7 = (raw: RawClient["server.automation"]) => (input?: Endpoint18_7Input) =>
+  raw["automation.runList"]({
+    query: {
+      location: input?.["location"],
+      triggerID: input?.["triggerID"],
+      sessionID: input?.["sessionID"],
+      status: input?.["status"],
+      limit: input?.["limit"],
+    },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint18_8Request = Parameters<RawClient["server.automation"]["automation.runGet"]>[0]
+type Endpoint18_8Input = { readonly id: Endpoint18_8Request["params"]["id"] }
+const Endpoint18_8 = (raw: RawClient["server.automation"]) => (input: Endpoint18_8Input) =>
+  raw["automation.runGet"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
 const adaptGroup18 = (raw: RawClient["server.automation"]) => ({
   list: Endpoint18_0(raw),
@@ -768,6 +797,8 @@ const adaptGroup18 = (raw: RawClient["server.automation"]) => ({
   remove: Endpoint18_4(raw),
   fire: Endpoint18_5(raw),
   webhook: Endpoint18_6(raw),
+  runList: Endpoint18_7(raw),
+  runGet: Endpoint18_8(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({

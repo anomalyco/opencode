@@ -109,6 +109,22 @@ export type AutomationNotFoundError = {
 export const isAutomationNotFoundError = (value: unknown): value is AutomationNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AutomationNotFoundError"
 
+export type AutomationLockError = {
+  readonly _tag: "AutomationLockError"
+  readonly id: string
+  readonly message: string
+}
+export const isAutomationLockError = (value: unknown): value is AutomationLockError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AutomationLockError"
+
+export type AutomationPromptConflictError = {
+  readonly _tag: "AutomationPromptConflictError"
+  readonly sessionID: string
+  readonly messageID: string
+}
+export const isAutomationPromptConflictError = (value: unknown): value is AutomationPromptConflictError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AutomationPromptConflictError"
+
 export type HealthGetOutput = { readonly healthy: true }
 
 export type LocationGetInput = {
@@ -1148,25 +1164,6 @@ export type SessionsHistoryOutput = {
     | {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
-        readonly type: "session.next.reasoning.cycle.fired"
-        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-        readonly location?: { readonly directory: string; readonly workspaceID?: string }
-        readonly data: {
-          readonly timestamp: number
-          readonly sessionID: string
-          readonly loop: "why" | "then"
-          readonly gated: boolean
-          readonly steered: boolean
-          readonly messageID?: string
-          readonly reason?: string
-          readonly iterates?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly epsilon?: number | "Infinity" | "-Infinity" | "NaN"
-          readonly approximationGap?: number | "Infinity" | "-Infinity" | "NaN"
-        }
-      }
-    | {
-        readonly id: string
-        readonly metadata?: { readonly [x: string]: JsonValue }
         readonly type: "session.next.revert.staged"
         readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
         readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -1620,25 +1617,6 @@ export type SessionsEventsOutput =
         readonly reason: "auto" | "manual"
         readonly text: string
         readonly recent: string
-      }
-    }
-  | {
-      readonly id: string
-      readonly metadata?: { readonly [x: string]: unknown }
-      readonly type: "session.next.reasoning.cycle.fired"
-      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
-      readonly location?: { readonly directory: string; readonly workspaceID?: string }
-      readonly data: {
-        readonly timestamp: number
-        readonly sessionID: string
-        readonly loop: "why" | "then"
-        readonly gated: boolean
-        readonly steered: boolean
-        readonly messageID?: string
-        readonly reason?: string
-        readonly iterates?: number
-        readonly epsilon?: number
-        readonly approximationGap?: number
       }
     }
   | {
@@ -2925,6 +2903,9 @@ export type ServerAutomationListOutput = {
     readonly enabled: boolean
     readonly agent?: string | null
     readonly lastFired?: number | "Infinity" | "-Infinity" | "NaN" | null
+    readonly locked: boolean
+    readonly lockOwner?: string | null
+    readonly lockExpires?: number | "Infinity" | "-Infinity" | "NaN" | null
     readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
     readonly timeUpdated: number | "Infinity" | "-Infinity" | "NaN"
   }>
@@ -2943,6 +2924,9 @@ export type ServerAutomationGetOutput = {
   readonly enabled: boolean
   readonly agent?: string | undefined
   readonly lastFired?: number | undefined
+  readonly locked: boolean
+  readonly lockOwner?: string | undefined
+  readonly lockExpires?: number | undefined
   readonly timeCreated: number
   readonly timeUpdated: number
 }
@@ -3038,6 +3022,9 @@ export type ServerAutomationCreateOutput = {
   readonly enabled: boolean
   readonly agent?: string | undefined
   readonly lastFired?: number | undefined
+  readonly locked: boolean
+  readonly lockOwner?: string | undefined
+  readonly lockExpires?: number | undefined
   readonly timeCreated: number
   readonly timeUpdated: number
 }
@@ -3081,6 +3068,9 @@ export type ServerAutomationUpdateOutput = {
   readonly enabled: boolean
   readonly agent?: string | undefined
   readonly lastFired?: number | undefined
+  readonly locked: boolean
+  readonly lockOwner?: string | undefined
+  readonly lockExpires?: number | undefined
   readonly timeCreated: number
   readonly timeUpdated: number
 }
@@ -3089,10 +3079,116 @@ export type ServerAutomationRemoveInput = { readonly id: { readonly id: string }
 
 export type ServerAutomationRemoveOutput = void
 
-export type ServerAutomationFireInput = { readonly id: { readonly id: string }["id"] }
+export type ServerAutomationFireInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly payload: { readonly payload: unknown }["payload"]
+}
 
-export type ServerAutomationFireOutput = void
+export type ServerAutomationFireOutput = {
+  readonly id: string
+  readonly triggerID: string
+  readonly sessionID: string
+  readonly status: "pending" | "running" | "completed" | "failed" | "cancelled"
+  readonly prompt: string
+  readonly agent?: string | undefined
+  readonly error?: string | undefined
+  readonly payload?: unknown | undefined
+  readonly timeStarted: number
+  readonly timeCompleted?: number | undefined
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}
 
 export type ServerAutomationWebhookInput = { readonly id: { readonly id: string }["id"] }
 
-export type ServerAutomationWebhookOutput = void
+export type ServerAutomationWebhookOutput = {
+  readonly id: string
+  readonly triggerID: string
+  readonly sessionID: string
+  readonly status: "pending" | "running" | "completed" | "failed" | "cancelled"
+  readonly prompt: string
+  readonly agent?: string | undefined
+  readonly error?: string | undefined
+  readonly payload?: unknown | undefined
+  readonly timeStarted: number
+  readonly timeCompleted?: number | undefined
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}
+
+export type ServerAutomationRunListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly triggerID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly status?: "pending" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly limit?: number | undefined
+  }["location"]
+  readonly triggerID?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly triggerID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly status?: "pending" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly limit?: number | undefined
+  }["triggerID"]
+  readonly sessionID?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly triggerID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly status?: "pending" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly limit?: number | undefined
+  }["sessionID"]
+  readonly status?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly triggerID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly status?: "pending" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly limit?: number | undefined
+  }["status"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly triggerID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly status?: "pending" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly limit?: number | undefined
+  }["limit"]
+}
+
+export type ServerAutomationRunListOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly triggerID: string
+    readonly sessionID: string
+    readonly status: "pending" | "running" | "completed" | "failed" | "cancelled"
+    readonly prompt: string
+    readonly agent?: string | null
+    readonly error?: string | null
+    readonly payload?: JsonValue | null
+    readonly timeStarted: number | "Infinity" | "-Infinity" | "NaN"
+    readonly timeCompleted?: number | "Infinity" | "-Infinity" | "NaN" | null
+    readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly timeUpdated: number | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
+export type ServerAutomationRunGetInput = { readonly id: { readonly id: string }["id"] }
+
+export type ServerAutomationRunGetOutput = {
+  readonly id: string
+  readonly triggerID: string
+  readonly sessionID: string
+  readonly status: "pending" | "running" | "completed" | "failed" | "cancelled"
+  readonly prompt: string
+  readonly agent?: string | undefined
+  readonly error?: string | undefined
+  readonly payload?: unknown | undefined
+  readonly timeStarted: number
+  readonly timeCompleted?: number | undefined
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}

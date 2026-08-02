@@ -150,8 +150,8 @@ HttpApiGroup.make("server.automation")
     HttpApiEndpoint.post("automation.fire", "/api/automation/:id/fire", {
       params: { id: Schema.String },
       payload: Schema.Struct({
-        payload: Schema.Unknown.pipe(Schema.optional).annotate({ description: "Optional payload to pass to the prompt (e.g., webhook body)" }),
-      }).pipe(Schema.optional),
+        payload: Schema.Unknown.annotate({ description: "Optional payload to pass to the prompt (e.g., webhook body)" }),
+      }),
       success: Run,
       error: [AutomationNotFoundError, AutomationLockError, AutomationPromptConflictError],
     }).annotateMerge(
@@ -177,7 +177,7 @@ HttpApiGroup.make("server.automation")
     ),
   )
   .add(
-    HttpApiEndpoint.get("automation.runs.list", "/api/automation/runs", {
+    HttpApiEndpoint.get("automation.runList", "/api/automation/runs", {
       query: Schema.Struct({
         ...LocationQuery.fields,
         triggerID: Schema.optional(Schema.String),
@@ -197,7 +197,7 @@ HttpApiGroup.make("server.automation")
       ),
   )
   .add(
-    HttpApiEndpoint.get("automation.runs.get", "/api/automation/runs/:id", {
+    HttpApiEndpoint.get("automation.runGet", "/api/automation/runs/:id", {
       params: { id: Schema.String },
       success: Run,
       error: [AutomationNotFoundError],
