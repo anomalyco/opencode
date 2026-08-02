@@ -3,9 +3,23 @@ import os from "os"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
-import { resolveMarketplaceSourceReference } from "@/marketplace/source"
+import { marketplaceGitReference, resolveMarketplaceSourceReference } from "@/marketplace/source"
 
 describe("marketplace local source references", () => {
+  test("recognizes SSH git repositories with explicit ports", () => {
+    expect(marketplaceGitReference("ssh://git@git.example.com:2222/ai/agent-marketplace.git")).toMatchObject({
+      host: "git.example.com:2222",
+      path: "ai/agent-marketplace",
+      repo: "agent-marketplace",
+      protocol: "ssh:",
+    })
+    expect(marketplaceGitReference("git@git.example.com:ai/agent-marketplace.git")).toMatchObject({
+      host: "git.example.com",
+      path: "ai/agent-marketplace",
+    })
+    expect(marketplaceGitReference("https://git.example.com/ai/agent-marketplace.git")).toBeUndefined()
+  })
+
   test("normalizes files, directories, relative paths, and file URLs", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-marketplace-source-"))
     try {

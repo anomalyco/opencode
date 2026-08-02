@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import {
   createMarketplaceSource,
   loadMarketplace,
@@ -37,7 +38,7 @@ import { Config } from "@/config/config"
 import { composeMarketplaceConfig } from "./overlay"
 import * as MarketplaceRegistry from "./registry"
 import * as MarketplaceCache from "./cache"
-import { resolveMarketplaceSourceReference } from "./source"
+import { marketplaceGitReference, resolveMarketplaceSourceReference } from "./source"
 import { createMarketplacePlanStore } from "./plan-store"
 
 export type InstallInput = {
@@ -251,6 +252,7 @@ const layer = Layer.effect(
     const registry = yield* MarketplaceRegistry.Service
     const cache = yield* MarketplaceCache.Service
     const config = yield* Config.Service
+    const repositories = yield* RepositoryCache.Service
     const compatibility = {
       opencode: InstallationVersion,
       platform: process.platform,
@@ -266,7 +268,42 @@ const layer = Layer.effect(
       replace?: boolean
     }>()
 
+    const resolveSourceReference = Effect.fnUntraced(function* (value: string, refresh: boolean) {
+      const repository = marketplaceGitReference(value)
+      if (!repository) {
+        return yield* Effect.tryPromise({
+          try: () => resolveMarketplaceSourceReference(value),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        })
+      }
+      const checkout = yield* repositories
+        .ensure({ reference: repository, refresh })
+        .pipe(Effect.mapError((error) => new Error(error.message)))
+      const local = yield* Effect.tryPromise({
+        try: () => resolveMarketplaceSourceReference(checkout.localPath),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      })
+      return {
+        ...local,
+        reference: value.trim(),
+        name: local.name ?? repository.repo,
+      }
+    })
+
+    const ensureSourceRepositories = Effect.fnUntraced(function* (state: MarketplaceState, refresh: boolean) {
+      yield* Effect.forEach(
+        state.sources ?? [],
+        (source) => {
+          const repository = marketplaceGitReference(source.reference ?? source.url)
+          if (!repository) return Effect.void
+          return repositories.ensure({ reference: repository, refresh }).pipe(Effect.ignore)
+        },
+        { concurrency: "unbounded" },
+      )
+    })
+
     const loadView = Effect.fnUntraced(function* (state: MarketplaceState, refresh: boolean) {
+      yield* ensureSourceRepositories(state, refresh)
       const loaded = yield* Effect.tryPromise({
         try: () =>
           loadMarketplace({
@@ -750,16 +787,20 @@ const layer = Layer.effect(
       if ((state.revision ?? 0) !== input.expectedRevision) {
         return revisionFailure(input.expectedRevision, state.revision ?? 0)
       }
-      const resolved = yield* Effect.promise(() => resolveMarketplaceSourceReference(input.url))
+      const resolved = yield* resolveSourceReference(input.url, true).pipe(
+        Effect.map((value) => ({ ok: true as const, value })),
+        Effect.catch((error) => Effect.succeed({ ok: false as const, error })),
+      )
+      if (!resolved.ok) return notFound(resolved.error.message)
       const source = {
         ...createMarketplaceSource({
-          url: resolved.url,
-          name: input.name ?? resolved.name,
+          url: resolved.value.url,
+          name: input.name ?? resolved.value.name,
           trust: input.trust,
           format: input.format,
-          header_env: resolved.local ? undefined : input.headerEnv,
+          header_env: resolved.value.local ? undefined : input.headerEnv,
         }),
-        reference: resolved.reference,
+        reference: resolved.value.reference,
       }
       const loaded = yield* Effect.tryPromise({
         try: () =>
@@ -826,10 +867,7 @@ const layer = Layer.effect(
       const sources: MarketplaceSource[] = []
       const sourceIDs = new Map<string, string>()
       for (const item of profile.value.sources) {
-        const resolved = yield* Effect.tryPromise({
-          try: () => resolveMarketplaceSourceReference(item.url),
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-        }).pipe(
+        const resolved = yield* resolveSourceReference(item.url, true).pipe(
           Effect.map((value) => ({ ok: true as const, value })),
           Effect.catch((error) => Effect.succeed({ ok: false as const, error })),
         )
@@ -1003,7 +1041,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Config.node, MarketplaceCache.node, MarketplaceRegistry.node],
+  deps: [Config.node, MarketplaceCache.node, MarketplaceRegistry.node, RepositoryCache.node],
 })
 
 export const MarketplaceServiceNode = node
