@@ -275,6 +275,10 @@ import type {
   V2AutomationListResponses,
   V2AutomationRemoveErrors,
   V2AutomationRemoveResponses,
+  V2AutomationRunsGetErrors,
+  V2AutomationRunsGetResponses,
+  V2AutomationRunsListErrors,
+  V2AutomationRunsListResponses,
   V2AutomationUpdateErrors,
   V2AutomationUpdateResponses,
   V2AutomationWebhookErrors,
@@ -7038,6 +7042,70 @@ export class ProjectCopy2 extends HeyApiClient {
   }
 }
 
+export class Runs extends HeyApiClient {
+  /**
+   * List automation runs
+   *
+   * List all automation runs, optionally filtered by trigger, session, or status.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      triggerID?: string
+      sessionID?: string
+      status?: "pending" | "running" | "completed" | "failed" | "cancelled"
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "triggerID" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "status" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      V2AutomationRunsListResponses,
+      V2AutomationRunsListErrors,
+      ThrowOnError
+    >({
+      url: "/api/automation/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get automation run
+   *
+   * Get an automation run by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<V2AutomationRunsGetResponses, V2AutomationRunsGetErrors, ThrowOnError>({
+      url: "/api/automation/runs/{id}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Automation extends HeyApiClient {
   /**
    * List automation triggers
@@ -7216,26 +7284,42 @@ export class Automation extends HeyApiClient {
   /**
    * Fire automation trigger
    *
-   * Manually fire an automation trigger, sending its prompt to the session.
+   * Manually fire an automation trigger, sending its prompt to the session. Returns the run record.
    */
   public fire<ThrowOnError extends boolean = false>(
     parameters: {
       id: string
+      payload?: unknown
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "payload" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).post<V2AutomationFireResponses, V2AutomationFireErrors, ThrowOnError>({
       url: "/api/automation/{id}/fire",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
   /**
    * Receive webhook for automation trigger
    *
-   * Raw webhook endpoint. If the trigger has a secret, the request must include an X-Hub-Signature-256 header (sha256=<hex>) that HMAC-SHA256-verifies against the raw body using the stored secret. Used by external services like GitHub.
+   * Raw webhook endpoint. If the trigger has a secret, the request must include an X-Hub-Signature-256 header (sha256=<hex>) that HMAC-SHA256-verifies against the raw body using the stored secret. Used by external services like GitHub. The webhook body is passed as payload to the prompt.
    */
   public webhook<ThrowOnError extends boolean = false>(
     parameters: {
@@ -7251,6 +7335,11 @@ export class Automation extends HeyApiClient {
         ...params,
       },
     )
+  }
+
+  private _runs?: Runs
+  get runs(): Runs {
+    return (this._runs ??= new Runs({ client: this.client }))
   }
 }
 

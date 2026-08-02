@@ -269,6 +269,7 @@ const execution = Layer.effect(
             extensionsDetected: 0,
           },
         }),
+      escalate: () => Effect.succeed({ escalated: true, message: "mock escalation" }),
     })
   }),
 ).pipe(Layer.provide(runnerLayer))

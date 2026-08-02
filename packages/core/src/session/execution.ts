@@ -20,6 +20,17 @@ export interface Interface {
     sessionID: SessionSchema.ID,
     input?: { readonly model?: { readonly providerID: string; readonly modelID: string } },
   ) => Effect.Effect<SessionRunner.ReflectionOutcome, SessionRunner.RunError>
+  /** Escalate current task to a more capable (cloud) model. Re-routes through automation queue. */
+  readonly escalate: (
+    input: { readonly sessionID: SessionSchema.ID; readonly reason: string },
+  ) => Effect.Effect<{ readonly escalated: boolean; readonly message: string }, EscalateError>
+}
+
+export class EscalateError extends Error {
+  readonly _tag = "EscalateError"
+  constructor(message: string) {
+    super(message)
+  }
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
@@ -36,5 +47,6 @@ export const noopLayer = Layer.succeed(
     wake: () => Effect.void,
     interrupt: () => Effect.void,
     reflect: () => Effect.die("Reflection not available in noop layer"),
+    escalate: () => Effect.die("Escalation not available in noop layer"),
   }),
 )

@@ -2997,6 +2997,18 @@ export type AutomationNotFoundError = {
   message: string
 }
 
+export type AutomationLockError = {
+  _tag: "AutomationLockError"
+  id: string
+  message: string
+}
+
+export type AutomationPromptConflictError = {
+  _tag: "AutomationPromptConflictError"
+  sessionID: string
+  messageID: string
+}
+
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
 }
@@ -13855,6 +13867,9 @@ export type V2AutomationListResponses = {
       enabled: boolean
       agent?: string
       lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      locked: boolean
+      lockOwner?: string
+      lockExpires?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }>
@@ -13934,6 +13949,9 @@ export type V2AutomationCreateResponses = {
     enabled: boolean
     agent?: string
     lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    locked: boolean
+    lockOwner?: string
+    lockExpires?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
@@ -14026,6 +14044,9 @@ export type V2AutomationGetResponses = {
     enabled: boolean
     agent?: string
     lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    locked: boolean
+    lockOwner?: string
+    lockExpires?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
@@ -14092,6 +14113,9 @@ export type V2AutomationUpdateResponses = {
     enabled: boolean
     agent?: string
     lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    locked: boolean
+    lockOwner?: string
+    lockExpires?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
@@ -14100,7 +14124,9 @@ export type V2AutomationUpdateResponses = {
 export type V2AutomationUpdateResponse = V2AutomationUpdateResponses[keyof V2AutomationUpdateResponses]
 
 export type V2AutomationFireData = {
-  body?: never
+  body: {
+    payload?: unknown
+  }
   path: {
     id: string
   }
@@ -14121,15 +14147,32 @@ export type V2AutomationFireErrors = {
    * AutomationNotFoundError
    */
   404: AutomationNotFoundError
+  /**
+   * AutomationLockError | AutomationPromptConflictError
+   */
+  409: AutomationLockError | AutomationPromptConflictError
 }
 
 export type V2AutomationFireError = V2AutomationFireErrors[keyof V2AutomationFireErrors]
 
 export type V2AutomationFireResponses = {
   /**
-   * <No Content>
+   * Success
    */
-  204: void
+  200: {
+    id: string
+    triggerID: string
+    sessionID: string
+    status: "pending" | "running" | "completed" | "failed" | "cancelled"
+    prompt: string
+    agent?: string
+    error?: string
+    payload?: unknown
+    timeStarted: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCompleted?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
 }
 
 export type V2AutomationFireResponse = V2AutomationFireResponses[keyof V2AutomationFireResponses]
@@ -14162,12 +14205,127 @@ export type V2AutomationWebhookError = V2AutomationWebhookErrors[keyof V2Automat
 
 export type V2AutomationWebhookResponses = {
   /**
-   * <No Content>
+   * Success
    */
-  204: void
+  200: {
+    id: string
+    triggerID: string
+    sessionID: string
+    status: "pending" | "running" | "completed" | "failed" | "cancelled"
+    prompt: string
+    agent?: string
+    error?: string
+    payload?: unknown
+    timeStarted: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCompleted?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
 }
 
 export type V2AutomationWebhookResponse = V2AutomationWebhookResponses[keyof V2AutomationWebhookResponses]
+
+export type V2AutomationRunsListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    triggerID?: string
+    sessionID?: string
+    status?: "pending" | "running" | "completed" | "failed" | "cancelled"
+    limit?: string
+  }
+  url: "/api/automation/runs"
+}
+
+export type V2AutomationRunsListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2AutomationRunsListError = V2AutomationRunsListErrors[keyof V2AutomationRunsListErrors]
+
+export type V2AutomationRunsListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<{
+      id: string
+      triggerID: string
+      sessionID: string
+      status: "pending" | "running" | "completed" | "failed" | "cancelled"
+      prompt: string
+      agent?: string
+      error?: string
+      payload?: unknown
+      timeStarted: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      timeCompleted?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }
+}
+
+export type V2AutomationRunsListResponse = V2AutomationRunsListResponses[keyof V2AutomationRunsListResponses]
+
+export type V2AutomationRunsGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/automation/runs/{id}"
+}
+
+export type V2AutomationRunsGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * AutomationNotFoundError
+   */
+  404: AutomationNotFoundError
+}
+
+export type V2AutomationRunsGetError = V2AutomationRunsGetErrors[keyof V2AutomationRunsGetErrors]
+
+export type V2AutomationRunsGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    triggerID: string
+    sessionID: string
+    status: "pending" | "running" | "completed" | "failed" | "cancelled"
+    prompt: string
+    agent?: string
+    error?: string
+    payload?: unknown
+    timeStarted: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCompleted?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type V2AutomationRunsGetResponse = V2AutomationRunsGetResponses[keyof V2AutomationRunsGetResponses]
 
 export type PtyConnectData = {
   body?: never

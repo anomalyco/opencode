@@ -100,6 +100,22 @@ const layer = Layer.effect(
           ),
         )
       }),
+
+      escalate: Effect.fnUntraced(function* (input: {
+        readonly sessionID: SessionSchema.ID
+        readonly reason: string
+      }) {
+        yield* Effect.logInfo("Escalation requested", {
+          sessionID: input.sessionID,
+          reason: input.reason,
+        })
+        yield* coordinator.interrupt(input.sessionID).pipe(Effect.orDie)
+        yield* coordinator.wake(input.sessionID).pipe(Effect.orDie)
+        return {
+          escalated: true,
+          message: `Task escalated to cloud model: ${input.reason}`,
+        }
+      }),
     })
   }),
 )

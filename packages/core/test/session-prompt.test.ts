@@ -61,6 +61,7 @@ const execution = Layer.succeed(
             extensionsDetected: 0,
           },
         }),
+      escalate: () => Effect.succeed({ escalated: true, message: "mock escalation" }),
   }),
 )
 const it = testEffect(
