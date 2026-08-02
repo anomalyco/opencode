@@ -175,15 +175,22 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  const configured = { ...resolved.settings, ...credential?.metadata }
-  const mapping = Provider.isAISDK(resolved.package) ? AISDKNative.map(packageName, configured) : undefined
+  const configured = {
+    ...resolved.settings,
+    ...credential?.metadata,
+    ...(packageName === "@ai-sdk/amazon-bedrock/mantle"
+      ? nativeCredentialSettings("@opencode-ai/ai/providers/amazon-bedrock/mantle", credential)
+      : {}),
+  }
+  const mapping = Provider.isAISDK(resolved.package)
+    ? AISDKNative.map(packageName, configured, resolved.modelID ?? resolved.id)
+    : undefined
   const native = mapping?.package ?? resolved.package
   if (Provider.isAISDK(resolved.package) && !mapping) {
     if (!dependencies?.loadAISDK) return Effect.fail(unsupported(resolved))
     const runtime = produce(resolved, (draft) => {
       draft.settings = Provider.mergeOverlay(draft.settings, {
-        ...(credential?.type === "key" ? { apiKey: credential.key } : {}),
-        ...(credential?.type === "oauth" ? { apiKey: credential.access } : {}),
+        ...nativeCredentialSettings(resolved.package ?? "", credential),
         ...credential?.metadata,
       })
     })

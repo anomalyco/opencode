@@ -2,6 +2,87 @@ import { describe, expect, test } from "bun:test"
 import { AISDKNative } from "@opencode-ai/core/aisdk-native"
 
 describe("AISDKNative", () => {
+  test("maps Bedrock Mantle models to their supported native APIs", () => {
+    const settings = {
+      bearerToken: "token",
+      region: "us-west-2",
+      baseURL: "https://mantle.test/v1",
+      reasoningEffort: "high",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    }
+
+    expect(AISDKNative.map("@ai-sdk/amazon-bedrock/mantle", settings, "openai.gpt-oss-120b")).toEqual({
+      package: "@opencode-ai/ai/providers/amazon-bedrock/mantle/responses",
+      settings: {
+        apiKey: "token",
+        baseURL: "https://mantle.test/v1",
+        region: "us-west-2",
+        providerOptions: {
+          openai: {
+            reasoningEffort: "high",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    })
+    expect(AISDKNative.map("@ai-sdk/amazon-bedrock/mantle", settings, "openai.gpt-oss-safeguard-20b")?.package).toBe(
+      "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
+    )
+  })
+
+  test("maps static Bedrock Mantle credentials without leaking connection options", () => {
+    expect(
+      AISDKNative.map(
+        "@ai-sdk/amazon-bedrock/mantle",
+        {
+          accessKeyId: "key",
+          secretAccessKey: "secret",
+          sessionToken: "session",
+          region: "eu-west-1",
+          profile: "ignored",
+          credentialProvider: "ignored",
+          fetch: "ignored",
+          store: false,
+        },
+        "openai.gpt-oss-120b",
+      ),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/amazon-bedrock/mantle/responses",
+      settings: {
+        credentials: {
+          accessKeyId: "key",
+          secretAccessKey: "secret",
+          sessionToken: "session",
+          region: "eu-west-1",
+        },
+        region: "eu-west-1",
+        providerOptions: { openai: { store: false } },
+      },
+    })
+  })
+
+  test("keeps Bedrock Mantle on the AI SDK when native static auth is unavailable", () => {
+    expect(
+      AISDKNative.map(
+        "@ai-sdk/amazon-bedrock/mantle",
+        { region: "us-east-1", profile: "production" },
+        "openai.gpt-oss-120b",
+      ),
+    ).toBeUndefined()
+  })
+
+  test("maps the legacy Bedrock endpoint override", () => {
+    expect(
+      AISDKNative.map(
+        "@ai-sdk/amazon-bedrock/mantle",
+        { bearerToken: "token", endpoint: "https://mantle.private/v1", region: "us-east-1" },
+        "openai.gpt-oss-120b",
+      ),
+    ).toMatchObject({ settings: { baseURL: "https://mantle.private/v1" } })
+  })
+
   test("maps OpenRouter settings to native destinations", () => {
     expect(
       AISDKNative.map("@openrouter/ai-sdk-provider", {

@@ -42,6 +42,35 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
   })
 
 describe("ModelResolver", () => {
+  it.effect("maps Bedrock Mantle models to native Responses and safeguards to Chat", () =>
+    Effect.gen(function* () {
+      const credential = Credential.Key.make({ type: "key", key: "secret" })
+      const responses = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          modelID: "openai.gpt-oss-120b",
+          settings: { region: "us-east-2" },
+        }),
+        credential,
+      )
+      const chat = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          modelID: "openai.gpt-oss-safeguard-20b",
+          settings: { region: "us-east-2" },
+        }),
+        credential,
+      )
+
+      expect(responses.route).toMatchObject({
+        id: "bedrock-mantle-responses",
+        endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
+      })
+      expect(chat.route).toMatchObject({
+        id: "bedrock-mantle-chat",
+        endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
+      })
+    }),
+  )
+
   it.effect("uses the API modelID instead of the catalog ID for native OpenAI routes", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai"), {

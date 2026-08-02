@@ -10,9 +10,15 @@ export interface Mapping {
   readonly body?: Readonly<Record<string, unknown>>
 }
 
-export function map(packageName: string | undefined, settings: Readonly<Record<string, unknown>>): Mapping | undefined {
+export function map(
+  packageName: string | undefined,
+  settings: Readonly<Record<string, unknown>>,
+  modelID?: string,
+): Mapping | undefined {
   const baseSettings = mapBaseSettings(settings)
   switch (packageName) {
+    case "@ai-sdk/amazon-bedrock/mantle":
+      return mapBedrockMantle(settings, baseSettings, modelID)
     case "@ai-sdk/google":
       return {
         package: "@opencode-ai/ai/providers/google",
@@ -34,6 +40,79 @@ export function map(packageName: string | undefined, settings: Readonly<Record<s
         },
       }
   }
+}
+
+function mapBedrockMantle(
+  settings: Readonly<Record<string, unknown>>,
+  baseSettings: Readonly<Record<string, unknown>>,
+  modelID: string | undefined,
+): Mapping | undefined {
+  const apiKey =
+    typeof settings.apiKey === "string"
+      ? settings.apiKey
+      : typeof settings.bearerToken === "string"
+        ? settings.bearerToken
+        : undefined
+  const credentials = mapBedrockCredentials(settings)
+  if (apiKey === undefined && credentials === undefined) return undefined
+  const safeguard = modelID === "openai.gpt-oss-safeguard-20b" || modelID === "openai.gpt-oss-safeguard-120b"
+  return {
+    package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${safeguard ? "chat" : "responses"}`,
+    settings: {
+      ...baseSettings,
+      ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
+        ? { baseURL: settings.endpoint }
+        : {}),
+      ...(apiKey === undefined ? {} : { apiKey }),
+      ...(credentials === undefined ? {} : { credentials }),
+      ...(typeof settings.region === "string" ? { region: settings.region } : {}),
+      ...mapOpenAIOptions(settings),
+    },
+  }
+}
+
+function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>) {
+  if (
+    isRecord(settings.credentials) &&
+    typeof settings.credentials.region === "string" &&
+    typeof settings.credentials.accessKeyId === "string" &&
+    typeof settings.credentials.secretAccessKey === "string"
+  ) {
+    return {
+      region: settings.credentials.region,
+      accessKeyId: settings.credentials.accessKeyId,
+      secretAccessKey: settings.credentials.secretAccessKey,
+      ...(typeof settings.credentials.sessionToken === "string"
+        ? { sessionToken: settings.credentials.sessionToken }
+        : {}),
+    }
+  }
+  if (
+    typeof settings.region !== "string" ||
+    typeof settings.accessKeyId !== "string" ||
+    typeof settings.secretAccessKey !== "string"
+  )
+    return undefined
+  return {
+    region: settings.region,
+    accessKeyId: settings.accessKeyId,
+    secretAccessKey: settings.secretAccessKey,
+    ...(typeof settings.sessionToken === "string" ? { sessionToken: settings.sessionToken } : {}),
+  }
+}
+
+function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {
+  const options = {
+    ...(typeof settings.reasoningEffort === "string" ? { reasoningEffort: settings.reasoningEffort } : {}),
+    ...(typeof settings.reasoningSummary === "string" ? { reasoningSummary: settings.reasoningSummary } : {}),
+    ...(Array.isArray(settings.include) ? { include: settings.include } : {}),
+    ...(typeof settings.store === "boolean" ? { store: settings.store } : {}),
+    ...(typeof settings.promptCacheKey === "string" ? { promptCacheKey: settings.promptCacheKey } : {}),
+    ...(typeof settings.textVerbosity === "string" ? { textVerbosity: settings.textVerbosity } : {}),
+    ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
+  }
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: { openai: options } }
 }
 
 function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
