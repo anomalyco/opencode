@@ -221,8 +221,7 @@ describe("derToPem", () => {
   })
 
   test("output is valid base64 between markers", () => {
-    const raw = new Uint8Array(256)
-    for (let i = 0; i < raw.length; i++) raw[i] = i
+    const raw = Uint8Array.from({ length: 256 }, (_, i) => i)
     const pem = derToPem(raw.buffer)
     const lines = pem.split("\n")
     const bodyLines = lines.slice(1, -1)

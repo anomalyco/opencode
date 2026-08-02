@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs"
+import { closeSync, fstatSync, openSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import tls from "node:tls"
@@ -18,6 +18,11 @@ export interface TlsConfig {
 /**
  * Resolve a file path, expanding `~` to the user home directory.
  * Absolute paths are returned as-is. Relative paths are resolved against the workspace directory.
+ *
+ * Path traversal via `..` is intentionally not restricted — the config author
+ * controls the CA file location. File content is always validated (must be PEM)
+ * and never exposed outside the TLS layer, so reading an unintended file is
+ * harmless beyond the CA trust it enables (which is the user's explicit intent).
  */
 export function resolveFilePath(filePath: string, workspaceDir: string): string {
   if (filePath.startsWith("~")) return path.join(homedir(), filePath.slice(2))
@@ -66,26 +71,34 @@ export function validateFingerprint(raw: string): string {
 /**
  * Read and validate a CA certificate file (PEM format).
  *
- * Checks that the path points to a regular file (not a directory or unusual
- * device) and that the file size is within a reasonable bound. Then reads the
- * content and verifies it contains at least one well-formed PEM certificate
- * block before returning it.
+ * Opens the file once and uses the file descriptor for both stat and read,
+ * closing the TOCTOU window between validation and content retrieval.
  *
  * Throws with a descriptive error message for missing files, directories,
  * non-certificate content, or files that are too large.
  */
 export function readCaFile(filePath: string, workspaceDir: string): string {
   const resolved = resolveFilePath(filePath, workspaceDir)
-  if (!existsSync(resolved)) throw new Error(`CA file not found: ${filePath}`)
 
-  const stat = statSync(resolved)
-  if (!stat.isFile()) throw new Error(`CA path is not a file: ${filePath}`)
-  if (stat.size > MAX_CA_FILE_SIZE)
-    throw new Error(`CA file too large (${stat.size} bytes, max ${MAX_CA_FILE_SIZE}): ${filePath}`)
+  let fd: number
+  try {
+    fd = openSync(resolved, "r")
+  } catch {
+    throw new Error(`CA file not found: ${filePath}`)
+  }
 
-  const content = readFileSync(resolved, "utf-8").trim()
-  validatePemCert(content, filePath)
-  return content
+  try {
+    const stat = fstatSync(fd)
+    if (!stat.isFile()) throw new Error(`CA path is not a file: ${filePath}`)
+    if (stat.size > MAX_CA_FILE_SIZE)
+      throw new Error(`CA file too large (${stat.size} bytes, max ${MAX_CA_FILE_SIZE}): ${filePath}`)
+
+    const content = readFileSync(fd, "utf-8").trim()
+    validatePemCert(content, filePath)
+    return content
+  } finally {
+    closeSync(fd)
+  }
 }
 
 /**
