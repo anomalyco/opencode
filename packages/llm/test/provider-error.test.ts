@@ -18,6 +18,21 @@ describe("provider error classification", () => {
     expect(messages.every(isContextOverflow)).toBe(true)
   })
 
+  test("classifies provider request payload and media caps as context overflow", () => {
+    const messages = [
+      // Azure OpenAI request payload byte cap, returned as a 400 (not a 413)
+      "Request content length exceeded 32 MB limit.",
+      '400 status code: {"error":{"message":"Request content length exceeded 32 MB limit.","type":"invalid_request_error","param":null,"code":null}}',
+      // Azure OpenAI per-request image cap
+      "Exceeded maximum number of images (50) allowed in the request.",
+      // OpenRouter double-wraps the upstream provider body as an escaped string in metadata.raw
+      '{"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\": {\\"message\\": \\"Request content length exceeded 32 MB limit.\\"}}","provider_name":"Azure"}}}',
+      '{"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\": {\\"message\\": \\"Exceeded maximum number of images (50) allowed in the request.\\"}}","provider_name":"Azure"}}}',
+    ]
+
+    expect(messages.every(isContextOverflow)).toBe(true)
+  })
+
   test("does not classify rate limits as context overflow", () => {
     const messages = [
       "Throttling error: Too many tokens, please wait before trying again.",
