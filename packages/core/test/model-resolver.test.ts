@@ -621,7 +621,10 @@ describe("ModelResolver", () => {
         model(Provider.aisdk("@ai-sdk/xai"), { settings: { reasoningEffort: "high" } }),
       )
       const bedrock = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), { settings: { region: "us-east-1" } }),
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), {
+          settings: { region: "us-east-1", topP: 0.8, serviceTier: "priority" },
+          body: {},
+        }),
       )
       const mantle = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
@@ -641,6 +644,8 @@ describe("ModelResolver", () => {
         xai: { reasoningEffort: "high", store: false },
       })
       expect(bedrock.route.id).toBe("bedrock-converse")
+      expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
+      expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
       expect(mantle.route.id).toBe("bedrock-mantle-responses")
     }),
   )

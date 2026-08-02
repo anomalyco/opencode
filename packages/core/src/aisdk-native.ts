@@ -22,10 +22,8 @@ export function map(input: MapInput): Mapping | undefined {
     case "@ai-sdk/amazon-bedrock":
       return {
         package: "@opencode-ai/ai/providers/amazon-bedrock",
-        settings: {
-          ...mapBedrockSettings(input.settings, baseSettings),
-          ...(typeof input.settings.topP === "number" ? { topP: input.settings.topP } : {}),
-        },
+        settings: mapBedrockSettings(input.settings, baseSettings),
+        ...mapBedrockRequest(input),
       }
     case "@ai-sdk/amazon-bedrock/mantle":
       return mapBedrockMantle(input, baseSettings)
@@ -61,6 +59,7 @@ function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string,
       ...mapBedrockSettings(settings, baseSettings),
       ...mapOpenAIOptions(settings),
     },
+    ...(isStringRecord(settings.headers) ? { headers: settings.headers } : {}),
   }
 }
 
@@ -83,6 +82,61 @@ function mapBedrockSettings(
     ...(apiKey === undefined ? {} : { apiKey }),
     ...(credentials === undefined ? {} : { credentials }),
     ...(typeof settings.region === "string" ? { region: settings.region } : {}),
+    ...(typeof settings.topP === "number" ? { topP: settings.topP } : {}),
+  }
+}
+
+function mapBedrockRequest(input: MapInput): Pick<Mapping, "headers" | "body"> {
+  const settings = input.settings
+  const headers = isStringRecord(settings.headers) ? settings.headers : undefined
+  const additional = isRecord(settings.additionalModelRequestFields) ? settings.additionalModelRequestFields : {}
+  const reasoning = isRecord(settings.reasoningConfig) ? settings.reasoningConfig : undefined
+  const anthropic = input.modelID.includes("anthropic")
+  const openai = input.modelID.startsWith("openai.")
+  const effort = typeof reasoning?.maxReasoningEffort === "string" ? reasoning.maxReasoningEffort : undefined
+  const type = typeof reasoning?.type === "string" ? reasoning.type : undefined
+  const budget = typeof reasoning?.budgetTokens === "number" ? reasoning.budgetTokens : undefined
+  const display = typeof reasoning?.display === "string" ? reasoning.display : undefined
+  const betas = Array.isArray(settings.anthropicBeta)
+    ? settings.anthropicBeta.filter((item): item is string => typeof item === "string")
+    : []
+  const existingBetas = Array.isArray(additional.anthropic_beta)
+    ? additional.anthropic_beta.filter((item): item is string => typeof item === "string")
+    : []
+  const fields = Provider.mergeOverlay(additional, {
+    ...(betas.length > 0 ? { anthropic_beta: [...existingBetas, ...betas] } : {}),
+    ...(anthropic && type === "enabled" && budget !== undefined
+      ? { thinking: { type: "enabled", budget_tokens: budget } }
+      : {}),
+    ...(anthropic && type === "adaptive"
+      ? { thinking: { type: "adaptive", ...(display === undefined ? {} : { display }) } }
+      : {}),
+    ...(anthropic && effort !== undefined
+      ? {
+          output_config: {
+            ...(isRecord(additional.output_config) ? additional.output_config : {}),
+            effort,
+          },
+        }
+      : {}),
+    ...(!anthropic && openai && effort !== undefined ? { reasoning_effort: effort } : {}),
+    ...(!anthropic && !openai && effort !== undefined
+      ? {
+          reasoningConfig: {
+            ...(type === undefined || type === "adaptive" ? {} : { type }),
+            ...(budget === undefined ? {} : { budgetTokens: budget }),
+            maxReasoningEffort: effort,
+          },
+        }
+      : {}),
+  })
+  const body = {
+    ...(fields && Object.keys(fields).length > 0 ? { additionalModelRequestFields: fields } : {}),
+    ...(typeof settings.serviceTier === "string" ? { serviceTier: { type: settings.serviceTier } } : {}),
+  }
+  return {
+    ...(headers === undefined ? {} : { headers }),
+    ...(Object.keys(body).length === 0 ? {} : { body }),
   }
 }
 
