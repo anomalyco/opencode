@@ -45,6 +45,7 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
+  | EventSessionNextReasoningCycleFired
   | EventSessionNextRevertStaged
   | EventSessionNextRevertCleared
   | EventSessionNextRevertCommitted
@@ -53,6 +54,7 @@ export type Event =
   | EventSessionError
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventInstallationRebaseCheckReady
   | EventFileEdited
   | EventReferenceUpdated
   | EventPermissionV2Asked
@@ -1166,6 +1168,22 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.reasoning.cycle.fired"
+        properties: {
+          timestamp: number
+          sessionID: string
+          loop: "why" | "then"
+          gated: boolean
+          steered: boolean
+          messageID?: string
+          reason?: string
+          iterates?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          epsilon?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          approximationGap?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+    | {
+        id: string
         type: "session.next.revert.staged"
         properties: {
           timestamp: number
@@ -1237,6 +1255,16 @@ export type GlobalEvent = {
         type: "installation.update-available"
         properties: {
           version: string
+        }
+      }
+    | {
+        id: string
+        type: "installation.rebase-check-ready"
+        properties: {
+          status: "clean" | "conflicts" | "type-errors"
+          version: string
+          conflictingFiles?: Array<string>
+          typeErrors?: Array<string>
         }
       }
     | {
@@ -1633,6 +1661,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextRetried
     | SyncEventSessionNextCompactionStarted
     | SyncEventSessionNextCompactionEnded
+    | SyncEventSessionNextReasoningCycleFired
     | SyncEventSessionNextRevertStaged
     | SyncEventSessionNextRevertCleared
     | SyncEventSessionNextRevertCommitted
@@ -2896,6 +2925,7 @@ export type V2Event =
   | SessionNextCompactionStarted
   | SessionNextCompactionDelta
   | SessionNextCompactionEnded
+  | SessionNextReasoningCycleFired
   | SessionNextRevertStaged
   | SessionNextRevertCleared
   | SessionNextRevertCommitted
@@ -2904,6 +2934,7 @@ export type V2Event =
   | SessionError
   | InstallationUpdated
   | InstallationUpdateAvailable
+  | InstallationRebaseCheckReady
   | FileEdited
   | ReferenceUpdated
   | PermissionV2Asked
@@ -2958,6 +2989,12 @@ export type ProjectCopyError = {
     message: string
     forceRequired?: boolean
   }
+}
+
+export type AutomationNotFoundError = {
+  _tag: "AutomationNotFoundError"
+  id: string
+  message: string
 }
 
 export type EffectHttpApiErrorForbidden = {
@@ -3775,6 +3812,29 @@ export type SyncEventSessionNextCompactionEnded = {
       reason: "auto" | "manual"
       text: string
       recent: string
+    }
+  }
+}
+
+export type SyncEventSessionNextReasoningCycleFired = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.reasoning.cycle.fired.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      loop: "why" | "then"
+      gated: boolean
+      steered: boolean
+      messageID?: string
+      reason?: string
+      iterates?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      epsilon?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      approximationGap?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
   }
 }
@@ -5303,6 +5363,32 @@ export type SessionNextCompactionDelta = {
   }
 }
 
+export type SessionNextReasoningCycleFired = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.cycle.fired"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    loop: "why" | "then"
+    gated: boolean
+    steered: boolean
+    messageID?: string
+    reason?: string
+    iterates?: number | "NaN" | "Infinity" | "-Infinity"
+    epsilon?: number | "NaN" | "Infinity" | "-Infinity"
+    approximationGap?: number | "NaN" | "Infinity" | "-Infinity"
+  }
+}
+
 export type MessagePartDelta = {
   id: string
   metadata?: {
@@ -5399,6 +5485,26 @@ export type InstallationUpdateAvailable = {
   location?: LocationRef
   data: {
     version: string
+  }
+}
+
+export type InstallationRebaseCheckReady = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "installation.rebase-check-ready"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    status: "clean" | "conflicts" | "type-errors"
+    version: string
+    conflictingFiles?: Array<string>
+    typeErrors?: Array<string>
   }
 }
 
@@ -6626,6 +6732,23 @@ export type EventSessionNextCompactionEnded = {
   }
 }
 
+export type EventSessionNextReasoningCycleFired = {
+  id: string
+  type: "session.next.reasoning.cycle.fired"
+  properties: {
+    timestamp: number
+    sessionID: string
+    loop: "why" | "then"
+    gated: boolean
+    steered: boolean
+    messageID?: string
+    reason?: string
+    iterates?: number | "NaN" | "Infinity" | "-Infinity"
+    epsilon?: number | "NaN" | "Infinity" | "-Infinity"
+    approximationGap?: number | "NaN" | "Infinity" | "-Infinity"
+  }
+}
+
 export type EventSessionNextRevertStaged = {
   id: string
   type: "session.next.revert.staged"
@@ -6706,6 +6829,17 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
+  }
+}
+
+export type EventInstallationRebaseCheckReady = {
+  id: string
+  type: "installation.rebase-check-ready"
+  properties: {
+    status: "clean" | "conflicts" | "type-errors"
+    version: string
+    conflictingFiles?: Array<string>
+    typeErrors?: Array<string>
   }
 }
 
@@ -11638,6 +11772,83 @@ export type V2SessionCompactResponses = {
 
 export type V2SessionCompactResponse = V2SessionCompactResponses[keyof V2SessionCompactResponses]
 
+export type V2SessionReflectData = {
+  body: {
+    model?: ModelRef
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/reflect"
+}
+
+export type V2SessionReflectErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
+}
+
+export type V2SessionReflectError = V2SessionReflectErrors[keyof V2SessionReflectErrors]
+
+export type V2SessionReflectResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: {
+      why: {
+        steered: boolean
+        iterates: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        converged: boolean
+        epsilon: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        approximationGap?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        text: string
+        extensionsDetected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      then: {
+        steered: boolean
+        iterates: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        converged: boolean
+        epsilon: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        approximationGap?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        text: string
+        extensionsDetected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      diagnostic: {
+        muR: string
+        tauR: string
+        state: string
+        initialPrompt: string
+        rhoMuR: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        rhoTauR: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        rhoState: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        forwardMisalignment: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        backwardMisalignment: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        totalMisalignment: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        objectiveGap: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        cofinality: "omega" | "transfinite"
+        extensionsDetected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+    }
+  }
+}
+
+export type V2SessionReflectResponse = V2SessionReflectResponses[keyof V2SessionReflectResponses]
+
 export type V2SessionWaitData = {
   body?: never
   path: {
@@ -13587,6 +13798,376 @@ export type V2ProjectCopyRefreshResponses = {
 }
 
 export type V2ProjectCopyRefreshResponse = V2ProjectCopyRefreshResponses[keyof V2ProjectCopyRefreshResponses]
+
+export type V2AutomationListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    sessionID?: string
+  }
+  url: "/api/automation"
+}
+
+export type V2AutomationListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2AutomationListError = V2AutomationListErrors[keyof V2AutomationListErrors]
+
+export type V2AutomationListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<{
+      id: string
+      sessionID: string
+      name: string
+      prompt: string
+      schedule:
+        | {
+            type: "cron"
+            /**
+             * Cron expression (e.g. '0 9 * * 1-5')
+             */
+            expression: string
+          }
+        | {
+            type: "webhook"
+            /**
+             * Webhook path (e.g. '/github/push')
+             */
+            path: string
+            secret?: string
+          }
+      enabled: boolean
+      agent?: string
+      lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }
+}
+
+export type V2AutomationListResponse = V2AutomationListResponses[keyof V2AutomationListResponses]
+
+export type V2AutomationCreateData = {
+  body: {
+    id?: string
+    sessionID: string
+    name: string
+    prompt: string
+    schedule:
+      | {
+          type: "cron"
+          /**
+           * Cron expression (e.g. '0 9 * * 1-5')
+           */
+          expression: string
+        }
+      | {
+          type: "webhook"
+          /**
+           * Webhook path (e.g. '/github/push')
+           */
+          path: string
+          secret?: string
+        }
+    enabled?: boolean
+    agent?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/automation"
+}
+
+export type V2AutomationCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2AutomationCreateError = V2AutomationCreateErrors[keyof V2AutomationCreateErrors]
+
+export type V2AutomationCreateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    sessionID: string
+    name: string
+    prompt: string
+    schedule:
+      | {
+          type: "cron"
+          /**
+           * Cron expression (e.g. '0 9 * * 1-5')
+           */
+          expression: string
+        }
+      | {
+          type: "webhook"
+          /**
+           * Webhook path (e.g. '/github/push')
+           */
+          path: string
+          secret?: string
+        }
+    enabled: boolean
+    agent?: string
+    lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type V2AutomationCreateResponse = V2AutomationCreateResponses[keyof V2AutomationCreateResponses]
+
+export type V2AutomationRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/automation/{id}"
+}
+
+export type V2AutomationRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2AutomationRemoveError = V2AutomationRemoveErrors[keyof V2AutomationRemoveErrors]
+
+export type V2AutomationRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2AutomationRemoveResponse = V2AutomationRemoveResponses[keyof V2AutomationRemoveResponses]
+
+export type V2AutomationGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/automation/{id}"
+}
+
+export type V2AutomationGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * AutomationNotFoundError
+   */
+  404: AutomationNotFoundError
+}
+
+export type V2AutomationGetError = V2AutomationGetErrors[keyof V2AutomationGetErrors]
+
+export type V2AutomationGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    sessionID: string
+    name: string
+    prompt: string
+    schedule:
+      | {
+          type: "cron"
+          /**
+           * Cron expression (e.g. '0 9 * * 1-5')
+           */
+          expression: string
+        }
+      | {
+          type: "webhook"
+          /**
+           * Webhook path (e.g. '/github/push')
+           */
+          path: string
+          secret?: string
+        }
+    enabled: boolean
+    agent?: string
+    lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type V2AutomationGetResponse = V2AutomationGetResponses[keyof V2AutomationGetResponses]
+
+export type V2AutomationUpdateData = {
+  body: {
+    name?: string
+    prompt?: string
+    enabled?: boolean
+    agent?: string
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/automation/{id}"
+}
+
+export type V2AutomationUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * AutomationNotFoundError
+   */
+  404: AutomationNotFoundError
+}
+
+export type V2AutomationUpdateError = V2AutomationUpdateErrors[keyof V2AutomationUpdateErrors]
+
+export type V2AutomationUpdateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    sessionID: string
+    name: string
+    prompt: string
+    schedule:
+      | {
+          type: "cron"
+          /**
+           * Cron expression (e.g. '0 9 * * 1-5')
+           */
+          expression: string
+        }
+      | {
+          type: "webhook"
+          /**
+           * Webhook path (e.g. '/github/push')
+           */
+          path: string
+          secret?: string
+        }
+    enabled: boolean
+    agent?: string
+    lastFired?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type V2AutomationUpdateResponse = V2AutomationUpdateResponses[keyof V2AutomationUpdateResponses]
+
+export type V2AutomationFireData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/automation/{id}/fire"
+}
+
+export type V2AutomationFireErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * AutomationNotFoundError
+   */
+  404: AutomationNotFoundError
+}
+
+export type V2AutomationFireError = V2AutomationFireErrors[keyof V2AutomationFireErrors]
+
+export type V2AutomationFireResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2AutomationFireResponse = V2AutomationFireResponses[keyof V2AutomationFireResponses]
+
+export type V2AutomationWebhookData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/automation/{id}/webhook"
+}
+
+export type V2AutomationWebhookErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * AutomationNotFoundError
+   */
+  404: AutomationNotFoundError
+}
+
+export type V2AutomationWebhookError = V2AutomationWebhookErrors[keyof V2AutomationWebhookErrors]
+
+export type V2AutomationWebhookResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2AutomationWebhookResponse = V2AutomationWebhookResponses[keyof V2AutomationWebhookResponses]
 
 export type PtyConnectData = {
   body?: never

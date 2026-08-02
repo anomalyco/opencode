@@ -490,7 +490,6 @@ export const DurableDefinitions = Event.inventory(
   Retried,
   Compaction.Started,
   Compaction.Ended,
-  ReasoningCycle.Fired,
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
