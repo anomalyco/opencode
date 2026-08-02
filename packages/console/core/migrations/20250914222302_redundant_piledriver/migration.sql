@@ -1,1 +1,0 @@
-ALTER TABLE `payment` ADD `error` varchar(255);

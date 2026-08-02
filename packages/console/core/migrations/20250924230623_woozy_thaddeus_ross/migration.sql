@@ -1,1 +1,0 @@
-ALTER TABLE `payment` ADD `invoice_id` varchar(255);
