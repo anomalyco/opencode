@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import { createRoot } from "solid-js"
 import { ServerScope } from "./server-scope"
 
 type PersistTestingType = typeof import("./persist").PersistTesting
@@ -207,5 +208,34 @@ describe("persist localStorage resilience", () => {
 
   test("server global target cannot collide when scope and key contain colons", () => {
     expect(Persist.serverGlobal("a:b" as ServerScope, "c")).not.toEqual(Persist.serverGlobal("a" as ServerScope, "b:c"))
+  })
+
+  test("debounceWrites coalesces rapid setItem calls into one flush", async () => {
+    await new Promise<void>((resolve, reject) => {
+      createRoot((dispose) => {
+        try {
+          const api = persistTesting.debounceWrites(persistTesting.localStorageDirect(), 20)
+          api.setItem("draft", '{"v":1}')
+          api.setItem("draft", '{"v":2}')
+          api.setItem("draft", '{"v":3}')
+          expect(storage.calls.set).toBe(0)
+
+          setTimeout(() => {
+            try {
+              expect(storage.calls.set).toBe(1)
+              expect(storage.getItem("draft")).toBe('{"v":3}')
+              dispose()
+              resolve()
+            } catch (error) {
+              dispose()
+              reject(error)
+            }
+          }, 40)
+        } catch (error) {
+          dispose()
+          reject(error)
+        }
+      })
+    })
   })
 })

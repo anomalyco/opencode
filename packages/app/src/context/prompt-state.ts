@@ -1,6 +1,6 @@
 import { checksum } from "@opencode-ai/core/util/encode"
 import type { FilePartSource } from "@opencode-ai/sdk/v2/client"
-import { batch, createMemo, type Accessor } from "solid-js"
+import { createMemo, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
@@ -151,20 +151,21 @@ export function isCommentItem(item: ContextItem | (ContextItem & { key: string }
   return item.type === "file" && !!item.comment?.trim()
 }
 
+const PROMPT_PERSIST_DEBOUNCE_MS = 300
+
 function createPromptActions(setStore: SetStoreFunction<PromptStore>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
       const next = clonePrompt(prompt)
-      batch(() => {
+      // Single store write so makePersisted serializes once per keystroke.
+      if (cursorPosition === undefined) {
         setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-      })
+        return
+      }
+      setStore({ prompt: next, cursor: cursorPosition })
     },
     reset() {
-      batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
-      })
+      setStore({ prompt: clonePrompt(DEFAULT_PROMPT), cursor: 0 })
     },
   }
 }
@@ -237,8 +238,16 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
   return value
 }
 
+<<<<<<< HEAD
 function createPersistedPrompt(target: ReturnType<typeof promptTarget>, initial?: InitialPrompt, platform?: Platform) {
   const [store, setStore, _, ready] = persisted(target, createStore<PromptStore>(promptStore(initial)), platform)
+=======
+function createPersistedPrompt(target: ReturnType<typeof promptTarget>, initial?: InitialPrompt) {
+  const [store, setStore, _, ready] = persisted(
+    { ...target, debounceMs: PROMPT_PERSIST_DEBOUNCE_MS },
+    createStore<PromptStore>(promptStore(initial)),
+  )
+>>>>>>> f008270 (fix(app): debounce prompt draft persistence)
   return { ready, ...createPromptStateValue(store, setStore) }
 }
 
