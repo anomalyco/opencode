@@ -96,6 +96,7 @@ it.live("installs a repo-local Codex marketplace plugin through the common immut
           await fs.mkdir(path.join(root, ".agents", "plugins"), { recursive: true })
           await fs.mkdir(path.join(plugin, ".codex-plugin"), { recursive: true })
           await fs.mkdir(path.join(plugin, "skills", "review"), { recursive: true })
+          await fs.mkdir(path.join(plugin, "skills", "release"), { recursive: true })
           await fs.writeFile(
             path.join(root, ".agents", "plugins", "marketplace.json"),
             JSON.stringify({
@@ -123,6 +124,10 @@ it.live("installs a repo-local Codex marketplace plugin through the common immut
             path.join(plugin, "skills", "review", "SKILL.md"),
             "---\nname: review\ndescription: Review changes\n---\nReview the current changes.",
           )
+          await fs.writeFile(
+            path.join(plugin, "skills", "release", "SKILL.md"),
+            "---\nname: release\ndescription: Prepare releases\n---\nPrepare a release.",
+          )
         })
 
         const added = yield* marketplace.sourceAdd({
@@ -136,19 +141,40 @@ it.live("installs a repo-local Codex marketplace plugin through the common immut
         if (!listing) throw new Error("Expected adapted Codex listing")
         const planned = yield* marketplace.plan(listing.key)
         if (!planned.ok) throw new Error(planned.message)
+        expect(planned.summary).toBe("2 skills")
         const applied = yield* marketplace.install({
           planId: planned.plan_id,
           expectedRevision: added.view.state.revision ?? 0,
           acceptUntrusted: true,
         })
         if (!applied.ok) throw new Error(applied.message)
+        expect(
+          applied.view.state.installed?.[listing.key]?.plan.skills?.items?.map((skill) => skill.name).toSorted(),
+        ).toEqual(["release", "review"])
+        expect(
+          applied.view.state.installed?.[listing.key]?.plan.skills?.items?.some((skill) => skill.path || skill.url),
+        ).toBe(false)
 
         const installed = (yield* registry.read()).installed?.[listing.key]
-        const skillRoot = installed?.materialized_plan?.skills?.paths?.[0]
-        expect(skillRoot).toBeDefined()
-        expect(yield* Effect.tryPromise(() => fs.readFile(path.join(skillRoot!, "SKILL.md"), "utf8"))).toContain(
+        const skills = installed?.materialized_plan?.skills?.items
+        expect(skills?.map((skill) => skill.name).toSorted()).toEqual(["release", "review"])
+        const review = skills?.find((skill) => skill.name === "review")
+        expect(review?.path).toBeDefined()
+        expect(yield* Effect.tryPromise(() => fs.readFile(path.join(review!.path!, "SKILL.md"), "utf8"))).toContain(
           "Review the current changes",
         )
+
+        const toggled = yield* marketplace.toggle({
+          key: listing.key,
+          component: "skill",
+          id: review!.id,
+          enabled: false,
+          expectedRevision: (yield* registry.read()).revision ?? 0,
+        })
+        if (!toggled.ok) throw new Error(toggled.message)
+        const disabled = (yield* registry.read()).installed?.[listing.key]
+        expect(disabled?.disabled_skills).toEqual([review!.id])
+        expect(disabled?.active_plan?.skills?.items?.map((skill) => skill.name)).toEqual(["release"])
 
         const current = yield* registry.read()
         yield* registry.replace({ revision: current.revision, sources: [], installed: {} })

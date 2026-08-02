@@ -154,7 +154,20 @@ function publicState(state: MarketplaceState): MarketplaceState {
                 materialized_digest: _materializedDigest,
                 ...value
               } = installed
-              return [key, { ...value, receipt: {} }]
+              const skills = marketplaceSkillComponents(installed.materialized_plan ?? installed.plan).map(
+                ({ source: _source, path: _path, url: _url, ...skill }) => skill,
+              )
+              return [
+                key,
+                {
+                  ...value,
+                  plan: {
+                    ...value.plan,
+                    ...(skills.length ? { skills: { items: skills } } : {}),
+                  },
+                  receipt: {},
+                },
+              ]
             }),
           ),
         }
@@ -344,7 +357,7 @@ const layer = Layer.effect(
         trust_warning: stored.value.trustWarning,
         conflicts,
         permissions: marketplacePermissions(listing.item),
-        summary: marketplacePlanSummary(listing.item.install),
+        summary: marketplacePlanSummary(prepared.installed.materialized_plan ?? listing.item.install),
       } satisfies MarketplacePlanResult
     })
 
@@ -457,7 +470,7 @@ const layer = Layer.effect(
       }
 
       const current = input.state.installed?.[input.listing.key]
-      const components = marketplaceSkillComponents(input.listing.item.install)
+      const components = marketplaceSkillComponents(materialized.value.plan)
       const disabledSkills =
         current?.disabled_skills?.filter((id) => components.some((component) => component.id === id)) ??
         components.filter((component) => component.enabled === false).map((component) => component.id)
@@ -694,14 +707,19 @@ const layer = Layer.effect(
       if (input.component === "package") {
         next.enabled = input.enabled
       } else if (input.component === "skill") {
-        if (!input.id || !marketplaceSkillComponents(next.plan).some((component) => component.id === input.id)) {
+        if (
+          !input.id ||
+          !marketplaceSkillComponents(next.materialized_plan ?? next.plan).some(
+            (component) => component.id === input.id,
+          )
+        ) {
           return notFound(`Marketplace skill not found: ${input.id ?? ""}`)
         }
         next.disabled_skills = input.enabled
           ? (next.disabled_skills ?? []).filter((id) => id !== input.id)
           : Array.from(new Set([...(next.disabled_skills ?? []), input.id]))
       } else {
-        if (!input.id || !(input.id in (next.plan.mcp ?? {}))) {
+        if (!input.id || !(input.id in ((next.materialized_plan ?? next.plan).mcp ?? {}))) {
           return notFound(`Marketplace MCP server not found: ${input.id ?? ""}`)
         }
         next.disabled_mcp = input.enabled

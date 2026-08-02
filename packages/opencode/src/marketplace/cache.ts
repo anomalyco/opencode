@@ -739,10 +739,19 @@ const layer = Layer.effect(
             )
               return [directory]
             const children = await fsNode.readdir(directory, { withFileTypes: true })
-            return children
+            const directories = children
               .filter((entry) => entry.isDirectory())
               .map((entry) => path.join(directory, entry.name))
-              .filter((target) => Bun.file(path.join(target, "SKILL.md")).size > 0)
+            const skills = await Promise.all(
+              directories.map(async (target) => ({
+                target,
+                exists: await fsNode
+                  .stat(path.join(target, "SKILL.md"))
+                  .then((stat) => stat.isFile() && stat.size > 0)
+                  .catch(() => false),
+              })),
+            )
+            return skills.filter((skill) => skill.exists).map((skill) => skill.target)
           },
           catch: (error) => cacheError("discover local skills", error),
         })).filter((target) => !input.name || path.basename(target) === input.name)
@@ -792,6 +801,74 @@ const layer = Layer.effect(
           roots.push({ name, relative: skillRoot })
         }
         return roots
+      }
+      if (new URL(base).hostname === "raw.githubusercontent.com") {
+        const parsed = new URL(base)
+        const [owner, repository, revision, ...parts] = parsed.pathname.split("/").filter(Boolean)
+        if (!owner || !repository || !revision) {
+          return yield* new CacheError({ operation: "discover GitHub skills", message: `Invalid GitHub URL: ${base}` })
+        }
+        const treeURL = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/git/trees/${encodeURIComponent(revision)}?recursive=1`
+        const treeArtifact = yield* fetchArtifact({
+          url: treeURL,
+          kind: "skill-index",
+          source: input.source,
+        })
+        input.digests.add(treeArtifact.digest)
+        const tree = yield* Effect.try({
+          try: () => JSON.parse(new TextDecoder().decode(treeArtifact.bytes)) as unknown,
+          catch: (error) => cacheError("parse GitHub skill tree", error),
+        })
+        if (!tree || typeof tree !== "object" || !("tree" in tree) || !Array.isArray(tree.tree)) {
+          return yield* new CacheError({ operation: "parse GitHub skill tree", message: "Invalid GitHub tree" })
+        }
+        if ("truncated" in tree && tree.truncated === true) {
+          return yield* new CacheError({ operation: "discover GitHub skills", message: "GitHub tree is truncated" })
+        }
+        const prefix = parts.map(decodeURIComponent).join("/").replace(/\/$/, "")
+        const files = tree.tree.flatMap((entry) => {
+          if (!entry || typeof entry !== "object" || !("path" in entry) || typeof entry.path !== "string") return []
+          if (!("type" in entry) || entry.type !== "blob") return []
+          if (prefix && entry.path !== prefix && !entry.path.startsWith(`${prefix}/`)) return []
+          return [entry.path]
+        })
+        const roots = Array.from(
+          new Set(
+            files
+              .filter((file) => file.endsWith("/SKILL.md") || file === "SKILL.md")
+              .map((file) => file.slice(0, -"SKILL.md".length).replace(/\/$/, "")),
+          ),
+        ).filter((root) => !input.name || root.split("/").at(-1) === input.name)
+        if (!roots.length) {
+          return yield* new CacheError({ operation: "discover GitHub skills", message: `No skills found in ${base}` })
+        }
+        if (roots.length > MAX_SKILLS) {
+          return yield* new CacheError({
+            operation: "discover GitHub skills",
+            message: `Skill source exceeds ${MAX_SKILLS} skills`,
+          })
+        }
+        const result: Array<{ name: string; relative: string }> = []
+        for (const root of roots) {
+          const name = root.split("/").at(-1) || repository
+          const skillRoot = path.posix.join(input.prefix, safeSegment(name))
+          for (const file of files.filter(
+            (candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`),
+          )) {
+            const url = new URL(file.slice(prefix.length).replace(/^\/+/, ""), base).href
+            const artifact = yield* fetchArtifact({
+              url,
+              headers: sameOriginHeaders(input.source, url),
+              kind: "skill-file",
+              source: input.source,
+            })
+            input.digests.add(artifact.digest)
+            const relative = path.posix.join(skillRoot, safeRelative(file.slice(root.length + 1)))
+            input.entries.set(relative, { relative, bytes: artifact.bytes, digest: artifact.digest })
+          }
+          result.push({ name, relative: skillRoot })
+        }
+        return result
       }
       if (new URL(base).hostname === "unpkg.com") {
         const metadataURL = `${base}?meta`
@@ -939,7 +1016,7 @@ const layer = Layer.effect(
       const plan = clone(inputPlan)
       const entries = new Map<string, TreeEntry>()
       const digests = new Set<string>()
-      const legacyRoots: string[] = []
+      const legacyRoots: Array<{ id: string; name: string; relative: string }> = []
       const itemRoots = new Map<string, string>()
       const pluginRelatives = new Map<number, string>()
       const mcpCommandRelatives = new Map<string, Map<number, string>>()
@@ -1000,7 +1077,13 @@ const layer = Layer.effect(
             }),
           ),
         )
-        legacyRoots.push(...roots.map((root) => root.relative))
+        legacyRoots.push(
+          ...roots.map((root) => ({
+            id: `url:${url}#${encodeURIComponent(root.name)}`,
+            name: root.name,
+            relative: root.relative,
+          })),
+        )
       }
 
       for (const item of plan.skills?.items ?? []) {
@@ -1138,19 +1221,24 @@ const layer = Layer.effect(
 
       if (plan.skills) {
         const existing = plan.skills.paths ?? []
-        plan.skills.paths = Array.from(
-          new Set([...existing, ...legacyRoots.map((relative) => path.join(target, ...relative.split("/")))]),
-        )
+        plan.skills.paths = Array.from(new Set(existing))
         delete plan.skills.urls
-        if (plan.skills.items) {
-          plan.skills.items = plan.skills.items.map((item) => {
-            const relative = itemRoots.get(item.id)
-            if (!relative) return item
-            const next = { ...item, path: path.join(target, ...relative.split("/")) }
-            delete next.url
-            return next
-          })
-        }
+        const items = (plan.skills.items ?? []).map((item) => {
+          const relative = itemRoots.get(item.id)
+          if (!relative) return item
+          const next = { ...item, path: path.join(target, ...relative.split("/")) }
+          delete next.url
+          return next
+        })
+        plan.skills.items = [
+          ...items,
+          ...legacyRoots.map((root) => ({
+            id: root.id,
+            name: root.name,
+            path: path.join(target, ...root.relative.split("/")),
+          })),
+        ]
+        if (!plan.skills.paths.length) delete plan.skills.paths
       }
 
       if (plan.instructions) {

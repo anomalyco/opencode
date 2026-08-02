@@ -126,6 +126,34 @@ describe("marketplace content-addressed cache", () => {
     ),
   )
 
+  it.effect("discovers each skill in a local directory without Bun-only file APIs", () =>
+    Effect.acquireUseRelease(
+      Effect.tryPromise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-marketplace-skills-"))),
+      (root) =>
+        Effect.gen(function* () {
+          const skills = path.join(root, "skills")
+          yield* Effect.tryPromise(async () => {
+            await fs.mkdir(path.join(skills, "review"), { recursive: true })
+            await fs.mkdir(path.join(skills, "release"), { recursive: true })
+            await fs.writeFile(path.join(skills, "review", "SKILL.md"), "---\nname: review\n---\nReview changes")
+            await fs.writeFile(path.join(skills, "release", "SKILL.md"), "---\nname: release\n---\nPrepare release")
+          })
+
+          const cache = yield* MarketplaceCache.Service
+          const url = `${pathToFileURL(skills).href}/`
+          const materialized = yield* cache.materializePlan(
+            { skills: { urls: [url] } },
+            { id: "local", name: "Local", url: `${pathToFileURL(root).href}/`, trust: "private" },
+          )
+
+          expect(materialized.plan.skills?.urls).toBeUndefined()
+          expect(materialized.plan.skills?.items?.map((item) => item.name).toSorted()).toEqual(["release", "review"])
+          expect(materialized.plan.skills?.items?.every((item) => item.path && !item.url)).toBe(true)
+        }),
+      (root) => Effect.tryPromise(() => fs.rm(root, { recursive: true, force: true })),
+    ),
+  )
+
   it.effect("prevents network catalogs and local path escapes from reading file artifacts", () =>
     Effect.acquireUseRelease(
       Effect.tryPromise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-marketplace-boundary-"))),
