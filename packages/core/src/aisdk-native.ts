@@ -2,6 +2,7 @@ export * as AISDKNative from "./aisdk-native"
 
 import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Provider } from "./provider"
+import { mantleAPI } from "./plugin/provider/amazon-bedrock-mantle"
 
 export interface Mapping {
   readonly package: string
@@ -10,43 +11,43 @@ export interface Mapping {
   readonly body?: Readonly<Record<string, unknown>>
 }
 
-export function map(
-  packageName: string | undefined,
-  settings: Readonly<Record<string, unknown>>,
-  modelID?: string,
-): Mapping | undefined {
-  const baseSettings = mapBaseSettings(settings)
-  switch (packageName) {
+export interface MapInput {
+  readonly packageName: string | undefined
+  readonly settings: Readonly<Record<string, unknown>>
+  readonly modelID: string
+  readonly hasCredential?: boolean
+}
+
+export function map(input: MapInput): Mapping | undefined {
+  const baseSettings = mapBaseSettings(input.settings)
+  switch (input.packageName) {
     case "@ai-sdk/amazon-bedrock/mantle":
-      return mapBedrockMantle(settings, baseSettings, modelID)
+      return mapBedrockMantle(input, baseSettings)
     case "@ai-sdk/google":
       return {
         package: "@opencode-ai/ai/providers/google",
         settings: {
           ...baseSettings,
-          ...mapAPIKey(settings),
-          ...mapGoogleOptions(settings),
+          ...mapAPIKey(input.settings),
+          ...mapGoogleOptions(input.settings),
         },
       }
     case "@openrouter/ai-sdk-provider":
-      return mapOpenRouter(settings, baseSettings)
+      return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
       return {
         package: "@opencode-ai/ai/providers/xai",
         settings: {
           ...baseSettings,
-          ...mapAPIKey(settings),
-          ...mapXAIOptions(settings),
+          ...mapAPIKey(input.settings),
+          ...mapXAIOptions(input.settings),
         },
       }
   }
 }
 
-function mapBedrockMantle(
-  settings: Readonly<Record<string, unknown>>,
-  baseSettings: Readonly<Record<string, unknown>>,
-  modelID: string | undefined,
-): Mapping | undefined {
+function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string, unknown>>): Mapping | undefined {
+  const settings = input.settings
   const apiKey =
     typeof settings.apiKey === "string"
       ? settings.apiKey
@@ -54,10 +55,9 @@ function mapBedrockMantle(
         ? settings.bearerToken
         : undefined
   const credentials = mapBedrockCredentials(settings)
-  if (apiKey === undefined && credentials === undefined) return undefined
-  const safeguard = modelID === "openai.gpt-oss-safeguard-20b" || modelID === "openai.gpt-oss-safeguard-120b"
+  if (!input.hasCredential && apiKey === undefined && credentials === undefined) return undefined
   return {
-    package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${safeguard ? "chat" : "responses"}`,
+    package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${mantleAPI(input.modelID)}`,
     settings: {
       ...baseSettings,
       ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
@@ -72,32 +72,24 @@ function mapBedrockMantle(
 }
 
 function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>) {
+  const credentials = isRecord(settings.credentials) ? settings.credentials : settings
+  const region =
+    typeof settings.region === "string"
+      ? settings.region
+      : typeof credentials.region === "string"
+        ? credentials.region
+        : undefined
   if (
-    isRecord(settings.credentials) &&
-    typeof settings.credentials.region === "string" &&
-    typeof settings.credentials.accessKeyId === "string" &&
-    typeof settings.credentials.secretAccessKey === "string"
-  ) {
-    return {
-      region: settings.credentials.region,
-      accessKeyId: settings.credentials.accessKeyId,
-      secretAccessKey: settings.credentials.secretAccessKey,
-      ...(typeof settings.credentials.sessionToken === "string"
-        ? { sessionToken: settings.credentials.sessionToken }
-        : {}),
-    }
-  }
-  if (
-    typeof settings.region !== "string" ||
-    typeof settings.accessKeyId !== "string" ||
-    typeof settings.secretAccessKey !== "string"
+    region === undefined ||
+    typeof credentials.accessKeyId !== "string" ||
+    typeof credentials.secretAccessKey !== "string"
   )
     return undefined
   return {
-    region: settings.region,
-    accessKeyId: settings.accessKeyId,
-    secretAccessKey: settings.secretAccessKey,
-    ...(typeof settings.sessionToken === "string" ? { sessionToken: settings.sessionToken } : {}),
+    region,
+    accessKeyId: credentials.accessKeyId,
+    secretAccessKey: credentials.secretAccessKey,
+    ...(typeof credentials.sessionToken === "string" ? { sessionToken: credentials.sessionToken } : {}),
   }
 }
 

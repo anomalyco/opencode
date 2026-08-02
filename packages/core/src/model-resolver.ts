@@ -175,15 +175,14 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  const configured = {
-    ...resolved.settings,
-    ...credential?.metadata,
-    ...(packageName === "@ai-sdk/amazon-bedrock/mantle"
-      ? nativeCredentialSettings("@opencode-ai/ai/providers/amazon-bedrock/mantle", credential)
-      : {}),
-  }
+  const configured = { ...resolved.settings, ...credential?.metadata }
   const mapping = Provider.isAISDK(resolved.package)
-    ? AISDKNative.map(packageName, configured, resolved.modelID ?? resolved.id)
+    ? AISDKNative.map({
+        packageName,
+        settings: configured,
+        modelID: resolved.modelID ?? resolved.id,
+        hasCredential: key !== undefined,
+      })
     : undefined
   const native = mapping?.package ?? resolved.package
   if (Provider.isAISDK(resolved.package) && !mapping) {
