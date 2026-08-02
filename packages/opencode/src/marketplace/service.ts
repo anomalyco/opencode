@@ -761,6 +761,21 @@ const layer = Layer.effect(
         }),
         reference: resolved.reference,
       }
+      const loaded = yield* Effect.tryPromise({
+        try: () =>
+          loadMarketplace({
+            config: { marketplace: runtimeState({ sources: [source] }) },
+            fetch: cache.fetcher("refresh"),
+            compatibility,
+          }),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      }).pipe(
+        Effect.map((value) => ({ ok: true as const, value })),
+        Effect.catch((error) => Effect.succeed({ ok: false as const, error })),
+      )
+      if (!loaded.ok) return notFound(loaded.error.message)
+      const failure = loaded.value.errors[0]
+      if (failure) return notFound(failure.message)
       const next = upsertMarketplaceSource({ marketplace: state }, source).marketplace ?? state
       return yield* persist({ state: next })
     })

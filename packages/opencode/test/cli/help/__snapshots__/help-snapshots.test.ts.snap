@@ -653,7 +653,8 @@ Options:
       --pure        run without external plugins                                           [boolean]
       --name        catalog display name                                                    [string]
       --trust       catalog trust level
-                                   [string] [choices: "community", "private"] [default: "community"]"
+                                   [string] [choices: "community", "private"] [default: "community"]
+      --header-env  request header from an environment variable (NAME=ENV)                   [array]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin marketplace export --help 1`] = `

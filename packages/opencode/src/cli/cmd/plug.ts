@@ -13,17 +13,9 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { effectCmd } from "../effect-cmd"
 import { InstanceRef } from "@/effect/instance-ref"
-import {
-  createMarketplaceSource,
-  upsertMarketplaceSource,
-  type MarketplaceConfiguredTrust,
-  type MarketplaceHostConfig,
-  type MarketplaceMutationResult,
-} from "@opencode-ai/core/marketplace"
+import { type MarketplaceConfiguredTrust, type MarketplaceMutationResult } from "@opencode-ai/core/marketplace"
 import { exportMarketplaceProfile } from "@opencode-ai/core/marketplace-profile"
-import { Config } from "@/config/config"
 import * as MarketplaceRegistry from "@/marketplace/registry"
-import { resolveMarketplaceSourceReference } from "@/marketplace/source"
 import { MarketplaceService } from "@/marketplace/service"
 import { parseMarketplaceLock } from "@opencode-ai/core/marketplace-lock"
 
@@ -262,25 +254,34 @@ const PluginMarketplaceAddCommand = effectCmd({
         choices: ["community", "private"] as const,
         default: "community" as const,
         describe: "catalog trust level",
+      })
+      .option("header-env", {
+        type: "string",
+        array: true,
+        describe: "request header from an environment variable (NAME=ENV)",
       }),
   handler: Effect.fn("Cli.plugin.marketplace.add")(function* (args) {
-    const config = yield* Config.Service
-    const registry = yield* MarketplaceRegistry.Service
-    const resolved = yield* Effect.promise(() => resolveMarketplaceSourceReference(String(args.url)))
-    const source = {
-      ...createMarketplaceSource({
-        url: resolved.url,
-        name: args.name ? String(args.name) : resolved.name,
-        trust: args.trust as MarketplaceConfiguredTrust,
-      }),
-      reference: resolved.reference,
+    const headers = ((args.headerEnv ?? []) as string[]).map((value) => {
+      const separator = value.indexOf("=")
+      if (separator <= 0 || separator === value.length - 1) return
+      return [value.slice(0, separator), value.slice(separator + 1)] as const
+    })
+    if (headers.some((entry) => entry === undefined)) {
+      log.error("--header-env must use NAME=ENV")
+      process.exitCode = 1
+      return
     }
-    const current = yield* registry.read()
-    const next = upsertMarketplaceSource({ marketplace: current } as MarketplaceHostConfig, source).marketplace!
-    const result = yield* registry.replace(next).pipe(Effect.orDie)
-    if (result.changed) yield* config.invalidate()
-    log.success(`${result.changed ? "Added" : "Already configured"} marketplace ${source.name}`)
-    log.info(source.reference ?? source.url)
+    const marketplace = yield* MarketplaceService
+    const result = yield* marketplace.sourceAdd({
+      expectedRevision: (yield* marketplace.get()).state.revision ?? 0,
+      url: String(args.url),
+      name: args.name ? String(args.name) : undefined,
+      trust: args.trust as MarketplaceConfiguredTrust,
+      ...(headers.length
+        ? { headerEnv: Object.fromEntries(headers.filter((entry): entry is readonly [string, string] => !!entry)) }
+        : {}),
+    })
+    reportMarketplaceMutation(result, `${result.ok && result.changed ? "Added" : "Already configured"} marketplace`)
   }),
 })
 

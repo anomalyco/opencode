@@ -386,6 +386,37 @@ describe("marketplace catalogs", () => {
     )
   })
 
+  test("discovers a Codex catalog from a generic repository URL without a git suffix", async () => {
+    const source = createMarketplaceSource({ url: "https://git.example.test/ai/agent-marketplace" })
+    const requests: string[] = []
+    const result = await loadMarketplace({
+      config: upsertMarketplaceSource({}, source),
+      fetch: async (input) => {
+        const url = String(input)
+        requests.push(url)
+        if (url.endsWith("/.agents/plugins/marketplace.json")) {
+          return Response.json({
+            name: "agents",
+            plugins: [{ name: "review", source: "./plugins/review", policy: { installation: "AVAILABLE" } }],
+          })
+        }
+        if (url.endsWith("/plugins/review/.codex-plugin/plugin.json")) {
+          return Response.json({ name: "review", version: "1.0.0", description: "Review changes" })
+        }
+        if (url === source.url)
+          return new Response("<html>sign in</html>", { headers: { "content-type": "text/html" } })
+        return new Response("not found", { status: 404 })
+      },
+    })
+
+    expect(requests).toContain(source.url)
+    expect(requests).toContain(
+      "https://git.example.test/ai/agent-marketplace/-/raw/HEAD/.agents/plugins/marketplace.json",
+    )
+    expect(result.errors).toEqual([])
+    expect(result.listings[0]?.item.id).toBe("review")
+  })
+
   test("discovers GitHub Copilot and Claude Code catalog locations", async () => {
     for (const catalogPath of [".github/plugin/marketplace.json", ".claude-plugin/marketplace.json"]) {
       const requests: string[] = []

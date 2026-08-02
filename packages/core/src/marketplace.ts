@@ -1000,8 +1000,7 @@ function marketplaceCatalogURLs(input: MarketplaceSource) {
     if (input.format === "opencode") return [...opencode, new URL("marketplace.json", url).href]
     return [...opencode, new URL("marketplace.json", url).href, ...codex]
   }
-  if (!source.endsWith(".git")) return [source]
-  const repository = `${url.origin}${url.pathname.slice(0, -".git".length)}`
+  const repository = `${url.origin}${url.pathname.replace(/\.git\/?$/, "").replace(/\/$/, "")}`
   if (url.hostname === "github.com") {
     const [owner, name] = url.pathname.split("/").filter(Boolean)
     const root = `https://raw.githubusercontent.com/${owner}/${name?.replace(/\.git$/, "")}/HEAD/`
@@ -1017,11 +1016,23 @@ function marketplaceCatalogURLs(input: MarketplaceSource) {
     if (input.format === "codex") return [...plugins.slice(1), plugins[0]!]
     return [...opencode, ...plugins]
   }
-  return [
+  const opencode = [
     `${repository}/-/raw/HEAD/.opencode/marketplace.json`,
     `${repository}/raw/HEAD/.opencode/marketplace.json`,
     `${repository}/raw/branch/main/.opencode/marketplace.json`,
   ]
+  const plugins = [
+    `${repository}/-/raw/HEAD/.agents/plugins/marketplace.json`,
+    `${repository}/-/raw/HEAD/.github/plugin/marketplace.json`,
+    `${repository}/-/raw/HEAD/.plugin/marketplace.json`,
+    `${repository}/-/raw/HEAD/.claude-plugin/marketplace.json`,
+    `${repository}/-/raw/HEAD/marketplace.json`,
+  ]
+  const repositories =
+    input.format === "opencode" ? opencode : input.format === "codex" ? plugins : [...opencode, ...plugins]
+  if (source.endsWith(".git")) return repositories
+  if (url.search || /\.[^/]+$/.test(url.pathname)) return [source]
+  return [source, ...repositories]
 }
 
 function parseItem(value: unknown, index: number): MarketplaceCatalogItem {

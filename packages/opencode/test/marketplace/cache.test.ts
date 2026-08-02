@@ -37,6 +37,61 @@ describe("marketplace content-addressed cache", () => {
     }),
   )
 
+  it.effect("loads private GitLab raw files through the API and materializes skill trees", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const seen: string[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch(request) {
+            const url = new URL(request.url)
+            seen.push(url.href)
+            if (request.headers.get("private-token") !== "secret") return new Response("unauthorized", { status: 401 })
+            if (url.pathname.endsWith("/repository/tree")) {
+              return Response.json([
+                { type: "blob", path: "plugins/review/skills/review/SKILL.md" },
+                { type: "blob", path: "plugins/review/skills/review/scripts/check.mjs" },
+              ])
+            }
+            if (url.pathname.includes("/repository/files/") && url.pathname.endsWith("/raw")) {
+              const file = decodeURIComponent(url.pathname.split("/repository/files/")[1]!.slice(0, -"/raw".length))
+              if (file.endsWith("SKILL.md")) {
+                return new Response("---\nname: review\ndescription: Review changes\n---\nReview the current diff.")
+              }
+              if (file.endsWith("scripts/check.mjs")) return new Response("export const check = true")
+            }
+            return new Response("not found", { status: 404 })
+          },
+        })
+        return { server, seen }
+      }),
+      ({ server, seen }) =>
+        Effect.gen(function* () {
+          const cache = yield* MarketplaceCache.Service
+          const source = {
+            id: "gitlab",
+            name: "GitLab",
+            url: new URL("ai/agent-marketplace", server.url).href,
+            trust: "private" as const,
+            headers: { "PRIVATE-TOKEN": "secret" },
+          }
+          const raw = new URL("ai/agent-marketplace/-/raw/HEAD/plugins/review/skills/", server.url).href
+          const materialized = yield* cache.materializePlan({ skills: { urls: [raw] } }, source)
+          const skill = materialized.plan.skills?.items?.[0]
+          expect(skill?.name).toBe("review")
+          expect(yield* Effect.promise(() => fs.readFile(path.join(skill!.path!, "SKILL.md"), "utf8"))).toContain(
+            "Review the current diff",
+          )
+          expect(yield* Effect.promise(() => fs.readFile(path.join(skill!.path!, "scripts/check.mjs"), "utf8"))).toBe(
+            "export const check = true",
+          )
+          expect(seen.some((url) => url.includes("/api/v4/projects/ai%2Fagent-marketplace/repository/tree"))).toBe(true)
+          expect(seen.some((url) => url.includes("/repository/files/") && url.endsWith("/raw?ref=HEAD"))).toBe(true)
+        }),
+      ({ server }) => Effect.promise(async () => void (await server.stop(true))),
+    ),
+  )
+
   it.effect("reads local sources and materializes local plugins, skills, and instructions", () =>
     Effect.acquireUseRelease(
       Effect.tryPromise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-marketplace-cache-"))),

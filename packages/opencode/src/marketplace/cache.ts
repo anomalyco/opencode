@@ -303,6 +303,49 @@ async function fetchWithRedirects(url: string, headers: Headers, signal?: AbortS
   throw new Error(`Too many redirects for ${url}`)
 }
 
+type GitLabRawReference = {
+  origin: string
+  repository: string
+  project: string
+  revision: string
+  file: string
+}
+
+function gitLabRawReference(url: URL) {
+  const marker = "/-/raw/"
+  const index = url.pathname.indexOf(marker)
+  if (index <= 0) return
+  const tail = url.pathname.slice(index + marker.length)
+  const separator = tail.indexOf("/")
+  if (separator <= 0 || separator === tail.length - 1) return
+  try {
+    return {
+      origin: url.origin,
+      repository: url.pathname.slice(0, index),
+      project: decodeURIComponent(url.pathname.slice(1, index)),
+      revision: decodeURIComponent(tail.slice(0, separator)),
+      file: decodeURIComponent(tail.slice(separator + 1)),
+    } satisfies GitLabRawReference
+  } catch {
+    return
+  }
+}
+
+function gitLabRawFileURL(reference: GitLabRawReference, file: string) {
+  return `${reference.origin}${reference.repository}/-/raw/${encodeURIComponent(reference.revision)}/${file
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/")}`
+}
+
+function gitLabAPIFileURL(reference: GitLabRawReference) {
+  return `${reference.origin}/api/v4/projects/${encodeURIComponent(reference.project)}/repository/files/${encodeURIComponent(reference.file)}/raw?ref=${encodeURIComponent(reference.revision)}`
+}
+
+function gitLabAPITreeURL(reference: GitLabRawReference) {
+  return `${reference.origin}/api/v4/projects/${encodeURIComponent(reference.project)}/repository/tree?path=${encodeURIComponent(reference.file.replace(/\/$/, ""))}&ref=${encodeURIComponent(reference.revision)}&recursive=true&per_page=100`
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -484,6 +527,8 @@ const layer = Layer.effect(
       const parsed = new URL(input.url)
       yield* validateLocalArtifact(input.source, parsed)
       const url = parsed.href
+      const gitlab = gitLabRawReference(parsed)
+      const requestURL = gitlab ? gitLabAPIFileURL(gitlab) : url
       const key = requestKey(url, input.headers)
       const row = (yield* db
         .all<FetchRow>(sql`SELECT * FROM marketplace_fetch WHERE key = ${key} LIMIT 1`)
@@ -579,7 +624,7 @@ const layer = Layer.effect(
       if (row?.last_modified) headers.set("if-modified-since", row.last_modified)
 
       const attempt = yield* Effect.tryPromise({
-        try: () => fetchWithRedirects(url, headers, input.signal),
+        try: () => fetchWithRedirects(requestURL, headers, input.signal),
         catch: (error) => cacheError("fetch", error),
       }).pipe(
         Effect.map((response) => ({ ok: true as const, response })),
@@ -856,6 +901,67 @@ const layer = Layer.effect(
             (candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`),
           )) {
             const url = new URL(file.slice(prefix.length).replace(/^\/+/, ""), base).href
+            const artifact = yield* fetchArtifact({
+              url,
+              headers: sameOriginHeaders(input.source, url),
+              kind: "skill-file",
+              source: input.source,
+            })
+            input.digests.add(artifact.digest)
+            const relative = path.posix.join(skillRoot, safeRelative(file.slice(root.length + 1)))
+            input.entries.set(relative, { relative, bytes: artifact.bytes, digest: artifact.digest })
+          }
+          result.push({ name, relative: skillRoot })
+        }
+        return result
+      }
+      const gitlab = gitLabRawReference(new URL(base))
+      if (gitlab) {
+        const treeArtifact = yield* fetchArtifact({
+          url: gitLabAPITreeURL(gitlab),
+          headers: sameOriginHeaders(input.source, base),
+          kind: "skill-index",
+          source: input.source,
+        })
+        input.digests.add(treeArtifact.digest)
+        const tree = yield* Effect.try({
+          try: () => JSON.parse(new TextDecoder().decode(treeArtifact.bytes)) as unknown,
+          catch: (error) => cacheError("parse GitLab skill tree", error),
+        })
+        if (!Array.isArray(tree)) {
+          return yield* new CacheError({ operation: "parse GitLab skill tree", message: "Invalid GitLab tree" })
+        }
+        const prefix = gitlab.file.replace(/\/$/, "")
+        const files = tree.flatMap((entry) => {
+          if (!entry || typeof entry !== "object" || !("path" in entry) || typeof entry.path !== "string") return []
+          if (!("type" in entry) || entry.type !== "blob") return []
+          if (prefix && entry.path !== prefix && !entry.path.startsWith(`${prefix}/`)) return []
+          return [entry.path]
+        })
+        const roots = Array.from(
+          new Set(
+            files
+              .filter((file) => file.endsWith("/SKILL.md") || file === "SKILL.md")
+              .map((file) => file.slice(0, -"SKILL.md".length).replace(/\/$/, "")),
+          ),
+        ).filter((root) => !input.name || root.split("/").at(-1) === input.name)
+        if (!roots.length) {
+          return yield* new CacheError({ operation: "discover GitLab skills", message: `No skills found in ${base}` })
+        }
+        if (roots.length > MAX_SKILLS) {
+          return yield* new CacheError({
+            operation: "discover GitLab skills",
+            message: `Skill source exceeds ${MAX_SKILLS} skills`,
+          })
+        }
+        const result: Array<{ name: string; relative: string }> = []
+        for (const root of roots) {
+          const name = root.split("/").at(-1) || gitlab.project.split("/").at(-1) || "skill"
+          const skillRoot = path.posix.join(input.prefix, safeSegment(name))
+          for (const file of files.filter(
+            (candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`),
+          )) {
+            const url = gitLabRawFileURL(gitlab, file)
             const artifact = yield* fetchArtifact({
               url,
               headers: sameOriginHeaders(input.source, url),
