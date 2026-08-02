@@ -118,3 +118,21 @@ export class AutomationNotFoundError extends Schema.TaggedErrorClass<AutomationN
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class AutomationLockError extends Schema.TaggedErrorClass<AutomationLockError>()(
+  "AutomationLockError",
+  {
+    id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
+
+export class AutomationPromptConflictError extends Schema.TaggedErrorClass<AutomationPromptConflictError>()(
+  "AutomationPromptConflictError",
+  {
+    sessionID: Schema.String,
+    messageID: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}

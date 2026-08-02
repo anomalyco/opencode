@@ -5,7 +5,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { Api } from "../api"
 import { response } from "../location"
-import { AutomationNotFoundError } from "@opencode-ai/protocol/errors"
+import { AutomationNotFoundError, AutomationLockError, AutomationPromptConflictError } from "@opencode-ai/protocol/errors"
 
 export const AutomationHandler = HttpApiBuilder.group(Api, "server.automation", (handlers) =>
   Effect.gen(function* () {
@@ -57,14 +57,39 @@ export const AutomationHandler = HttpApiBuilder.group(Api, "server.automation", 
           return HttpApiSchema.NoContent.make()
         }),
       )
-      .handle("automation.fire", ({ params }) =>
+      .handle("automation.fire", ({ params, payload }) =>
         Effect.gen(function* () {
-          yield* automation.fire(params.id).pipe(
+          return yield* automation.fire(params.id, payload?.payload).pipe(
             Effect.catchTag("Automation.NotFoundError", () =>
               new AutomationNotFoundError({ id: params.id, message: `Automation trigger not found: ${params.id}` }),
             ),
+            Effect.catchTag("Automation.LockError", () =>
+              new AutomationLockError({ id: params.id, message: `Automation trigger is locked` }),
+            ),
+            Effect.catchTag("Automation.PromptConflictError", (e) =>
+              new AutomationPromptConflictError({ sessionID: e.sessionID, messageID: e.messageID }),
+            ),
           )
-          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle("automation.runs.list", ({ query }) =>
+        Effect.gen(function* () {
+          const runs = yield* automation.getRuns({
+            ...(query.triggerID ? { triggerID: query.triggerID } : {}),
+            ...(query.sessionID ? { sessionID: query.sessionID } : {}),
+            ...(query.status ? { status: query.status } : {}),
+            ...(query.limit ? { limit: query.limit } : {}),
+          })
+          return runs
+        }).pipe(response),
+      )
+      .handle("automation.runs.get", ({ params }) =>
+        Effect.gen(function* () {
+          return yield* automation.getRun(params.id).pipe(
+            Effect.catchTag("Automation.NotFoundError", () =>
+              new AutomationNotFoundError({ id: params.id, message: `Automation run not found: ${params.id}` }),
+            ),
+          )
         }),
       )
       .handleRaw(
@@ -110,9 +135,22 @@ export const AutomationHandler = HttpApiBuilder.group(Api, "server.automation", 
                       )
                     }
                   }
-                  return automation.fire(ctx.params.id).pipe(
-                    Effect.ignore,
-                    Effect.as(HttpServerResponse.empty({ status: 200 })),
+                  let payload: unknown
+                  try {
+                    payload = JSON.parse(body)
+                  } catch {
+                    payload = body
+                  }
+                  return automation.fire(ctx.params.id, payload).pipe(
+                    Effect.map((run) => HttpServerResponse.jsonUnsafe(run, { status: 200 })),
+                    Effect.catchCause((cause) =>
+                      Effect.succeed(
+                        HttpServerResponse.jsonUnsafe(
+                          { error: cause instanceof Error ? cause.message : String(cause) },
+                          { status: 500 },
+                        ),
+                      ),
+                    ),
                   )
                 }),
               )

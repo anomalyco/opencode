@@ -3,8 +3,10 @@ import { Context } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Session } from "@opencode-ai/schema/session"
 import { Location } from "@opencode-ai/schema/location"
-import { AutomationNotFoundError } from "../errors"
+import { AutomationNotFoundError, AutomationLockError, AutomationPromptConflictError } from "../errors"
 import { LocationQuery, locationQueryOpenApi } from "./location"
+
+const BoundedLimit = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))
 
 const Schedule = Schema.Union([
   Schema.Struct({
@@ -27,6 +29,32 @@ const Trigger = Schema.Struct({
   enabled: Schema.Boolean,
   agent: Schema.String.pipe(Schema.optional),
   lastFired: Schema.Number.pipe(Schema.optional),
+  locked: Schema.Boolean,
+  lockOwner: Schema.String.pipe(Schema.optional),
+  lockExpires: Schema.Number.pipe(Schema.optional),
+  timeCreated: Schema.Number,
+  timeUpdated: Schema.Number,
+})
+
+const RunStatus = Schema.Union([
+  Schema.Literal("pending"),
+  Schema.Literal("running"),
+  Schema.Literal("completed"),
+  Schema.Literal("failed"),
+  Schema.Literal("cancelled"),
+])
+
+const Run = Schema.Struct({
+  id: Schema.String,
+  triggerID: Schema.String,
+  sessionID: Session.ID,
+  status: RunStatus,
+  prompt: Schema.String,
+  agent: Schema.String.pipe(Schema.optional),
+  error: Schema.String.pipe(Schema.optional),
+  payload: Schema.Unknown.pipe(Schema.optional),
+  timeStarted: Schema.Number,
+  timeCompleted: Schema.Number.pipe(Schema.optional),
   timeCreated: Schema.Number,
   timeUpdated: Schema.Number,
 })
@@ -121,27 +149,63 @@ HttpApiGroup.make("server.automation")
   .add(
     HttpApiEndpoint.post("automation.fire", "/api/automation/:id/fire", {
       params: { id: Schema.String },
-      success: HttpApiSchema.NoContent,
-      error: [AutomationNotFoundError],
+      payload: Schema.Struct({
+        payload: Schema.Unknown.pipe(Schema.optional).annotate({ description: "Optional payload to pass to the prompt (e.g., webhook body)" }),
+      }).pipe(Schema.optional),
+      success: Run,
+      error: [AutomationNotFoundError, AutomationLockError, AutomationPromptConflictError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.automation.fire",
         summary: "Fire automation trigger",
-        description: "Manually fire an automation trigger, sending its prompt to the session.",
+        description: "Manually fire an automation trigger, sending its prompt to the session. Returns the run record.",
       }),
     ),
   )
   .add(
     HttpApiEndpoint.post("automation.webhook", "/api/automation/:id/webhook", {
       params: { id: Schema.String },
-      success: HttpApiSchema.NoContent,
+      success: Run,
       error: [AutomationNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.automation.webhook",
         summary: "Receive webhook for automation trigger",
         description:
-          "Raw webhook endpoint. If the trigger has a secret, the request must include an X-Hub-Signature-256 header (sha256=<hex>) that HMAC-SHA256-verifies against the raw body using the stored secret. Used by external services like GitHub.",
+          "Raw webhook endpoint. If the trigger has a secret, the request must include an X-Hub-Signature-256 header (sha256=<hex>) that HMAC-SHA256-verifies against the raw body using the stored secret. Used by external services like GitHub. The webhook body is passed as payload to the prompt.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("automation.runs.list", "/api/automation/runs", {
+      query: Schema.Struct({
+        ...LocationQuery.fields,
+        triggerID: Schema.optional(Schema.String),
+        sessionID: Schema.optional(Session.ID),
+        status: Schema.optional(RunStatus),
+        limit: Schema.optional(Schema.NumberFromString.pipe(Schema.decodeTo(BoundedLimit))).annotate({ description: "Maximum number of runs to return (default 50)" }),
+      }),
+      success: Location.response(Schema.Array(Run)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.automation.runs.list",
+          summary: "List automation runs",
+          description: "List all automation runs, optionally filtered by trigger, session, or status.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("automation.runs.get", "/api/automation/runs/:id", {
+      params: { id: Schema.String },
+      success: Run,
+      error: [AutomationNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.automation.runs.get",
+        summary: "Get automation run",
+        description: "Get an automation run by ID.",
       }),
     ),
   )

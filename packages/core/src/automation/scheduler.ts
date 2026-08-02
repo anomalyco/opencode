@@ -29,7 +29,13 @@ const layer = Layer.effect(
           if (!trigger.enabled) continue
           if (trigger.schedule.type !== "cron") continue
           if (!isCronDue(trigger.schedule.expression, now)) continue
-          yield* automation.fire(trigger.id).pipe(Effect.ignore)
+          // Fire and log result, don't ignore errors
+          const result = yield* automation.fire(trigger.id).pipe(
+            Effect.tap((run) => Effect.logInfo("Automation cron fired", { triggerId: trigger.id, runId: run.id, status: run.status })),
+            Effect.catchCause((cause) =>
+              Effect.logError("Automation cron fire failed", { triggerId: trigger.id, cause: cause.toString() }),
+            ),
+          )
         }
       })
 
