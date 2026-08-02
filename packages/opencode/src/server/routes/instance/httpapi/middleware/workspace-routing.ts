@@ -31,6 +31,7 @@ type RemoteTarget = Extract<Target, { type: "remote" }>
 type RequestPlan = Data.TaggedEnum<{
   InvalidWorkspace: {}
   MissingWorkspace: { readonly workspaceID: WorkspaceV2.ID }
+  MissingDirectory: {}
   Local: { readonly directory: string; readonly workspaceID?: WorkspaceV2.ID }
   Remote: {
     readonly request: HttpServerRequest.HttpServerRequest
@@ -83,8 +84,8 @@ function selectedV2WorkspaceID(
   return workspaceID.value
 }
 
-function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
+function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string | undefined {
+  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || undefined
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
@@ -178,8 +179,10 @@ function planRequest(
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
+    const directory = session?.directory || defaultDirectory(request, url)
+    if (directory === undefined) return RequestPlan.MissingDirectory()
     return RequestPlan.Local({
-      directory: session?.directory || defaultDirectory(request, url),
+      directory,
       workspaceID: envWorkspaceID ?? workspaceID,
     })
   })
@@ -203,6 +206,17 @@ function routeWorkspace<E>(
         ),
       ),
     MissingWorkspace: ({ workspaceID }) => Effect.succeed(missingWorkspaceResponse(workspaceID)),
+    MissingDirectory: () =>
+      Effect.succeed(
+        HttpServerResponse.jsonUnsafe(
+          new InvalidRequestError({
+            message: "Missing directory: set ?directory= or x-opencode-directory",
+            kind: "Query",
+            field: "directory",
+          }),
+          { status: 400 },
+        ),
+      ),
     Remote: ({ request, workspace, target, url }) => proxyRemote(client, request, workspace, target, url),
     Local: ({ directory, workspaceID }) =>
       effect.pipe(Effect.provideService(WorkspaceRouteContext, WorkspaceRouteContext.of({ directory, workspaceID }))),

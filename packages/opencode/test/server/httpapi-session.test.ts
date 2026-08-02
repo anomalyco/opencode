@@ -793,6 +793,25 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "rejects directory-less session creation with a v2 public request error",
+    () =>
+      Effect.gen(function* () {
+        const created = yield* request(SessionPaths.create, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+        })
+
+        expect(created.status).toBe(400)
+        expect(yield* responseJson(created)).toMatchObject({
+          _tag: "InvalidRequestError",
+          kind: "Query",
+          field: "directory",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+  )
+
+  it.instance(
     "persists selected workspace id when creating a session",
     () =>
       Effect.gen(function* () {

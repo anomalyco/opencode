@@ -2,8 +2,9 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { InvalidRequestError } from "@opencode-ai/protocol/errors"
 import { Effect, Layer } from "effect"
-import { HttpServerRequest } from "effect/unstable/http"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
 export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap.Service)["get"]>>
@@ -26,12 +27,12 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   })
 }
 
-function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
+function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref | undefined {
   const query = new URL(request.url, "http://localhost").searchParams
   const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
-  const directory =
-    query.get("location[directory]") ||
-    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
+  const headerDirectory = request.headers["x-opencode-directory"]
+  const directory = query.get("location[directory]") || (headerDirectory ? decode(headerDirectory) : undefined)
+  if (directory === undefined) return undefined
   return Location.Ref.make({
     directory: AbsolutePath.make(directory),
     workspaceID: workspaceID ? WorkspaceV2.ID.make(workspaceID) : undefined,
@@ -53,7 +54,18 @@ export const layer = Layer.effect(
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(locations.get(ref(request))))
+        const location = ref(request)
+        if (location === undefined) {
+          return HttpServerResponse.jsonUnsafe(
+            new InvalidRequestError({
+              message: "Missing directory: set x-opencode-directory or location[directory]",
+              kind: "Query",
+              field: "location[directory]",
+            }),
+            { status: 400 },
+          )
+        }
+        return yield* effect.pipe(Effect.provide(locations.get(location)))
       }),
     )
   }),
