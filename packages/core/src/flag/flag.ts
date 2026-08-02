@@ -20,6 +20,10 @@ export const Flag = {
   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],
   OPENCODE_CONFIG: process.env["OPENCODE_CONFIG"],
   OPENCODE_CONFIG_CONTENT: process.env["OPENCODE_CONFIG_CONTENT"],
+  // Disables all automatic internet-bound behavior (update checks, models.dev
+  // fetch, share sync, remote config/skills/plugins, LSP downloads) while
+  // keeping user-configured endpoints (providers, MCP, webfetch) working.
+  OPENCODE_AIRGAP: truthy("OPENCODE_AIRGAP"),
   OPENCODE_DISABLE_AUTOUPDATE: truthy("OPENCODE_DISABLE_AUTOUPDATE"),
   OPENCODE_ALWAYS_NOTIFY_UPDATE: truthy("OPENCODE_ALWAYS_NOTIFY_UPDATE"),
   OPENCODE_DISABLE_PRUNE: truthy("OPENCODE_DISABLE_PRUNE"),

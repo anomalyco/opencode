@@ -5,6 +5,7 @@ import npa from "npm-package-arg"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
+import { Flag } from "./flag/flag"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
 import { makeGlobalNode } from "./effect/app-node"
@@ -124,6 +125,14 @@ const layer = Layer.effect(
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      }
+
+      if (Flag.OPENCODE_AIRGAP) {
+        return yield* new InstallFailedError({
+          add: [pkg],
+          dir,
+          cause: new Error(`Package ${pkg} is not cached and OPENCODE_AIRGAP disables npm registry access`),
+        })
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
