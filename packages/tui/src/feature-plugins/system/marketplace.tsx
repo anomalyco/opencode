@@ -10,6 +10,7 @@ import {
   marketplaceSources,
   marketplaceStatus,
   type MarketplaceMutationResult,
+  type MarketplaceInstallPlan,
   type MarketplacePlanResult,
   type MarketplaceView,
 } from "@opencode-ai/core/marketplace"
@@ -138,7 +139,7 @@ function statusText(api: TuiPluginApi, view: MarketplaceView, key: string) {
   return <span style={{ fg: color }}>{status}</span>
 }
 
-function details(listing: MarketplaceView["listings"][number]) {
+function details(listing: MarketplaceView["listings"][number], plan: MarketplaceInstallPlan) {
   return [
     listing.item.description,
     `publisher: ${listing.item.publisher?.name ?? listing.catalog.publisher?.name ?? "unknown"}`,
@@ -146,7 +147,7 @@ function details(listing: MarketplaceView["listings"][number]) {
     `catalog: ${listing.source.name} (${listing.source.trust ?? "community"})`,
     listing.catalog_digest ? `catalog digest: ${listing.catalog_digest}` : undefined,
     listing.orphaned ? "catalog status: unavailable; local install remains manageable" : undefined,
-    `changes: ${marketplacePlanSummary(listing.item.install)}`,
+    `changes: ${marketplacePlanSummary(plan)}`,
     ...marketplacePermissions(listing.item).map((permission) => `permission: ${permission}`),
   ].filter((value): value is string => value !== undefined)
 }
@@ -182,7 +183,7 @@ function View(props: { api: TuiPluginApi }) {
       value: listing.key,
       category: `${listing.item.kind} · ${listing.source.name}`,
       description: listing.item.description,
-      details: details(listing),
+      details: details(listing, data()?.state.installed?.[listing.key]?.plan ?? listing.item.install),
       footer: data() ? statusText(props.api, data()!, listing.key) : "",
     })),
   )

@@ -20,3 +20,6 @@ class GlobalBusEmitter extends EventEmitter<{
 }
 
 export const GlobalBus = new GlobalBusEmitter()
+// Global SSE is a fan-out channel. More than ten desktop/web clients are valid
+// and should not trigger EventEmitter's leak heuristic.
+GlobalBus.setMaxListeners(0)

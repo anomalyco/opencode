@@ -42,6 +42,7 @@ type Pending = {
   action: PendingAction
   conflicts: MarketplaceConflict[]
   trustWarning: boolean
+  summary?: string
 }
 
 export function DialogMarketplace() {
@@ -183,6 +184,7 @@ export function MarketplacePanel() {
         action: result.action,
         conflicts: result.conflicts,
         trustWarning: result.trust_warning,
+        summary: result.summary,
       })
     } catch (error) {
       showToast({
@@ -474,7 +476,7 @@ export function MarketplacePanel() {
               <p class="mt-2 text-12-regular text-text-weak">
                 {pending().action === "uninstall"
                   ? "The SQLite installation record will be removed. User configuration is not rewritten."
-                  : marketplacePlanSummary(pending().listing.item.install)}
+                  : (pending().summary ?? marketplacePlanSummary(pending().listing.item.install))}
               </p>
               <Show when={pending().trustWarning}>
                 <div class="mt-3 rounded-md border border-border-warning px-3 py-2 text-12-regular text-text-base">
@@ -573,8 +575,10 @@ function Details(props: {
   const status = () => marketplaceStatus(props.config, props.listing)
   const installed = () => props.config.marketplace?.installed?.[props.listing.key]
   const enabled = () => marketplaceItemEnabled(props.config, props.listing.key)
-  const skills = () => marketplaceSkillComponents(installed()?.plan ?? props.listing.item.install)
-  const mcp = () => Object.keys(installed()?.plan.mcp ?? props.listing.item.install.mcp ?? {})
+  const skills = () =>
+    marketplaceSkillComponents(installed()?.materialized_plan ?? installed()?.plan ?? props.listing.item.install)
+  const mcp = () =>
+    Object.keys(installed()?.materialized_plan?.mcp ?? installed()?.plan.mcp ?? props.listing.item.install.mcp ?? {})
 
   return (
     <div class="flex min-h-full flex-col">
@@ -651,7 +655,12 @@ function Details(props: {
         </div>
       </Show>
       <div class="mt-5 grid grid-cols-2 gap-3 text-12-regular">
-        <Meta label="Changes" value={marketplacePlanSummary(props.listing.item.install)} />
+        <Meta
+          label="Changes"
+          value={marketplacePlanSummary(
+            installed()?.materialized_plan ?? installed()?.plan ?? props.listing.item.install,
+          )}
+        />
         <Meta label="Trust" value={props.listing.source.trust ?? "community"} />
         <Meta label="License" value={props.listing.item.license ?? "Not specified"} />
         <Meta label="Catalog digest" value={props.listing.catalog_digest ?? "Built-in or not cached"} />
