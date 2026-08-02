@@ -387,6 +387,7 @@ export const ShellTool = Tool.define(
         patterns: new Set<string>(),
         always: new Set<string>(),
       }
+      const found: { pattern: string; always: string }[] = []
       const shellKind = ShellID.toKind(Shell.name(shell))
 
       for (const node of commands(root)) {
@@ -405,10 +406,23 @@ export const ShellTool = Tool.define(
         }
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {
-          scan.patterns.add(source(node))
-          scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
+          found.push({
+            pattern: source(node),
+            always: BashArity.prefix(tokens).join(" ") + " *",
+          })
         }
       }
+
+      for (const item of found) scan.patterns.add(item.pattern)
+
+      // A single "always" reply approves every pattern in `scan.always`, so the widened
+      // arity prefix is only safe when the request covers exactly one command. For a
+      // compound command the user is shown one prompt and makes one decision, but each
+      // command would contribute its own widened rule -- approving `git status && rm -rf ~`
+      // would install `git status *` AND `rm *`, the latter matching `rm -rf /`. Fall back
+      // to the literal commands so "always" grants exactly what was displayed.
+      if (found.length === 1) scan.always.add(found[0].always)
+      else for (const item of found) scan.always.add(item.pattern)
 
       return scan
     })
