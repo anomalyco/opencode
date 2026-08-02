@@ -66,11 +66,37 @@ A source may be:
 - an HTTP loopback URL for local development;
 - a local catalog file, local catalog directory, or `file://` URL.
 
-For Git repository URLs ending in `.git`, OpenCode looks for `.opencode/marketplace.json` through conventional GitHub,
-GitLab, and Gitea raw-file routes. For a local directory in automatic mode, OpenCode tries
-`.opencode/marketplace.json`, `marketplace.json`, `.agents/plugins/marketplace.json`, and the legacy-compatible
-`.claude-plugin/marketplace.json`. Codex catalogs and their `.codex-plugin/plugin.json` manifests are adapted to the
-same OpenCode install plan; bundled skills and `.mcp.json` servers are materialized normally. Use `--name` to set a
+For a GitHub repository URL or `github:` shorthand, OpenCode discovers `.opencode/marketplace.json`, root
+`marketplace.json`, `.agents/plugins/marketplace.json`, `.github/plugin/marketplace.json`,
+`.plugin/marketplace.json`, and `.claude-plugin/marketplace.json`. GitLab and Gitea `.git` URLs continue to use their
+conventional raw-file routes. Local directories use the same catalog locations.
+
+OpenCode adapts Codex, GitHub Copilot, and Claude Code plugin catalogs to the common install plan. It recognizes local,
+GitHub, Git URL/subdirectory, and npm plugin sources and checks `.codex-plugin/plugin.json`, `.plugin/plugin.json`,
+root `plugin.json`, `.github/plugin/plugin.json`, and `.claude-plugin/plugin.json`. Declared skills and MCP servers are
+materialized normally. A skills directory is expanded into its individual `SKILL.md` packages, so every skill gets
+its own switch after installation. Capabilities that OpenCode cannot execute, such as lifecycle hooks, Copilot
+extensions, or Claude language servers, are shown as incompatible instead of being silently installed.
+
+### Official compatible catalogs
+
+These upstream repositories are the best-maintained reference sources for their respective formats:
+
+```bash title="OpenAI Codex plugins"
+opencode plugin marketplace add https://github.com/openai/plugins --name "OpenAI Plugins"
+```
+
+```bash title="GitHub Copilot plugins"
+opencode plugin marketplace add https://github.com/github/copilot-plugins --name "GitHub Copilot"
+```
+
+```bash title="Claude Code plugins"
+opencode plugin marketplace add https://github.com/anthropics/claude-plugins-official --name "Claude Code"
+```
+
+GitHub also maintains `github/awesome-copilot`, a broader community index. Prefer `github/copilot-plugins` when you
+want the smaller first-party catalog. Catalog trust remains `community` until OpenCode itself distributes and pins a
+source; inspect the requested capabilities and accept the trust prompt before installation. Use `--name` to set a
 display name and `--trust private` for a private catalog.
 
 ### Local filesystem catalogs
