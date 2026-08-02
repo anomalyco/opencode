@@ -1,12 +1,26 @@
+import type { EditBufferRenderable } from "@opentui/core"
+
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
 export function promptOffsetWidth(value: string) {
   let width = 0
   for (const part of graphemes.segment(value)) {
-    // Textarea offsets count newlines as one position; Bun.stringWidth counts them as zero.
-    width += part.segment === "\n" ? 1 : Bun.stringWidth(part.segment)
+    // Textarea offsets count newlines as one position and tabs as two, while
+    // Bun.stringWidth counts both as zero.
+    width += part.segment === "\n" ? 1 : part.segment === "\t" ? 2 : Bun.stringWidth(part.segment)
   }
   return width
+}
+
+// visualCursor.visualRow is viewport-relative, so scrollY is what makes it a
+// document row. Comparing visualRow alone treats the top of a scrolled viewport
+// as the first line of the buffer.
+export function promptOnFirstRow(input: EditBufferRenderable) {
+  return input.scrollY + input.visualCursor.visualRow === 0
+}
+
+export function promptOnLastRow(input: EditBufferRenderable) {
+  return input.scrollY + input.visualCursor.visualRow === Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
 }
 
 function displayOffsetIndex(value: string, offset: number) {
