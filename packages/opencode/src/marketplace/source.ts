@@ -3,17 +3,25 @@ import os from "os"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { normalizeMarketplaceURL } from "@opencode-ai/core/marketplace"
+import { Repository } from "@opencode-ai/core/repository"
 
 const FILE_URL = /^file:/i
 const WINDOWS_DRIVE = /^[A-Za-z]:[\\/]/
 const WINDOWS_UNC = /^(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+/
 const URI_SCHEME = /^[A-Za-z][A-Za-z\d+.-]*:/
+const SCP_GIT = /^(?:[^@/\s]+@)[^:/\s]+:.+/
 
 export type MarketplaceSourceReference = {
   url: string
   reference: string
   local: boolean
   name?: string
+}
+
+export function marketplaceGitReference(value: string) {
+  const reference = Repository.parse(value)
+  if (!reference || !Repository.isRemote(reference)) return
+  if (reference.protocol === "ssh:" || SCP_GIT.test(value.trim())) return reference
 }
 
 function expandHome(value: string) {
