@@ -7,7 +7,19 @@ import { spawn } from "node:child_process"
 import type { Stream } from "node:stream"
 import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
-type EditorStdio = "inherit" | "pipe" | "ignore" | number | Stream
+export type EditorStdio = "inherit" | "pipe" | "ignore" | number | Stream
+
+export function editorSpawnOptions(
+  input: { cwd?: string; stdin?: EditorStdio },
+  os: NodeJS.Platform = process.platform,
+) {
+  return {
+    cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
+    stdio: [input.stdin ?? "inherit", "inherit", "inherit"] as [EditorStdio, "inherit", "inherit"],
+    shell: os === "win32",
+    windowsHide: os === "win32",
+  }
+}
 
 export function normalizePromptContent(content: string) {
   if (content.endsWith("\r\n")) {
@@ -25,7 +37,7 @@ export function normalizePromptContent(content: string) {
 
 export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
   const editor = process.env.VISUAL || process.env.EDITOR
-  if (!editor) return
+  if (!editor) return undefined
   const file = path.join(os.tmpdir(), `${Date.now()}.md`)
   await writeFile(file, input.value)
   input.renderer.suspend()
@@ -33,11 +45,7 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   try {
     await new Promise<void>((resolve, reject) => {
       const parts = editor.split(" ")
-      const child = spawn(parts[0]!, [...parts.slice(1), file], {
-        cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
-        stdio: [input.stdin ?? "inherit", "inherit", "inherit"],
-        shell: process.platform === "win32",
-      })
+      const child = spawn(parts[0], [...parts.slice(1), file], editorSpawnOptions(input))
       child.on("error", reject)
       child.on("exit", (code, signal) => {
         if (code === 0) return resolve()

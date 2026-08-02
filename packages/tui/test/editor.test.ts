@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { normalizePromptContent, openEditor } from "../src/editor"
+import { editorSpawnOptions, normalizePromptContent, openEditor } from "../src/editor"
 
 const editor = process.env.EDITOR
 const visual = process.env.VISUAL
@@ -29,4 +29,12 @@ test("normalizes a single trailing editor newline for one-line prompts", () => {
 
 test("preserves multiline prompts that end with a newline", () => {
   expect(normalizePromptContent("hello\nworld\n")).toBe("hello\nworld\n")
+})
+
+test("hides external editor windows on Windows", () => {
+  const options = editorSpawnOptions({ stdin: "pipe" }, "win32")
+
+  expect(options.shell).toBe(true)
+  expect(options.windowsHide).toBe(true)
+  expect(options.stdio).toEqual(["pipe", "inherit", "inherit"])
 })

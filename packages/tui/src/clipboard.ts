@@ -6,9 +6,17 @@ import { promisify } from "node:util"
 
 const exec = promisify(execFile)
 
+export function clipboardCommandOptions(input: string | undefined, os: NodeJS.Platform = process.platform) {
+  const stdin = input === undefined ? "ignore" : "pipe"
+  return {
+    stdio: [stdin, "pipe", "ignore"] as ["ignore" | "pipe", "pipe", "ignore"],
+    windowsHide: os === "win32",
+  }
+}
+
 function command(command: string, args: string[] = [], input?: string) {
   return new Promise<Buffer>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"] })
+    const child = spawn(command, args, clipboardCommandOptions(input))
     const output: Buffer[] = []
     child.on("error", reject)
     child.stdout?.on("data", (chunk: Buffer) => output.push(chunk))
@@ -71,6 +79,7 @@ export async function read() {
   const { default: clipboardy } = await import("clipboardy")
   const text = await clipboardy.read().catch(() => undefined)
   if (text) return { data: text, mime: "text/plain" }
+  return undefined
 }
 
 export function copyCommand(
@@ -91,6 +100,7 @@ export function copyCommand(
       "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
     ]
   }
+  return undefined
 }
 
 let copyMethod: Promise<(text: string) => Promise<void>> | undefined

@@ -2,8 +2,13 @@ import { execFile } from "node:child_process"
 import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, extname, join } from "node:path"
 import util from "node:util"
+import { hiddenWindowOptions } from "./process-options"
 
 const execFilePromise = util.promisify(execFile)
+
+export function lookupAppOptions(os: NodeJS.Platform = process.platform) {
+  return hiddenWindowOptions(os)
+}
 
 const exists = (path: string) =>
   access(path)
@@ -31,7 +36,7 @@ async function checkMacosApp(appName: string) {
     if (await exists(location)) return true
   }
 
-  return execFilePromise("which", [appName])
+  return execFilePromise("which", [appName], lookupAppOptions())
     .then(() => true)
     .catch(() => false)
 }
@@ -39,7 +44,7 @@ async function checkMacosApp(appName: string) {
 async function resolveWindowsAppPath(appName: string): Promise<string | null> {
   let output: string
   try {
-    output = await execFilePromise("where", [appName]).then((r) => r.stdout.toString())
+    output = await execFilePromise("where", [appName], lookupAppOptions()).then((r) => r.stdout)
   } catch {
     return null
   }

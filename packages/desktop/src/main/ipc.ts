@@ -8,6 +8,7 @@ import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
+import { hiddenWindowOptions } from "./process-options"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
 import {
@@ -196,8 +197,9 @@ export function registerIpcHandlers(deps: Deps) {
     await new Promise<void>((resolve, reject) => {
       const [cmd, args] =
         process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
-      execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
+      execFile(cmd, args, hiddenWindowOptions(), (err) => (err ? reject(err) : resolve()))
     })
+    return undefined
   })
 
   ipcMain.handle("reveal-path", async (_event: IpcMainInvokeEvent, path: string) => {
