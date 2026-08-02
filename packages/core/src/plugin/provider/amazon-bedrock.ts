@@ -2,7 +2,6 @@ import { Effect } from "effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Provider } from "../../provider"
-import { mantleAPI } from "./amazon-bedrock-mantle"
 
 type MantleSDK = {
   languageModel: (modelID: string) => LanguageModelV3
@@ -55,7 +54,9 @@ function resolveModelID(modelID: string, region: string | undefined) {
 }
 
 function selectMantleModel(sdk: MantleSDK, modelID: string) {
-  return sdk[mantleAPI(modelID)](modelID)
+  if (modelID === "openai.gpt-oss-safeguard-20b" || modelID === "openai.gpt-oss-safeguard-120b")
+    return sdk.chat(modelID)
+  return sdk.responses(modelID)
 }
 
 export const AmazonBedrockPlugin = define({

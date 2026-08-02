@@ -2,7 +2,6 @@ export * as AISDKNative from "./aisdk-native"
 
 import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Provider } from "./provider"
-import { mantleAPI } from "./plugin/provider/amazon-bedrock-mantle"
 
 export interface Mapping {
   readonly package: string
@@ -56,8 +55,9 @@ function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string,
         : undefined
   const credentials = mapBedrockCredentials(settings)
   if (!input.hasCredential && apiKey === undefined && credentials === undefined) return undefined
+  const chat = input.modelID === "openai.gpt-oss-safeguard-20b" || input.modelID === "openai.gpt-oss-safeguard-120b"
   return {
-    package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${mantleAPI(input.modelID)}`,
+    package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${chat ? "chat" : "responses"}`,
     settings: {
       ...baseSettings,
       ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
