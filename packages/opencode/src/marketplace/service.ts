@@ -38,7 +38,7 @@ import { Config } from "@/config/config"
 import { composeMarketplaceConfig } from "./overlay"
 import * as MarketplaceRegistry from "./registry"
 import * as MarketplaceCache from "./cache"
-import { marketplaceGitReference, resolveMarketplaceSourceReference } from "./source"
+import { marketplaceGitReference, marketplaceSourceNeedsResolution, resolveMarketplaceSourceReference } from "./source"
 import { createMarketplacePlanStore } from "./plan-store"
 
 export type InstallInput = {
@@ -290,20 +290,27 @@ const layer = Layer.effect(
       }
     })
 
-    const ensureSourceRepositories = Effect.fnUntraced(function* (state: MarketplaceState, refresh: boolean) {
-      yield* Effect.forEach(
+    const readState = Effect.fnUntraced(function* (refresh: boolean) {
+      const state = yield* registry.read()
+      const sources = yield* Effect.forEach(
         state.sources ?? [],
         (source) => {
-          const repository = marketplaceGitReference(source.reference ?? source.url)
-          if (!repository) return Effect.void
-          return repositories.ensure({ reference: repository, refresh }).pipe(Effect.ignore)
+          if (!marketplaceSourceNeedsResolution(source)) return Effect.succeed(source)
+          return resolveSourceReference(source.reference!, refresh).pipe(
+            Effect.map((resolved) => (resolved.url === source.url ? source : { ...source, url: resolved.url })),
+            Effect.catch(() => Effect.succeed(source)),
+          )
         },
         { concurrency: "unbounded" },
+      )
+      if (sources.every((source, index) => source === state.sources?.[index])) return state
+      return yield* registry.replace({ ...state, sources }).pipe(
+        Effect.map((result) => result.state),
+        Effect.catch(() => registry.read()),
       )
     })
 
     const loadView = Effect.fnUntraced(function* (state: MarketplaceState, refresh: boolean) {
-      yield* ensureSourceRepositories(state, refresh)
       const loaded = yield* Effect.tryPromise({
         try: () =>
           loadMarketplace({
@@ -326,7 +333,8 @@ const layer = Layer.effect(
       cursor?: string
       limit?: number
     }) {
-      const view = yield* loadView(yield* registry.read(), options?.refresh === true)
+      const refresh = options?.refresh === true
+      const view = yield* loadView(yield* readState(refresh), refresh)
       if (options?.limit === undefined) return view
       const limit = Math.max(1, Math.min(options.limit, 200))
       const start = options.cursor
