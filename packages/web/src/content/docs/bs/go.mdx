@@ -13,7 +13,7 @@ Go radi kao bilo koji drugi provajder u OpenCode-u. Pretplatite se na OpenCode G
 dobijete svoj API ključ. On je **potpuno opcionalan** i ne morate ga koristiti da
 biste koristili OpenCode.
 
-Dizajniran je prvenstveno za međunarodne korisnike, sa modelima hostovanim u SAD-u, EU i Singapuru za stabilan globalni pristup.
+Prvenstveno je namijenjen međunarodnim korisnicima i pruža stabilan globalni pristup.
 
 ---
 
@@ -62,6 +62,7 @@ Trenutna lista modela uključuje:
 - **Grok 4.5**
 - **GLM-5.2**
 - **GLM-5.1**
+- **GPT 5.6 Luna**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -95,6 +96,7 @@ Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca kori
 | Model             | zahtjeva na 5 sati | zahtjeva sedmično | zahtjeva mjesečno |
 | ----------------- | ------------------ | ----------------- | ----------------- |
 | Grok 4.5          | 120                | 300               | 600               |
+| GPT 5.6 Luna      | 2,050              | 5,100             | 10,250            |
 | GLM-5.2           | 880                | 2,150             | 4,300             |
 | GLM-5.1           | 880                | 2,150             | 4,300             |
 | Kimi K3           | 110                | 250               | 490               |
@@ -115,6 +117,7 @@ Procjene se zasnivaju na zapaženim obrascima zahtjeva:
 
 - Grok 4.5 — 1,100 ulaznih, 71,500 keširanih, 220 izlaznih tokena po zahtjevu
 - GLM-5.2/5.1 — 700 ulaznih (input), 52,000 keširanih, 150 izlaznih (output) tokena po zahtjevu
+- GPT 5.6 Luna — 1,000 ulaznih, 50,000 keširanih, 220 izlaznih tokena po zahtjevu
 - Kimi K3 — 1,050 ulaznih, 76,500 keširanih, 300 izlaznih tokena po zahtjevu
 - Kimi K2.7/K2.6 — 870 ulaznih, 55,000 keširanih, 200 izlaznih tokena po zahtjevu
 - DeepSeek V4 Pro — 750 ulaznih, 82,000 keširanih, 290 izlaznih tokena po zahtjevu
@@ -133,6 +136,8 @@ Procjene se također zasnivaju na sljedećim cijenama po 1M tokena i mjesečnoj 
 | Model                        | Input  | Output | Cached Read | Cached Write | Potrošnja |
 | ---------------------------- | ------ | ------ | ----------- | ------------ | --------- |
 | Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15       |
+| GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02       | $0.25        | $15       |
+| GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04       | $0.50        | $15       |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60       |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60       |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15       |
@@ -189,6 +194,7 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | Model             | Model ID          | Endpoint                                         | AI SDK Paket                |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -224,7 +230,29 @@ https://opencode.ai/zen/go/v1/models
 
 ## Privatnost
 
-Plan je prvenstveno namijenjen međunarodnim korisnicima, a modeli su smješteni u US, EU i Singaporeu radi stabilnog globalnog pristupa. Naši pružaoci usluga primjenjuju politiku nultog zadržavanja podataka i ne koriste vaše podatke za treniranje modela.
+| Model             | Treniranje modela | Zadržavanje podataka |
+| ----------------- | ----------------- | -------------------- |
+| Grok 4.5          | Ne koristi se     | 30 dana              |
+| GPT 5.6 Luna      | Ne koristi se     | 30 dana              |
+| GLM-5.2           | Ne koristi se     | 0 dana               |
+| GLM-5.1           | Ne koristi se     | 0 dana               |
+| Kimi K3           | Ne koristi se     | 0 dana               |
+| Kimi K2.7 Code    | Ne koristi se     | 0 dana               |
+| Kimi K2.6         | Ne koristi se     | 0 dana               |
+| MiMo-V2.5-Pro     | Ne koristi se     | 0 dana               |
+| MiMo-V2.5         | Ne koristi se     | 0 dana               |
+| Qwen3.7 Max       | Ne koristi se     | 0 dana               |
+| Qwen3.7 Plus      | Ne koristi se     | 0 dana               |
+| Qwen3.6 Plus      | Ne koristi se     | 0 dana               |
+| MiniMax M3        | Ne koristi se     | 0 dana               |
+| MiniMax M2.7      | Ne koristi se     | 0 dana               |
+| DeepSeek V4 Pro   | Ne koristi se     | 0 dana               |
+| DeepSeek V4 Flash | Ne koristi se     | 0 dana               |
+| Hy3               | Ne koristi se     | 0 dana               |
+
+- **Grok 4.5:** ZDR onemogućava važne API funkcije koje zavise od pohranjenih podataka, uključujući Responses API s očuvanjem stanja, Files and Collections i Batch API. [Saznajte više](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** Zapisi o nadzoru zloupotrebe generišu se za svako korištenje API funkcija i čuvaju do 30 dana. [Saznajte više](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **DeepSeek V4 Flash:** ZDR sporazum obnavlja se mjesečno. Trenutni sporazum važi do 31. augusta 2026.
 
 ---
 
