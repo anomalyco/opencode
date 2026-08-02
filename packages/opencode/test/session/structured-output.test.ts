@@ -8,6 +8,8 @@ import { SessionID, MessageID } from "../../src/session/schema"
 const decodeFormat = Schema.decodeUnknownExit(SessionV1.Format)
 const decodeUser = Schema.decodeUnknownExit(SessionV1.User)
 const decodeAssistant = Schema.decodeUnknownExit(SessionV1.Assistant)
+const encodeFormat = Schema.encodeUnknownSync(SessionV1.Format)
+const encodeUser = Schema.encodeUnknownSync(SessionV1.User)
 
 describe("structured-output.OutputFormat", () => {
   test("parses text format", () => {
@@ -61,6 +63,30 @@ describe("structured-output.OutputFormat", () => {
       retryCount: -1,
     })
     expect(Exit.isFailure(result)).toBe(true)
+  })
+
+  // Messages come back out of storage as plain JSON, and that value is what the
+  // message routes and MessageUpdated events encode.
+  test("encodes a text format read back from storage", () => {
+    expect(encodeFormat({ type: "text" })).toEqual({ type: "text" })
+  })
+
+  test("encodes a json_schema format read back from storage", () => {
+    const stored = { type: "json_schema" as const, schema: { type: "object" }, retryCount: 2 }
+    expect(encodeFormat(stored)).toEqual(stored)
+  })
+
+  test("encodes a stored user message that carries a format", () => {
+    const encoded = encodeUser({
+      id: MessageID.ascending(),
+      sessionID: SessionID.descending(),
+      role: "user",
+      time: { created: Date.now() },
+      agent: "default",
+      model: { providerID: "anthropic", modelID: "claude-3" },
+      format: { type: "json_schema", schema: { type: "object" }, retryCount: 2 },
+    }) as Record<string, unknown>
+    expect(encoded.format).toEqual({ type: "json_schema", schema: { type: "object" }, retryCount: 2 })
   })
 })
 

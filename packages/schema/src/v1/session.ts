@@ -62,15 +62,17 @@ export const ContentFilterError = namedError("ContentFilterError", {
   message: Schema.String,
 })
 
-export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
+// Messages are read back out of storage as plain JSON, so these must stay structs: a
+// Schema.Class only encodes an actual class instance and rejects the stored object.
+export const OutputFormatText = Schema.Struct({
   type: Schema.Literal("text"),
-}) {}
+}).annotate({ identifier: "OutputFormatText" })
 
-export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
+export const OutputFormatJsonSchema = Schema.Struct({
   type: Schema.Literal("json_schema"),
   schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
   retryCount: NonNegativeInt.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
-}) {}
+}).annotate({ identifier: "OutputFormatJsonSchema" })
 
 export const Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
   discriminator: "type",
