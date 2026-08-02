@@ -36,6 +36,29 @@ const FILES = new Set([
   "chmod",
   "chown",
   "cat",
+  // Writers that take their destination as a plain positional argument. Without these
+  // `tee ~/.ssh/authorized_keys` reaches the shell with no external_directory prompt,
+  // even though the documented behaviour is that the permission fires whenever a tool
+  // touches paths outside the project directory.
+  "dd",
+  "install",
+  "ln",
+  "rsync",
+  "shred",
+  "split",
+  "tee",
+  "truncate",
+  "unlink",
+  // Readers. These match how the read tool already prompts for out-of-project files.
+  "cmp",
+  "diff",
+  "head",
+  "less",
+  "more",
+  "sed",
+  "sort",
+  "tail",
+  "wc",
   // Leave PowerShell aliases out for now. Common ones like cat/cp/mv/rm/mkdir
   // already hit the entries above, and alias normalization should happen in one
   // place later so we do not risk double-prompting.
@@ -156,6 +179,17 @@ function expand(text: string, cwd: string, shell: string) {
     .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => envValue(key) || "")
     .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => envValue(key) || "")
     .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => auto(key, cwd, shell) || "")
+  return home(out)
+}
+
+// POSIX counterpart to `expand`. Without it `$HOME`/`$PWD` survive into `dynamic()`,
+// which drops the argument, so `rm $HOME/.ssh/id_rsa` skipped the external_directory
+// scan even though `rm` is scanned. Only the two variables we can resolve without
+// running the shell are substituted; anything else still falls through to `dynamic()`.
+function posixExpand(text: string, cwd: string) {
+  const out = unquote(text).replace(/\$\{?(HOME|PWD)\}?(?=$|[\\/])/g, (_, key: string) =>
+    key === "HOME" ? os.homedir() : cwd,
+  )
   return home(out)
 }
 
@@ -367,7 +401,7 @@ export const ShellTool = Tool.define(
     })
 
     const argPath = Effect.fn("ShellTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
-      const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
+      const text = ps ? expand(arg, cwd, shell) : posixExpand(arg, cwd)
       const file = text && prefix(text)
       if (!file || dynamic(file, ps)) return
       const next = ps ? provider(file) : file

@@ -263,6 +263,56 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  if (process.platform !== "win32") {
+    it.live("asks for external_directory permission for tee targets", () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        yield* runIn(
+          tmp,
+          Effect.gen(function* () {
+            const err = new Error("stop after permission")
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+            expect(
+              yield* fail(
+                {
+                  command: "echo hi | tee /etc/opencode-external-test",
+                },
+                capture(requests, err),
+              ),
+            ).toMatchObject({ message: err.message })
+            const extDirReq = requests.find((r) => r.permission === "external_directory")
+            expect(extDirReq).toBeDefined()
+            expect(extDirReq!.patterns).toContain("/etc/*")
+          }),
+        )
+      }),
+    )
+
+    it.live("asks for external_directory permission for $HOME paths", () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        yield* runIn(
+          tmp,
+          Effect.gen(function* () {
+            const err = new Error("stop after permission")
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+            expect(
+              yield* fail(
+                {
+                  command: "rm $HOME/.ssh/opencode-external-test",
+                },
+                capture(requests, err),
+              ),
+            ).toMatchObject({ message: err.message })
+            const extDirReq = requests.find((r) => r.permission === "external_directory")
+            expect(extDirReq).toBeDefined()
+            expect(extDirReq!.patterns).toContain(path.join(os.homedir(), ".ssh", "*"))
+          }),
+        )
+      }),
+    )
+  }
+
   for (const item of ps) {
     it.live(`parses PowerShell conditionals for permission prompts [${item.label}]`, () =>
       withShell(
