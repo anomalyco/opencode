@@ -514,26 +514,35 @@ function debounceWrites<T extends SyncStorage | AsyncStorage>(storage: T, deboun
     })
   }
 
-  return {
-    ...storage,
-    setItem: (key: string, value: string) => {
-      const prev = pending.get(key)
-      if (prev) clearTimeout(prev.timer)
-      pending.set(key, {
-        value,
-        timer: setTimeout(() => flush(key), debounceMs),
-      })
+  const setItem = (key: string, value: string) => {
+    const prev = pending.get(key)
+    if (prev) clearTimeout(prev.timer)
+    pending.set(key, {
+      value,
+      timer: setTimeout(() => flush(key), debounceMs),
+    })
+  }
+
+  const removeItem = (key: string) => {
+    const prev = pending.get(key)
+    if (prev) {
+      clearTimeout(prev.timer)
+      pending.delete(key)
+    }
+    last.delete(key)
+    return storage.removeItem(key)
+  }
+
+  // Proxy instead of object spread so getter-based fields like AsyncStorage.length stay live.
+  return new Proxy(storage, {
+    get(target, prop) {
+      if (prop === "setItem") return setItem
+      if (prop === "removeItem") return removeItem
+      const value = Reflect.get(target, prop, target)
+      if (typeof value === "function") return value.bind(target)
+      return value
     },
-    removeItem: (key: string) => {
-      const prev = pending.get(key)
-      if (prev) {
-        clearTimeout(prev.timer)
-        pending.delete(key)
-      }
-      last.delete(key)
-      return storage.removeItem(key)
-    },
-  } as T
+  })
 }
 
 export const PersistTesting = {

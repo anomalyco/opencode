@@ -238,16 +238,16 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
   return value
 }
 
-<<<<<<< HEAD
-function createPersistedPrompt(target: ReturnType<typeof promptTarget>, initial?: InitialPrompt, platform?: Platform) {
-  const [store, setStore, _, ready] = persisted(target, createStore<PromptStore>(promptStore(initial)), platform)
-=======
-function createPersistedPrompt(target: ReturnType<typeof promptTarget>, initial?: InitialPrompt) {
+function createPersistedPrompt(
+  target: ReturnType<typeof promptTarget>,
+  initial?: InitialPrompt,
+  platform?: Platform,
+) {
   const [store, setStore, _, ready] = persisted(
     { ...target, debounceMs: PROMPT_PERSIST_DEBOUNCE_MS },
     createStore<PromptStore>(promptStore(initial)),
+    platform,
   )
->>>>>>> f008270 (fix(app): debounce prompt draft persistence)
   return { ready, ...createPromptStateValue(store, setStore) }
 }
 
