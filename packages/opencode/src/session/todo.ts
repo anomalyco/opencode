@@ -1,12 +1,31 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionID } from "./schema"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schedule } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { asc } from "drizzle-orm"
 import { TodoTable } from "@opencode-ai/core/session/sql"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
+
+/**
+ * Retry SQLite lock conflicts (SQLITE_BUSY/SQLITE_LOCKED) with short
+ * exponential backoff. Parallel subagents calling todowrite simultaneously
+ * can hit these even with busy_timeout=5000 and WAL mode when both
+ * transactions hold write locks. #40020.
+ */
+function withSqliteLockRetry<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> {
+  return effect.pipe(
+    Effect.retry({
+      times: 5,
+      schedule: Schedule.exponential(10, 2),
+      while: (error) => {
+        const e = error as { code?: string }
+        return e?.code === "SQLITE_BUSY" || e?.code === "SQLITE_LOCKED"
+      },
+    }),
+  )
+}
 
 export const Info = SessionTodo.Info
 export type Info = SessionTodo.Info
@@ -27,8 +46,8 @@ const layer = Layer.effect(
     const { db } = yield* Database.Service
 
     const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: ReadonlyArray<Info> }) {
-      yield* db
-        .transaction((tx) =>
+      yield* withSqliteLockRetry(
+        db.transaction((tx) =>
           Effect.gen(function* () {
             yield* tx.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
             if (input.todos.length === 0) return
@@ -45,8 +64,8 @@ const layer = Layer.effect(
               )
               .run()
           }),
-        )
-        .pipe(Effect.orDie)
+        ),
+      ).pipe(Effect.orDie)
       yield* events.publish(Event.Updated, input)
     })
 
