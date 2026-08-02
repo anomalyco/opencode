@@ -71,6 +71,8 @@ export function MarketplacePanel() {
     sourceURL: "",
     sourceName: "",
     sourceTrust: "community" as MarketplaceConfiguredTrust,
+    sourceHeaderName: "",
+    sourceHeaderEnv: "",
   })
 
   const state = () => view()?.state ?? { revision: 0 }
@@ -238,16 +240,26 @@ export function MarketplacePanel() {
   async function addSource() {
     const url = store.sourceURL.trim()
     if (!url) return
+    const header = store.sourceHeaderName.trim()
+    const variable = store.sourceHeaderEnv.trim()
     const success = await run(
       sync().marketplace.sourceAdd({
         expected_revision: revision(),
         url,
         name: store.sourceName.trim() || undefined,
         trust: store.sourceTrust,
+        header_env: header && variable ? { [header]: variable } : undefined,
       }) as Promise<MarketplaceMutationResult>,
       "Marketplace source added",
     )
-    if (success) setStore({ sourceURL: "", sourceName: "", sourceTrust: "community" })
+    if (success)
+      setStore({
+        sourceURL: "",
+        sourceName: "",
+        sourceTrust: "community",
+        sourceHeaderName: "",
+        sourceHeaderEnv: "",
+      })
   }
 
   async function prune() {
@@ -437,9 +449,13 @@ export function MarketplacePanel() {
           sourceURL={store.sourceURL}
           sourceName={store.sourceName}
           sourceTrust={store.sourceTrust}
+          sourceHeaderName={store.sourceHeaderName}
+          sourceHeaderEnv={store.sourceHeaderEnv}
           setURL={(value) => setStore("sourceURL", value)}
           setName={(value) => setStore("sourceName", value)}
           setTrust={(value) => setStore("sourceTrust", value)}
+          setHeaderName={(value) => setStore("sourceHeaderName", value)}
+          setHeaderEnv={(value) => setStore("sourceHeaderEnv", value)}
           add={() => void addSource()}
           toggle={(source) =>
             void run(
@@ -703,44 +719,83 @@ function Sources(props: {
   sourceURL: string
   sourceName: string
   sourceTrust: MarketplaceConfiguredTrust
+  sourceHeaderName: string
+  sourceHeaderEnv: string
   setURL: (value: string) => void
   setName: (value: string) => void
   setTrust: (value: MarketplaceConfiguredTrust) => void
+  setHeaderName: (value: string) => void
+  setHeaderEnv: (value: string) => void
   add: () => void
   toggle: (source: MarketplaceSource) => void
   remove: (source: MarketplaceSource) => void
 }) {
   return (
     <div data-slot="marketplace-content" class="min-h-0 flex-1 overflow-y-auto">
-      <div data-slot="marketplace-source-form" class="grid gap-2 rounded-lg p-3 md:grid-cols-[1fr_13rem_9rem_auto]">
-        <TextInputV2
-          appearance="base"
-          value={props.sourceURL}
-          onInput={(event) => props.setURL(event.currentTarget.value)}
-          placeholder="HTTPS, github:owner/repository, or local path"
-          aria-label="Marketplace source URL or local path"
-          spellcheck={false}
-          autocorrect="off"
-          autocomplete="off"
-          autocapitalize="off"
-        />
-        <TextInputV2
-          appearance="base"
-          value={props.sourceName}
-          onInput={(event) => props.setName(event.currentTarget.value)}
-          placeholder="Display name"
-          aria-label="Marketplace source display name"
-        />
-        <SelectV2
-          options={["community", "private"] as MarketplaceConfiguredTrust[]}
-          current={props.sourceTrust}
-          appearance="base"
-          aria-label="Marketplace source trust"
-          onSelect={(value) => value && props.setTrust(value)}
-        />
-        <ButtonV2 type="button" variant="neutral" disabled={props.busy || !props.sourceURL.trim()} onClick={props.add}>
-          Add
-        </ButtonV2>
+      <div data-slot="marketplace-source-form" class="space-y-2 rounded-lg p-3">
+        <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_12rem_9rem]">
+          <TextInputV2
+            appearance="base"
+            value={props.sourceURL}
+            onInput={(event) => props.setURL(event.currentTarget.value)}
+            placeholder="HTTPS, github:owner/repository, or local path"
+            aria-label="Marketplace source URL or local path"
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+          />
+          <TextInputV2
+            appearance="base"
+            value={props.sourceName}
+            onInput={(event) => props.setName(event.currentTarget.value)}
+            placeholder="Display name"
+            aria-label="Marketplace source display name"
+          />
+          <SelectV2
+            options={["community", "private"] as MarketplaceConfiguredTrust[]}
+            current={props.sourceTrust}
+            appearance="base"
+            aria-label="Marketplace source trust"
+            onSelect={(value) => value && props.setTrust(value)}
+          />
+        </div>
+        <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <TextInputV2
+            appearance="base"
+            value={props.sourceHeaderName}
+            onInput={(event) => props.setHeaderName(event.currentTarget.value)}
+            placeholder="Auth header (for example, PRIVATE-TOKEN)"
+            aria-label="Marketplace authentication header"
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+          />
+          <TextInputV2
+            appearance="base"
+            value={props.sourceHeaderEnv}
+            onInput={(event) => props.setHeaderEnv(event.currentTarget.value)}
+            placeholder="Environment variable (for example, GITLAB_TOKEN)"
+            aria-label="Marketplace authentication environment variable"
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+          />
+          <ButtonV2
+            type="button"
+            variant="neutral"
+            disabled={
+              props.busy ||
+              !props.sourceURL.trim() ||
+              Boolean(props.sourceHeaderName.trim()) !== Boolean(props.sourceHeaderEnv.trim())
+            }
+            onClick={props.add}
+          >
+            Add
+          </ButtonV2>
+        </div>
       </div>
       <div class="mt-3 space-y-2">
         <For each={props.sources}>
@@ -754,6 +809,15 @@ function Sources(props: {
                     <span class="text-10-medium uppercase text-text-weak">{source.trust ?? "community"}</span>
                   </div>
                   <div class="mt-1 truncate text-11-regular text-text-weak">{source.reference ?? source.url}</div>
+                  <Show when={source.header_env}>
+                    {(headers) => (
+                      <div class="mt-1 truncate text-10-regular text-text-weak">
+                        {Object.entries(headers())
+                          .map(([name, variable]) => `${name} ← ${variable}`)
+                          .join(", ")}
+                      </div>
+                    )}
+                  </Show>
                 </div>
                 <div class="flex items-center gap-2">
                   <Switch
