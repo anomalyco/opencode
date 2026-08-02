@@ -24,6 +24,12 @@ export function marketplaceGitReference(value: string) {
   if (reference.protocol === "ssh:" || SCP_GIT.test(value.trim())) return reference
 }
 
+export function marketplaceSourceNeedsResolution(source: { url: string; reference?: string }) {
+  if (!source.reference || source.reference === source.url) return false
+  if (marketplaceGitReference(source.reference)) return true
+  return source.reference.startsWith("github:") || /^https:\/\/github\.com\//i.test(source.reference)
+}
+
 function expandHome(value: string) {
   if (value === "~") return os.homedir()
   if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))

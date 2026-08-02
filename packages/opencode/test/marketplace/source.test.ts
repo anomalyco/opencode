@@ -3,7 +3,11 @@ import os from "os"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
-import { marketplaceGitReference, resolveMarketplaceSourceReference } from "@/marketplace/source"
+import {
+  marketplaceGitReference,
+  marketplaceSourceNeedsResolution,
+  resolveMarketplaceSourceReference,
+} from "@/marketplace/source"
 
 describe("marketplace local source references", () => {
   test("recognizes SSH git repositories with explicit ports", () => {
@@ -18,6 +22,27 @@ describe("marketplace local source references", () => {
       path: "ai/agent-marketplace",
     })
     expect(marketplaceGitReference("https://git.example.com/ai/agent-marketplace.git")).toBeUndefined()
+  })
+
+  test("re-resolves legacy GitHub repository sources", () => {
+    expect(
+      marketplaceSourceNeedsResolution({
+        url: "https://raw.githubusercontent.com/openai/plugins/HEAD/.opencode/marketplace.json",
+        reference: "https://github.com/openai/plugins",
+      }),
+    ).toBe(true)
+    expect(
+      marketplaceSourceNeedsResolution({
+        url: "file:///cache/agent-marketplace/",
+        reference: "ssh://git@git.example.com:2222/ai/agent-marketplace.git",
+      }),
+    ).toBe(true)
+    expect(
+      marketplaceSourceNeedsResolution({
+        url: "file:///tmp/marketplace.json",
+        reference: "/tmp/marketplace.json",
+      }),
+    ).toBe(false)
   })
 
   test("normalizes files, directories, relative paths, and file URLs", async () => {
