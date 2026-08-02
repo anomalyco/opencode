@@ -111,7 +111,101 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+function assistantReasoningInput(
+  finish: string,
+  metadata?: Record<string, unknown>,
+  text = "partial answer",
+): SessionV1.WithParts[] {
+  const userID = `m-user-reasoning-${finish}`
+  const assistantID = `m-assistant-reasoning-${finish}`
+
+  return [
+    {
+      info: userInfo(userID),
+      parts: [
+        {
+          ...basePart(userID, "u-reasoning"),
+          type: "text",
+          text: "continue the task",
+        },
+      ] as SessionV1.Part[],
+    },
+    {
+      info: { ...assistantInfo(assistantID, userID), finish },
+      parts: [
+        {
+          ...basePart(assistantID, "a-text-reasoning"),
+          type: "text",
+          text,
+        },
+        {
+          ...basePart(assistantID, "a-reasoning"),
+          type: "reasoning",
+          text: "incomplete chain",
+          metadata,
+          time: { start: 0 },
+        },
+        {
+          ...basePart(assistantID, "a-step-finish"),
+          type: "step-finish",
+          reason: finish,
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+        },
+      ] as SessionV1.Part[],
+    },
+  ]
+}
+
 describe("session.message-v2.toModelMessage", () => {
+  test("drops a truncated assistant message left with only empty text", async () => {
+    const result = await MessageV2.toModelMessages(assistantReasoningInput("length", undefined, ""), model)
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "continue the task" }],
+      },
+    ])
+  })
+
+  test("drops unsigned reasoning from an assistant message truncated by length", async () => {
+    const result = await MessageV2.toModelMessages(assistantReasoningInput("length"), model)
+
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "partial answer" }],
+    })
+  })
+
+  test("preserves signed reasoning from an assistant message truncated by length", async () => {
+    const result = await MessageV2.toModelMessages(
+      assistantReasoningInput("length", { anthropic: { signature: "signed" } }),
+      model,
+    )
+
+    expect(result[1]?.content).toContainEqual({
+      type: "reasoning",
+      text: "incomplete chain",
+      providerOptions: { anthropic: { signature: "signed" } },
+    })
+  })
+
+  test("preserves reasoning from an assistant message that stopped normally", async () => {
+    const result = await MessageV2.toModelMessages(assistantReasoningInput("stop"), model)
+
+    expect(result[1]?.content).toContainEqual({
+      type: "reasoning",
+      text: "incomplete chain",
+      providerOptions: undefined,
+    })
+  })
+
   test("filters out messages with no parts", async () => {
     const input: SessionV1.WithParts[] = [
       {

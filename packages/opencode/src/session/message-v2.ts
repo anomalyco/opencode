@@ -259,6 +259,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "assistant",
         parts: [],
       }
+      let droppedUnsignedReasoning = false
       // Anthropic adaptive thinking can persist assistant turns like:
       // step-start, reasoning(signature), text(""), step-start,
       // reasoning(signature). The empty text part is a structural separator,
@@ -368,6 +369,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               })
             continue
           }
+          if (msg.info.finish === "length" && part.metadata?.anthropic?.signature == null) {
+            droppedUnsignedReasoning = true
+            continue
+          }
           assistantMessage.parts.push({
             type: "reasoning",
             text: part.text,
@@ -375,7 +380,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
-      if (assistantMessage.parts.length > 0) {
+      const hasSubstantivePart = assistantMessage.parts.some(
+        (part) => part.type !== "step-start" && (part.type !== "text" || part.text.trim().length > 0),
+      )
+      if (assistantMessage.parts.length > 0 && (!droppedUnsignedReasoning || hasSubstantivePart)) {
         result.push(assistantMessage)
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results
