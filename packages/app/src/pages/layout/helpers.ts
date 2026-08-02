@@ -148,3 +148,10 @@ export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted
 
   return [...result, ...live.values()]
 }
+
+export function explicitProjectDirectory(root: string, requested: string, dirs: string[]): string | undefined {
+  const rootKey = pathKey(root)
+  const requestedKey = pathKey(requested)
+  if (requestedKey === rootKey) return undefined
+  return dirs.find((dir) => pathKey(dir) === requestedKey)
+}

@@ -13,6 +13,7 @@ import {
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
+  explicitProjectDirectory,
   hasProjectPermissions,
   homeProjectNavigation,
   homeProjectDirectories,
@@ -127,6 +128,12 @@ describe("layout workspace helpers", () => {
   test("keeps local first while preserving known order", () => {
     const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
+  })
+
+  test("keeps an explicitly selected sandbox directory distinct from the project root", () => {
+    expect(explicitProjectDirectory("/repo", "/repo-copy", ["/repo", "/repo-copy"])).toBe("/repo-copy")
+    expect(explicitProjectDirectory("/repo", "/repo", ["/repo", "/repo-copy"])).toBeUndefined()
+    expect(explicitProjectDirectory("/repo", "/missing", ["/repo", "/repo-copy"])).toBeUndefined()
   })
 
   test("finds the latest root session across workspaces", () => {

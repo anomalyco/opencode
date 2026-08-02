@@ -64,6 +64,7 @@ import {
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
+  explicitProjectDirectory,
   latestRootSession,
   sortedRootSessions,
 } from "./layout/helpers"
@@ -1212,6 +1213,32 @@ export default function LegacyLayout(props: ParentProps) {
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
+    }
+
+    const explicit = explicitProjectDirectory(root, directory, dirs)
+    if (explicit) {
+      await refreshDirs(explicit)
+      const local = serverSync().child(explicit, { bootstrap: false })[0]
+      const localLatest = latestRootSession([local], Date.now())
+      if (localLatest && (await openSession(localLatest))) return
+
+      const fetched = latestRootSession(
+        [
+          {
+            path: { directory: explicit },
+            session: await listAllSessions(serverSDK().api.session, {
+              directory: explicit,
+              parentID: null,
+              order: "desc",
+            }).catch(() => []),
+          },
+        ],
+        Date.now(),
+      )
+      if (fetched && (await openSession(fetched))) return
+
+      navigateWithSidebarReset(`/${base64Encode(explicit)}/session`)
+      return
     }
 
     const projectSession = store.lastProjectSession[root]
