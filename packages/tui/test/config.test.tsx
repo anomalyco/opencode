@@ -102,8 +102,8 @@ test("reserves home and end for navigation", () => {
 
   expect(config.keybinds.get("input.buffer.home")).toEqual([])
   expect(config.keybinds.get("input.buffer.end")).toEqual([])
-  expect(config.keybinds.get("input.select.buffer.home")).toEqual([])
-  expect(config.keybinds.get("input.select.buffer.end")).toEqual([])
+  expect(config.keybinds.get("input.select.buffer.home")).toMatchObject([{ key: "shift+home" }])
+  expect(config.keybinds.get("input.select.buffer.end")).toMatchObject([{ key: "shift+end" }])
   expect(config.keybinds.get("input.line.home")).toMatchObject([{ key: "ctrl+a" }])
   expect(config.keybinds.get("input.line.end")).toMatchObject([{ key: "ctrl+e" }])
   expect(config.keybinds.get("input.visual.line.home")).toMatchObject([{ key: "alt+a" }])
