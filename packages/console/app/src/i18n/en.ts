@@ -348,6 +348,8 @@ export const dict = {
     "ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API.",
   "go.faq.a5.gptRetention":
     "Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days.",
+  "go.faq.a5.deepseekRetention":
+    "ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.a5.beforeExceptions":
