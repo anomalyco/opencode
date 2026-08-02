@@ -6,7 +6,14 @@ import tls from "node:tls"
 const PEM_CERT_HEADER = "-----BEGIN CERTIFICATE-----"
 const PEM_CERT_FOOTER = "-----END CERTIFICATE-----"
 const MAX_CA_FILE_SIZE = 1024 * 1024
-const FINGERPRINT_PATTERN = /^(?:SHA256:)?(?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$|^(?:SHA256:)?[0-9A-Fa-f]{64}$/
+const FINGERPRINT_PATTERN =
+  /^(?:SHA256:)?(?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$|^(?:SHA256:)?[0-9A-Fa-f]{64}$/
+
+export interface TlsConfig {
+  readonly caFile?: string
+  readonly caPem?: string
+  readonly fingerprint?: string
+}
 
 /**
  * Resolve a file path, expanding `~` to the user home directory.
@@ -82,18 +89,42 @@ export function readCaFile(filePath: string, workspaceDir: string): string {
 }
 
 /**
- * Normalize a certificate fingerprint for comparison.
- * Strips the optional `SHA256:` prefix and removes colons, then lowercases.
+ * Build a TLS CA certificate string from the full MCP TLS configuration.
+ *
+ * Reads files, validates PEM content, and/or verifies fingerprint pinning
+ * as specified in the config. Returns an empty string when no TLS options
+ * are configured (meaning "use the system trust store").
+ *
+ * Throws with descriptive messages for validation failures, missing files,
+ * or fingerprint mismatches so the caller can surface the specific error.
  */
-function normalizeFingerprint(raw: string): string {
-  return raw.replace(/^SHA256:/i, "").replace(/:/g, "").toLowerCase()
+export async function buildTlsCa(tls: TlsConfig, workspaceDir: string, url: URL): Promise<string> {
+  let ca = ""
+
+  if (tls.caPem) {
+    validatePemCert(tls.caPem, "caPem config entry")
+    ca += tls.caPem
+  }
+
+  if (tls.caFile) {
+    ca += readCaFile(tls.caFile, workspaceDir)
+  }
+
+  if (tls.fingerprint) {
+    const normalized = validateFingerprint(tls.fingerprint)
+    const port = Number(url.port) || 443
+    const pem = await verifyServerFingerprint(url.hostname, port, normalized)
+    ca += pem
+  }
+
+  return ca
 }
 
 /**
  * Convert a DER-encoded certificate to PEM format so it can be used as a trusted CA.
  * Processes the raw bytes in chunks to avoid call-stack overflow on large certificates.
  */
-function derToPem(der: ArrayBuffer): string {
+export function derToPem(der: ArrayBuffer): string {
   const bytes = new Uint8Array(der)
   let base64 = ""
   for (let i = 0; i < bytes.length; i += 4096) {
@@ -118,14 +149,14 @@ function derToPem(der: ArrayBuffer): string {
  * the returned PEM is used as a strict trust anchor.
  * The socket is destroyed immediately after the certificate is retrieved;
  * no application data is exchanged over the unverified connection.
+ *
+ * @param expectedFingerprint Pre-normalized fingerprint (no prefix, no colons, lowercase)
  */
 function verifyServerFingerprint(
   hostname: string,
   port: number,
   expectedFingerprint: string,
 ): Promise<string> {
-  const normalized = normalizeFingerprint(expectedFingerprint)
-
   return new Promise<string>((resolve, reject) => {
     const socket = tls.connect({
       host: hostname,
@@ -150,7 +181,7 @@ function verifyServerFingerprint(
       }
 
       const certFingerprint = rawFingerprint.replace(/:/g, "").toLowerCase()
-      if (certFingerprint !== normalized) {
+      if (certFingerprint !== expectedFingerprint) {
         socket.destroy()
         reject(
           new Error(
@@ -180,25 +211,18 @@ function verifyServerFingerprint(
 }
 
 /**
- * Verify the server certificate fingerprint and return the certificate as PEM.
- * Validates the fingerprint format before attempting the TLS connection.
- */
-export async function verifyAndPinFingerprint(url: URL, fingerprint: string): Promise<string> {
-  validateFingerprint(fingerprint)
-  const port = parseInt(url.port) || (url.protocol === "https:" ? 443 : 443)
-  return verifyServerFingerprint(url.hostname, port, fingerprint)
-}
-
-/**
  * Create a custom `fetch` that trusts the given CA certificate(s) for all requests.
  *
  * This wraps the global `fetch` and injects the CA certificate via Bun's `tls.ca`
  * option on every request. The trust is scoped to this fetch instance only and
  * does not affect other connections in the process.
+ *
+ * Security note: the custom CA is trusted for all hostnames reached through this
+ * fetch instance, including redirect targets. This matches standard CA trust
+ * semantics (e.g. `curl --cacert`). If the MCP server redirects to a different
+ * host, the custom CA will also be trusted for that host.
  */
 export function createTlsFetch(ca: string): typeof fetch {
-  return (input, init) => {
-    const fetchInit = { ...init, tls: { ca } } as RequestInit & { tls: { ca: string } }
-    return globalThis.fetch(input, fetchInit)
-  }
+  const tlsOpt = { tls: { ca } }
+  return (input, init) => globalThis.fetch(input, { ...init, ...tlsOpt }) as Promise<Response>
 }

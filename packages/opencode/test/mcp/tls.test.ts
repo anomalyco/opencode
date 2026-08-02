@@ -3,7 +3,9 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir as osTmpdir } from "node:os"
 import path from "node:path"
 import {
+  buildTlsCa,
   createTlsFetch,
+  derToPem,
   readCaFile,
   resolveFilePath,
   validateFingerprint,
@@ -87,35 +89,41 @@ describe("validatePemCert", () => {
 
 describe("validateFingerprint", () => {
   test("accepts bare hex fingerprint", () => {
-    const result = validateFingerprint("a" .repeat(64))
-    expect(result).toBe("a" .repeat(64))
+    const result = validateFingerprint("a".repeat(64))
+    expect(result).toBe("a".repeat(64))
   })
 
   test("accepts colon-separated fingerprint", () => {
-    const result = validateFingerprint("AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99")
+    const result = validateFingerprint(
+      "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+    )
     expect(result).toHaveLength(64)
     expect(result).not.toContain(":")
     expect(result).not.toContain("SHA256")
   })
 
   test("accepts SHA256: prefixed fingerprint", () => {
-    const result = validateFingerprint("SHA256:" + "a" .repeat(64))
-    expect(result).toBe("a" .repeat(64))
+    const result = validateFingerprint("SHA256:" + "a".repeat(64))
+    expect(result).toBe("a".repeat(64))
   })
 
   test("accepts SHA256: prefixed with colons", () => {
-    const result = validateFingerprint("SHA256:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99")
+    const result = validateFingerprint(
+      "SHA256:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+    )
     expect(result).toHaveLength(64)
   })
 
   test("lowercases the result", () => {
-    const result = validateFingerprint("AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99")
+    const result = validateFingerprint(
+      "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+    )
     expect(result).toBe(result.toLowerCase())
   })
 
   test("trims whitespace", () => {
-    const result = validateFingerprint("  " + "a" .repeat(64) + "  ")
-    expect(result).toBe("a" .repeat(64))
+    const result = validateFingerprint("  " + "a".repeat(64) + "  ")
+    expect(result).toBe("a".repeat(64))
   })
 
   test("rejects empty string", () => {
@@ -123,17 +131,17 @@ describe("validateFingerprint", () => {
   })
 
   test("rejects wrong length hex", () => {
-    expect(() => validateFingerprint("a" .repeat(63))).toThrow("Invalid SHA256 fingerprint")
-    expect(() => validateFingerprint("a" .repeat(65))).toThrow("Invalid SHA256 fingerprint")
+    expect(() => validateFingerprint("a".repeat(63))).toThrow("Invalid SHA256 fingerprint")
+    expect(() => validateFingerprint("a".repeat(65))).toThrow("Invalid SHA256 fingerprint")
   })
 
   test("rejects non-hex characters", () => {
-    expect(() => validateFingerprint("g" + "a" .repeat(63))).toThrow("Invalid SHA256 fingerprint")
+    expect(() => validateFingerprint("g" + "a".repeat(63))).toThrow("Invalid SHA256 fingerprint")
   })
 
   test("rejects wrong prefix", () => {
-    expect(() => validateFingerprint("SHA1:" + "a" .repeat(64))).toThrow("Invalid SHA256 fingerprint")
-    expect(() => validateFingerprint("MD5:" + "a" .repeat(64))).toThrow("Invalid SHA256 fingerprint")
+    expect(() => validateFingerprint("SHA1:" + "a".repeat(64))).toThrow("Invalid SHA256 fingerprint")
+    expect(() => validateFingerprint("MD5:" + "a".repeat(64))).toThrow("Invalid SHA256 fingerprint")
   })
 
   test("rejects SQL injection attempt in fingerprint", () => {
@@ -204,28 +212,118 @@ describe("readCaFile", () => {
   })
 })
 
+describe("derToPem", () => {
+  test("converts DER bytes to PEM format", () => {
+    const der = new TextEncoder().encode("dummy-cert-bytes").buffer
+    const pem = derToPem(der)
+    expect(pem).toStartWith("-----BEGIN CERTIFICATE-----")
+    expect(pem).toEndWith("-----END CERTIFICATE-----\n")
+  })
+
+  test("output is valid base64 between markers", () => {
+    const raw = new Uint8Array(256)
+    for (let i = 0; i < raw.length; i++) raw[i] = i
+    const pem = derToPem(raw.buffer)
+    const lines = pem.split("\n")
+    const bodyLines = lines.slice(1, -1)
+    for (const line of bodyLines) {
+      expect(line).toMatch(/^[A-Za-z0-9+/=]{0,64}$/)
+    }
+  })
+
+  test("empty DER produces minimal valid PEM", () => {
+    const pem = derToPem(new ArrayBuffer(0))
+    expect(pem).toBe("-----BEGIN CERTIFICATE-----\n\n-----END CERTIFICATE-----\n")
+  })
+})
+
+describe("buildTlsCa", () => {
+  const url = new URL("https://example.com/mcp")
+
+  test("returns empty string when no TLS options configured", async () => {
+    const ca = await buildTlsCa({}, "/workspace", url)
+    expect(ca).toBe("")
+  })
+
+  test("builds CA from caPem", async () => {
+    const ca = await buildTlsCa({ caPem: SAMPLE_CERT }, "/workspace", url)
+    expect(ca).toBe(SAMPLE_CERT)
+  })
+
+  test("builds CA from caFile", async () => {
+    using dir = tmpdir()
+    const filePath = writeTempFile(dir.path, "ca.pem", SAMPLE_CERT)
+    const ca = await buildTlsCa({ caFile: filePath }, dir.path, url)
+    expect(ca).toBe(SAMPLE_CERT)
+  })
+
+  test("concatenates caPem and caFile", async () => {
+    using dir = tmpdir()
+    const filePath = writeTempFile(dir.path, "ca.pem", SAMPLE_CERT)
+    const ca = await buildTlsCa({ caPem: "CERT-A\n", caFile: filePath }, dir.path, url)
+    expect(ca).toBe("CERT-A\n" + SAMPLE_CERT)
+  })
+
+  test("throws if caPem is not valid PEM", async () => {
+    await expect(buildTlsCa({ caPem: "not a cert" }, "/workspace", url)).rejects.toThrow(
+      "missing PEM certificate header",
+    )
+  })
+
+  test("throws if caFile does not exist", async () => {
+    await expect(buildTlsCa({ caFile: "nonexistent.pem" }, "/workspace", url)).rejects.toThrow(
+      "CA file not found",
+    )
+  })
+
+  test("throws if fingerprint is invalid format", async () => {
+    await expect(
+      buildTlsCa({ fingerprint: "not-a-fingerprint" }, "/workspace", url),
+    ).rejects.toThrow("Invalid SHA256 fingerprint")
+  })
+})
+
 describe("createTlsFetch", () => {
   test("returns a function", () => {
     const customFetch = createTlsFetch(SAMPLE_CERT)
     expect(typeof customFetch).toBe("function")
   })
 
-  test("injects tls.ca into requests made to HTTPS URLs", async () => {
+  test("injects tls.ca into requests", async () => {
     const customFetch = createTlsFetch(SAMPLE_CERT)
 
-    let capturedInit: any = undefined
+    let capturedInit: RequestInit & { tls?: { ca?: string } } | undefined
     const originalFetch = globalThis.fetch
-    globalThis.fetch = ((_input: any, init: any) => {
-      capturedInit = init
+    globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init as typeof capturedInit
       return Promise.resolve(new Response("ok"))
     }) as typeof fetch
 
     try {
       await customFetch("https://example.com/test", { method: "POST" })
       expect(capturedInit).toBeDefined()
-      expect(capturedInit.tls).toBeDefined()
-      expect(capturedInit.tls.ca).toBe(SAMPLE_CERT)
-      expect(capturedInit.method).toBe("POST")
+      expect(capturedInit!.tls).toBeDefined()
+      expect(capturedInit!.tls!.ca).toBe(SAMPLE_CERT)
+      expect(capturedInit!.method).toBe("POST")
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test("preserves original init when no init provided", async () => {
+    const customFetch = createTlsFetch(SAMPLE_CERT)
+
+    let capturedInit: RequestInit & { tls?: { ca?: string } } | undefined
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init as typeof capturedInit
+      return Promise.resolve(new Response("ok"))
+    }) as typeof fetch
+
+    try {
+      await customFetch("https://example.com/test")
+      expect(capturedInit).toBeDefined()
+      expect(capturedInit!.tls).toBeDefined()
     } finally {
       globalThis.fetch = originalFetch
     }
