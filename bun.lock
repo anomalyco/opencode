@@ -719,17 +719,6 @@
         "@opentui/solid",
       ],
     },
-    "packages/plugin-openhands": {
-      "name": "opencode-plugin-openhands",
-      "version": "0.1.0",
-      "dependencies": {
-        "@opencode-ai/plugin": "workspace:*",
-        "zod": "catalog:",
-      },
-      "devDependencies": {
-        "typescript": "catalog:",
-      },
-    },
     "packages/protocol": {
       "name": "@opencode-ai/protocol",
       "dependencies": {
@@ -4628,8 +4617,6 @@
     "opencode": ["opencode@workspace:packages/opencode"],
 
     "opencode-gitlab-auth": ["opencode-gitlab-auth@2.1.0", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "*", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-ZCDYaY0V8Se6hOH2tqZqqcskrd0xLTgfiGhU0J1igkUP52oFtN9eSwxOPLT0ctvNXUq8b+zOmJ4sskAQoC/IUA=="],
-
-    "opencode-plugin-openhands": ["opencode-plugin-openhands@workspace:packages/plugin-openhands"],
 
     "opencode-poe-auth": ["opencode-poe-auth@0.0.1", "", { "dependencies": { "open": "^10.0.0", "poe-oauth": "*" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-cXqTlS6AXHzo1oBdosnxbT47ZJEZ9WXn050X8Re6wZ1vaNnTpB/l2fMQt90evT7RBK0fB8UjXQUDMKyd7bbiqg=="],
 
