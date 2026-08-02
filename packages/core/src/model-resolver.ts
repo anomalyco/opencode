@@ -181,7 +181,6 @@ export const fromCatalogModel = (
         packageName,
         settings: configured,
         modelID: resolved.modelID ?? resolved.id,
-        hasCredential: key !== undefined,
       })
     : undefined
   const native = mapping?.package ?? resolved.package

@@ -620,6 +620,15 @@ describe("ModelResolver", () => {
       const xai = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/xai"), { settings: { reasoningEffort: "high" } }),
       )
+      const bedrock = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), { settings: { region: "us-east-1" } }),
+      )
+      const mantle = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          modelID: "openai.gpt-oss-120b",
+          settings: { region: "us-east-1" },
+        }),
+      )
 
       expect(google.route.id).toBe("gemini")
       expect(google.route.defaults.providerOptions).toEqual({
@@ -631,6 +640,8 @@ describe("ModelResolver", () => {
       expect(xai.route.defaults.providerOptions).toEqual({
         xai: { reasoningEffort: "high", store: false },
       })
+      expect(bedrock.route.id).toBe("bedrock-converse")
+      expect(mantle.route.id).toBe("bedrock-mantle-responses")
     }),
   )
 

@@ -14,12 +14,19 @@ export interface MapInput {
   readonly packageName: string | undefined
   readonly settings: Readonly<Record<string, unknown>>
   readonly modelID: string
-  readonly hasCredential?: boolean
 }
 
 export function map(input: MapInput): Mapping | undefined {
   const baseSettings = mapBaseSettings(input.settings)
   switch (input.packageName) {
+    case "@ai-sdk/amazon-bedrock":
+      return {
+        package: "@opencode-ai/ai/providers/amazon-bedrock",
+        settings: {
+          ...mapBedrockSettings(input.settings, baseSettings),
+          ...(typeof input.settings.topP === "number" ? { topP: input.settings.topP } : {}),
+        },
+      }
     case "@ai-sdk/amazon-bedrock/mantle":
       return mapBedrockMantle(input, baseSettings)
     case "@ai-sdk/google":
@@ -47,6 +54,20 @@ export function map(input: MapInput): Mapping | undefined {
 
 function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string, unknown>>): Mapping | undefined {
   const settings = input.settings
+  const chat = input.modelID === "openai.gpt-oss-safeguard-20b" || input.modelID === "openai.gpt-oss-safeguard-120b"
+  return {
+    package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${chat ? "chat" : "responses"}`,
+    settings: {
+      ...mapBedrockSettings(settings, baseSettings),
+      ...mapOpenAIOptions(settings),
+    },
+  }
+}
+
+function mapBedrockSettings(
+  settings: Readonly<Record<string, unknown>>,
+  baseSettings: Readonly<Record<string, unknown>>,
+) {
   const apiKey =
     typeof settings.apiKey === "string"
       ? settings.apiKey
@@ -54,20 +75,14 @@ function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string,
         ? settings.bearerToken
         : undefined
   const credentials = mapBedrockCredentials(settings)
-  if (!input.hasCredential && apiKey === undefined && credentials === undefined) return undefined
-  const chat = input.modelID === "openai.gpt-oss-safeguard-20b" || input.modelID === "openai.gpt-oss-safeguard-120b"
   return {
-    package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${chat ? "chat" : "responses"}`,
-    settings: {
-      ...baseSettings,
-      ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
-        ? { baseURL: settings.endpoint }
-        : {}),
-      ...(apiKey === undefined ? {} : { apiKey }),
-      ...(credentials === undefined ? {} : { credentials }),
-      ...(typeof settings.region === "string" ? { region: settings.region } : {}),
-      ...mapOpenAIOptions(settings),
-    },
+    ...baseSettings,
+    ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
+      ? { baseURL: settings.endpoint }
+      : {}),
+    ...(apiKey === undefined ? {} : { apiKey }),
+    ...(credentials === undefined ? {} : { credentials }),
+    ...(typeof settings.region === "string" ? { region: settings.region } : {}),
   }
 }
 

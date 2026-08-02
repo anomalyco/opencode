@@ -5,6 +5,17 @@ const map = (packageName: string, settings: Readonly<Record<string, unknown>>, m
   AISDKNative.map({ packageName, settings, modelID })
 
 describe("AISDKNative", () => {
+  test("maps both models.dev Bedrock packages to native providers", () => {
+    expect(map("@ai-sdk/amazon-bedrock", { region: "us-east-1" })).toEqual({
+      package: "@opencode-ai/ai/providers/amazon-bedrock",
+      settings: { region: "us-east-1" },
+    })
+    expect(map("@ai-sdk/amazon-bedrock/mantle", { region: "us-east-1" }, "openai.gpt-oss-120b")).toEqual({
+      package: "@opencode-ai/ai/providers/amazon-bedrock/mantle/responses",
+      settings: { region: "us-east-1" },
+    })
+  })
+
   test("maps Bedrock Mantle models to their supported native APIs", () => {
     const settings = {
       bearerToken: "token",
@@ -66,12 +77,6 @@ describe("AISDKNative", () => {
         providerOptions: { openai: { store: false } },
       },
     })
-  })
-
-  test("keeps Bedrock Mantle on the AI SDK when native static auth is unavailable", () => {
-    expect(
-      map("@ai-sdk/amazon-bedrock/mantle", { region: "us-east-1", profile: "production" }, "openai.gpt-oss-120b"),
-    ).toBeUndefined()
   })
 
   test("maps the legacy Bedrock endpoint override", () => {
