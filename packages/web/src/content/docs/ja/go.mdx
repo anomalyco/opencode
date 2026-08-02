@@ -216,7 +216,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## プライバシー
 
-このプランは主に海外ユーザー向けに設計されており、世界中から安定してアクセスできます。お客様のデータがモデルのトレーニングに使用されることはありません。
+| モデル            | モデルのトレーニング | データ保持 |
+| ----------------- | -------------------- | ---------- |
+| Grok 4.5          | 使用なし             | 30日       |
+| GPT 5.6 Luna      | 使用なし             | 30日       |
+| GLM-5.2           | 使用なし             | 0日        |
+| GLM-5.1           | 使用なし             | 0日        |
+| Kimi K3           | 使用なし             | 0日        |
+| Kimi K2.7 Code    | 使用なし             | 0日        |
+| Kimi K2.6         | 使用なし             | 0日        |
+| MiMo-V2.5-Pro     | 使用なし             | 0日        |
+| MiMo-V2.5         | 使用なし             | 0日        |
+| Qwen3.7 Max       | 使用なし             | 0日        |
+| Qwen3.7 Plus      | 使用なし             | 0日        |
+| Qwen3.6 Plus      | 使用なし             | 0日        |
+| MiniMax M3        | 使用なし             | 0日        |
+| MiniMax M2.7      | 使用なし             | 0日        |
+| DeepSeek V4 Pro   | 使用なし             | 0日        |
+| DeepSeek V4 Flash | 使用あり             | 契約なし   |
+| Hy3               | 使用なし             | 0日        |
+
+- **Grok 4.5:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
+- **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
 
 ---
 

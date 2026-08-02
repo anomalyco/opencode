@@ -230,7 +230,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## Privatnost
 
-Plan je prvenstveno namijenjen međunarodnim korisnicima i pruža stabilan globalni pristup. Vaši podaci neće se koristiti za treniranje modela.
+| Model             | Treniranje modela | Zadržavanje podataka |
+| ----------------- | ----------------- | -------------------- |
+| Grok 4.5          | Ne koristi se     | 30 dana              |
+| GPT 5.6 Luna      | Ne koristi se     | 30 dana              |
+| GLM-5.2           | Ne koristi se     | 0 dana               |
+| GLM-5.1           | Ne koristi se     | 0 dana               |
+| Kimi K3           | Ne koristi se     | 0 dana               |
+| Kimi K2.7 Code    | Ne koristi se     | 0 dana               |
+| Kimi K2.6         | Ne koristi se     | 0 dana               |
+| MiMo-V2.5-Pro     | Ne koristi se     | 0 dana               |
+| MiMo-V2.5         | Ne koristi se     | 0 dana               |
+| Qwen3.7 Max       | Ne koristi se     | 0 dana               |
+| Qwen3.7 Plus      | Ne koristi se     | 0 dana               |
+| Qwen3.6 Plus      | Ne koristi se     | 0 dana               |
+| MiniMax M3        | Ne koristi se     | 0 dana               |
+| MiniMax M2.7      | Ne koristi se     | 0 dana               |
+| DeepSeek V4 Pro   | Ne koristi se     | 0 dana               |
+| DeepSeek V4 Flash | Koristi se        | Nema sporazuma       |
+| Hy3               | Ne koristi se     | 0 dana               |
+
+- **Grok 4.5:** ZDR onemogućava važne API funkcije koje zavise od pohranjenih podataka, uključujući Responses API s očuvanjem stanja, Files and Collections i Batch API. [Saznajte više](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** Zapisi o nadzoru zloupotrebe generišu se za svako korištenje API funkcija i čuvaju do 30 dana. [Saznajte više](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 
 ---
 

@@ -216,7 +216,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## 隱私權
 
-此方案主要為國際使用者設計，提供穩定的全球存取體驗。您的資料不會用於模型訓練。
+| 模型              | 模型訓練 | 資料保留 |
+| ----------------- | -------- | -------- |
+| Grok 4.5          | 不使用   | 30 天    |
+| GPT 5.6 Luna      | 不使用   | 30 天    |
+| GLM-5.2           | 不使用   | 0 天     |
+| GLM-5.1           | 不使用   | 0 天     |
+| Kimi K3           | 不使用   | 0 天     |
+| Kimi K2.7 Code    | 不使用   | 0 天     |
+| Kimi K2.6         | 不使用   | 0 天     |
+| MiMo-V2.5-Pro     | 不使用   | 0 天     |
+| MiMo-V2.5         | 不使用   | 0 天     |
+| Qwen3.7 Max       | 不使用   | 0 天     |
+| Qwen3.7 Plus      | 不使用   | 0 天     |
+| Qwen3.6 Plus      | 不使用   | 0 天     |
+| MiniMax M3        | 不使用   | 0 天     |
+| MiniMax M2.7      | 不使用   | 0 天     |
+| DeepSeek V4 Pro   | 不使用   | 0 天     |
+| DeepSeek V4 Flash | 使用     | 無協議   |
+| Hy3               | 不使用   | 0 天     |
+
+- **Grok 4.5:** ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections 與 Batch API。[了解更多](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
+- **GPT 5.6 Luna:** 所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。[了解更多](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
 
 ---
 

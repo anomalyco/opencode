@@ -230,7 +230,28 @@ https://opencode.ai/zen/go/v1/models
 
 ## Privatliv
 
-Planen er primært udviklet til internationale brugere og giver stabil global adgang. Dine data bliver ikke brugt til modeltræning.
+| Model             | Modeltræning | Dataopbevaring |
+| ----------------- | ------------ | -------------- |
+| Grok 4.5          | Ikke brugt   | 30 dage        |
+| GPT 5.6 Luna      | Ikke brugt   | 30 dage        |
+| GLM-5.2           | Ikke brugt   | 0 dage         |
+| GLM-5.1           | Ikke brugt   | 0 dage         |
+| Kimi K3           | Ikke brugt   | 0 dage         |
+| Kimi K2.7 Code    | Ikke brugt   | 0 dage         |
+| Kimi K2.6         | Ikke brugt   | 0 dage         |
+| MiMo-V2.5-Pro     | Ikke brugt   | 0 dage         |
+| MiMo-V2.5         | Ikke brugt   | 0 dage         |
+| Qwen3.7 Max       | Ikke brugt   | 0 dage         |
+| Qwen3.7 Plus      | Ikke brugt   | 0 dage         |
+| Qwen3.6 Plus      | Ikke brugt   | 0 dage         |
+| MiniMax M3        | Ikke brugt   | 0 dage         |
+| MiniMax M2.7      | Ikke brugt   | 0 dage         |
+| DeepSeek V4 Pro   | Ikke brugt   | 0 dage         |
+| DeepSeek V4 Flash | Brugt        | Ingen aftale   |
+| Hy3               | Ikke brugt   | 0 dage         |
+
+- **Grok 4.5:** ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API. [Læs mere](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage. [Læs mere](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 
 ---
 
