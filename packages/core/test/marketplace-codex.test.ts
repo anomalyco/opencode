@@ -119,4 +119,104 @@ describe("Codex Marketplace adapter", () => {
       ),
     ).rejects.toThrow("Unsupported Codex plugin source for private")
   })
+
+  test("adapts GitHub Copilot manifests and github repository sources", async () => {
+    const requested: string[] = []
+    const catalog = await adaptCodexMarketplace(
+      {
+        name: "copilot-plugins",
+        owner: { name: "GitHub" },
+        plugins: [
+          {
+            name: "review",
+            source: { source: "github", repo: "acme/review", path: "plugin", sha: "abc123" },
+            description: "Review changes",
+            version: "2.0.0",
+          },
+        ],
+      },
+      {
+        fetcher: async (input) => {
+          const url = input instanceof Request ? input.url : String(input)
+          requested.push(url)
+          if (!url.endsWith("/.github/plugin/plugin.json")) throw new Error(`HTTP 404 while loading ${url}`)
+          return Response.json({
+            name: "review",
+            description: "Review changes",
+            version: "2.0.0",
+            skills: ["skills/review"],
+            mcpServers: { docs: { url: "https://docs.example.com/mcp" } },
+          })
+        },
+        source: { id: "github", name: "GitHub", url: "https://github.com/github/copilot-plugins.git" },
+        catalogURL: "https://raw.githubusercontent.com/github/copilot-plugins/HEAD/.github/plugin/marketplace.json",
+      },
+    )
+
+    expect(requested).toContain(
+      "https://raw.githubusercontent.com/acme/review/abc123/plugin/.github/plugin/plugin.json",
+    )
+    expect(catalog.publisher?.name).toBe("GitHub")
+    expect(catalog.items[0]?.install).toEqual({
+      skills: {
+        items: [
+          {
+            id: "review:review:0",
+            name: "review",
+            url: "https://raw.githubusercontent.com/acme/review/abc123/plugin/skills/review/",
+          },
+        ],
+      },
+      mcp: { docs: { type: "remote", url: "https://docs.example.com/mcp" } },
+    })
+  })
+
+  test("adapts manifest-free Claude Code skill sources", async () => {
+    const catalog = await adaptCodexMarketplace(
+      {
+        name: "claude-plugins-official",
+        plugins: [
+          {
+            name: "amd-skills",
+            source: {
+              source: "git-subdir",
+              url: "https://github.com/amd/skills.git",
+              path: "skills",
+              sha: "abc123",
+            },
+            strict: false,
+            description: "AMD development skills",
+            skills: ["./local-ai-use", "./serving-llms"],
+          },
+        ],
+      },
+      {
+        fetcher: async (input) => {
+          throw new Error(`HTTP 404 while loading ${String(input)}`)
+        },
+        source: { id: "claude", name: "Claude Code", url: "https://github.com/anthropics/claude-plugins-official.git" },
+        catalogURL:
+          "https://raw.githubusercontent.com/anthropics/claude-plugins-official/HEAD/.claude-plugin/marketplace.json",
+      },
+    )
+
+    expect(catalog.items[0]).toMatchObject({
+      id: "amd-skills",
+      version: "0.0.0",
+      install: {
+        skills: {
+          items: [
+            {
+              name: "local-ai-use",
+              url: "https://raw.githubusercontent.com/amd/skills/abc123/skills/local-ai-use/",
+            },
+            {
+              name: "serving-llms",
+              url: "https://raw.githubusercontent.com/amd/skills/abc123/skills/serving-llms/",
+            },
+          ],
+        },
+      },
+    })
+  })
 })

@@ -518,7 +518,15 @@ async function fetchMarketplaceCatalog(fetcher: MarketplaceFetch, source: Market
     }
     throw lastError
   }
-  return Promise.any(urls.map(load))
+  return Promise.any(urls.map(load)).catch((error) => {
+    if (!(error instanceof AggregateError)) throw error
+    const messages = Array.from(
+      new Set(
+        error.errors.map((failure) => (failure instanceof Error ? failure.message : String(failure))).filter(Boolean),
+      ),
+    )
+    throw new Error(messages.join("; ") || `No supported marketplace catalog found at ${source.url}`)
+  })
 }
 
 function isCodexMarketplace(value: unknown) {
@@ -689,7 +697,10 @@ export function setMarketplaceSkillEnabled(
   enabled: boolean,
 ): MarketplaceToggleResult {
   const installed = config.marketplace?.installed?.[key]
-  if (!installed || !marketplaceSkillComponents(installed.plan).some((component) => component.id === id)) {
+  if (
+    !installed ||
+    !marketplaceSkillComponents(installed.materialized_plan ?? installed.plan).some((component) => component.id === id)
+  ) {
     return { ok: true, config: clone(config), conflicts: [], preserved: [] }
   }
   return reconfigureMarketplaceItem(config, key, {
@@ -706,7 +717,7 @@ export function setMarketplaceMcpEnabled(
   enabled: boolean,
 ): MarketplaceToggleResult {
   const installed = config.marketplace?.installed?.[key]
-  if (!installed || !(id in (installed.plan.mcp ?? {}))) {
+  if (!installed || !(id in ((installed.materialized_plan ?? installed.plan).mcp ?? {}))) {
     return { ok: true, config: clone(config), conflicts: [], preserved: [] }
   }
   return reconfigureMarketplaceItem(config, key, {
@@ -743,10 +754,10 @@ export function marketplaceSkillComponents(plan: MarketplaceInstallPlan): Market
 
 export function marketplaceDisabledSkillNames(config: MarketplaceHostConfig) {
   return Object.values(config.marketplace?.installed ?? {}).flatMap((installed) => {
-    if (installed.enabled === false)
-      return marketplaceSkillComponents(installed.plan).map((component) => component.name)
+    const plan = installed.materialized_plan ?? installed.plan
+    if (installed.enabled === false) return marketplaceSkillComponents(plan).map((component) => component.name)
     const disabled = new Set(installed.disabled_skills ?? [])
-    return marketplaceSkillComponents(installed.plan)
+    return marketplaceSkillComponents(plan)
       .filter((component) => disabled.has(component.id))
       .map((component) => component.name)
   })
@@ -761,7 +772,7 @@ function reconfigureMarketplaceItem(
   if (!installed) return { ok: true, config: clone(config), conflicts: [], preserved: [] }
   const state = { ...installed, ...patch }
   const removed = uninstallMarketplaceItem(config, key)
-  const activePlan = marketplaceActivePlan(installed.plan, state)
+  const activePlan = marketplaceActivePlan(installed.materialized_plan ?? installed.plan, state)
   const conflicts = marketplaceConflicts(removed.config, activePlan)
   if (conflicts.length) return { ok: false, conflicts }
 
@@ -842,7 +853,7 @@ export function marketplaceActivePlan(
 function installedActivePlan(installed: MarketplaceInstalled) {
   if (installed.active_plan) return installed.active_plan
   if (installed.enabled === false) return {}
-  return installed.plan
+  return installed.materialized_plan ?? installed.plan
 }
 
 export function marketplaceInitialDisabledMcp(plan: MarketplaceInstallPlan) {
@@ -944,7 +955,8 @@ export function normalizeMarketplaceURL(value: string) {
     const repo = url.slice("github:".length).replace(/^\/+/, "")
     const [owner, name, ...parts] = repo.split("/")
     if (!owner || !name) throw new Error("GitHub marketplace source must use github:owner/repository")
-    return `https://raw.githubusercontent.com/${owner}/${name}/HEAD/${parts.join("/") || ".opencode/marketplace.json"}`
+    if (parts.length) return `https://raw.githubusercontent.com/${owner}/${name}/HEAD/${parts.join("/")}`
+    return `https://github.com/${owner}/${name.replace(/\.git$/, "")}.git`
   }
   const parsed = new URL(url)
   if (parsed.username || parsed.password) throw new Error("Marketplace source URLs cannot contain credentials")
@@ -968,8 +980,7 @@ export function normalizeMarketplaceURL(value: string) {
     if (action === "blob" && branch && parts.length) {
       return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${parts.join("/")}`
     }
-    if (!action)
-      return `https://raw.githubusercontent.com/${owner}/${repo.replace(/\.git$/, "")}/HEAD/.opencode/marketplace.json`
+    if (!action) return `https://github.com/${owner}/${repo.replace(/\.git$/, "")}.git`
   }
   return parsed.href
 }
@@ -981,6 +992,8 @@ function marketplaceCatalogURLs(input: MarketplaceSource) {
     const opencode = [new URL(".opencode/marketplace.json", url).href]
     const codex = [
       new URL(".agents/plugins/marketplace.json", url).href,
+      new URL(".github/plugin/marketplace.json", url).href,
+      new URL(".plugin/marketplace.json", url).href,
       new URL(".claude-plugin/marketplace.json", url).href,
     ]
     if (input.format === "codex") return [...codex, new URL("marketplace.json", url).href]
@@ -991,7 +1004,18 @@ function marketplaceCatalogURLs(input: MarketplaceSource) {
   const repository = `${url.origin}${url.pathname.slice(0, -".git".length)}`
   if (url.hostname === "github.com") {
     const [owner, name] = url.pathname.split("/").filter(Boolean)
-    return [`https://raw.githubusercontent.com/${owner}/${name?.replace(/\.git$/, "")}/HEAD/.opencode/marketplace.json`]
+    const root = `https://raw.githubusercontent.com/${owner}/${name?.replace(/\.git$/, "")}/HEAD/`
+    const opencode = [`${root}.opencode/marketplace.json`]
+    const plugins = [
+      `${root}marketplace.json`,
+      `${root}.agents/plugins/marketplace.json`,
+      `${root}.github/plugin/marketplace.json`,
+      `${root}.plugin/marketplace.json`,
+      `${root}.claude-plugin/marketplace.json`,
+    ]
+    if (input.format === "opencode") return [...opencode, `${root}marketplace.json`]
+    if (input.format === "codex") return [...plugins.slice(1), plugins[0]!]
+    return [...opencode, ...plugins]
   }
   return [
     `${repository}/-/raw/HEAD/.opencode/marketplace.json`,
