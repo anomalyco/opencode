@@ -26,7 +26,6 @@ export type SessionReviewV2Props = {
   empty?: JSX.Element
   sidebarOpen?: boolean
   sidebar?: JSX.Element
-  sidebarToggle?: JSX.Element
   activeFile?: string
   files: string[]
   onSelectFile: (file: string) => void
@@ -40,6 +39,7 @@ export type SessionReviewV2Props = {
 
 export type SessionReviewV2SidebarProps = {
   open: boolean
+  transition: boolean
   title?: JSX.Element
   stats?: JSX.Element
   filter: string
@@ -77,6 +77,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
       <Show when={props.open}>
         <aside
           data-slot="session-review-v2-sidebar"
+          data-transition={props.transition ? "" : undefined}
           data-resizing={resizing() ? "" : undefined}
           style={{ width: `${width()}px` }}
         >
@@ -138,6 +139,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
             min={minWidth()}
             max={maxWidth()}
             onResize={(next) => props.onWidthChange?.(next)}
+            onDblClick={() => props.onWidthChange?.(SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT)}
           />
         </div>
       </Show>
@@ -163,15 +165,13 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   }
 
   const prev = () => {
-    const files = props.files
-    if (files.length === 0) return
-    return files[(fileIndex() - 1 + files.length) % files.length]
+    if (!canCycle()) return
+    return props.files[(fileIndex() - 1 + props.files.length) % props.files.length]
   }
 
   const next = () => {
-    const files = props.files
-    if (files.length === 0) return
-    return files[(fileIndex() + 1) % files.length]
+    if (!canCycle()) return
+    return props.files[(fileIndex() + 1) % props.files.length]
   }
 
   const canCycle = () => props.files.length > 0
@@ -185,21 +185,22 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
     props.onSelectFile(file)
   }
 
-  // The prev/next tooltips advertise < and >; keep the keys working while the
+  // Keep the advertised arrow keys working while the
   // pane is mounted, but never while typing in an input or comment editor.
   makeEventListener(document, "keydown", (event) => {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
-    if (event.key !== "<" && event.key !== ">") return
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
     const target = event.target
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return
     if (!props.hasDiffs || !canCycle()) return
+    const file = event.key === "ArrowLeft" ? prev() : next()
+    if (!file) return
     event.preventDefault()
-    cycle(event.key === "<" ? prev() : next())
+    cycle(file)
   })
 
   const toolbarStart = () => (
     <>
-      {props.sidebarToggle}
       <Show when={showCollapsedMeta()}>
         <div data-slot="session-review-v2-toolbar-collapsed-meta">
           <Show when={title()}>
@@ -216,10 +217,11 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
       <div class="flex items-center">
         <TooltipV2
           openDelay={2000}
+          inactive={!prev()}
           value={
             <>
               {i18n.t("ui.sessionReviewV2.previousFile")}
-              <KeybindV2 keys={["<"]} variant="neutral" />
+              <KeybindV2 keys={["←"]} variant="neutral" />
             </>
           }
         >
@@ -228,17 +230,18 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
             variant="ghost"
             size="small"
             class="session-review-v2-file-nav-button"
-            disabled={!canCycle()}
+            disabled={!prev()}
             onClick={() => cycle(prev())}
             aria-label={i18n.t("ui.sessionReviewV2.previousFile")}
           />
         </TooltipV2>
         <TooltipV2
           openDelay={2000}
+          inactive={!next()}
           value={
             <>
               {i18n.t("ui.sessionReviewV2.nextFile")}
-              <KeybindV2 keys={[">"]} variant="neutral" />
+              <KeybindV2 keys={["→"]} variant="neutral" />
             </>
           }
         >
@@ -247,7 +250,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
             variant="ghost"
             size="small"
             class="session-review-v2-file-nav-button"
-            disabled={!canCycle()}
+            disabled={!next()}
             onClick={() => cycle(next())}
             aria-label={i18n.t("ui.sessionReviewV2.nextFile")}
           />
@@ -319,7 +322,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   )
 }
 
-export function SessionReviewV2SidebarToggle(props: { opened: boolean; onToggle: () => void }) {
+export function SessionReviewV2SidebarToggle(props: { opened: boolean; disabled?: boolean; onToggle: () => void }) {
   const i18n = useI18n()
 
   return (
@@ -330,6 +333,8 @@ export function SessionReviewV2SidebarToggle(props: { opened: boolean; onToggle:
         class="session-review-v2-sidebar-toggle"
         aria-label={i18n.t("ui.sessionReviewV2.toggleSidebar")}
         aria-expanded={props.opened}
+        data-expanded={props.opened ? "" : undefined}
+        disabled={props.disabled}
         onClick={props.onToggle}
         icon={<Icon name="filetree" />}
       />

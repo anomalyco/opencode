@@ -86,6 +86,7 @@ export const dict = {
   "command.session.unshare": "Parar de compartilhar sessão",
   "command.session.unshare.description": "Parar de compartilhar esta sessão",
   "palette.search.placeholder": "Buscar arquivos, comandos e sessões",
+  "palette.search.placeholder.home": "Buscar comandos e sessões",
   "palette.empty": "Nenhum resultado encontrado",
   "palette.group.commands": "Comandos",
   "palette.group.files": "Arquivos",
@@ -276,6 +277,7 @@ export const dict = {
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Parar",
   "prompt.toast.pasteUnsupported.title": "Anexo não suportado",
+  "prompt.toast.attachmentDuplicate.title": "Este arquivo já foi enviado",
   "prompt.toast.pasteUnsupported.description": "Apenas imagens, PDFs ou arquivos de texto podem ser anexados aqui.",
   "prompt.toast.modelAgentRequired.title": "Selecione um agente e modelo",
   "prompt.toast.modelAgentRequired.description": "Escolha um agente e modelo antes de enviar um prompt.",
@@ -618,6 +620,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Repositório local",
   "session.new.workspace.existing": "Espaço de trabalho…",
+  "session.new.git.none": "Sem Git",
   "session.new.lastModified": "Última modificação",
   "session.header.search.placeholder": "Buscar {{project}}",
   "session.header.searchFiles": "Buscar arquivos",
@@ -746,9 +749,13 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes da ferramenta de edição",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar partes das ferramentas de edição, escrita e patch expandidas por padrão na linha do tempo",
-  "settings.general.row.newLayoutDesigns.title": "Novo layout e design",
-  "settings.general.row.newLayoutDesigns.description":
-    "Ativar o layout, a página inicial, a área de composição e a interface de sessão reformulados",
+  "settings.general.row.newInterface.title": "Novo layout",
+  "settings.general.row.newInterface.badge": "Novo",
+  "settings.general.row.newInterface.description":
+    "Use as novas abas e o layout da página inicial. Alterne entre os layouts por tempo limitado.",
+  "settings.general.row.newInterfaceNotice.title": "Agora você está usando o novo layout",
+  "settings.general.row.newInterfaceNotice.description": "O layout anterior não está mais disponível",
+  "settings.general.row.newInterfaceNotice.dismiss": "Descartar",
   "settings.general.row.pinchZoom.title": "Zoom com gesto de pinça",
   "settings.general.row.pinchZoom.description":
     "Permitir gestos de pinça no trackpad e de Ctrl+rolagem para aplicar zoom",

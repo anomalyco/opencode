@@ -47,11 +47,14 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { AttachmentCardV2 } from "../v2/components/attachment-card-v2"
+import { CommentCardV2 } from "../v2/components/comment-card-v2"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
@@ -59,8 +62,7 @@ import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
-import { useLocation } from "@solidjs/router"
-import { attached, inline, kind } from "./message-file"
+import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
@@ -167,6 +169,7 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
   useV2Actions?: boolean
+  comments?: UserMessageComment[]
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -174,6 +177,16 @@ export type SessionAction = (input: { sessionID: string; messageID: string }) =>
 export type UserActions = {
   fork?: SessionAction
   revert?: SessionAction
+  openAttachment?: (file: FilePart) => void
+}
+
+export type UserMessageComment = {
+  path: string
+  comment: string
+  selection?: {
+    startLine: number
+    endLine: number
+  }
 }
 
 export interface MessagePartProps {
@@ -507,6 +520,7 @@ export function getToolInfo(
       }
     }
     case "bash":
+    case "shell":
       return {
         icon: "console",
         title: i18n.t("ui.tool.shell"),
@@ -524,6 +538,7 @@ export function getToolInfo(
         title: i18n.t("ui.messagePart.title.write"),
         subtitle: input.filePath ? getFilename(input.filePath) : undefined,
       }
+    case "patch":
     case "apply_patch":
       return {
         icon: "code-lines",
@@ -567,29 +582,18 @@ function urls(text: string | undefined) {
     })
 }
 
-function sessionLink(id: string | undefined, path: string, href?: (id: string) => string | undefined) {
-  if (!id) return
-
-  const direct = href?.(id)
-  if (direct) return direct
-
-  const idx = path.indexOf("/session")
-  if (idx === -1) return
-  return `${path.slice(0, idx)}/session/${id}`
-}
-
-function currentSession(path: string) {
-  return path.match(/\/session\/([^/?#]+)/)?.[1]
+function sessionLink(id: string | undefined, href?: (id: string) => string | undefined) {
+  if (!id) return undefined
+  return href?.(id)
 }
 
 function taskSession(
   input: Record<string, any>,
-  path: string,
+  parentID: string | undefined,
   sessions: Session[] | undefined,
   agents?: readonly { name: string; color?: string }[],
 ) {
-  const parentID = currentSession(path)
-  if (!parentID) return
+  if (!parentID) return undefined
   const description = typeof input.description === "string" ? input.description : ""
   const agent = taskAgent(input.subagent_type, agents).name
   return (sessions ?? [])
@@ -715,8 +719,8 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
 }
 
 function toolDefaultOpen(tool: string, shell = false, edit = false) {
-  if (tool === "bash") return shell
-  if (tool === "edit" || tool === "write" || tool === "apply_patch") return edit
+  if (tool === "bash" || tool === "shell") return shell
+  if (tool === "edit" || tool === "write" || tool === "patch" || tool === "apply_patch") return edit
 }
 
 export function partDefaultOpen(part: PartType, shell = false, edit = false) {
@@ -946,6 +950,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             actions={props.actions}
             useV2Actions={props.useV2Actions}
+            comments={props.comments}
           />
         )}
       </Match>
@@ -1158,11 +1163,40 @@ export function ContextToolGroup(props: {
   )
 }
 
+function UserMessageComments(props: { comments: UserMessageComment[]; bounded: boolean }) {
+  const i18n = useI18n()
+  const [state, setState] = createStore({ expanded: false })
+  const comments = createMemo(() => (props.bounded && !state.expanded ? props.comments.slice(0, 5) : props.comments))
+
+  return (
+    <div data-slot="user-message-comments" data-bounded={props.bounded ? "true" : undefined}>
+      <For each={comments()}>
+        {(comment) => (
+          <CommentCardV2
+            comment={comment.comment}
+            path={comment.path}
+            selection={comment.selection}
+            title={comment.comment}
+            tooltip
+            wide
+          />
+        )}
+      </For>
+      <Show when={props.bounded && props.comments.length > 5 && !state.expanded}>
+        <ButtonV2 size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
+          {i18n.t("ui.common.showMore")}
+        </ButtonV2>
+      </Show>
+    </div>
+  )
+}
+
 export function UserMessageDisplay(props: {
   message: UserMessage
   parts: PartType[]
   actions?: UserActions
   useV2Actions?: boolean
+  comments?: UserMessageComment[]
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -1183,6 +1217,8 @@ export function UserMessageDisplay(props: {
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
   const attachments = createMemo(() => files().filter(attached))
+
+  const messageComments = createMemo(() => (newLayout() ? (props.comments ?? []) : []))
 
   const inlineFiles = createMemo(() => files().filter(inline))
 
@@ -1238,83 +1274,114 @@ export function UserMessageDisplay(props: {
       .finally(() => setState("busy", false))
   }
 
+  const renderAttachments = () => (
+    <Show when={attachments().length > 0}>
+      <div data-slot="user-message-attachments">
+        <For each={attachments()}>
+          {(file) => {
+            const type = kind(file)
+            const name = file.filename ?? i18n.t("ui.message.attachment.alt")
+
+            return (
+              <Show
+                when={newLayout() && type === "file"}
+                fallback={
+                  <div
+                    data-slot="user-message-attachment"
+                    data-type={type}
+                    data-clickable={type === "image" ? "true" : undefined}
+                    title={type === "file" ? name : undefined}
+                    onClick={() => {
+                      if (type === "image") openImagePreview(file.url, name)
+                    }}
+                  >
+                    <Show
+                      when={type === "image"}
+                      fallback={
+                        <div data-slot="user-message-attachment-file">
+                          <FileIcon node={{ path: name, type: "file" }} />
+                          <span data-slot="user-message-attachment-name">{name}</span>
+                        </div>
+                      }
+                    >
+                      <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
+                    </Show>
+                  </div>
+                }
+              >
+                <AttachmentCardV2
+                  title={getFilename(name)}
+                  hover={name}
+                  clickable={!!props.actions?.openAttachment}
+                  onClick={() => props.actions?.openAttachment?.(file)}
+                >
+                  {typeLabel(name, file.mime)}
+                </AttachmentCardV2>
+              </Show>
+            )
+          }}
+        </For>
+      </div>
+    </Show>
+  )
+
   return (
     <div data-component="user-message" data-timeline-part-id={textPart()?.id}>
-      <Show when={attachments().length > 0}>
-        <div data-slot="user-message-attachments">
-          <For each={attachments()}>
-            {(file) => {
-              const type = kind(file)
-              const name = file.filename ?? i18n.t("ui.message.attachment.alt")
-
-              return (
-                <div
-                  data-slot="user-message-attachment"
-                  data-type={type}
-                  data-clickable={type === "image" ? "true" : undefined}
-                  title={type === "file" ? name : undefined}
-                  onClick={() => {
-                    if (type === "image") openImagePreview(file.url, name)
-                  }}
-                >
-                  <Show
-                    when={type === "image"}
-                    fallback={
-                      <div data-slot="user-message-attachment-file">
-                        <FileIcon node={{ path: name, type: "file" }} />
-                        <span data-slot="user-message-attachment-name">{name}</span>
-                      </div>
-                    }
-                  >
-                    <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
-                  </Show>
-                </div>
-              )
-            }}
-          </For>
+      <Show when={!props.useV2Actions}>{renderAttachments()}</Show>
+      <Show
+        when={text()}
+        fallback={
+          <Show when={messageComments().length > 0}>
+            <UserMessageComments comments={messageComments()} bounded={false} />
+          </Show>
+        }
+      >
+        <div data-slot="user-message-body">
+          <div data-slot="user-message-text" data-comments={messageComments().length > 0 ? "true" : undefined}>
+            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+            <Show when={messageComments().length > 0}>
+              <UserMessageComments comments={messageComments()} bounded />
+            </Show>
+          </div>
         </div>
       </Show>
-      <Show when={text()}>
-        <>
-          <div data-slot="user-message-body">
-            <div data-slot="user-message-text">
-              <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-            </div>
-          </div>
-          <div data-slot="user-message-copy-wrapper">
-            <Show when={metaHead() || metaTail()}>
-              <span data-slot="user-message-meta-wrap">
-                <Show when={metaHead()}>
-                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                    {metaHead()}
-                  </span>
-                </Show>
-                <Show when={metaHead() && metaTail()}>
-                  <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
-                    {"\u00A0\u00B7\u00A0"}
-                  </span>
-                </Show>
-                <Show when={metaTail()}>
-                  <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
-                    {metaTail()}
-                  </span>
-                </Show>
-              </span>
-            </Show>
-            <Show when={props.actions?.revert}>
-              <MessageActionButton
-                icon="reset"
-                label={i18n.t("ui.message.revertMessage")}
-                useV2={props.useV2Actions}
-                disabled={!!busy()}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  revert()
-                }}
-                aria-label={i18n.t("ui.message.revertMessage")}
-              />
-            </Show>
+      <Show when={props.useV2Actions}>{renderAttachments()}</Show>
+      <Show when={text() || (props.useV2Actions && messageComments().length > 0)}>
+        <div data-slot="user-message-copy-wrapper">
+          <Show when={metaHead() || metaTail()}>
+            <span data-slot="user-message-meta-wrap">
+              <Show when={metaHead()}>
+                <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                  {metaHead()}
+                </span>
+              </Show>
+              <Show when={metaHead() && metaTail()}>
+                <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                  {"\u00A0\u00B7\u00A0"}
+                </span>
+              </Show>
+              <Show when={metaTail()}>
+                <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                  {metaTail()}
+                </span>
+              </Show>
+            </span>
+          </Show>
+          <Show when={props.actions?.revert}>
+            <MessageActionButton
+              icon="reset"
+              label={i18n.t("ui.message.revertMessage")}
+              useV2={props.useV2Actions}
+              disabled={!!busy()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                revert()
+              }}
+              aria-label={i18n.t("ui.message.revertMessage")}
+            />
+          </Show>
+          <Show when={text()}>
             <MessageActionButton
               icon={copied() ? "check" : "copy"}
               label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
@@ -1326,8 +1393,8 @@ export function UserMessageDisplay(props: {
               }}
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
             />
-          </div>
-        </>
+          </Show>
+        </div>
       </Show>
     </div>
   )
@@ -1429,7 +1496,7 @@ export function registerTool(input: { name: string; render?: ToolComponent }) {
 }
 
 export function getTool(name: string) {
-  return state[name]?.render
+  return state[name === "apply_patch" ? "patch" : name === "bash" ? "shell" : name]?.render
 }
 
 export const ToolRegistry = {
@@ -1496,7 +1563,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   })
   const taskHref = createMemo(() => {
     if (part().tool !== "task") return
-    return sessionLink(taskId(), useLocation().pathname, data.sessionHref)
+    return sessionLink(taskId(), data.sessionHref)
   })
   const taskSubtitle = createMemo(() => {
     if (part().tool !== "task") return undefined
@@ -1535,6 +1602,14 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
+                  onSubtitleClick={(event) => {
+                    if (!data.navigateToSession) return
+                    if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+                    const id = taskId()
+                    if (!id) return
+                    event.preventDefault()
+                    data.navigateToSession(id)
+                  }}
                 />
               )
             }}
@@ -1915,11 +1990,10 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const location = useLocation()
     const childSessionId = createMemo(() => {
       const value = props.metadata.sessionId
       if (typeof value === "string" && value) return value
-      return taskSession(props.input, location.pathname, data.store.session, data.store.agent)
+      return taskSession(props.input, data.sessionID, data.store.session, data.store.agent)
     })
     const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
@@ -1936,18 +2010,13 @@ ToolRegistry.register({
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
 
-    const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
+    const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
 
     const open = () => {
       const id = childSessionId()
       if (!id) return
-      if (data.navigateToSession) {
-        data.navigateToSession(id)
-        return
-      }
-      const value = href()
-      if (value) window.location.assign(value)
+      data.navigateToSession?.(id)
     }
 
     const navigate = (event: MouseEvent) => {
@@ -2024,7 +2093,7 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
-  name: "bash",
+  name: "shell",
   render(props) {
     const i18n = useI18n()
     const pending = () => props.status === "pending" || props.status === "running"
@@ -2049,13 +2118,14 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
+        allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
-              <Show when={!pending() && !open() && props.input.command}>
+              <Show when={!open() && props.input.command}>
                 <ShellSubmessage text={props.input.command} animate={sawPending} />
               </Show>
             </div>
@@ -2259,7 +2329,7 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
-  name: "apply_patch",
+  name: "patch",
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()

@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test"
 export type SseConnectionRecord = {
   id: number
   url: string
-  path: "/global/event" | "/event"
+  path: "/global/event" | "/event" | "/api/event"
   headers: Record<string, string>
   openedAt: number
   endedAt?: number
@@ -93,6 +93,21 @@ export async function installSseTransport<T>(
           eventOptions.retry === undefined ? "" : `retry: ${eventOptions.retry}\n`,
           `data: ${JSON.stringify(payload)}\n\n`,
         ].join("")
+      const currentEvent = (input: unknown) => {
+        if (!input || typeof input !== "object" || !("payload" in input)) return input
+        const envelope = input as { directory?: string; payload?: unknown }
+        if (!envelope.payload || typeof envelope.payload !== "object") return input
+        const payload = envelope.payload as { id?: string; type?: string; properties?: unknown }
+        if (!payload.type) return input
+        return {
+          id: payload.id ?? `evt_mock_${Date.now()}`,
+          created: Date.now(),
+          type: payload.type,
+          data: payload.properties ?? {},
+          location:
+            envelope.directory && envelope.directory !== "global" ? { directory: envelope.directory } : undefined,
+        }
+      }
       const acknowledge = (
         connection: Connection,
         bytes: number,
@@ -140,15 +155,13 @@ export async function installSseTransport<T>(
           output.forEach((chunk) => connection.controller.enqueue(chunk))
           return acknowledge(connection, input.bytes.length, output.length)
         }
-        const encoded = input.deliveries.map((delivery) => ({
-          delivery,
-          bytes: encoder.encode(frame(delivery.payload, delivery.options)),
-        }))
+        const encoded = input.deliveries.map((delivery) => {
+          const payload = connection.path === "/api/event" ? currentEvent(delivery.payload) : delivery.payload
+          return { delivery, payload, bytes: encoder.encode(frame(payload, delivery.options)) }
+        })
         encoded.forEach((item) => marker(item.delivery.options?.marker))
         if (input.burst) {
-          const bytes = encoder.encode(
-            encoded.map((item) => frame(item.delivery.payload, item.delivery.options)).join(""),
-          )
+          const bytes = encoder.encode(encoded.map((item) => frame(item.payload, item.delivery.options)).join(""))
           connection.controller.enqueue(bytes)
           return encoded.map((item) => acknowledge(connection, item.bytes.byteLength, 1, item.delivery.options?.id))
         }
@@ -161,8 +174,11 @@ export async function installSseTransport<T>(
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
-        if (url.origin !== server || (url.pathname !== "/global/event" && url.pathname !== "/event"))
-          return originalFetch(input, init)
+        if (
+          url.origin !== server ||
+          (url.pathname !== "/global/event" && url.pathname !== "/event" && url.pathname !== "/api/event")
+        )
+          return originalFetch(request)
 
         const id = ++nextConnectionID
         const record = {
@@ -177,6 +193,18 @@ export async function installSseTransport<T>(
             record.controller = controller
             connections.push(record)
             if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
+            if (url.pathname === "/api/event")
+              controller.enqueue(
+                encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
+              )
+            if (url.pathname === "/global/event")
+              controller.enqueue(
+                encoder.encode(
+                  frame({
+                    payload: { id: `evt_mock_connected_${id}`, type: "server.connected", properties: {} },
+                  }),
+                ),
+              )
             request.signal.addEventListener(
               "abort",
               () => {

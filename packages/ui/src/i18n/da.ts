@@ -148,6 +148,7 @@ export const dict = {
   "ui.common.close": "Luk",
   "ui.common.next": "Næste",
   "ui.common.submit": "Indsend",
+  "ui.common.showMore": "Vis mere",
 
   "ui.permission.deny": "Afvis",
   "ui.permission.allowAlways": "Tillad altid",

@@ -4,7 +4,7 @@ import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
-import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
@@ -13,6 +13,8 @@ import { getStore, removeStoreFile } from "./store"
 import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { createWindowRegistry } from "./window-registry"
+import { safeWindowURL } from "./window-state"
+import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -36,6 +38,7 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       standard: true,
       supportFetchAPI: true,
+      stream: true,
     },
   },
 ])
@@ -202,6 +205,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   allowRendererPermissions(win)
   wireWindowRecovery(win, id)
+  wireNavigationPolicy(win)
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -217,6 +221,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   state.manage(win)
   registerWindow(win, id)
+  wireFullscreen(win)
   loadWindow(win, "index.html")
   wireZoom(win)
 
@@ -225,6 +230,40 @@ export function createMainWindow(id: string = randomUUID()) {
   })
 
   return win
+}
+
+export function openExternalURL(value: string) {
+  const url = resolveExternalURL(value)
+  if (!url) {
+    writeLog("window", "blocked external target", { url: value }, "warn")
+    return
+  }
+  void shell.openExternal(url)
+}
+
+export function openLocalFileURL(value: string) {
+  const path = resolveLocalFilePath(value)
+  if (!path) {
+    writeLog("window", "blocked local file target", { url: value }, "warn")
+    return
+  }
+  void shell.openPath(path).then((error) => {
+    if (error) writeLog("window", "failed to open local file", { path, error }, "error")
+  })
+}
+
+function wireNavigationPolicy(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (!isRendererUrl(url)) openExternalURL(url)
+    return { action: "deny" }
+  })
+  // Renderer reloads (window.location.reload) navigate to the app's own URL
+  // and must stay in-window; everything else leaves through the OS.
+  win.webContents.on("will-navigate", (event, url) => {
+    if (isRendererUrl(url)) return
+    event.preventDefault()
+    openExternalURL(url)
+  })
 }
 
 function registerWindow(win: BrowserWindow, id: string) {
@@ -266,7 +305,10 @@ export function registerRendererProtocol() {
     }
 
     try {
-      const response = await net.fetch(pathToFileURL(file).toString())
+      const range = request.headers.get("range")
+      const response = await net.fetch(pathToFileURL(file).toString(), {
+        headers: range ? { range } : undefined,
+      })
       if (response.status >= 400) {
         writeLog(
           "protocol",
@@ -360,7 +402,7 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
         errorCode,
         errorDescription,
         validatedURL,
-        currentURL: win.webContents.getURL(),
+        currentURL: safeWindowURL(win),
         isMainFrame,
       },
       "error",
@@ -382,12 +424,7 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
   })
   win.webContents.on("render-process-gone", (_event, details) => {
     sampler.stopAndFlush()
-    writeLog(
-      "window",
-      "renderer process gone",
-      { window: name, currentURL: win.webContents.getURL(), details },
-      "error",
-    )
+    writeLog("window", "renderer process gone", { window: name, currentURL: safeWindowURL(win), details }, "error")
     void show(
       "OpenCode window terminated unexpectedly",
       [`Window: ${name}`, `Reason: ${details.reason}`, `Code: ${details.exitCode ?? "<unknown>"}`].join("\n"),
@@ -395,12 +432,12 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     )
   })
   win.on("unresponsive", () => {
-    writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+    writeLog("window", "renderer unresponsive", { window: name, currentURL: safeWindowURL(win) }, "error")
     sampler.start()
     void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
   })
   win.on("responsive", () => {
-    writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+    writeLog("window", "renderer responsive", { window: name, currentURL: safeWindowURL(win) }, "error")
     sampler.stopAndFlush()
   })
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
@@ -470,6 +507,16 @@ function wireZoom(win: BrowserWindow) {
     if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
     updateZoom(win)
   })
+}
+
+function wireFullscreen(win: BrowserWindow) {
+  const send = (fullscreen: boolean) => {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) return
+    win.webContents.send("window-fullscreen-changed", fullscreen)
+  }
+
+  win.on("enter-full-screen", () => send(true))
+  win.on("leave-full-screen", () => send(false))
 }
 
 function clampZoom(value: number) {
