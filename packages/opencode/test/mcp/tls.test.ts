@@ -35,6 +35,9 @@ qRsTqNvWxVyZaBcDeFgHjIkLmNoPqRsTqNvWxVyZaBcDeFgHjIkLmNoPqRsTqNXv
 
 const SAMPLE_CA_BUNDLE = `${SAMPLE_CERT}\n${SAMPLE_CERT}`
 
+// readCaFile trims trailing whitespace, so match against trimmed cert
+const SAMPLE_CERT_TRIMMED = SAMPLE_CERT.trim()
+
 function tmpdir(): { path: string; [Symbol.dispose](): void } {
   const dir = realpathSync(mkdtempSync(path.join(osTmpdir(), "opencode-test-tls-")))
   return {
@@ -176,14 +179,14 @@ describe("readCaFile", () => {
     using dir = tmpdir()
     const filePath = writeTempFile(dir.path, "ca.pem", SAMPLE_CERT)
     const content = readCaFile(filePath, dir.path)
-    expect(content).toBe(SAMPLE_CERT)
+    expect(content).toBe(SAMPLE_CERT_TRIMMED)
   })
 
   test("resolves relative paths against workspace", () => {
     using dir = tmpdir()
     writeTempFile(dir.path, "ca.pem", SAMPLE_CERT)
     const content = readCaFile("ca.pem", dir.path)
-    expect(content).toBe(SAMPLE_CERT)
+    expect(content).toBe(SAMPLE_CERT_TRIMMED)
   })
 
   test("throws if file does not exist", () => {
@@ -224,7 +227,8 @@ describe("derToPem", () => {
     const raw = Uint8Array.from({ length: 256 }, (_, i) => i)
     const pem = derToPem(raw.buffer)
     const lines = pem.split("\n")
-    const bodyLines = lines.slice(1, -1)
+    // PEM format: header, base64 body lines, footer, trailing empty line
+    const bodyLines = lines.slice(1, -2)
     for (const line of bodyLines) {
       expect(line).toMatch(/^[A-Za-z0-9+/=]{0,64}$/)
     }
@@ -253,14 +257,15 @@ describe("buildTlsCa", () => {
     using dir = tmpdir()
     const filePath = writeTempFile(dir.path, "ca.pem", SAMPLE_CERT)
     const ca = await buildTlsCa({ caFile: filePath }, dir.path, url)
-    expect(ca).toBe(SAMPLE_CERT)
+    expect(ca).toBe(SAMPLE_CERT_TRIMMED)
   })
 
   test("concatenates caPem and caFile", async () => {
     using dir = tmpdir()
-    const filePath = writeTempFile(dir.path, "ca.pem", SAMPLE_CERT)
-    const ca = await buildTlsCa({ caPem: "CERT-A\n", caFile: filePath }, dir.path, url)
-    expect(ca).toBe("CERT-A\n" + SAMPLE_CERT)
+    const filePath = writeTempFile(dir.path, "ca2.pem", SAMPLE_CERT)
+    const ca = await buildTlsCa({ caPem: SAMPLE_CERT, caFile: filePath }, dir.path, url)
+    // caPem is kept as-is, caFile content is trimmed by readCaFile
+    expect(ca).toBe(SAMPLE_CERT + SAMPLE_CERT_TRIMMED)
   })
 
   test("throws if caPem is not valid PEM", async () => {
