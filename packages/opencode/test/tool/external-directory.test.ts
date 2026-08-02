@@ -2,6 +2,8 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { describe, expect } from "bun:test"
 import path from "path"
+import { realpathSync } from "fs"
+import { symlink } from "fs/promises"
 import { Effect } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import type { Tool } from "@/tool/tool"
@@ -104,6 +106,64 @@ describe("tool.assertExternalDirectory", () => {
       expect(requests.length).toBe(0)
     }),
   )
+
+  if (process.platform !== "win32") {
+    it.instance("follows symlinks that escape the project before checking containment", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const { requests, ctx } = makeCtx()
+
+        const outside = yield* tmpdirScoped()
+        const link = path.join(test.directory, "vendor")
+        yield* Effect.promise(() => symlink(outside, link))
+
+        // Lexically inside the project, but resolves outside it.
+        const target = path.join(link, "existing.txt")
+        yield* Effect.promise(() => Bun.write(target, "x"))
+        const expected = glob(path.join(realpathSync(outside), "*"))
+
+        yield* assertExternalDirectoryEffect(ctx, target)
+
+        const req = requests.find((r) => r.permission === "external_directory")
+        expect(req).toBeDefined()
+        expect(req!.patterns).toEqual([expected])
+        expect(req!.metadata.filepath).toBe(path.join(realpathSync(outside), "existing.txt"))
+      }),
+    )
+
+    it.instance("follows symlinks for targets that do not exist yet", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const { requests, ctx } = makeCtx()
+
+        const outside = yield* tmpdirScoped()
+        const link = path.join(test.directory, "vendor")
+        yield* Effect.promise(() => symlink(outside, link))
+
+        // `write` and `apply_patch` target files that do not exist yet; realpath
+        // fails on those, so the nearest existing ancestor has to be resolved.
+        const target = path.join(link, "brand-new.txt")
+        const expected = glob(path.join(realpathSync(outside), "*"))
+
+        yield* assertExternalDirectoryEffect(ctx, target)
+
+        const req = requests.find((r) => r.permission === "external_directory")
+        expect(req).toBeDefined()
+        expect(req!.patterns).toEqual([expected])
+      }),
+    )
+
+    it.instance("does not prompt for ordinary paths inside the project", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const { requests, ctx } = makeCtx()
+
+        yield* assertExternalDirectoryEffect(ctx, path.join(test.directory, "src", "new-file.ts"))
+
+        expect(requests.length).toBe(0)
+      }),
+    )
+  }
 
   if (process.platform === "win32") {
     it.instance(
