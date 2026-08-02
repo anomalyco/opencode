@@ -4,6 +4,8 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Provider } from "@/provider/provider"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
@@ -51,6 +53,21 @@ export type StreamRequest = StreamInput & {
   abort: AbortSignal
 }
 
+function currentUserMessageText(messages: ModelMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.role !== "user") continue
+    const content = message.content
+    if (typeof content === "string") return content
+    const text = content
+      .filter((part) => part.type === "text" && "text" in part)
+      .map((part) => (part as { text: string }).text)
+      .join("\n")
+    if (text) return text
+  }
+  return ""
+}
+
 export interface Interface {
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, unknown>
 }
@@ -83,9 +100,45 @@ const live: Layer.Layer<
     const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const routeOutput: { model?: { providerID: string; modelID: string }; reason?: string } = {}
+      const route = yield* plugin.trigger(
+        "chat.model",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent.name,
+          model: {
+            providerID: input.model.providerID,
+            modelID: input.model.id,
+          },
+          message: {
+            id: input.user.id,
+            text: currentUserMessageText(input.messages),
+          },
+        },
+        routeOutput,
+      )
+      const model = route.model
+        ? yield* provider.getModel(
+            ProviderV2.ID.make(route.model.providerID),
+            ModelV2.ID.make(route.model.modelID),
+          )
+        : input.model
+      const user = route.model
+        ? {
+            ...input.user,
+            model: {
+              providerID: model.providerID,
+              modelID: model.id,
+            },
+          }
+        : input.user
+
       yield* Effect.logInfo("stream", {
-        providerID: input.model.providerID,
-        modelID: input.model.id,
+        providerID: model.providerID,
+        modelID: model.id,
+        ...(route.model
+          ? { routedFrom: `${input.model.providerID}/${input.model.id}`, reason: route.reason }
+          : {}),
         "session.id": input.sessionID,
         small: (input.small ?? false).toString(),
         agent: input.agent.name,
@@ -94,10 +147,10 @@ const live: Layer.Layer<
 
       const [language, cfg, item, info] = yield* Effect.all(
         [
-          provider.getLanguage(input.model),
+          provider.getLanguage(model),
           config.get(),
-          provider.getProvider(input.model.providerID),
-          auth.get(input.model.providerID),
+          provider.getProvider(model.providerID),
+          auth.get(model.providerID),
         ],
         { concurrency: "unbounded" },
       )
@@ -105,6 +158,8 @@ const live: Layer.Layer<
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
       const prepared = yield* LLMRequestPrep.prepare({
         ...input,
+        user,
+        model,
         provider: item,
         auth: info,
         plugin,
@@ -225,7 +280,7 @@ const live: Layer.Layer<
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
         const native = LLMNativeRuntime.stream({
-          model: input.model,
+          model: model,
           provider: item,
           auth: info,
           llmClient,
@@ -243,8 +298,8 @@ const live: Layer.Layer<
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected", {
             "llm.runtime": "native",
-            "llm.provider": input.model.providerID,
-            "llm.model": input.model.id,
+            "llm.provider": model.providerID,
+            "llm.model": model.id,
           })
           return {
             type: "native" as const,
@@ -253,13 +308,13 @@ const live: Layer.Layer<
         }
         yield* Effect.logInfo("llm runtime selected", {
           "llm.runtime": "ai-sdk",
-          "llm.provider": input.model.providerID,
-          "llm.model": input.model.id,
+          "llm.provider": model.providerID,
+          "llm.model": model.id,
           "llm.native_unsupported_reason": native.reason,
         })
         yield* Effect.logInfo("native runtime unavailable; falling back to ai-sdk", {
-          providerID: input.model.providerID,
-          modelID: input.model.id,
+          providerID: model.providerID,
+          modelID: model.id,
           "session.id": input.sessionID,
           small: (input.small ?? false).toString(),
           agent: input.agent.name,
@@ -270,8 +325,8 @@ const live: Layer.Layer<
 
       yield* Effect.logInfo("llm runtime selected", {
         "llm.runtime": "ai-sdk",
-        "llm.provider": input.model.providerID,
-        "llm.model": input.model.id,
+        "llm.provider": model.providerID,
+        "llm.model": model.id,
       })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
@@ -281,8 +336,8 @@ const live: Layer.Layer<
           onError(error) {
             bridge.fork(
               Effect.logError("stream error", {
-                providerID: input.model.providerID,
-                modelID: input.model.id,
+                providerID: model.providerID,
+                modelID: model.id,
                 "session.id": input.sessionID,
                 small: (input.small ?? false).toString(),
                 agent: input.agent.name,
@@ -292,7 +347,7 @@ const live: Layer.Layer<
             )
           },
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
-          includeRawChunks: input.model.providerID.includes("github-copilot"),
+          includeRawChunks: model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
             const lower = failed.toolCall.toolName.toLowerCase()
             if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
@@ -313,7 +368,7 @@ const live: Layer.Layer<
           temperature: prepared.params.temperature,
           topP: prepared.params.topP,
           topK: prepared.params.topK,
-          providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
+          providerOptions: ProviderTransform.providerOptions(model, prepared.params.options),
           activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
           tools: prepared.tools,
           toolChoice: input.toolChoice,
@@ -332,7 +387,7 @@ const live: Layer.Layer<
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(
                       args.params.prompt,
-                      input.model,
+                      model,
                       prepared.messageTransformOptions,
                     )
                   }

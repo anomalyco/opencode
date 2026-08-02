@@ -13,6 +13,7 @@ import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { Plugin } from "@/plugin"
 
 import { testEffect } from "../lib/effect"
 import type { Agent } from "../../src/agent/agent"
@@ -2111,5 +2112,214 @@ describe("session.llm.stream", () => {
         },
       }),
     },
+  )
+})
+
+function pluginHookLayer(hook: Plugin.Interface["trigger"]): Layer.Layer<Plugin.Service> {
+  return Layer.succeed(
+    Plugin.Service,
+    Plugin.Service.of({
+      trigger: hook,
+      list: Effect.fn("TestPlugin.list")(() => Effect.succeed([])),
+      init: Effect.fn("TestPlugin.init")(() => Effect.void),
+    }),
+  )
+}
+
+describe("session.llm.chat.model", () => {
+  const vivgridFixture = { providerID: "vivgrid", modelID: "gemini-3.1-pro-preview" }
+  const routedModelID = "gpt-5.4-mini"
+  const testConfig = () => ({
+    enabled_providers: [vivgridFixture.providerID],
+    provider: {
+      [vivgridFixture.providerID]: {
+        options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+      },
+    },
+  })
+
+  function itWithPlugin(hook: Plugin.Interface["trigger"]) {
+    return testEffect(
+      AppNodeBuilder.build(
+        LayerNode.group([LLM.node, Provider.node]),
+        [[Plugin.node, pluginHookLayer(hook)]],
+      ),
+    )
+  }
+
+  itWithPlugin(
+    Effect.fn("TestPlugin.trigger")(function* (name, input, output) {
+      if (name === "chat.headers") {
+        const hookInput = input as { model: Provider.Model }
+        ;(output as { headers: Record<string, string> }).headers["x-chat-model-test"] = "noop"
+      }
+      return output
+    }),
+  ).instance(
+    "uses the original model when chat.model does not route",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-chat-model-noop")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-chat-model-noop"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        expect(capture.body.model).toBe(fixture.model.id)
+        expect(capture.headers.get("x-chat-model-test")).toBe("noop")
+      }),
+    { config: testConfig },
+  )
+
+  itWithPlugin(
+    Effect.fn("TestPlugin.trigger")(function* (name, input, output) {
+      if (name === "chat.model") {
+        const hookInput = input as { message: { text: string } }
+        if (hookInput.message.text === "Route me") {
+          const routeOutput = output as { model?: { providerID: string; modelID: string }; reason?: string }
+          routeOutput.model = { providerID: vivgridFixture.providerID, modelID: routedModelID }
+          routeOutput.reason = "test-routing"
+        }
+      }
+      return output
+    }),
+  ).instance(
+    "routes to the model returned by chat.model",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const routed = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(routedModelID),
+        )
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-chat-model-route")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-chat-model-route"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Route me" }],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        expect(capture.body.model).toBe(routed.api.id)
+      }),
+    { config: testConfig },
+  )
+
+  itWithPlugin(
+    Effect.fn("TestPlugin.trigger")(function* (name, input, output) {
+      if (name === "chat.model") {
+        const hookInput = input as { sessionID: string; agent: string; message: { id: string; text: string } }
+        expect(hookInput.sessionID).toBe("session-test-chat-model-ctx")
+        expect(hookInput.agent).toBe("test")
+        expect(hookInput.message.text).toBe("Hello")
+        expect(hookInput.message.id).toBe("msg_user-chat-model-ctx")
+      }
+      return output
+    }),
+  ).instance(
+    "passes session, agent, and message context to chat.model",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-chat-model-ctx")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-chat-model-ctx"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        yield* Effect.promise(() => request)
+      }),
+    { config: testConfig },
   )
 })
