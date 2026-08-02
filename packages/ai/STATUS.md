@@ -60,7 +60,7 @@ Other `aisdk:` packages, including Google Vertex, Azure, and Bedrock, currently 
 | `@ai-sdk/google-vertex/xai`       | Vertex Chat / Responses                                        | Partial / usable | Decide Chat/Responses selection for catalog models, add runner mapping and recorded coverage, and review xAI-specific request options.                                                                              |
 | `@ai-sdk/azure`                   | Azure OpenAI Chat/Responses facade                             | Partial          | Map runner/catalog metadata to native Azure, handle resourceName/baseURL/apiVersion variants, add AAD/token auth story, and verify Chat vs Responses deployment selection.                                          |
 | `@ai-sdk/amazon-bedrock`          | Bedrock Converse                                               | Partial          | Add default AWS credential chain/profile support, region/inference-profile model ID handling, provider option parity via `additionalModelRequestFields`, guardrails/performance config, and runner/catalog mapping. |
-| `@ai-sdk/amazon-bedrock/mantle`   | Bedrock Mantle OpenAI-compatible Chat/Responses namespace      | Missing          | Decide native Mantle shape, likely separate from Converse because it uses OpenAI-compatible Chat/Responses semantics over Bedrock. Add package mapping and tests.                                                   |
+| `@ai-sdk/amazon-bedrock/mantle`   | Bedrock Mantle OpenAI-compatible Chat/Responses namespace      | Partial / usable | Add default AWS credential chain/profile support; native catalog mapping currently requires bearer auth or explicit static credentials.                                                                             |
 
 ## Highest-Risk Gaps
 
@@ -71,30 +71,31 @@ Other `aisdk:` packages, including Google Vertex, Azure, and Bedrock, currently 
 5. Azure is only a provider facade, not a full runtime replacement. Native Azure exists, but the catalog runner does not select it, and token auth/resource variants need review.
 6. Provider option typing is uneven. OpenAI, Anthropic, Gemini, Bedrock, and OpenRouter each expose a small typed subset plus raw HTTP overlays; this is useful but not equivalent to AI SDK provider option coverage.
 7. Structured output is not provider-native yet. `LLM.generateObject` still uses a synthetic tool strategy, while the future design expects native structured output where reliable and tool fallback where needed.
-8. Package/namespace boundaries for the current native loading set are explicit in docs and exports. Other exported provider facades are not catalog package entrypoints until they implement the contract. Vertex xAI still needs catalog API selection; the missing native boundary is Bedrock Mantle.
-9. Recorded coverage is uneven. OpenAI, Anthropic, Gemini, Bedrock Converse, Cloudflare, OpenRouter, and several OpenAI-compatible Chat providers have cassettes. Azure, Vertex, and Mantle need first-class recorded scenarios before switching defaults.
+8. Package/namespace boundaries for the current native loading set are explicit in docs and exports. Other exported provider facades are not catalog package entrypoints until they implement the contract. Vertex xAI still needs catalog API selection.
+9. Recorded coverage is uneven. OpenAI, Anthropic, Gemini, Bedrock Converse, Bedrock Mantle, Cloudflare, OpenRouter, and several OpenAI-compatible Chat providers have cassettes. Azure and Vertex still need first-class recorded scenarios before switching defaults.
 
 ## Native Namespace Shape
 
 These are implementation/API slices, not separate npm packages.
 
-| API slice                     | Package-like entrypoint                                 | Purpose                                                                      |
-| ----------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| OpenAI Chat                   | `@opencode-ai/ai/providers/openai/chat`                 | OpenAI `/chat/completions` semantics.                                        |
-| OpenAI Responses              | `@opencode-ai/ai/providers/openai/responses`            | OpenAI `/responses` semantics with HTTP/WebSocket selected through settings. |
-| OpenAI-compatible Chat        | `@opencode-ai/ai/providers/openai-compatible`           | Generic OpenAI-compatible `/chat/completions`.                               |
-| Open Responses-compatible     | `@opencode-ai/ai/providers/openai-compatible/responses` | Generic provider-neutral `/responses`.                                       |
-| Anthropic-compatible Messages | `@opencode-ai/ai/providers/anthropic-compatible`        | Generic Anthropic-compatible `/messages`.                                    |
-| Anthropic Messages            | `@opencode-ai/ai/providers/anthropic`                   | Anthropic Messages API.                                                      |
-| Gemini Developer API          | `@opencode-ai/ai/providers/google`                      | Google AI Studio Gemini API.                                                 |
-| Vertex Gemini                 | `@opencode-ai/ai/providers/google-vertex/gemini`        | Vertex Gemini API; `providers/google-vertex` is the default alias.           |
-| Vertex Chat                   | `@opencode-ai/ai/providers/google-vertex/chat`          | Vertex OpenAI-compatible Chat Completions for MaaS models.                   |
-| Vertex Responses              | `@opencode-ai/ai/providers/google-vertex/responses`     | Vertex Open Responses for Grok models.                                       |
-| Vertex Messages               | `@opencode-ai/ai/providers/google-vertex/messages`      | Vertex-hosted Anthropic Messages API.                                        |
-| Bedrock Converse              | `@opencode-ai/ai/providers/amazon-bedrock`              | AWS Bedrock Converse API.                                                    |
-| Bedrock Mantle                | Missing                                                 | AWS Bedrock Mantle OpenAI-compatible APIs.                                   |
-| Azure OpenAI Chat             | `@opencode-ai/ai/providers/azure/chat`                  | Azure specialization of OpenAI Chat.                                         |
-| Azure OpenAI Responses        | `@opencode-ai/ai/providers/azure/responses`             | Azure specialization of OpenAI Responses.                                    |
+| API slice                     | Package-like entrypoint                                     | Purpose                                                                      |
+| ----------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| OpenAI Chat                   | `@opencode-ai/ai/providers/openai/chat`                     | OpenAI `/chat/completions` semantics.                                        |
+| OpenAI Responses              | `@opencode-ai/ai/providers/openai/responses`                | OpenAI `/responses` semantics with HTTP/WebSocket selected through settings. |
+| OpenAI-compatible Chat        | `@opencode-ai/ai/providers/openai-compatible`               | Generic OpenAI-compatible `/chat/completions`.                               |
+| Open Responses-compatible     | `@opencode-ai/ai/providers/openai-compatible/responses`     | Generic provider-neutral `/responses`.                                       |
+| Anthropic-compatible Messages | `@opencode-ai/ai/providers/anthropic-compatible`            | Generic Anthropic-compatible `/messages`.                                    |
+| Anthropic Messages            | `@opencode-ai/ai/providers/anthropic`                       | Anthropic Messages API.                                                      |
+| Gemini Developer API          | `@opencode-ai/ai/providers/google`                          | Google AI Studio Gemini API.                                                 |
+| Vertex Gemini                 | `@opencode-ai/ai/providers/google-vertex/gemini`            | Vertex Gemini API; `providers/google-vertex` is the default alias.           |
+| Vertex Chat                   | `@opencode-ai/ai/providers/google-vertex/chat`              | Vertex OpenAI-compatible Chat Completions for MaaS models.                   |
+| Vertex Responses              | `@opencode-ai/ai/providers/google-vertex/responses`         | Vertex Open Responses for Grok models.                                       |
+| Vertex Messages               | `@opencode-ai/ai/providers/google-vertex/messages`          | Vertex-hosted Anthropic Messages API.                                        |
+| Bedrock Converse              | `@opencode-ai/ai/providers/amazon-bedrock`                  | AWS Bedrock Converse API.                                                    |
+| Bedrock Mantle Chat           | `@opencode-ai/ai/providers/amazon-bedrock/mantle/chat`      | AWS Bedrock Mantle OpenAI-compatible Chat API.                               |
+| Bedrock Mantle Responses      | `@opencode-ai/ai/providers/amazon-bedrock/mantle/responses` | AWS Bedrock Mantle OpenAI-compatible Responses API.                          |
+| Azure OpenAI Chat             | `@opencode-ai/ai/providers/azure/chat`                      | Azure specialization of OpenAI Chat.                                         |
+| Azure OpenAI Responses        | `@opencode-ai/ai/providers/azure/responses`                 | Azure specialization of OpenAI Responses.                                    |
 
 ## Suggested Next Work Slices
 
@@ -103,6 +104,5 @@ These are implementation/API slices, not separate npm packages.
 3. Bring Bedrock native auth/config to AI SDK parity: region, profile, default AWS credential chain, bearer token env, endpoint override, and cross-region inference profile handling.
 4. Add runner/catalog mappings and recorded scenarios for the native Vertex Gemini, Chat, Responses, and Messages entrypoints.
 5. Decide Chat/Responses selection for `@ai-sdk/google-vertex/xai` catalog models.
-6. Add Bedrock Mantle as a separate OpenAI-compatible Bedrock namespace after deciding whether it uses Chat, Responses, or both by model.
-7. Expand typed provider options from the existing V1 lowerer knowledge in `packages/core/src/v1/config/provider-options.ts` before adding more raw overlay examples.
-8. Add recorded provider tests for Azure, Vertex Gemini, Vertex Chat, Vertex Responses, Vertex Messages, Bedrock credential-chain behavior, and Mantle before making native runtime the default for those packages.
+6. Expand typed provider options from the existing V1 lowerer knowledge in `packages/core/src/v1/config/provider-options.ts` before adding more raw overlay examples.
+7. Add recorded provider tests for Azure, Vertex Gemini, Vertex Chat, Vertex Responses, Vertex Messages, and Bedrock credential-chain behavior before making native runtime the default for those packages.

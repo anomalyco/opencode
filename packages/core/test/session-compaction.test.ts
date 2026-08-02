@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
@@ -28,7 +28,7 @@ import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
-const model = Model.make({
+const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
@@ -145,7 +145,7 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
     })
     const input = (tokens: number, limits: { context: number; input?: number; output: number }) => ({
       session,
-      model: Model.make({
+      model: LanguageModel.make({
         id: "test-model",
         provider: "test-provider",
         route: OpenAIChat.route.with({ limits }),

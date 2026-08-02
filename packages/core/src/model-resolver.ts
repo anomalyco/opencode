@@ -1,7 +1,7 @@
 export * as ModelResolver from "./model-resolver"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Model } from "@opencode-ai/ai"
+import { LanguageModel } from "@opencode-ai/ai"
 // ast-grep-ignore: no-star-import
 import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
 // ast-grep-ignore: no-star-import
@@ -50,7 +50,7 @@ export type Error = VariantUnavailableError | UnsupportedPackageError | Integrat
 
 export interface Resolved {
   /** Route-level model for provider requests; its id is the provider API model id, which may differ from the catalog id. */
-  readonly model: Model
+  readonly model: LanguageModel
   /** Selected catalog identity. Durable records and displays must use this, never the API model id. */
   readonly ref: Ref
   /** Catalog capabilities used to shape requests before provider lowering. */
@@ -134,14 +134,14 @@ export const withVariant = (
 
 export interface Dependencies {
   readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
-  readonly loadAISDK?: (model: Info) => Effect.Effect<Model, AISDK.InitError>
+  readonly loadAISDK?: (model: Info) => Effect.Effect<LanguageModel, AISDK.InitError>
 }
 
 export const fromCatalogModel = (
   model: Info,
   credential?: Credential.Value,
   dependencies?: Dependencies,
-): Effect.Effect<Model, UnsupportedPackageError> => {
+): Effect.Effect<LanguageModel, UnsupportedPackageError> => {
   const resolved = produce(model, (draft) => {
     if (draft.settings?.apiKey === "") delete draft.settings.apiKey
     if (credential?.type === "key" && credential.metadata !== undefined)
@@ -176,14 +176,19 @@ export const fromCatalogModel = (
     )
   }
   const configured = { ...resolved.settings, ...credential?.metadata }
-  const mapping = Provider.isAISDK(resolved.package) ? AISDKNative.map(packageName, configured) : undefined
+  const mapping = Provider.isAISDK(resolved.package)
+    ? AISDKNative.map({
+        packageName,
+        settings: configured,
+        modelID: resolved.modelID ?? resolved.id,
+      })
+    : undefined
   const native = mapping?.package ?? resolved.package
   if (Provider.isAISDK(resolved.package) && !mapping) {
     if (!dependencies?.loadAISDK) return Effect.fail(unsupported(resolved))
     const runtime = produce(resolved, (draft) => {
       draft.settings = Provider.mergeOverlay(draft.settings, {
-        ...(credential?.type === "key" ? { apiKey: credential.key } : {}),
-        ...(credential?.type === "oauth" ? { apiKey: credential.access } : {}),
+        ...nativeCredentialSettings(resolved.package ?? "", credential),
         ...credential?.metadata,
       })
     })
@@ -207,7 +212,7 @@ export const fromCatalogModel = (
     return yield* Effect.try({
       try: () => {
         const runtime = module.model(resolved.modelID ?? resolved.id, settings)
-        return Model.update(runtime, {
+        return LanguageModel.update(runtime, {
           provider: resolved.providerID,
           compatibility: resolved.compatibility
             ? Object.assign({}, runtime.compatibility, resolved.compatibility)

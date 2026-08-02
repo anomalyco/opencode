@@ -1,6 +1,6 @@
 import { Config } from "effect"
 import { Auth } from "../src/route"
-import type { ModelFactory } from "../src/route/auth-options"
+import type { LanguageModelFactory } from "../src/route/auth-options"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as AmazonBedrock from "../src/providers/amazon-bedrock"
 import * as Anthropic from "../src/providers/anthropic"
@@ -23,13 +23,13 @@ type BaseOptions = {
   readonly headers?: Record<string, string>
 }
 
-type Model = {
+type LanguageModel = {
   readonly id: string
 }
 
 declare const auth: Auth.Definition
-declare const optionalAuthModel: ModelFactory<BaseOptions, "optional", Model>
-declare const requiredAuthModel: ModelFactory<BaseOptions, "required", Model>
+declare const optionalAuthModel: LanguageModelFactory<BaseOptions, "optional", LanguageModel>
+declare const requiredAuthModel: LanguageModelFactory<BaseOptions, "required", LanguageModel>
 const configApiKey = Config.redacted("OPENAI_API_KEY")
 
 OpenAIChat.route.model({ id: "gpt-4.1-mini" })

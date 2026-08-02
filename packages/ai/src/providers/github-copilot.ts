@@ -9,14 +9,14 @@ export const id = ProviderID.make("github-copilot")
 
 // GitHub Copilot has no canonical public URL — callers (opencode, etc.) must
 // supply `baseURL` explicitly.
-export type ModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL: string
     readonly endpoint?: "chat" | "responses"
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
-export const shouldUseResponsesApi = (modelID: string | ModelID, endpoint?: ModelOptions["endpoint"]) => {
+export const shouldUseResponsesApi = (modelID: string | ModelID, endpoint?: LanguageModelOptions["endpoint"]) => {
   if (endpoint) return endpoint === "responses"
   const model = String(modelID)
   const match = /^gpt-(\d+)/.exec(model)
@@ -29,24 +29,24 @@ export const routes = [OpenAIResponses.route, OpenAIChat.route]
 const chatRoute = OpenAIChat.route.with({ provider: id })
 const responsesRoute = OpenAIResponses.route.with({ provider: id })
 
-const defaults = (options: ModelOptions) => {
+const defaults = (options: LanguageModelOptions) => {
   const { apiKey: _, auth: _auth, baseURL: _baseURL, endpoint: _endpoint, ...rest } = options
   return rest
 }
 
-const configuredResponsesRoute = (options: ModelOptions) =>
+const configuredResponsesRoute = (options: LanguageModelOptions) =>
   responsesRoute.with({
     endpoint: { baseURL: options.baseURL },
     auth: AuthOptions.bearer(options, []),
   })
 
-const configuredChatRoute = (options: ModelOptions) =>
+const configuredChatRoute = (options: LanguageModelOptions) =>
   chatRoute.with({
     endpoint: { baseURL: options.baseURL },
     auth: AuthOptions.bearer(options, []),
   })
 
-export const configure = (options: ModelOptions) => {
+export const configure = (options: LanguageModelOptions) => {
   const responsesRoute = configuredResponsesRoute(options)
   const chatRoute = configuredChatRoute(options)
   const responses = (modelID: string | ModelID) =>

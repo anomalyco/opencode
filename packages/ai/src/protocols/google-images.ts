@@ -11,7 +11,7 @@ import {
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
 import {
   InvalidProviderOutputReason,
-  LLMError,
+  AIError,
   Usage,
   mergeHttpOptions,
   mergeJsonRecords,
@@ -125,7 +125,7 @@ const nativeOptions = (options: GoogleImageOptions | undefined) => {
 }
 
 const invalidOutput = (message: string, providerMetadata?: ProviderMetadata) =>
-  new LLMError({
+  new AIError({
     module: ADAPTER,
     method: "generate",
     reason: new InvalidProviderOutputReason({ message, route: ADAPTER, providerMetadata }),
@@ -285,7 +285,7 @@ export const model = (input: ModelInput) => {
   return ImageModel.make<GoogleImageOptions>({ id: input.id, provider: "google", route, http: input.http })
 }
 
-const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknown>, LLMError> => {
+const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknown>, AIError> => {
   if (image.type === "bytes")
     return Effect.succeed({ inlineData: { mimeType: image.mediaType, data: Encoding.encodeBase64(image.data) } })
   if (image.type === "file-uri") return Effect.succeed({ fileData: { mimeType: image.mediaType, fileUri: image.uri } })

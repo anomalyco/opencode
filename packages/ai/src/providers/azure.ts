@@ -14,7 +14,7 @@ const routeAuth = Auth.remove("authorization")
 // (helper builds the URL) or `baseURL` directly.
 type AzureURL = AtLeastOne<{ readonly resourceName: string; readonly baseURL: string }>
 
-export type ModelOptions = AzureURL &
+export type LanguageModelOptions = AzureURL &
   RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
@@ -22,7 +22,7 @@ export type ModelOptions = AzureURL &
     readonly useCompletionUrls?: boolean
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-export type Config = ModelOptions
+export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   AzureURL & {

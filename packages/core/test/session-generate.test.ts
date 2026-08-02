@@ -1,5 +1,13 @@
 import { expect } from "bun:test"
-import { LLMClient, LLMEvent, LLMResponse, Model, SystemPart, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
+import {
+  LLMClient,
+  LLMEvent,
+  LLMResponse,
+  LanguageModel,
+  SystemPart,
+  ToolDefinition,
+  type LLMRequest,
+} from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
@@ -46,7 +54,7 @@ const requests: LLMRequest[] = []
 let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
-const model = Model.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
+const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
 const client = Layer.mock(LLMClient.Service)({
   stream: () => Stream.die(new Error("unused")),
   generate: (request) =>

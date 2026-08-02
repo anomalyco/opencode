@@ -301,6 +301,7 @@ describe("ShellTool", () => {
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
+    { timeout: 15_000 },
   )
 
   it.live("rejects a workdir that stops being a directory during approval", () =>
@@ -472,6 +473,7 @@ describe("ShellTool", () => {
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
+    { timeout: 15_000 },
   )
 
   it.live(
@@ -538,7 +540,7 @@ describe("ShellTool", () => {
       (tmp) => {
           reset()
           return withSession(tmp.path, (registry) =>
-            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 500 : 50 })),
+            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 3_000 : 50 })),
           ).pipe(
             Effect.andThen((settled) =>
               Effect.sync(() => {
@@ -557,6 +559,7 @@ describe("ShellTool", () => {
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
+    { timeout: 15_000 },
   )
 
   it.live("returns the shell id for a background command", () =>

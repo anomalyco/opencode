@@ -5,13 +5,13 @@ import {
   LLMEvent,
   LLMResponse,
   type FinishReasonDetails,
-  type LLMError,
+  type AIError,
   type LLMRequest,
   type UsageInput,
 } from "./schema"
 import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
 
-export type Response = readonly LLMEvent[] | Stream.Stream<LLMEvent, LLMError>
+export type Response = readonly LLMEvent[] | Stream.Stream<LLMEvent, AIError>
 
 export type Gate = Readonly<{ started: Effect.Effect<void>; release: Effect.Effect<void> }>
 
@@ -63,7 +63,7 @@ export const textWithUsage = (value: string, id: string, inputTokens: number) =>
 
 export const tool = (id: string, name: string, input: unknown) => toolCalls(LLMEvent.toolCall({ id, name, input }))
 
-export const failAfter = (error: LLMError, ...events: readonly LLMEvent[]) =>
+export const failAfter = (error: AIError, ...events: readonly LLMEvent[]) =>
   Stream.fromIterable(events).pipe(Stream.concat(Stream.fail(error)))
 
 export const hangAfter = (...events: readonly LLMEvent[]) => Stream.concat(Stream.fromIterable(events), Stream.never)

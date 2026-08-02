@@ -2,7 +2,7 @@ import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provide
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { LLM, LLMError, LLMEvent, Message } from "@opencode-ai/ai"
+import { LLM, AIError, LLMEvent, Message } from "@opencode-ai/ai"
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { expect } from "bun:test"
@@ -316,7 +316,7 @@ it.effect("keeps malformed provider-executed AI SDK input terminal", () =>
       Effect.flip,
     )
 
-    expect(error).toBeInstanceOf(LLMError)
+    expect(error).toBeInstanceOf(AIError)
     expect(error.message).toContain("Invalid JSON input for aisdk tool call web_search")
   }),
 )

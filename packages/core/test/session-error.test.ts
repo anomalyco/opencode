@@ -4,7 +4,7 @@ import {
   ContentPolicyReason,
   InvalidProviderOutputReason,
   InvalidRequestReason,
-  LLMError,
+  AIError,
   NoRouteReason,
   ModelID,
   ProviderID,
@@ -23,10 +23,10 @@ import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 
-const llm = (reason: LLMError["reason"]) => new LLMError({ module: "test", method: "stream", reason })
+const llm = (reason: AIError["reason"]) => new AIError({ module: "test", method: "stream", reason })
 
 describe("toSessionError", () => {
-  test("maps every LLM reason to the open wire type", () => {
+  test("maps every AI error reason to the open wire type", () => {
     expect(toSessionError(llm(new RateLimitReason({ message: "rate", retryAfterMs: 123 })))).toEqual({
       type: "provider.rate-limit",
       message: "rate",

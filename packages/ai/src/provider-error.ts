@@ -3,7 +3,7 @@ import {
   AuthenticationReason,
   ContentPolicyReason,
   InvalidRequestReason,
-  LLMError,
+  AIError,
   ProviderErrorEvent,
   ProviderInternalReason,
   QuotaExceededReason,
@@ -53,7 +53,7 @@ export const isContextOverflow = (message: string) =>
 export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
-  failure instanceof LLMError
+  failure instanceof AIError
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
@@ -86,7 +86,7 @@ export interface ProviderFailure {
 
 // Keep HTTP failures and provider-reported stream failures on one typed path so
 // session retry policy never needs provider-specific string matching.
-export function classifyProviderFailure(input: ProviderFailure): LLMError["reason"] {
+export function classifyProviderFailure(input: ProviderFailure): AIError["reason"] {
   const body = input.http?.body ?? ""
   const codes = [input.code, ...providerCodes(body), ...providerCodes(input.message)]
     .filter((code): code is string => code !== undefined)

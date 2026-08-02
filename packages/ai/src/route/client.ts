@@ -10,15 +10,15 @@ import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
-import type { LLMError, ProtocolID, ProviderOptions } from "../schema"
+import type { ProtocolID, ProviderOptions } from "../schema"
 import {
+  AIError,
   GenerationOptions,
   HttpOptions,
   LLMRequest,
   LLMResponse,
-  Model,
-  ModelLimits,
-  LLMError as LLMErrorClass,
+  LanguageModel,
+  LanguageModelLimits,
   LLMEvent,
   ProviderID,
   mergeGenerationOptions,
@@ -30,7 +30,7 @@ export interface RouteBody<Body> {
   /** Schema for the validated provider-native body sent as the JSON request. */
   readonly schema: Schema.Codec<Body, unknown>
   /** Build the provider-native body from a common `LLMRequest`. */
-  readonly from: (request: LLMRequest) => Effect.Effect<Body, LLMError>
+  readonly from: (request: LLMRequest) => Effect.Effect<Body, AIError>
 }
 
 export interface Route<Body, Prepared = unknown> {
@@ -45,17 +45,19 @@ export interface Route<Body, Prepared = unknown> {
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
-  readonly model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedModelInput) => Model<Options>
+  readonly model: <Options extends ProviderOptions = ProviderOptions>(
+    input: RouteMappedLanguageModelInput,
+  ) => LanguageModel<Options>
   readonly prepareTransport: (
     body: Body,
     request: LLMRequest,
     options?: StreamOptions,
-  ) => Effect.Effect<Prepared, LLMError>
+  ) => Effect.Effect<Prepared, AIError>
   readonly streamPrepared: (
     prepared: Prepared,
     request: LLMRequest,
     runtime: TransportRuntime,
-  ) => Stream.Stream<LLMEvent, LLMError>
+  ) => Stream.Stream<LLMEvent, AIError>
 }
 
 // Route registries intentionally erase body generics after construction.
@@ -66,13 +68,13 @@ export type AnyRoute = Route<any, any>
 
 export type HttpOptionsInput = HttpOptions.Input
 
-export type RouteModelInput = Omit<Model.Input, "provider" | "route">
+export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "route">
 
-export type RouteRoutedModelInput = Omit<Model.Input, "route">
+export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
 
 export interface RouteDefaults {
   readonly headers?: Record<string, string>
-  readonly limits?: ModelLimits
+  readonly limits?: LanguageModelLimits
   readonly generation?: GenerationOptions
   readonly providerOptions?: ProviderOptions
   readonly http?: HttpOptions
@@ -80,7 +82,7 @@ export interface RouteDefaults {
 
 export interface RouteDefaultsInput {
   readonly headers?: Record<string, string>
-  readonly limits?: ModelLimits.Input
+  readonly limits?: LanguageModelLimits.Input
   readonly generation?: GenerationOptions.Input
   readonly providerOptions?: ProviderOptions
   readonly http?: HttpOptions.Input
@@ -94,14 +96,17 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly endpoint?: EndpointPatch<Body>
 }
 
-type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
+type RouteMappedLanguageModelInput = RouteLanguageModelInput | RouteRoutedLanguageModelInput
 
-const makeRouteModel = <Options extends ProviderOptions = ProviderOptions>(route: AnyRoute, mapped: RouteMappedModelInput) => {
+const makeRouteLanguageModel = <Options extends ProviderOptions = ProviderOptions>(
+  route: AnyRoute,
+  mapped: RouteMappedLanguageModelInput,
+) => {
   const provider = route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
   if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
   if (!endpointBaseURL(route.endpoint))
     throw new Error(`Route.model(${route.id}) requires an endpoint baseURL — configure it on the route first`)
-  return Model.make<Options>({
+  return LanguageModel.make<Options>({
     ...mapped,
     provider,
     route,
@@ -114,7 +119,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
     ...base,
     ...patch,
     headers,
-    limits: patch.limits === undefined ? base?.limits : ModelLimits.make(patch.limits),
+    limits: patch.limits === undefined ? base?.limits : LanguageModelLimits.make(patch.limits),
     generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
     providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
     http: mergeHttpOptions(
@@ -154,11 +159,11 @@ export interface StreamOptions {
 }
 
 export interface StreamMethod {
-  (request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, LLMError>
+  (request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError>
 }
 
 export interface GenerateMethod {
-  (request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, LLMError>
+  (request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, AIError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
@@ -222,11 +227,11 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
 
 const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
-  if (failed instanceof LLMErrorClass) return failed
+  if (failed instanceof AIError) return failed
   return ProviderShared.eventError(route, message, Cause.pretty(cause))
 }
 
-const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent, LLMError>) =>
+const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent, AIError>) =>
   Stream.suspend(() => {
     let terminal = false
     return events.pipe(
@@ -292,8 +297,8 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           defaults: mergeRouteDefaults(route.defaults, defaults),
         })
       },
-      model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedModelInput) =>
-        makeRouteModel<Options>(route, input),
+      model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedLanguageModelInput) =>
+        makeRouteLanguageModel<Options>(route, input),
       prepareTransport: (body, request, options) =>
         routeInput.transport.prepare({
           body,
@@ -417,18 +422,18 @@ const generateWith = (stream: Interface["stream"]) =>
     )
   })
 
-export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, LLMError> {
+export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError> {
   return Stream.unwrap(
     Effect.gen(function* () {
       return (yield* Service).stream(request, options)
     }),
-  ) as Stream.Stream<LLMEvent, LLMError>
+  ) as Stream.Stream<LLMEvent, AIError>
 }
 
-export function generate(request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, LLMError> {
+export function generate(request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, AIError> {
   return Effect.gen(function* () {
     return yield* (yield* Service).generate(request, options)
-  }) as Effect.Effect<LLMResponse, LLMError>
+  }) as Effect.Effect<LLMResponse, AIError>
 }
 
 export const streamRequest = (request: LLMRequest, options?: StreamOptions) =>

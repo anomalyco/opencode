@@ -6,7 +6,7 @@ import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   InvalidProviderOutputReason,
   InvalidRequestReason,
-  LLMError,
+  AIError,
   type ContentPart,
   type LLMRequest,
   type MediaPart,
@@ -41,7 +41,7 @@ export interface ToolAccumulator {
  * when at least one is defined. Returns `undefined` when neither input nor
  * output is known so routes don't publish a misleading `0`.
  *
- * Under the additive `LLM.Usage` contract, `inputTokens` and `outputTokens`
+ * Under the additive `AI.Usage` contract, `inputTokens` and `outputTokens`
  * are the non-cached input and visible output only. The provider-supplied
  * `total` is the source of truth when present; the computed fallback
  * under-counts cache and reasoning by design and exists mainly so
@@ -88,7 +88,7 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
-  new LLMError({
+  new AIError({
     module: "ProviderShared",
     method: "stream",
     reason: new InvalidProviderOutputReason({ route, message, raw }),
@@ -238,9 +238,9 @@ export const errorText = (error: unknown) => {
  * `decodeChunk` sees one JSON string per element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
  * implement client-driven retries) so the public error channel stays
- * `LLMError`.
+ * `AIError`.
  */
-export const sseFraming = (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.Stream<string, LLMError> =>
+export const sseFraming = (bytes: Stream.Stream<Uint8Array, AIError>): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
@@ -257,7 +257,7 @@ export const sseFraming = (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.S
  * lands here.
  */
 export const invalidRequest = (message: string) =>
-  new LLMError({
+  new AIError({
     module: "ProviderShared",
     method: "request",
     reason: new InvalidRequestReason({ message }),
@@ -304,7 +304,7 @@ export const unsupportedContent = (
  * Build a `validate` step from a Schema decoder. Replaces the per-route
  * lambda body `(payload) => decode(payload).pipe(Effect.mapError((e) =>
  * invalid(e.message)))`. Any decode error is translated into
- * `LLMError` carrying the original parse-error message.
+ * `AIError` carrying the original parse-error message.
  */
 export const validateWith =
   <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>

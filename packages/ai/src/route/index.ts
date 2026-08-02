@@ -1,8 +1,8 @@
 export { Route, LLMClient } from "./client"
 export type {
   Route as RouteShape,
-  RouteModelInput,
-  RouteRoutedModelInput,
+  RouteLanguageModelInput,
+  RouteRoutedLanguageModelInput,
   RouteDefaults,
   RouteDefaultsInput,
   AnyRoute,

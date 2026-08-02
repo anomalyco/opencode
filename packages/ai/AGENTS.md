@@ -10,7 +10,7 @@
 
 ## Conventions
 
-Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `Model.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.updateRequest`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
+Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `LanguageModel.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.updateRequest`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
 
 - Keep provider-defined string enums forward-compatible. Expose known values for autocomplete while accepting future values with `Known | (string & {})`; use `Schema.String` at runtime unless rejecting unknown values is required for correctness.
 
@@ -76,7 +76,7 @@ export const route = Route.make({
 })
 ```
 
-Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `Model` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `LLMError`s.
+Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `LanguageModel` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `AIError`s.
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
@@ -128,7 +128,7 @@ const selected = model("gpt-5", {
 })
 ```
 
-Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses`. Keep transport choices inside the semantic entrypoint settings, so OpenAI Responses HTTP and WebSocket share one entrypoint. Provider facades may still expose named selectors such as `responsesWebSocket` for direct typed call sites; the package-like contract maps its settings to those selectors before returning an executable `Model`.
+Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses`. Keep transport choices inside the semantic entrypoint settings, so OpenAI Responses HTTP and WebSocket share one entrypoint. Provider facades may still expose named selectors such as `responsesWebSocket` for direct typed call sites; the package-like contract maps its settings to those selectors before returning an executable `LanguageModel`.
 
 Do not expose `Route` in provider package settings. Route composition stays an implementation detail behind `model(...)`.
 
@@ -138,10 +138,10 @@ Do not expose `Route` in provider package settings. Route composition stays an i
 packages/ai/src/
   schema/                   canonical Schema model, split by concern
     ids.ts                  branded IDs, literal types, ProviderMetadata
-    options.ts              Generation/Provider/Http options, Limits, Model, cache policy
+    options.ts              Generation/Provider/Http options, Limits, LanguageModel, cache policy
     messages.ts             content parts, Message, ToolDefinition, LLMRequest
     events.ts               Usage, individual events, LLMEvent, LLMResponse
-    errors.ts               error reasons, LLMError, ToolFailure
+    errors.ts               error reasons, AIError, ToolFailure
     index.ts                barrel
   llm.ts                    request constructors and convenience helpers
   route/

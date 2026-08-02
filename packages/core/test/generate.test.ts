@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Model } from "@opencode-ai/ai"
+import { LanguageModel } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { AISDK } from "@opencode-ai/core/aisdk"
@@ -17,7 +17,7 @@ const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
   package: Provider.aisdk("@ai-sdk/mistral"),
 })
-const runtime = Model.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
+const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
 const catalog = Layer.mock(Catalog.Service, {
   provider: {

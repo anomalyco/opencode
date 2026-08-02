@@ -3,11 +3,11 @@ import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMRequest, LLMResponse } from "../src"
 import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
 import { compileRequest } from "../src/route/client"
-import { Model } from "../src/schema"
+import { LanguageModel } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 
-const updateModel = (model: Model, patch: Partial<Model.Input>) => Model.update(model, patch)
+const updateModel = (model: LanguageModel, patch: Partial<LanguageModel.Input>) => LanguageModel.update(model, patch)
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -86,7 +86,7 @@ const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local"
 
 const request = LLM.request({
   id: "req_1",
-  model: Model.make({
+  model: LanguageModel.make({
     id: "fake-model",
     provider: "fake-provider",
     route: configuredFake,

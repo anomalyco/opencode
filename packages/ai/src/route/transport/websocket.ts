@@ -1,6 +1,6 @@
 import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
-import { LLMError, TransportReason } from "../../schema"
+import { AIError, TransportReason } from "../../schema"
 import * as HttpTransport from "./http"
 import type { Transport } from "./index"
 
@@ -10,13 +10,13 @@ export interface WebSocketRequest {
 }
 
 export interface WebSocketConnection {
-  readonly sendText: (message: string) => Effect.Effect<void, LLMError>
-  readonly messages: Stream.Stream<string | Uint8Array, LLMError>
+  readonly sendText: (message: string) => Effect.Effect<void, AIError>
+  readonly messages: Stream.Stream<string | Uint8Array, AIError>
   readonly close: Effect.Effect<void, never>
 }
 
 export interface Interface {
-  readonly open: (input: WebSocketRequest) => Effect.Effect<WebSocketConnection, LLMError>
+  readonly open: (input: WebSocketRequest) => Effect.Effect<WebSocketConnection, AIError>
 }
 
 type WebSocketConstructorWithHeaders = new (
@@ -24,14 +24,14 @@ type WebSocketConstructorWithHeaders = new (
   options?: { readonly headers?: Headers.Headers },
 ) => globalThis.WebSocket
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/WebSocketExecutor") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/AI/WebSocketExecutor") {}
 
 const transportError = (
   method: string,
   message: string,
   input: { readonly url?: string; readonly kind?: string } = {},
 ) =>
-  new LLMError({
+  new AIError({
     module: "WebSocketExecutor",
     method,
     reason: new TransportReason({ message, url: input.url, kind: input.kind }),
@@ -59,7 +59,7 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
       }),
     )
   }
-  return Effect.callback<void, LLMError>((resume, signal) => {
+  return Effect.callback<void, AIError>((resume, signal) => {
     const cleanup = () => {
       ws.removeEventListener("open", onOpen)
       ws.removeEventListener("error", onError)
@@ -138,10 +138,10 @@ export const layer: Layer.Layer<Service> = Layer.succeed(Service, Service.of({ o
 export const fromWebSocket = (
   ws: globalThis.WebSocket,
   input: WebSocketRequest,
-): Effect.Effect<WebSocketConnection, LLMError> =>
+): Effect.Effect<WebSocketConnection, AIError> =>
   Effect.gen(function* () {
     yield* waitOpen(ws, input)
-    const messages = yield* Queue.bounded<string | Uint8Array, LLMError | Cause.Done<void>>(128)
+    const messages = yield* Queue.bounded<string | Uint8Array, AIError | Cause.Done<void>>(128)
 
     const onMessage = (event: MessageEvent) => {
       if (typeof event.data === "string") return Queue.offerUnsafe(messages, event.data)
@@ -213,7 +213,7 @@ export interface JsonPrepared {
 }
 
 export interface JsonInput<Body, Message> {
-  readonly toMessage: (body: Body | Record<string, unknown>) => Effect.Effect<Message, LLMError>
+  readonly toMessage: (body: Body | Record<string, unknown>) => Effect.Effect<Message, AIError>
   readonly encodeMessage: (message: Message) => string
 }
 

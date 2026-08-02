@@ -97,6 +97,19 @@ test("resolves message navigation defaults", () => {
   expect(config.keybinds.get("session.messages_last_user")).toMatchObject([{ key: "alt+end" }])
 })
 
+test("reserves home and end for navigation", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("input.buffer.home")).toEqual([])
+  expect(config.keybinds.get("input.buffer.end")).toEqual([])
+  expect(config.keybinds.get("input.select.buffer.home")).toMatchObject([{ key: "shift+home" }])
+  expect(config.keybinds.get("input.select.buffer.end")).toMatchObject([{ key: "shift+end" }])
+  expect(config.keybinds.get("input.line.home")).toMatchObject([{ key: "ctrl+a" }])
+  expect(config.keybinds.get("input.line.end")).toMatchObject([{ key: "ctrl+e" }])
+  expect(config.keybinds.get("input.visual.line.home")).toMatchObject([{ key: "alt+a" }])
+  expect(config.keybinds.get("input.visual.line.end")).toMatchObject([{ key: "alt+e" }])
+})
+
 test("opens the subagent picker with down", () => {
   const config = resolve({}, { terminalSuspend: true })
 

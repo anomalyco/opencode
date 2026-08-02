@@ -6,7 +6,7 @@ import { Endpoint } from "../route/endpoint"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
-  LLMError,
+  AIError,
   LLMEvent,
   Usage,
   type FinishReason,
@@ -555,7 +555,7 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // OpenAI Chat reports `prompt_tokens` (inclusive total) with a
 // cached-read and cache-write subsets, and `completion_tokens` (inclusive
 // total) with a `reasoning_tokens` subset. We pass the inclusive totals
-// through and derive the non-cached breakdown so the `LLM.Usage` contract is
+// through and derive the non-cached breakdown so the `AI.Usage` contract is
 // satisfied on both sides.
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
@@ -645,7 +645,7 @@ const reasoningMetadata = (field: ParserState["reasoningField"], details?: Reado
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
     if (event.error)
-      return yield* new LLMError({
+      return yield* new AIError({
         module: ADAPTER,
         method: "stream",
         reason: classifyProviderFailure({

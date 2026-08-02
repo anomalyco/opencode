@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, LLMError } from "../src"
+import { LLM, AIError } from "../src"
 import { LLMClient, RequestExecutor } from "../src/route"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { dynamicResponse } from "./lib/http"
@@ -58,13 +58,13 @@ const countedResponsesLayer = (attempts: Ref.Ref<number>, responses: ReadonlyArr
     ),
   )
 
-const expectLLMError = (error: unknown) => {
-  expect(error).toBeInstanceOf(LLMError)
-  if (!(error instanceof LLMError)) throw new Error("expected LLMError")
+const expectAIError = (error: unknown) => {
+  expect(error).toBeInstanceOf(AIError)
+  if (!(error instanceof AIError)) throw new Error("expected AIError")
   return error
 }
 
-const errorHttp = (error: LLMError) => ("http" in error.reason ? error.reason.http : undefined)
+const errorHttp = (error: AIError) => ("http" in error.reason ? error.reason.http : undefined)
 
 describe("RequestExecutor", () => {
   it.effect("classifies context overflow responses", () =>
@@ -72,7 +72,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
     }).pipe(
       Effect.provide(
@@ -90,7 +90,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({
         _tag: "InvalidRequest",
         classification: "payload-too-large",
@@ -104,7 +104,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
     }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
@@ -117,7 +117,7 @@ describe("RequestExecutor", () => {
           const executor = yield* RequestExecutor.Service
           const error = yield* executor.execute(request).pipe(Effect.flip)
 
-          expectLLMError(error)
+          expectAIError(error)
           expect(error.reason).toMatchObject({ _tag: "RateLimit" })
         }).pipe(Effect.provide(responsesLayer([new Response(body, { status: 400 })])))
 
@@ -134,7 +134,7 @@ describe("RequestExecutor", () => {
           const executor = yield* RequestExecutor.Service
           const error = yield* executor.execute(request).pipe(Effect.flip)
 
-          expectLLMError(error)
+          expectAIError(error)
           expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
         }).pipe(Effect.provide(responsesLayer([new Response(body, { status: 400 })])))
 
@@ -148,7 +148,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error).toMatchObject({
         reason: {
           _tag: "RateLimit",
@@ -190,7 +190,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(errorHttp(error)?.request.headers["x-safe"]).toBe("<redacted>")
       expect(errorHttp(error)?.response?.headers["x-safe"]).toBe("<redacted>")
     }).pipe(
@@ -204,7 +204,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "RateLimit" })
       expect(error.reason._tag === "RateLimit" ? error.reason.rateLimit : undefined).toEqual({
         retryAfterMs: 0,
@@ -237,7 +237,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
       expect(errorHttp(error)?.rateLimit).toEqual({
         retryAfterMs: 0,
@@ -280,7 +280,7 @@ describe("RequestExecutor", () => {
         ),
       )
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 503 })
       expect(yield* Ref.get(attempts)).toBe(1)
     }),
@@ -293,7 +293,7 @@ describe("RequestExecutor", () => {
           const executor = yield* RequestExecutor.Service
           const error = yield* executor.execute(request).pipe(Effect.flip)
 
-          expectLLMError(error)
+          expectAIError(error)
           expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status })
         }).pipe(
           Effect.provide(
@@ -316,7 +316,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "Authentication" })
       expect(errorHttp(error)?.bodyTruncated).toBe(true)
       expect(errorHttp(error)?.body).toHaveLength(16_384)
@@ -335,7 +335,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(errorHttp(error)?.body).toContain('"key":"<redacted>"')
       expect(errorHttp(error)?.body).toContain("api_key=<redacted>")
       expect(errorHttp(error)?.body).not.toContain("body-secret")
@@ -356,7 +356,7 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(secretRequest).pipe(Effect.flip)
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(errorHttp(error)?.body).toContain("provider echoed <redacted>")
       expect(errorHttp(error)?.body).toContain("authorization <redacted>")
       expect(errorHttp(error)?.body).not.toContain("query-secret-123")
@@ -395,7 +395,7 @@ describe("RequestExecutor", () => {
         Effect.flip,
       )
 
-      expectLLMError(error)
+      expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
       expect(yield* Ref.get(attempts)).toBe(1)
     }),

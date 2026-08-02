@@ -1,13 +1,10 @@
 import { Effect, Schema } from "effect"
-import { HttpOptions, InvalidRequestReason, LLMError, ModelID, ProviderID, ProviderMetadata, Usage } from "./schema"
+import { HttpOptions, InvalidRequestReason, AIError, ModelID, ProviderID, ProviderMetadata, Usage } from "./schema"
 import { ImageClient, Service, type Execute as ImageExecute } from "./image-client"
 
 export interface ImageRoute<Options extends ImageOptions = ImageOptions> {
   readonly id: string
-  readonly generate: (
-    request: ImageRequestFor<Options>,
-    execute: ImageExecute,
-  ) => Effect.Effect<ImageResponse, LLMError>
+  readonly generate: (request: ImageRequestFor<Options>, execute: ImageExecute) => Effect.Effect<ImageResponse, AIError>
 }
 
 export type ImageOptions = Record<string, unknown>
@@ -146,13 +143,13 @@ export function request(input: ImageRequest | ImageRequestInput) {
 
 export function generate<const Model extends object>(
   input: ImageRequestInput<Model>,
-): Effect.Effect<ImageResponse, LLMError, Service>
-export function generate(input: ImageRequest): Effect.Effect<ImageResponse, LLMError, Service>
+): Effect.Effect<ImageResponse, AIError, Service>
+export function generate(input: ImageRequest): Effect.Effect<ImageResponse, AIError, Service>
 export function generate(input: ImageRequest | ImageRequestInput) {
   return Effect.try({
     try: () => (input instanceof ImageRequest ? input : request(input)),
     catch: (error) =>
-      new LLMError({
+      new AIError({
         module: "Image",
         method: "generate",
         reason: new InvalidRequestReason({ message: error instanceof Error ? error.message : String(error) }),

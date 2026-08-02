@@ -1,9 +1,9 @@
 import { Effect, Encoding } from "effect"
 import type { ImageInput } from "../../image"
-import { InvalidRequestReason, LLMError } from "../../schema"
+import { InvalidRequestReason, AIError } from "../../schema"
 
 const invalid = (module: string, message: string) =>
-  new LLMError({
+  new AIError({
     module,
     method: "generate",
     reason: new InvalidRequestReason({ message }),
@@ -15,7 +15,7 @@ export const dataUrl = (input: Extract<ImageInput, { readonly type: "bytes" }>) 
 export const decodeDataUrl = (
   url: string,
   module: string,
-): Effect.Effect<{ readonly mediaType: string; readonly data: Uint8Array } | undefined, LLMError> => {
+): Effect.Effect<{ readonly mediaType: string; readonly data: Uint8Array } | undefined, AIError> => {
   if (!url.startsWith("data:")) return Effect.succeed(undefined)
   const match = /^data:([^;,]+);base64,(.*)$/s.exec(url)
   if (!match) return Effect.fail(invalid(module, "Image data URLs must contain a MIME type and base64 data"))

@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/ai"
+import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Config } from "../config"
@@ -64,7 +64,7 @@ type Dependencies = {
   readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
-    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
+    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError>
   }
   readonly models: SessionRunnerModel.Interface
   readonly config: Settings
@@ -73,7 +73,7 @@ type Dependencies = {
 export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
-  readonly model: Model
+  readonly model: LanguageModel
   readonly cost: Info["cost"]
 }
 
@@ -85,7 +85,7 @@ export type ManualInput = {
 
 type Plan = {
   readonly session: SessionSchema.Info
-  readonly model: Model
+  readonly model: LanguageModel
   readonly cost: Info["cost"]
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
@@ -282,7 +282,7 @@ const make = (dependencies: Dependencies) => {
           }
           return Effect.void
         }),
-        Effect.catchTag("LLM.Error", (error) =>
+        Effect.catchTag("AI.Error", (error) =>
           Effect.sync(() => {
             failure = toSessionError(error)
           }),

@@ -1,4 +1,4 @@
-import type { JsonSchema, ModelToolSchemaCompatibility } from "../../schema"
+import type { JsonSchema, LanguageModelToolSchemaCompatibility } from "../../schema"
 import { isRecord } from "../../utils/record"
 import { GeminiToolSchema } from "./gemini-tool-schema"
 
@@ -69,7 +69,7 @@ const gemini = (schema: JsonSchema): JsonSchema => GeminiToolSchema.convert(sche
 
 const modelCompatibility = (
   schema: JsonSchema,
-  compatibility: ModelToolSchemaCompatibility | undefined,
+  compatibility: LanguageModelToolSchemaCompatibility | undefined,
 ): JsonSchema => {
   if (compatibility === undefined) return schema
   switch (compatibility) {

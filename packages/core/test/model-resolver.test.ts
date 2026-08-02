@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM, Model } from "@opencode-ai/ai"
+import { LLM, LanguageModel } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { Effect } from "effect"
@@ -42,6 +42,35 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
   })
 
 describe("ModelResolver", () => {
+  it.effect("maps Bedrock Mantle models to native Responses and safeguards to Chat", () =>
+    Effect.gen(function* () {
+      const credential = Credential.Key.make({ type: "key", key: "secret" })
+      const responses = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          modelID: "openai.gpt-oss-120b",
+          settings: { region: "us-east-2" },
+        }),
+        credential,
+      )
+      const chat = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          modelID: "openai.gpt-oss-safeguard-20b",
+          settings: { region: "us-east-2" },
+        }),
+        credential,
+      )
+
+      expect(responses.route).toMatchObject({
+        id: "bedrock-mantle-responses",
+        endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
+      })
+      expect(chat.route).toMatchObject({
+        id: "bedrock-mantle-chat",
+        endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
+      })
+    }),
+  )
+
   it.effect("uses the API modelID instead of the catalog ID for native OpenAI routes", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai"), {
@@ -439,7 +468,7 @@ describe("ModelResolver", () => {
                   body: { custom: true },
                   limits: { context: 100, output: 20 },
                 })
-                return Model.make({ id: modelID, provider: "package-provider", route: native.route })
+                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
               },
             })
           },
@@ -481,7 +510,7 @@ describe("ModelResolver", () => {
               model: (modelID, settings) => {
                 expect(settings).toMatchObject({ [key]: "oauth-token" })
                 expect(settings).not.toHaveProperty("apiKey")
-                return Model.make({ id: modelID, provider: "package-provider", route: native.route })
+                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
               },
             }),
         }),
@@ -536,7 +565,7 @@ describe("ModelResolver", () => {
                     limits: { context: 100, output: 20 },
                     providerOptions,
                   })
-                  return Model.make({ id: modelID, provider: "native-provider", route: native.route })
+                  return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
                 },
               })
             },
@@ -571,7 +600,7 @@ describe("ModelResolver", () => {
                 transforms: ["middle-out"],
                 provider: { sort: "price", only: ["anthropic"] },
               })
-              return Model.make({ id: modelID, provider: "openrouter", route: OpenAIChat.route })
+              return LanguageModel.make({ id: modelID, provider: "openrouter", route: OpenAIChat.route })
             },
           }),
       },
@@ -591,6 +620,18 @@ describe("ModelResolver", () => {
       const xai = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/xai"), { settings: { reasoningEffort: "high" } }),
       )
+      const bedrock = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock"), {
+          settings: { region: "us-east-1", topP: 0.8, serviceTier: "priority" },
+          body: {},
+        }),
+      )
+      const mantle = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          modelID: "openai.gpt-oss-120b",
+          settings: { region: "us-east-1" },
+        }),
+      )
 
       expect(google.route.id).toBe("gemini")
       expect(google.route.defaults.providerOptions).toEqual({
@@ -602,6 +643,10 @@ describe("ModelResolver", () => {
       expect(xai.route.defaults.providerOptions).toEqual({
         xai: { reasoningEffort: "high", store: false },
       })
+      expect(bedrock.route.id).toBe("bedrock-converse")
+      expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
+      expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
+      expect(mantle.route.id).toBe("bedrock-mantle-responses")
     }),
   )
 
@@ -632,7 +677,7 @@ describe("ModelResolver", () => {
                 headers: { "x-aisdk": "header" },
                 body: { custom: true },
               })
-              return Model.make({
+              return LanguageModel.make({
                 id: runtime.modelID ?? runtime.id,
                 provider: runtime.providerID,
                 route: native.route,

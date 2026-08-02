@@ -48,7 +48,7 @@ import { ProviderFailureClassification } from "./errors"
  * — for fields we don't normalize and for billing-level audit trails.
  * Matches the same escape-hatch field on `LLMEvent`.
  */
-export class Usage extends Schema.Class<Usage>("LLM.Usage")({
+export class Usage extends Schema.Class<Usage>("AI.Usage")({
   inputTokens: Schema.optional(Schema.Number),
   outputTokens: Schema.optional(Schema.Number),
   nonCachedInputTokens: Schema.optional(Schema.Number),

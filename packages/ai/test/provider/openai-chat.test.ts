@@ -4,11 +4,11 @@ import { HttpClientRequest } from "effect/unstable/http"
 import {
   HttpOptions,
   LLM,
-  LLMError,
+  AIError,
   LLMEvent,
   LLMRequest,
   Message,
-  Model,
+  LanguageModel,
   ToolCallPart,
   ToolDefinition,
   Usage,
@@ -104,7 +104,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
-          model: Model.update(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
           messages: [
             Message.assistant([
               {
@@ -130,7 +130,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLM.request({
-          model: Model.update(model, { compatibility: { reasoningField: "content" } }),
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "content" } }),
           messages: [Message.assistant([{ type: "reasoning", text: "thinking" }])],
         }),
       ).pipe(Effect.flip)
@@ -171,7 +171,9 @@ describe("OpenAI Chat route", () => {
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate(
       LLMRequest.update(request, {
-        model: Model.update(model, { route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }) }),
+        model: LanguageModel.update(model, {
+          route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
+        }),
       }),
     ).pipe(
       Effect.provide(
@@ -624,7 +626,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("parses and replays a configured custom reasoning field", () =>
     Effect.gen(function* () {
-      const custom = Model.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })
+      const custom = LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })
       const response = yield* LLMClient.generate(LLMRequest.update(request, { model: custom })).pipe(
         Effect.provide(
           fixedResponse(
@@ -1172,7 +1174,7 @@ describe("OpenAI Chat route", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import {
-  LLMError,
+  AIError,
   LLMEvent,
   LLMRequest,
   Message,
-  Model,
+  LanguageModel,
   SystemPart,
   ToolFailure,
   TransportReason,
@@ -130,25 +130,25 @@ const testLLM = TestLLM.layer({
     }),
 })
 const client = TestLLM.clientLayer
-const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
+const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const defaultSystem = PROMPT_DEFAULT
-const replacementModel = Model.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
-const compactModel = Model.make({
+const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
+const compactModel = LanguageModel.make({
   id: "compact",
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
 })
-const fullOutputModel = Model.make({
+const fullOutputModel = LanguageModel.make({
   id: "full-output",
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 262_144, output: 262_144 } }),
 })
-const undersizedContextModel = Model.make({
+const undersizedContextModel = LanguageModel.make({
   id: "undersized-context",
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 1, output: 1_000 } }),
 })
-const recoveryModel = Model.make({
+const recoveryModel = LanguageModel.make({
   id: "recovery",
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
@@ -230,9 +230,7 @@ const permission = Layer.succeed(
 )
 const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, Info>>, options?: Tool.Options) =>
   registry.transform((draft) =>
-    Object.entries(tools).forEach(([name, tool]) =>
-      draft.add({ ...tool, name, options: options ?? tool.options }),
-    ),
+    Object.entries(tools).forEach(([name, tool]) => draft.add({ ...tool, name, options: options ?? tool.options })),
   )
 const echo = Layer.effectDiscard(
   Tool.Service.use((registry) =>
@@ -509,21 +507,21 @@ const setup = Effect.gen(function* () {
 })
 
 const providerUnavailable = () =>
-  new LLMError({
+  new AIError({
     module: "test",
     method: "stream",
     reason: new TransportReason({ message: "Provider unavailable" }),
   })
 
 const invalidRequest = () =>
-  new LLMError({
+  new AIError({
     module: "test",
     method: "stream",
     reason: new InvalidRequestReason({ message: "Invalid request" }),
   })
 
 const rateLimited = (retryAfterMs?: number) =>
-  new LLMError({
+  new AIError({
     module: "test",
     method: "stream",
     reason: new RateLimitReason({ message: "Rate limited", retryAfterMs }),
@@ -1307,7 +1305,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("uses the selected model family prompt when the agent does not override it", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      currentModel = Model.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+      currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
       yield* admit(session, "First")
 
       yield* TestLLM.push(TestLLM.text("Done", "text-provider-prompt"))
@@ -1323,7 +1321,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("uses the selected model family prompt when the agent system override is empty", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      currentModel = Model.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+      currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
       const agent = yield* Agent.Service
       yield* agent.transform((editor) =>
         editor.update(Agent.ID.make("build"), (agent) => {
@@ -2149,7 +2147,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* setupOverflowRecovery
       yield* TestLLM.push(
         Stream.fail(
-          new LLMError({
+          new AIError({
             module: "test",
             method: "stream",
             reason: new InvalidRequestReason({
@@ -4076,7 +4074,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("settles malformed streamed tool input before the provider failure", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const failure = new LLMError({
+      const failure = new AIError({
         module: "test",
         method: "stream",
         reason: new InvalidProviderOutputReason({ message: "Invalid JSON input for tool call echo" }),
@@ -4290,7 +4288,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("records malformed provider-executed input as executed", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const failure = new LLMError({
+      const failure = new AIError({
         module: "test",
         method: "stream",
         reason: new InvalidProviderOutputReason({ message: "Invalid hosted tool input" }),
@@ -4322,7 +4320,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("records a provider failure after malformed input", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const failure = new LLMError({
+      const failure = new AIError({
         module: "test",
         method: "stream",
         reason: new InvalidProviderOutputReason({ message: "Provider failed after malformed input" }),

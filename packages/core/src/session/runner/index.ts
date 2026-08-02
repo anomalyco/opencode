@@ -1,6 +1,6 @@
 export * as SessionRunner from "./index"
 
-import type { LLMError } from "@opencode-ai/ai"
+import type { AIError } from "@opencode-ai/ai"
 import { Context, Effect } from "effect"
 import { SessionSchema } from "../schema"
 import type { AgentNotFoundError, MessageDecodeError, StepFailedError, UserInterruptedError } from "../error"
@@ -8,7 +8,7 @@ import { SessionRunnerModel } from "./model"
 import type { Instructions } from "../../instructions/index"
 
 export type RunError =
-  | LLMError
+  | AIError
   | SessionRunnerModel.Error
   | MessageDecodeError
   | AgentNotFoundError

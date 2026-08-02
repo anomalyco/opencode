@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
 import { JsonSchema, MessageRole, ProviderMetadata } from "./ids"
-import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, ModelSchema, ProviderOptions } from "./options"
+import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, LanguageModelSchema, ProviderOptions } from "./options"
 import { isRecord } from "../utils/record"
 
 const systemPartSchema = Schema.Struct({
@@ -263,7 +263,7 @@ export namespace ToolChoice {
 
 export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   id: Schema.optional(Schema.String),
-  model: ModelSchema,
+  model: LanguageModelSchema,
   system: Schema.Array(SystemPart),
   messages: Schema.Array(Message),
   tools: Schema.Array(ToolDefinition),

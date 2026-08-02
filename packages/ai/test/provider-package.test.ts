@@ -23,12 +23,16 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/google-vertex/messages"),
       import("@opencode-ai/ai/providers/openrouter"),
       import("@opencode-ai/ai/providers/xai"),
+      import("@opencode-ai/ai/providers/amazon-bedrock/mantle"),
+      import("@opencode-ai/ai/providers/amazon-bedrock/mantle/chat"),
+      import("@opencode-ai/ai/providers/amazon-bedrock/mantle/responses"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
     expect(modules[0].model).toBe(modules[1].model)
     expect(modules[8].model).toBe(modules[9].model)
     expect(modules[12].model).toBe(modules[13].model)
+    expect(modules[19].model).toBe(modules[20].model)
   })
 
   test("maps OpenRouter and xAI package settings onto executable models", async () => {

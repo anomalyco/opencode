@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { CacheHint, LLM, LLMError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
+import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
 import { compileRequest } from "../../src/route/client"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
@@ -684,9 +684,7 @@ describe("Anthropic Messages route", () => {
         ),
       )
 
-      expect(response.toolCalls).toMatchObject([
-        { id: "call_1", name: "lookup", input: { query: "weather" } },
-      ])
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
     }),
   )
 
@@ -935,7 +933,7 @@ describe("Anthropic Messages route", () => {
 
       const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.message).toContain("Invalid JSON input for anthropic-messages tool call web_search")
     }),
   )
@@ -1009,7 +1007,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),
