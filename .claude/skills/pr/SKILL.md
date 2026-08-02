@@ -1,7 +1,7 @@
 ---
 name: pr
-description: Open (or update) the pull request for the ticket branch after running format/lint/typecheck/test. PR body cites FRs, success criteria, and story changes. Use after /implement.
-allowed-tools: Read, Bash, Grep, Glob, AskUserQuestion, mcp__linear-axiomic__*
+description: Open (or update) the pull request for the ticket branch after running format/lint/typecheck/test. The body carries the proof's red-then-green output as its evidence. Run as the last step of /implement.
+allowed-tools: Read, Bash, Grep, Glob, mcp__linear-axiomic__*
 ---
 
 # pr
@@ -40,30 +40,40 @@ Pull the ticket title/body from `mcp__linear-axiomic__get_issue`. Build the body
 ```markdown
 Linear: <ticket URL>
 
-## Overview
-<1–2 sentences>
+## Outcome
+<the ticket's one sentence of world-state change>
 
-## Success Criteria
-- [x] <criterion> (covered by `tests/...`)
+## Proof
+| # | Run | Red before | Green after |
+|---|---|---|---|
+| 1 | `<the command>` | <what it printed before> | <what it prints now> |
+
+<The actual output, quoted. This is the evidence the work is done — not the
+description below it. A PR whose proof was never run says so here, plainly.>
 
 ## Story changes
 - Functional: <added/changed stories — or none>
 - Security:  <added/changed negative stories — or none>
 
-## Tests
-<summary: tests added, coverage>
+## Regression tests
+<what now pins this so it cannot come back>
 
 ## Review notes
-<concerns, trade-offs, areas needing attention — or none>
+<first-principles decisions worth checking · anything you could NOT verify, and why>
 ```
+
+**The proof section is the point.** A description of what changed is not evidence;
+red-then-green is. If any part of the proof could not be run, say which and why —
+never imply a command passed that you did not watch pass.
 
 If the diff touches `*.tf`, append a collapsed `<details>` with a `terraform plan`
 summary for the changed stack (warn but continue if it can't run).
 
-**Approval gate — before creating.** Show the diffstat
-(`git diff --stat origin/<default_base>...<TICKET>`), the proposed PR title + body, and
-any review concerns from the pre-flight pass. `AskUserQuestion`: **Open PR / Revise /
-Abort**. Only create or update on explicit approval.
+**No approval gate here.** `/implement` runs this as its last step and ends at the
+PR — that *is* the handoff. Opening a PR is reversible and gates nothing; the two
+gates that matter are the owner approving the proof at `/write-ticket`, and the owner
+invoking `/review` afterwards. A gate here would only stop an autonomous run from
+finishing the one thing it is supposed to finish.
 
 ```
 gh pr view <TICKET> --repo <github_repo> --json number >/dev/null 2>&1 \
@@ -77,7 +87,8 @@ Comment the PR URL on the ticket (`mcp__linear-axiomic__save_comment`) and move 
 "PR Open".
 
 ## 6. Output
-Report the PR URL. Next step: `/adversarial-review <PR#>`. Do not merge here.
+Report the PR URL and what went red -> green. Next step is the owner's:
+`/adversarial-review <PR#>` when they choose to run it. Do not merge here.
 
 ---
 

@@ -42,12 +42,22 @@ gh pr merge <TICKET> --repo <github_repo> --squash --delete-branch
 (Squash keeps one tidy commit per ticket on the base. Verify the PR shows MERGED.)
 
 ## 5. Linear status
+
+**Merging never writes Done.** A merged ticket is not done — a *verified deployed* one
+is. `/deploy-staging` writes "Deployed to Staging", runs the ticket's **proof** against
+the deployed build, and writes "Verified on Staging" when it passes. You set Done.
+
 `mcp__linear-axiomic__get_issue` then set state by target:
-- `TARGET` == staging → "Merged to Staging" (the deploy/verify gates take it from here:
-  `/deploy-staging` → "Deployed to Staging", `/e2e-staging` on pass → "Done". A merged
-  ticket is not done until a deployed build is verified against its Success Criteria.)
-- `TARGET` == main/master → "Done"
+- `TARGET` == staging → **"Merged to Staging"**
+- `TARGET` == main/master → **"Merged to Staging"** as well. Forge and spine have
+  `default_base = main`, and this step used to write "Done" for them — so in two of
+  three repos Done meant "merged", and nothing had ever run the proof. The branch name
+  is not what decides whether something works.
 - another feature branch → leave unchanged (tell the user)
+
+There is no `/e2e-staging`. The proof runs against staging using `/impersonate-customer`,
+`/staging-db` and `AWS_PROFILE=axiomic-terraform` (region `us-east-2` — the profile
+carries no default region), driven by `/deploy-staging`.
 ```
 mcp__linear-axiomic__save_issue(id: "<issue id>", state: "<state>")
 ```

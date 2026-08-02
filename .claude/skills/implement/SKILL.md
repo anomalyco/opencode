@@ -1,66 +1,116 @@
 ---
 name: implement
-description: Execute a plan test-first (TDD) — write/extend STORIES.md and failing tests, then code to green, refactor, commit. Use after /plan-review passes (or straight after /plan for trivial changes).
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash, AskUserQuestion, mcp__linear-axiomic__*
+description: Run a ticket from red to a PR — build the proof, watch it fail, make it pass, add the regression tests, run the gates, open the PR. Stops for exactly three reasons. Use after /worktree.
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash, Agent, AskUserQuestion, mcp__linear-axiomic__*
 ---
 
 # implement
 
-Execute `workspace/plans/<TICKET>.md` strictly **test-first**. Red → green → refactor,
-one step at a time. Code documents itself; the only docs you touch are `STORIES.md` and
-(if you punt anything) `DEFERRED.md`.
+Take the ticket from red to an open PR. **Never reviews** — `/review` is invoked by the
+owner, separately, after this finishes.
 
-**Operate from first principles.** The plan set the direction, but real decisions still
-surface mid-implementation. Resolve them by reasoning from first principles — the actual
-constraints and the desired behavior — not by pattern-matching the nearest example. If a
-choice is load-bearing and genuinely underdetermined, prefer the most defensible option
-and record the assumption (in the plan's Risks/decisions), rather than guessing silently.
-(See "Operating mode: first principles" in `CLAUDE.md`.)
+```
+build the proof → RED → make it pass → GREEN → regression tests → suite + gates → PR
+```
 
-## Setup
-Config from `.axiomic.toml` (`commands.test`, `commands.typecheck`, `commands.format`).
-Detect the ticket; read the plan. If there's no plan, run `/plan` first. If the plan
-hasn't been through `/plan-review` (no review comment on the ticket), run that first —
-unless it's a trivial plan, in which case say you're skipping the gate.
+## The three stop reasons
 
-## The TDD loop (per plan step)
-1. **RED.**
-   - Add or update the relevant `STORIES.md` entry — **functional (can-do)** and, where
-     relevant, **security (cannot-do)** — and point it at the test path.
-   - Write the test(s). Security stories get **negative** tests (assert the action is
-     blocked). Run `commands.test` (scoped to the new tests) and **confirm they fail for
-     the right reason**. A test that passes immediately is suspect — fix the test.
-2. **GREEN.** Write the **minimal** code to make them pass. Run the tests → green.
-   Never weaken or delete a test to get green.
-3. **REFACTOR.** Clean up names/structure; keep tests green. Add short usage docstrings
-   to new public surfaces; let type hints carry the types. No code-doc markdown.
-4. **Commit** the step: `git commit -m "<TICKET>: <what this step did>"`.
+Stop, report, and hand back when any of these happens. They are the only exits other
+than a PR.
 
-## Rules
-- **Follow the stack principles.** Obey `.claude/principles.md` (e.g. Python: Pydantic
-  for all data models, never dataclasses or bare dicts at boundaries). Violations fail
-  review.
-- **Self-documenting code only.** Docstrings on public surfaces (usage-focused), clear
-  names, comments explain *why* not *what*. Never create a markdown file to explain code.
-- **Guardrails.** Terraform source (`*.tf`) is fine to read; **variables/credentials are
-  not** — `*.tfvars`, `*.tfstate`, `.env*`, `secrets/`, and keys are blocked by the hook.
-  If you think you need a secret value, stop and ask.
-- **Punt to DEFERRED.md, not to a TODO.** Anything out of scope / known limitation /
-  follow-up gets a dated entry in `DEFERRED.md` (what · why · ticket). No `TODO`/`FIXME`
-  left in code.
-- **No real external calls in tests.** Mock at the boundary; use a test DB.
+1. **Can't get red.** The proof passes on unfixed code. The outcome is already met, or
+   the proof does not discriminate. Cheap failure — say which, and stop.
+2. **Can't get green** after a bounded number of attempts. Report what the proof still
+   shows.
+3. **Needs a human to press something.** Anything irreversible, credential-minting,
+   customer-facing, or costing real money. Do everything up to that point, then hand
+   over the button.
 
-## Done check
-- `commands.test` passes — **full suite, no regressions**; new code is fully covered.
-- `commands.typecheck` and `commands.format` are clean.
-- Every Success Criterion in the ticket is green and every changed story links to a
-  passing test.
+**And one thing that is never your call: filing a ticket.** If you find something
+worth its own ticket — a second bug, an adjacent hazard — **surface it and wait.** Do
+not create a Linear issue, and do not bury it in `DEFERRED.md` to avoid asking;
+`DEFERRED.md` is for *not now*, and a real finding routed there is a finding lost. You
+run unattended, which is exactly why this one is not yours to decide.
 
-## Output
-Summarize: stories added/changed, tests added (red→green), files touched, anything sent
-to `DEFERRED.md`. Then present **2–3 manual verification scenarios** for the human to
-spot-check before handoff (action → expected result) — the things a test can't prove.
-Next step: `/pr`.
+## 1. Load
+`.axiomic.toml` for `commands.{format,lint,typecheck,test}`. Detect the ticket. Read
+its **Outcome** and **Proof**.
+
+The stack the proof names must be up. If the repo has `/stack`, run it — a fresh
+worktree has no `.env`, and in agents-platform every pytest invocation dies at
+collection until `/stack up` writes one.
+
+## 2. RED — build the proof and watch it fail
+
+**Before any implementation.** The ticket fixed *what* to observe; write the script that
+observes it, run it, and confirm it shows the bad state.
+
+This is the most valuable step in the workflow and the one most easily skipped. It buys
+three things at once:
+
+- **The outcome is real.** You have reproduced it, not inferred it.
+- **The proof discriminates.** A proof that never went red proves nothing when it later
+  goes green.
+- **The ticket wasn't stale.** A proof written from ticket text that cites deleted code
+  fails here, for a few minutes, instead of in review round three.
+
+Red also *is* the design gate. There is no separate plan review: a plan is prose about
+code that does not exist, and prose cannot be falsified. A failing observation can.
+
+Commit the proof. It is a first-class artifact — it will run again at green, and a
+third time against staging after deploy. **Never leave it in a scratch directory.**
+AXI-142's soak driver was written last, run never, and ended up in a temp folder; the
+criterion the whole ticket rested on was never demonstrated.
+
+## 3. GREEN — make it pass
+
+Now design the change, constrained by a real signal. Keep it minimal: the smallest
+thing that turns the proof green. TDD inside here freely — that is the technique, not
+the gate.
+
+Resolve decisions from first principles (see `CLAUDE.md`), record the load-bearing ones
+in the PR body. Run the proof. Green is **done**.
+
+## 4. Regression tests
+
+*Now* write the tests that stop this regressing — the proof reduced to something
+repeatable where it can be, plus whatever else pins the behaviour. Update `STORIES.md`;
+security stories get **negative** tests.
+
+Tests are the source of truth for **regression**, not for success. Success was decided
+in §3 by the proof. That ordering is the whole point: a test written by the same agent,
+from the same understanding, at the same time as the code cannot falsify that agent's
+model of the problem — if the model is wrong, the test is wrong in the same direction
+and green proves only self-consistency.
+
+**A test whose stack is missing must fail, never skip.** A suite that silently skips
+lets green mean "ran, or didn't". That is how 5342 passing tests coexisted with an
+unexercised criterion.
+
+## 5. Suite + gates
+
+```
+<commands.format>   <commands.lint>   <commands.typecheck>   <commands.test>
+```
+
+Full suite, no regressions. These gates are where **principles adherence** is decided —
+types, docstrings, coverage, import hygiene, no `TODO` in code (use `DEFERRED.md`), no
+stray markdown, no credentials read or committed. If a gate can decide it, the gate
+decides it, and `/review` never re-litigates it.
+
+## 6. PR
+
+Run `/pr`. The body carries the proof's **red and green output** as its evidence —
+that, not a description, is what says the work is done. Also record the first-principles
+decisions worth checking.
+
+## 7. Output
+
+Report: ticket, PR URL, what went red→green, anything sent to `DEFERRED.md`, and any
+part of the proof you could **not** run and why. Never claim a command passed without
+having watched it pass.
+
+Next step is the owner's: `/review <PR#>`, then `/merge`.
 
 ---
 

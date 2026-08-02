@@ -18,6 +18,15 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-stray-docs.py\""
           }
         ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-unpinned-subagent-model.py\""
+          }
+        ]
       }
     ]
   }
