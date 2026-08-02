@@ -161,6 +161,97 @@ The `url` is the URL of the remote MCP server and with the `headers` option you 
 | `headers` | Object  |          | Headers to send with the request.                                                   |
 | `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
 | `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+| `tls`     | Object  |          | TLS trust configuration for self-signed certs. See [TLS Trust](#tls-trust) below.   |
+
+---
+
+## TLS Trust
+
+Many MCP servers run on private infrastructure — network appliances, homelab devices, enterprise internal services — where certificates are self-signed or issued by a private CA. OpenCode supports per-server TLS trust so you don't need to disable verification globally.
+
+All three options below apply **only to the configured MCP server**. Global TLS is unaffected.
+
+---
+
+### Custom CA file
+
+Point to a PEM-encoded CA certificate file. Relative paths resolve from the workspace, `~/` expands to your home directory.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "opnsense": {
+      "type": "remote",
+      "url": "https://192.168.1.1/mcp",
+      "tls": {
+        "caFile": "~/.config/mcp/opnsense-ca.pem"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Embedded CA certificate
+
+Embed the CA certificate directly in your config. Useful for appliances that generate a self-contained MCP configuration.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "proxmox": {
+      "type": "remote",
+      "url": "https://192.168.1.10/mcp",
+      "tls": {
+        "caPem": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAg...\n-----END CERTIFICATE-----"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Certificate fingerprint pinning
+
+Pin a specific server certificate by its SHA256 fingerprint, similar to SSH host key verification. OpenCode connects to the server once to verify the fingerprint, then trusts that exact certificate.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "truenas": {
+      "type": "remote",
+      "url": "https://192.168.1.20/mcp",
+      "tls": {
+        "fingerprint": "SHA256:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"
+      }
+    }
+  }
+}
+```
+
+You can get the fingerprint from your server with:
+
+```bash
+openssl s_client -connect 192.168.1.20:443 </dev/null 2>/dev/null \
+  | openssl x509 -noout -fingerprint -sha256
+```
+
+The fingerprint accepts formats like `SHA256:AA:BB:CC:...`, `AA:BB:CC:...` (with colons), or `AABBCCDD...` (bare hex).
+
+---
+
+#### TLS Options
+
+| Option        | Type   | Description                                                                                                   |
+| ------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `caFile`      | String | Path to a PEM-encoded CA certificate file. Relative paths resolve from the workspace.                         |
+| `caPem`       | String | Inline PEM-encoded CA certificate content. Useful for self-contained configurations.                          |
+| `fingerprint` | String | SHA256 fingerprint of the server certificate to pin. The client verifies the cert matches before trusting it. |
 
 ---
 
