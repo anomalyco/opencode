@@ -63,7 +63,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 16px 8px 8px;
+  padding: 12px 16px 12px 8px;
   flex-shrink: 0;
 }
 
@@ -91,7 +91,7 @@
 }
 
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-filter"] {
-  padding: 0 8px 8px;
+  padding: 0 8px 4px;
   flex-shrink: 0;
   min-width: 0;
   box-sizing: border-box;
@@ -109,10 +109,71 @@
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"] {
   flex: 1;
   min-height: 0;
+  timeline-scope: --session-review-v2-sidebar-tree-scroll;
+}
+
+@keyframes session-review-v2-sidebar-tree-fade-top {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
+
+@keyframes session-review-v2-sidebar-tree-fade-bottom {
+  from {
+    visibility: visible;
+  }
+  to {
+    visibility: hidden;
+  }
+}
+
+[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"]::before,
+[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  z-index: 10;
+  height: 16px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"]::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
+}
+
+[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"]::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--v2-background-bg-base), transparent);
+}
+
+@supports (animation-timeline: --session-review-v2-sidebar-tree-scroll) and
+  (timeline-scope: --session-review-v2-sidebar-tree-scroll) {
+  [data-component="session-review-v2-sidebar-root"]
+    [data-slot="session-review-v2-sidebar-tree"]
+    .scroll-view__viewport {
+    scroll-timeline: --session-review-v2-sidebar-tree-scroll y;
+  }
+
+  [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"]::before {
+    animation: session-review-v2-sidebar-tree-fade-top linear both;
+    animation-timeline: --session-review-v2-sidebar-tree-scroll;
+    animation-range: 0 0.1px;
+  }
+
+  [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"]::after {
+    animation: session-review-v2-sidebar-tree-fade-bottom linear both;
+    animation-timeline: --session-review-v2-sidebar-tree-scroll;
+    animation-range: calc(100% - 1.1px) calc(100% - 1px);
+  }
 }
 
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport {
-  padding: 0 8px 12px;
+  padding: 4px 8px 12px;
 }
 
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-tree"] .scroll-view__thumb {
@@ -244,7 +305,7 @@
 }
 
 [data-component="icon-button-v2"][data-variant="ghost"].session-review-v2-sidebar-toggle[aria-expanded="true"] {
-  background-color: var(--v2-overlay-simple-overlay-pressed);
+  background-color: var(--v2-background-bg-layer-02);
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-file-header"] {
