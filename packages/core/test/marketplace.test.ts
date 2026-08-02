@@ -386,6 +386,54 @@ describe("marketplace catalogs", () => {
     )
   })
 
+  test("discovers GitHub Copilot and Claude Code catalog locations", async () => {
+    for (const catalogPath of [".github/plugin/marketplace.json", ".claude-plugin/marketplace.json"]) {
+      const requests: string[] = []
+      const source = createMarketplaceSource({ url: "github:example/plugins" })
+      const result = await loadMarketplace({
+        config: upsertMarketplaceSource({}, source),
+        fetch: async (input) => {
+          const url = String(input)
+          requests.push(url)
+          if (url.endsWith(`/${catalogPath}`)) {
+            return Response.json({
+              name: catalogPath.startsWith(".github") ? "copilot" : "claude",
+              plugins: [
+                {
+                  name: "review",
+                  description: "Review changes",
+                  version: "1.0.0",
+                  source: "./plugins/review",
+                  skills: ["./skills/review"],
+                  strict: false,
+                },
+              ],
+            })
+          }
+          return new Response("not found", { status: 404 })
+        },
+      })
+
+      expect(requests).toContain(`https://raw.githubusercontent.com/example/plugins/HEAD/${catalogPath}`)
+      expect(result.errors).toEqual([])
+      expect(result.listings[0]?.item.install.skills?.items?.[0]?.url).toBe(
+        "https://raw.githubusercontent.com/example/plugins/HEAD/plugins/review/skills/review/",
+      )
+    }
+  })
+
+  test("reports useful errors when a GitHub repository has no supported catalog", async () => {
+    const source = createMarketplaceSource({ url: "github:example/empty" })
+    const result = await loadMarketplace({
+      config: upsertMarketplaceSource({}, source),
+      fetch: async (input) => new Response(`missing ${String(input)}`, { status: 404 }),
+    })
+
+    expect(result.listings).toEqual([])
+    expect(result.errors[0]?.message).toContain("HTTP 404")
+    expect(result.errors[0]?.message).not.toBe("")
+  })
+
   test("rejects oversized catalog responses before parsing", async () => {
     const source = createMarketplaceSource({ url: "https://example.test/catalog.json" })
     const result = await loadMarketplace({
@@ -704,7 +752,7 @@ describe("marketplace sources", () => {
     const source = createMarketplaceSource({ url: "github:example/catalog", trust: "community" })
     const added = upsertMarketplaceSource({}, source)
     expect(marketplaceSources(added).map((item) => item.id)).toEqual([source.id])
-    expect(source.url).toBe("https://raw.githubusercontent.com/example/catalog/HEAD/.opencode/marketplace.json")
+    expect(source.url).toBe("https://github.com/example/catalog.git")
 
     const disabled = toggleMarketplaceSource(added, source.id, false)
     expect(marketplaceSources(disabled).find((item) => item.id === source.id)?.enabled).toBe(false)
