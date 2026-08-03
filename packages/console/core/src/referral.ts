@@ -59,30 +59,7 @@ export namespace Referral {
     const accountID = Actor.account()
     const code = await ensureCode(workspaceID)
     const rows = await Database.use(async (tx) => {
-      const [rewards, invites, inviteeReferral, inviteeRewards] = await Promise.all([
-        tx
-          .select({
-            referralID: ReferralRewardTable.referralID,
-            workspaceID: ReferralRewardTable.workspaceID,
-            referralWorkspaceID: ReferralTable.workspaceID,
-            inviteeEmail: AuthTable.subject,
-            amount: ReferralRewardTable.amount,
-            timeCreated: ReferralRewardTable.timeCreated,
-            timeApplied: ReferralRewardTable.timeApplied,
-          })
-          .from(ReferralRewardTable)
-          .innerJoin(ReferralTable, eq(ReferralTable.id, ReferralRewardTable.referralID))
-          .innerJoin(
-            AuthTable,
-            and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")),
-          )
-          .where(
-            and(
-              eq(ReferralRewardTable.workspaceID, workspaceID),
-              isNull(ReferralRewardTable.timeDeleted),
-              isNull(ReferralTable.timeDeleted),
-            ),
-          ),
+      const [invites, inviteeReferral] = await Promise.all([
         tx
           .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
@@ -106,19 +83,20 @@ export namespace Referral {
           .where(and(eq(ReferralTable.inviteeAccountID, accountID), isNull(ReferralTable.timeDeleted)))
           .orderBy(asc(UserTable.timeCreated))
           .then((rows) => rows.find((row) => row.inviterEmail) ?? rows[0]),
-        tx
-          .select({ referralID: ReferralRewardTable.referralID })
-          .from(ReferralRewardTable)
-          .innerJoin(ReferralTable, eq(ReferralTable.id, ReferralRewardTable.referralID))
-          .where(
-            and(
-              eq(ReferralTable.inviteeAccountID, accountID),
-              isNull(ReferralRewardTable.timeDeleted),
-              isNull(ReferralTable.timeDeleted),
-            ),
-          ),
       ])
 
+      // Hide reward history until the referral_id index can be deployed and this lookup restored.
+      const rewards: {
+        referralID: string
+        workspaceID: string
+        referralWorkspaceID: string
+        inviteeEmail: string
+        amount: number
+        timeCreated: Date
+        timeApplied: Date | null
+      }[] = []
+      // Hide pending invitee rewards until the referral_id index can be deployed and this lookup restored.
+      const inviteeRewards = inviteeReferral ? [{ referralID: inviteeReferral.id }] : []
       return { inviteeReferral, inviteeRewards, invites, rewards }
     })
 
