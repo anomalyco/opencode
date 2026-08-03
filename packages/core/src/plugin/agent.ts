@@ -7,6 +7,9 @@ import { Agent } from "../agent"
 import { Global } from "@opencode-ai/util/global"
 import { Permission } from "../permission"
 
+const SHELL_OUTPUT_GLOB = (data: string) => path.join(data, "shell", "*", "*")
+const TOOL_OUTPUT_GLOB = (data: string) => path.join(data, "tool-output", "*")
+
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
 Your strengths:
@@ -97,8 +100,8 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const global = yield* Global.Service
     const externalDirectories = [
-      path.join(global.data, "shell", "*", "*"),
-      path.join(global.data, "tool-output", "*"),
+      SHELL_OUTPUT_GLOB(global.data),
+      TOOL_OUTPUT_GLOB(global.data),
       path.join(global.tmp, "*"),
       path.join(global.config, "*"),
     ].map((resource): Permission.Rule => ({ action: "external_directory", resource, effect: "allow" }))
