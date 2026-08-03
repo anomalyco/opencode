@@ -3252,6 +3252,18 @@ describe("ProviderTransform sampling defaults - Gemini", () => {
   })
 })
 
+describe("ProviderTransform sampling defaults - DeepSeek", () => {
+  test("defaults deepseek-v4-flash top_p to 0.95", () => {
+    const model = {
+      id: "deepseek/deepseek-v4-flash",
+      api: { id: "deepseek-v4-flash" },
+    } as any
+    expect(ProviderTransform.temperature(model)).toBeUndefined()
+    expect(ProviderTransform.topP(model)).toBe(0.95)
+    expect(ProviderTransform.topK(model)).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
   const target = (npm: string, id = "test-model") =>

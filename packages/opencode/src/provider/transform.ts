@@ -551,6 +551,8 @@ export function topP(model: Provider.Model) {
   if (["minimax-m2", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5"].some((s) => id.includes(s))) {
     return 0.95
   }
+  // https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731
+  if (id.includes("deepseek-v4-flash")) return 0.95
   return undefined
 }
 
