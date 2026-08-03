@@ -69,6 +69,11 @@ const unsafeCSS = `
   border-right: 0;
 }
 
+[data-content-buffer] {
+  background-image: none;
+  background-color: var(--diffs-bg-context-gutter);
+}
+
 ::highlight(opencode-find) {
   background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
 }
