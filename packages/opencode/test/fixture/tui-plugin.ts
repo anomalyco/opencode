@@ -320,6 +320,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         messages: opts.state?.session?.messages ?? (() => []),
         status: opts.state?.session?.status ?? (() => undefined),
         permission: opts.state?.session?.permission ?? (() => []),
+        decisions: opts.state?.session?.decisions ?? (() => []),
         question: opts.state?.session?.question ?? (() => []),
       },
       part: opts.state?.part ?? (() => []),

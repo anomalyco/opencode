@@ -51,6 +51,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
+import { DialogDecisions } from "./dialog-decisions"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
@@ -117,6 +118,7 @@ const sessionBindingCommands = [
   "session.share",
   "session.rename",
   "session.timeline",
+  "session.decisions",
   "session.fork",
   "session.compact",
   "session.unshare",
@@ -537,6 +539,17 @@ export function Session() {
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
           />
         ))
+      },
+    },
+    {
+      title: "Auto mode decisions",
+      value: "session.decisions",
+      category: "Session",
+      slash: {
+        name: "decisions",
+      },
+      run: () => {
+        dialog.replace(() => <DialogDecisions sessionID={route.sessionID} />)
       },
     },
     {
@@ -1855,6 +1868,8 @@ function GenericTool(props: ToolProps) {
 // Discreet marker for tool calls the LLM validator ("auto" mode) decided
 // without a human dialog, correlated through the audited callID. Only
 // allow/deny appear — uncertain/fallback already surfaced as the dialog.
+// The short model name identifies which LLM made the call; full detail lives
+// in the sidebar "Auto" section and the /decisions dialog.
 function AutoDecisionSuffix(props: { part?: ToolPart }) {
   const { theme } = useTheme()
   const ctx = use()
@@ -1866,9 +1881,13 @@ function AutoDecisionSuffix(props: { part?: ToolPart }) {
       (item) => (item.verdict === "allow" || item.verdict === "deny") && item.metadata?.callID === part.callID,
     )
   })
+  const model = createMemo(() => {
+    const value = decision()?.model
+    return value ? (value.split("/").pop() ?? value) : undefined
+  })
   return (
     <Show when={decision()}>
-      {(item) => <span style={{ fg: theme.textMuted }}>{` · auto: ${item().verdict}`}</span>}
+      {(item) => <span style={{ fg: theme.textMuted }}>{` · auto: ${item().verdict} · ${model()}`}</span>}
     </Show>
   )
 }
