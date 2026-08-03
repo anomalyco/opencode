@@ -1,0 +1,158 @@
+---
+title: Autonomous Agents
+description: Run OpenCode agents unattended — multi-phase tasks that survive reboots, with automatic resume and a TTY fallback.
+---
+
+Autonomous agents let OpenCode complete **multi-phase tasks without a human in the loop** — even when a task spans a reboot, a package update, or a long build. This guide describes a battle-tested setup: a persistent task database as the source of truth, automatic resume on login, and a TTY fallback when the graphical session fails.
+
+:::note
+This is a pattern, not a built-in feature. It composes existing OpenCode primitives: agents, `run --continue`, `--auto`, and your display manager's autostart.
+:::
+
+---
+
+## The problem
+
+Some tasks can't finish in one session:
+
+1. **System updates** that require a reboot before continuing.
+2. **Long migrations / builds** that outlive a single run.
+3. **Installation chains** where step N unlocks step N+1.
+
+With a plain agent, a reboot means lost context. You need three things:
+
+- **Persistence** — the task's exact state survives the reboot.
+- **Automatic resume** — after boot, OpenCode continues the task by itself.
+- **A fallback** — if the graphical session fails, the task still resumes.
+
+---
+
+## 1. Persistence: a source of truth
+
+Keep the task state outside the agent, in a small SQLite database (or any file). One row per intention:
+
+| Field | Purpose |
+|---|---|
+| `objetivo` | high-level goal of the task |
+| `detalhes` | exact context: decisions, constraints, reasoning |
+| `fases_restantes` | JSON array of remaining phases |
+| `fases_concluidas` | JSON array of completed phases |
+| `proximo_comando` | the next command the agent should run |
+| `status` | `em_andamento` / `concluido` / `falhou` |
+
+A tiny CLI (`intuito.py`) wraps it: `nova` (create), `atualizar` (progress), `pendentes` (list pending), `dump <id>` (full context).
+
+Before any reboot, the agent **must** record the intention:
+
+```bash
+intuito.py nova "Update system and continue task X" \
+  --detalhes "exact decisions, constraints, reasoning" \
+  --fases-restantes '["update", "reboot", "continue X"]' \
+  --fases-concluidas '[]' \
+  --proximo-comando "sudo pacman -Syu"
+```
+
+:::tip
+The `detalhes` field is the most important one. After a resume, the agent reads it to rebuild its mental model of the task.
+:::
+
+## 2. Automatic resume
+
+Wire the resume into your session's autostart. On login, a script checks the database for a pending intention and, if found, runs OpenCode in continue mode:
+
+```bash
+#!/bin/bash
+# auto-resume.sh — called from your WM/compositor autostart
+ID=$(intuito.py pendentes | head -1 | sed 's/^#//' | cut -d' ' -f1)
+[ -z "$ID" ] && exit 0                 # nothing pending → do nothing
+
+PERFIL=$(intuito.py perfil)            # inject persistent personality/rules
+
+opencode run --continue --agent sudo --auto \
+  --dir /path/to/project \
+  "You resumed after an autonomous reboot. Read your persistent profile,
+   consult intuito.py dump $ID and continue the remaining phases by yourself.
+   Mark the intention concluded when done."
+```
+
+Key flags:
+
+- `--continue` — resume the last session.
+- `--agent sudo` — use the privileged agent (it can `sudo`, install packages, reboot).
+- `--auto` — auto-approve permissions that aren't explicitly denied (required for unattended runs).
+
+On Hyprland the hook looks like:
+
+```lua
+-- hyprland.conf (autostart)
+exec-once = /path/to/scripts/auto-resume.sh
+```
+
+If your display manager autologs you in via greetd, configure the **initial session** (not the greeter session):
+
+```toml
+# /etc/greetd/config.toml
+[initial_session]
+command = "start-hyprland"
+user = "ra"
+```
+
+## 3. TTY fallback
+
+Graphical sessions fail. The fallback is a dedicated TTY that also autologs-in and runs the same resume script — but only when the GUI session is absent:
+
+```ini
+# /etc/systemd/system/getty@tty2.service.d/override.conf
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/agetty --autologin ra --noclear tty2 linux
+```
+
+```fish
+# ~/.config/fish/conf.d/resume-tty2.fish — runs on tty2 login
+if test "$XDG_VTNR" = "2"
+    and not set -q RESUME_TTY_DONE
+    /path/to/scripts/resume-tty.sh
+end
+```
+
+The script waits ~25s (let the GUI come up), then only acts if **no** Hyprland and **no** `opencode run` process is alive — otherwise it exits, because the normal flow already handles the resume:
+
+```bash
+sleep 25
+pgrep -x Hyprland && exit 0                  # GUI flow is fine
+pgrep -f "opencode run --continue" && exit 0 # resume already running
+opencode run --continue --agent sudo --auto --dir /path/to/project
+```
+
+## 4. Security guardrails
+
+Unattended + `sudo` is powerful, so encode the safety rules where the agent will always see them:
+
+- **Theorize before executing** — every state-changing action needs: effects, risks, a recovery plan. No safe plan B → don't execute.
+- **Never reboot without** — (1) the intention recorded, (2) autologin verified, (3) the auto-resume script ready.
+- **Verify every step** — check exit codes and outputs before proceeding.
+- **Persist personality** — store these rules in the profile the resume prompt injects, so every resumed session behaves the same.
+
+:::warning
+Use a dedicated agent with `NOPASSWD` sudo and `--auto` only on a personal machine you own. On shared machines, scope the permissions (e.g., only specific commands) instead.
+:::
+
+---
+
+## Implementation notes
+
+The pieces above compose into a working setup:
+
+- `intuito.py` — intention database CLI (SQLite: `nova`, `atualizar`, `pendentes`, `dump`).
+- `auto-resume.sh` / `resume-task.sh` — GUI resume path: on compositor autostart, opens a terminal and runs `opencode run --continue`.
+- `resume-tty.sh` + `resume-tty2.fish` — TTY fallback path (autologin getty on tty2, guarded so it never double-runs with the GUI).
+- Optional waybar module — a visual indicator (animated icon while OpenCode is active; click opens a menu: new session, resume pending task, switch session, logs, quit). Switching sessions uses `opencode session list` piped to a menu and `opencode run --session <id>`.
+
+---
+
+## Related
+
+- [Agents](/docs/agents)
+- [CLI reference](/docs/cli) — `run`, `--continue`, `--session`, `--auto`
+- [Permissions](/docs/permissions) — scoping what an unattended agent can do
