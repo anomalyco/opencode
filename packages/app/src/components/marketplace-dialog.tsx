@@ -27,6 +27,7 @@ import { useServerSync } from "@/context/server-sync"
 import { showToast } from "@/utils/toast"
 import { createEffect, createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { preserveMarketplaceScroll } from "./marketplace-scroll"
 import "./marketplace-dialog.css"
 
 const TABS = ["discover", "installed", "updates", "sources"] as const
@@ -61,6 +62,8 @@ export function DialogMarketplace() {
 export function MarketplacePanel() {
   const sync = useServerSync()
   const [view, actions] = createResource(async () => (await sync().marketplace.get()) as MarketplaceView)
+  let detailsScroll: HTMLDivElement | undefined
+  let sourcesScroll: HTMLDivElement | undefined
   const [store, setStore] = createStore({
     tab: "discover" as Tab,
     kind: "all" as KindFilter,
@@ -115,7 +118,7 @@ export function MarketplacePanel() {
   async function run(
     request: Promise<MarketplaceMutationResult>,
     message: string,
-    options?: { restorePending?: Pending },
+    options?: { restorePending?: Pending; scroll?: () => HTMLDivElement | undefined },
   ) {
     setStore("busy", true)
     try {
@@ -129,7 +132,11 @@ export function MarketplacePanel() {
         if (options?.restorePending) setStore("pending", options.restorePending)
         return false
       }
-      actions.mutate(result.view)
+      if (options?.scroll) {
+        await preserveMarketplaceScroll(options.scroll, () => actions.mutate(result.view))
+      } else {
+        actions.mutate(result.view)
+      }
       await Promise.allSettled(result.connect_mcp.map((name) => sync().mcp.connect(sync().data.path.directory, name)))
       showToast({ variant: "success", description: message })
       if (result.preserved.length) {
@@ -408,7 +415,11 @@ export function MarketplacePanel() {
                 </Show>
               </div>
             </div>
-            <div data-slot="marketplace-pane" class="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg p-4">
+            <div
+              ref={(element) => (detailsScroll = element)}
+              data-slot="marketplace-pane"
+              class="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg p-4"
+            >
               <Show
                 when={current()}
                 fallback={
@@ -433,6 +444,7 @@ export function MarketplacePanel() {
                           enabled,
                         }) as Promise<MarketplaceMutationResult>,
                         label,
+                        { scroll: () => detailsScroll },
                       )
                     }
                   />
@@ -443,6 +455,7 @@ export function MarketplacePanel() {
         }
       >
         <Sources
+          scrollRef={(element) => (sourcesScroll = element)}
           sources={marketplaceSources(config())}
           errors={view()?.errors ?? []}
           busy={store.busy}
@@ -465,6 +478,7 @@ export function MarketplacePanel() {
                 enabled: source.enabled === false,
               }) as Promise<MarketplaceMutationResult>,
               `${source.enabled === false ? "Enabled" : "Disabled"} ${source.name}`,
+              { scroll: () => sourcesScroll },
             )
           }
           remove={(source) =>
@@ -713,6 +727,7 @@ function Meta(props: { label: string; value: string }) {
 }
 
 function Sources(props: {
+  scrollRef: (element: HTMLDivElement) => void
   sources: MarketplaceSource[]
   errors: MarketplaceView["errors"]
   busy: boolean
@@ -731,7 +746,7 @@ function Sources(props: {
   remove: (source: MarketplaceSource) => void
 }) {
   return (
-    <div data-slot="marketplace-content" class="min-h-0 flex-1 overflow-y-auto">
+    <div ref={props.scrollRef} data-slot="marketplace-content" class="min-h-0 flex-1 overflow-y-auto">
       <div data-slot="marketplace-source-form" class="space-y-2 rounded-lg p-3">
         <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_12rem_9rem]">
           <TextInputV2
