@@ -99,6 +99,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     tools[item.id] = tool({
       description: item.description,
       inputSchema: jsonSchema(schema),
+      ...(item.strict !== undefined && { strict: item.strict }),
       execute(args, options) {
         return run.promise(
           Effect.gen(function* () {
