@@ -1270,15 +1270,6 @@ export function options(input: {
     result["gateway"] = { caching: "auto" }
   }
 
-  // Any gpt version above 5.4 in combination with azure does not support reasoningEffort
-  // so we should return early here.
-  const [, gptMajorVersion, gptMinorVersion] = input.model.api.id.match(/gpt-(\d+)\.(\d+)/) ?? []
-  const supported = Number(gptMajorVersion) > 5 || (Number(gptMajorVersion) === 5 && Number(gptMinorVersion) >= 5)
-  if (input.model.api.npm === "@ai-sdk/azure" && supported) {
-    result["reasoningSummary"] = "auto"
-    return result
-  }
-
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"

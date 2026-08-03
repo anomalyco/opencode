@@ -88,6 +88,15 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         sessionID: input.sessionID,
         providerOptions: input.provider.options,
       })
+  function isGpt55OrNewer(modelID: string) {
+    const match = /(?:^|\/)gpt-(\d+)(?:\.(\d+))?(?:[.-]|$)/i.exec(modelID)
+    if (!match) return false
+
+    const major = Number(match[1])
+    const minor = Number(match[2] ?? 0)
+
+    return major > 5 || (major === 5 && minor >= 5)
+  }
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
   if (
     input.model.api.npm === "@ai-sdk/azure" &&
@@ -95,6 +104,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   ) {
     delete options.reasoningSummary
     delete options.include
+    if (isGpt55OrNewer(input.model.api.id)) {
+      delete options.reasoningEffort
+    }
   }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
