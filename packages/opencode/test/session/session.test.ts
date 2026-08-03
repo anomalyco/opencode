@@ -206,6 +206,23 @@ describe("step-finish token propagation via event", () => {
 })
 
 describe("Session", () => {
+  it.instance("archives descendants with the same timestamp", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const parent = yield* session.create({ title: "parent" })
+      const child = yield* session.create({ title: "child", parentID: parent.id })
+      const grandchild = yield* session.create({ title: "grandchild", parentID: child.id })
+
+      yield* session.setArchived({ sessionID: parent.id, time: 123 })
+
+      expect((yield* session.get(parent.id)).time.archived).toBe(123)
+      expect((yield* session.get(child.id)).time.archived).toBe(123)
+      expect((yield* session.get(grandchild.id)).time.archived).toBe(123)
+
+      yield* session.remove(parent.id)
+    }),
+  )
+
   it.live("remove works without an instance", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service

@@ -756,8 +756,19 @@ const layer: Layer.Layer<
       yield* patch(input.sessionID, { title: input.title }).pipe(Effect.orDie)
     })
 
-    const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
+    const setArchived: Interface["setArchived"] = Effect.fn("Session.setArchived")(function* (input: {
+      sessionID: SessionID
+      time?: number
+    }) {
       yield* patch(input.sessionID, { time: { archived: input.time } }).pipe(Effect.orDie)
+
+      // Archiving a session also archives every descendant so that child sessions
+      // cannot remain active after their parent is hidden.
+      if (input.time === undefined) return
+      const kids = yield* children(input.sessionID)
+      for (const child of kids) {
+        yield* setArchived({ sessionID: child.id, time: input.time })
+      }
     })
 
     const setMetadata = Effect.fn("Session.setMetadata")(function* (input: typeof SetMetadataInput.Type) {
