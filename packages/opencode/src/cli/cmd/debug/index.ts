@@ -2,6 +2,8 @@ import { Global } from "@opencode-ai/core/global"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import os from "os"
+import path from "path"
+import { fileURLToPath } from "node:url"
 import { Duration, Effect } from "effect"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
@@ -71,7 +73,11 @@ const InfoCommand = effectCmd({
       return
     }
     for (const plugin of config.plugin_origins) {
-      console.log(`- ${ConfigPlugin.pluginSpecifier(plugin.spec)}`)
+      const spec = ConfigPlugin.pluginSpecifier(plugin.spec)
+      const display = spec.startsWith("file://")
+        ? path.basename(fileURLToPath(spec))
+        : spec
+      console.log(`- ${display}`)
     }
   }),
 })
