@@ -1273,9 +1273,11 @@ export function options(input: {
   // Any gpt version above 5.4 in combination with azure does not support reasoningEffort
   // so we should return early here.
   const [, gptMajorVersion, gptMinorVersion] = input.model.api.id.match(/gpt-(\d+)\.(\d+)/) ?? []
-  const supported = Number(gptMajorVersion) > 5 || (Number(gptMajorVersion) === 5 && Number(gptMinorVersion) >= 5)
-  if (input.model.api.npm === "@ai-sdk/azure" && supported) {
-    result["reasoningSummary"] = "auto"
+  const isGpt55OrNewer = Number(gptMajorVersion) > 5 || (Number(gptMajorVersion) === 5 && Number(gptMinorVersion) >= 5)
+  if (input.model.api.npm === "@ai-sdk/azure" && input.providerOptions?.useCompletionUrls) {
+    if (!isGpt55OrNewer) {
+      result["reasoningEffort"] = "medium"
+    }
     return result
   }
 
