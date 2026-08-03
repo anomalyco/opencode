@@ -107,6 +107,15 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   const responseBody = JSON.stringify(body)
   if (body.type !== "error") return
 
+  if (body.code === "request_timeout") {
+    return {
+      type: "api_error",
+      message: typeof body.message === "string" ? body.message : "Request timed out.",
+      isRetryable: true,
+      responseBody,
+    }
+  }
+
   switch (body?.error?.code) {
     case "context_length_exceeded":
       return {
