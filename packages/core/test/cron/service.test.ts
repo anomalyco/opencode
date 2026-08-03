@@ -146,4 +146,30 @@ describe("CronService", () => {
       const jobs = yield* cron.list("s1")
       expect(jobs.length).toBe(0)
     }))
+
+  test("logs a defect raised by deliver instead of swallowing it", async () => {
+    const defectingPort = Layer.succeed(
+      CronDeliveryPort,
+      CronDeliveryPort.of({
+        isBusy: () => Effect.succeed(false),
+        deliver: () => Effect.die("boom from port"),
+        exists: () => Effect.succeed(true),
+      }),
+    )
+
+    const tickLayer = Layer.provideMerge(Layer.provideMerge(cronLayer, defectingPort), testEnv)
+
+    await Effect.gen(function* () {
+      const cron = yield* CronService
+      yield* cron.add({ sessionID: "s_die", prompt: "fire", intervalMs: 60_000 })
+      yield* TestClock.adjust(Duration.minutes(1))
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      const lines = yield* TestConsole.logLines
+      expect(lines.some((l) => String(l).includes("cron delivery defect"))).toBe(true)
+    }).pipe(Effect.provide(tickLayer), Effect.runPromise)
+  })
 })
