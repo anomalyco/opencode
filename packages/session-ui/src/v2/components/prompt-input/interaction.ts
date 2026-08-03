@@ -460,7 +460,7 @@ function editorCursor(editor: HTMLElement) {
   return range.toString().length
 }
 
-function setEditorCursor(editor: HTMLElement | undefined, cursor: number) {
+export function setEditorCursor(editor: HTMLElement | undefined, cursor: number) {
   if (!editor) return
   const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
   let remaining = cursor
