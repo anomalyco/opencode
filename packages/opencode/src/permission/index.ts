@@ -133,7 +133,20 @@ const layer = Layer.effect(
       // here; DENY fails with CorrectedError; UNCERTAIN/fallback continue to
       // the human flow below with the verdict attached to the request.
       const auto = yield* validateAuto(request)
-      if (auto?.verdict === "allow") return
+      if (auto?.verdict === "allow") {
+        // Learn the approval like a human "always" reply, but stricter: only
+        // the exact patterns just approved (never the broader always-globs a
+        // human reply records), only literal patterns (a learned glob would
+        // auto-approve commands the validator never saw), and never over a
+        // static deny. Identical future asks short-circuit in the ruleset
+        // evaluation above without spending an LLM call.
+        for (const pattern of request.patterns) {
+          if (pattern.includes("*") || pattern.includes("?")) continue
+          if (evaluate(request.permission, pattern, ruleset).action === "deny") continue
+          approved.push({ permission: request.permission, pattern, action: "allow" })
+        }
+        return
+      }
 
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {

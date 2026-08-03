@@ -458,6 +458,64 @@ it.instance(
 )
 
 it.instance(
+  "ALLOW learns the exact pattern: an identical ask skips the validator and writes no new audit row",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      summaryCalls.length = 0
+      const decisions = yield* PermissionDecisionsStore.Service
+      const chat = yield* seedAutoSession()
+      llm.push(text("ALLOW"))
+
+      yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["ls -la"], metadata: { command: "ls -la" } })
+      expect(llm.state.hits).toHaveLength(1)
+
+      yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["ls -la"], metadata: { command: "ls -la" } })
+      expect(llm.state.hits).toHaveLength(1)
+      expect(yield* decisions.listBySession(chat.id)).toHaveLength(1)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ALLOW does not learn wildcard patterns: the validator runs again",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      summaryCalls.length = 0
+      const chat = yield* seedAutoSession()
+      llm.push(text("ALLOW"))
+
+      yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["ls *.ts"], metadata: { command: "ls *.ts" } })
+      expect(llm.state.hits).toHaveLength(1)
+
+      llm.push(text("ALLOW"))
+      yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["ls *.ts"], metadata: { command: "ls *.ts" } })
+      expect(llm.state.hits).toHaveLength(2)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ALLOW does not broaden: a different command still reaches the validator",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      summaryCalls.length = 0
+      const chat = yield* seedAutoSession()
+      llm.push(text("ALLOW"))
+
+      yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["ls -la"], metadata: { command: "ls -la" } })
+      expect(llm.state.hits).toHaveLength(1)
+
+      llm.push(text("ALLOW"))
+      yield* ask({ sessionID: chat.id, agent: "auto", patterns: ["ls -la src"], metadata: { command: "ls -la src" } })
+      expect(llm.state.hits).toHaveLength(2)
+    }),
+  { git: true },
+)
+
+it.instance(
   "DENY fails with CorrectedError carrying the reason",
   () =>
     Effect.gen(function* () {
