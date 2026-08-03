@@ -195,7 +195,7 @@ export const DialogManageModelsV2: Component = () => {
           </div>
         </div>
         <div data-slot="manage-models-scroll" class="relative min-h-0 flex-1">
-          <div class="settings-v2-panel settings-v2-models h-full px-4 pt-4 pb-4">
+          <div class="settings-v2-panel settings-v2-panel--scroll settings-v2-models h-full px-4 pt-4 pb-4">
             <Show
               when={!list.grouped.loading}
               fallback={
