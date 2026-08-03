@@ -218,6 +218,7 @@ export const dict = {
   "prompt.mode.shell": "셸",
   "prompt.mode.normal": "프롬프트",
   "prompt.mode.shell.exit": "종료하려면 esc",
+  "prompt.branch.tooltip": "현재 Git 브랜치",
   "prompt.example.1": "코드베이스의 TODO 수정",
   "prompt.example.2": "이 프로젝트의 기술 스택이 무엇인가요?",
   "prompt.example.3": "고장 난 테스트 수정",

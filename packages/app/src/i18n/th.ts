@@ -246,6 +246,7 @@ export const dict = {
   "prompt.mode.shell": "เชลล์",
   "prompt.mode.normal": "พรอมต์",
   "prompt.mode.shell.exit": "กด esc เพื่อออก",
+  "prompt.branch.tooltip": "สาขา Git ปัจจุบัน",
   "session.child.promptDisabled": "ไม่สามารถส่งพรอมต์ในเซสชันเอเจนต์ย่อยได้.",
   "session.child.backToParent": "กลับไปยังเซสชันหลัก.",
 

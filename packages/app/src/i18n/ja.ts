@@ -228,6 +228,7 @@ export const dict = {
   "prompt.mode.shell": "シェル",
   "prompt.mode.normal": "プロンプト",
   "prompt.mode.shell.exit": "escで終了",
+  "prompt.branch.tooltip": "現在のGitブランチ",
   "session.child.promptDisabled": "サブエージェントのセッションにはプロンプトを送信できません。",
   "session.child.backToParent": "メインセッションに戻る。",
   "prompt.example.1": "コードベースのTODOを修正",

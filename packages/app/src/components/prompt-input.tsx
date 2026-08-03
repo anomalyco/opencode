@@ -1197,6 +1197,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!id) return permission.isAutoAcceptingDirectory(sdk().directory)
     return permission.isAutoAccepting(id, sdk().directory)
   })
+  const branch = createMemo(() => (sync().project?.vcs === "git" ? sync().data.vcs?.branch : undefined))
 
   const { abort, handleSubmit } =
     props.submission ??
@@ -1781,6 +1782,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </div>
                     </Show>
                   </Show>
+                </Show>
+                <Show when={store.mode !== "shell" && branch()}>
+                  <Tooltip placement="top" gutter={8} value={language.t("prompt.branch.tooltip")}>
+                    <div class="flex items-center gap-1 px-2 h-7 text-13-regular text-text-dimmed">
+                      <Icon name="branch" size="small" />
+                      <span class="truncate max-w-[120px]">{branch()}</span>
+                    </div>
+                  </Tooltip>
                 </Show>
               </div>
             </div>

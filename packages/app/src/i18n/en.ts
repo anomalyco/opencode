@@ -249,6 +249,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc to exit",
+  "prompt.branch.tooltip": "Current Git branch",
   "session.child.promptDisabled": "Subagent sessions cannot be prompted.",
   "session.child.backToParent": "Back to main session.",
 
