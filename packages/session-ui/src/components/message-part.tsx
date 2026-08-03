@@ -1047,6 +1047,38 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
+function ToolImageAttachments(props: { parts: ToolPart[] }) {
+  const i18n = useI18n()
+  const dialog = useDialog()
+
+  const images = createMemo(() =>
+    props.parts.flatMap((part) => {
+      if (part.state.status !== "completed") return []
+      return (part.state.attachments ?? []).filter((attachment) => kind(attachment) === "image")
+    }),
+  )
+
+  return (
+    <Show when={images().length > 0}>
+      <div data-slot="tool-image-attachments">
+        <For each={images()}>
+          {(file) => {
+            const name = file.filename ?? i18n.t("ui.message.attachment.alt")
+            return (
+              <button
+                data-slot="tool-image-attachment"
+                onClick={() => dialog.show(() => <ImagePreview src={file.url} alt={name} />)}
+              >
+                <img src={file.url} alt={name} />
+              </button>
+            )
+          }}
+        </For>
+      </div>
+    </Show>
+  )
+}
+
 export function ContextToolGroup(props: {
   parts: ToolPart[]
   busy?: boolean
@@ -1069,97 +1101,100 @@ export function ContextToolGroup(props: {
   }
 
   return (
-    <Collapsible
-      open={open()}
-      onOpenChange={handleOpenChange}
-      variant="ghost"
-      class="tool-collapsible"
-      data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
-    >
-      <Collapsible.Trigger>
-        <div data-component="context-tool-group-trigger">
-          <span
-            data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
-          >
-            <span data-slot="context-tool-group-label" class="shrink-0">
-              <ToolStatusTitle
-                active={pending()}
-                activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
-                doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
-                split={false}
-              />
-            </span>
+    <>
+      <Collapsible
+        open={open()}
+        onOpenChange={handleOpenChange}
+        variant="ghost"
+        class="tool-collapsible"
+        data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
+      >
+        <Collapsible.Trigger>
+          <div data-component="context-tool-group-trigger">
             <span
-              data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
+              data-slot="context-tool-group-title"
+              class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
             >
-              <AnimatedCountList
-                items={[
-                  {
-                    key: "read",
-                    count: summary().read,
-                    one: i18n.t("ui.messagePart.context.read.one"),
-                    other: i18n.t("ui.messagePart.context.read.other"),
-                  },
-                  {
-                    key: "search",
-                    count: summary().search,
-                    one: i18n.t("ui.messagePart.context.search.one"),
-                    other: i18n.t("ui.messagePart.context.search.other"),
-                  },
-                  {
-                    key: "list",
-                    count: summary().list,
-                    one: i18n.t("ui.messagePart.context.list.one"),
-                    other: i18n.t("ui.messagePart.context.list.other"),
-                  },
-                ]}
-                fallback=""
-              />
+              <span data-slot="context-tool-group-label" class="shrink-0">
+                <ToolStatusTitle
+                  active={pending()}
+                  activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
+                  doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
+                  split={false}
+                />
+              </span>
+              <span
+                data-slot="context-tool-group-summary"
+                class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
+              >
+                <AnimatedCountList
+                  items={[
+                    {
+                      key: "read",
+                      count: summary().read,
+                      one: i18n.t("ui.messagePart.context.read.one"),
+                      other: i18n.t("ui.messagePart.context.read.other"),
+                    },
+                    {
+                      key: "search",
+                      count: summary().search,
+                      one: i18n.t("ui.messagePart.context.search.one"),
+                      other: i18n.t("ui.messagePart.context.search.other"),
+                    },
+                    {
+                      key: "list",
+                      count: summary().list,
+                      one: i18n.t("ui.messagePart.context.list.one"),
+                      other: i18n.t("ui.messagePart.context.list.other"),
+                    },
+                  ]}
+                  fallback=""
+                />
+              </span>
             </span>
-          </span>
-          <Collapsible.Arrow />
-        </div>
-      </Collapsible.Trigger>
-      <Collapsible.Content>
-        <div data-component="context-tool-group-list">
-          <Index each={props.parts}>
-            {(partAccessor) => {
-              const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
-              const running = createMemo(
-                () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
-              )
-              return (
-                <div data-slot="context-tool-group-item">
-                  <div data-component="tool-trigger">
-                    <div data-slot="basic-tool-tool-trigger-content">
-                      <div data-slot="basic-tool-tool-info">
-                        <div data-slot="basic-tool-tool-info-structured">
-                          <div data-slot="basic-tool-tool-info-main">
-                            <span data-slot="basic-tool-tool-title">
-                              <TextShimmer text={trigger().title} active={running()} />
-                            </span>
-                            <Show when={!running() && trigger().subtitle}>
-                              <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
-                            </Show>
-                            <Show when={!running() && trigger().args?.length}>
-                              <For each={trigger().args}>
-                                {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
-                              </For>
-                            </Show>
+            <Collapsible.Arrow />
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div data-component="context-tool-group-list">
+            <Index each={props.parts}>
+              {(partAccessor) => {
+                const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
+                const running = createMemo(
+                  () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
+                )
+                return (
+                  <div data-slot="context-tool-group-item">
+                    <div data-component="tool-trigger">
+                      <div data-slot="basic-tool-tool-trigger-content">
+                        <div data-slot="basic-tool-tool-info">
+                          <div data-slot="basic-tool-tool-info-structured">
+                            <div data-slot="basic-tool-tool-info-main">
+                              <span data-slot="basic-tool-tool-title">
+                                <TextShimmer text={trigger().title} active={running()} />
+                              </span>
+                              <Show when={!running() && trigger().subtitle}>
+                                <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
+                              </Show>
+                              <Show when={!running() && trigger().args?.length}>
+                                <For each={trigger().args}>
+                                  {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
+                                </For>
+                              </Show>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )
-            }}
-          </Index>
-        </div>
-      </Collapsible.Content>
-    </Collapsible>
+                )
+              }}
+            </Index>
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
+      <ToolImageAttachments parts={props.parts} />
+    </>
   )
 }
 
@@ -1634,6 +1669,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             />
           </Match>
         </Switch>
+        <ToolImageAttachments parts={[part()]} />
       </div>
     </Show>
   )
