@@ -144,6 +144,8 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const sessionEventRevisions = new Map<string, number>()
+    let sessionEventRevision = 0
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -162,9 +164,32 @@ export const {
     }
 
     function listSessions() {
+      const revisions = new Map(sessionEventRevisions)
       return sdk.client.session
         .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+        .then((x) => ({ revisions, sessions: (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)) }))
+    }
+
+    function applySessionList(result: { revisions: Map<string, number>; sessions: Session[] }) {
+      const current = new Map(store.session.map((session) => [session.id, session] as const))
+      const listed = new Set(result.sessions.map((session) => session.id))
+      const sessions = result.sessions.flatMap((session) => {
+        if (sessionEventRevisions.get(session.id) === result.revisions.get(session.id)) return [session]
+        const live = current.get(session.id)
+        return live ? [live] : []
+      })
+      sessions.push(
+        ...store.session.filter(
+          (session) =>
+            !listed.has(session.id) && sessionEventRevisions.get(session.id) !== result.revisions.get(session.id),
+        ),
+      )
+      setStore("session", reconcile(sessions.toSorted((a, b) => a.id.localeCompare(b.id))))
+    }
+
+    function markSessionEvent(sessionID: string) {
+      sessionEventRevision++
+      sessionEventRevisions.set(sessionID, sessionEventRevision)
     }
 
     event.subscribe((event, { directory, workspace }) => {
@@ -265,6 +290,7 @@ export const {
           break
 
         case "session.deleted": {
+          markSessionEvent(event.properties.info.id)
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore(
@@ -276,7 +302,9 @@ export const {
           }
           break
         }
+        case "session.created":
         case "session.updated": {
+          markSessionEvent(event.properties.info.id)
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore("session", result.index, reconcile(event.properties.info))
@@ -294,6 +322,7 @@ export const {
         case "session.next.moved": {
           const result = search(store.session, event.properties.sessionID, (s) => s.id)
           if (!result.found) break
+          markSessionEvent(event.properties.sessionID)
           setStore(
             "session",
             result.index,
@@ -504,7 +533,7 @@ export const {
               setStore("console_state", reconcile(consoleState))
               setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))
-              if (sessions !== undefined) setStore("session", reconcile(sessions))
+              if (sessions !== undefined) applySessionList(sessions)
             })
           })
         })
@@ -512,7 +541,7 @@ export const {
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           void Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
+            ...(args.continue ? [] : [sessionListPromise.then((sessions) => applySessionList(sessions))]),
             consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
@@ -573,7 +602,7 @@ export const {
         },
         async refresh() {
           const list = await listSessions()
-          setStore("session", reconcile(list))
+          applySessionList(list)
         },
         status(sessionID: string) {
           const session = result.session.get(sessionID)
