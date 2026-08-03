@@ -30,7 +30,7 @@ describe("AnthropicPlugin", () => {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
         const item = Provider.Info.make({
-          ...Provider.Info.empty(Provider.ID.anthropic),
+          ...Provider.Info.default(Provider.ID.anthropic),
           package: Provider.aisdk("@ai-sdk/anthropic"),
           headers: { Existing: "1" },
         })

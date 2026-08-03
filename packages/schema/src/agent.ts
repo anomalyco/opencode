@@ -36,7 +36,7 @@ export const Info = Schema.Struct({
   .annotate({ identifier: "Agent.Info" })
   .pipe(
     statics(() => ({
-      empty: (id: ID) =>
+      default: (id: ID) =>
         ({
           id,
           name: Name.make(id),

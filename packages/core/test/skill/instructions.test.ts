@@ -47,7 +47,7 @@ const layer = (list: () => Skill.Info[]) =>
 describe("SkillInstructions", () => {
   it.effect("renders described agent skills and updates the complete available list", () => {
     const agent = Agent.Info.make({
-      ...Agent.Info.empty(build),
+      ...Agent.Info.default(build),
       permissions: [{ action: "skill", resource: "denied", effect: "deny" }],
     })
     let skills = [hidden, denied, manual, effect]
@@ -80,7 +80,7 @@ describe("SkillInstructions", () => {
   })
 
   it.effect("announces added and removed skills as deltas without restating the list", () => {
-    const agent = Agent.Info.make(Agent.Info.empty(build))
+    const agent = Agent.Info.make(Agent.Info.default(build))
     const debugging = Skill.Info.make({
       id: Skill.ID.make("debugging"),
       name: Skill.Name.make("Debugging"),
@@ -117,7 +117,7 @@ describe("SkillInstructions", () => {
   })
 
   it.effect("restates the full skill list when a description changes", () => {
-    const agent = Agent.Info.make(Agent.Info.empty(build))
+    const agent = Agent.Info.make(Agent.Info.default(build))
     let skills = [effect]
     return Effect.gen(function* () {
       const instructions = yield* SkillInstructions.Service
@@ -138,7 +138,7 @@ describe("SkillInstructions", () => {
 
   it.effect("omits instructions when the selected agent denies all skills", () => {
     const agent = Agent.Info.make({
-      ...Agent.Info.empty(build),
+      ...Agent.Info.default(build),
       permissions: [{ action: "skill", resource: "*", effect: "deny" }],
     })
     return Effect.gen(function* () {
@@ -149,7 +149,7 @@ describe("SkillInstructions", () => {
 
   it.effect("omits instructions when a resource-specific denial follows the global denial", () => {
     const agent = Agent.Info.make({
-      ...Agent.Info.empty(build),
+      ...Agent.Info.default(build),
       permissions: [
         { action: "skill", resource: "*", effect: "deny" },
         { action: "skill", resource: "hidden", effect: "deny" },
@@ -163,7 +163,7 @@ describe("SkillInstructions", () => {
 
   it.effect("retains specifically allowed skills after a global denial", () => {
     const agent = Agent.Info.make({
-      ...Agent.Info.empty(build),
+      ...Agent.Info.default(build),
       permissions: [
         { action: "skill", resource: "*", effect: "deny" },
         { action: "skill", resource: "effect", effect: "allow" },
@@ -179,7 +179,7 @@ describe("SkillInstructions", () => {
 
   it.effect("omits instructions when a specifically allowed skill is denied again", () => {
     const agent = Agent.Info.make({
-      ...Agent.Info.empty(build),
+      ...Agent.Info.default(build),
       permissions: [
         { action: "skill", resource: "*", effect: "deny" },
         { action: "skill", resource: "effect", effect: "allow" },

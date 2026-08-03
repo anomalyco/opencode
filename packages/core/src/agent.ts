@@ -61,7 +61,7 @@ const layer = Layer.effect(
           draft.default = id
         },
         update: (id, fn) => {
-          const current = draft.agents.get(id) ?? (Info.empty(id) as Types.DeepMutable<Info>)
+          const current = draft.agents.get(id) ?? (Info.default(id) as Types.DeepMutable<Info>)
           if (!draft.agents.has(id)) draft.agents.set(id, current)
           fn(current)
           current.id = id

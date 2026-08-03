@@ -120,7 +120,7 @@ describe("Agent", () => {
       const id = Agent.ID.make("custom")
 
       yield* agent.transform((editor) => editor.update(id, () => {}))
-      expect(yield* agent.get(id)).toEqual(Agent.Info.empty(id))
+      expect(yield* agent.get(id)).toEqual(Agent.Info.default(id))
 
       yield* agent.transform((editor) => editor.remove(id))
       expect(yield* agent.get(id)).toBeUndefined()
