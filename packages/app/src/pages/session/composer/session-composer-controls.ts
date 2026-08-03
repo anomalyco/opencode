@@ -40,7 +40,7 @@ export function createPromptInputController(input: {
         options: local.agent.list().map((agent) => agent.name),
         current: local.agent.current()?.name ?? "",
         loading: agentsQuery.isLoading,
-        visible: local.agent.visible(),
+        visible: local.agent.visible,
         select: local.agent.set,
       },
       model: {

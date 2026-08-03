@@ -2,6 +2,7 @@ import type { useLocal } from "@/context/local"
 import type { Prompt, usePrompt } from "@/context/prompt"
 import type { PromptInputHistory } from "./history-store"
 import type { FollowupDraft } from "./submit"
+import type { Accessor } from "solid-js"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -16,7 +17,7 @@ export type PromptInputControls = {
     options: string[]
     current: string
     loading: boolean
-    visible: boolean
+    visible: Accessor<boolean>
     select: (name: string | undefined) => void
   }
   model: {

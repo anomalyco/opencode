@@ -54,7 +54,7 @@ function PromptInputExample() {
         return controls.agent
       },
       loading: false,
-      visible: true,
+      visible: () => true,
       select: (agent?: string) => setControls("agent", agent ?? "build"),
     },
     model: {
@@ -132,7 +132,7 @@ function PromptInputWithOpenDock() {
         return controls.agent
       },
       loading: false,
-      visible: true,
+      visible: () => true,
       select: (agent?: string) => setControls("agent", agent ?? "build"),
     },
     model: {

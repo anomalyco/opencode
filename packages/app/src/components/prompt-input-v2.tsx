@@ -44,6 +44,10 @@ export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
 }
 
+export function agentControlVisible(visible: () => boolean, options: string[]) {
+  return visible() && options.length > 0
+}
+
 export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   const dialog = useDialog()
   const command = useCommand()
@@ -382,7 +386,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     view: {
       placeholder: designPlaceholder,
       get agent() {
-        return props.controls.agents.visible && props.controls.agents.options.length > 0
+        return agentControlVisible(props.controls.agents.visible, props.controls.agents.options)
           ? {
               options: () => props.controls.agents.options.map((name) => ({ id: name, label: name })),
               current: () => props.controls.agents.current,
