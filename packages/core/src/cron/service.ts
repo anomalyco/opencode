@@ -61,6 +61,13 @@ const make = Effect.gen(function* () {
       const job = yield* dequeueJob()
       if (!job) continue
 
+      if (job.id !== top.id) {
+        // A sooner job was inserted during the sleep and won the heap head.
+        // Re-queue the job we just popped and re-iterate instead of firing early.
+        yield* insertJob(job)
+        continue
+      }
+
       const current = yield* Clock.currentTimeMillis
 
       if (current >= job.expiresAt) continue
