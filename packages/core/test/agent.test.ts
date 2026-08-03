@@ -1,3 +1,4 @@
+import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
@@ -8,9 +9,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
-import { Reference } from "@opencode-ai/core/reference"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Skill } from "@opencode-ai/core/skill"
 import { Global } from "@opencode-ai/util/global"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -18,26 +17,7 @@ import { agentHost, host } from "./plugin/host"
 
 const testLocation = location({ directory: AbsolutePath.make("/project") })
 const locationLayer = Layer.succeed(Location.Service, Location.Service.of(testLocation))
-const referencePath = AbsolutePath.make("/references/docs")
-const skillPath = AbsolutePath.make("/skills/team")
-const references = Reference.Service.of({
-  list: () =>
-    Effect.succeed([
-      Reference.Info.make({
-        name: "docs",
-        path: referencePath,
-        source: Reference.LocalSource.make({ type: "local", path: referencePath }),
-      }),
-    ]),
-  transform: () => Effect.succeed({ dispose: Effect.void }),
-  reload: () => Effect.void,
-})
-const skills = Skill.Service.of({
-  sources: () => Effect.succeed([Skill.DirectorySource.make({ type: "directory", path: skillPath })]),
-  list: () => Effect.succeed([]),
-  transform: () => Effect.succeed({ dispose: Effect.void }),
-  reload: () => Effect.void,
-})
+const global = Global.make({ data: "/data", config: "/config", tmp: "/tmp/opencode" })
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, Location.node]), [
@@ -168,7 +148,7 @@ describe("Agent", () => {
     }),
   )
 
-  it.effect("does not ambiently opt built-in agents into bash", () =>
+  it.effect("applies managed external directories without opting built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
       yield* AgentPlugin.Plugin.effect(
@@ -176,9 +156,7 @@ describe("Agent", () => {
           agent: agentHost(agent),
         }),
       ).pipe(
-        Effect.provideService(Global.Service, Global.Service.of(Global.make())),
-        Effect.provideService(Reference.Service, references),
-        Effect.provideService(Skill.Service, skills),
+        Effect.provideService(Global.Service, Global.Service.of(global)),
         Effect.provideService(
           Location.Service,
           Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
@@ -197,11 +175,14 @@ describe("Agent", () => {
       ])
       expect((yield* agent.get(Agent.defaultID))?.system).toBeUndefined()
       const permissions = (yield* agent.get(Agent.defaultID))?.permissions ?? []
-      expect(Permission.evaluate("external_directory", "/references/docs/*", permissions).effect).toBe("allow")
-      expect(Permission.evaluate("external_directory", "/skills/team/*", permissions).effect).toBe("allow")
       expect(
-        Permission.evaluate("external_directory", `${Global.Path.config}/*`, permissions).effect,
+        Permission.evaluate("external_directory", path.join(global.data, "shell", "*", "*"), permissions).effect,
       ).toBe("allow")
+      expect(
+        Permission.evaluate("external_directory", path.join(global.data, "tool-output", "*"), permissions).effect,
+      ).toBe("allow")
+      expect(Permission.evaluate("external_directory", path.join(global.config, "*"), permissions).effect).toBe("allow")
+      expect(Permission.evaluate("external_directory", path.join(global.tmp, "*"), permissions).effect).toBe("allow")
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
@@ -216,9 +197,7 @@ describe("Agent", () => {
           agent: agentHost(agent),
         }),
       ).pipe(
-        Effect.provideService(Global.Service, Global.Service.of(Global.make())),
-        Effect.provideService(Reference.Service, references),
-        Effect.provideService(Skill.Service, skills),
+        Effect.provideService(Global.Service, Global.Service.of(global)),
         Effect.provideService(
           Location.Service,
           Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
