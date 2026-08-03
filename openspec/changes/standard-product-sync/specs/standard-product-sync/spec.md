@@ -65,11 +65,19 @@ The synchronizer SHALL preserve trimmed workbook `盘点日期` and trimmed work
 - **THEN** the display remark is SQL `NULL` and the robot omits it
 
 ### Requirement: Authoritative structured shelf replacement
-The synchronizer SHALL normalize workbook shelf tokens to uppercase ASCII A-D three-part codes and, for each `MATCHED` row, replace that product's structured shelf relations with exactly the approved set. It MUST back up previous relations and evidence and SHALL identify new evidence as `StandardWorkbook`.
+The synchronizer SHALL normalize workbook shelf tokens to uppercase ASCII A-D three-part codes and, for each `MATCHED` row, replace that product's structured shelf relations with exactly the approved set. Complete shelf tokens MAY be directly adjacent or separated by approved punctuation, whitespace, or the literal annotation `非标`; every other unmatched character SHALL fail admission. It MUST preserve the complete source cell as evidence, back up previous relations and evidence, and SHALL identify new evidence as `StandardWorkbook`.
 
 #### Scenario: Product has multiple approved shelves
 - **WHEN** a workbook cell contains `A-1-4+A-1-1`
 - **THEN** the authoritative and mapped product shelf sets contain exactly `A-1-4` and `A-1-1`, independent of order
+
+#### Scenario: Approved shelf tokens are adjacent or annotated
+- **WHEN** a workbook cell contains `B-11-10+B-11-13B-11-4` or `B-11-18+B-11-29非标B-12-3+B-12-2`
+- **THEN** every complete shelf token is normalized into the authoritative set and the original cell remains unchanged as evidence
+
+#### Scenario: Shelf cell contains unknown text
+- **WHEN** a non-empty shelf cell contains unmatched text other than the literal annotation `非标`
+- **THEN** admission fails before any database write
 
 #### Scenario: Product has no approved shelf
 - **WHEN** the workbook shelf cell is blank

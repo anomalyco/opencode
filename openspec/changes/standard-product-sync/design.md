@@ -48,7 +48,7 @@ Before updates, store the complete old values in `erp_standard_product_backup`. 
 
 ### 4. Replace mapped shelf relations from the workbook
 
-For each `MATCHED` product, back up existing `ProductShelfLocation` and `ProductShelfLocationEvidence`, delete only that product's existing relations/evidence, then insert the workbook shelf set. Evidence uses `source_field=StandardWorkbook`, the source shelf cell, source row, workbook hash, and run ID. Existing shared `ShelfLocation` dictionary rows may be reused; unused dictionary rows are retained.
+For each `MATCHED` product, back up existing `ProductShelfLocation` and `ProductShelfLocationEvidence`, delete only that product's existing relations/evidence, then insert the workbook shelf set. The latest approved workbook may place two complete shelf tokens directly adjacent or use the literal annotation `非标` between complete tokens; both forms are accepted as separators, while every other unmatched character still fails admission. Evidence uses `source_field=StandardWorkbook`, the complete source shelf cell, source row, workbook hash, and run ID. Existing shared `ShelfLocation` dictionary rows may be reused; unused dictionary rows are retained.
 
 Alternative considered: continue extracting shelves from `ProdSpec` and `ProdType`. Those fields contain stale shelf tokens and produced the observed 1,120 differences.
 

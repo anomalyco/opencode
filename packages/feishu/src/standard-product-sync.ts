@@ -96,8 +96,8 @@ export type StandardProductDatabaseSnapshot = {
   activeRunID?: string | null
 }
 
-const shelfPattern = /(?<![A-Za-z0-9])([A-Da-d])\s*[-－—–]\s*(\d{1,2})\s*[-－—–]\s*(\d{1,2})(?!\d)/g
-const shelfSeparatorPattern = /^[+＋,，、;；/\\|\s]*$/
+const shelfPattern = /([A-Da-d])\s*[-－—–]\s*(\d{1,2})\s*[-－—–]\s*(\d{1,2})(?!\d)/g
+const shelfSeparatorPattern = /^(?:(?:非标)|[+＋,，、;；/\\|\s])*$/
 
 export function normalizeStandardProductRows(input: readonly (readonly unknown[])[]) {
   if (!sameHeaders(input[0])) throw new Error("workbook headers do not match")

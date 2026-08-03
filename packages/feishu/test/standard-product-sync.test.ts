@@ -137,6 +137,18 @@ describe("standard product workbook", () => {
     ).toThrow("invalid shelf cell at row 2")
   })
 
+  test("accepts adjacent shelf tokens and the literal nonstandard annotation", () => {
+    const rows = normalizeStandardProductRows([
+      headers,
+      [1, "A", "adjacent", "厂", 1, null, "B-11-10+B-11-13B-11-4"],
+      [2, "B", "annotated", "厂", 1, null, "B-11-18+B-11-29非标B-12-3+B-12-2"],
+    ])
+
+    expect(rows[0].shelves).toEqual(["B-11-4", "B-11-10", "B-11-13"])
+    expect(rows[1].shelves).toEqual(["B-11-18", "B-11-29", "B-12-2", "B-12-3"])
+    expect(rows[1].shelfText).toBe("B-11-18+B-11-29非标B-12-3+B-12-2")
+  })
+
   test("preserves inventory date and source remark while deriving the display remark", () => {
     const rows = normalizeStandardProductRows([
       headers,
