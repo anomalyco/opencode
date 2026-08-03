@@ -18,8 +18,6 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: none;
   user-select: none;
 }
 
@@ -27,7 +25,18 @@
   user-select: text;
 }
 
-.settings-v2-panel::-webkit-scrollbar {
+/*
+ * Panels that scroll themselves rather than delegating to a ScrollView child.
+ * The settings dialog tabs wrap their content in ScrollView so a thumb reveals
+ * on hover, and must not also scroll here — otherwise the thumb tracks an inner
+ * viewport while the panel scrolls behind it.
+ */
+.settings-v2-panel--scroll {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.settings-v2-panel--scroll::-webkit-scrollbar {
   display: none;
 }
 
