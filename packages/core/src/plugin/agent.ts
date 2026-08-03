@@ -5,7 +5,6 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 import { Agent } from "../agent"
 import { Global } from "@opencode-ai/util/global"
-import { Location } from "../location"
 import { Permission } from "../permission"
 
 const SHELL_OUTPUT_GLOB = path.join(Global.Path.data, "shell", "*", "*")
@@ -99,8 +98,6 @@ Rules:
 export const Plugin = define({
   id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
-    const location = yield* Location.Service
-    const worktree = location.directory
     const managedDirectories = [SHELL_OUTPUT_GLOB, TOOL_OUTPUT_GLOB, path.join(Global.Path.tmp, "*")].map(
       (resource): Permission.Rule => ({
         action: "external_directory",
@@ -118,10 +115,7 @@ export const Plugin = define({
         item.permissions.push(
           ...Permission.merge([
             { action: "question", resource: "*", effect: "deny" },
-            { action: "plan_enter", resource: "*", effect: "deny" },
-            { action: "plan_exit", resource: "*", effect: "deny" },
             { action: "question", resource: "*", effect: "allow" },
-            { action: "plan_enter", resource: "*", effect: "allow" },
           ]),
         )
       })
@@ -133,26 +127,8 @@ export const Plugin = define({
         item.permissions.push(
           ...Permission.merge([
             { action: "question", resource: "*", effect: "deny" },
-            { action: "plan_enter", resource: "*", effect: "deny" },
-            { action: "plan_exit", resource: "*", effect: "deny" },
             { action: "question", resource: "*", effect: "allow" },
-            { action: "plan_exit", resource: "*", effect: "allow" },
-            {
-              action: "external_directory",
-              resource: path.join(Global.Path.data, "plans", "*"),
-              effect: "allow",
-            },
             { action: "edit", resource: "*", effect: "deny" },
-            {
-              action: "edit",
-              resource: path.join(".opencode", "plans", "*.md"),
-              effect: "allow",
-            },
-            {
-              action: "edit",
-              resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
-              effect: "allow",
-            },
           ]),
         )
       })
@@ -164,8 +140,6 @@ export const Plugin = define({
         item.mode = "subagent"
         item.permissions.push(
           { action: "question", resource: "*", effect: "deny" },
-          { action: "plan_enter", resource: "*", effect: "deny" },
-          { action: "plan_exit", resource: "*", effect: "deny" },
           { action: "subagent", resource: "*", effect: "deny" },
         )
       })
