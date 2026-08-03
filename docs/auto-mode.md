@@ -88,7 +88,8 @@ releases, so asks queued behind it drain normally. Each validation:
    `UNCERTAIN <reason>` (reasons are capped at 100 characters by the prompt
    and at 200 code points by the parser, in the session's language).
 5. Writes exactly one `permission_decisions` row with the verdict, reason,
-   model, and latency. The audit write never breaks or blocks the ask itself
+   model, latency, and the exact prompt sent to the validator. The audit
+   write never breaks or blocks the ask itself
    — with one exception: an `ALLOW` whose audit row fails to land degrades to
    the human flow instead of executing without evidence. The audit write
    after the 45s ask deadline fires and forgets, so it can't extend the
@@ -369,17 +370,21 @@ change — human or LLM — appends one row to `session_title_history`.
   `feature-plugins/sidebar/auto.tsx`) lists the session's decisions with a
   verdict icon, the permission and command, and per-verdict counts in the
   header. Clicking a row expands the verdict, full model, latency, reason,
-  and timestamp.
+  and timestamp. When a session summary exists, a collapsible
+  `session summary · turn <n> · <model>` line shows the current
+  `session_auto_summary` text above the decision list.
 - **Decisions dialog**: `session.decisions` (slash `/decisions`, keybind
   `session_decisions`, default `none`) opens a `DialogSelect` audit list —
   newest first, verdict gutter icon, command as title, verdict/model/latency
   as description, reason and extra patterns as expandable details, timestamp
-  in the footer.
+  in the footer. Selecting a row opens a detail view with every audited
+  field, including the full validator prompt.
 
 The TUI keeps a `decision` store keyed by session, fetched with the session
 payload and refetched when validator activity lands (an escalated ask, or a
 tool part leaving `pending` — `allow`/`deny` rows are written before the tool
-runs).
+runs). The session summary rides along in an `auto_summary` store, fetched
+from `GET /session/:sessionID/auto_summary` on the same triggers.
 
 ## Evals
 

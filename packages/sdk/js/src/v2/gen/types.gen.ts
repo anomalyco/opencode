@@ -2567,9 +2567,18 @@ export type PermissionDecision = {
   }
   verdict: "allow" | "deny" | "uncertain" | "fallback"
   reason?: string
+  prompt?: string
   model: string
   latency_ms: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   created_at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type SessionAutoSummary = {
+  session_id: string
+  summary: string
+  model: string
+  turn_count: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  updated_at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
 export type TextPartInput = {
@@ -9846,6 +9855,40 @@ export type SessionPermissionDecisionsResponses = {
 
 export type SessionPermissionDecisionsResponse =
   SessionPermissionDecisionsResponses[keyof SessionPermissionDecisionsResponses]
+
+export type SessionAutoSummaryData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/auto_summary"
+}
+
+export type SessionAutoSummaryErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionAutoSummaryError = SessionAutoSummaryErrors[keyof SessionAutoSummaryErrors]
+
+export type SessionAutoSummaryResponses = {
+  /**
+   * Session auto summary
+   */
+  200: SessionAutoSummary
+}
+
+export type SessionAutoSummaryResponse = SessionAutoSummaryResponses[keyof SessionAutoSummaryResponses]
 
 export type SessionDiffData = {
   body?: never

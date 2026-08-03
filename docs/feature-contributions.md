@@ -36,14 +36,14 @@ Per-session status that survives restarts, shown as a gutter icon + footer
 label with "cache heat" colors (hot <5min, warm 5–60min, cold >60min, aligned
 with provider prompt-cache windows).
 
-| Icon    | Label         | Meaning                                              |
-| ------- | ------------- | ---------------------------------------------------- |
-| spinner | `Working`     | a turn is running in a live process                  |
-| `⚠`    | `Retrying`    | the provider call is being retried                   |
-| `!`     | `Needs input` | a question/permission tool is blocked waiting for you |
+| Icon    | Label         | Meaning                                                    |
+| ------- | ------------- | ---------------------------------------------------------- |
+| spinner | `Working`     | a turn is running in a live process                        |
+| `⚠`    | `Retrying`    | the provider call is being retried                         |
+| `!`     | `Needs input` | a question/permission tool is blocked waiting for you      |
 | `?`     | `Waiting`     | the turn completed with the assistant asking you something |
-| `✓`     | `Done`        | the turn completed cleanly (expires after 30 min)    |
-| `✕`     | `Interrupted` | the process behind an active status is gone          |
+| `✓`     | `Done`        | the turn completed cleanly (expires after 30 min)          |
+| `✕`     | `Interrupted` | the process behind an active status is gone                |
 
 Internals: statuses persist to SQLite (`session_status`), writes are
 serialized through a single queue, writers stamp their PID, and `Interrupted`
@@ -96,14 +96,17 @@ human — "`rm -rf /tmp/build` is fine in this context; `rm -rf ~` is not".
 - The prompt is fenced with per-call nonces against prompt injection;
   truncated payloads never approve.
 - Every decision lands in the `permission_decisions` audit table (verdict,
-  reason, model, latency) — no TTL, and an `ALLOW` whose audit row fails to
-  land degrades to the human flow instead of executing without evidence.
+  reason, model, latency, and the exact prompt sent to the validator) — no
+  TTL, and an `ALLOW` whose audit row fails to land degrades to the human
+  flow instead of executing without evidence.
 - Static rules keep precedence: configured `deny` never reaches the validator;
   configured `allow` never spends an LLM call.
 
 The TUI surfaces validator state: `auto (<model>)` prompt label, verdict line
-in the permission dialog, and an `Auto` decision badge on approved tool calls
-in the transcript.
+in the permission dialog, an `Auto` decision badge on approved tool calls in
+the transcript, an `Auto` sidebar section with the current session summary
+and the decision list, and a `/decisions` dialog whose detail view shows
+every audited field including the full validator prompt.
 
 ### Eval harness
 
@@ -125,12 +128,12 @@ without a summary, never a stuck ask.
 
 ## Commit map
 
-| Feature                        | Commits (main)                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------ |
-| Sessions screen                | `cdc1ccb52e` `2ee34fd357` `e75392605b` `945ed236da` `547b8035ac` `d880a1fa58` |
+| Feature                        | Commits (main)                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------ |
+| Sessions screen                | `cdc1ccb52e` `2ee34fd357` `e75392605b` `945ed236da` `547b8035ac` `d880a1fa58`              |
 | Status model + icons           | `e87a0a60fb` `c2f3ed5a38` `2df314cf66` `bbbcd4e1bf` `aa31c72299` `c8877c2f08` `8fd47742b7` |
-| Model carry-over               | `3917e3e576`                                                                   |
-| Titles: classifier + retitle   | `7d39c5b866` `e73529c87c` `299f287e5d`                                         |
-| Auto mode + validator + audit  | `2ac73c27cd` `8f6cb8ac70` `26caf3fb8d` `13e8470a5c` `cecf5abd10` `df188f9939` |
-| Hardening (injection, timeout) | `f02116c890` `1594e03836` `a72b5c66da`                                         |
-| Eval + docs                    | `e2450a28c0` `d332af1a25` `a701c9ba6e` `066ca096ac` `3a3ad3e6d6` `a693c37f68` |
+| Model carry-over               | `3917e3e576`                                                                               |
+| Titles: classifier + retitle   | `7d39c5b866` `e73529c87c` `299f287e5d`                                                     |
+| Auto mode + validator + audit  | `2ac73c27cd` `8f6cb8ac70` `26caf3fb8d` `13e8470a5c` `cecf5abd10` `df188f9939`              |
+| Hardening (injection, timeout) | `f02116c890` `1594e03836` `a72b5c66da`                                                     |
+| Eval + docs                    | `e2450a28c0` `d332af1a25` `a701c9ba6e` `066ca096ac` `3a3ad3e6d6` `a693c37f68`              |

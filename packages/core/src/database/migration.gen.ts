@@ -43,5 +43,6 @@ export const migrations = (
     import("./migration/20260726224314_session_status"),
     import("./migration/20260726234822_add_session_status_pid"),
     import("./migration/20260728121831_add-auto-mode-audit"),
+    import("./migration/20260803161726_amused_frightful_four"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

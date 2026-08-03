@@ -83,10 +83,20 @@ export const PermissionDecision = Schema.Struct({
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   verdict: Schema.Literals(["allow", "deny", "uncertain", "fallback"]),
   reason: Schema.optional(Schema.String),
+  prompt: Schema.optional(Schema.String),
   model: Schema.String,
   latency_ms: Schema.Number,
   created_at: Schema.Number,
 }).annotate({ identifier: "PermissionDecision" })
+
+// Wire shape mirrors the session_auto_summary table (snake_case).
+export const SessionAutoSummary = Schema.Struct({
+  session_id: Schema.String,
+  summary: Schema.String,
+  model: Schema.String,
+  turn_count: Schema.Number,
+  updated_at: Schema.Number,
+}).annotate({ identifier: "SessionAutoSummary" })
 
 export const SessionPaths = {
   list: root,
@@ -113,6 +123,7 @@ export const SessionPaths = {
   unrevert: `${root}/:sessionID/unrevert`,
   permissions: `${root}/:sessionID/permissions/:permissionID`,
   permissionDecisions: `${root}/:sessionID/permission_decisions`,
+  autoSummary: `${root}/:sessionID/auto_summary`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -189,6 +200,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.permission_decisions",
             summary: "List permission decisions",
             description: "Get the LLM permission validator audit trail for a session (auto mode), oldest first.",
+          }),
+        ),
+        HttpApiEndpoint.get("autoSummary", SessionPaths.autoSummary, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.NullOr(SessionAutoSummary), "Session auto summary"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.auto_summary",
+            summary: "Get session auto summary",
+            description:
+              "Get the incremental summary maintained by the session-summarizer agent (auto mode), or null when none exists.",
           }),
         ),
         HttpApiEndpoint.get("diff", SessionPaths.diff, {

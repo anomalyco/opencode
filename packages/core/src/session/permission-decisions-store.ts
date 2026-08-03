@@ -21,6 +21,9 @@ export interface Insert {
   readonly metadata?: Record<string, unknown>
   readonly verdict: Verdict
   readonly reason?: string
+  // The exact user message sent to the validator model; absent when no model
+  // call happened (truncated payload, early fallbacks).
+  readonly prompt?: string
   readonly model: string
   readonly latencyMs: number
 }
@@ -53,6 +56,7 @@ const layer = Layer.effect(
           metadata: decision.metadata,
           verdict: decision.verdict,
           reason: decision.reason,
+          prompt: decision.prompt,
           model: decision.model,
           latency_ms: decision.latencyMs,
         })
@@ -77,6 +81,7 @@ const layer = Layer.effect(
           metadata: row.metadata ?? undefined,
           verdict: row.verdict,
           reason: row.reason ?? undefined,
+          prompt: row.prompt ?? undefined,
           model: row.model,
           latencyMs: row.latency_ms,
           createdAt: row.created_at,

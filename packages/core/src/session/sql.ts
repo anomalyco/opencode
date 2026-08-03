@@ -205,6 +205,7 @@ export const PermissionDecisionsTable = sqliteTable(
     metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
     verdict: text().$type<PermissionDecisionsStore.Verdict>().notNull(),
     reason: text(),
+    prompt: text(),
     model: text().notNull(),
     latency_ms: integer().notNull(),
     created_at: integer()

@@ -47,10 +47,38 @@ function Row(props: { api: TuiPluginApi; item: PermissionDecision }) {
   )
 }
 
+function Summary(props: { api: TuiPluginApi; session_id: string }) {
+  const [open, setOpen] = createSignal(false)
+  const theme = () => props.api.theme.current
+  const summary = createMemo(() => props.api.state.session.autoSummary(props.session_id))
+
+  return (
+    <Show when={summary()}>
+      {(item) => (
+        <box onMouseDown={() => setOpen((x) => !x)}>
+          <box flexDirection="row" gap={1}>
+            <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
+            <text fg={theme().textMuted}>
+              session summary · turn {item().turn_count} · {item().model.split("/").pop()}
+            </text>
+          </box>
+          <Show when={open()}>
+            <box paddingLeft={3}>
+              <text fg={theme().text}>{item().summary}</text>
+              <text fg={theme().textMuted}>updated {Locale.time(Number(item().updated_at))}</text>
+            </box>
+          </Show>
+        </box>
+      )}
+    </Show>
+  )
+}
+
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
   const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.session.decisions(props.session_id))
+  const hasSummary = createMemo(() => props.api.state.session.autoSummary(props.session_id) != null)
   const summary = createMemo(() => {
     const counts = { allow: 0, deny: 0, uncertain: 0, fallback: 0 }
     for (const item of list()) counts[item.verdict]++
@@ -65,7 +93,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   })
 
   return (
-    <Show when={list().length > 0}>
+    <Show when={list().length > 0 || hasSummary()}>
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => setOpen((x) => !x)}>
           <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
@@ -75,6 +103,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           <text fg={theme().textMuted}>{summary()}</text>
         </box>
         <Show when={open()}>
+          <Summary api={props.api} session_id={props.session_id} />
           <For each={list()}>{(item) => <Row api={props.api} item={item} />}</For>
         </Show>
       </box>

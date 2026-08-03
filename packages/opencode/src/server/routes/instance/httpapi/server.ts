@@ -40,6 +40,7 @@ import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionStatusStore } from "@opencode-ai/core/session/status-store"
 import { PermissionDecisionsStore } from "@opencode-ai/core/session/permission-decisions-store"
+import { AutoSummaryStore } from "@opencode-ai/core/session/auto-summary-store"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
@@ -236,6 +237,7 @@ const app = LayerNode.group([
   PermissionSaved.node,
   PermissionValidator.node,
   PermissionDecisionsStore.node,
+  AutoSummaryStore.node,
   Todo.node,
   Session.node,
   SessionProjector.node,

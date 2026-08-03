@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "97e68d77-4fd1-4522-8c37-f3ff3116eff1",
-  "prevIds": ["08c00430-950c-4050-8df3-ff6ff6c353cc"],
+  "id": "6812acad-7bec-4a0e-84b5-bde01b4ef997",
+  "prevIds": ["97e68d77-4fd1-4522-8c37-f3ff3116eff1"],
   "ddl": [
     {
       "name": "workspace",
@@ -963,6 +963,16 @@
       "default": null,
       "generated": null,
       "name": "reason",
+      "entityType": "columns",
+      "table": "permission_decisions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "prompt",
       "entityType": "columns",
       "table": "permission_decisions"
     },

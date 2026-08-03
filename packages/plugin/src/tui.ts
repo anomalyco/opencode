@@ -11,6 +11,7 @@ import type {
   Provider,
   PermissionRequest,
   PermissionDecision,
+  SessionAutoSummary,
   QuestionRequest,
   Session,
   SessionStatus,
@@ -393,6 +394,7 @@ export type TuiState = {
     status: (sessionID: string) => SessionStatus | undefined
     permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
     decisions: (sessionID: string) => ReadonlyArray<PermissionDecision>
+    autoSummary: (sessionID: string) => SessionAutoSummary | null | undefined
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
   }
   part: (messageID: string) => ReadonlyArray<Part>

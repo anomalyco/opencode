@@ -429,6 +429,8 @@ it.instance(
       expect(rows[0].latencyMs).toBeGreaterThanOrEqual(0)
       expect(rows[0].createdAt).toBeGreaterThan(0)
       expect(rows[0].id.length).toBeGreaterThan(0)
+      expect(rows[0].prompt).toContain("ls -la")
+      expect(rows[0].prompt).toContain("WORK SO FAR")
     }),
   { git: true },
 )

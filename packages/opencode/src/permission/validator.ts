@@ -95,6 +95,7 @@ const make = (options?: Options) =>
         model: string,
         latencyMs: number,
         reason?: string,
+        prompt?: string,
       ) {
         // The audit trail must never break or block the ask itself — but the
         // caller learns whether the row landed, because an ALLOW without it
@@ -111,6 +112,7 @@ const make = (options?: Options) =>
               : summarize(input.metadata),
             verdict,
             reason,
+            prompt,
             model,
             latencyMs,
           })
@@ -183,6 +185,7 @@ const make = (options?: Options) =>
           reason: string,
           model: string,
           cause?: Cause.Cause<unknown>,
+          prompt?: string,
         ) {
           yield* Effect.logWarning("permission.validator.fallback", {
             reason,
@@ -190,7 +193,7 @@ const make = (options?: Options) =>
             permission: input.permission,
             ...(cause ? { cause: Cause.pretty(cause) } : {}),
           })
-          yield* audit(input, "fallback", model, Date.now() - started, reason)
+          yield* audit(input, "fallback", model, Date.now() - started, reason, prompt)
           return { verdict: "fallback" as const, reason, model }
         })
 
@@ -214,13 +217,13 @@ const make = (options?: Options) =>
           // degrade into a second fallback audit row.
           if (Cause.hasInterruptsOnly(attempted.cause)) return yield* Effect.interrupt
           const reason = Cause.isTimeoutError(Cause.squash(attempted.cause)) ? "timeout" : "error"
-          return yield* fallback(reason, model, attempted.cause)
+          return yield* fallback(reason, model, attempted.cause, prompt.text)
         }
 
         const parsed = parseVerdict(attempted.value)
-        if (!parsed) return yield* fallback("invalid", model)
+        if (!parsed) return yield* fallback("invalid", model, undefined, prompt.text)
         if (parsed.verdict === "allow") {
-          const recorded = yield* audit(input, "allow", model, Date.now() - started)
+          const recorded = yield* audit(input, "allow", model, Date.now() - started, undefined, prompt.text)
           if (recorded) return { verdict: "allow" as const }
           yield* Effect.logWarning("permission.validator.fallback", {
             reason: "audit",
@@ -230,10 +233,10 @@ const make = (options?: Options) =>
           return { verdict: "fallback" as const, reason: "audit", model }
         }
         if (parsed.verdict === "deny") {
-          yield* audit(input, "deny", model, Date.now() - started, parsed.reason)
+          yield* audit(input, "deny", model, Date.now() - started, parsed.reason, prompt.text)
           return yield* new PermissionV1.CorrectedError({ feedback: parsed.reason })
         }
-        yield* audit(input, "uncertain", model, Date.now() - started, parsed.reason)
+        yield* audit(input, "uncertain", model, Date.now() - started, parsed.reason, prompt.text)
         return { verdict: "uncertain" as const, reason: parsed.reason, model }
       })
 

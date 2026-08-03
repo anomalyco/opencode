@@ -144,6 +144,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       decisions(sessionID) {
         return sync.data.decision[sessionID] ?? []
       },
+      autoSummary(sessionID) {
+        return sync.data.auto_summary[sessionID]
+      },
       question(sessionID) {
         return sync.data.question[sessionID] ?? []
       },

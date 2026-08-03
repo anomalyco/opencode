@@ -9,6 +9,7 @@ import type {
   Command,
   PermissionRequest,
   PermissionDecision,
+  SessionAutoSummary,
   QuestionRequest,
   LspStatus,
   McpStatus,
@@ -80,6 +81,9 @@ export const {
       decision: {
         [sessionID: string]: PermissionDecision[]
       }
+      auto_summary: {
+        [sessionID: string]: SessionAutoSummary | null
+      }
       question: {
         [sessionID: string]: QuestionRequest[]
       }
@@ -125,6 +129,7 @@ export const {
       agent: [],
       permission: {},
       decision: {},
+      auto_summary: {},
       question: {},
       command: [],
       provider: [],
@@ -186,6 +191,10 @@ export const {
         .then((x) => setStore("decision", sessionID, reconcile(x.data ?? [])))
         .catch(() => {})
         .finally(() => decisionFetches.delete(sessionID))
+      void sdk.client.session
+        .autoSummary({ sessionID })
+        .then((x) => setStore("auto_summary", sessionID, x.data ?? null))
+        .catch(() => {})
     }
 
     // A session validates through the LLM only while its latest user message
@@ -305,6 +314,12 @@ export const {
           }
           setStore(
             "decision",
+            produce((draft) => {
+              delete draft[event.properties.info.id]
+            }),
+          )
+          setStore(
+            "auto_summary",
             produce((draft) => {
               delete draft[event.properties.info.id]
             }),
@@ -631,12 +646,13 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
-            const [session, messages, todo, diff, decisions] = await Promise.all([
+            const [session, messages, todo, diff, decisions, autoSummary] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
               sdk.client.session.permissionDecisions({ sessionID }),
+              sdk.client.session.autoSummary({ sessionID }),
             ])
             setStore(
               produce((draft) => {
@@ -645,6 +661,7 @@ export const {
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
                 draft.decision[sessionID] = decisions.data ?? []
+                draft.auto_summary[sessionID] = autoSummary.data ?? null
                 const currentMessages = draft.message[sessionID] ?? []
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]

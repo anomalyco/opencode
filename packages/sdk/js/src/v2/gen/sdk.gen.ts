@@ -181,6 +181,8 @@ import type {
   QuestionV2Reply,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionAutoSummaryErrors,
+  SessionAutoSummaryResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -3762,6 +3764,38 @@ export class Session2 extends HeyApiClient {
       ThrowOnError
     >({
       url: "/session/{sessionID}/permission_decisions",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session auto summary
+   *
+   * Get the incremental summary maintained by the session-summarizer agent (auto mode), or null when none exists.
+   */
+  public autoSummary<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionAutoSummaryResponses, SessionAutoSummaryErrors, ThrowOnError>({
+      url: "/session/{sessionID}/auto_summary",
       ...options,
       ...params,
     })
