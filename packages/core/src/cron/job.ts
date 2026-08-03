@@ -14,5 +14,6 @@ export const CronJob = Schema.Struct({
   nextRunAt: Schema.Number,
   lastRunAt: Schema.optional(Schema.Number),
   runCount: Schema.Number,
+  context: Schema.optional(Schema.Unknown),
 })
 export type CronJob = Schema.Schema.Type<typeof CronJob>

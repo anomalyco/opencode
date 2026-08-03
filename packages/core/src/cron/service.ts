@@ -9,6 +9,7 @@ interface Interface {
     intervalMs: number
     agent?: string
     model?: string
+    context?: unknown
   }) => Effect.Effect<CronJob, CronError>
   readonly list: (sessionID: string) => Effect.Effect<ReadonlyArray<CronJob>>
   readonly remove: (sessionID: string, jobId: string) => Effect.Effect<number>
@@ -64,14 +65,14 @@ const make = Effect.gen(function* () {
 
       if (current >= job.expiresAt) continue
 
-      const busy = yield* port.isBusy(job.sessionID)
+      const busy = yield* port.isBusy(job.sessionID, { context: job.context })
       if (busy) {
         yield* insertJob({ ...job, nextRunAt: job.nextRunAt + job.intervalMs })
         continue
       }
 
       yield* port
-        .deliver(job.sessionID, job.prompt, { agent: job.agent, model: job.model })
+        .deliver(job.sessionID, job.prompt, { agent: job.agent, model: job.model, context: job.context })
         .pipe(
           Effect.catch((e) =>
             Effect.logError("cron delivery failed", { sessionID: job.sessionID, error: String(e) }),
@@ -97,6 +98,7 @@ const make = Effect.gen(function* () {
     intervalMs: number
     agent?: string
     model?: string
+    context?: unknown
   }) =>
     Effect.gen(function* () {
       if (input.intervalMs < 60_000) {
@@ -118,6 +120,7 @@ const make = Effect.gen(function* () {
         expiresAt: now + 7 * 24 * 60 * 60 * 1000,
         nextRunAt: now + input.intervalMs,
         runCount: 0,
+        context: input.context,
       }
       const inserted = yield* Ref.modify(heap, (jobs) => {
         const count = jobs.filter((j) => j.sessionID === input.sessionID).length
