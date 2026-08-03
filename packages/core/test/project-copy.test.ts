@@ -3,9 +3,10 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { eq } from "drizzle-orm"
-import { Effect, Fiber, Layer, Stream } from "effect"
+import { Effect, Fiber, Stream } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Git } from "@opencode-ai/core/git"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -16,17 +17,9 @@ import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const databaseLayer = Database.layerFromPath(":memory:")
-const eventLayer = EventV2.layer.pipe(Layer.provide(databaseLayer))
-const directoriesLayer = ProjectDirectories.layer.pipe(Layer.provide(databaseLayer))
-const copyLayer = ProjectCopy.layer.pipe(
-  Layer.provide(databaseLayer),
-  Layer.provide(directoriesLayer),
-  Layer.provide(eventLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Git.defaultLayer),
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([ProjectCopy.node, Database.node, EventV2.node, ProjectDirectories.node])),
 )
-const it = testEffect(Layer.mergeAll(copyLayer, databaseLayer, eventLayer, directoriesLayer))
 
 function abs(input: string) {
   return AbsolutePath.make(input)

@@ -1,4 +1,11 @@
 export { AppBaseProviders, AppInterface } from "./app"
+export { useLayout } from "./context/layout"
+export { useServerSDK } from "./context/server-sdk"
+export { useServerSync } from "./context/server-sync"
+export { useServer } from "./context/server"
+export { useSettings } from "./context/settings"
+export { useTabs } from "./context/tabs"
+export { useProviders } from "./hooks/use-providers"
 export { ACCEPTED_FILE_EXTENSIONS, ACCEPTED_FILE_TYPES, filePickerFilters } from "./constants/file-picker"
 export { useCommand } from "./context/command"
 export { loadLocaleDict, normalizeLocale, type Locale } from "./context/language"
@@ -20,4 +27,3 @@ export {
   type WslServersState,
 } from "./wsl/types"
 export { ServerConnection } from "./context/server"
-export { handleNotificationClick } from "./utils/notification-click"

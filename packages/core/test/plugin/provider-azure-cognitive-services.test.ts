@@ -1,25 +1,76 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AzureCognitiveServicesPlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { fakeSelectorSdk, it, model, provider, withEnv } from "./provider-helper"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
+
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* AzureCognitiveServicesPlugin.effect(host)
+})
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value")
+  return value
+}
+
+function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+      Object.entries(vars).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    fx,
+    (previous) =>
+      Effect.sync(() => {
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        })
+      }),
+  )
+}
+
+function fakeSelectorSdk(calls: string[]) {
+  const make = (method: string) => (id: string) => {
+    calls.push(`${method}:${id}`)
+    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
+  }
+  return {
+    responses: make("responses"),
+    messages: make("messages"),
+    chat: make("chat"),
+    languageModel: make("languageModel"),
+  }
+}
 
 describe("AzureCognitiveServicesPlugin", () => {
   it.effect("maps the resource env var to the Azure SDK baseURL", () =>
     withEnv({ AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "cognitive" }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzureCognitiveServicesPlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
+        yield* catalog.transform((catalog) => {
           catalog.provider.update(ProviderV2.ID.make("azure-cognitive-services"), (item) => {
             item.api = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
           })
         })
-        const result = yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services"))
+        yield* addPlugin()
+        const result = required(yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services")))
         expect(result.api).toEqual({
           type: "aisdk",
           package: "@ai-sdk/openai-compatible",
@@ -34,15 +85,16 @@ describe("AzureCognitiveServicesPlugin", () => {
   it.effect("leaves baseURL unset without resource env and ignores other providers", () =>
     withEnv({ AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzureCognitiveServicesPlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
-          const azure = provider("azure-cognitive-services", {
+        yield* catalog.transform((catalog) => {
+          const azure = ProviderV2.Info.make({
+            ...ProviderV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services")),
             api: { type: "aisdk", package: "@ai-sdk/openai-compatible" },
           })
-          const openai = provider("openai")
+          const openai = ProviderV2.Info.make({
+            ...ProviderV2.Info.empty(ProviderV2.ID.openai),
+            api: { type: "aisdk", package: "test-provider" },
+          })
           catalog.provider.update(azure.id, (item) => {
             item.api = azure.api
           })
@@ -50,8 +102,9 @@ describe("AzureCognitiveServicesPlugin", () => {
             item.api = openai.api
           })
         })
-        const azure = yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services"))
-        const openai = yield* catalog.provider.get(ProviderV2.ID.openai)
+        yield* addPlugin()
+        const azure = required(yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services")))
+        const openai = required(yield* catalog.provider.get(ProviderV2.ID.openai))
         expect(azure.request.body.baseURL).toBeUndefined()
         expect(azure.api).toEqual({ type: "aisdk", package: "@ai-sdk/openai-compatible" })
         expect(openai.request.body.baseURL).toBeUndefined()
@@ -63,17 +116,17 @@ describe("AzureCognitiveServicesPlugin", () => {
   it.effect("selects chat only for completion URLs", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AzureCognitiveServicesPlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("azure-cognitive-services", "deployment"),
-          sdk: fakeSelectorSdk(calls),
-          options: { useCompletionUrls: true },
-        },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: { useCompletionUrls: true },
+      })
       expect(calls).toEqual(["chat:deployment"])
     }),
   )
@@ -81,18 +134,25 @@ describe("AzureCognitiveServicesPlugin", () => {
   it.effect("uses the legacy Azure selector order and provider guard", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(AzureCognitiveServicesPlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("azure-cognitive-services", "deployment"), sdk: fakeSelectorSdk(calls), options: {} },
-        {},
-      )
-      const ignored = yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("openai", "deployment"), sdk: fakeSelectorSdk(calls), options: {} },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      const ignored = yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("deployment")),
+          api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
       expect(calls).toEqual(["responses:deployment"])
       expect(ignored.language).toBeUndefined()
     }),
@@ -101,36 +161,34 @@ describe("AzureCognitiveServicesPlugin", () => {
   it.effect("falls back from responses to messages, chat, then languageModel", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
       const sdk = fakeSelectorSdk(calls)
-      yield* plugin.add(AzureCognitiveServicesPlugin)
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("azure-cognitive-services", "messages-deployment"),
-          sdk: { messages: sdk.messages, chat: sdk.chat, languageModel: sdk.languageModel },
-          options: {},
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("azure-cognitive-services", "chat-deployment"),
-          sdk: { chat: sdk.chat, languageModel: sdk.languageModel },
-          options: {},
-        },
-        {},
-      )
-      yield* plugin.trigger(
-        "aisdk.language",
-        {
-          model: model("azure-cognitive-services", "language-deployment"),
-          sdk: { languageModel: sdk.languageModel },
-          options: {},
-        },
-        {},
-      )
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("messages-deployment")),
+          api: { id: ModelV2.ID.make("messages-deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { messages: sdk.messages, chat: sdk.chat, languageModel: sdk.languageModel },
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("chat-deployment")),
+          api: { id: ModelV2.ID.make("chat-deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { chat: sdk.chat, languageModel: sdk.languageModel },
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("language-deployment")),
+          api: { id: ModelV2.ID.make("language-deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: { languageModel: sdk.languageModel },
+        options: {},
+      })
       expect(calls).toEqual([
         "messages:messages-deployment",
         "chat:chat-deployment",

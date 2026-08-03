@@ -132,6 +132,10 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
+    "SUPPORT_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Stat": import("@cloudflare/workers-types").Service
     "Teams": {
       "type": "sst.cloudflare.SolidStart"

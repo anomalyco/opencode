@@ -1,19 +1,15 @@
-import { MetaProvider, Meta, Title } from "@solidjs/meta"
+import { MetaProvider, Title } from "@solidjs/meta"
 import { Router } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
 import { Suspense } from "solid-js"
-import "./app.css"
+import { I18nProvider, useI18n } from "./context/i18n"
+import { LanguageProvider } from "./context/language"
+import { strip } from "./lib/language"
+import "./routes/index.css"
 
 function AppMeta() {
-  return (
-    <>
-      <Title>AI Model Usage Rankings | OpenCode Data</Title>
-      <Meta
-        name="description"
-        content="Explore OpenCode Go usage across AI models, including token volume, rankings, market share, token pricing, session cost, cache ratio, and geo breakdowns."
-      />
-    </>
-  )
+  const i18n = useI18n()
+  return <Title>{i18n.t("app.title")}</Title>
 }
 
 export default function App() {
@@ -21,11 +17,16 @@ export default function App() {
     <Router
       base={import.meta.env.BASE_URL.replace(/\/$/, "")}
       explicitLinks={true}
+      transformUrl={strip}
       root={(props) => (
-        <MetaProvider>
-          <AppMeta />
-          <Suspense>{props.children}</Suspense>
-        </MetaProvider>
+        <LanguageProvider>
+          <I18nProvider>
+            <MetaProvider>
+              <AppMeta />
+              <Suspense>{props.children}</Suspense>
+            </MetaProvider>
+          </I18nProvider>
+        </LanguageProvider>
       )}
     >
       <FileRoutes />

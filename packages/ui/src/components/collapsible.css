@@ -127,6 +127,12 @@
       height: 24px;
     }
   }
+
+  &[data-variant="ghost"][data-scope="file-tree-v2"] {
+    > [data-slot="collapsible-trigger"] {
+      height: 28px;
+    }
+  }
 }
 
 @keyframes slideDown {

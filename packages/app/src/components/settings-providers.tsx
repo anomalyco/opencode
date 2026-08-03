@@ -6,10 +6,9 @@ import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
-import { DialogConnectProvider } from "./dialog-connect-provider"
-import { DialogSelectProvider } from "./dialog-select-provider"
+import { DialogConnectProvider, useProviderConnectController } from "./dialog-connect-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
 import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
@@ -28,20 +27,27 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
 ] as const
 
-export const SettingsProviders: Component = () => {
+export const SettingsProviders: Component<{ onBack?: () => void }> = (props) => {
   return (
     <SettingsServerScope>
-      <SettingsProvidersContent />
+      <SettingsProvidersContent onBack={props.onBack} />
     </SettingsServerScope>
   )
 }
 
-const SettingsProvidersContent: Component = () => {
+const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
+  const protocol = useServerProtocol()
   const serverSync = useServerSync()
-  const providers = useProviders()
+  const providers = useProviders(() => undefined)
+  const providerConnect = useProviderConnectController({ onBack: props.onBack })
+
+  const connect = (provider?: string) => {
+    providerConnect.select(provider)
+    void dialog.show(() => <DialogConnectProvider controller={providerConnect} />)
+  }
 
   const connected = createMemo(() => {
     return providers
@@ -78,7 +84,8 @@ const SettingsProvidersContent: Component = () => {
     return language.t("settings.providers.tag.other")
   }
 
-  const canDisconnect = (item: ProviderItem) => source(item) !== "env"
+  const canDisconnect = (item: ProviderItem) =>
+    source(item) !== "env" && (protocol() === "v1" || !isConfigCustom(item.id))
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
@@ -91,6 +98,7 @@ const SettingsProvidersContent: Component = () => {
   }
 
   const disableProvider = async (providerID: string, name: string) => {
+    if (protocol() !== "v1") return
     const before = serverSync().data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
     serverSync().set("config", "disabled_providers", next)
@@ -206,53 +214,46 @@ const SettingsProvidersContent: Component = () => {
                       {(key) => <span class="text-12-regular text-text-weak pl-8">{language.t(key())}</span>}
                     </Show>
                   </div>
-                  <Button
-                    size="large"
-                    variant="secondary"
-                    icon="plus-small"
-                    onClick={() => {
-                      dialog.show(() => <DialogConnectProvider provider={item.id} />)
-                    }}
-                  >
+                  <Button size="large" variant="secondary" icon="plus-small" onClick={() => connect(item.id)}>
                     {language.t("common.connect")}
                   </Button>
                 </div>
               )}
             </For>
 
-            <div
-              class="flex items-center justify-between gap-4 min-h-16 border-b border-border-weak-base last:border-none flex-wrap py-3"
-              data-component="custom-provider-section"
-            >
-              <div class="flex flex-col min-w-0">
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
-                  <span class="text-14-medium text-text-strong">{language.t("provider.custom.title")}</span>
-                  <Tag>{language.t("settings.providers.tag.custom")}</Tag>
-                </div>
-                <span class="text-12-regular text-text-weak pl-8">
-                  {language.t("settings.providers.custom.description")}
-                </span>
-              </div>
-              <Button
-                size="large"
-                variant="secondary"
-                icon="plus-small"
-                onClick={() => {
-                  dialog.show(() => <DialogCustomProvider back="close" />)
-                }}
+            <Show when={protocol() === "v1"}>
+              <div
+                class="flex items-center justify-between gap-4 min-h-16 border-b border-border-weak-base last:border-none flex-wrap py-3"
+                data-component="custom-provider-section"
               >
-                {language.t("common.connect")}
-              </Button>
-            </div>
+                <div class="flex flex-col min-w-0">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
+                    <span class="text-14-medium text-text-strong">{language.t("provider.custom.title")}</span>
+                    <Tag>{language.t("settings.providers.tag.custom")}</Tag>
+                  </div>
+                  <span class="text-12-regular text-text-weak pl-8">
+                    {language.t("settings.providers.custom.description")}
+                  </span>
+                </div>
+                <Button
+                  size="large"
+                  variant="secondary"
+                  icon="plus-small"
+                  onClick={() => {
+                    dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
+                  }}
+                >
+                  {language.t("common.connect")}
+                </Button>
+              </div>
+            </Show>
           </SettingsList>
 
           <Button
             variant="ghost"
             class="px-0 py-0 mt-5 text-14-medium text-text-interactive-base text-left justify-start hover:bg-transparent active:bg-transparent"
-            onClick={() => {
-              dialog.show(() => <DialogSelectProvider />)
-            }}
+            onClick={() => connect()}
           >
             {language.t("dialog.provider.viewAll")}
           </Button>

@@ -12,6 +12,7 @@ export type StatBaseAggregate = {
   tier: string
   sessions: number
   requests: number
+  unique_users: number
   input_tokens: number
   output_tokens: number
   reasoning_tokens: number
@@ -41,6 +42,7 @@ export type StatBaseRow = {
   source?: string
   sessions?: number
   requests?: number
+  unique_users?: number
   input_tokens?: number
   output_tokens?: number
   reasoning_tokens?: number
@@ -71,6 +73,7 @@ export function toStatBaseRow(data: StatBaseAggregate) {
     source: "all",
     sessions: data.sessions,
     requests: data.requests,
+    unique_users: data.unique_users,
     input_tokens: data.input_tokens,
     output_tokens: data.output_tokens,
     reasoning_tokens: data.reasoning_tokens,
@@ -122,6 +125,7 @@ export function combineRows<T extends StatBaseRow>(left: T, right: T): T {
     ...left,
     sessions: (left.sessions ?? 0) + (right.sessions ?? 0),
     requests: (left.requests ?? 0) + (right.requests ?? 0),
+    unique_users: (left.unique_users ?? 0) + (right.unique_users ?? 0),
     input_tokens: (left.input_tokens ?? 0) + (right.input_tokens ?? 0),
     output_tokens: (left.output_tokens ?? 0) + (right.output_tokens ?? 0),
     reasoning_tokens: (left.reasoning_tokens ?? 0) + (right.reasoning_tokens ?? 0),
@@ -141,6 +145,18 @@ export function combineRows<T extends StatBaseRow>(left: T, right: T): T {
     error_count: (left.error_count ?? 0) + (right.error_count ?? 0),
     sample_count: (left.sample_count ?? 0) + (right.sample_count ?? 0),
   }
+}
+
+export function isMissingUniqueUsersColumn(cause: unknown): boolean {
+  return errorText(cause).includes("Unknown column 'unique_users'")
+}
+
+export function omitUniqueUsers<T extends { unique_users?: number }>(rows: T[]) {
+  return rows.map((row) => {
+    const result = { ...row }
+    delete result.unique_users
+    return result
+  })
 }
 
 export function statPeriodKey(row: StatBaseRow) {
@@ -236,6 +252,15 @@ function unique(values: string[]) {
 
 export function inserted(column: string) {
   return sql.raw(`values(\`${column}\`)`)
+}
+
+function errorText(cause: unknown): string {
+  if (cause instanceof Error) return `${cause.message} ${errorText((cause as { cause?: unknown }).cause)}`
+  if (typeof cause === "object" && cause)
+    return Object.values(cause as Record<string, unknown>)
+      .map(errorText)
+      .join(" ")
+  return String(cause)
 }
 
 export function weightedAverage(

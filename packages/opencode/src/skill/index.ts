@@ -1,6 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
-import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
@@ -17,6 +16,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
+import { escapeHtml } from "@/util/html"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -247,7 +247,7 @@ const loadSkills = Effect.fnUntraced(function* (
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const discovery = yield* Discovery.Service
@@ -318,15 +318,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Discovery.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Global.layer),
-  Layer.provide(RuntimeFlags.defaultLayer),
-)
-
 export function fmt(list: Info[], opts: { verbose: boolean }) {
   const described = list.filter((skill) => skill.description !== undefined)
   if (described.length === 0) return "No skills are currently available."
@@ -339,7 +330,7 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
           "  <skill>",
           `    <name>${skill.name}</name>`,
           `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
+          `    <location>${escapeHtml(skill.location)}</location>`,
           "  </skill>",
         ]),
       "</available_skills>",
@@ -354,13 +345,10 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
   ].join("\n")
 }
 
-export const node = LayerNode.make(layer, [
-  Discovery.node,
-  Config.node,
-  EventV2Bridge.node,
-  FSUtil.node,
-  Global.node,
-  RuntimeFlags.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Discovery.node, Config.node, EventV2Bridge.node, FSUtil.node, Global.node, RuntimeFlags.node],
+})
 
 export * as Skill from "."

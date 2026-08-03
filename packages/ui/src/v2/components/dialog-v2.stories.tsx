@@ -1,17 +1,17 @@
 import { Dialog as KobalteDialog } from "@kobalte/core/dialog"
-import { Dialog, DialogFooter } from "./dialog-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle, DialogTitleGroup } from "./dialog-v2"
 import { ButtonV2 } from "./button-v2"
 
 const docs = `### Overview
 Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
 
-### API
-- Optional: \`title\`, \`description\`, \`action\`.
-- \`size\`: normal | large | x-large.
-- \`fit\` and \`transition\` control layout and animation.
+Compose with \`DialogHeader\`, \`DialogTitle\`, \`DialogTitleGroup\`, \`DialogBody\`, and \`DialogFooter\`.
 
-### Variants and states
-- Sizes and optional header/action controls.
+### API
+- \`Dialog\`: \`size\` (normal | large | x-large), \`variant\`, \`fit\`.
+- \`DialogHeader\`: row container with optional \`closeLabel\` and \`hideClose\`.
+- \`DialogTitle\`: accessible single-line header title.
+- \`DialogTitleGroup\`: column with \`title\` and required \`description\`.
 
 ### Accessibility
 - Focus trapping and aria attributes provided by Kobalte Dialog.
@@ -34,6 +34,14 @@ export default {
   },
 }
 
+function dialogHeader(title: string, description: string) {
+  return (
+    <DialogHeader>
+      <DialogTitleGroup title={title} description={description} />
+    </DialogHeader>
+  )
+}
+
 export const Basic = {
   render: () => (
     <KobalteDialog defaultOpen>
@@ -42,8 +50,9 @@ export const Basic = {
       </KobalteDialog.Trigger>
       <KobalteDialog.Portal>
         <KobalteDialog.Overlay />
-        <Dialog title="Dialog" description="Description">
-          Dialog body content.
+        <Dialog>
+          {dialogHeader("Dialog", "Description")}
+          <DialogBody>Dialog body content.</DialogBody>
         </Dialog>
       </KobalteDialog.Portal>
     </KobalteDialog>
@@ -59,8 +68,9 @@ export const Sizes = {
         </KobalteDialog.Trigger>
         <KobalteDialog.Portal>
           <KobalteDialog.Overlay />
-          <Dialog title="Normal" description="Normal size">
-            Normal dialog content.
+          <Dialog>
+            {dialogHeader("Normal", "Normal size")}
+            <DialogBody>Normal dialog content.</DialogBody>
           </Dialog>
         </KobalteDialog.Portal>
       </KobalteDialog>
@@ -71,8 +81,9 @@ export const Sizes = {
         </KobalteDialog.Trigger>
         <KobalteDialog.Portal>
           <KobalteDialog.Overlay />
-          <Dialog size="large" title="Large" description="Large size">
-            Large dialog content.
+          <Dialog size="large">
+            {dialogHeader("Large", "Large size")}
+            <DialogBody>Large dialog content.</DialogBody>
           </Dialog>
         </KobalteDialog.Portal>
       </KobalteDialog>
@@ -83,8 +94,9 @@ export const Sizes = {
         </KobalteDialog.Trigger>
         <KobalteDialog.Portal>
           <KobalteDialog.Overlay />
-          <Dialog size="x-large" title="Extra large" description="X-large size">
-            X-large dialog content.
+          <Dialog size="x-large">
+            {dialogHeader("Extra large", "X-large size")}
+            <DialogBody>X-large dialog content.</DialogBody>
           </Dialog>
         </KobalteDialog.Portal>
       </KobalteDialog>
@@ -92,24 +104,41 @@ export const Sizes = {
   ),
 }
 
-export const CustomAction = {
+export const TitleOnly = {
   render: () => (
-    <KobalteDialog>
+    <KobalteDialog defaultOpen>
       <KobalteDialog.Trigger as={ButtonV2} variant="neutral">
-        Open action dialog
+        Open dialog
       </KobalteDialog.Trigger>
       <KobalteDialog.Portal>
         <KobalteDialog.Overlay />
-        <Dialog
-          title="Custom action"
-          description="Dialog with a custom header action"
-          action={
+        <Dialog>
+          <DialogHeader>
+            <DialogTitle>Open project</DialogTitle>
+          </DialogHeader>
+          <DialogBody>Dialog body content.</DialogBody>
+        </Dialog>
+      </KobalteDialog.Portal>
+    </KobalteDialog>
+  ),
+}
+
+export const HeaderControls = {
+  render: () => (
+    <KobalteDialog>
+      <KobalteDialog.Trigger as={ButtonV2} variant="neutral">
+        Open dialog
+      </KobalteDialog.Trigger>
+      <KobalteDialog.Portal>
+        <KobalteDialog.Overlay />
+        <Dialog>
+          <DialogHeader>
+            <DialogTitleGroup title="Custom header" description="Dialog with an extra header control" />
             <ButtonV2 variant="neutral" size="small">
               Help
             </ButtonV2>
-          }
-        >
-          Dialog body content.
+          </DialogHeader>
+          <DialogBody>Dialog body content.</DialogBody>
         </Dialog>
       </KobalteDialog.Portal>
     </KobalteDialog>
@@ -124,7 +153,8 @@ export const WithFooter = {
       </KobalteDialog.Trigger>
       <KobalteDialog.Portal>
         <KobalteDialog.Overlay />
-        <Dialog title="Save changes" description="Your changes will be lost if you don't save them." fit>
+        <Dialog fit>
+          {dialogHeader("Save changes", "Your changes will be lost if you don't save them.")}
           <DialogFooter>
             <ButtonV2 variant="neutral">Cancel</ButtonV2>
             <ButtonV2 variant="contrast">Save</ButtonV2>
@@ -143,7 +173,8 @@ export const WithFooterThreeButtons = {
       </KobalteDialog.Trigger>
       <KobalteDialog.Portal>
         <KobalteDialog.Overlay />
-        <Dialog title="Unsaved changes" description="You have unsaved changes. What would you like to do?" fit>
+        <Dialog fit>
+          {dialogHeader("Unsaved changes", "You have unsaved changes. What would you like to do?")}
           <DialogFooter>
             <span style={{ "margin-right": "auto" }}>
               <ButtonV2 variant="ghost">Remind me later</ButtonV2>
@@ -165,8 +196,9 @@ export const Fit = {
       </KobalteDialog.Trigger>
       <KobalteDialog.Portal>
         <KobalteDialog.Overlay />
-        <Dialog title="Fit content" fit>
-          Dialog fits its content.
+        <Dialog fit>
+          {dialogHeader("Fit content", "Dialog fits its content.")}
+          <DialogBody>Dialog fits its content.</DialogBody>
         </Dialog>
       </KobalteDialog.Portal>
     </KobalteDialog>

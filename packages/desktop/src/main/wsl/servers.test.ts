@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { clearWslDistroState, requireWslIpcString, wslServerIdToRestart, wslTerminalArgs } from "./policy"
+import {
+  clearWslDistroState,
+  requireWslIpcString,
+  requireWslIpcStrings,
+  wslServerIdToRestart,
+  wslTerminalArgs,
+} from "./policy"
 import {
   expectOpencodeVersion,
   pendingRestartAfterWslInstall,
@@ -87,8 +93,10 @@ test("stops health polling when sidecar startup settles", async () => {
 
 test("validates WSL IPC identifiers at the module boundary", () => {
   expect(requireWslIpcString("distro", "Debian")).toBe("Debian")
+  expect(requireWslIpcStrings("distro", ["Debian", "Ubuntu"])).toEqual(["Debian", "Ubuntu"])
   expect(() => requireWslIpcString("distro", "")).toThrow("Invalid distro")
   expect(() => requireWslIpcString("server id", undefined)).toThrow("Invalid server id")
+  expect(() => requireWslIpcStrings("distro", [])).toThrow("Invalid distro")
 })
 
 test("derives a required Windows restart from the post-install runtime probe", () => {
@@ -140,6 +148,62 @@ test("ignores stale startup OpenCode checks after removing a WSL server", async 
 
   expect(controller.getState().servers).toEqual([])
   expect(controller.getState().opencodeChecks).toEqual({})
+})
+
+test("probes addable distros in parallel before checking OpenCode", async () => {
+  persistedServers = []
+  const started: string[] = []
+  const release = new Map<string, () => void>()
+  const opencode: string[] = []
+  const controller = createWslServersController("1.16.2", async () => new Promise<never>(() => undefined), {
+    ...testControllerOptions(),
+    probeDistro: async (distro) => {
+      started.push(distro)
+      await new Promise<void>((resolve) => release.set(distro, resolve))
+      return { name: distro, canExecute: true, hasBash: true, hasCurl: true, error: null }
+    },
+    resolveOpencode: async (distro) => {
+      opencode.push(distro)
+      return "/home/me/.opencode/bin/opencode"
+    },
+  })
+
+  const task = controller.probeAddable(["Debian", "Ubuntu"])
+  await waitFor(() => started.length === 2)
+  expect(started).toEqual(["Debian", "Ubuntu"])
+  expect(opencode).toEqual([])
+  release.get("Debian")?.()
+  release.get("Ubuntu")?.()
+  await task
+
+  expect(Object.keys(controller.getState().distroProbes)).toEqual(["Debian", "Ubuntu"])
+  expect(opencode).toEqual(["Debian", "Ubuntu"])
+  expect(Object.keys(controller.getState().opencodeChecks)).toEqual(["Debian", "Ubuntu"])
+})
+
+test("does not check OpenCode in addable distros that cannot execute commands", async () => {
+  persistedServers = []
+  const opencode: string[] = []
+  const controller = createWslServersController("1.16.2", async () => new Promise<never>(() => undefined), {
+    ...testControllerOptions(),
+    probeDistro: async (distro) => ({
+      name: distro,
+      canExecute: distro === "Debian",
+      hasBash: distro === "Debian",
+      hasCurl: distro === "Debian",
+      error: distro === "Debian" ? null : "Open Ubuntu once to finish setup",
+    }),
+    resolveOpencode: async (distro) => {
+      opencode.push(distro)
+      return "/home/me/.opencode/bin/opencode"
+    },
+  })
+
+  await controller.probeAddable(["Debian", "Ubuntu"])
+
+  expect(Object.keys(controller.getState().distroProbes)).toEqual(["Debian", "Ubuntu"])
+  expect(opencode).toEqual(["Debian"])
+  expect(Object.keys(controller.getState().opencodeChecks)).toEqual(["Debian"])
 })
 
 async function waitFor(check: () => boolean) {

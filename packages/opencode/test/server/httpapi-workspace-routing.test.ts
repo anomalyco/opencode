@@ -21,7 +21,6 @@ import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Database } from "@opencode-ai/core/database/database"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Project } from "../../src/project/project"
 import { Session } from "../../src/session/session"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
@@ -55,11 +54,9 @@ const it = testEffect(
     testStateLayer,
     NodeHttpServer.layerTest,
     NodeServices.layer,
-    Database.defaultLayer,
-    Project.defaultLayer,
     workspaceLayer,
     Socket.layerWebSocketConstructorGlobal,
-  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
+  ),
 )
 
 type ProxiedRequest = {

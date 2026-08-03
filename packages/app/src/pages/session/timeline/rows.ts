@@ -1,9 +1,11 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import { AssistantMessage, Part, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
-import { groupParts, PartGroup, renderable } from "@opencode-ai/ui/message-part"
-import { Data, Equal } from "effect"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
+import { TimelineRow, type SummaryDiff } from "./timeline-row"
+import { uniqueSummaryDiffs } from "./summary-diffs"
 
-export type SummaryDiff = SnapshotFileDiff & { file: string }
+export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
 export type TimelineRowMap = {
   TurnGap: { userMessageID: string }
@@ -29,82 +31,72 @@ export type TimelineRowMap = {
   Error: { userMessageID: string; text: string }
 }
 
-export namespace TimelineRow {
-  export class TurnGap extends Data.TaggedClass("TurnGap")<{
-    userMessageID: string
-  }> {}
-  export class CommentStrip extends Data.TaggedClass("CommentStrip")<{
-    userMessageID: string
-  }> {}
-  export class UserMessage extends Data.TaggedClass("UserMessage")<{
-    userMessageID: string
-    anchor: boolean
-  }> {}
-  export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
-    userMessageID: string
-    label: "compaction" | "interrupted"
-  }> {}
-  export class AssistantPart extends Data.TaggedClass("AssistantPart")<{
-    userMessageID: string
-    group: PartGroup
-    previousAssistantPart: boolean
-  }> {}
-  export class Thinking extends Data.TaggedClass("Thinking")<{
-    userMessageID: string
-    reasoningHeading?: string
-  }> {}
-  export class DiffSummary extends Data.TaggedClass("DiffSummary")<{
-    userMessageID: string
-    diffs: SummaryDiff[]
-  }> {}
-  export class Error extends Data.TaggedClass("Error")<{
-    userMessageID: string
-    text: string
-  }> {}
-  export class Retry extends Data.TaggedClass("Retry")<{
-    userMessageID: string
-  }> {}
-
-  export type TimelineRow =
-    | TurnGap
-    | CommentStrip
-    | UserMessage
-    | TurnDivider
-    | AssistantPart
-    | Thinking
-    | DiffSummary
-    | Error
-    | Retry
-
-  export const key = (row: TimelineRow) => {
-    switch (row._tag) {
-      case "TurnGap":
-        return `turn-gap:${row.userMessageID}`
-      case "CommentStrip":
-        return `comment-strip:${row.userMessageID}`
-      case "UserMessage":
-        return `user-message:${row.userMessageID}`
-      case "TurnDivider":
-        return `turn-divider:${row.userMessageID}:${row.label}`
-      case "AssistantPart":
-        return `assistant-part:${row.userMessageID}:${row.group.key}`
-      case "Thinking":
-        return `thinking:${row.userMessageID}`
-      case "DiffSummary":
-        return `diff-summary:${row.userMessageID}`
-      case "Error":
-        return `error:${row.userMessageID}`
-      case "Retry":
-        return `retry:${row.userMessageID}`
+export namespace Timeline {
+  export function constructSessionMessageRows(
+    messages: SessionMessageInfo[],
+    getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
+    getMessageParts: (messageID: string) => Part[],
+    showReasoning: boolean,
+    status: SessionStatus["type"],
+    inlineComments: boolean,
+    projectedUserMessages: UserMessage[],
+  ) {
+    const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
+    const turnByUserID = new Map<string, (typeof turns)[number]>()
+    messages.forEach((message) => {
+      const projected = getMessage(message.id)
+      if (message.type === "shell" && projected?.role === "user") {
+        const assistant = getMessage(`${message.id}:assistant`)
+        const turn = { user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        return
+      }
+      if (projected?.role === "user") {
+        if (turnByUserID.has(projected.id)) return
+        const turn = { user: projected, assistants: [] }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        return
+      }
+      if (projected?.role !== "assistant") return
+      const existing = turnByUserID.get(projected.parentID)
+      if (existing) {
+        existing.assistants.push(projected)
+        return
+      }
+      const user = getMessage(projected.parentID)
+      if (user?.role !== "user") return
+      const turn = { user, assistants: [projected] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+    })
+    const latestUserMessageID = turns.at(-1)?.user.id
+    projectedUserMessages.forEach((user) => {
+      if (turnByUserID.has(user.id)) return
+      if (latestUserMessageID && user.id < latestUserMessageID) return
+      const turn = { user, assistants: [] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+    })
+    const activeMessageID = turns.at(-1)?.user.id
+    return {
+      activeMessageID,
+      rows: turns.flatMap((turn, index) =>
+        constructMessageRows(
+          turn.user,
+          getMessageParts,
+          turn.assistants,
+          index,
+          showReasoning,
+          status,
+          turn.user.id === activeMessageID,
+          inlineComments,
+        ),
+      ),
     }
   }
 
-  export function equals(a: TimelineRow, b: TimelineRow) {
-    return Equal.equals(a, b)
-  }
-}
-
-export namespace Timeline {
   export function constructMessageRows(
     userMessage: UserMessage,
     getMessageParts: (messageID: string) => Part[],
@@ -113,6 +105,8 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus["type"],
     isActive: boolean,
+    // v2 renders comments inside the user message attachments row instead of a strip row
+    inlineComments: boolean,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
 
@@ -149,7 +143,7 @@ export namespace Timeline {
         : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: userMessage.id }))
 
-    if (comments.length > 0)
+    if (comments.length > 0 && !inlineComments)
       rows.push(
         new TimelineRow.CommentStrip({
           userMessageID: userMessage.id,
@@ -159,7 +153,7 @@ export namespace Timeline {
     rows.push(
       new TimelineRow.UserMessage({
         userMessageID: userMessage.id,
-        anchor: comments.length === 0,
+        anchor: inlineComments || comments.length === 0,
       }),
     )
 
@@ -210,14 +204,7 @@ export namespace Timeline {
 
     if (isActive && status === "retry") rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
 
-    const diffs = (userMessage.summary?.diffs ?? [])
-      .reduceRight<SummaryDiff[]>((result, diff) => {
-        if (!isSummaryDiff(diff)) return result
-        if (result.some((item) => item.file === diff.file)) return result
-        result.push(diff)
-        return result
-      }, [])
-      .reverse()
+    const diffs = uniqueSummaryDiffs(userMessage.summary?.diffs)
     if (diffs.length > 0 && (status === "idle" || !isActive)) {
       rows.push(
         new TimelineRow.DiffSummary({
@@ -240,10 +227,6 @@ export namespace Timeline {
     }
 
     return rows
-  }
-
-  function isSummaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
-    return typeof value.file === "string"
   }
 
   function reasoningHeading(text: string) {

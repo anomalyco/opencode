@@ -2,7 +2,7 @@ import { beforeEach, describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 
@@ -19,7 +19,7 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-const env = LayerNode.buildLayer(CrossSpawnSpawner.node)
+const env = LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node]))
 const it = testEffect(env)
 
 const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unknown, status = 200) =>
@@ -34,13 +34,13 @@ const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unkno
 const none = HttpClient.make(() => Effect.die("unexpected http call"))
 
 function requestLayer(client: HttpClient.HttpClient) {
-  return LayerNode.buildLayer(LayerNode.group([ShareNext.node, AccountRepo.node]), {
-    replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
-  })
+  const replacement = [httpClient, Layer.succeed(HttpClient.HttpClient, client)] as const
+  return LayerNode.compile(LayerNode.group([ShareNext.node, AccountRepo.node]), [replacement])
 }
 
 function integrationLayer(client: HttpClient.HttpClient) {
-  return LayerNode.buildLayer(
+  const replacement = [httpClient, Layer.succeed(HttpClient.HttpClient, client)] as const
+  return LayerNode.compile(
     LayerNode.group([
       ShareNext.node,
       EventV2Bridge.node,
@@ -49,9 +49,7 @@ function integrationLayer(client: HttpClient.HttpClient) {
       AccountRepo.node,
       Database.node,
     ]),
-    {
-      replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
-    },
+    [replacement],
   )
 }
 

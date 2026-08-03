@@ -83,6 +83,26 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("passes topK through additionalModelRequestFields as top_k", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.updateRequest(baseRequest, { generation: { maxTokens: 64, temperature: 0, topK: 40 } }),
+      )
+
+      // Converse's inferenceConfig has no topK; Anthropic/Nova read it from
+      // additionalModelRequestFields as top_k.
+      expect(prepared.body.inferenceConfig).toEqual({ maxTokens: 64, temperature: 0 })
+      expect(prepared.body.additionalModelRequestFields).toEqual({ top_k: 40 })
+    }),
+  )
+
+  it.effect("omits additionalModelRequestFields when topK is unset", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(baseRequest)
+      expect(prepared.body.additionalModelRequestFields).toBeUndefined()
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(

@@ -6,6 +6,7 @@ import { playgroundCss } from "./playground-css-plugin"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const ui = path.resolve(here, "../../ui")
+const sessionUi = path.resolve(here, "../../session-ui")
 const app = path.resolve(here, "../../app/src")
 const mocks = path.resolve(here, "./mocks")
 
@@ -21,7 +22,11 @@ export default defineMain({
     "@storybook/addon-a11y",
     "@storybook/addon-vitest",
   ],
-  stories: ["../../ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)", "../../app/src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
+  stories: [
+    "../../ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../../session-ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../../app/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+  ],
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
     return mergeConfig(config, {
@@ -42,6 +47,8 @@ export default defineMain({
           { find: /^@\/context\/language$/, replacement: path.resolve(mocks, "app/context/language.ts") },
           { find: /^@\/context\/platform$/, replacement: path.resolve(mocks, "app/context/platform.ts") },
           { find: /^@\/context\/global-sync$/, replacement: path.resolve(mocks, "app/context/global-sync.ts") },
+          { find: /^@\/context\/server-sync$/, replacement: path.resolve(mocks, "app/context/server-sync.ts") },
+          { find: /^@\/context\/server-sdk$/, replacement: path.resolve(mocks, "app/context/server-sdk.ts") },
           { find: /^@\/hooks\/use-providers$/, replacement: path.resolve(mocks, "app/hooks/use-providers.ts") },
           {
             find: /^@\/components\/dialog-select-model$/,
@@ -59,7 +66,7 @@ export default defineMain({
       },
       server: {
         fs: {
-          allow: [searchForWorkspaceRoot(process.cwd()), ui, app, mocks],
+          allow: [searchForWorkspaceRoot(process.cwd()), ui, sessionUi, app, mocks],
         },
       },
     })

@@ -3,12 +3,14 @@ export * as GrepTool from "./grep"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import path from "path"
+import { makeLocationNode } from "../effect/app-node"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -48,7 +50,7 @@ export const toModelOutput = (output: ModelOutput) => {
 }
 
 /** Grep leaf that defaults its filesystem root to the active Location. */
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const fs = yield* FSUtil.Service
@@ -102,23 +104,22 @@ export const layer = Layer.effectDiscard(
                 })
                 .pipe(
                   Effect.map((result) =>
-                    result.map(
-                      (match) =>
-                        new FileSystem.Match({
-                          ...match,
-                          entry: new FileSystem.Entry({
-                            ...match.entry,
-                            path: RelativePath.make(
-                              path.relative(
-                                location.directory,
-                                path.resolve(
-                                  info?.type === "Directory" ? target : path.dirname(target),
-                                  match.entry.path,
-                                ),
+                    result.map((match) =>
+                      FileSystem.Match.make({
+                        ...match,
+                        entry: FileSystem.Entry.make({
+                          ...match.entry,
+                          path: RelativePath.make(
+                            path.relative(
+                              location.directory,
+                              path.resolve(
+                                info?.type === "Directory" ? target : path.dirname(target),
+                                match.entry.path,
                               ),
                             ),
-                          }),
+                          ),
                         }),
+                      }),
                     ),
                   ),
                 )
@@ -128,3 +129,9 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/grep",
+  layer,
+  deps: [ToolRegistry.node, FSUtil.node, Ripgrep.node, Location.node, PermissionV2.node],
+})

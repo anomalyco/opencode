@@ -1,4 +1,4 @@
-// Top-level orchestrator for `run --interactive`.
+// Top-level orchestrator for `opencode --mini`.
 //
 // Wires the boot sequence, lifecycle (renderer + footer), stream transport,
 // and prompt queue together into a single session loop. Two entry points:

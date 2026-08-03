@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { UsageService } from "@/acp/usage"
@@ -97,24 +98,26 @@ const fakeLayer = (input: {
   readonly messages?: Effect.Effect<readonly UsageService.SessionMessage[], unknown>
   readonly providers?: (directory: string) => Effect.Effect<Record<ProviderV2.ID, Provider.Info>, unknown>
 }) =>
-  UsageService.layer.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        Layer.succeed(
-          UsageService.MessageLoader,
-          UsageService.MessageLoader.of({
-            messages: () => input.messages ?? Effect.succeed([]),
-          }),
-        ),
-        Layer.succeed(
-          UsageService.ContextLimitLoader,
-          UsageService.ContextLimitLoader.of({
-            providers: input.providers ?? (() => Effect.succeed(providers())),
-          }),
-        ),
+  LayerNode.compile(UsageService.node, [
+    [
+      UsageService.messageLoaderNode,
+      Layer.succeed(
+        UsageService.MessageLoader,
+        UsageService.MessageLoader.of({
+          messages: () => input.messages ?? Effect.succeed([]),
+        }),
       ),
-    ),
-  )
+    ],
+    [
+      UsageService.contextLimitLoaderNode,
+      Layer.succeed(
+        UsageService.ContextLimitLoader,
+        UsageService.ContextLimitLoader.of({
+          providers: input.providers ?? (() => Effect.succeed(providers())),
+        }),
+      ),
+    ],
+  ])
 
 const connection = (updates: SessionNotification[]) => ({
   sessionUpdate(params: SessionNotification) {
