@@ -11,7 +11,7 @@ OpenCode Goは低価格のサブスクリプションで、**初月は5ドル**�
 
 GoはOpenCodeの他のプロバイダーと同様に機能します。OpenCode GoをサブスクライブしてAPIキーを取得します。これは**完全に任意**であり、OpenCodeを使用するために必須ではありません。
 
-主に海外ユーザー向けに設計されており、世界中で安定してアクセスできるよう、モデルは米国、EU、シンガポールでホストされています。
+主に海外ユーザー向けに設計されており、世界中から安定してアクセスできます。
 
 ---
 
@@ -52,6 +52,7 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **Grok 4.5**
 - **GLM-5.2**
 - **GLM-5.1**
+- **GPT 5.6 Luna**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -85,6 +86,7 @@ OpenCode Goには以下の制限が含まれています：
 | Model             | 5時間あたりのリクエスト数 | 週間リクエスト数 | 月間リクエスト数 |
 | ----------------- | ------------------------- | ---------------- | ---------------- |
 | Grok 4.5          | 120                       | 300              | 600              |
+| GPT 5.6 Luna      | 2,050                     | 5,100            | 10,250           |
 | GLM-5.2           | 880                       | 2,150            | 4,300            |
 | GLM-5.1           | 880                       | 2,150            | 4,300            |
 | Kimi K3           | 110                       | 250              | 490              |
@@ -105,6 +107,7 @@ OpenCode Goには以下の制限が含まれています：
 
 - Grok 4.5 — リクエストあたり 入力 1,100トークン、キャッシュ 71,500トークン、出力 220トークン
 - GLM-5.2/5.1 — リクエストあたり 入力 700トークン、キャッシュ 52,000トークン、出力 150トークン
+- GPT 5.6 Luna — リクエストあたり 入力 1,000トークン、キャッシュ 50,000トークン、出力 220トークン
 - Kimi K3 — リクエストあたり 入力 1,050トークン、キャッシュ 76,500トークン、出力 300トークン
 - Kimi K2.7/K2.6 — リクエストあたり 入力 870トークン、キャッシュ 55,000トークン、出力 200トークン
 - DeepSeek V4 Pro — リクエストあたり 入力 750トークン、キャッシュ 82,000トークン、出力 290トークン
@@ -123,6 +126,8 @@ OpenCode Goには以下の制限が含まれています：
 | Model                        | Input  | Output | Cached Read | Cached Write | Usage |
 | ---------------------------- | ------ | ------ | ----------- | ------------ | ----- |
 | Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15   |
+| GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02       | $0.25        | $15   |
+| GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04       | $0.50        | $15   |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60   |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60   |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15   |
@@ -177,6 +182,7 @@ Goでは月額$10を支払い、その6倍の利用枠を提供することを�
 | Model             | Model ID          | Endpoint                                         | AI SDK Package              |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -210,7 +216,29 @@ https://opencode.ai/zen/go/v1/models
 
 ## プライバシー
 
-このプランは主に海外ユーザー向けに設計されており、安定したグローバルアクセスのため、モデルは US、EU、Singapore でホストされています。各プロバイダーはデータを保持しないポリシーに従っており、お客様のデータをモデルのトレーニングに使用することはありません。
+| モデル            | モデルのトレーニング | データ保持 |
+| ----------------- | -------------------- | ---------- |
+| Grok 4.5          | 使用なし             | 30日       |
+| GPT 5.6 Luna      | 使用なし             | 30日       |
+| GLM-5.2           | 使用なし             | 0日        |
+| GLM-5.1           | 使用なし             | 0日        |
+| Kimi K3           | 使用なし             | 0日        |
+| Kimi K2.7 Code    | 使用なし             | 0日        |
+| Kimi K2.6         | 使用なし             | 0日        |
+| MiMo-V2.5-Pro     | 使用なし             | 0日        |
+| MiMo-V2.5         | 使用なし             | 0日        |
+| Qwen3.7 Max       | 使用なし             | 0日        |
+| Qwen3.7 Plus      | 使用なし             | 0日        |
+| Qwen3.6 Plus      | 使用なし             | 0日        |
+| MiniMax M3        | 使用なし             | 0日        |
+| MiniMax M2.7      | 使用なし             | 0日        |
+| DeepSeek V4 Pro   | 使用なし             | 0日        |
+| DeepSeek V4 Flash | 使用なし             | 0日        |
+| Hy3               | 使用なし             | 0日        |
+
+- **Grok 4.5:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
+- **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
+- **DeepSeek V4 Flash:** ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。
 
 ---
 
