@@ -645,12 +645,36 @@ const layer = Layer.effect(
 
       const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
+      // Fetch the full catalog model when we may need to consult its
+      // declared variants: to validate an explicit --variant, or to resolve
+      // the agent's saved variant against the available set.
       const full =
-        !input.variant && ag.variant && same
+        input.variant || (ag.variant && same)
           ? yield* provider
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
+      // Validate an explicit --variant against the model's declared variants
+      // before it is recorded on the session. `opencode run --variant <value>`
+      // accepts any string, but an unknown value is silently dropped by the
+      // LLM request prep (model.variants[variant] -> undefined), so the run
+      // proceeds at the default effort while the session records an effort
+      // level that was never applied. Reject it here with the valid set.
+      // #40182.
+      if (input.variant && input.variant !== "default") {
+        const variants = full?.variants
+        if (variants && !(input.variant in variants)) {
+          const valid = Object.keys(variants)
+          const error = new NamedError.Unknown({
+            message:
+              valid.length > 0
+                ? `Unknown variant "${input.variant}" for ${model.providerID}/${model.modelID}. Available variants: ${valid.join(", ")}`
+                : `Unknown variant "${input.variant}" for ${model.providerID}/${model.modelID}. This model declares no variants.`,
+          })
+          yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+          throw error
+        }
+      }
       const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
       const info: SessionV1.User = {
