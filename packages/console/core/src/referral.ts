@@ -59,7 +59,16 @@ export namespace Referral {
     const accountID = Actor.account()
     const code = await ensureCode(workspaceID)
     const rows = await Database.use(async (tx) => {
-      const [invites, inviteeReferral] = await Promise.all([
+      const [rewards, invites, inviteeReferral] = await Promise.all([
+        tx
+          .select({
+            referralID: ReferralRewardTable.referralID,
+            amount: ReferralRewardTable.amount,
+            timeCreated: ReferralRewardTable.timeCreated,
+            timeApplied: ReferralRewardTable.timeApplied,
+          })
+          .from(ReferralRewardTable)
+          .where(and(eq(ReferralRewardTable.workspaceID, workspaceID), isNull(ReferralRewardTable.timeDeleted))),
         tx
           .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
@@ -84,36 +93,33 @@ export namespace Referral {
           .orderBy(asc(UserTable.timeCreated))
           .then((rows) => rows.find((row) => row.inviterEmail) ?? rows[0]),
       ])
-
-      // Hide reward history until the referral_id index can be deployed and this lookup restored.
-      const rewards: {
-        referralID: string
-        workspaceID: string
-        referralWorkspaceID: string
-        inviteeEmail: string
-        amount: number
-        timeCreated: Date
-        timeApplied: Date | null
-      }[] = []
-      // Hide pending invitee rewards until the referral_id index can be deployed and this lookup restored.
-      const inviteeRewards = inviteeReferral ? [{ referralID: inviteeReferral.id }] : []
-      return { inviteeReferral, inviteeRewards, invites, rewards }
+      return { inviteeReferral, invites, rewards }
     })
 
-    const rewardReferralIDs = new Set(rows.rewards.map((reward) => reward.referralID))
-    const inviteeRewardReferralIDs = new Set(rows.inviteeRewards.map((reward) => reward.referralID))
-    const rewards = rows.rewards.map((reward) => {
-      const source = reward.workspaceID === reward.referralWorkspaceID ? ("inviter" as const) : ("invitee" as const)
-      return {
-        id: reward.referralID,
-        source,
-        status: reward.timeApplied ? ("applied" as const) : ("available" as const),
-        email: source === "invitee" ? (rows.inviteeReferral?.inviterEmail ?? null) : reward.inviteeEmail,
-        amount: microCentsToCents(reward.amount),
-        timeCreated: reward.timeCreated,
-        timeApplied: reward.timeApplied,
-      }
+    const invites = new Map(rows.invites.map((referral) => [referral.id, referral]))
+    const rewards = rows.rewards.flatMap((reward) => {
+      const source = invites.has(reward.referralID)
+        ? ("inviter" as const)
+        : rows.inviteeReferral?.id === reward.referralID
+          ? ("invitee" as const)
+          : undefined
+      if (!source) return []
+      return [
+        {
+          id: reward.referralID,
+          source,
+          status: reward.timeApplied ? ("applied" as const) : ("available" as const),
+          email:
+            source === "invitee"
+              ? (rows.inviteeReferral?.inviterEmail ?? null)
+              : (invites.get(reward.referralID)?.inviteeEmail ?? null),
+          amount: microCentsToCents(reward.amount),
+          timeCreated: reward.timeCreated,
+          timeApplied: reward.timeApplied,
+        },
+      ]
     })
+    const rewardReferralIDs = new Set(rewards.map((reward) => reward.id))
     const pending = [
       ...rows.invites
         .filter((referral) => !rewardReferralIDs.has(referral.id))
@@ -126,7 +132,7 @@ export namespace Referral {
           timeCreated: referral.timeCreated,
           timeApplied: null,
         })),
-      ...(rows.inviteeReferral && !inviteeRewardReferralIDs.has(rows.inviteeReferral.id)
+      ...(rows.inviteeReferral && !rewardReferralIDs.has(rows.inviteeReferral.id)
         ? [
             {
               id: `${rows.inviteeReferral.id}:invitee`,
