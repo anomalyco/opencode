@@ -29,6 +29,7 @@ const headers = [
   "商品名称",
   "产地",
   "数量",
+  "盘点日期",
   "货架号",
   "规格",
   "型号",
@@ -43,7 +44,7 @@ describe("standard product workbook", () => {
       [
         "python",
         "-c",
-        "from openpyxl import Workbook; from sys import argv; w=Workbook(); s=w.active; s.title='清洗结果'; s.append(['原始行号','商品编码','商品名称','产地','数量','货架号','规格','型号','备注']); s.append([1,'001011','6001ZZ','虎旺',1,'A-1-1',None,'12*28*8',None]); w.save(argv[1])",
+        "from openpyxl import Workbook; from sys import argv; w=Workbook(); s=w.active; s.title='清洗结果'; s.append(['原始行号','商品编码','商品名称','产地','数量','盘点日期','货架号','规格','型号','备注']); s.append([1,'001011','6001ZZ','虎旺',1,'2026-07-15','A-1-1',None,'12*28*8','来货']); w.save(argv[1])",
         path,
       ],
       { stdout: "ignore", stderr: "pipe" },
@@ -63,7 +64,18 @@ describe("standard product workbook", () => {
     expect(
       normalizeStandardProductRows([
         headers,
-        [13, " 001011 ", "6001ZZ", "虎旺", 363, "A-1-4+A-1-1", null, "12*28*8", null],
+        [
+          13,
+          " 001011 ",
+          "6001ZZ",
+          "虎旺",
+          363,
+          "2026-07-15",
+          "A-1-4+A-1-1",
+          null,
+          "12*28*8",
+          "来货",
+        ],
       ]),
     ).toEqual([
       {
@@ -73,10 +85,12 @@ describe("standard product workbook", () => {
         name: "6001ZZ",
         origin: "虎旺",
         workbookQuantity: "363",
+        inventoryDate: "2026-07-15",
         shelves: ["A-1-1", "A-1-4"],
         specification: null,
         model: "12*28*8",
-        remark: null,
+        sourceRemark: "来货",
+        remark: "2026-07-15；来货",
         shelfText: "A-1-4+A-1-1",
       },
     ])
@@ -91,9 +105,11 @@ describe("standard product workbook", () => {
         name: "604zz",
         origin: "虎旺",
         workbookQuantity: "161",
+        inventoryDate: null,
         shelves: [],
         specification: null,
         model: null,
+        sourceRemark: null,
         remark: null,
         shelfText: "",
       })
@@ -117,8 +133,39 @@ describe("standard product workbook", () => {
 
   test("rejects a nonempty shelf cell with unrecognized content", () => {
     expect(() =>
-      normalizeStandardProductRows([headers, [1, "X", "A", "厂", 1, "A-1-1+not-a-shelf"]]),
+      normalizeStandardProductRows([headers, [1, "X", "A", "厂", 1, null, "A-1-1+not-a-shelf"]]),
     ).toThrow("invalid shelf cell at row 2")
+  })
+
+  test("preserves inventory date and source remark while deriving the display remark", () => {
+    const rows = normalizeStandardProductRows([
+      headers,
+      [1, "A", "date and remark", "厂", 1, " 2019-05-21 ", null, null, null, " 来货；白字 "],
+      [2, "B", "date only", "厂", 1, "2026-07-15"],
+      [3, "C", "remark only", "厂", 1, null, null, null, null, "已盘点；UG 加"],
+      [4, "D", "both blank", "厂", 1],
+    ])
+
+    expect(rows.map(({ inventoryDate, sourceRemark, remark }) => ({ inventoryDate, sourceRemark, remark })))
+      .toEqual([
+        {
+          inventoryDate: "2019-05-21",
+          sourceRemark: "来货；白字",
+          remark: "2019-05-21；来货；白字",
+        },
+        { inventoryDate: "2026-07-15", sourceRemark: null, remark: "2026-07-15" },
+        { inventoryDate: null, sourceRemark: "已盘点；UG 加", remark: "已盘点；UG 加" },
+        { inventoryDate: null, sourceRemark: null, remark: null },
+      ])
+  })
+
+  test("admits all 10572 rows from the latest workbook shape without truncation", () => {
+    expect(
+      normalizeStandardProductRows([
+        headers,
+        ...Array.from({ length: 10_572 }, (_, index) => [index + 1, `CODE-${index}`, `NAME-${index}`, "", 0]),
+      ]),
+    ).toHaveLength(10_572)
   })
 })
 
@@ -130,9 +177,11 @@ describe("legacy product reconciliation", () => {
     name: "6001ZZ",
     origin: "虎旺",
     workbookQuantity: "363",
+    inventoryDate: null,
     shelves: ["A-1-1", "A-1-4"],
     specification: null,
     model: "12*28*8",
+    sourceRemark: null,
     remark: null,
     shelfText: "A-1-4+A-1-1",
   }
@@ -252,7 +301,10 @@ describe("standard product database plan", () => {
       {
         fileName: "standard.xlsx",
         sha256: "a".repeat(64),
-        rows: [headers, [13, "001011", "6001ZZ", "虎旺", 363, "A-1-4+A-1-1", null, "12*28*8"]],
+        rows: [
+          headers,
+          [13, "001011", "6001ZZ", "虎旺", 363, null, "A-1-4+A-1-1", null, "12*28*8", null],
+        ],
       },
       {
         database: "t1_full_20260717_133707",
@@ -269,9 +321,11 @@ describe("standard product database plan", () => {
             name: "6001ZZ",
             origin: "虎旺",
             workbookQuantity: "363",
+            inventoryDate: null,
             shelves: ["A-2-1"],
             specification: null,
             model: "12*28*8",
+            sourceRemark: null,
             remark: null,
             shelfText: "A-2-1",
           }),
@@ -330,7 +384,21 @@ describe("standard product database plan", () => {
       {
         fileName: "standard.xlsx",
         sha256: "a".repeat(64),
-        rows: [headers, [13, "001011", "6001ZZ", "虎旺", 363, "A-1-4", null, "12*28*8"]],
+        rows: [
+          headers,
+          [
+            13,
+            "001011",
+            "6001ZZ",
+            "虎旺",
+            363,
+            "2026-07-15",
+            "A-1-4",
+            null,
+            "12*28*8",
+            "来货",
+          ],
+        ],
       },
       {
         database: "t1_full_20260717_133707",
@@ -348,20 +416,34 @@ describe("standard product database plan", () => {
       preview,
     })
     expect(statements.some((statement) => statement.sql.includes("001011"))).toBeFalse()
-    expect(statements.flatMap((statement) => statement.values ?? [])).toContain("001011")
+    const values = statements.flatMap((statement) => statement.values ?? [])
+    expect(values).toContain("001011")
+    expect(values).toContain("2026-07-15")
+    expect(values).toContain("来货")
+    expect(values).toContain("2026-07-15；来货")
+    expect(statements.find((statement) => statement.name === "stage_products_1")?.sql).toMatch(
+      /inventory_date[\s\S]*source_remark[\s\S]*remark/,
+    )
     expect(statements.filter((statement) => statement.name.startsWith("stage_"))).toHaveLength(4)
   })
 
-  test("setup creates only idempotent authoritative and audit objects", () => {
+  test("setup idempotently upgrades inventory date and source remark evidence", () => {
     const statements = standardProductSetupStatements()
-    expect(statements).toHaveLength(9)
+    expect(statements).toHaveLength(11)
     expect(
       statements.every(
         (statement) =>
           /^CREATE TABLE IF NOT EXISTS/i.test(statement.sql.trim()) ||
-          /^CREATE OR REPLACE VIEW/i.test(statement.sql.trim()),
+          /^CREATE OR REPLACE VIEW/i.test(statement.sql.trim()) ||
+          /^ALTER TABLE/i.test(statement.sql.trim()),
       ),
     ).toBeTrue()
+    expect(statements.find((statement) => statement.name === "add_inventory_date")?.sql).toMatch(
+      /ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS inventory_date LONGTEXT NULL/i,
+    )
+    expect(statements.find((statement) => statement.name === "add_source_remark")?.sql).toMatch(
+      /ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS source_remark LONGTEXT NULL/i,
+    )
     const inventoryView = statements.find((statement) => statement.name === "create_inventory_view")!
     expect(inventoryView.sql).toMatch(
       /CASE\s+WHEN\s+mapping\.product_id\s+IS\s+NULL[\s\S]*workbook_quantity[\s\S]*COALESCE\(inventory\.total_inventory,\s*0\)/i,
@@ -444,6 +526,7 @@ describe("standard product database plan", () => {
       "standard_rows",
       "duplicate_codes",
       "mapping_rows",
+      "derived_remark_mismatches",
       "matched_product_mismatches",
       "shelf_mismatches",
       "shelf_orphans",
@@ -452,6 +535,10 @@ describe("standard product database plan", () => {
     ])
     expect(checks.every((check) => /^SELECT/i.test(check.sql.trim()))).toBeTrue()
     expect(checks.flatMap((check) => check.values)).toContain("run-1")
+    const derivedRemarkCheck = checks.find((check) => check.name === "derived_remark_mismatches")!
+    expect(derivedRemarkCheck.sql).toMatch(/inventory_date/i)
+    expect(derivedRemarkCheck.sql).toMatch(/source_remark/i)
+    expect(derivedRemarkCheck.sql).toMatch(/\bremark\b/i)
 
     expect(
       assertStandardProductValidation(
@@ -459,6 +546,7 @@ describe("standard product database plan", () => {
           standardRows: 10_560,
           duplicateCodes: 0,
           mappingRows: 10_560,
+          derivedRemarkMismatches: 0,
           matchedProductMismatches: 0,
           shelfMismatches: 0,
           shelfOrphans: 0,
@@ -476,6 +564,7 @@ describe("standard product database plan", () => {
           standardRows: 10_560,
           duplicateCodes: 0,
           mappingRows: 10_560,
+          derivedRemarkMismatches: 0,
           matchedProductMismatches: 0,
           shelfMismatches: 1,
           shelfOrphans: 0,
@@ -518,9 +607,11 @@ function rowForCode(code: string): StandardProductRow {
     name: "6001ZZ",
     origin: "虎旺",
     workbookQuantity: "363",
+    inventoryDate: null,
     shelves: ["A-1-4"],
     specification: null,
     model: "12*28*8",
+    sourceRemark: null,
     remark: null,
     shelfText: "A-1-4",
   }

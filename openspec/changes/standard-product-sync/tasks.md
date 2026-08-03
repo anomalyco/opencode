@@ -31,7 +31,7 @@
 
 ## 6. Latest workbook inventory date and remark merge
 
-- [ ] 6.1 Add RED cases in `packages/feishu/test/standard-product-sync.test.ts` for the exact 10-column header, 10,572-row workbook shape, separately preserved `盘点日期`/source `备注`, and the four blank/non-blank merge combinations; run the focused test and confirm it fails against the nine-column parser.
-- [ ] 6.2 Implement the 10-column parser and additive authoritative table upgrade in `packages/feishu/src/standard-product-sync.ts`, stage both raw values plus the merged display remark, and keep the existing robot query contract; run focused tests, `bun typecheck`, and `bun run lint` from `packages/feishu`.
+- [x] 6.1 Add RED cases in `packages/feishu/test/standard-product-sync.test.ts` for the exact 10-column header, 10,572-row workbook shape, separately preserved `盘点日期`/source `备注`, and the four blank/non-blank merge combinations; run the focused test and confirm it fails against the nine-column parser.
+- [x] 6.2 Implement the 10-column parser and additive authoritative table upgrade in `packages/feishu/src/standard-product-sync.ts`, stage both raw values plus the merged display remark, and keep the existing robot query contract; run focused tests, `bun typecheck`, and `bun run lint` from `packages/feishu`.
 - [ ] 6.3 Preview `D:\opencode\商品信息8.3_结构化清洗.xlsx`, then Apply only with its exact SHA-256, 10,572 rows, mapping counts, and current active run guard; Validate raw/derived remarks, Product fields, shelves, views, and unchanged Storage at 100%.
 - [ ] 6.4 Run the MySQL contract and full package suite, restart the single gateway process, and verify representative live queries including `6001ZZ` return the latest supplier/shelves and the merged remark without any product code.

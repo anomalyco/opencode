@@ -379,6 +379,7 @@ async function loadValidation(connection: Connection, timeout: number, runID: st
     standardRows: requiredCheck(values, "standard_rows"),
     duplicateCodes: requiredCheck(values, "duplicate_codes"),
     mappingRows: requiredCheck(values, "mapping_rows"),
+    derivedRemarkMismatches: requiredCheck(values, "derived_remark_mismatches"),
     matchedProductMismatches: requiredCheck(values, "matched_product_mismatches"),
     shelfMismatches: requiredCheck(values, "shelf_mismatches"),
     shelfOrphans: requiredCheck(values, "shelf_orphans"),

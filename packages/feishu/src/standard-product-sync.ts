@@ -4,6 +4,7 @@ export const STANDARD_PRODUCT_HEADERS = [
   "商品名称",
   "产地",
   "数量",
+  "盘点日期",
   "货架号",
   "规格",
   "型号",
@@ -17,9 +18,11 @@ export type StandardProductRow = {
   name: string
   origin: string
   workbookQuantity: string
+  inventoryDate: string | null
   shelves: string[]
   specification: string | null
   model: string | null
+  sourceRemark: string | null
   remark: string | null
   shelfText: string
 }
@@ -60,6 +63,7 @@ export type StandardProductValidation = {
   standardRows: number
   duplicateCodes: number
   mappingRows: number
+  derivedRemarkMismatches: number
   matchedProductMismatches: number
   shelfMismatches: number
   shelfOrphans: number
@@ -105,7 +109,9 @@ export function normalizeStandardProductRows(input: readonly (readonly unknown[]
     if (!code) throw new Error(`blank product code at row ${sourceRow}`)
     if (codes.has(code)) throw new Error(`duplicate product code: ${code}`)
     codes.add(code)
-    const shelfText = text(raw[5])
+    const inventoryDate = optionalText(raw[5])
+    const sourceRemark = optionalText(raw[9])
+    const shelfText = text(raw[6])
     const shelves = normalizeShelves(shelfText, sourceRow)
     return [
       {
@@ -115,10 +121,12 @@ export function normalizeStandardProductRows(input: readonly (readonly unknown[]
         name: text(raw[2]),
         origin: text(raw[3]),
         workbookQuantity: decimal(raw[4], sourceRow),
+        inventoryDate,
         shelves,
-        specification: optionalText(raw[6]),
-        model: optionalText(raw[7]),
-        remark: optionalText(raw[8]),
+        specification: optionalText(raw[7]),
+        model: optionalText(raw[8]),
+        sourceRemark,
+        remark: [inventoryDate, sourceRemark].filter((value) => value !== null).join("；") || null,
         shelfText,
       } satisfies StandardProductRow,
     ]
@@ -336,8 +344,10 @@ export function standardProductSetupStatements(): StandardProductStatement[] {
         product_name VARCHAR(255) NOT NULL,
         origin LONGTEXT NULL,
         workbook_quantity DECIMAL(38,8) NOT NULL,
+        inventory_date LONGTEXT NULL,
         specification LONGTEXT NULL,
         model LONGTEXT NULL,
+        source_remark LONGTEXT NULL,
         remark LONGTEXT NULL,
         shelf_text LONGTEXT NULL,
         PRIMARY KEY (run_id, source_row),
@@ -345,6 +355,14 @@ export function standardProductSetupStatements(): StandardProductStatement[] {
         CONSTRAINT fk_standard_product_run FOREIGN KEY (run_id)
           REFERENCES erp_standard_product_sync_run (run_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin`,
+    },
+    {
+      name: "add_inventory_date",
+      sql: "ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS inventory_date LONGTEXT NULL AFTER workbook_quantity",
+    },
+    {
+      name: "add_source_remark",
+      sql: "ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS source_remark LONGTEXT NULL AFTER model",
     },
     {
       name: "create_standard_shelf",
@@ -501,8 +519,8 @@ export function standardProductStageStatements(input: {
       name: `stage_products_${index + 1}`,
       sql: `INSERT INTO erp_standard_product
         (run_id, source_row, original_row, product_code, product_name, origin,
-          workbook_quantity, specification, model, remark, shelf_text)
-        VALUES ${rows.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")}`,
+          workbook_quantity, inventory_date, specification, model, source_remark, remark, shelf_text)
+        VALUES ${rows.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")}`,
       values: rows.flatMap((row) => [
         input.runID,
         row.sourceRow,
@@ -511,8 +529,10 @@ export function standardProductStageStatements(input: {
         row.name,
         row.origin || null,
         row.workbookQuantity,
+        row.inventoryDate,
         row.specification,
         row.model,
+        row.sourceRemark,
         row.remark,
         row.shelfText || null,
       ]),
@@ -853,6 +873,17 @@ export function standardProductValidationChecks(runID: string): StandardProductC
       values: [runID],
     },
     {
+      name: "derived_remark_mismatches",
+      sql: `SELECT COUNT(*) AS value FROM erp_standard_product
+        WHERE run_id=? AND NOT (
+          remark <=> NULLIF(CONCAT_WS('；',
+            NULLIF(TRIM(inventory_date), ''),
+            NULLIF(TRIM(source_remark), '')
+          ), '')
+        )`,
+      values: [runID],
+    },
+    {
       name: "matched_product_mismatches",
       sql: `SELECT COUNT(*) AS value
         FROM erp_standard_product_map AS mapping
@@ -930,6 +961,7 @@ export function assertStandardProductValidation(
     ["standardRows", expected.expectedRows],
     ["duplicateCodes", 0],
     ["mappingRows", expected.expectedRows],
+    ["derivedRemarkMismatches", 0],
     ["matchedProductMismatches", 0],
     ["shelfMismatches", 0],
     ["shelfOrphans", 0],

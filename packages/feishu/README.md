@@ -31,7 +31,7 @@ DeepSeek API Key 继续由 OpenCode 本机认证状态管理，不复制到飞�
 6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx
 ```
 
-供应商只使用标准表中的“产地”，并与标准商品名称、规格、型号、备注和货架号一起从当前活动标准视图读取；“产地”为空时省略供应商。机器人不查询库存来源投影或采购历史来补供应商，也不使用上面的示例名称代填。库存由标准视图对已映射商品读取当前 `Storage` 总量，未映射商品使用标准表数量。
+供应商只使用标准表中的“产地”，并与标准商品名称、规格、型号、备注和货架号一起从当前活动标准视图读取；“产地”为空时省略供应商。展示备注按 `盘点日期；备注` 合并，空白部分自动省略，两个字段都为空时不显示备注。机器人不查询库存来源投影或采购历史来补供应商，也不使用上面的示例名称代填。库存由标准视图对已映射商品读取当前 `Storage` 总量，未映射商品使用标准表数量。
 
 没有结果时回复 `未找到相关商品。`，查询失败时回复 `库存查询失败，请稍后再试。`。
 
@@ -61,18 +61,18 @@ bun run test:mysql-contract
 
 ## 标准商品表同步
 
-`商品信息(1)_结构化清洗.xlsx` 是商品名称、供应商（原表“产地”）、规格、型号、备注和货架号的标准答案。同步工具不会写 `Storage`，库存始终受保护；它只对确定匹配的老商品备份后更新 `Product.u_Name`、`Product.ProdArea`、`Product.ProdType`、`Product.ProdSpec`、`Product.u_Remark`，并按标准表替换货架关系。缺失或无法唯一匹配的商品只进入标准数据视图，不猜测老商品 ID。
+`商品信息8.3_结构化清洗.xlsx` 是商品名称、供应商（原表“产地”）、规格、型号、盘点日期、备注和货架号的最新标准答案，共 10,572 行。同步工具分别保留盘点日期和源备注，并以 `盘点日期；备注` 生成展示备注；它不会解析或改写日期文本。同步工具不会写 `Storage`，库存始终受保护；它只对确定匹配的老商品备份后更新 `Product.u_Name`、`Product.ProdArea`、`Product.ProdType`、`Product.ProdSpec`、`Product.u_Remark`，并按标准表替换货架关系。缺失或无法唯一匹配的商品只进入标准数据视图，不猜测老商品 ID。
 
 先只读预览，记录输出中的 SHA-256、行数和差异统计；Preview 的 `databaseWrites` 必须为 `0`：
 
 ```powershell
-bun run standard-product:preview --workbook "D:\opencode\商品信息(1)_结构化清洗.xlsx"
+bun run standard-product:preview --workbook "D:\opencode\商品信息8.3_结构化清洗.xlsx"
 ```
 
 仅在预览核对无误后，使用完全相同的文件哈希、行数、三类映射数量和活动版本执行事务同步；首次没有活动版本时传 `NONE`。任一字段、货架、影响行数或 Storage 指纹校验失败都会整笔回滚：
 
 ```powershell
-bun run standard-product:apply --workbook "D:\opencode\商品信息(1)_结构化清洗.xlsx" --expected-sha256 "预览输出的SHA-256" --expected-row-count 10560 --expected-matched "Preview的MATCHED" --expected-missing "Preview的MISSING" --expected-ambiguous "Preview的AMBIGUOUS" --expected-active-run "Preview的activeRunID或NONE"
+bun run standard-product:apply --workbook "D:\opencode\商品信息8.3_结构化清洗.xlsx" --expected-sha256 "预览输出的SHA-256" --expected-row-count 10572 --expected-matched "Preview的MATCHED" --expected-missing "Preview的MISSING" --expected-ambiguous "Preview的AMBIGUOUS" --expected-active-run "Preview的activeRunID或NONE"
 bun run standard-product:validate --run-id "Apply输出的runID"
 ```
 
