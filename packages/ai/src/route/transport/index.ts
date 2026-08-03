@@ -10,15 +10,6 @@ export interface TransportRuntime {
   readonly webSocket?: WebSocketExecutorInterface
 }
 
-export interface HttpRequest {
-  url: string
-  readonly method: string
-  headers: Record<string, string>
-  body: string | undefined
-}
-
-export type HttpRequestTransform = (request: HttpRequest) => Effect.Effect<void>
-
 export interface Transport<Body, Prepared, Frame> {
   readonly id: string
   readonly prepare: (input: TransportPrepareInput<Body>) => Effect.Effect<Prepared, AIError>
@@ -32,7 +23,6 @@ export interface TransportPrepareInput<Body> {
   readonly auth: Auth.Definition
   readonly encodeBody: (body: Body) => string
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-  readonly transform?: HttpRequestTransform
   readonly middleware?: HttpMiddleware
 }
 

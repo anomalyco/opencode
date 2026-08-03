@@ -5,7 +5,7 @@ import { Endpoint, type EndpointPatch } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import { Framing } from "./framing"
 import { HttpTransport } from "./transport"
-import type { HttpMiddleware, HttpRequestTransform, Transport, TransportRuntime } from "./transport"
+import type { HttpMiddleware, Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
@@ -155,7 +155,6 @@ export interface Interface {
 }
 
 export interface StreamOptions {
-  readonly transform?: HttpRequestTransform
   readonly http?: HttpMiddleware
 }
 
@@ -308,7 +307,6 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           auth: routeInput.auth ?? Auth.none,
           encodeBody,
           headers: routeInput.headers,
-          transform: options?.transform,
           middleware: options?.http,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
