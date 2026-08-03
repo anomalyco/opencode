@@ -384,6 +384,7 @@
       "version": "1.18.11",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
+        "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "electron-context-menu": "4.1.2",
         "electron-log": "^5",
