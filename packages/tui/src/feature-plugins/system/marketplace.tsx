@@ -292,7 +292,9 @@ function View(props: { api: TuiPluginApi }) {
               enabled,
             }),
             `${enabled ? "Enabled" : "Disabled"} ${listing.item.name}`,
-          ).then(() => show(props.api))
+          ).then((success) => {
+            if (success) void actions.refetch()
+          })
         },
       },
     ],
@@ -303,6 +305,7 @@ function View(props: { api: TuiPluginApi }) {
       title="Marketplace"
       placeholder="Search plugins, skills, agents, commands, MCP servers…"
       options={rows()}
+      preserveSelection={true}
       onMove={(option) => (current = option.value)}
       emptyView={
         <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
@@ -340,7 +343,7 @@ function View(props: { api: TuiPluginApi }) {
 }
 
 function Components(props: { api: TuiPluginApi; key: string }) {
-  const [view] = createResource(() => getView(props.api))
+  const [view, actions] = createResource(() => getView(props.api))
   const listing = () => view()?.listings.find((candidate) => candidate.key === props.key)
   const installed = () => view()?.state.installed?.[props.key]
   const rows = createMemo<DialogSelectOption<string>[]>(() => {
@@ -416,7 +419,7 @@ function Components(props: { api: TuiPluginApi; key: string }) {
         : component === "skill"
           ? !marketplaceSkillEnabled(config, props.key, componentID!)
           : !marketplaceMcpEnabled(config, props.key, componentID!)
-    await applyMutation(
+    const success = await applyMutation(
       props.api,
       toggleRequest(props.api, {
         key: props.key,
@@ -427,7 +430,7 @@ function Components(props: { api: TuiPluginApi; key: string }) {
       }),
       `${enabled ? "Enabled" : "Disabled"} ${componentID ?? item.item.name}`,
     )
-    showComponents(props.api, props.key)
+    if (success) await actions.refetch()
   }
 
   useBindings(() => ({
@@ -441,6 +444,7 @@ function Components(props: { api: TuiPluginApi; key: string }) {
     <DialogSelect
       title={`${listing()?.item.name ?? "Marketplace"} components`}
       options={rows()}
+      preserveSelection={true}
       footer={<text fg={props.api.theme.current.textMuted}>enter toggle · ctrl+d uninstall · ctrl+b back</text>}
       onSelect={(option) => void toggle(option.value)}
     />
@@ -448,7 +452,7 @@ function Components(props: { api: TuiPluginApi; key: string }) {
 }
 
 function Sources(props: { api: TuiPluginApi }) {
-  const [view] = createResource(() => getView(props.api))
+  const [view, actions] = createResource(() => getView(props.api))
   const sources = () => (view() ? marketplaceSources({ marketplace: view()!.state }) : [])
   const rows = createMemo<DialogSelectOption<string>[]>(() =>
     sources().map((source) => ({
@@ -514,6 +518,7 @@ function Sources(props: { api: TuiPluginApi }) {
     <DialogSelect
       title="Marketplace sources"
       options={rows()}
+      preserveSelection={true}
       onMove={(option) => (current = option.value)}
       footer={
         <text fg={props.api.theme.current.textMuted}>
@@ -532,7 +537,9 @@ function Sources(props: { api: TuiPluginApi }) {
             enabled: source.enabled === false,
           }),
           `${source.enabled === false ? "Enabled" : "Disabled"} ${source.name}`,
-        ).then(() => showSources(props.api))
+        ).then((success) => {
+          if (success) void actions.refetch()
+        })
       }}
     />
   )
