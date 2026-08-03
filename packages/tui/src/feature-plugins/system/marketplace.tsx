@@ -16,11 +16,36 @@ import {
 } from "@opencode-ai/core/marketplace"
 import { createMemo, createResource } from "solid-js"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
+import { Spinner } from "../../component/spinner"
 import { useBindings } from "../../keymap"
 import { errorMessage } from "../../util/error"
 import type { BuiltinTuiPlugin } from "../builtins"
 
 const id = "internal:marketplace"
+
+function Planning(props: { api: TuiPluginApi; name: string }) {
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={props.api.theme.current.text}>Prepare {props.name}</text>
+        <text fg={props.api.theme.current.textMuted}>esc cancel</text>
+      </box>
+      <Spinner color={props.api.theme.current.textMuted}>Downloading and verifying the install plan…</Spinner>
+      <text fg={props.api.theme.current.textMuted}>Large remote catalogs can take a moment.</text>
+    </box>
+  )
+}
+
+function prepare(api: TuiPluginApi, name: string) {
+  let active = true
+  api.ui.dialog.replace(
+    () => <Planning api={api} name={name} />,
+    () => {
+      active = false
+    },
+  )
+  return () => active
+}
 
 function confirm(api: TuiPluginApi, title: string, message: string) {
   return new Promise<boolean>((resolve) => {
@@ -130,6 +155,9 @@ function statusText(api: TuiPluginApi, view: MarketplaceView, key: string) {
   const listing = view.listings.find((candidate) => candidate.key === key)
   if (!listing) return ""
   const status = marketplaceStatus({ marketplace: view.state }, listing)
+  if (status !== "installed" && listing.compatibility?.compatible === false) {
+    return <span style={{ fg: api.theme.current.error }}>incompatible</span>
+  }
   const color =
     status === "update"
       ? api.theme.current.warning
@@ -147,6 +175,9 @@ function details(listing: MarketplaceView["listings"][number], plan: Marketplace
     `catalog: ${listing.source.name} (${listing.source.trust ?? "community"})`,
     listing.catalog_digest ? `catalog digest: ${listing.catalog_digest}` : undefined,
     listing.orphaned ? "catalog status: unavailable; local install remains manageable" : undefined,
+    ...(listing.compatibility?.compatible === false
+      ? listing.compatibility.reasons.map((reason) => `incompatible: ${reason}`)
+      : []),
     `changes: ${marketplacePlanSummary(plan)}`,
     ...marketplacePermissions(listing.item).map((permission) => `permission: ${permission}`),
   ].filter((value): value is string => value !== undefined)
@@ -198,45 +229,52 @@ function View(props: { api: TuiPluginApi }) {
       showComponents(props.api, key)
       return
     }
-
-    try {
-      const planned = await unwrap<MarketplacePlanResult>(planRequest(props.api, key))
-      if (!planned.ok) {
-        props.api.ui.toast({ variant: "error", message: planned.message })
-        show(props.api)
-        return
-      }
-      const message = [
-        planned.summary,
-        planned.trust_warning ? `Catalog trust: ${listing.source.trust ?? "community"}.` : undefined,
-        planned.permissions.length ? `Capabilities: ${planned.permissions.join("; ")}.` : undefined,
-        planned.conflicts.length ? `Shadow: ${planned.conflicts.map((item) => item.path).join(", ")}.` : undefined,
-      ]
-        .filter((value): value is string => value !== undefined)
-        .join("\n")
-      if (
-        !(await confirm(
-          props.api,
-          `${planned.action === "update" ? "Update" : "Install"} ${listing.item.name}?`,
-          message,
-        ))
-      ) {
-        show(props.api)
-        return
-      }
-      await applyMutation(
-        props.api,
-        installRequest(props.api, {
-          plan_id: planned.plan_id,
-          expected_revision: view.state.revision ?? 0,
-          force: planned.conflicts.length > 0,
-          accept_untrusted: planned.trust_warning,
-        }),
-        `${planned.action === "update" ? "Updated" : "Installed"} ${listing.item.name}`,
-      )
-    } catch (error) {
-      props.api.ui.toast({ variant: "error", message: errorMessage(error) })
+    if (listing.compatibility?.compatible === false) {
+      props.api.ui.toast({ variant: "error", message: listing.compatibility.reasons.join("; ") })
+      show(props.api)
+      return
     }
+
+    const active = prepare(props.api, listing.item.name)
+    const planned = await unwrap<MarketplacePlanResult>(planRequest(props.api, key)).catch((error) => {
+      if (!active()) return
+      props.api.ui.toast({ variant: "error", message: errorMessage(error) })
+      show(props.api)
+    })
+    if (!planned || !active()) return
+    if (!planned.ok) {
+      props.api.ui.toast({ variant: "error", message: planned.message })
+      show(props.api)
+      return
+    }
+    const message = [
+      planned.summary,
+      planned.trust_warning ? `Catalog trust: ${listing.source.trust ?? "community"}.` : undefined,
+      planned.permissions.length ? `Capabilities: ${planned.permissions.join("; ")}.` : undefined,
+      planned.conflicts.length ? `Shadow: ${planned.conflicts.map((item) => item.path).join(", ")}.` : undefined,
+    ]
+      .filter((value): value is string => value !== undefined)
+      .join("\n")
+    if (
+      !(await confirm(
+        props.api,
+        `${planned.action === "update" ? "Update" : "Install"} ${listing.item.name}?`,
+        message,
+      ))
+    ) {
+      show(props.api)
+      return
+    }
+    await applyMutation(
+      props.api,
+      installRequest(props.api, {
+        plan_id: planned.plan_id,
+        expected_revision: view.state.revision ?? 0,
+        force: planned.conflicts.length > 0,
+        accept_untrusted: planned.trust_warning,
+      }),
+      `${planned.action === "update" ? "Updated" : "Installed"} ${listing.item.name}`,
+    )
     show(props.api)
   }
 

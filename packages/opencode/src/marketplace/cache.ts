@@ -2,7 +2,7 @@ import path from "path"
 import fsNode from "fs/promises"
 import { createHash, randomUUID } from "crypto"
 import { fileURLToPath, pathToFileURL } from "url"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Semaphore } from "effect"
 import { sql } from "drizzle-orm"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
@@ -427,59 +427,77 @@ const layer = Layer.effect(
       }
     })
 
+    const putLocks = new Map<string, { semaphore: Semaphore.Semaphore; references: number }>()
+
     const put = Effect.fn("MarketplaceCache.put")(function* (
       bytes: Uint8Array,
       metadata: { mediaType?: string; kind?: string; sourceUrl?: string } = {},
     ) {
       const digest = digestOf(bytes)
       const target = objectPath(digest)
-      yield* flock
-        .withLock(
+      const lock = putLocks.get(digest) ?? { semaphore: Semaphore.makeUnsafe(1), references: 0 }
+      putLocks.set(digest, lock)
+      lock.references++
+      return yield* lock.semaphore
+        .withPermits(1)(
           Effect.gen(function* () {
-            if (!(yield* exists(target))) {
-              const staging = `${target}.tmp-${randomUUID()}`
-              yield* Effect.tryPromise({
-                try: async () => {
-                  await fsNode.mkdir(path.dirname(target), { recursive: true })
-                  await fsNode.writeFile(staging, bytes, { mode: 0o600 })
-                  await fsNode.rename(staging, target).catch(async (error: NodeJS.ErrnoException) => {
-                    if (error.code !== "EEXIST") throw error
-                  })
-                  await fsNode.rm(staging, { force: true })
-                },
-                catch: (error) => cacheError("put", error),
-              })
-            }
+            yield* flock
+              .withLock(
+                Effect.gen(function* () {
+                  if (!(yield* exists(target))) {
+                    const staging = `${target}.tmp-${randomUUID()}`
+                    yield* Effect.tryPromise({
+                      try: async () => {
+                        await fsNode.mkdir(path.dirname(target), { recursive: true })
+                        await fsNode.writeFile(staging, bytes, { mode: 0o600 })
+                        await fsNode.rename(staging, target).catch(async (error: NodeJS.ErrnoException) => {
+                          if (error.code !== "EEXIST") throw error
+                        })
+                        await fsNode.rm(staging, { force: true })
+                      },
+                      catch: (error) => cacheError("put", error),
+                    })
+                  }
 
-            const now = Date.now()
-            yield* db
-              .run(
-                sql`
-                INSERT INTO marketplace_artifact
-                  (digest, size, media_type, kind, source_url, time_created, time_accessed)
-                VALUES
-                  (${digest}, ${bytes.byteLength}, ${metadata.mediaType ?? null}, ${metadata.kind ?? "blob"},
-                   ${metadata.sourceUrl ?? null}, ${now}, ${now})
-                ON CONFLICT(digest) DO UPDATE SET
-                  time_accessed = excluded.time_accessed,
-                  media_type = COALESCE(marketplace_artifact.media_type, excluded.media_type),
-                  source_url = COALESCE(marketplace_artifact.source_url, excluded.source_url)
-              `,
+                  const now = Date.now()
+                  yield* db
+                    .run(
+                      sql`
+                      INSERT INTO marketplace_artifact
+                        (digest, size, media_type, kind, source_url, time_created, time_accessed)
+                      VALUES
+                        (${digest}, ${bytes.byteLength}, ${metadata.mediaType ?? null}, ${metadata.kind ?? "blob"},
+                         ${metadata.sourceUrl ?? null}, ${now}, ${now})
+                      ON CONFLICT(digest) DO UPDATE SET
+                        time_accessed = excluded.time_accessed,
+                        media_type = COALESCE(marketplace_artifact.media_type, excluded.media_type),
+                        source_url = COALESCE(marketplace_artifact.source_url, excluded.source_url)
+                    `,
+                    )
+                    .pipe(Effect.orDie)
+                }),
+                `marketplace-artifact:${digest}`,
               )
-              .pipe(Effect.orDie)
-          }),
-          `marketplace-artifact:${digest}`,
-        )
-        .pipe(Effect.mapError((error) => cacheError("lock", error)))
+              .pipe(Effect.mapError((error) => cacheError("lock", error)))
 
-      return {
-        digest,
-        path: target,
-        size: bytes.byteLength,
-        ...(metadata.mediaType ? { mediaType: metadata.mediaType } : {}),
-        kind: metadata.kind ?? "blob",
-        ...(metadata.sourceUrl ? { sourceUrl: metadata.sourceUrl } : {}),
-      } satisfies Artifact
+            return {
+              digest,
+              path: target,
+              size: bytes.byteLength,
+              ...(metadata.mediaType ? { mediaType: metadata.mediaType } : {}),
+              kind: metadata.kind ?? "blob",
+              ...(metadata.sourceUrl ? { sourceUrl: metadata.sourceUrl } : {}),
+            } satisfies Artifact
+          }),
+        )
+        .pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              lock.references--
+              if (lock.references === 0) putLocks.delete(digest)
+            }),
+          ),
+        )
     })
 
     const putJson = Effect.fn("MarketplaceCache.putJson")(function* (
@@ -762,6 +780,32 @@ const layer = Layer.effect(
       return `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`
     })
 
+    const materializeRemoteSkillFiles = Effect.fnUntraced(function* (input: {
+      files: Array<{ url: string; relative: string }>
+      source: MarketplaceSource
+      entries: Map<string, TreeEntry>
+      digests: Set<string>
+    }) {
+      const files = Array.from(new Map(input.files.map((file) => [file.url, file])).values())
+      const artifacts = yield* Effect.forEach(
+        files,
+        (file) =>
+          fetchArtifact({
+            url: file.url,
+            headers: sameOriginHeaders(input.source, file.url),
+            kind: "skill-file",
+            source: input.source,
+          }).pipe(Effect.map((artifact) => ({ url: file.url, artifact }))),
+        { concurrency: 32 },
+      )
+      const byURL = new Map(artifacts.map((item) => [item.url, item.artifact]))
+      for (const file of input.files) {
+        const artifact = byURL.get(file.url)!
+        input.digests.add(artifact.digest)
+        input.entries.set(file.relative, { relative: file.relative, bytes: artifact.bytes, digest: artifact.digest })
+      }
+    })
+
     const indexedSkill = Effect.fnUntraced(function* (input: {
       url: string
       source: MarketplaceSource
@@ -893,27 +937,27 @@ const layer = Layer.effect(
             message: `Skill source exceeds ${MAX_SKILLS} skills`,
           })
         }
-        const result: Array<{ name: string; relative: string }> = []
-        for (const root of roots) {
+        const result = roots.map((root) => {
           const name = root.split("/").at(-1) || repository
-          const skillRoot = path.posix.join(input.prefix, safeSegment(name))
-          for (const file of files.filter(
-            (candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`),
-          )) {
-            const url = new URL(file.slice(prefix.length).replace(/^\/+/, ""), base).href
-            const artifact = yield* fetchArtifact({
-              url,
-              headers: sameOriginHeaders(input.source, url),
-              kind: "skill-file",
-              source: input.source,
-            })
-            input.digests.add(artifact.digest)
-            const relative = path.posix.join(skillRoot, safeRelative(file.slice(root.length + 1)))
-            input.entries.set(relative, { relative, bytes: artifact.bytes, digest: artifact.digest })
+          const relative = path.posix.join(input.prefix, safeSegment(name))
+          return {
+            name,
+            relative,
+            files: files
+              .filter((candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`))
+              .map((file) => ({
+                url: new URL(file.slice(prefix.length).replace(/^\/+/, ""), base).href,
+                relative: path.posix.join(relative, safeRelative(file.slice(root.length + 1))),
+              })),
           }
-          result.push({ name, relative: skillRoot })
-        }
-        return result
+        })
+        yield* materializeRemoteSkillFiles({
+          files: result.flatMap((item) => item.files),
+          source: input.source,
+          entries: input.entries,
+          digests: input.digests,
+        })
+        return result.map((item) => ({ name: item.name, relative: item.relative }))
       }
       const gitlab = gitLabRawReference(new URL(base))
       if (gitlab) {
@@ -954,27 +998,27 @@ const layer = Layer.effect(
             message: `Skill source exceeds ${MAX_SKILLS} skills`,
           })
         }
-        const result: Array<{ name: string; relative: string }> = []
-        for (const root of roots) {
+        const result = roots.map((root) => {
           const name = root.split("/").at(-1) || gitlab.project.split("/").at(-1) || "skill"
-          const skillRoot = path.posix.join(input.prefix, safeSegment(name))
-          for (const file of files.filter(
-            (candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`),
-          )) {
-            const url = gitLabRawFileURL(gitlab, file)
-            const artifact = yield* fetchArtifact({
-              url,
-              headers: sameOriginHeaders(input.source, url),
-              kind: "skill-file",
-              source: input.source,
-            })
-            input.digests.add(artifact.digest)
-            const relative = path.posix.join(skillRoot, safeRelative(file.slice(root.length + 1)))
-            input.entries.set(relative, { relative, bytes: artifact.bytes, digest: artifact.digest })
+          const relative = path.posix.join(input.prefix, safeSegment(name))
+          return {
+            name,
+            relative,
+            files: files
+              .filter((candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`))
+              .map((file) => ({
+                url: gitLabRawFileURL(gitlab, file),
+                relative: path.posix.join(relative, safeRelative(file.slice(root.length + 1))),
+              })),
           }
-          result.push({ name, relative: skillRoot })
-        }
-        return result
+        })
+        yield* materializeRemoteSkillFiles({
+          files: result.flatMap((item) => item.files),
+          source: input.source,
+          entries: input.entries,
+          digests: input.digests,
+        })
+        return result.map((item) => ({ name: item.name, relative: item.relative }))
       }
       if (new URL(base).hostname === "unpkg.com") {
         const metadataURL = `${base}?meta`
@@ -1009,30 +1053,30 @@ const layer = Layer.effect(
           })
         }
         const metadataPrefix = "prefix" in metadata && typeof metadata.prefix === "string" ? metadata.prefix : "/"
-        const result: Array<{ name: string; relative: string }> = []
-        for (const root of roots) {
+        const result = roots.map((root) => {
           const name = root.split("/").at(-1)!
-          const skillRoot = path.posix.join(input.prefix, safeSegment(name))
-          for (const file of files.filter(
-            (candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`),
-          )) {
-            const relativeSource = file.startsWith(metadataPrefix)
-              ? file.slice(metadataPrefix.length)
-              : file.replace(/^\/+/, "")
-            const url = new URL(relativeSource, base).href
-            const artifact = yield* fetchArtifact({
-              url,
-              headers: sameOriginHeaders(input.source, url),
-              kind: "skill-file",
-              source: input.source,
-            })
-            input.digests.add(artifact.digest)
-            const relative = path.posix.join(skillRoot, safeRelative(file.slice(root.length + 1)))
-            input.entries.set(relative, { relative, bytes: artifact.bytes, digest: artifact.digest })
+          const relative = path.posix.join(input.prefix, safeSegment(name))
+          return {
+            name,
+            relative,
+            files: files
+              .filter((candidate) => candidate === `${root}/SKILL.md` || candidate.startsWith(`${root}/`))
+              .map((file) => ({
+                url: new URL(
+                  file.startsWith(metadataPrefix) ? file.slice(metadataPrefix.length) : file.replace(/^\/+/, ""),
+                  base,
+                ).href,
+                relative: path.posix.join(relative, safeRelative(file.slice(root.length + 1))),
+              })),
           }
-          result.push({ name, relative: skillRoot })
-        }
-        return result
+        })
+        yield* materializeRemoteSkillFiles({
+          files: result.flatMap((item) => item.files),
+          source: input.source,
+          entries: input.entries,
+          digests: input.digests,
+        })
+        return result.map((item) => ({ name: item.name, relative: item.relative }))
       }
       const indexURL = new URL("index.json", base).href
       const headers = sameOriginHeaders(input.source, indexURL)
@@ -1050,24 +1094,24 @@ const layer = Layer.effect(
         })
       }
 
-      const roots: Array<{ name: string; relative: string }> = []
-      for (const skill of selected) {
-        const skillRoot = path.posix.join(input.prefix, safeSegment(skill.name))
-        for (const file of skill.files) {
-          const url = new URL(file, `${base}${encodeURIComponent(skill.name)}/`).href
-          const artifact = yield* fetchArtifact({
-            url,
-            headers: sameOriginHeaders(input.source, url),
-            kind: "skill-file",
-            source: input.source,
-          })
-          input.digests.add(artifact.digest)
-          const relative = path.posix.join(skillRoot, safeRelative(file))
-          input.entries.set(relative, { relative, bytes: artifact.bytes, digest: artifact.digest })
+      const roots = selected.map((skill) => {
+        const relative = path.posix.join(input.prefix, safeSegment(skill.name))
+        return {
+          name: skill.name,
+          relative,
+          files: skill.files.map((file) => ({
+            url: new URL(file, `${base}${encodeURIComponent(skill.name)}/`).href,
+            relative: path.posix.join(relative, safeRelative(file)),
+          })),
         }
-        roots.push({ name: skill.name, relative: skillRoot })
-      }
-      return roots
+      })
+      yield* materializeRemoteSkillFiles({
+        files: roots.flatMap((item) => item.files),
+        source: input.source,
+        entries: input.entries,
+        digests: input.digests,
+      })
+      return roots.map((item) => ({ name: item.name, relative: item.relative }))
     })
 
     const directSkillSource = Effect.fnUntraced(function* (input: {

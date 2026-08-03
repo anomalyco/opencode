@@ -332,7 +332,16 @@ const PluginMarketplaceListCommand = effectCmd({
     const view = yield* marketplace.get({ refresh: Boolean(args.refresh) })
     for (const listing of view.listings) {
       const installed = view.state.installed?.[listing.key]
-      log.info(`${installed ? "installed" : "available"}\t${listing.key}\t${listing.item.name}@${listing.item.version}`)
+      const status = installed
+        ? "installed"
+        : listing.compatibility?.compatible === false
+          ? "incompatible"
+          : "available"
+      log.info(
+        `${status}\t${listing.key}\t${listing.item.name}@${listing.item.version}${
+          status === "incompatible" ? `\t${listing.compatibility?.reasons.join("; ")}` : ""
+        }`,
+      )
     }
     for (const error of view.errors) log.warn(`${error.source.name}: ${error.message}`)
   }),
@@ -348,6 +357,7 @@ const PluginMarketplaceInstallCommand = effectCmd({
       .option("accept-untrusted", { type: "boolean", default: false }),
   handler: Effect.fn("Cli.plugin.marketplace.install")(function* (args) {
     const marketplace = yield* MarketplaceService
+    log.info("Preparing and verifying the Marketplace install plan...")
     const plan = yield* marketplace.plan(String(args.key))
     if (!plan.ok) {
       log.error(plan.message)

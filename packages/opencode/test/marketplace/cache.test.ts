@@ -92,6 +92,52 @@ describe("marketplace content-addressed cache", () => {
     ),
   )
 
+  it.effect("materializes remote skill files concurrently", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { active: 0, max: 0 }
+        const files = ["SKILL.md", ...Array.from({ length: 7 }, (_, index) => `references/${index}.md`)]
+        const server = Bun.serve({
+          port: 0,
+          async fetch(request) {
+            const url = new URL(request.url)
+            if (url.pathname === "/index.json") {
+              return Response.json({ skills: [{ name: "cloudflare", files }] })
+            }
+            if (url.pathname.startsWith("/cloudflare/")) {
+              state.active++
+              state.max = Math.max(state.max, state.active)
+              await Bun.sleep(25)
+              state.active--
+              return new Response(
+                url.pathname.endsWith("SKILL.md") ? "---\nname: cloudflare\n---\nCloudflare" : "Guide",
+              )
+            }
+            return new Response("not found", { status: 404 })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const cache = yield* MarketplaceCache.Service
+          const materialized = yield* cache.materializePlan(
+            { skills: { urls: [server.url.href] } },
+            { id: "remote", name: "Remote", url: new URL("catalog.json", server.url).href, trust: "community" },
+          )
+
+          expect(state.max).toBeGreaterThan(1)
+          expect(materialized.plan.skills?.items?.[0]?.name).toBe("cloudflare")
+          expect(
+            yield* Effect.promise(() =>
+              fs.readFile(path.join(materialized.plan.skills!.items![0]!.path!, "references", "0.md"), "utf8"),
+            ),
+          ).toBe("Guide")
+        }),
+      ({ server }) => Effect.promise(async () => void (await server.stop(true))),
+    ),
+  )
+
   it.effect("reads local sources and materializes local plugins, skills, and instructions", () =>
     Effect.acquireUseRelease(
       Effect.tryPromise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-marketplace-cache-"))),
