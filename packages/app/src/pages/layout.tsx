@@ -33,9 +33,9 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { toaster } from "@opencode-ai/ui/toast"
-import { setV2Toast, showToast, ToastRegion } from "@/utils/toast"
+import { dismissToast, setV2Toast, showToast, ToastRegion } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
+import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import { clearWorkspaceTerminals } from "@/context/terminal"
 import { pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import { useNotification } from "@/context/notification"
@@ -44,10 +44,10 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
-import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
+import { listAllSessions } from "@/utils/session"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
@@ -116,8 +116,7 @@ export default function LegacyLayout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
-  setNavigate(navigate)
-  const providers = useProviders()
+  const providers = useProviders(() => undefined)
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
@@ -156,6 +155,7 @@ export default function LegacyLayout(props: ParentProps) {
     sizing: false,
     peek: undefined as string | undefined,
     peeked: false,
+    debugTools: true,
   })
 
   const updateVersion = () => {
@@ -381,7 +381,7 @@ export default function LegacyLayout(props: ParentProps) {
       const dismissSessionAlert = (sessionKey: string) => {
         const toastId = toastBySession.get(sessionKey)
         if (toastId === undefined) return
-        toaster.dismiss(toastId)
+        dismissToast(toastId)
         toastBySession.delete(sessionKey)
         alertedAtBySession.delete(sessionKey)
       }
@@ -446,13 +446,13 @@ export default function LegacyLayout(props: ParentProps) {
             void playSoundById(settings.sounds.permissions())
           }
           if (settings.notifications.permissions()) {
-            void platform.notify(title, description, href)
+            void platform.notify(title, description, () => navigate(href))
           }
         }
 
         if (e.details.type === "question.asked") {
           if (settings.notifications.agent()) {
-            void platform.notify(title, description, href)
+            void platform.notify(title, description, () => navigate(href))
           }
         }
 
@@ -869,14 +869,15 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   async function archiveSession(session: Session) {
+    if ((await serverSDK().protocol) !== "v1") return
     const [store, setStore] = serverSync().child(session.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
     await serverSDK().client.session.update({
-      directory: session.directory,
       sessionID: session.id,
+      directory: session.directory,
       time: { archived: Date.now() },
     })
     setStore(
@@ -1184,9 +1185,12 @@ export default function LegacyLayout(props: ParentProps) {
     }
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
-      const listed = await serverSDK()
-        .client.worktree.list({ directory: root })
-        .then((x) => x.data ?? [])
+      const listed = await Promise.resolve(
+        project?.id ?? serverSDK().api.project.current({ location: { directory: root } }),
+      )
+        .then((value) => (typeof value === "string" ? value : value.id))
+        .then((projectID) => serverSDK().api.project.directories({ projectID, location: { directory: root } }))
+        .then((items) => items.map((item) => item.directory).filter((item) => pathKey(item) !== pathKey(root)))
         .catch(() => [] as string[])
       dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
       return canOpen(target)
@@ -1230,10 +1234,11 @@ export default function LegacyLayout(props: ParentProps) {
       await Promise.all(
         dirs.map(async (item) => ({
           path: { directory: item },
-          session: await serverSDK()
-            .client.session.list({ directory: item })
-            .then((x) => x.data ?? [])
-            .catch(() => []),
+          session: await listAllSessions(serverSDK().api.session, {
+            directory: item,
+            parentID: null,
+            order: "desc",
+          }).catch(() => []),
         })),
       ),
       Date.now(),
@@ -1293,7 +1298,16 @@ export default function LegacyLayout(props: ParentProps) {
     const name = next === getFilename(project.worktree) ? "" : next
 
     if (project.id && project.id !== "global") {
-      await serverSDK().client.project.update({ projectID: project.id, directory: project.worktree, name })
+      const sdk = serverSDK()
+      if ((await sdk.protocol) !== "v1") return
+      const result = await sdk.client.project
+        .update({ projectID: project.id, directory: project.worktree, name })
+        .then((response) => response.data)
+      if (!result) return
+      // const result = await serverSDK().api.project.update({ projectID: project.id, name })
+      serverSync().set("project", (items) =>
+        items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
+      )
       return
     }
 
@@ -1442,12 +1456,9 @@ export default function LegacyLayout(props: ParentProps) {
       title: language.t("workspace.resetting.title"),
       description: language.t("workspace.resetting.description"),
     })
-    const dismiss = () => toaster.dismiss(progress)
+    const dismiss = () => dismissToast(progress)
 
-    const sessions: Session[] = await serverSDK()
-      .client.session.list({ directory })
-      .then((x) => x.data ?? [])
-      .catch(() => [])
+    const sessions = await listAllSessions(serverSDK().api.session, { directory, order: "desc" }).catch(() => [])
 
     clearWorkspaceTerminals(
       directory,
@@ -1476,20 +1487,20 @@ export default function LegacyLayout(props: ParentProps) {
       return
     }
 
-    const archivedAt = Date.now()
-    await Promise.all(
-      sessions
-        .filter((session) => session.time.archived === undefined)
-        .map((session) =>
-          serverSDK()
-            .client.session.update({
-              sessionID: session.id,
-              directory: session.directory,
-              time: { archived: archivedAt },
-            })
-            .catch(() => undefined),
-        ),
-    )
+    if ((await serverSDK().protocol) === "v1")
+      await Promise.all(
+        sessions
+          .filter((session) => session.time.archived === undefined)
+          .map((session) =>
+            serverSDK()
+              .client.session.update({
+                sessionID: session.id,
+                directory: session.directory,
+                time: { archived: Date.now() },
+              })
+              .catch(() => undefined),
+          ),
+      )
 
     setBusy(directory, false)
     dismiss()
@@ -1523,9 +1534,9 @@ export default function LegacyLayout(props: ParentProps) {
 
     onMount(() => {
       serverSDK()
-        .client.vcs.status({ directory: props.directory })
-        .then((x) => {
-          const files = x.data ?? []
+        .api.vcs.status({ location: { directory: props.directory } })
+        .then((result) => {
+          const files = result.data
           const dirty = files.length > 0
           setData({ status: "ready", dirty })
         })
@@ -1581,19 +1592,19 @@ export default function LegacyLayout(props: ParentProps) {
     })
 
     const refresh = async () => {
-      const sessions = await serverSDK()
-        .client.session.list({ directory: props.directory })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
+      const sessions = await listAllSessions(serverSDK().api.session, {
+        directory: props.directory,
+        order: "desc",
+      }).catch(() => [])
       const active = sessions.filter((session) => session.time.archived === undefined)
       setState({ sessions: active })
     }
 
     onMount(() => {
       serverSDK()
-        .client.vcs.status({ directory: props.directory })
-        .then((x) => {
-          const files = x.data ?? []
+        .api.vcs.status({ location: { directory: props.directory } })
+        .then((result) => {
+          const files = result.data
           const dirty = files.length > 0
           setState({ status: "ready", dirty })
           void refresh()
@@ -2238,7 +2249,7 @@ export default function LegacyLayout(props: ParentProps) {
       settingsKeybind={() => command.keybind("settings.open")}
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
-      onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+      onOpenHelp={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
@@ -2248,7 +2259,14 @@ export default function LegacyLayout(props: ParentProps) {
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       {autoselecting() ?? ""}
-      <Titlebar update={titlebarUpdate} />
+      <Titlebar
+        update={titlebarUpdate}
+        debugTools={
+          import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1"
+            ? { visible: state.debugTools, toggle: () => setState("debugTools", (value) => !value) }
+            : undefined
+        }
+      />
       <Show when={updateVersion() !== undefined}>
         <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
       </Show>
@@ -2393,7 +2411,7 @@ export default function LegacyLayout(props: ParentProps) {
             </div>
           </div>
         </div>
-        {import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1" && <DebugBar />}
+        {import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1" && state.debugTools && <DebugBar />}
       </div>
       <TabsInfoPopup />
       <ToastRegion v2={false} />
@@ -2429,7 +2447,7 @@ function UpdateAvailableToast(props: {
 
   onCleanup(() => {
     if (toastId === undefined) return
-    toaster.dismiss(toastId)
+    dismissToast(toastId)
   })
 
   return null

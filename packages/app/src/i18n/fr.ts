@@ -277,6 +277,7 @@ export const dict = {
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
   "prompt.toast.pasteUnsupported.title": "Pièce jointe non prise en charge",
+  "prompt.toast.attachmentDuplicate.title": "Ce fichier a déjà été téléversé",
   "prompt.toast.pasteUnsupported.description":
     "Seules les images, les PDF ou les fichiers texte peuvent être joints ici.",
   "prompt.toast.modelAgentRequired.title": "Sélectionnez un agent et un modèle",
@@ -624,6 +625,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Dépôt local",
   "session.new.workspace.existing": "Espace de travail…",
+  "session.new.git.none": "Pas de Git",
   "session.new.lastModified": "Dernière modification",
   "session.header.search.placeholder": "Rechercher {{project}}",
   "session.header.searchFiles": "Rechercher des fichiers",

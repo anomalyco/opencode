@@ -27,4 +27,4 @@ export {
   type WslServersState,
 } from "./wsl/types"
 export { ServerConnection } from "./context/server"
-export { handleNotificationClick } from "./utils/notification-click"
+export { createDraftStore, type DraftStore } from "./utils/draft-store"

@@ -100,7 +100,7 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
                   }
                 >
                   <img
-                    src={attachment.dataUrl}
+                    src={attachment.blob.url}
                     alt={attachment.filename}
                     class={props.newLayoutDesigns ? imageClassV2 : imageClass}
                     onClick={() => props.onOpen(attachment)}

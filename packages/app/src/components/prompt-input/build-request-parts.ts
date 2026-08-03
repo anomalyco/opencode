@@ -22,7 +22,7 @@ type ContextFile = {
 type BuildRequestPartsInput = {
   prompt: Prompt
   context: ContextFile[]
-  images: ImageAttachmentPart[]
+  images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
   text: string
   messageID: string
   sessionID: string
@@ -89,13 +89,15 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
 }
 
 export function buildRequestParts(input: BuildRequestPartsInput) {
-  const requestParts: PromptRequestPart[] = [
-    {
-      id: Identifier.ascending("part"),
-      type: "text",
-      text: input.text,
-    },
-  ]
+  const requestParts: PromptRequestPart[] = input.text.trim()
+    ? [
+        {
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: input.text,
+        },
+      ]
+    : []
 
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
