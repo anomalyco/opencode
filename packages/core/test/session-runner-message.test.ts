@@ -498,4 +498,67 @@ Recent work
       },
     ])
   })
+
+  test("drops duplicate tool_call_id left by an interrupted run (#40235)", () => {
+    // An interrupted tool run can leave a second part that reuses an
+    // existing callID: a `completed` part plus an `error`/`Tool execution
+    // aborted` part with `metadata.interrupted`. Serializing both to the
+    // provider yields a duplicate `tool_call_id`, which providers reject with
+    // a 400 - and because compaction re-sends the full history, the session
+    // can never compact again. The fix keeps the most informative part
+    // (completed) and drops the duplicate.
+    const assistant = (content: SessionMessage.Assistant["content"]) =>
+      SessionMessage.Assistant.make({
+        id: id("dup"),
+        type: "assistant",
+        agent: "build",
+        model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+        content,
+        time: { created, completed: created },
+      })
+    const messages = toLLMMessages(
+      [
+        assistant([
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: "functions.todowrite:1",
+            name: "todowrite",
+            state: SessionMessage.ToolStateCompleted.make({
+              status: "completed",
+              input: { todos: [] },
+              content: [{ type: "text", text: "ok" }],
+              structured: {},
+            }),
+            time: { created, completed: created },
+          }),
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: "functions.todowrite:1",
+            name: "unknown",
+            state: SessionMessage.ToolStateError.make({
+              status: "error",
+              input: {},
+              raw: "",
+              error: { type: "unknown", message: "Tool execution aborted" },
+              metadata: { interrupted: true },
+              content: [],
+              structured: {},
+            }),
+            time: { created, completed: created },
+          }),
+        ]),
+      ],
+      model,
+    )
+
+    // Exactly one assistant message with one tool-call + one tool-result,
+    // both carrying the single callID - no duplicate.
+    expect(messages).toHaveLength(2)
+    const toolCalls = messages[0]!.content.filter((part) => part.type === "tool-call")
+    const toolResults = messages[1]!.content.filter((part) => part.type === "tool-result")
+    expect(toolCalls).toHaveLength(1)
+    expect(toolResults).toHaveLength(1)
+    expect(toolCalls[0]).toMatchObject({ id: "functions.todowrite:1", name: "todowrite" })
+    expect(toolResults[0]).toMatchObject({ id: "functions.todowrite:1" })
+  })
 })
